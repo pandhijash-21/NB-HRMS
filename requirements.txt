@@ -1,0 +1,6 @@
+Node.js==20.x
+npm>=10.x
+Docker>=24.x
+Docker Compose>=2.x
+Git>=2.40.x
+Hasura CLI>=2.36.0

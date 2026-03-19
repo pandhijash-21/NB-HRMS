@@ -1,0 +1,46 @@
+table:
+  name: employees
+  schema: public
+array_relationships:
+  - name: academic_qualifications
+    using:
+      foreign_key_constraint_on:
+        column: employee_id
+        table:
+          name: academic_qualifications
+          schema: public
+  - name: employee_addresses
+    using:
+      foreign_key_constraint_on:
+        column: employee_id
+        table:
+          name: employee_addresses
+          schema: public
+  - name: employee_general_infos
+    using:
+      foreign_key_constraint_on:
+        column: employee_id
+        table:
+          name: employee_general_info
+          schema: public
+  - name: employee_other_infos
+    using:
+      foreign_key_constraint_on:
+        column: employee_id
+        table:
+          name: employee_other_info
+          schema: public
+  - name: employee_personal_infos
+    using:
+      foreign_key_constraint_on:
+        column: employee_id
+        table:
+          name: employee_personal_info
+          schema: public
+  - name: family_members
+    using:
+      foreign_key_constraint_on:
+        column: employee_id
+        table:
+          name: family_members
+          schema: public

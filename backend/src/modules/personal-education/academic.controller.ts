@@ -66,5 +66,19 @@ export const academicController = {
     if (!updated) return res.status(404).json(fail('Qualification not found'));
     return res.json(ok(updated));
   },
+
+  async softDelete(req: Request, res: Response) {
+    const employeeId = Number(req.params.id);
+    const qualId = String(req.params.qualId);
+    if (!Number.isFinite(employeeId)) return res.status(400).json(fail('Invalid employee id'));
+    if (!qualId) return res.status(400).json(fail('Invalid qualification id'));
+
+    try {
+      const deleted = await academicService.softDelete(qualId, employeeId);
+      return res.json(ok(deleted));
+    } catch (err: any) {
+      return res.status(err.status ?? 500).json(fail(err.message ?? 'Internal server error'));
+    }
+  },
 };
 

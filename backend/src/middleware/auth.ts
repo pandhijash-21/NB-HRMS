@@ -1,43 +1,41 @@
 import type { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
+import { redis, connectRedis } from '../config/redis';
 import { fail } from '../utils/response';
 
-export type AuthRole = 'EMPLOYEE' | 'HR' | 'ADMIN';
-
-export type AuthUser = {
-  id: string;
-  role: AuthRole;
-  employeeId?: number;
-};
-
-declare global {
-  namespace Express {
-    interface Request {
-      user?: AuthUser;
-    }
-  }
-}
-
-export function requireAuth(req: Request, res: Response, next: NextFunction) {
+export async function requireAuth(req: Request, res: Response, next: NextFunction) {
   const header = req.headers.authorization;
-  const token = header?.startsWith('Bearer ') ? header.slice('Bearer '.length) : undefined;
+  const token = header?.startsWith('Bearer ') ? header.slice(7) : undefined;
   if (!token) return res.status(401).json(fail('Missing bearer token'));
 
   try {
     const decoded = jwt.verify(token, env.JWT_SECRET) as jwt.JwtPayload;
-    const id = String(decoded.sub ?? decoded.userId ?? decoded.id ?? '');
-    const role = String(decoded.role ?? '').toUpperCase() as AuthRole;
-    const employeeId = decoded.employeeId != null ? Number(decoded.employeeId) : undefined;
+    const userId = String(decoded.sub ?? '');
 
-    if (!id || !role || !['EMPLOYEE', 'HR', 'ADMIN'].includes(role)) {
-      return res.status(401).json(fail('Invalid token'));
+    // Validate session still exists in Redis (honours logout / permission revocation)
+    try {
+      await connectRedis();
+      const sessionExists = await redis.get(`session:${userId}`);
+      if (!sessionExists) {
+        return res.status(401).json(fail('Session expired. Please log in again.'));
+      }
+    } catch {
+      // Redis unavailable — fall through and accept the JWT as-is
+      // (fail-open to avoid locking everyone out on Redis downtime)
     }
 
-    req.user = { id, role, employeeId };
+    req.user = {
+      id:          userId,
+      employeeId:  decoded.employeeId,
+      roleId:      decoded.roleId,
+      roleName:    decoded.roleName,
+      role:        decoded.roleName,  // backward compat for existing requireRole checks
+      permissions: decoded.permissions ?? {},
+    };
+
     return next();
   } catch {
-    return res.status(401).json(fail('Invalid token'));
+    return res.status(401).json(fail('Invalid or expired token'));
   }
 }
-

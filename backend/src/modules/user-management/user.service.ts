@@ -1,0 +1,196 @@
+import bcrypt from 'bcryptjs';
+import { prisma } from '../../config/prisma';
+import { redis, connectRedis } from '../../config/redis';
+import { sendAccountCreatedEmail } from '../../utils/mailer';
+import type { CreateUserInput, UpdateUserInput } from './types';
+
+async function invalidateSession(userId: string, roleId?: string) {
+  try {
+    await connectRedis();
+    await redis.del(`session:${userId}`);
+    if (roleId) await redis.sRem(`role_users:${roleId}`, userId);
+  } catch {
+    // Redis unavailable — session will expire naturally
+  }
+}
+
+export const userService = {
+  async list(filters: { roleId?: string; isActive?: boolean; search?: string }) {
+    return prisma.user.findMany({
+      where: {
+        ...(filters.roleId   ? { roleId: filters.roleId }     : {}),
+        ...(filters.isActive !== undefined ? { isActive: filters.isActive } : {}),
+        ...(filters.search
+          ? {
+              employee: {
+                generalInfo: {
+                  fullName: { contains: filters.search, mode: 'insensitive' },
+                },
+              },
+            }
+          : {}),
+      },
+      select: {
+        id:          true,
+        employeeId:  true,
+        isActive:    true,
+        isFirstLogin:true,
+        lastLoginAt: true,
+        createdAt:   true,
+        role: {
+          select: { id: true, name: true },
+        },
+        employee: {
+          select: {
+            id:         true,
+            status:     true,
+            photoUrl:   true,
+            generalInfo: { select: { fullName: true, designation: true, department: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+  },
+
+  async getById(id: string) {
+    return prisma.user.findUnique({
+      where: { id },
+      select: {
+        id:               true,
+        employeeId:       true,
+        isActive:         true,
+        isFirstLogin:     true,
+        lastLoginAt:      true,
+        passwordChangedAt:true,
+        createdAt:        true,
+        updatedAt:        true,
+        role: {
+          include: { permissions: true },
+        },
+        employee: {
+          select: {
+            id:         true,
+            status:     true,
+            photoUrl:   true,
+            generalInfo:{ select: { fullName: true, designation: true, department: true } },
+          },
+        },
+      },
+    });
+  },
+
+  async create(input: CreateUserInput, creatorId: string) {
+    // Check employee exists
+    const employee = await prisma.employee.findUnique({
+      where: { id: input.employeeId },
+      include: { personalInfo: true },
+    });
+    if (!employee) return { error: 'Employee not found', status: 404 } as const;
+
+    // Check user doesn't already exist
+    const existing = await prisma.user.findUnique({ where: { employeeId: input.employeeId } });
+    if (existing) return { error: 'User account already exists for this employee', status: 409 } as const;
+
+    // Check role exists
+    const role = await prisma.role.findUnique({ where: { id: input.roleId } });
+    if (!role) return { error: 'Role not found', status: 404 } as const;
+    if (!role.isActive) return { error: 'Role is inactive', status: 400 } as const;
+
+    // Default password: DOB as DDMMYYYY, fallback to 01011990
+    let defaultPassword = '01011990';
+    const dob = employee.personalInfo?.birthDate;
+    if (dob) {
+      const d = String(dob.getDate()).padStart(2, '0');
+      const m = String(dob.getMonth() + 1).padStart(2, '0');
+      const y = dob.getFullYear();
+      defaultPassword = `${d}${m}${y}`;
+    }
+
+    const passwordHash = await bcrypt.hash(defaultPassword, 12);
+
+    const user = await prisma.user.create({
+      data: {
+        employeeId:   input.employeeId,
+        roleId:       input.roleId,
+        passwordHash,
+        isFirstLogin: true,
+        createdBy:    creatorId,
+      },
+      select: {
+        id: true, employeeId: true, isActive: true, isFirstLogin: true, createdAt: true,
+        role: { select: { id: true, name: true } },
+      },
+    });
+
+    // Backfill Employee.userId
+    await prisma.employee.update({
+      where: { id: input.employeeId },
+      data:  { userId: user.id },
+    });
+
+    // Fire-and-forget email notification (non-blocking)
+    const toEmail: string =
+      (employee as any).generalInfo?.instituteEmail ?? '';
+    if (toEmail) {
+      sendAccountCreatedEmail(toEmail, input.employeeId, defaultPassword).catch(console.error);
+    }
+
+    return { user, defaultPasswordUsed: !dob };
+  },
+
+  async update(id: string, input: UpdateUserInput, requesterId: string) {
+    // Prevent admin from changing their own role
+    if (input.roleId && id === requesterId) {
+      return { error: 'You cannot change your own role', status: 400 } as const;
+    }
+
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) return { error: 'User not found', status: 404 } as const;
+
+    if (input.roleId) {
+      const role = await prisma.role.findUnique({ where: { id: input.roleId } });
+      if (!role) return { error: 'Role not found', status: 404 } as const;
+    }
+
+    const updated = await prisma.user.update({
+      where: { id },
+      data: {
+        ...(input.roleId   ? { roleId: input.roleId }     : {}),
+        ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
+        updatedBy: requesterId,
+      },
+      select: { id: true, employeeId: true, isActive: true, role: { select: { id: true, name: true } } },
+    });
+
+    // Role changed → force re-login for new permissions
+    if (input.roleId && input.roleId !== user.roleId) {
+      await invalidateSession(id, user.roleId);
+    }
+
+    // Deactivated → kick session
+    if (input.isActive === false) {
+      await invalidateSession(id, user.roleId);
+    }
+
+    return updated;
+  },
+
+  async softDelete(id: string, requesterId: string) {
+    if (id === requesterId) {
+      return { error: 'Cannot deactivate your own account', status: 400 } as const;
+    }
+
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) return { error: 'User not found', status: 404 } as const;
+
+    await prisma.user.update({
+      where: { id },
+      data:  { isActive: false, updatedBy: requesterId },
+    });
+
+    await invalidateSession(id, user.roleId);
+
+    return { message: 'User deactivated' };
+  },
+};

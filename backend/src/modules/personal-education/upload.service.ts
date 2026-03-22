@@ -24,17 +24,17 @@ export const uploadService = {
     return result.secure_url;
   },
 
-  setEmployeePhoto(employeeId: number, photoUrl: string, actorId?: string) {
+  setEmployeePhoto(employeeId: number, photoUrl: string, _actorId?: string) {
     return prisma.employee.update({
       where: { id: employeeId },
-      data: { photoUrl, createdBy: actorId ?? undefined },
+      data: { photoUrl },
     });
   },
 
-  setEmployeeSignature(employeeId: number, signatureUrl: string, actorId?: string) {
+  setEmployeeSignature(employeeId: number, signatureUrl: string, _actorId?: string) {
     return prisma.employee.update({
       where: { id: employeeId },
-      data: { signatureUrl, createdBy: actorId ?? undefined },
+      data: { signatureUrl },
     });
   },
 

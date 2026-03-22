@@ -11,44 +11,37 @@ export const authConfig = {
     Credentials({
       name: "Credentials",
       credentials: {
-        email: {},
+        employeeId: {},
         password: {},
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials.password) return null;
+        if (!credentials?.employeeId || !credentials.password) return null;
 
         try {
           const res = await axios.post(`${API_URL}/auth/login`, {
-            email: credentials.email,
-            password: credentials.password,
+            employeeId: Number(credentials.employeeId),
+            password:   String(credentials.password),
           });
 
-          const { token, employee } = res.data.data;
+          const { token, isFirstLogin, employee } = res.data.data;
 
           return {
-            id: employee.id,
-            name: employee.fullName,
-            email: employee.email,
-            role: employee.role ?? "EMPLOYEE",
-            employeeId: employee.id,
+            id:           String(employee.id),
+            name:         employee.name,
+            email:        null,
+            role:         employee.role ?? "EMPLOYEE",
+            employeeId:   String(employee.id),
+            isFirstLogin: isFirstLogin ?? false,
             token,
           };
-        } catch {
-          // Dev fallback — allows any login while backend auth isn't wired
-          const email = String(credentials.email);
-          const role =
-            email.includes("admin") || email.includes("hr")
-              ? "ADMIN"
-              : "EMPLOYEE";
-
-          return {
-            id: "dev-1",
-            name: email.split("@")[0],
-            email,
-            role,
-            employeeId: "dev-1",
-            token: "",
-          };
+        } catch (err: unknown) {
+          // Log server-side so we can diagnose in nodemon output
+          if (axios.isAxiosError(err)) {
+            console.error('[NextAuth] login failed:', err.response?.status, err.response?.data ?? err.message);
+          } else {
+            console.error('[NextAuth] login error:', err);
+          }
+          return null;
         }
       },
     }),
@@ -57,17 +50,25 @@ export const authConfig = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.role = (user as { role?: string }).role;
-        token.employeeId = (user as { employeeId?: string }).employeeId;
-        token.backendToken = (user as { token?: string }).token;
+        const u = user as {
+          role?: string;
+          employeeId?: string;
+          isFirstLogin?: boolean;
+          token?: string;
+        };
+        token.role         = u.role;
+        token.employeeId   = u.employeeId;
+        token.isFirstLogin = u.isFirstLogin;
+        token.backendToken = u.token;
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
-        session.user.role = token.role as string;
-        session.user.employeeId = token.employeeId as string;
-        session.user.token = token.backendToken as string;
+        session.user.role         = token.role         as string;
+        session.user.employeeId   = token.employeeId   as string;
+        session.user.isFirstLogin = token.isFirstLogin as boolean;
+        session.user.token        = token.backendToken as string;
       }
       return session;
     },

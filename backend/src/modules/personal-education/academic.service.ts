@@ -34,33 +34,52 @@ export const academicService = {
     });
   },
 
-  create(employeeId: number, input: AcademicInput, actorId?: string) {
-    return prisma.academicQualification.create({
-      data: {
-        employeeId,
-        degreeType: input.degreeType,
-        degreeName: input.degreeName ?? null,
-        medium: input.medium ?? null,
-        boardUniversity: input.boardUniversity,
-        schoolCollege: input.schoolCollege,
-        passingYear: input.passingYear,
-        percentage: input.percentage ?? null,
-        grade: input.grade ?? null,
-        specialization: input.specialization ?? null,
-        durationYears: input.durationYears ?? null,
-        totalSemesters: input.totalSemesters ?? null,
-        certificateUrl: input.certificateUrl ?? null,
-        sem1MarksheetUrl: input.sem1MarksheetUrl ?? null,
-        sem2MarksheetUrl: input.sem2MarksheetUrl ?? null,
-        sem3MarksheetUrl: input.sem3MarksheetUrl ?? null,
-        sem4MarksheetUrl: input.sem4MarksheetUrl ?? null,
-        sem5MarksheetUrl: input.sem5MarksheetUrl ?? null,
-        sem6MarksheetUrl: input.sem6MarksheetUrl ?? null,
-        sem7MarksheetUrl: input.sem7MarksheetUrl ?? null,
-        sem8MarksheetUrl: input.sem8MarksheetUrl ?? null,
-        displayOrder: input.displayOrder ?? 0,
-        updatedBy: input.updatedBy ?? actorId ?? null,
-      },
+  async create(employeeId: number, input: AcademicInput, actorId?: string) {
+    try {
+      return await prisma.academicQualification.create({
+        data: {
+          employeeId,
+          degreeType: input.degreeType,
+          degreeName: input.degreeName ?? null,
+          medium: input.medium ?? null,
+          boardUniversity: input.boardUniversity,
+          schoolCollege: input.schoolCollege,
+          passingYear: input.passingYear,
+          percentage: input.percentage ?? null,
+          grade: input.grade ?? null,
+          specialization: input.specialization ?? null,
+          durationYears: input.durationYears ?? null,
+          totalSemesters: input.totalSemesters ?? null,
+          certificateUrl: input.certificateUrl ?? null,
+          sem1MarksheetUrl: input.sem1MarksheetUrl ?? null,
+          sem2MarksheetUrl: input.sem2MarksheetUrl ?? null,
+          sem3MarksheetUrl: input.sem3MarksheetUrl ?? null,
+          sem4MarksheetUrl: input.sem4MarksheetUrl ?? null,
+          sem5MarksheetUrl: input.sem5MarksheetUrl ?? null,
+          sem6MarksheetUrl: input.sem6MarksheetUrl ?? null,
+          sem7MarksheetUrl: input.sem7MarksheetUrl ?? null,
+          sem8MarksheetUrl: input.sem8MarksheetUrl ?? null,
+          displayOrder: input.displayOrder ?? 0,
+          updatedBy: input.updatedBy ?? actorId ?? null,
+        },
+      });
+    } catch (err: any) {
+      if (err.code === 'P2002') {
+        throw { status: 409, message: `A ${input.degreeType} qualification already exists for this employee. Use PATCH to update it.` };
+      }
+      throw err;
+    }
+  },
+
+  async softDelete(qualId: string, employeeId: number) {
+    const qual = await prisma.academicQualification.findFirst({
+      where: { id: qualId, employeeId, isActive: true },
+    });
+    if (!qual) throw { status: 404, message: 'Qualification not found' };
+
+    return prisma.academicQualification.update({
+      where: { id: qualId },
+      data: { isActive: false },
     });
   },
 

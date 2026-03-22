@@ -21,6 +21,16 @@ const envSchema = z.object({
   CLOUDINARY_CLOUD_NAME: optionalNonEmptyString,
   CLOUDINARY_API_KEY: optionalNonEmptyString,
   CLOUDINARY_API_SECRET: optionalNonEmptyString,
+
+  CORS_ALLOWED_ORIGINS: z.string().optional(),
+  FRONTEND_URL: z.string().default('http://localhost:3000'),
+
+  SMTP_HOST:   z.string().optional(),
+  SMTP_PORT:   z.coerce.number().optional().default(587),
+  SMTP_SECURE: z.preprocess((v) => v === 'true' || v === true, z.boolean()).optional().default(false),
+  SMTP_USER:   z.string().optional(),
+  SMTP_PASS:   z.string().optional(),
+  SMTP_FROM:   z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

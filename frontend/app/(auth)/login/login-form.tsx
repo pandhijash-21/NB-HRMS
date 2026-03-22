@@ -7,7 +7,7 @@ import { useState } from "react";
 export default function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [email, setEmail] = useState("");
+  const [employeeId, setEmployeeId] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -21,7 +21,7 @@ export default function LoginForm() {
 
     const result = await signIn("credentials", {
       redirect: false,
-      email,
+      employeeId,
       password,
       callbackUrl,
     });
@@ -29,16 +29,25 @@ export default function LoginForm() {
     setLoading(false);
 
     if (!result || result.error) {
-      setError("Invalid email or password. Please try again.");
+      setError("Invalid Employee ID or password. Please try again.");
       return;
     }
 
-    // Redirect based on role
-    const session = result.url;
-    if (email.includes("admin") || email.includes("hr")) {
+    // NextAuth puts isFirstLogin + role in the URL via callbackUrl on success
+    // Read fresh session to check isFirstLogin
+    const { getSession } = await import("next-auth/react");
+    const session = await getSession();
+
+    if ((session?.user as { isFirstLogin?: boolean })?.isFirstLogin) {
+      router.push("/change-password");
+      return;
+    }
+
+    const role = session?.user?.role ?? "";
+    if (role === "ADMIN" || role === "HR" || role === "HOI" || role === "FINANCE") {
       router.push("/admin/dashboard");
     } else {
-      router.push(session ?? "/profile");
+      router.push(result.url ?? "/profile");
     }
   }
 
@@ -46,16 +55,17 @@ export default function LoginForm() {
     <form className="space-y-5" onSubmit={handleSubmit}>
       <div className="space-y-1">
         <label className="block text-xs font-medium text-slate-600">
-          Email Address
+          Employee ID
         </label>
         <input
-          type="email"
-          autoComplete="email"
+          type="number"
+          autoComplete="username"
           required
+          min={1}
           className="w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-[#1d3459] focus:ring-1 focus:ring-[#1d3459] transition-colors"
-          placeholder="you@example.com"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          placeholder="e.g. 1"
+          value={employeeId}
+          onChange={(e) => setEmployeeId(e.target.value)}
         />
       </div>
 
@@ -117,9 +127,8 @@ export default function LoginForm() {
         )}
       </button>
 
-      {/* Dev hint */}
       <p className="text-center text-xs text-slate-400 pt-1">
-        Tip: use <strong>admin@example.com</strong> for admin access
+        Use your Employee ID and password to sign in
       </p>
     </form>
   );

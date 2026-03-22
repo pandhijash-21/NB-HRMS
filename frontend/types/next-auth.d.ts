@@ -8,6 +8,7 @@ declare module "next-auth" {
       image?: string | null;
       role?: string;
       employeeId?: string;
+      isFirstLogin?: boolean;
       token?: string;
     };
   }
@@ -15,6 +16,7 @@ declare module "next-auth" {
   interface User {
     role?: string;
     employeeId?: string;
+    isFirstLogin?: boolean;
     token?: string;
   }
 }
@@ -23,6 +25,7 @@ declare module "next-auth/jwt" {
   interface JWT {
     role?: string;
     employeeId?: string;
+    isFirstLogin?: boolean;
     backendToken?: string;
   }
 }

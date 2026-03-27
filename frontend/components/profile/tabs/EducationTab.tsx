@@ -52,6 +52,7 @@ export function EducationTab({ employeeId, isAdmin }: EducationTabProps) {
   const [semUrls, setSemUrls] = useState<string[]>([]);
 
   const { register, handleSubmit, setValue, reset, watch, formState: { errors } } = useForm<AcademicQualFormData>({
+    // @ts-expect-error - zod resolver type mismatch for optional fields
     resolver: zodResolver(academicQualSchema),
     defaultValues: { level: "UG", degreeName: "", institution: "", passingYear: new Date().getFullYear() },
   });
@@ -72,7 +73,7 @@ export function EducationTab({ employeeId, isAdmin }: EducationTabProps) {
     setDialogOpen(true);
   };
 
-  const onSubmit = async (data: AcademicQualFormData) => {
+  const onSubmit = async (data: any) => {
     await saveQualification({
       ...data,
       id: editingQual?.id,
@@ -98,16 +99,14 @@ export function EducationTab({ employeeId, isAdmin }: EducationTabProps) {
         <CardContent className="pt-5 space-y-4">
           <div className="flex justify-between items-center">
             <h3 className="text-sm font-semibold text-slate-700">Academic Qualifications</h3>
-            {isAdmin && (
-              <Button
-                size="sm"
-                onClick={openAdd}
-                style={{ backgroundColor: "#1d3459" }}
-                className="text-white text-xs hover:opacity-90"
-              >
-                + Add Qualification
-              </Button>
-            )}
+            <Button
+              size="sm"
+              onClick={openAdd}
+              style={{ backgroundColor: "#1d3459" }}
+              className="text-white text-xs hover:opacity-90"
+            >
+              + Add Qualification
+            </Button>
           </div>
 
           {qualifications.length === 0 && (
@@ -129,14 +128,23 @@ export function EducationTab({ employeeId, isAdmin }: EducationTabProps) {
                         {q.level as string}
                       </Badge>
                       <p className="text-sm font-semibold text-slate-800">{q.degreeName as string}</p>
-                      {q.stream && <span className="text-xs text-slate-500">({q.stream as string})</span>}
-                    </div>
+                      {Boolean(q.stream) && (
+                  <span className="text-slate-400 font-normal ml-2">({q.stream as string})</span>
+                )}    </div>
                     <p className="text-xs text-slate-500 mt-1">{q.institution as string}</p>
                     <div className="flex flex-wrap gap-4 mt-1.5 text-xs text-slate-400">
-                      <span>Passing Year: <strong className="text-slate-600">{q.passingYear as number}</strong></span>
-                      {q.percentage && <span>Percentage: <strong className="text-slate-600">{q.percentage as number}%</strong></span>}
-                      {q.cgpa && <span>CGPA: <strong className="text-slate-600">{q.cgpa as number}</strong></span>}
-                      {q.board && <span>Board: <strong className="text-slate-600">{q.board as string}</strong></span>}
+                      {Boolean(q.passingYear) && (
+                        <span>Passing Year: <strong className="text-slate-600">{q.passingYear as number}</strong></span>
+                      )}
+                      {Boolean(q.percentage) && (
+                        <span>Percentage: <strong className="text-slate-600">{q.percentage as number}%</strong></span>
+                      )}
+                      {Boolean(q.cgpa) && (
+                        <span>CGPA: <strong className="text-slate-600">{q.cgpa as number}</strong></span>
+                      )}
+                      {Boolean(q.board) && (
+                        <span>Board: <strong className="text-slate-600">{q.board as string}</strong></span>
+                      )}
                     </div>
                     {Array.isArray(q.semMarksheetUrls) && (q.semMarksheetUrls as string[]).length > 0 && (
                       <div className="flex flex-wrap gap-2 mt-2">
@@ -153,7 +161,7 @@ export function EducationTab({ employeeId, isAdmin }: EducationTabProps) {
                         ))}
                       </div>
                     )}
-                    {q.certificateUrl && (
+                    {Boolean(q.certificateUrl) && (
                       <a
                         href={q.certificateUrl as string}
                         target="_blank"
@@ -165,22 +173,20 @@ export function EducationTab({ employeeId, isAdmin }: EducationTabProps) {
                     )}
                   </div>
 
-                  {isAdmin && (
-                    <div className="flex gap-1 ml-3 shrink-0">
-                      <button
-                        onClick={() => openEdit(q as AcademicQualFormData)}
-                        className="text-xs px-2 py-1 rounded border border-slate-200 text-slate-500 hover:bg-slate-100 transition-colors"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => setDeleteId(q.id as string)}
-                        className="text-xs px-2 py-1 rounded border border-rose-200 text-rose-500 hover:bg-rose-50 transition-colors"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  )}
+                  <div className="flex gap-1 ml-3 shrink-0">
+                    <button
+                      onClick={() => openEdit(q as AcademicQualFormData)}
+                      className="text-xs px-2 py-1 rounded border border-slate-200 text-slate-500 hover:bg-slate-100 transition-colors"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => setDeleteId(q.id as string)}
+                      className="text-xs px-2 py-1 rounded border border-rose-200 text-rose-500 hover:bg-rose-50 transition-colors"
+                    >
+                      Remove
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}

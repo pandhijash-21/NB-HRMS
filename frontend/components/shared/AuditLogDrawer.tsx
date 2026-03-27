@@ -26,7 +26,7 @@ const OPERATION_COLORS: Record<string, string> = {
 
 export function AuditLogDrawer({ employeeId, trigger }: AuditLogDrawerProps) {
   const [open, setOpen] = useState(false);
-  const { data, loading } = useQuery(GET_AUDIT_LOGS, {
+  const { data, loading } = useQuery<any>(GET_AUDIT_LOGS, {
     variables: { employeeId, limit: 50, offset: 0 },
     skip: !open,
   });

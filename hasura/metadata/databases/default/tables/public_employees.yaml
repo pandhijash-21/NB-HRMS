@@ -16,6 +16,13 @@ array_relationships:
         table:
           name: employee_addresses
           schema: public
+  - name: employee_bank_infos
+    using:
+      foreign_key_constraint_on:
+        column: employee_id
+        table:
+          name: employee_bank_info
+          schema: public
   - name: employee_general_infos
     using:
       foreign_key_constraint_on:
@@ -37,10 +44,24 @@ array_relationships:
         table:
           name: employee_personal_info
           schema: public
+  - name: employee_salary_infos
+    using:
+      foreign_key_constraint_on:
+        column: employee_id
+        table:
+          name: employee_salary_info
+          schema: public
   - name: family_members
     using:
       foreign_key_constraint_on:
         column: employee_id
         table:
           name: family_members
+          schema: public
+  - name: users
+    using:
+      foreign_key_constraint_on:
+        column: employee_id
+        table:
+          name: users
           schema: public

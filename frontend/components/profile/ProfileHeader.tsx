@@ -18,6 +18,7 @@ interface ProfileHeaderProps {
     status: string;
     joiningDate: string;
     employeeCategory: string;
+    updatedAt?: string;
   };
   showAuditLog?: boolean;
   actions?: React.ReactNode;
@@ -101,19 +102,29 @@ export function ProfileHeader({
           </div>
         </div>
 
-        {/* Actions */}
-        <div className="flex gap-2 shrink-0">
-          {showAuditLog && (
-            <AuditLogDrawer
-              employeeId={employee.id}
-              trigger={
-                <button className="text-xs px-3 py-1.5 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors">
-                  Audit Log
-                </button>
-              }
-            />
+        {/* Actions & Timestamps */}
+        <div className="flex flex-col gap-2 shrink-0 items-end">
+          {employee.updatedAt && (
+            <div className="text-[10px] uppercase tracking-wider text-slate-400 font-medium">
+              Last Updated: {new Date(employee.updatedAt).toLocaleString("en-IN", {
+                day: "2-digit", month: "short", year: "numeric",
+                hour: "2-digit", minute: "2-digit"
+              })}
+            </div>
           )}
-          {actions}
+          <div className="flex gap-2">
+            {showAuditLog && (
+              <AuditLogDrawer
+                employeeId={employee.id}
+                trigger={
+                  <button className="text-xs px-3 py-1.5 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors">
+                    Audit Log
+                  </button>
+                }
+              />
+            )}
+            {actions}
+          </div>
         </div>
       </div>
 

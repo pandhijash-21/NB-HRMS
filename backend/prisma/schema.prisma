@@ -122,6 +122,8 @@ model Employee {
   otherInfo        EmployeeOtherInfo?
   familyMembers    FamilyMember[]
   academicQuals    AcademicQualification[]
+  salaryInfo       EmployeeSalaryInfo?
+  bankInfo         EmployeeBankInfo?
   user             User?
 
   @@map("employees")
@@ -506,3 +508,47 @@ model User {
   @@map("users")
 }
 
+// =============================================================================
+// 9. SALARY INFORMATION
+// PDF fields: Pay Commission, Pay Grade, Basic Salary, AGP, Gross Salary
+// =============================================================================
+
+model EmployeeSalaryInfo {
+  id              String    @id @default(uuid())
+  employeeId      Int       @unique @map("employee_id")
+
+  payCommission   String?   @map("pay_commission")
+  payGrade        String?   @map("pay_grade")
+  basicSalary     Decimal?  @map("basic_salary") @db.Decimal(12, 2)
+  agp             Decimal?  @db.Decimal(12, 2)
+  grossSalary     Decimal?  @map("gross_salary") @db.Decimal(12, 2)
+
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  updatedBy       String?   @map("updated_by")
+
+  employee        Employee  @relation(fields: [employeeId], references: [id])
+
+  @@map("employee_salary_info")
+}
+
+// =============================================================================
+// 10. BANK INFORMATION
+// PDF fields: Bank Name, Bank Account No, Bank Branch Code, IFSC Code
+// =============================================================================
+
+model EmployeeBankInfo {
+  id              String    @id @default(uuid())
+  employeeId      Int       @unique @map("employee_id")
+
+  bankName        String?   @map("bank_name")
+  bankAccountNo   String?   @map("bank_account_no")
+  bankBranchCode  String?   @map("bank_branch_code")
+  ifscCode        String?   @map("ifsc_code")
+
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  updatedBy       String?   @map("updated_by")
+
+  employee        Employee  @relation(fields: [employeeId], references: [id])
+
+  @@map("employee_bank_info")
+}

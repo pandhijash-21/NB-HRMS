@@ -1,53 +1,99 @@
-const tabs = [
-  "General",
-  "Personal",
-  "Address",
-  "Other",
-  "Family",
-  "Education",
-] as const;
+"use client";
+
+import { useSession } from "next-auth/react";
+import { useEmployee } from "@/lib/hooks/useEmployee";
+import { Skeleton } from "@/components/ui/skeleton";
+import { GeneralTab } from "@/components/profile/tabs/GeneralTab";
+import { PersonalTab } from "@/components/profile/tabs/PersonalTab";
+import { AddressTab } from "@/components/profile/tabs/AddressTab";
+import { OtherTab } from "@/components/profile/tabs/OtherTab";
+import { SalaryTab } from "@/components/profile/tabs/SalaryTab";
+import { BankTab } from "@/components/profile/tabs/BankTab";
+import { FamilyTab } from "@/components/profile/tabs/FamilyTab";
+import { EducationTab } from "@/components/profile/tabs/EducationTab";
 
 export default function EmployeeProfileEditPage() {
+  const { data: session } = useSession();
+  const employeeId = session?.user?.employeeId;
+  const { employee, loading, refetch } = useEmployee(employeeId);
+
+  if (loading || !employeeId) {
+    return (
+      <div className="space-y-6">
+        <header className="mb-8">
+          <Skeleton className="h-8 w-48 mb-2" />
+          <Skeleton className="h-4 w-96" />
+        </header>
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-64 w-full rounded-2xl" />
+        ))}
+      </div>
+    );
+  }
+
+  if (!employee) {
+    return (
+      <div className="flex h-64 items-center justify-center rounded-2xl border border-rose-100 bg-rose-50 text-rose-500">
+        Employee profile not found.
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-5">
-      <header className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+    <div className="space-y-8 pb-12">
+      <header className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between border-b border-slate-200/50 pb-5">
         <div>
-          <h1 className="text-base font-semibold text-slate-900">
-            Edit profile
+          <h1 className="text-2xl font-bold text-slate-800 tracking-tight">
+            Comprehensive Profile Review
           </h1>
-          <p className="text-xs text-slate-500">
-            Keep your personal and academic information up to date.
+          <p className="text-sm text-slate-500 mt-1">
+            Review and update your information across all categories in one continuous page.
+            Click 'Edit' on any section to modify its contents.
           </p>
         </div>
-        <button className="inline-flex items-center rounded-md bg-[color:var(--accent)] px-3 py-1.5 text-xs font-medium text-slate-900 shadow-sm hover:bg-[color:var(--accent-soft)]">
-          Save changes
-        </button>
       </header>
 
-      <div className="rounded-xl border border-[color:var(--primary-muted)] bg-white/80">
-        <div className="flex flex-wrap border-b border-[color:var(--primary-muted)] bg-slate-50/60 px-3">
-          {tabs.map((tab) => (
-            <button
-              key={tab}
-              className={
-                "relative px-3 py-2 text-xs font-medium text-slate-600 hover:text-[color:var(--primary)] " +
-                (tab === "General"
-                  ? "text-[color:var(--primary)] after:absolute after:inset-x-2 after:-bottom-px after:h-0.5 after:rounded-full after:bg-[color:var(--accent)]"
-                  : "")
-              }
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
+      <div className="space-y-10">
+        <section id="general">
+          <h2 className="text-lg font-bold text-slate-700 mb-4 px-1">1. General Information</h2>
+          <GeneralTab employee={employee} onUpdate={refetch} isAdmin={true} />
+        </section>
 
-        <div className="p-4 text-xs text-slate-600">
-          {/* Placeholder: individual tab forms will be wired later */}
-          Start with the <span className="font-semibold">General</span> tab:
-          Full Name, Organization, Department, Reporting hierarchy, etc.
-        </div>
+        <section id="personal">
+          <h2 className="text-lg font-bold text-slate-700 mb-4 px-1">2. Personal Details</h2>
+          <PersonalTab employee={employee} onUpdate={refetch} isAdmin={true} />
+        </section>
+
+        <section id="address">
+          <h2 className="text-lg font-bold text-slate-700 mb-4 px-1">3. Contact & Address</h2>
+          <AddressTab employeeId={employee.id} isAdmin={true} />
+        </section>
+
+        <section id="other">
+          <h2 className="text-lg font-bold text-slate-700 mb-4 px-1">4. Other Information</h2>
+          <OtherTab employee={employee} employeeId={employee.id} onUpdate={refetch} isAdmin={true} />
+        </section>
+
+        <section id="family">
+          <h2 className="text-lg font-bold text-slate-700 mb-4 px-1">5. Family Members</h2>
+          <FamilyTab employeeId={employee.id} isAdmin={true} />
+        </section>
+
+        <section id="education">
+          <h2 className="text-lg font-bold text-slate-700 mb-4 px-1">6. Academic Qualifications</h2>
+          <EducationTab employeeId={employee.id} isAdmin={true} />
+        </section>
+
+        <section id="salary">
+          <h2 className="text-lg font-bold text-slate-700 mb-4 px-1">7. Salary Information</h2>
+          <SalaryTab employee={employee} isAdmin={true} />
+        </section>
+
+        <section id="bank">
+          <h2 className="text-lg font-bold text-slate-700 mb-4 px-1">8. Bank Details</h2>
+          <BankTab employee={employee} isAdmin={true} />
+        </section>
       </div>
     </div>
   );
 }
-

@@ -4,7 +4,7 @@ import { useQuery, useMutation } from "@apollo/client/react";
 import { GET_EMPLOYEE_ADDRESSES, UPSERT_EMPLOYEE_ADDRESS } from "@/lib/graphql";
 
 export function useAddress(employeeId: string) {
-  const { data, loading, error, refetch } = useQuery(GET_EMPLOYEE_ADDRESSES, {
+  const { data, loading, error, refetch } = useQuery<any>(GET_EMPLOYEE_ADDRESSES, {
     variables: { employeeId },
     skip: !employeeId,
   });

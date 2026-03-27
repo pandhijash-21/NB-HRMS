@@ -23,12 +23,13 @@ export function useUpload(employeeId: string) {
     setProgress(0);
     const formData = new FormData();
     formData.append("file", file);
+    formData.append("employeeId", employeeId);
     if (extraData) {
       Object.entries(extraData).forEach(([k, v]) => formData.append(k, v));
     }
     try {
       const res = await api.post(
-        `/personal-education/employees/${employeeId}/upload/${type}`,
+        `upload/${type === 'photo' ? 'photo' : type === 'signature' ? 'signature' : type.replace(/([A-Z])/g, '-$1').toLowerCase()}`,
         formData,
         {
           headers: { "Content-Type": "multipart/form-data" },

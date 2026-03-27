@@ -38,12 +38,12 @@ app.get('/health', async (_req, res) => {
 app.use('/actions', actionsRouter);
 app.use('/events', eventsRouter);
 
-// Specific routes first — must come before the generic /api mount
+// Generic /api prefix - personal-education module
+app.use('/api', personalEducationRouter);
+
+// Specific routes
 app.use('/api/auth',  authRouter);
 app.use('/api/admin', userMgmtRouter);
-
-// Generic /api prefix last — personal-education module
-app.use('/api', personalEducationRouter);
 
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);

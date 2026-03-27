@@ -96,35 +96,35 @@
 }
 
 .app-header {
-  @apply flex items-center justify-between px-6 py-3 border-b border-[color:var(--primary-muted)] bg-white;
+  @apply flex items-center justify-between px-6 py-3 border-b border-white/20 bg-white/40 backdrop-blur-xl z-10 sticky top-0;
 }
 
 .app-header-title {
-  @apply text-lg font-semibold tracking-tight text-[color:var(--primary)];
+  @apply text-lg font-bold tracking-tight text-[#1d3459];
 }
 
 .app-header-subtitle {
-  @apply text-xs text-slate-500;
+  @apply text-xs font-medium text-slate-500;
 }
 
 .app-main {
-  @apply flex-1 flex bg-slate-50;
+  @apply flex-1 flex bg-gradient-to-br from-[#e0eaf5] via-[#f1f5f9] to-[#ffffff] relative;
 }
 
 .app-sidebar {
-  @apply hidden md:flex w-64 flex-col border-r border-[color:var(--primary-muted)] bg-white;
+  @apply hidden md:flex w-72 flex-col border-r border-white/30 bg-white/30 backdrop-blur-2xl shadow-[4px_0_30px_rgba(0,0,0,0.03)] z-20;
 }
 
 .app-sidebar-section-title {
-  @apply px-5 pt-6 pb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400;
+  @apply px-6 pt-6 pb-2 text-[0.65rem] font-bold uppercase tracking-widest text-slate-400/80;
 }
 
 .app-sidebar-link {
-  @apply flex items-center gap-2 px-5 py-2 text-sm text-slate-600 hover:bg-[color:var(--primary-muted)] hover:text-[color:var(--primary)] transition-colors;
+  @apply relative flex items-center gap-3 px-4 py-2.5 mx-3 mb-1.5 rounded-xl text-sm font-medium text-slate-500 overflow-hidden transition-all duration-300 hover:text-[#1d3459] hover:translate-x-1 z-10 before:absolute before:inset-0 before:-z-10 before:rounded-xl before:bg-white/50 before:opacity-0 before:transition-all before:duration-300 hover:before:opacity-100;
 }
 
 .app-sidebar-link-active {
-  @apply bg-[color:var(--primary)] text-white font-medium;
+  @apply text-[#1d3459] shadow-sm font-semibold translate-x-1 before:opacity-100 before:bg-white/80 before:shadow-[inset_0_1px_1px_rgba(255,255,255,1)];
 }
 
 .app-content {

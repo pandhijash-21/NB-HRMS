@@ -23,15 +23,22 @@ export function Sidebar({ title, subtitle, navGroups, footer }: SidebarProps) {
   return (
     <aside className="app-sidebar flex flex-col h-full">
       {/* Logo / Brand */}
-      <div
-        className="flex flex-col px-5 py-5 border-b border-slate-100"
-        style={{ backgroundColor: "#1d3459" }}
-      >
-        <span className="text-base font-bold tracking-tight text-white">
+      <div className="flex flex-col px-6 py-6 border-b border-white/20 bg-white/10 backdrop-blur-md">
+        <span className="text-xl font-extrabold tracking-tight text-[#1d3459] flex items-center gap-2">
+          <div className="w-6 h-6 rounded-lg bg-[#1d3459] text-[#d9b557] flex items-center justify-center">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+          </div>
           {title}
         </span>
         {subtitle && (
-          <span className="text-xs text-slate-300 mt-0.5">{subtitle}</span>
+          <span className="text-[0.65rem] font-bold uppercase tracking-wider text-slate-400 mt-1 pl-8">
+            {subtitle}
+          </span>
         )}
       </div>
 

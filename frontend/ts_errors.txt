@@ -1,0 +1,4 @@
+components/profile/tabs/AddressTab.tsx(129,38): error TS2345: Argument of type '(data: AddressFormData) => Promise<void>' is not assignable to parameter of type 'SubmitHandler<TFieldValues>'.
+  Types of parameters 'data' and 'data' are incompatible.
+    Type 'TFieldValues' is not assignable to type '{ local: { addressLine1: string; city: string; state: string; pincode: string; country: string; addressLine2?: string | undefined; district?: string | undefined; }; permanent: { addressLine1: string; ... 5 more ...; district?: string | undefined; }; sameAsLocal?: boolean | undefined; }'.
+      Type 'FieldValues' is missing the following properties from type '{ local: { addressLine1: string; city: string; state: string; pincode: string; country: string; addressLine2?: string | undefined; district?: string | undefined; }; permanent: { addressLine1: string; ... 5 more ...; district?: string | undefined; }; sameAsLocal?: boolean | undefined; }': local, permanent

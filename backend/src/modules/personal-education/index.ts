@@ -10,7 +10,6 @@ import { uploadRouter } from './upload.routes';
 import { auditRouter } from './audit.routes';
 
 export const personalEducationRouter = Router();
-
 personalEducationRouter.use('/employees', employeeRouter);
 personalEducationRouter.use('/employees', generalRouter);
 personalEducationRouter.use('/employees', personalRouter);

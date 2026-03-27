@@ -11,6 +11,8 @@ import { AddressTab } from "@/components/profile/tabs/AddressTab";
 import { OtherTab } from "@/components/profile/tabs/OtherTab";
 import { FamilyTab } from "@/components/profile/tabs/FamilyTab";
 import { EducationTab } from "@/components/profile/tabs/EducationTab";
+import { SalaryTab } from "@/components/profile/tabs/SalaryTab";
+import { BankTab } from "@/components/profile/tabs/BankTab";
 import { DocumentsTab } from "@/components/profile/tabs/DocumentsTab";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -45,9 +47,11 @@ export default function AdminEmployeeProfilePage({ params }: PageProps) {
 
   const tabs = [
     { value: "general",   label: "General",   content: <GeneralTab   employee={employee} isAdmin onUpdate={refetch} /> },
-    { value: "personal",  label: "Personal",  content: <PersonalTab  employeeId={id} isAdmin /> },
+    { value: "personal",  label: "Personal",  content: <PersonalTab employee={employee} isAdmin onUpdate={refetch} /> },
     { value: "address",   label: "Address",   content: <AddressTab   employeeId={id} isAdmin /> },
-    { value: "other",     label: "Other",     content: <OtherTab     employeeId={id} isAdmin /> },
+    { value: "other",     label: "Other",     content: <OtherTab     employee={employee} employeeId={id} isAdmin onUpdate={refetch} /> },
+    { value: "salary",    label: "Salary",    content: <SalaryTab    employee={employee} isAdmin /> },
+    { value: "bank",      label: "Bank",      content: <BankTab      employee={employee} isAdmin /> },
     { value: "family",    label: "Family",    content: <FamilyTab    employeeId={id} isAdmin /> },
     { value: "education", label: "Education", content: <EducationTab employeeId={id} isAdmin /> },
     { value: "documents", label: "Documents", content: <DocumentsTab employeeId={id} isAdmin /> },

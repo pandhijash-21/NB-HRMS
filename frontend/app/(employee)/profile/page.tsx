@@ -10,8 +10,12 @@ import { AddressTab } from "@/components/profile/tabs/AddressTab";
 import { OtherTab } from "@/components/profile/tabs/OtherTab";
 import { FamilyTab } from "@/components/profile/tabs/FamilyTab";
 import { EducationTab } from "@/components/profile/tabs/EducationTab";
+import { SalaryTab } from "@/components/profile/tabs/SalaryTab";
+import { BankTab } from "@/components/profile/tabs/BankTab";
 import { DocumentsTab } from "@/components/profile/tabs/DocumentsTab";
 import { Skeleton } from "@/components/ui/skeleton";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
 
 export default function ProfilePage() {
   const { data: session } = useSession();
@@ -46,7 +50,7 @@ export default function ProfilePage() {
     {
       value: "personal",
       label: "Personal",
-      content: <PersonalTab employeeId={employeeId} isAdmin={false} />,
+      content: <PersonalTab employee={employee} isAdmin={false} onUpdate={refetch} />,
     },
     {
       value: "address",
@@ -56,7 +60,17 @@ export default function ProfilePage() {
     {
       value: "other",
       label: "Other",
-      content: <OtherTab employeeId={employeeId} isAdmin={false} />,
+      content: <OtherTab employee={employee} employeeId={employeeId} isAdmin={false} onUpdate={refetch} />,
+    },
+    {
+      value: "salary",
+      label: "Salary",
+      content: <SalaryTab employee={employee} isAdmin={false} />,
+    },
+    {
+      value: "bank",
+      label: "Bank",
+      content: <BankTab employee={employee} isAdmin={false} />,
     },
     {
       value: "family",
@@ -77,7 +91,17 @@ export default function ProfilePage() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-4">
-      <ProfileHeader employee={employee} showAuditLog={false} />
+      <ProfileHeader 
+        employee={employee} 
+        showAuditLog={false} 
+        actions={
+          <Link href="/profile/edit">
+            <Button size="sm" variant="outline" className="text-xs border-[#1d3459] text-[#1d3459] hover:bg-[#1d3459] hover:text-white">
+              Edit Profile
+            </Button>
+          </Link>
+        }
+      />
       <ProfileTabs tabs={tabs} defaultTab="general" />
     </div>
   );

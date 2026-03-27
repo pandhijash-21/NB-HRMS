@@ -9,7 +9,7 @@ import type { AcademicQualFormData } from "@/lib/validators/academic.schema";
 export function useAcademicQuals(employeeId: string) {
   const [saving, setSaving] = useState(false);
 
-  const { data, loading, error, refetch } = useQuery(
+  const { data, loading, error, refetch } = useQuery<any>(
     GET_ACADEMIC_QUALIFICATIONS,
     {
       variables: { employeeId },
@@ -21,13 +21,13 @@ export function useAcademicQuals(employeeId: string) {
     setSaving(true);
     try {
       if (qual.id) {
-        await api.put(
-          `/personal-education/employees/${employeeId}/academic/${qual.id}`,
+        await api.patch(
+          `employees/${employeeId}/academic/${qual.id}`,
           qual
         );
       } else {
         await api.post(
-          `/personal-education/employees/${employeeId}/academic`,
+          `employees/${employeeId}/academic`,
           qual
         );
       }
@@ -41,7 +41,7 @@ export function useAcademicQuals(employeeId: string) {
     setSaving(true);
     try {
       await api.delete(
-        `/personal-education/employees/${employeeId}/academic/${id}`
+        `employees/${employeeId}/academic/${id}`
       );
       refetch();
     } finally {

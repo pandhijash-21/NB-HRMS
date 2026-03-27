@@ -122,6 +122,8 @@ model Employee {
   otherInfo        EmployeeOtherInfo?
   familyMembers    FamilyMember[]
   academicQuals    AcademicQualification[]
+  salaryInfo       EmployeeSalaryInfo?
+  bankInfo         EmployeeBankInfo?
 
   @@map("employees")
 }
@@ -217,6 +219,9 @@ model EmployeePersonalInfo {
   passportIssueDate  DateTime?   @map("passport_issue_date")
   passportExpiryDate DateTime?   @map("passport_expiry_date")
 
+  // Custom Fields
+  customFields       Json?       @map("custom_fields")
+
   updatedAt        DateTime      @updatedAt @map("updated_at")
   updatedBy        String?       @map("updated_by")
 
@@ -299,6 +304,45 @@ model EmployeeOtherInfo {
   employee        Employee  @relation(fields: [employeeId], references: [id])
 
   @@map("employee_other_info")
+}
+
+// =============================================================================
+// NEW: SALARY & BANK INFORMATION
+// =============================================================================
+
+model EmployeeSalaryInfo {
+  id              String    @id @default(uuid())
+  employeeId      Int       @unique @map("employee_id")
+
+  payCommission   String?   @map("pay_commission")                      // 6TH PAY / 7TH PAY
+  payGrade        String?   @map("pay_grade")
+  basicSalary     Decimal?  @map("basic_salary") @db.Decimal(10,2)
+  agp             Decimal?  @map("agp") @db.Decimal(10,2)
+  grossSalary     Decimal?  @map("gross_salary") @db.Decimal(10,2)
+
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  updatedBy       String?   @map("updated_by")
+
+  employee        Employee  @relation(fields: [employeeId], references: [id])
+
+  @@map("employee_salary_info")
+}
+
+model EmployeeBankInfo {
+  id              String    @id @default(uuid())
+  employeeId      Int       @unique @map("employee_id")
+
+  bankName        String?   @map("bank_name")                           // STATE BANK OF INDIA
+  bankAccountNo   String?   @map("bank_account_no")                     // XXXXXXXX1234
+  bankBranchCode  String?   @map("bank_branch_code")
+  ifscCode        String?   @map("ifsc_code")                           // optional
+
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  updatedBy       String?   @map("updated_by")
+
+  employee        Employee  @relation(fields: [employeeId], references: [id])
+
+  @@map("employee_bank_info")
 }
 
 // =============================================================================

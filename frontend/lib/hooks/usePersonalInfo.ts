@@ -12,7 +12,7 @@ export function usePersonalInfo(employeeId: string) {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.get(`/personal-education/employees/${employeeId}/personal`);
+      const res = await api.get(`employees/${employeeId}/personal`);
       return res.data.data;
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Failed to load personal info";
@@ -27,8 +27,8 @@ export function usePersonalInfo(employeeId: string) {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.put(
-        `/personal-education/employees/${employeeId}/personal`,
+      const res = await api.patch(
+        `employees/${employeeId}/personal`,
         data
       );
       return res.data.data;

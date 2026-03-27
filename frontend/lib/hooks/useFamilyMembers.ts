@@ -10,7 +10,7 @@ export function useFamilyMembers(employeeId: string) {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const { data, loading, error, refetch } = useQuery(GET_FAMILY_MEMBERS, {
+  const { data, loading, error, refetch } = useQuery<any>(GET_FAMILY_MEMBERS, {
     variables: { employeeId },
     skip: !employeeId,
   });
@@ -20,13 +20,13 @@ export function useFamilyMembers(employeeId: string) {
     setSaveError(null);
     try {
       if (member.id) {
-        await api.put(
-          `/personal-education/employees/${employeeId}/family/${member.id}`,
+        await api.patch(
+          `employees/${employeeId}/family/${member.id}`,
           member
         );
       } else {
         await api.post(
-          `/personal-education/employees/${employeeId}/family`,
+          `employees/${employeeId}/family`,
           member
         );
       }
@@ -44,7 +44,7 @@ export function useFamilyMembers(employeeId: string) {
     setSaving(true);
     try {
       await api.delete(
-        `/personal-education/employees/${employeeId}/family/${id}`
+        `employees/${employeeId}/family/${id}`
       );
       refetch();
     } finally {

@@ -42,8 +42,7 @@ function StatCard({
 }
 
 export default function DashboardPage() {
-  const { employees, total, loading } = useEmployeeList({ limit: 5 });
-  const activeCount = employees.filter((e: { status: string }) => e.status === "ACTIVE").length;
+  const { employees, total, activeCount, loading } = useEmployeeList({ limit: 5 });
 
   return (
     <div className="space-y-6">

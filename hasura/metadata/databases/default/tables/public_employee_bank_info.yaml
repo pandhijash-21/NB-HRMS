@@ -1,0 +1,7 @@
+table:
+  name: employee_bank_info
+  schema: public
+object_relationships:
+  - name: employee
+    using:
+      foreign_key_constraint_on: employee_id

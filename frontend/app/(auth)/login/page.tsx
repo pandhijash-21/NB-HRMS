@@ -5,13 +5,12 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#1d3459] to-[#243b63]">
       <div className="w-full max-w-md mx-4">
-        {/* Card */}
-        <div className="rounded-2xl bg-white shadow-2xl px-8 py-10">
+        {/* Glass Card */}
+        <div className="relative rounded-3xl bg-white/5 backdrop-blur-2xl border border-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] px-8 py-12 overflow-hidden before:absolute before:inset-0 before:-z-10 before:bg-gradient-to-b before:from-white/10 before:to-transparent before:opacity-50">
           {/* Brand */}
-          <div className="mb-8 text-center">
+          <div className="mb-10 text-center">
             <div
-              className="inline-flex items-center justify-center w-14 h-14 rounded-2xl mb-4"
-              style={{ backgroundColor: "#1d3459" }}
+              className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-5 bg-white/10 border border-white/20 shadow-inner backdrop-blur-md"
             >
               <svg
                 viewBox="0 0 24 24"
@@ -26,14 +25,11 @@ export default function LoginPage() {
                 <path d="M16 3.13a4 4 0 0 1 0 7.75" />
               </svg>
             </div>
-            <h1
-              className="text-xl font-bold"
-              style={{ color: "#1d3459" }}
-            >
+            <h1 className="text-2xl font-bold text-white tracking-wide">
               HRMS Portal
             </h1>
-            <p className="mt-1 text-xs text-slate-500">
-              Gandhinagar University · Human Resource Management
+            <p className="mt-2 text-xs text-white/60 font-medium tracking-wide">
+              GANDHINAGAR UNIVERSITY
             </p>
           </div>
 
@@ -42,8 +38,8 @@ export default function LoginPage() {
           </Suspense>
         </div>
 
-        <p className="mt-4 text-center text-xs text-slate-300">
-          &copy; {new Date().getFullYear()} Gandhinagar University · All rights reserved
+        <p className="mt-6 text-center text-xs text-white/40 tracking-wider font-light">
+          &copy; {new Date().getFullYear()} Gandhinagar University
         </p>
       </div>
     </div>

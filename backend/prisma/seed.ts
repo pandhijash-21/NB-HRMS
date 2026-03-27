@@ -153,11 +153,14 @@ async function main() {
   const adminRoleId = roleIdMap['ADMIN'];
 
   // Default password: 01011990  (admin should change on first login)
-  const defaultHash = await bcrypt.hash('01011990', 12);
+  const defaultHash = await bcrypt.hash('01011998', 12);
 
   const adminUser = await prisma.user.upsert({
     where:  { employeeId: 1 },
-    update: {},
+    update: {
+      passwordHash: defaultHash,
+      isFirstLogin: true,
+    },
     create: {
       employeeId:   1,
       roleId:       adminRoleId,
@@ -173,10 +176,133 @@ async function main() {
   });
 
   console.log('✅  Admin user seeded');
+
+  // ── HR employee + user ──────────────────────────────────────────────
+  console.log('⏳  Seeding HR employee & user…');
+  const hrEmployee = await prisma.employee.upsert({
+    where:  { id: 2 },
+    update: {},
+    create: {
+      id:           2,
+      abbreviation: 'HRM',
+      userId:       'pending-hr',
+      status:       'ACTIVE',
+    },
+  });
+
+  const hrUser = await prisma.user.upsert({
+    where:  { employeeId: 2 },
+    update: { passwordHash: defaultHash },
+    create: {
+      employeeId:   2,
+      roleId:       roleIdMap['HR'],
+      passwordHash: defaultHash,
+    },
+  });
+
+  await prisma.employee.update({
+    where: { id: 2 },
+    data:  { userId: hrUser.id },
+  });
+
+  await prisma.employeeGeneralInfo.upsert({
+    where: { employeeId: 2 },
+    update: {},
+    create: {
+      employeeId: 2,
+      fullName: 'SNEHA MEHTA',
+      organization: 'GANDHINAGAR UNIVERSITY',
+      department: 'HR DEPARTMENT',
+      employeeCategory: 'NON_TEACHING',
+      designation: 'HR MANAGER',
+      joiningDate: new Date('2020-05-15'),
+      originalJoiningDate: new Date('2020-05-15'),
+    },
+  });
+
+  // ── Regular Employees ────────────────────────────────────────────────
+  console.log('⏳  Seeding regular employees…');
+  const employeesToSeed = [
+    {
+      id: 3,
+      name: 'RAJESH KUMAR',
+      designation: 'ASSISTANT PROFESSOR',
+      dept: 'COMPUTER ENGINEERING',
+      category: 'TEACHING' as const,
+    },
+    {
+      id: 4,
+      name: 'PRIYA SHARMA',
+      designation: 'LECTURER',
+      dept: 'INFORMATION TECHNOLOGY',
+      category: 'TEACHING' as const,
+    },
+  ];
+
+  for (const empData of employeesToSeed) {
+    const emp = await prisma.employee.upsert({
+      where:  { id: empData.id },
+      update: {},
+      create: {
+        id:           empData.id,
+        abbreviation: empData.name.split(' ').map(n => n[0]).join(''),
+        userId:       `pending-emp-${empData.id}`,
+        status:       'ACTIVE',
+      },
+    });
+
+    const user = await prisma.user.upsert({
+      where:  { employeeId: empData.id },
+      update: { passwordHash: defaultHash },
+      create: {
+        employeeId:   empData.id,
+        roleId:       roleIdMap['EMPLOYEE'],
+        passwordHash: defaultHash,
+        isFirstLogin: true,
+      },
+    });
+
+    await prisma.employee.update({
+      where: { id: empData.id },
+      data:  { userId: user.id },
+    });
+
+    await prisma.employeeGeneralInfo.upsert({
+      where: { employeeId: empData.id },
+      update: {},
+      create: {
+        employeeId: empData.id,
+        fullName: empData.name,
+        organization: 'GANDHINAGAR UNIVERSITY',
+        department: empData.dept,
+        employeeCategory: empData.category,
+        designation: empData.designation,
+        joiningDate: new Date('2022-01-10'),
+        originalJoiningDate: new Date('2022-01-10'),
+      },
+    });
+
+    await prisma.employeePersonalInfo.upsert({
+      where: { employeeId: empData.id },
+      update: {},
+      create: {
+        employeeId: empData.id,
+        birthDate: new Date('1990-01-01'),
+        gender: empData.id % 2 === 0 ? 'FEMALE' : 'MALE',
+        maritalStatus: 'SINGLE',
+        nationality: 'INDIAN',
+        bloodGroup: 'O_POS',
+      },
+    });
+  }
+
+  console.log('✅  Demo employees and users seeded');
   console.log('');
   console.log('═══════════════════════════════════════');
-  console.log(' Login with:  employeeId = 1');
-  console.log(' Password  :  01011990  (change on first login)');
+  console.log(' Admin Login  : employeeId = 1');
+  console.log(' HR Login     : employeeId = 2');
+  console.log(' Emp Login    : employeeId = 3, 4');
+  console.log(' Default Pass : 01011998');
   console.log('═══════════════════════════════════════');
 }
 

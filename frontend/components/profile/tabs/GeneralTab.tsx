@@ -65,22 +65,22 @@ export function GeneralTab({ employee, isAdmin, onUpdate }: GeneralTabProps) {
   const onSubmit = async (data: GeneralInfoFormData) => {
     await mutate({
       variables: {
-        id: employee.id,
+        employeeId: employee.id,
         set: {
-          fullName: data.fullName,
-          joiningDate: data.joiningDate,
-          originalJoiningDate: data.originalJoiningDate,
+          full_name: data.fullName,
+          joining_date: data.joiningDate,
+          original_joining_date: data.originalJoiningDate,
           designation: data.designation,
           department: data.department,
-          functionalDepartment: data.functionalDepartment,
+          functional_department: data.functionalDepartment,
           organization: data.organization,
-          subOrganization: data.subOrganization,
-          employeeCategory: data.employeeCategory,
-          appointmentType: data.appointmentType,
+          sub_organization: data.subOrganization,
+          employee_category: data.employeeCategory,
+          appointment_type: data.appointmentType,
           shift: data.shift,
-          firstReporting: data.firstReporting,
-          secondReporting: data.secondReporting,
-          incrementMonth: data.incrementMonth,
+          first_reporting: data.firstReporting,
+          second_reporting: data.secondReporting,
+          increment_month: data.incrementMonth,
         },
       },
     });
@@ -94,16 +94,14 @@ export function GeneralTab({ employee, isAdmin, onUpdate }: GeneralTabProps) {
         <CardContent className="pt-5 space-y-5">
           <div className="flex justify-between items-center">
             <h3 className="text-sm font-semibold text-slate-700">General Information</h3>
-            {isAdmin && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setEditing(true)}
-                className="text-xs border-[#1d3459] text-[#1d3459] hover:bg-[#1d3459] hover:text-white"
-              >
-                Edit
-              </Button>
-            )}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setEditing(true)}
+              className="text-xs border-[#1d3459] text-[#1d3459] hover:bg-[#1d3459] hover:text-white"
+            >
+              Edit
+            </Button>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">

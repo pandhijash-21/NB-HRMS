@@ -5,7 +5,10 @@ import { employeeController } from './employee.controller';
 
 export const employeeRouter = Router();
 
-employeeRouter.post('/full', requireAuth, requireRole(['HR', 'ADMIN']), employeeController.createFull);
-employeeRouter.get('/:id', requireAuth, employeeController.getById);
-employeeRouter.delete('/:id', requireAuth, requireRole(['HR', 'ADMIN']), employeeController.delete);
+const hrAdmin = requireRole(['HR', 'ADMIN']);
 
+employeeRouter.get('/',      requireAuth, hrAdmin, employeeController.list);
+employeeRouter.post('/full', requireAuth, hrAdmin, employeeController.createFull);
+employeeRouter.get('/:id',   requireAuth, employeeController.getById);
+employeeRouter.patch('/:id', requireAuth, hrAdmin, employeeController.update);
+employeeRouter.delete('/:id',requireAuth, hrAdmin, employeeController.delete);

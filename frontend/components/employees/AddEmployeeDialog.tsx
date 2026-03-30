@@ -23,8 +23,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useCreateEmployee } from "@/lib/hooks/useEmployee";
-import { PlusCircle, Loader2 } from "lucide-react";
+import { useCreateEmployee } from "@/modules/admin/hooks/useAdminEmployees";
+import { PlusCircle, Loader2, UserPlus, ShieldAlert } from "lucide-react";
 
 const addEmployeeSchema = z.object({
   fullName: z.string().min(3, "Full name must be at least 3 characters"),
@@ -38,11 +38,9 @@ const addEmployeeSchema = z.object({
 
 type AddEmployeeForm = z.infer<typeof addEmployeeSchema>;
 
-export function AddEmployeeDialog({ onEmployeeAdded }: { onEmployeeAdded: () => void }) {
+export function AddEmployeeDialog() {
   const [open, setOpen] = useState(false);
-  const { createEmployee } = useCreateEmployee();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const createMutation = useCreateEmployee();
 
   const {
     register,
@@ -58,155 +56,151 @@ export function AddEmployeeDialog({ onEmployeeAdded }: { onEmployeeAdded: () => 
   });
 
   const onSubmit = async (data: AddEmployeeForm) => {
-    setLoading(true);
-    setError(null);
-    try {
-      await createEmployee(data);
-      setOpen(false);
-      reset();
-      onEmployeeAdded();
-    } catch (err: any) {
-      setError(err.response?.data?.message || err.message || "Failed to create employee");
-    } finally {
-      setLoading(false);
-    }
+    createMutation.mutate(data, {
+      onSuccess: () => {
+        setOpen(false);
+        reset();
+      },
+    });
   };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button className="bg-[#1d3459] hover:bg-[#1d3459]/90 text-white gap-2 text-sm">
-          <PlusCircle className="h-4 w-4" />
-          Add Employee
+        <Button className="bg-[#1d3459] hover:bg-[#1d3459]/90 text-white gap-2 text-xs font-bold uppercase tracking-widest px-6 h-11 rounded-xl shadow-lg shadow-[#1d3459]/10 transition-all hover:shadow-xl hover:-translate-y-0.5">
+          <UserPlus className="h-4 w-4" />
+          Add Personnel
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[500px] border-none shadow-2xl">
-        <DialogHeader>
-          <DialogTitle className="text-[#1d3459] font-bold">Add New Employee</DialogTitle>
-          <DialogDescription className="text-slate-500 text-xs text-balance">
-            Create a base employee record and a system user account. Detailed information can be added later.
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent className="sm:max-w-[550px] border-none shadow-2xl rounded-3xl p-0 overflow-hidden bg-slate-50/50 backdrop-blur-xl">
+        <div className="bg-[#1d3459] p-8 text-white relative h-32 overflow-hidden">
+             <div className="relative z-10">
+                <DialogTitle className="text-xl font-extrabold tracking-tight flex items-center gap-2">
+                    <UserPlus className="w-5 h-5 text-[#d9b557]" />
+                    Onboard New Employee
+                </DialogTitle>
+                <DialogDescription className="text-white/60 text-[11px] font-medium mt-1">
+                    Establish a new institutional record and system credentials.
+                </DialogDescription>
+             </div>
+             <ShieldAlert className="absolute -right-8 -bottom-8 w-40 h-40 text-white/5 rotate-12" />
+        </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-4">
-          {error && (
-            <div className="p-3 bg-rose-50 text-rose-600 border border-rose-100 rounded-lg text-xs font-medium">
-              {error}
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2 space-y-1.5">
-              <Label htmlFor="fullName" className="text-slate-700 font-semibold text-xs">Full Name *</Label>
+        <div className="p-8 space-y-6">
+          <div className="grid grid-cols-2 gap-6">
+            <div className="col-span-2 space-y-2">
+              <Label htmlFor="fullName" className="text-[10px] font-bold text-slate-400 uppercase ml-1">Full Name *</Label>
               <Input
                 id="fullName"
                 {...register("fullName")}
                 placeholder="e.g. Dr. Rajesh Kumar"
-                className="border-slate-200 focus:border-[#1d3459] transition-all text-sm h-9"
+                className="rounded-xl border-slate-200/60 bg-white focus:ring-2 focus:ring-[#1d3459]/10 transition-all text-sm h-11 font-medium"
               />
-              {errors.fullName && <p className="text-[10px] text-rose-500 font-medium">{errors.fullName.message}</p>}
+              {errors.fullName && <p className="text-[10px] text-rose-500 font-bold uppercase tracking-tight">{errors.fullName.message}</p>}
             </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="employeeCode" className="text-slate-700 font-semibold text-xs">Employee Code *</Label>
+            <div className="space-y-2">
+              <Label htmlFor="employeeCode" className="text-[10px] font-bold text-slate-400 uppercase ml-1">Unique Code *</Label>
               <Input
                 id="employeeCode"
                 {...register("employeeCode")}
                 placeholder="e.g. ADM001"
-                className="border-slate-200 focus:border-[#1d3459] transition-all text-sm h-9"
+                className="rounded-xl border-slate-200/60 bg-white focus:ring-2 focus:ring-[#1d3459]/10 transition-all text-sm h-11 font-medium"
               />
-              {errors.employeeCode && <p className="text-[10px] text-rose-500 font-medium">{errors.employeeCode.message}</p>}
+              {errors.employeeCode && <p className="text-[10px] text-rose-500 font-bold uppercase tracking-tight">{errors.employeeCode.message}</p>}
             </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="email" className="text-slate-700 font-semibold text-xs">Institute Email *</Label>
+            <div className="space-y-2">
+              <Label htmlFor="email" className="text-[10px] font-bold text-slate-400 uppercase ml-1">Institutional Email *</Label>
               <Input
                 id="email"
                 type="email"
                 {...register("email")}
-                placeholder="rajesh.kumar@uni.ac.in"
-                className="border-slate-200 focus:border-[#1d3459] transition-all text-sm h-9"
+                placeholder="rajesh.k@gu.ac.in"
+                className="rounded-xl border-slate-200/60 bg-white focus:ring-2 focus:ring-[#1d3459]/10 transition-all text-sm h-11 font-medium"
               />
-              {errors.email && <p className="text-[10px] text-rose-500 font-medium">{errors.email.message}</p>}
+              {errors.email && <p className="text-[10px] text-rose-500 font-bold uppercase tracking-tight">{errors.email.message}</p>}
             </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="designation" className="text-slate-700 font-semibold text-xs">Designation *</Label>
+            <div className="space-y-2">
+              <Label htmlFor="designation" className="text-[10px] font-bold text-slate-400 uppercase ml-1">Designation *</Label>
               <Input
                 id="designation"
                 {...register("designation")}
-                placeholder="e.g. Assistant Professor"
-                className="border-slate-200 focus:border-[#1d3459] transition-all text-sm h-9"
+                placeholder="e.g. Asst. Professor"
+                className="rounded-xl border-slate-200/60 bg-white focus:ring-2 focus:ring-[#1d3459]/10 transition-all text-sm h-11 font-medium"
               />
-              {errors.designation && <p className="text-[10px] text-rose-500 font-medium">{errors.designation.message}</p>}
+              {errors.designation && <p className="text-[10px] text-rose-500 font-bold uppercase tracking-tight">{errors.designation.message}</p>}
             </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="department" className="text-slate-700 font-semibold text-xs">Department *</Label>
+            <div className="space-y-2">
+              <Label htmlFor="department" className="text-[10px] font-bold text-slate-400 uppercase ml-1">Department *</Label>
               <Input
                 id="department"
                 {...register("department")}
-                placeholder="e.g. Computer Science"
-                className="border-slate-200 focus:border-[#1d3459] transition-all text-sm h-9"
+                placeholder="e.g. Comp. Science"
+                className="rounded-xl border-slate-200/60 bg-white focus:ring-2 focus:ring-[#1d3459]/10 transition-all text-sm h-11 font-medium"
               />
-              {errors.department && <p className="text-[10px] text-rose-500 font-medium">{errors.department.message}</p>}
+              {errors.department && <p className="text-[10px] text-rose-500 font-bold uppercase tracking-tight">{errors.department.message}</p>}
             </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="category" className="text-slate-700 font-semibold text-xs">Category *</Label>
+            <div className="space-y-2">
+              <Label htmlFor="category" className="text-[10px] font-bold text-slate-400 uppercase ml-1">Engagement Category *</Label>
               <Select
+                name="category"
                 onValueChange={(v) => setValue("employeeCategory", v as any)}
                 defaultValue="TEACHING"
               >
-                <SelectTrigger className="border-slate-200 focus:ring-[#1d3459] h-9 text-sm">
-                  <SelectValue placeholder="Select category" />
+                <SelectTrigger id="category" className="rounded-xl border-slate-200/60 bg-white h-11 text-sm font-medium">
+                  <SelectValue placeholder="Select..." />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="TEACHING">Teaching</SelectItem>
-                  <SelectItem value="NON_TEACHING">Non-Teaching</SelectItem>
-                  <SelectItem value="CONTRACT">Contract</SelectItem>
-                  <SelectItem value="VISITING">Visiting</SelectItem>
+                <SelectContent className="rounded-xl border-slate-100 shadow-xl">
+                  <SelectItem value="TEACHING" className="text-[10px] font-bold uppercase">Teaching</SelectItem>
+                  <SelectItem value="NON_TEACHING" className="text-[10px] font-bold uppercase">Non-Teaching</SelectItem>
+                  <SelectItem value="CONTRACT" className="text-[10px] font-bold uppercase">Contract</SelectItem>
+                  <SelectItem value="VISITING" className="text-[10px] font-bold uppercase">Visiting</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="joiningDate" className="text-slate-700 font-semibold text-xs">Joining Date *</Label>
+            <div className="space-y-2">
+              <Label htmlFor="joiningDate" className="text-[10px] font-bold text-slate-400 uppercase ml-1">Appointment Date *</Label>
               <Input
                 id="joiningDate"
                 type="date"
                 {...register("joiningDate")}
-                className="border-slate-200 focus:border-[#1d3459] transition-all text-sm h-9"
+                className="rounded-xl border-slate-200/60 bg-white h-11 text-sm font-medium"
               />
-              {errors.joiningDate && <p className="text-[10px] text-rose-500 font-medium">{errors.joiningDate.message}</p>}
+              {errors.joiningDate && <p className="text-[10px] text-rose-500 font-bold uppercase tracking-tight">{errors.joiningDate.message}</p>}
             </div>
           </div>
 
-          <DialogFooter className="pt-4 border-t border-slate-50">
+          <DialogFooter className="pt-4 gap-3 bg-white/40 -mx-8 -mb-8 p-8 border-t border-slate-100">
             <Button
               type="button"
               variant="ghost"
               onClick={() => setOpen(false)}
-              className="text-slate-500 hover:text-slate-800 text-xs"
+              className="text-slate-500 hover:text-slate-800 text-[10px] font-bold uppercase tracking-widest h-11 px-8 rounded-xl"
             >
               Cancel
             </Button>
             <Button
-              type="submit"
-              disabled={loading}
-              className="bg-[#1d3459] hover:bg-[#1d3459]/90 text-white min-w-[100px] text-xs h-9 shadow-lg shadow-[#1d3459]/20"
+              type="button"
+              disabled={createMutation.isPending}
+              onClick={handleSubmit(onSubmit)}
+              className="bg-[#d9b557] hover:bg-[#c9a547] text-[#1d3459] min-w-[160px] text-[10px] font-bold uppercase tracking-widest h-11 rounded-xl shadow-lg shadow-[#d9b557]/20 transition-all hover:shadow-xl hover:-translate-y-0.5"
             >
-              {loading ? (
+              {createMutation.isPending ? (
                 <>
-                  <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                  Saving...
+                  <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                  Processing...
                 </>
               ) : (
-                "Create Employee"
+                "Finalize Records"
               )}
             </Button>
           </DialogFooter>
-        </form>
+        </div>
       </DialogContent>
     </Dialog>
   );

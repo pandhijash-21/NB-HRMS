@@ -2,6 +2,32 @@ import { prisma } from '../../config/prisma';
 import type { EmployeeStatus } from '@prisma/client';
 
 export const employeeService = {
+  async list(params: { search?: string; status?: string; limit?: number; offset?: number }) {
+    const { search, status, limit = 20, offset = 0 } = params;
+
+    const where: any = {};
+    if (status) where.status = status as EmployeeStatus;
+    if (search) {
+      where.OR = [
+        { generalInfo: { fullName: { contains: search, mode: 'insensitive' } } },
+        { generalInfo: { employeeCode: { contains: search, mode: 'insensitive' } } },
+      ];
+    }
+
+    const [items, total] = await Promise.all([
+      prisma.employee.findMany({
+        where,
+        include: { generalInfo: true },
+        take: limit,
+        skip: offset,
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.employee.count({ where }),
+    ]);
+
+    return { items, total };
+  },
+
   getById(employeeId: number) {
     return prisma.employee.findUnique({
       where: { id: employeeId },
@@ -53,6 +79,7 @@ export const employeeService = {
           originalJoiningDate: input.joiningDate,
           employeeCategory: input.employeeCategory as any,
           organization: 'GANDHINAGAR UNIVERSITY',
+          employeeCode: input.employeeCode,
           updatedBy: creatorId,
         },
       });

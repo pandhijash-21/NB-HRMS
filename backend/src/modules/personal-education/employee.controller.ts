@@ -18,6 +18,15 @@ const updateSchema = z.object({
 });
 
 export const employeeController = {
+  async list(req: Request, res: Response) {
+    const limit = Number(req.query.limit) || 20;
+    const offset = Number(req.query.offset) || 0;
+    const search = req.query.search as string | undefined;
+    const status = req.query.status as string | undefined;
+    const data = await employeeService.list({ limit, offset, search, status });
+    return res.json(ok(data));
+  },
+
   async getById(req: Request, res: Response) {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json(fail('Invalid employee id'));
@@ -88,4 +97,3 @@ export const employeeController = {
     return res.json(ok({ message: 'Employee deactivated successfully' }));
   },
 };
-

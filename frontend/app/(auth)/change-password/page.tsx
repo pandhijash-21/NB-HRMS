@@ -1,7 +1,5 @@
-"use client";
-
 import { Suspense } from "react";
-import ChangePasswordForm from "./change-password-form";
+import { ChangePasswordForm } from "@/modules/auth/components/ChangePasswordForm";
 
 export default function ChangePasswordPage() {
   return (

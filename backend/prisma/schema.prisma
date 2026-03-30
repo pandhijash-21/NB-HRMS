@@ -165,6 +165,7 @@ model EmployeeGeneralInfo {
   designation          String                                           // O.S. ESTABLISHMENT
   shift                String?                                          // GENERAL
   appointmentType      AppointmentType? @map("appointment_type")        // Full Time-Regular
+  employeeCode         String?          @unique @map("employee_code")   // GU1234
 
   updatedAt            DateTime         @updatedAt @map("updated_at")
   updatedBy            String?          @map("updated_by")

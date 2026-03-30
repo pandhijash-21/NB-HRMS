@@ -1,61 +1,53 @@
 "use client";
 
-import { signIn } from "next-auth/react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useLogin } from "../hooks/useAuth";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Eye, EyeOff, Hash } from "lucide-react";
+import { Eye, EyeOff, Hash, Loader2 } from "lucide-react";
+import { getSession } from "next-auth/react";
 
-export default function LoginForm() {
+export function LoginForm() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [employeeId, setEmployeeId] = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [showPass, setShowPass] = useState(false);
+  const [errorVisible, setErrorVisible] = useState(false);
+
+  const loginMutation = useLogin();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
-    setError(null);
-    const callbackUrl = "/dashboard"; // Default redirect
+    loginMutation.mutate(
+      { employeeId, password },
+      {
+        onSuccess: async () => {
+          const session = await getSession();
+          if ((session?.user as any)?.isFirstLogin) {
+            router.push("/change-password");
+            return;
+          }
 
-    const result = await signIn("credentials", {
-      redirect: false,
-      employeeId,
-      password,
-      callbackUrl,
-    });
-
-    setLoading(false);
-
-    if (!result || result.error) {
-      setError("Invalid Employee ID or password. Please try again.");
-      return;
-    }
-
-    // Read session to determine redirect
-    const { getSession } = await import("next-auth/react");
-    const session = await getSession();
-    
-    if ((session?.user as { isFirstLogin?: boolean })?.isFirstLogin) {
-      router.push("/change-password");
-      return;
-    }
-
-    const role = session?.user?.role ?? "";
-
-    if (role === "ADMIN") {
-      router.push("/admin/dashboard");
-    } else {
-      router.push("/dashboard");
-    }
+          const role = session?.user?.role ?? "";
+          if (role === "ADMIN" || role === "HR") {
+            router.push("/admin/dashboard");
+          } else {
+            router.push("/dashboard");
+          }
+        },
+        onError: () => {
+          setErrorVisible(true);
+        },
+      }
+    );
   }
 
   return (
     <form className="space-y-6" onSubmit={handleSubmit}>
       <div className="space-y-1.5">
-        <label htmlFor="employeeId" className="block text-xs font-semibold tracking-wide text-white/80 uppercase">
+        <label
+          htmlFor="employeeId"
+          className="block text-xs font-semibold tracking-wide text-white/80 uppercase"
+        >
           Employee ID
         </label>
         <div className="relative">
@@ -68,7 +60,10 @@ export default function LoginForm() {
             className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 pl-11 text-sm text-white placeholder-white/30 outline-none focus:border-white/30 focus:bg-white/10 focus:ring-2 focus:ring-white/20 transition-all duration-300"
             placeholder="e.g. 1"
             value={employeeId}
-            onChange={(e) => setEmployeeId(e.target.value)}
+            onChange={(e) => {
+              setEmployeeId(e.target.value);
+              setErrorVisible(false);
+            }}
           />
           <Hash className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30 w-4 h-4" />
         </div>
@@ -76,8 +71,11 @@ export default function LoginForm() {
 
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
-          <label htmlFor="password" className="block text-xs font-semibold tracking-wide text-white/80">
-            PASSWORD
+          <label
+            htmlFor="password"
+            className="block text-xs font-semibold tracking-wide text-white/80 uppercase"
+          >
+            Password
           </label>
         </div>
         <div className="relative group">
@@ -90,7 +88,10 @@ export default function LoginForm() {
             className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 pr-12 text-sm text-white placeholder-white/30 outline-none focus:border-white/30 focus:bg-white/10 focus:ring-2 focus:ring-white/20 transition-all duration-300"
             placeholder="••••••••"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(e) => {
+              setPassword(e.target.value);
+              setErrorVisible(false);
+            }}
           />
           <button
             type="button"
@@ -104,23 +105,22 @@ export default function LoginForm() {
         </div>
       </div>
 
-      {error && (
+      {errorVisible && (
         <div className="rounded-xl bg-rose-500/10 border border-rose-500/20 px-4 py-3 backdrop-blur-sm">
-          <p className="text-xs font-medium text-rose-300">{error}</p>
+          <p className="text-xs font-medium text-rose-300">
+            Invalid Employee ID or password. Please try again.
+          </p>
         </div>
       )}
 
       <button
         type="submit"
-        disabled={loading}
+        disabled={loginMutation.isPending}
         className="mt-6 flex w-full items-center justify-center rounded-xl bg-[#d9b557] hover:bg-[#c9a547] px-4 py-3 text-sm font-bold text-[#1d3459] shadow-[0_0_20px_rgba(217,181,87,0.3)] transition-all duration-300 hover:shadow-[0_0_25px_rgba(217,181,87,0.5)] hover:-translate-y-0.5 disabled:opacity-70 disabled:hover:translate-y-0 disabled:hover:shadow-[0_0_20px_rgba(217,181,87,0.3)]"
       >
-        {loading ? (
+        {loginMutation.isPending ? (
           <span className="flex items-center gap-2">
-            <svg className="animate-spin h-5 w-5 text-[#1d3459]" viewBox="0 0 24 24" fill="none">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
+            <Loader2 className="h-5 w-5 animate-spin" />
             Authenticating…
           </span>
         ) : (

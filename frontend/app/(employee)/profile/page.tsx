@@ -1,92 +1,69 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { useEmployeeBase } from "@/modules/profile/hooks/useProfile";
-import { ProfileHeader } from "@/modules/profile/components/ProfileHeader";
-import { GeneralTab } from "@/modules/profile/components/tabs/GeneralTab";
-import { PersonalTab } from "@/modules/profile/components/tabs/PersonalTab";
-import { AddressTab } from "@/modules/profile/components/tabs/AddressTab";
-import { OtherTab } from "@/modules/profile/components/tabs/OtherTab";
-import { FamilyTab } from "@/modules/profile/components/tabs/FamilyTab";
-import { EducationTab } from "@/modules/profile/components/tabs/EducationTab";
-import { DocumentsTab } from "@/modules/profile/components/tabs/DocumentsTab";
+import { useAdminEmployee } from "@/modules/admin/hooks/useAdminEmployees";
+import { ProfileHeader } from "@/components/profile/ProfileHeader";
+import { ProfileTabs } from "@/components/profile/ProfileTabs";
+import { GeneralTab } from "@/components/profile/tabs/GeneralTab";
+import { PersonalTab } from "@/components/profile/tabs/PersonalTab";
+import { AddressTab } from "@/components/profile/tabs/AddressTab";
+import { OtherTab } from "@/components/profile/tabs/OtherTab";
+import { FamilyTab } from "@/components/profile/tabs/FamilyTab";
+import { EducationTab } from "@/components/profile/tabs/EducationTab";
+import { DocumentsTab } from "@/components/profile/tabs/DocumentsTab";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Shield, User, MapPin, Briefcase, Users, GraduationCap, FileCheck } from "lucide-react";
 
 export default function ProfilePage() {
   const { data: session } = useSession();
-  const employeeId = session?.user?.employeeId;
+  const employeeId = (session?.user as any)?.employeeId;
 
-  const { data: employee, isLoading, error } = useEmployeeBase(employeeId as string);
+  const { data: rawEmployee, isLoading, refetch } = useAdminEmployee(employeeId);
+
+  // Same flattening pattern as admin [id]/page.tsx
+  const employee = rawEmployee ? {
+    ...rawEmployee.generalInfo,
+    ...rawEmployee.personalInfo,
+    ...rawEmployee.otherInfo,
+    ...rawEmployee,
+    employeeCode: rawEmployee.generalInfo?.employeeCode || `EMP-${String(rawEmployee.id).padStart(4, "0")}`,
+    // Email comes from the local address record
+    email: rawEmployee.addresses?.find((a: any) => a.addressType === "LOCAL")?.instituteEmail
+      || rawEmployee.addresses?.[0]?.personalEmail
+      || "",
+  } : null;
 
   if (isLoading || !employeeId) {
     return (
-      <div className="max-w-5xl mx-auto space-y-8 animate-pulse p-6">
-        <Skeleton className="h-40 w-full rounded-2xl" />
-        <div className="flex gap-4">
-            <Skeleton className="h-10 w-24 rounded-lg" />
-            <Skeleton className="h-10 w-24 rounded-lg" />
-            <Skeleton className="h-10 w-24 rounded-lg" />
-        </div>
-        <Skeleton className="h-[400px] w-full rounded-2xl" />
+      <div className="max-w-5xl mx-auto space-y-4">
+        <Skeleton className="h-32 w-full rounded-xl" />
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-60 w-full" />
       </div>
     );
   }
 
-  if (error || !employee) {
+  if (!employee) {
     return (
-      <div className="flex flex-col items-center justify-center py-32 text-center">
-        <div className="bg-rose-50 p-4 rounded-full mb-4">
-            <Shield className="w-8 h-8 text-rose-500" />
-        </div>
-        <h3 className="text-lg font-bold text-slate-800">Profile Unreachable</h3>
-        <p className="text-sm text-slate-500 mt-1 max-w-xs">
-          Your profile record could not be retrieved from the server. Please check your connection or contact HR.
-        </p>
+      <div className="flex flex-col items-center justify-center py-20 text-slate-400 space-y-3">
+        <p className="text-sm">Profile could not be loaded. Please contact HR.</p>
       </div>
     );
   }
+
+  const tabs = [
+    { value: "general",   label: "General",   content: <GeneralTab   employee={employee} isAdmin={false} onUpdate={refetch} /> },
+    { value: "personal",  label: "Personal",  content: <PersonalTab  employee={employee} isAdmin={false} onUpdate={refetch} /> },
+    { value: "address",   label: "Address",   content: <AddressTab   employeeId={String(employeeId)} isAdmin={false} /> },
+    { value: "other",     label: "Other",     content: <OtherTab     employee={employee} employeeId={String(employeeId)} isAdmin={false} onUpdate={refetch} /> },
+    { value: "family",    label: "Family",    content: <FamilyTab    employeeId={String(employeeId)} isAdmin={false} /> },
+    { value: "education", label: "Education", content: <EducationTab employeeId={String(employeeId)} isAdmin={false} /> },
+    { value: "documents", label: "Documents", content: <DocumentsTab employeeId={String(employeeId)} isAdmin={false} /> },
+  ];
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8 p-4 md:p-8 animate-in fade-in duration-500">
+    <div className="max-w-5xl mx-auto space-y-4">
       <ProfileHeader employee={employee} />
-
-      <Tabs defaultValue="general" className="w-full">
-        <div className="overflow-x-auto pb-2 scrollbar-hide">
-            <TabsList className="bg-slate-100/50 p-1.5 h-11 rounded-2xl border border-slate-200/40 w-max min-w-full md:min-w-0">
-                <TabItem value="general" icon={Shield} label="General" />
-                <TabItem value="personal" icon={User} label="Personal" />
-                <TabItem value="address" icon={MapPin} label="Address" />
-                <TabItem value="family" icon={Users} label="Family" />
-                <TabItem value="education" icon={GraduationCap} label="Academic" />
-                <TabItem value="other" icon={Briefcase} label="Professional" />
-                <TabItem value="documents" icon={FileCheck} label="Documents" />
-            </TabsList>
-        </div>
-
-        <div className="mt-8">
-            <TabsContent value="general" className="ring-0 focus-visible:ring-0"><GeneralTab employeeId={employeeId} /></TabsContent>
-            <TabsContent value="personal" className="ring-0 focus-visible:ring-0"><PersonalTab employeeId={employeeId} /></TabsContent>
-            <TabsContent value="address" className="ring-0 focus-visible:ring-0"><AddressTab employeeId={employeeId} /></TabsContent>
-            <TabsContent value="family" className="ring-0 focus-visible:ring-0"><FamilyTab employeeId={employeeId} /></TabsContent>
-            <TabsContent value="education" className="ring-0 focus-visible:ring-0"><EducationTab employeeId={employeeId} /></TabsContent>
-            <TabsContent value="other" className="ring-0 focus-visible:ring-0"><OtherTab employeeId={employeeId} /></TabsContent>
-            <TabsContent value="documents" className="ring-0 focus-visible:ring-0"><DocumentsTab employeeId={employeeId} /></TabsContent>
-        </div>
-      </Tabs>
+      <ProfileTabs tabs={tabs} defaultTab="general" />
     </div>
   );
-}
-
-function TabItem({ value, icon: Icon, label }: { value: string, icon: any, label: string }) {
-    return (
-        <TabsTrigger 
-            value={value} 
-            className="rounded-xl px-6 py-2 text-[10px] font-bold uppercase tracking-widest gap-2 data-[state=active]:bg-[#1d3459] data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-[#1d3459]/10"
-        >
-            <Icon className="w-3.5 h-3.5" />
-            {label}
-        </TabsTrigger>
-    );
 }

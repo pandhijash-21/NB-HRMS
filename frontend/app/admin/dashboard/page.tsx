@@ -1,7 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEmployeeList } from "@/lib/hooks/useEmployee";
+import { useQuery } from "@tanstack/react-query";
+import api from "@/lib/axios";
+import { useAdminEmployeeList } from "@/modules/admin/hooks/useAdminEmployees";
+import { useAllChangeRequests } from "@/lib/hooks/useApprovals";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -11,12 +14,14 @@ function StatCard({
   icon,
   href,
   accent,
+  loading,
 }: {
   label: string;
   value: string | number;
   icon: React.ReactNode;
   href?: string;
   accent?: string;
+  loading?: boolean;
 }) {
   const content = (
     <Card className="hover:shadow-md transition-shadow">
@@ -24,9 +29,13 @@ function StatCard({
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs text-slate-500 mb-1">{label}</p>
-            <p className="text-2xl font-bold" style={{ color: accent ?? "#1d3459" }}>
-              {value}
-            </p>
+            {loading ? (
+              <Skeleton className="h-8 w-16 mt-1" />
+            ) : (
+              <p className="text-2xl font-bold" style={{ color: accent ?? "#1d3459" }}>
+                {value}
+              </p>
+            )}
           </div>
           <div
             className="h-10 w-10 rounded-lg flex items-center justify-center"
@@ -42,7 +51,26 @@ function StatCard({
 }
 
 export default function DashboardPage() {
-  const { employees, total, activeCount, loading } = useEmployeeList({ limit: 5 });
+  // Employees list for total, active, departments
+  const { data: employeeData, isLoading: empLoading } = useAdminEmployeeList({ page: 0, limit: 1000 });
+
+  // Pending change requests count
+  const { data: pendingRequests, isLoading: approvalLoading } = useAllChangeRequests("PENDING");
+
+  // Recent employees (latest 5)
+  const { data: recentData, isLoading: recentLoading } = useAdminEmployeeList({ page: 0, limit: 5 });
+
+  const employees = employeeData?.items ?? [];
+  const total = employeeData?.total ?? 0;
+  const activeCount = employees.filter((e: any) => e.status === "ACTIVE").length;
+
+  // Distinct departments from generalInfo.department
+  const departments = new Set(
+    employees.map((e: any) => e.generalInfo?.department).filter(Boolean)
+  ).size;
+
+  const pendingCount = pendingRequests?.length ?? 0;
+  const recentEmployees = recentData?.items ?? [];
 
   return (
     <div className="space-y-6">
@@ -54,7 +82,8 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           label="Total Employees"
-          value={loading ? "—" : total}
+          value={total}
+          loading={empLoading}
           href="/admin/employees"
           icon={
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-5 h-5">
@@ -67,7 +96,8 @@ export default function DashboardPage() {
         />
         <StatCard
           label="Active"
-          value={loading ? "—" : activeCount}
+          value={activeCount}
+          loading={empLoading}
           accent="#16a34a"
           icon={
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-5 h-5">
@@ -77,7 +107,8 @@ export default function DashboardPage() {
         />
         <StatCard
           label="Departments"
-          value="—"
+          value={departments || "—"}
+          loading={empLoading}
           icon={
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-5 h-5">
               <rect x="2" y="7" width="20" height="14" rx="2" />
@@ -87,8 +118,10 @@ export default function DashboardPage() {
         />
         <StatCard
           label="Pending Actions"
-          value="—"
+          value={pendingCount}
+          loading={approvalLoading}
           accent="#d97706"
+          href="/admin/approvals"
           icon={
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-5 h-5">
               <circle cx="12" cy="12" r="10" />
@@ -108,23 +141,27 @@ export default function DashboardPage() {
             </Link>
           </div>
 
-          {loading ? (
+          {recentLoading ? (
             <div className="space-y-3">
               {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
             </div>
-          ) : employees.length === 0 ? (
+          ) : recentEmployees.length === 0 ? (
             <p className="text-sm text-slate-400 text-center py-6">No employees yet.</p>
           ) : (
             <div className="space-y-2">
-              {employees.map((emp: { id: string; fullName: string; employeeCode: string; designation: string }) => (
+              {recentEmployees.map((emp: any) => (
                 <Link
                   key={emp.id}
                   href={`/admin/employees/${emp.id}`}
                   className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors group"
                 >
                   <div>
-                    <p className="text-sm font-medium text-slate-700 group-hover:text-[#1d3459]">{emp.fullName}</p>
-                    <p className="text-xs text-slate-400">{emp.employeeCode} · {emp.designation}</p>
+                    <p className="text-sm font-medium text-slate-700 group-hover:text-[#1d3459]">
+                      {emp.generalInfo?.fullName ?? `Employee #${emp.id}`}
+                    </p>
+                    <p className="text-xs text-slate-400">
+                      {emp.generalInfo?.employeeCode ?? "—"} · {emp.generalInfo?.designation ?? "—"}
+                    </p>
                   </div>
                   <span className="text-xs text-slate-400 group-hover:text-[#1d3459]">→</span>
                 </Link>

@@ -8,7 +8,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Clock, CheckCircle2 } from "lucide-react";
+import { toast } from "sonner";
 import {
   Select,
   SelectContent,
@@ -18,6 +19,7 @@ import {
 } from "@/components/ui/select";
 import { useMutation } from "@apollo/client/react";
 import { UPDATE_EMPLOYEE_PERSONAL } from "@/lib/graphql";
+import { useRequestChange, usePendingRequest } from "@/lib/hooks/useApprovals";
 
 const personalSchema = z.object({
   birthDate: z.string().optional(),
@@ -64,7 +66,15 @@ function Field({ label, value }: { label: string; value?: string | null }) {
 
 export function PersonalTab({ employee, isAdmin, onUpdate }: PersonalTabProps) {
   const [editing, setEditing] = useState(false);
-  const [mutate, { loading }] = useMutation(UPDATE_EMPLOYEE_PERSONAL);
+  const [requestSent, setRequestSent] = useState(false);
+
+  // Admin path — direct Hasura mutation
+  const [mutate, { loading: adminSaving }] = useMutation(UPDATE_EMPLOYEE_PERSONAL);
+
+  // Employee path — approval request
+  const requestChange = useRequestChange();
+  const { data: pendingRequest } = usePendingRequest("PERSONAL");
+
 
   const customFieldsObj = (employee.customFields as Record<string, string>) || {};
 
@@ -97,37 +107,75 @@ export function PersonalTab({ employee, isAdmin, onUpdate }: PersonalTabProps) {
   });
 
   const onSubmit = async (data: any) => {
-    const customFieldsMap = data.customFields?.reduce((acc: any, field: any) => {
-      if (field.key.trim()) acc[field.key.trim()] = field.value;
-      return acc;
-    }, {});
+    if (isAdmin) {
+      // Admin: save directly via Hasura
+      const customFieldsMap = data.customFields?.reduce((acc: any, field: any) => {
+        if (field.key.trim()) acc[field.key.trim()] = field.value;
+        return acc;
+      }, {});
 
-    await mutate({
-      variables: {
-        employeeId: employee.id,
-        set: {
-          birth_date: data.birthDate || null,
-          birth_place: data.birthPlace,
-          home_town: data.homeTown,
-          gender: data.gender,
-          marital_status: data.maritalStatus,
-          nationality: data.nationality,
-          mother_tongue: data.motherTongue,
-          blood_group: data.bloodGroup || null,
-          cast_category: data.castCategory,
-          sub_caste: data.subCaste,
-          nominee_name: data.nomineeName,
-          nominee_relation: data.nomineeRelation,
-          passport_no: data.passportNo,
-          passport_issue_place: data.passportIssuePlace,
-          passport_issue_date: data.passportIssueDate || null,
-          passport_expiry_date: data.passportExpiryDate || null,
-          custom_fields: customFieldsMap,
-        },
-      },
-    });
-    setEditing(false);
-    onUpdate?.();
+      const setPayload: Record<string, unknown> = {
+        birth_date: data.birthDate || null,
+        birth_place: data.birthPlace,
+        home_town: data.homeTown,
+        gender: data.gender,
+        marital_status: data.maritalStatus,
+        nationality: data.nationality,
+        mother_tongue: data.motherTongue,
+        blood_group: data.bloodGroup || null,
+        cast_category: data.castCategory,
+        sub_caste: data.subCaste,
+        nominee_name: data.nomineeName,
+        nominee_relation: data.nomineeRelation,
+        passport_no: data.passportNo,
+        passport_issue_place: data.passportIssuePlace,
+        passport_issue_date: data.passportIssueDate || null,
+        passport_expiry_date: data.passportExpiryDate || null,
+      };
+      if (customFieldsMap && Object.keys(customFieldsMap).length > 0) {
+        setPayload.custom_fields = customFieldsMap;
+      }
+      await mutate({ variables: { employeeId: employee.id, set: setPayload } });
+      setEditing(false);
+      onUpdate?.();
+    } else {
+      // Employee: create a ChangeRequest — data is NOT applied until HR approves
+      const customFieldsMap = data.customFields?.reduce((acc: any, field: any) => {
+        if (field.key.trim()) acc[field.key.trim()] = field.value;
+        return acc;
+      }, {});
+
+      const newData: Record<string, unknown> = {
+        birthDate: data.birthDate || null,
+        birthPlace: data.birthPlace,
+        homeTown: data.homeTown,
+        gender: data.gender,
+        maritalStatus: data.maritalStatus,
+        nationality: data.nationality,
+        motherTongue: data.motherTongue,
+        bloodGroup: data.bloodGroup || null,
+        castCategory: data.castCategory,
+        subCaste: data.subCaste,
+        nomineeName: data.nomineeName,
+        nomineeRelation: data.nomineeRelation,
+        passportNo: data.passportNo,
+        passportIssuePlace: data.passportIssuePlace,
+        passportIssueDate: data.passportIssueDate || null,
+        passportExpiryDate: data.passportExpiryDate || null,
+        customFields: customFieldsMap,
+      };
+      
+      requestChange.mutate(
+        { module: "PERSONAL", newData },
+        {
+          onSuccess: () => {
+            setEditing(false);
+            setRequestSent(true);
+            toast.success("Change request submitted for HR approval");
+          },
+        }
+      );
+    }
   };
 
   if (!editing) {
@@ -136,11 +184,60 @@ export function PersonalTab({ employee, isAdmin, onUpdate }: PersonalTabProps) {
         <CardContent className="pt-5 space-y-5">
           <div className="flex justify-between items-center">
             <h3 className="text-sm font-semibold text-slate-700">Personal Information</h3>
-            <Button size="sm" variant="outline" onClick={() => setEditing(true)} className="text-xs border-[#1d3459] text-[#1d3459] hover:bg-[#1d3459] hover:text-white">
-              Edit
-            </Button>
+            {/* Disable edit button if employee has a pending request */}
+            {(!pendingRequest || isAdmin) && (
+              <Button size="sm" variant="outline" onClick={() => setEditing(true)} className="text-xs border-[#1d3459] text-[#1d3459] hover:bg-[#1d3459] hover:text-white">
+                Edit
+              </Button>
+            )}
           </div>
 
+          {/* Status banners — employee only */}
+          {!isAdmin && pendingRequest && pendingRequest.status === "PENDING" && (
+            <div className="flex items-start gap-3 p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs shadow-sm">
+              <Clock className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+              <div>
+                <p className="font-bold text-amber-700">Update Pending HR Approval</p>
+                <p className="text-amber-600 mt-0.5 leading-relaxed">
+                  Submitted {new Date(pendingRequest.requestedAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}. Your profile will be updated once approved.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {!isAdmin && pendingRequest && pendingRequest.status === "REJECTED" && (
+            <div className="flex items-start gap-3 p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs shadow-sm">
+              <Trash2 className="w-4 h-4 text-rose-500 mt-0.5 shrink-0" />
+              <div className="flex-1">
+                <p className="font-bold text-rose-700">Update Not Approved</p>
+                <p className="text-rose-600 mt-0.5 leading-relaxed">
+                  Your request from {new Date(pendingRequest.requestedAt).toLocaleDateString()} was reviewed but not approved.
+                </p>
+                <Button 
+                  variant="link" 
+                  size="sm" 
+                  className="h-auto p-0 mt-2 text-rose-600 font-bold hover:text-rose-700 text-[10px] uppercase tracking-wider"
+                  onClick={() => setEditing(true)}
+                >
+                  Edit & Resubmit →
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Request sent success notice */}
+          {!isAdmin && requestSent && !pendingRequest && (
+            <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-50 border border-emerald-100 text-xs text-emerald-700 font-semibold">
+              <CheckCircle2 className="w-4 h-4" />
+              Change request submitted. HR will review it shortly.
+            </div>
+          )}
+
+          {!isAdmin && (
+            <p className="text-xs text-slate-400">
+              Personal info changes require HR approval before they take effect.
+            </p>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 bg-white/30 backdrop-blur-md p-4 rounded-xl border border-white/50 shadow-sm">
             <Field label="Date of Birth" value={employee.birthDate ? new Date(employee.birthDate as string).toLocaleDateString("en-IN") : undefined} />
             <Field label="Birth Place" value={employee.birthPlace as string} />
@@ -187,8 +284,12 @@ export function PersonalTab({ employee, isAdmin, onUpdate }: PersonalTabProps) {
             <h3 className="text-sm font-semibold text-slate-700">Edit Personal Information</h3>
             <div className="flex gap-2">
               <Button type="button" size="sm" variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>
-              <Button type="submit" size="sm" disabled={loading} style={{ backgroundColor: "#1d3459" }} className="text-white hover:opacity-90">
-                {loading ? "Saving…" : "Save"}
+              <Button type="submit" size="sm"
+                disabled={isAdmin ? adminSaving : requestChange.isPending}
+                style={{ backgroundColor: "#1d3459" }} className="text-white hover:opacity-90">
+                {isAdmin
+                  ? (adminSaving ? "Saving…" : "Save")
+                  : (requestChange.isPending ? "Submitting…" : "Request Change")}
               </Button>
             </div>
           </div>

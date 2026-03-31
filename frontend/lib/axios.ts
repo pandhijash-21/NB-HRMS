@@ -13,7 +13,7 @@ import { getSession } from "next-auth/react";
 api.interceptors.request.use(async (config) => {
   if (typeof window !== "undefined") {
     const session = await getSession();
-    const token = (session as any)?.token || localStorage.getItem("hrms_token");
+    const token = (session?.user as any)?.token || localStorage.getItem("hrms_token");
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }

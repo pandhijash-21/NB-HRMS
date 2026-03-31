@@ -77,16 +77,27 @@ export function AddUserDialog({ onUserAdded }: { onUserAdded: () => void }) {
             <label className="text-xs font-bold text-slate-500 uppercase">Assign Role</label>
             <Select value={roleId} onValueChange={setRoleId} disabled={rolesLoading}>
               <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select a role..." />
+                <SelectValue placeholder={rolesLoading ? "Loading roles..." : "Select a role..."} />
               </SelectTrigger>
               <SelectContent>
-                {roles.map((role) => (
-                  <SelectItem key={role.id} value={role.id}>
-                    {role.name}
-                  </SelectItem>
-                ))}
+                {roles.length === 0 && !rolesLoading ? (
+                  <div className="p-2 text-xs text-slate-500 italic text-center">
+                    No roles found. Please run system seed.
+                  </div>
+                ) : (
+                  roles.map((role) => (
+                    <SelectItem key={role.id} value={role.id}>
+                      {role.name}
+                    </SelectItem>
+                  ))
+                )}
               </SelectContent>
             </Select>
+            {!rolesLoading && roles.length === 0 && (
+              <p className="text-[10px] text-red-500 font-medium">
+                Warning: No roles available in the system.
+              </p>
+            )}
           </div>
           <div className="pt-4 flex justify-end gap-2">
             <Button

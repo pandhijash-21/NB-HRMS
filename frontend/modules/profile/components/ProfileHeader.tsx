@@ -35,7 +35,7 @@ export function ProfileHeader({
   employee,
   actions,
 }: ProfileHeaderProps) {
-  const initials = employee.fullName
+  const initials = (employee.fullName || "??")
     .split(" ")
     .map((n) => n[0])
     .join("")
@@ -60,7 +60,7 @@ export function ProfileHeader({
         <div className="flex-1 min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-3">
             <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-              {employee.fullName}
+              {employee.fullName || "Unknown Employee"}
             </h2>
             <Badge
               className={`text-[10px] font-bold uppercase tracking-wider border ${STATUS_COLORS[employee.status] ?? "bg-slate-100 text-slate-500 transition-all hover:scale-105"}`}

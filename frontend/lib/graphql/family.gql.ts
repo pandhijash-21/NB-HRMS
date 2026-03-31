@@ -1,7 +1,7 @@
 import { gql } from "@apollo/client/core";
 
 export const GET_FAMILY_MEMBERS = gql`
-  query GetFamilyMembers($employeeId: uuid!) {
+  query GetFamilyMembers($employeeId: Int!) {
     employee_family(
       where: {
         employeeId: { _eq: $employeeId }

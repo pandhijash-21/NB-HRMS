@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
-import axios from "axios";
+import api from "@/lib/axios";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,16 +37,11 @@ export default function ChangePasswordForm() {
 
     setLoading(true);
     try {
-      const response = await axios.post(
-        `${process.env.NEXT_PUBLIC_API_URL}/auth/change-password`,
+      const response = await api.post(
+        "auth/change-password",
         {
           currentPassword: formData.currentPassword,
           newPassword: formData.newPassword,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${session?.user?.token}`,
-          },
         }
       );
 

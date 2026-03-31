@@ -84,7 +84,21 @@ export const employeeController = {
       const created = await employeeService.createFull(body.data, req.user!.id);
       return res.status(201).json(ok(created));
     } catch (err: any) {
-      return res.status(500).json(fail(err.message));
+      let message = err.message || "An error occurred";
+      
+      // Map common Prisma errors
+      if (err.code === 'P2002') {
+        const target = err.meta?.target || [];
+        if (target.includes('employee_code')) {
+          message = "Employee Code already exists. Please use a unique code.";
+        } else if (target.includes('institute_email')) {
+          message = "Institutional Email already exists. Please use a unique email.";
+        } else {
+          message = "A record with this unique information already exists.";
+        }
+      }
+      
+      return res.status(400).json(fail(message));
     }
   },
 

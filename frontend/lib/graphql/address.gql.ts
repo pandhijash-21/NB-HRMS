@@ -1,7 +1,7 @@
 import { gql } from "@apollo/client/core";
 
 export const GET_EMPLOYEE_ADDRESSES = gql`
-  query GetEmployeeAddresses($employeeId: uuid!) {
+  query GetEmployeeAddresses($employeeId: Int!) {
     employee_address(
       where: { employeeId: { _eq: $employeeId } }
       order_by: { type: asc }

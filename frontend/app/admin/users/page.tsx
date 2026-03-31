@@ -56,7 +56,7 @@ export default function UsersPage() {
       header: "Employee Details",
       cell: ({ row }) => {
         const user = row.original;
-        const initials = user.employee.fullName.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
+        const initials = user.employee?.fullName?.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2) || "??";
         return (
           <div className="flex items-center gap-4">
             <Avatar className="h-10 w-10 shrink-0 border-2 border-white shadow-sm ring-1 ring-slate-100">

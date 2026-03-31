@@ -2,7 +2,7 @@
 
 import { use } from "react";
 import Link from "next/link";
-import { useEmployee } from "@/lib/hooks/useEmployee";
+import { useAdminEmployee } from "@/modules/admin/hooks/useAdminEmployees";
 import { ProfileHeader } from "@/components/profile/ProfileHeader";
 import { ProfileTabs } from "@/components/profile/ProfileTabs";
 import { GeneralTab } from "@/components/profile/tabs/GeneralTab";
@@ -22,7 +22,15 @@ interface PageProps {
 
 export default function AdminEmployeeProfilePage({ params }: PageProps) {
   const { id } = use(params);
-  const { employee, loading, refetch } = useEmployee(id);
+  const { data: rawEmployee, isLoading: loading, refetch } = useAdminEmployee(id);
+
+  const employee = rawEmployee ? {
+    ...rawEmployee.generalInfo,
+    ...rawEmployee.personalInfo,
+    ...rawEmployee.otherInfo,
+    ...rawEmployee, // Spreading rawEmployee last ensures its 'id' (Int) takes precedence
+    employeeCode: rawEmployee.generalInfo?.employeeCode || `EMP-${rawEmployee.id.toString().padStart(4, '0')}`,
+  } : null;
 
   if (loading) {
     return (

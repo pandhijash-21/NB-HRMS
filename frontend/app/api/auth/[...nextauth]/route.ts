@@ -34,19 +34,8 @@ export const authConfig = {
             isFirstLogin: isFirstLogin ?? false,
             token,
           };
-        } catch {
-          // Dev fallback — allows any login while backend auth isn't wired
-          const empId = Number(credentials.employeeId);
-          const role = (empId === 1) ? "ADMIN" : "EMPLOYEE";
-
-          return {
-            id: String(empId),
-            name: `Employee #${empId}`,
-            email: null,
-            role,
-            employeeId: String(empId),
-            token: "",
-          };
+        } catch (err: any) {
+          return null;
         }
       },
     }),

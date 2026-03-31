@@ -176,21 +176,54 @@ export function EducationTab({ employeeId }: EducationTabProps) {
                   </div>
                 </div>
 
-                <div className="mt-5 pt-4 border-t border-slate-50 flex items-center justify-between">
-                  {q.certificateUrl ? (
-                     <a href={q.certificateUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-[10px] font-bold text-[#1d3459] hover:underline uppercase tracking-widest">
-                        <FileText className="w-3 h-3" /> View Marksheet <ExternalLink className="w-2.5 h-2.5" />
-                     </a>
-                  ) : (
-                    <span className="text-[9px] text-slate-300 font-bold uppercase tracking-widest">No Documents Attached</span>
-                  )}
-                  
-                  <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                {/* Certificate + Sem-wise marksheets */}
+                <div className="mt-5 pt-4 border-t border-slate-50 space-y-3">
+                  {/* Certificate */}
+                  <div className="flex items-center justify-between">
+                    {q.certificateUrl ? (
+                      <a href={q.certificateUrl} target="_blank" rel="noreferrer"
+                        className="flex items-center gap-1.5 text-[10px] font-bold text-[#1d3459] hover:underline uppercase tracking-widest">
+                        <FileText className="w-3 h-3" /> Certificate <ExternalLink className="w-2.5 h-2.5" />
+                      </a>
+                    ) : (
+                      <span className="text-[9px] text-slate-300 font-bold uppercase tracking-widest">No Certificate</span>
+                    )}
+                    <div className="opacity-0 group-hover:opacity-100 transition-opacity">
                       <Button variant="ghost" size="icon" className="h-7 w-7 text-rose-400 hover:text-rose-500 hover:bg-rose-50">
                         <Trash2 className="w-3.5 h-3.5" />
                       </Button>
+                    </div>
                   </div>
+
+                  {/* Sem-wise Marksheets — only for relevant degree types */}
+                  {['DIPLOMA', 'BACHELOR', 'MASTER', 'PHD'].includes((q as any).degreeType) && (
+                    <div>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-2">Semester Marksheets</p>
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => {
+                          const urlKey = `sem${sem}MarksheetUrl` as keyof typeof q;
+                          const url = (q as any)[urlKey] as string | null;
+                          return (
+                            <div key={sem}>
+                              {url ? (
+                                <a href={url} target="_blank" rel="noreferrer"
+                                  className="flex items-center justify-center py-1.5 rounded-lg bg-emerald-50 border border-emerald-100 text-[9px] font-bold text-emerald-600 hover:bg-emerald-100 transition-colors gap-1">
+                                  <ExternalLink className="w-2.5 h-2.5" /> Sem {sem}
+                                </a>
+                              ) : (
+                                <label className="flex items-center justify-center py-1.5 rounded-lg bg-slate-50 border border-dashed border-slate-200 text-[9px] font-bold text-slate-400 cursor-pointer hover:border-[#1d3459]/30 hover:text-[#1d3459] transition-colors">
+                                  +&nbsp;S{sem}
+                                  <input type="file" accept="application/pdf,image/*" className="hidden" />
+                                </label>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
+
               </div>
             ))
           ) : (

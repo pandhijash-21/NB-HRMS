@@ -43,6 +43,17 @@ export function useCreateEmployee() {
   });
 }
 
+export function useAdminEmployee(id: string | number) {
+  return useQuery({
+    queryKey: ["admin", "employees", id],
+    queryFn: async () => {
+      const { data } = await api.get(`employees/${id}`);
+      return data.data;
+    },
+    enabled: !!id,
+  });
+}
+
 export function useDeleteEmployee() {
     const queryClient = useQueryClient();
   

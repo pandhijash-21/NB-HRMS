@@ -93,16 +93,26 @@ export function GeneralTab({ employee, isAdmin, onUpdate }: GeneralTabProps) {
       <Card>
         <CardContent className="pt-5 space-y-5">
           <div className="flex justify-between items-center">
-            <h3 className="text-sm font-semibold text-slate-700">General Information</h3>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setEditing(true)}
-              className="text-xs border-[#1d3459] text-[#1d3459] hover:bg-[#1d3459] hover:text-white"
-            >
-              Edit
-            </Button>
+            <h3 className="text-sm font-semibold text-slate-700">
+              {isAdmin ? "General Information" : "Employment Records"}
+            </h3>
+            {isAdmin && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setEditing(true)}
+                className="text-xs border-[#1d3459] text-[#1d3459] hover:bg-[#1d3459] hover:text-white"
+              >
+                Edit
+              </Button>
+            )}
           </div>
+          {!isAdmin && (
+            <p className="text-xs text-slate-400">
+              Official institutional data provided by the Registrar/HR office. These details are read-only.
+            </p>
+          )}
+
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             <Field label="Full Name" value={employee.fullName as string} />

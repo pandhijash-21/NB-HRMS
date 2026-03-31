@@ -47,6 +47,16 @@ const adminNav = [
           </svg>
         ),
       },
+      {
+        label: "Approvals",
+        href: "/admin/approvals",
+        icon: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+            <path d="M9 11l3 3L22 4" />
+            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+          </svg>
+        ),
+      },
     ],
   },
   {
@@ -81,6 +91,8 @@ import { getServerSession } from "next-auth";
 import { authConfig } from "@/app/api/auth/[...nextauth]/route";
 import { redirect } from "next/navigation";
 
+import { AppProviders } from "../providers";
+
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const session = await getServerSession(authConfig) as any;
 
@@ -89,18 +101,20 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   }
 
   return (
-    <div className="app-shell">
-      <div className="app-main">
-        <Sidebar
-          title="HRMS Admin"
-          subtitle="Management Portal"
-          navGroups={adminNav}
-        />
-        <div className="flex flex-col flex-1 min-w-0">
-          <Topbar title="HRMS Admin" />
-          <main className="app-content">{children}</main>
+    <AppProviders>
+      <div className="app-shell">
+        <div className="app-main">
+          <Sidebar
+            title="HRMS Admin"
+            subtitle="Management Portal"
+            navGroups={adminNav}
+          />
+          <div className="flex flex-col flex-1 min-w-0">
+            <Topbar title="HRMS Admin" isAdmin={true} />
+            <main className="app-content">{children}</main>
+          </div>
         </div>
       </div>
-    </div>
+    </AppProviders>
   );
 }

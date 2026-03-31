@@ -1,7 +1,7 @@
 import { gql } from "@apollo/client/core";
 
 export const GET_ACADEMIC_QUALIFICATIONS = gql`
-  query GetAcademicQualifications($employeeId: uuid!) {
+  query GetAcademicQualifications($employeeId: Int!) {
     employee_academic_qualification(
       where: { employeeId: { _eq: $employeeId } }
       order_by: { passingYear: desc }

@@ -27,7 +27,9 @@ import { useCreateEmployee } from "@/modules/admin/hooks/useAdminEmployees";
 import { PlusCircle, Loader2, UserPlus, ShieldAlert } from "lucide-react";
 
 const addEmployeeSchema = z.object({
-  fullName: z.string().min(3, "Full name must be at least 3 characters"),
+  fullName: z.string()
+    .min(3, "Full name must be at least 3 characters")
+    .regex(/^[a-zA-Z\s\.]+$/, "Name should only contain letters, spaces, and dots"),
   email: z.string().email("Invalid institute email"),
   designation: z.string().min(2, "Designation is required"),
   department: z.string().min(2, "Department is required"),
@@ -40,6 +42,7 @@ type AddEmployeeForm = z.infer<typeof addEmployeeSchema>;
 
 export function AddEmployeeDialog() {
   const [open, setOpen] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
   const createMutation = useCreateEmployee();
 
   const {
@@ -56,12 +59,15 @@ export function AddEmployeeDialog() {
   });
 
   const onSubmit = async (data: AddEmployeeForm) => {
-    createMutation.mutate(data, {
-      onSuccess: () => {
-        setOpen(false);
-        reset();
-      },
-    });
+    setServerError(null);
+    try {
+      await createMutation.mutateAsync(data);
+      setOpen(false);
+      reset();
+    } catch (err: any) {
+      const msg = err.response?.data?.error || err.response?.data?.message || err.message || "An unexpected error occurred";
+      setServerError(msg);
+    }
   };
 
   return (
@@ -87,6 +93,12 @@ export function AddEmployeeDialog() {
         </div>
 
         <div className="p-8 space-y-6">
+          {serverError && (
+             <div className="bg-rose-50 border border-rose-200 text-rose-600 px-4 py-3 rounded-xl text-xs font-bold uppercase tracking-tight flex items-center gap-3">
+                <ShieldAlert className="w-4 h-4 shrink-0" />
+                {serverError}
+             </div>
+          )}
           <div className="grid grid-cols-2 gap-6">
             <div className="col-span-2 space-y-2">
               <Label htmlFor="fullName" className="text-[10px] font-bold text-slate-400 uppercase ml-1">Full Name *</Label>

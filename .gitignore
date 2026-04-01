@@ -49,4 +49,3 @@ docker-compose.override.yml
 /backend/prisma/migrations/
 !/backend/prisma/migrations/migration.sql
 /frontend/app/generated/prisma
-/docs/

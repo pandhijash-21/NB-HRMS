@@ -1,6 +1,6 @@
 // Restarted: prisma client regenerated with ChangeRequest model
 import dotenv from 'dotenv';
-dotenv.config();
+dotenv.config({ override: true });
 
 // IMPORTANT: load env AFTER dotenv.config() runs.
 // Using require here avoids ESM import hoisting ordering issues in tsx/nodemon.

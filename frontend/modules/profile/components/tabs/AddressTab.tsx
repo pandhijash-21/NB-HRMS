@@ -217,6 +217,13 @@ function AddressForm({ register, errors }: { register: any, errors: any }) {
           </div>
         </div>
         <div className="space-y-1.5">
+          <Label className="text-[10px] font-bold text-slate-500 uppercase ml-1 text-emerald-600">Personal Email</Label>
+          <div className="relative">
+            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+            <Input {...register("personalEmail")} className="h-10 rounded-xl pl-9" placeholder="personal@example.com" />
+          </div>
+        </div>
+        <div className="space-y-1.5">
           <Label className="text-[10px] font-bold text-slate-500 uppercase ml-1 text-emerald-600">Work Email</Label>
           <div className="relative">
             <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />

@@ -5,7 +5,7 @@ import helmet from 'helmet';
 import actionsRouter from './actions';
 import eventsRouter from './events';
 import { personalEducationRouter } from './modules/personal-education';
-import { authRouter } from './modules/auth';
+import { authRouter, otpRouter } from './modules/auth';
 import { userMgmtRouter } from './modules/user-management';
 import { approvalsRouter } from './modules/approvals';
 import { eventsRouter as sseEventsRouter } from './modules/events';
@@ -54,6 +54,7 @@ app.use('/api', personalEducationRouter);
 
 // Specific routes
 app.use('/api/auth',  authRouter);
+app.use('/api/otp', otpRouter);
 app.use('/api/admin', userMgmtRouter);
 app.use('/api/approvals', approvalsRouter);
 app.use('/api/events', sseEventsRouter);

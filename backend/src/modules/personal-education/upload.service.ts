@@ -70,6 +70,18 @@ export const uploadService = {
     });
   },
 
+  setPassport(employeeId: number, passportUrl: string, actorId?: string) {
+    return prisma.employeeOtherInfo.upsert({
+      where: { employeeId },
+      update: { passportUrl, updatedBy: actorId ?? undefined },
+      create: {
+        employeeId,
+        passportUrl,
+        updatedBy: actorId ?? null,
+      },
+    });
+  },
+
   async setSemMarksheet(employeeId: number, qualId: string, sem: number, url: string, actorId?: string) {
     const field = `sem${sem}MarksheetUrl` as const;
     const exists = await prisma.academicQualification.findFirst({ where: { id: qualId, employeeId, isActive: true } });
@@ -90,5 +102,16 @@ export const uploadService = {
       data: { certificateUrl: url, updatedBy: actorId ?? undefined },
     });
   },
-};
 
+  async setFamilyMemberAadhaar(employeeId: number, memberId: string, url: string, actorId?: string) {
+    const member = await prisma.familyMember.findFirst({ 
+      where: { id: memberId, employeeId, isActive: true } 
+    });
+    if (!member) throw new Error('Family member not found');
+
+    return prisma.familyMember.update({
+      where: { id: memberId },
+      data: { aadhaarUrl: url, updatedBy: actorId ?? undefined },
+    });
+  },
+};

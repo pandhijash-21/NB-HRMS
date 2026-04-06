@@ -51,6 +51,7 @@ function AddressCard({ title, address }: { title: string; address: any }) {
         <Field label="Pincode" value={address.zipPostalCode} />
         <Field label="Country" value={address.country} />
         {address.personalEmail && <Field label="Personal Email" value={address.personalEmail} />}
+        {address.instituteEmail && <Field label="Institutional Email" value={address.instituteEmail} />}
         {address.phoneNo && <Field label="Phone" value={address.phoneNo} />}
         {address.mobileNo && <Field label="Mobile" value={address.mobileNo} />}
       </div>
@@ -101,6 +102,10 @@ function AddressFields({ prefix }: { prefix: "local" | "permanent" }) {
         <Label>Personal Email</Label>
         <Input name={`${prefix}.personalEmail`} type="email" />
       </div>
+      <div className="sm:col-span-2 space-y-1">
+        <Label>Institutional Email</Label>
+        <Input name={`${prefix}.instituteEmail`} type="email" placeholder="firstname.lastname@gandhinagaruni.ac.in" />
+      </div>
     </div>
   );
 }
@@ -135,6 +140,7 @@ export function AddressTab({ employeeId, isAdmin }: AddressTabProps) {
         phoneNo: localAddress?.phoneNo ?? "",
         mobileNo: localAddress?.mobileNo ?? "",
         personalEmail: localAddress?.personalEmail ?? "",
+        instituteEmail: localAddress?.instituteEmail ?? "",
       },
       permanent: {
         flatBlockNo: permanentAddress?.flatBlockNo ?? "",
@@ -147,6 +153,7 @@ export function AddressTab({ employeeId, isAdmin }: AddressTabProps) {
         phoneNo: permanentAddress?.phoneNo ?? "",
         mobileNo: permanentAddress?.mobileNo ?? "",
         personalEmail: permanentAddress?.personalEmail ?? "",
+        instituteEmail: permanentAddress?.instituteEmail ?? "",
       },
     },
   });
@@ -322,6 +329,10 @@ export function AddressTab({ employeeId, isAdmin }: AddressTabProps) {
                 <Label>Personal Email</Label>
                 <Input {...register("local.personalEmail")} type="email" />
               </div>
+              <div className="sm:col-span-2 space-y-1">
+                <Label>Institutional Email</Label>
+                <Input {...register("local.instituteEmail")} type="email" placeholder="firstname.lastname@gandhinagaruni.ac.in" />
+              </div>
             </div>
           </div>
 
@@ -387,6 +398,10 @@ export function AddressTab({ employeeId, isAdmin }: AddressTabProps) {
                 <div className="sm:col-span-2 space-y-1">
                   <Label>Personal Email</Label>
                   <Input {...register("permanent.personalEmail")} type="email" />
+                </div>
+                <div className="sm:col-span-2 space-y-1">
+                  <Label>Institutional Email</Label>
+                  <Input {...register("permanent.instituteEmail")} type="email" placeholder="firstname.lastname@gandhinagaruni.ac.in" />
                 </div>
               </div>
             </div>

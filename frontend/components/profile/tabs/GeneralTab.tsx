@@ -18,6 +18,24 @@ import {
 import { useMutation } from "@apollo/client/react";
 import { UPDATE_EMPLOYEE_GENERAL } from "@/lib/graphql";
 
+const INSTITUTES = [
+  "Gandhinagar Institute of Technology",
+  "Gandhinagar Institute of Management",
+  "Gandhinagar Institute of Commerce",
+  "Gandhinagar Institute of Science",
+  "Gandhinagar Institute of Research & Development",
+  "Gandhinagar Institute of Liberal Studies",
+  "Gandhinagar Institute of Computer Science & Applications",
+  "Gandhinagar Institute of Law",
+  "Gandhinagar Institute of Valuation Studies",
+  "Gandhinagar Institute of Design",
+  "Gandhinagar Institute of Pharmacy",
+  "Gandhinagar Institute of Nursing",
+  "Gandhinagar Institute of Skill Development",
+  "Gandhinagar Institute of Library & Information Science",
+  "Gandhinagar Institute of Vocational Education",
+];
+
 interface GeneralTabProps {
   employee: Record<string, unknown>;
   isAdmin?: boolean;
@@ -197,7 +215,19 @@ export function GeneralTab({ employee, isAdmin, onUpdate }: GeneralTabProps) {
             </div>
             <div className="space-y-1">
               <Label>Sub-Organization</Label>
-              <Input {...register("subOrganization")} />
+              <Select
+                defaultValue={(employee.subOrganization as string) ?? ""}
+                onValueChange={(v) => setValue("subOrganization", v)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select institute..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {INSTITUTES.map((institute) => (
+                    <SelectItem key={institute} value={institute}>{institute}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1">
               <Label>Employee Category *</Label>

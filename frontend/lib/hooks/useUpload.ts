@@ -10,14 +10,37 @@ type UploadType =
   | "panCard"
   | "offerLetter"
   | "experienceLetter"
-  | "marksheet";
+  | "marksheet"
+  | "certificate"
+  | "passport"
+  | "aadhaarFamily"
+  | "lastPaycheck"
+  | "recommendation";
+
+function formatTypeForApi(type: UploadType): string {
+  const typeMap: Record<UploadType, string> = {
+    photo: "photo",
+    signature: "signature",
+    aadhaarCard: "aadhaar-card",
+    panCard: "pan-card",
+    offerLetter: "offer-letter",
+    experienceLetter: "experience-letter",
+    marksheet: "marksheet",
+    certificate: "certificate",
+    passport: "passport",
+    aadhaarFamily: "aadhaar-family",
+    lastPaycheck: "last-paycheck",
+    recommendation: "recommendation",
+  };
+  return typeMap[type] || type.replace(/([A-Z])/g, '-$1').toLowerCase();
+}
 
 export function useUpload(employeeId: string) {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
-  const upload = async (type: UploadType, file: File, extraData?: Record<string, string>) => {
+  const upload = async (type: UploadType, file: File, extraData?: Record<string, string>): Promise<string> => {
     setUploading(true);
     setError(null);
     setProgress(0);
@@ -29,7 +52,7 @@ export function useUpload(employeeId: string) {
     }
     try {
       const res = await api.post(
-        `upload/${type === 'photo' ? 'photo' : type === 'signature' ? 'signature' : type.replace(/([A-Z])/g, '-$1').toLowerCase()}`,
+        `upload/${formatTypeForApi(type)}`,
         formData,
         {
           headers: { "Content-Type": "multipart/form-data" },
@@ -38,7 +61,8 @@ export function useUpload(employeeId: string) {
           },
         }
       );
-      return res.data.data as { url: string };
+      // Return the URL from the response
+      return res.data.data?.url || res.data.data;
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Upload failed";
       setError(msg);

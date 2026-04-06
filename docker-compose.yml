@@ -46,14 +46,15 @@ services:
       - ./backend:/app
       - /app/node_modules
     environment:
-      DATABASE_URL: postgres://hrms_user:hrms_pass@postgres:5432/hrms_db
-      REDIS_URL: redis://redis:6379
-      PORT: 4000
-      JWT_SECRET: "your_jwt_secret_here_change_me"
-      ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
-      CLOUDINARY_CLOUD_NAME: ""
-      CLOUDINARY_API_KEY: ""
-      CLOUDINARY_API_SECRET: ""
+      - DATABASE_URL=postgres://hrms_user:hrms_pass@postgres:5432/hrms_db
+      - REDIS_URL=redis://redis:6379
+      - PORT=4000
+      - JWT_SECRET=your_jwt_secret_here_change_me
+      - ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000
+      - PRISMA_CLIENT_ENGINE_TYPE=binary
+      - PRISMA_CLI_QUERY_ENGINE_TYPE=binary
+      - DOCKER=true
+    command: sh -c "npx prisma generate && nodemon -L --exec tsx src/index.ts"
 
 volumes:
   pgdata:

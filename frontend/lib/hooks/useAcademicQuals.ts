@@ -9,11 +9,14 @@ import type { AcademicQualFormData } from "@/lib/validators/academic.schema";
 export function useAcademicQuals(employeeId: string) {
   const [saving, setSaving] = useState(false);
 
+  const parsedId = parseInt(employeeId, 10);
+  const isValidId = !Number.isNaN(parsedId);
+
   const { data, loading, error, refetch } = useQuery<any>(
     GET_ACADEMIC_QUALIFICATIONS,
     {
-      variables: { employeeId },
-      skip: !employeeId,
+      variables: { employeeId: parsedId },
+      skip: !isValidId,
     }
   );
 

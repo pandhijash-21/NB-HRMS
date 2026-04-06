@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useForm, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -38,7 +38,7 @@ export function EducationTab({ employeeId }: EducationTabProps) {
   const { data: qualifications, isLoading } = useAcademicQualifications(employeeId);
   const { addMutation } = useAcademicActions(employeeId);
 
-  const { register, handleSubmit, setValue, reset, formState: { errors } } = useForm<AcademicFormData>({
+  const { register, handleSubmit, setValue, reset, watch, formState: { errors } } = useForm<AcademicFormData>({
     resolver: zodResolver(academicSchema),
   });
 
@@ -102,11 +102,15 @@ export function EducationTab({ employeeId }: EducationTabProps) {
                   {errors.degreeName && <p className="text-[10px] text-rose-500">{errors.degreeName.message}</p>}
                 </div>
                 <div className="space-y-1.5 col-span-2">
-                  <Label className="text-[10px] font-bold text-slate-500 uppercase ml-1">University / Board *</Label>
+                  <Label className="text-[10px] font-bold text-slate-500 uppercase ml-1">
+                    {watch("degreeType") === "SSC" ? "Board *" : "University / Board *"}
+                  </Label>
                   <Input {...register("boardUniversity")} className="rounded-xl h-10" />
                 </div>
                 <div className="space-y-1.5 col-span-2">
-                  <Label className="text-[10px] font-bold text-slate-500 uppercase ml-1">Institution Name *</Label>
+                  <Label className="text-[10px] font-bold text-slate-500 uppercase ml-1">
+                    {watch("degreeType") === "SSC" ? "School Name *" : "Institution / College Name *"}
+                  </Label>
                   <Input {...register("schoolCollege")} className="rounded-xl h-10" />
                 </div>
                 <div className="space-y-1.5">

@@ -69,7 +69,8 @@ export const employeeController = {
     console.log('POST /api/employees/full hit with:', req.body);
     const FullCreateSchema = z.object({
       fullName: z.string().min(1),
-      email: z.string().email(),
+      personalEmail: z.string().email(),
+      institutionalEmail: z.string().email().optional().nullable(),
       designation: z.string().min(1),
       department: z.string().min(1),
       joiningDate: z.string().transform((str) => new Date(str)),

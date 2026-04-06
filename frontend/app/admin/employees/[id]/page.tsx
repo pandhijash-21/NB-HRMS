@@ -11,9 +11,9 @@ import { AddressTab } from "@/components/profile/tabs/AddressTab";
 import { OtherTab } from "@/components/profile/tabs/OtherTab";
 import { FamilyTab } from "@/components/profile/tabs/FamilyTab";
 import { EducationTab } from "@/components/profile/tabs/EducationTab";
+import { ExperienceTab } from "@/components/profile/tabs/ExperienceTab";
 import { SalaryTab } from "@/components/profile/tabs/SalaryTab";
 import { BankTab } from "@/components/profile/tabs/BankTab";
-import { DocumentsTab } from "@/components/profile/tabs/DocumentsTab";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface PageProps {
@@ -62,7 +62,7 @@ export default function AdminEmployeeProfilePage({ params }: PageProps) {
     { value: "bank",      label: "Bank",      content: <BankTab      employee={employee} isAdmin /> },
     { value: "family",    label: "Family",    content: <FamilyTab    employeeId={id} isAdmin /> },
     { value: "education", label: "Education", content: <EducationTab employeeId={id} isAdmin /> },
-    { value: "documents", label: "Documents", content: <DocumentsTab employeeId={id} isAdmin /> },
+    { value: "experience", label: "Experience", content: <ExperienceTab employeeId={id} isAdmin /> },
   ];
 
   return (

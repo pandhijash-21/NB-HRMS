@@ -28,6 +28,16 @@ const employeeMetaSchema = z.object({
   employeeId: z.coerce.number().int().positive(),
 });
 
+const familyMemberMetaSchema = z.object({
+  employeeId: z.coerce.number().int().positive(),
+  memberId: z.string().min(1),
+});
+
+const experienceMetaSchema = z.object({
+  employeeId: z.coerce.number().int().positive(),
+  experienceId: z.string().min(1),
+});
+
 const PRIVILEGED_ROLES = ['ADMIN', 'HR', 'HOI'];
 
 function assertUploadAccess(req: Request, targetEmployeeId: number) {
@@ -40,6 +50,7 @@ function assertUploadAccess(req: Request, targetEmployeeId: number) {
 }
 
 export const uploadController = {
+  // Existing uploads
   photo: [single('file'), async (req: Request, res: Response) => {
     const meta = employeeMetaSchema.safeParse(req.body);
     if (!meta.success) return res.status(400).json(fail(meta.error.message));
@@ -99,5 +110,56 @@ export const uploadController = {
     const updated = await uploadService.setCertificate(meta.data.employeeId, meta.data.qualId, url, req.user?.id);
     return res.json(ok(updated));
   }],
-};
 
+  // NEW: Passport upload
+  passport: [single('file'), async (req: Request, res: Response) => {
+    const meta = employeeMetaSchema.safeParse(req.body);
+    if (!meta.success) return res.status(400).json(fail(meta.error.message));
+    if (!req.file) return res.status(400).json(fail('Missing file'));
+    assertUploadAccess(req, meta.data.employeeId);
+    const url = await uploadService.uploadToCloudinary(req.file, 'employee/passport');
+    const updated = await uploadService.setPassport(meta.data.employeeId, url, req.user?.id);
+    return res.json(ok(updated));
+  }],
+
+  // NEW: Family member Aadhaar upload
+  aadhaarFamily: [single('file'), async (req: Request, res: Response) => {
+    const meta = familyMemberMetaSchema.safeParse(req.body);
+    if (!meta.success) return res.status(400).json(fail(meta.error.message));
+    if (!req.file) return res.status(400).json(fail('Missing file'));
+    assertUploadAccess(req, meta.data.employeeId);
+    const url = await uploadService.uploadToCloudinary(req.file, `family/aadhaar/${meta.data.memberId}`);
+    const updated = await uploadService.setFamilyMemberAadhaar(meta.data.employeeId, meta.data.memberId, url, req.user?.id);
+    return res.json(ok(updated));
+  }],
+
+  // NEW: Experience letter upload
+  experienceLetter: [single('file'), async (req: Request, res: Response) => {
+    const meta = experienceMetaSchema.safeParse(req.body);
+    if (!meta.success) return res.status(400).json(fail(meta.error.message));
+    if (!req.file) return res.status(400).json(fail('Missing file'));
+    assertUploadAccess(req, meta.data.employeeId);
+    const url = await uploadService.uploadToCloudinary(req.file, `experience/letter/${meta.data.experienceId}`);
+    return res.json(ok({ url }));
+  }],
+
+  // NEW: Last paycheck upload
+  lastPaycheck: [single('file'), async (req: Request, res: Response) => {
+    const meta = experienceMetaSchema.safeParse(req.body);
+    if (!meta.success) return res.status(400).json(fail(meta.error.message));
+    if (!req.file) return res.status(400).json(fail('Missing file'));
+    assertUploadAccess(req, meta.data.employeeId);
+    const url = await uploadService.uploadToCloudinary(req.file, `experience/paycheck/${meta.data.experienceId}`);
+    return res.json(ok({ url }));
+  }],
+
+  // NEW: Recommendation letter upload
+  recommendation: [single('file'), async (req: Request, res: Response) => {
+    const meta = experienceMetaSchema.safeParse(req.body);
+    if (!meta.success) return res.status(400).json(fail(meta.error.message));
+    if (!req.file) return res.status(400).json(fail('Missing file'));
+    assertUploadAccess(req, meta.data.employeeId);
+    const url = await uploadService.uploadToCloudinary(req.file, `experience/recommendation/${meta.data.experienceId}`);
+    return res.json(ok({ url }));
+  }],
+};

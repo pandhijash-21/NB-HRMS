@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useForm, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -62,6 +62,14 @@ export function OtherTab({ employeeId }: OtherTabProps) {
       weightInKg: other.weight ?? null,
     } : undefined
   });
+
+  const hFeet = watch("heightInFeet");
+  const wKg = watch("weightInKg");
+  const bmi = useMemo(() => {
+    if (!hFeet || !wKg) return null;
+    const heightInMeters = hFeet * 0.3048;
+    return (wKg / (heightInMeters * heightInMeters)).toFixed(2);
+  }, [hFeet, wKg]);
 
   const onSubmit: SubmitHandler<OtherFormData> = (data) => {
     updateMutation.mutate(data, {
@@ -128,6 +136,11 @@ export function OtherTab({ employeeId }: OtherTabProps) {
               </div>
               <ReadOnlyField label="Height (ft)" value={other?.height} icon={Ruler} />
               <ReadOnlyField label="Weight (kg)" value={other?.weight} icon={Weight} />
+              <ReadOnlyField 
+                label="BMI" 
+                value={other?.height && other?.weight ? (other.weight / Math.pow(other.height * 0.3048, 2)).toFixed(2) : "—"} 
+                icon={Sparkles} 
+              />
               <ReadOnlyField label="Handicapped?" value={(other as any)?.isHandicapped} icon={UserCheck} />
               {(other as any)?.isHandicapped && (
                 <div className="lg:col-span-3">
@@ -166,9 +179,17 @@ export function OtherTab({ employeeId }: OtherTabProps) {
                     type="number"
                     step="0.1"
                     className="h-10 rounded-xl"
+                    defaultValue={other?.weight || ""}
                     onChange={(e) => setValue("weightInKg", e.target.value ? parseFloat(e.target.value) : null)}
                   />
                   {errors.weightInKg && <p className="text-[10px] text-rose-500">{errors.weightInKg.message}</p>}
+                </div>
+                
+                <div className="space-y-1.5 md:col-span-1">
+                  <Label className="text-[10px] font-bold text-slate-500 uppercase ml-1">BMI (Auto-calculated)</Label>
+                  <div className="h-10 rounded-xl bg-slate-50 border border-slate-200 flex items-center px-4 text-sm font-bold text-[#1d3459]">
+                    {bmi || "—"}
+                  </div>
                 </div>
                 
                 <div className="md:col-span-2 flex items-center space-x-2 py-2">

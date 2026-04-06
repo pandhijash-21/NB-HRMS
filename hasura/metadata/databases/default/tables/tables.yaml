@@ -1,4 +1,3 @@
-- "!include public__prisma_migrations.yaml"
 - "!include public_academic_qualifications.yaml"
 - "!include public_audit_log.yaml"
 - "!include public_employee_addresses.yaml"

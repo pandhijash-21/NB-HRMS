@@ -10,9 +10,12 @@ export function useFamilyMembers(employeeId: string) {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  const parsedId = parseInt(employeeId, 10);
+  const isValidId = !Number.isNaN(parsedId);
+
   const { data, loading, error, refetch } = useQuery<any>(GET_FAMILY_MEMBERS, {
-    variables: { employeeId },
-    skip: !employeeId,
+    variables: { employeeId: parsedId },
+    skip: !isValidId,
   });
 
   const saveMember = async (member: FamilyMemberFormData) => {

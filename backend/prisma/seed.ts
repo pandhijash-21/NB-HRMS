@@ -150,9 +150,28 @@ async function main() {
     },
   });
 
+  await prisma.employeeGeneralInfo.upsert({
+    where: { employeeId: 1 },
+    update: {
+      fullName: 'SYSTEM ADMIN',
+      designation: 'SYSTEM ADMINISTRATOR',
+      department: 'IT DEPARTMENT',
+    },
+    create: {
+      employeeId: 1,
+      fullName: 'SYSTEM ADMIN',
+      organization: 'GANDHINAGAR UNIVERSITY',
+      department: 'IT DEPARTMENT',
+      employeeCategory: 'NON_TEACHING',
+      designation: 'SYSTEM ADMINISTRATOR',
+      joiningDate: new Date('2020-01-01'),
+      originalJoiningDate: new Date('2020-01-01'),
+    },
+  });
+
   const adminRoleId = roleIdMap['ADMIN'];
 
-  // Default password: 01011990  (admin should change on first login)
+  // Default password: 01011998 (user-specified)
   const defaultHash = await bcrypt.hash('01011998', 12);
 
   const adminUser = await prisma.user.upsert({
@@ -207,10 +226,12 @@ async function main() {
 
   await prisma.employeeGeneralInfo.upsert({
     where: { employeeId: 2 },
-    update: {},
+    update: {
+      fullName: 'SNEHA TIWARI',
+    },
     create: {
       employeeId: 2,
-      fullName: 'SNEHA MEHTA',
+      fullName: 'SNEHA TIWARI',
       organization: 'GANDHINAGAR UNIVERSITY',
       department: 'HR DEPARTMENT',
       employeeCategory: 'NON_TEACHING',
@@ -294,6 +315,15 @@ async function main() {
         bloodGroup: 'O_POS',
       },
     });
+  }
+
+  // 10. Reset DB Sequences (Postgres specific)
+  // Ensures manual IDs 1-4 don't break autoincrement for future employee creation
+  try {
+    await prisma.$executeRawUnsafe("SELECT setval('employees_id_seq', (SELECT MAX(id) FROM employees))");
+    console.log('✅  Database sequences synchronized');
+  } catch (err: any) {
+    console.warn('⚠️  Could not reset sequences (non-critical):', err.message);
   }
 
   console.log('✅  Demo employees and users seeded');

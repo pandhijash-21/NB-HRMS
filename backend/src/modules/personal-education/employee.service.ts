@@ -44,7 +44,8 @@ export const employeeService = {
 
   async createFull(input: {
     fullName: string;
-    email: string;
+    personalEmail: string;
+    institutionalEmail?: string | null;
     designation: string;
     department: string;
     joiningDate: Date;
@@ -84,12 +85,13 @@ export const employeeService = {
         },
       });
 
-      // 4. Create Address (Local) for email
+      // 4. Create Address (Local) for both emails
       await tx.employeeAddress.create({
         data: {
           employeeId: employee.id,
           addressType: 'LOCAL',
-          instituteEmail: input.email,
+          personalEmail: input.personalEmail,
+          instituteEmail: input.institutionalEmail,
         },
       });
 

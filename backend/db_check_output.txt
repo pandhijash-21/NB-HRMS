@@ -1,0 +1,23 @@
+﻿--- USERS ---
+User ID: fb8dbce7-d7a3-4258-bfdc-2a22fd25c53a, EmployeeID: 1, Role: ADMIN, Active: true
+Full Name: undefined
+Password Hash: $2b$12$niQ3BiZ5./oso6xQfA0MpOjd8w7nPchlVwyZH7mXUAS5s3wN92oHO
+---
+User ID: 84d44008-b41b-4d40-a39c-6f48747784d7, EmployeeID: 2, Role: HR, Active: true
+Full Name: SNEHA MEHTA
+Password Hash: $2b$12$niQ3BiZ5./oso6xQfA0MpOjd8w7nPchlVwyZH7mXUAS5s3wN92oHO
+---
+User ID: 4e818def-70c3-439a-8452-7b5614405425, EmployeeID: 3, Role: EMPLOYEE, Active: true
+Full Name: RAJESH KUMAR
+Password Hash: $2b$12$niQ3BiZ5./oso6xQfA0MpOjd8w7nPchlVwyZH7mXUAS5s3wN92oHO
+---
+User ID: fb6f69f8-72a4-498a-8bf5-58346782efc1, EmployeeID: 4, Role: EMPLOYEE, Active: true
+Full Name: PRIYA SHARMA
+Password Hash: $2b$12$niQ3BiZ5./oso6xQfA0MpOjd8w7nPchlVwyZH7mXUAS5s3wN92oHO
+---
+
+--- ALL EMPLOYEES ---
+Employee ID: 1, Name: undefined
+Employee ID: 2, Name: SNEHA MEHTA
+Employee ID: 3, Name: RAJESH KUMAR
+Employee ID: 4, Name: PRIYA SHARMA

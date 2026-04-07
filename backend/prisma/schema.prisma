@@ -129,6 +129,7 @@ model Employee {
   otherInfo        EmployeeOtherInfo?
   familyMembers    FamilyMember[]
   academicQuals    AcademicQualification[]
+  experiences      EmployeeExperience[]
   salaryInfo       EmployeeSalaryInfo?
   bankInfo         EmployeeBankInfo?
   user             User?
@@ -412,6 +413,42 @@ model AcademicQualification {
 
   @@unique([employeeId, degreeType])
   @@map("academic_qualifications")
+}
+
+// =============================================================================
+// PRIOR WORK EXPERIENCE (GraphQL / Hasura — employee_experience)
+// =============================================================================
+
+enum ExperienceType {
+  TEACHING
+  INDUSTRY
+  RESEARCH
+  ADMINISTRATIVE
+  CONSULTANCY
+  OTHER
+}
+
+model EmployeeExperience {
+  id                    String         @id @default(uuid())
+  employeeId            Int            @map("employee_id")
+  type                  ExperienceType
+  designation           String
+  organizationName      String         @map("organization_name")
+  fromDate              DateTime       @map("from_date") @db.Date
+  toDate                DateTime       @map("to_date") @db.Date
+  jobDescription        String?        @map("job_description")
+  lastSalary            Decimal?       @map("last_salary") @db.Decimal(12, 2)
+  experienceLetterUrl   String?        @map("experience_letter_url")
+  lastPaycheckUrl       String?        @map("last_paycheck_url")
+  recommendationLetters Json           @default("[]") @map("recommendation_letters")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@map("employee_experience")
 }
 
 // =============================================================================

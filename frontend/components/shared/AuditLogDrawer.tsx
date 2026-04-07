@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@apollo/client/react";
+import { useQuery, skipToken } from "@apollo/client/react";
 import {
   Sheet,
   SheetContent,
@@ -26,10 +26,13 @@ const OPERATION_COLORS: Record<string, string> = {
 
 export function AuditLogDrawer({ employeeId, trigger }: AuditLogDrawerProps) {
   const [open, setOpen] = useState(false);
-  const { data, loading } = useQuery<any>(GET_AUDIT_LOGS, {
-    variables: { employeeId, limit: 50, offset: 0 },
-    skip: !open,
-  });
+  const safeEmployeeId = employeeId ? String(employeeId) : null;
+  const { data, loading } = useQuery<any>(
+    GET_AUDIT_LOGS,
+    open && safeEmployeeId
+      ? { variables: { employeeId: safeEmployeeId, limit: 50, offset: 0 } }
+      : skipToken
+  );
 
   const logs = data?.audit_log ?? [];
 

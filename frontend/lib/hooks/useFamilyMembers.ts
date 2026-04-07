@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import api from "@/lib/axios";
-import { useQuery } from "@apollo/client/react";
+import { useQuery, skipToken } from "@apollo/client/react";
 import { GET_FAMILY_MEMBERS } from "@/lib/graphql";
 import type { FamilyMemberFormData } from "@/lib/validators/family.schema";
 
@@ -11,12 +11,12 @@ export function useFamilyMembers(employeeId: string) {
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const parsedId = parseInt(employeeId, 10);
-  const isValidId = !Number.isNaN(parsedId);
+  const isValidId = Number.isFinite(parsedId) && parsedId > 0;
 
-  const { data, loading, error, refetch } = useQuery<any>(GET_FAMILY_MEMBERS, {
-    variables: { employeeId: parsedId },
-    skip: !isValidId,
-  });
+  const { data, loading, error, refetch } = useQuery<any>(
+    GET_FAMILY_MEMBERS,
+    isValidId ? { variables: { employeeId: parsedId } } : skipToken
+  );
 
   const saveMember = async (member: FamilyMemberFormData) => {
     setSaving(true);

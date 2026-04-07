@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery, useMutation as useApolloMutation } from "@apollo/client/react";
+import { useQuery, useMutation as useApolloMutation, skipToken } from "@apollo/client/react";
 import { GET_EXPERIENCES, UPSERT_EXPERIENCE, DELETE_EXPERIENCE } from "@/lib/graphql/experience.gql";
 import type { ExperienceFormData } from "@/lib/validators/experience.schema";
 
@@ -9,48 +9,46 @@ export function useExperiences(employeeId: string) {
   const [saving, setSaving] = useState(false);
 
   const parsedId = parseInt(employeeId, 10);
-  const isValidId = !Number.isNaN(parsedId);
+  const isValidId = Number.isFinite(parsedId) && parsedId > 0;
 
   const { data, loading, error, refetch } = useQuery<any>(
     GET_EXPERIENCES,
-    {
-      variables: { employeeId: parsedId },
-      skip: !isValidId,
-    }
+    isValidId ? { variables: { employeeId: parsedId } } : skipToken
   );
 
   const [upsertExperience] = useApolloMutation(UPSERT_EXPERIENCE);
   const [deleteExperience] = useApolloMutation(DELETE_EXPERIENCE);
 
   const saveExperience = async (exp: ExperienceFormData) => {
+    if (!isValidId) return;
     setSaving(true);
     try {
+      // Hasura insert_input uses DB column names (snake_case) for this table.
+      // PK has no DB default: Prisma @default(uuid()) does not run for GraphQL inserts — generate id here.
+      const now = new Date().toISOString();
       const expData = {
-        employeeId: parseInt(employeeId),
+        employee_id: parsedId,
         type: exp.type,
         designation: exp.designation,
-        organizationName: exp.organizationName,
-        fromDate: exp.fromDate,
-        toDate: exp.toDate,
-        jobDescription: exp.jobDescription || null,
-        lastSalary: exp.lastSalary || null,
-        experienceLetterUrl: exp.experienceLetterUrl || null,
-        lastPaycheckUrl: exp.lastPaycheckUrl || null,
-        recommendationLetters: exp.recommendationLetters || [],
+        organization_name: exp.organizationName,
+        from_date: exp.fromDate,
+        to_date: exp.toDate,
+        job_description: exp.jobDescription || null,
+        last_salary: exp.lastSalary ?? null,
+        experience_letter_url: exp.experienceLetterUrl || null,
+        last_paycheck_url: exp.lastPaycheckUrl || null,
+        recommendation_letters: exp.recommendationLetters ?? [],
+        updated_at: now,
       };
 
       if (exp.id) {
         await upsertExperience({
-          variables: {
-            employeeId: parseInt(employeeId),
-            objects: [{ ...expData, id: exp.id }],
-          },
+          variables: { objects: [{ ...expData, id: exp.id }] },
         });
       } else {
         await upsertExperience({
           variables: {
-            employeeId: parseInt(employeeId),
-            objects: [expData],
+            objects: [{ ...expData, id: crypto.randomUUID(), created_at: now }],
           },
         });
       }

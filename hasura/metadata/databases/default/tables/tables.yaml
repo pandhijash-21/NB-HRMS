@@ -1,6 +1,7 @@
 - "!include public_academic_qualifications.yaml"
 - "!include public_audit_log.yaml"
 - "!include public_employee_addresses.yaml"
+- "!include public_employee_experience.yaml"
 - "!include public_employee_bank_info.yaml"
 - "!include public_employee_general_info.yaml"
 - "!include public_employee_other_info.yaml"

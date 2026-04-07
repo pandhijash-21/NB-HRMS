@@ -418,125 +418,134 @@ export function ExperienceTab({ employeeId, isAdmin }: ExperienceTabProps) {
       </Card>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>
               {editingExp ? "Edit Experience" : "Add Experience"}
             </DialogTitle>
+            <p className="text-xs text-slate-500 pt-1">
+              Role, dates, compensation, and supporting documents in one place.
+            </p>
           </DialogHeader>
 
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <Label>Experience Type *</Label>
-                <Select
-                  defaultValue={editingExp?.type ?? "TEACHING"}
-                  onValueChange={(v) => setValue("type", v as ExperienceFormData["type"])}
-                >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {EXPERIENCE_TYPES.map((t) => (
-                      <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1">
-                <Label>Designation *</Label>
-                <Input
-                  {...register("designation")}
-                  placeholder="e.g., Assistant Professor"
-                />
-                {errors.designation && (
-                  <p className="text-xs text-rose-500">{errors.designation.message}</p>
-                )}
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <Label>Organization Name *</Label>
-              <Input
-                {...register("organizationName")}
-                placeholder="e.g., XYZ University"
-              />
-              {errors.organizationName && (
-                <p className="text-xs text-rose-500">{errors.organizationName.message}</p>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <Label>From Date *</Label>
-                <Input type="date" {...register("fromDate")} />
-                {errors.fromDate && (
-                  <p className="text-xs text-rose-500">{errors.fromDate.message}</p>
-                )}
-              </div>
-
-              <div className="space-y-1">
-                <Label>To Date *</Label>
-                <Input type="date" {...register("toDate")} />
-                {errors.toDate && (
-                  <p className="text-xs text-rose-500">{errors.toDate.message}</p>
-                )}
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <Label>Job Description</Label>
-              <Textarea
-                {...register("jobDescription")}
-                placeholder="Brief description of your role and responsibilities..."
-                rows={3}
-                className="resize-none"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <Label>Last Salary (Monthly)</Label>
-              <div className="relative">
-                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <Input
-                  type="number"
-                  {...register("lastSalary")}
-                  placeholder="e.g., 50000"
-                  className="pl-9"
-                />
-              </div>
-            </div>
-
-            <div className="border-t pt-4">
-              <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
-                Document Uploads
-              </h4>
-
-              <div className="grid grid-cols-2 gap-4">
-                <FileUploadField
-                  label="Experience Letter"
-                  url={experienceLetterUrl}
-                  accept=".pdf,image/*"
-                  onUpload={handleExperienceLetterUpload}
-                  uploading={expLetterUploading}
-                />
-
-                <FileUploadField
-                  label="Last Paycheck"
-                  url={lastPaycheckUrl}
-                  accept=".pdf,image/*"
-                  onUpload={handlePaycheckUpload}
-                  uploading={paycheckUploading}
-                />
-              </div>
-
-              <div className="mt-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs font-medium text-slate-600">
-                    Recommendation Letters
-                  </Label>
-                  <span className="text-[10px] text-slate-400">(Optional, multiple)</span>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-5 py-1">
+            <div className="rounded-xl border border-slate-200/80 bg-slate-50/40 p-4 sm:p-5 space-y-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label>Experience Type *</Label>
+                  <Select
+                    defaultValue={editingExp?.type ?? "TEACHING"}
+                    onValueChange={(v) => setValue("type", v as ExperienceFormData["type"])}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {EXPERIENCE_TYPES.map((t) => (
+                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-                <div className="border-2 border-dashed border-slate-200 rounded-xl p-3">
+
+                <div className="space-y-1.5">
+                  <Label>Designation *</Label>
+                  <Input
+                    {...register("designation")}
+                    placeholder="e.g., Assistant Professor"
+                  />
+                  {errors.designation && (
+                    <p className="text-xs text-rose-500">{errors.designation.message}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Organization Name *</Label>
+                <Input
+                  {...register("organizationName")}
+                  placeholder="e.g., XYZ University"
+                />
+                {errors.organizationName && (
+                  <p className="text-xs text-rose-500">{errors.organizationName.message}</p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label>From Date *</Label>
+                  <Input type="date" {...register("fromDate")} />
+                  {errors.fromDate && (
+                    <p className="text-xs text-rose-500">{errors.fromDate.message}</p>
+                  )}
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>To Date *</Label>
+                  <Input type="date" {...register("toDate")} />
+                  {errors.toDate && (
+                    <p className="text-xs text-rose-500">{errors.toDate.message}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Job Description</Label>
+                <Textarea
+                  {...register("jobDescription")}
+                  placeholder="Brief description of your role and responsibilities..."
+                  rows={3}
+                  className="resize-none"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Last Salary (Monthly)</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-500 font-medium" aria-hidden>
+                    ₹
+                  </span>
+                  <Input
+                    type="number"
+                    {...register("lastSalary")}
+                    placeholder="e.g., 50000"
+                    className="pl-8"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-3 pt-1 border-t border-slate-200/80">
+                <div>
+                  <p className="text-xs font-semibold text-slate-700">Document uploads</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Experience letter, last paycheck, and optional recommendation letters.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <FileUploadField
+                    label="Experience Letter"
+                    url={experienceLetterUrl}
+                    accept=".pdf,image/*"
+                    onUpload={handleExperienceLetterUpload}
+                    uploading={expLetterUploading}
+                  />
+
+                  <FileUploadField
+                    label="Last Paycheck"
+                    url={lastPaycheckUrl}
+                    accept=".pdf,image/*"
+                    onUpload={handlePaycheckUpload}
+                    uploading={paycheckUploading}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label className="text-xs font-medium text-slate-600">
+                      Recommendation letters
+                    </Label>
+                    <span className="text-[10px] text-slate-400 shrink-0">Optional · multiple files</span>
+                  </div>
+                  <div className="border-2 border-dashed border-slate-200 rounded-xl p-3 bg-white/80">
                   {recommendationLetters && recommendationLetters.length > 0 ? (
                     <div className="space-y-2">
                       {recommendationLetters.map((url, index) => (
@@ -621,6 +630,7 @@ export function ExperienceTab({ employeeId, isAdmin }: ExperienceTabProps) {
                     </label>
                   )}
                 </div>
+              </div>
               </div>
             </div>
 

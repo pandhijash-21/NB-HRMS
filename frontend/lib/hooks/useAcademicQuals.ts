@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import api from "@/lib/axios";
-import { useQuery } from "@apollo/client/react";
+import { useQuery, skipToken } from "@apollo/client/react";
 import { GET_ACADEMIC_QUALIFICATIONS } from "@/lib/graphql";
 import type { AcademicQualFormData } from "@/lib/validators/academic.schema";
 
@@ -10,14 +10,11 @@ export function useAcademicQuals(employeeId: string) {
   const [saving, setSaving] = useState(false);
 
   const parsedId = parseInt(employeeId, 10);
-  const isValidId = !Number.isNaN(parsedId);
+  const isValidId = Number.isFinite(parsedId) && parsedId > 0;
 
   const { data, loading, error, refetch } = useQuery<any>(
     GET_ACADEMIC_QUALIFICATIONS,
-    {
-      variables: { employeeId: parsedId },
-      skip: !isValidId,
-    }
+    isValidId ? { variables: { employeeId: parsedId } } : skipToken
   );
 
   const saveQualification = async (qual: AcademicQualFormData) => {

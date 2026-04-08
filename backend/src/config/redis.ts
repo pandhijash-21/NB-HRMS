@@ -14,3 +14,7 @@ export async function connectRedis() {
   }
 }
 
+export function getRedisClient() {
+  return redis;
+}
+

@@ -28,7 +28,7 @@ export const otpService = {
     });
 
     // Store OTP in Redis
-    await redis.setex(getOtpKey(email), OTP_EXPIRY_SECONDS, otpData);
+    await redis.setEx(getOtpKey(email), OTP_EXPIRY_SECONDS, otpData);
 
     // Create email transporter
     const transporter = nodemailer.createTransport({
@@ -99,7 +99,7 @@ export const otpService = {
         await redis.del(key);
         throw new Error('Too many failed attempts. Please request a new OTP.');
       }
-      await redis.setex(key, OTP_EXPIRY_SECONDS, JSON.stringify(data));
+      await redis.setEx(key, OTP_EXPIRY_SECONDS, JSON.stringify(data));
       return false;
     }
 
@@ -108,7 +108,7 @@ export const otpService = {
     }
 
     // Mark email as verified in Redis (longer expiry or permanent)
-    await redis.set(`verified:${email.toLowerCase()}`, userId, 'EX', 86400 * 30); // 30 days
+    await redis.set(`verified:${email.toLowerCase()}`, userId, { EX: 86400 * 30 }); // 30 days
     
     // Delete the used OTP
     await redis.del(key);

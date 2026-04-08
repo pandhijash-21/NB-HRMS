@@ -1,15 +1,27 @@
 "use client";
 
+import { useEffect } from "react";
 import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
 
+const APPROVER_ROLES = ["HOD", "HOI", "REGISTRAR", "VC"];
+
 export default function EmployeeDashboard() {
   const { data: session, status } = useSession();
+  const router = useRouter();
+  const role = (session?.user as any)?.role ?? "";
   const userName = session?.user?.name ?? "Employee";
 
-  if (status === "loading") {
+  useEffect(() => {
+    if (status === "authenticated" && APPROVER_ROLES.includes(role)) {
+      router.replace("/approvals");
+    }
+  }, [status, role, router]);
+
+  if (status === "loading" || (status === "authenticated" && APPROVER_ROLES.includes(role))) {
     return (
       <div className="space-y-6">
         <Skeleton className="h-8 w-48" />

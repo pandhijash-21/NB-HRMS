@@ -1,0 +1,36 @@
+table:
+  name: leave_types
+  schema: public
+select_permissions:
+  - role: ADMIN
+    permission:
+      columns: "*"
+      filter: {}
+  - role: HR
+    permission:
+      columns: "*"
+      filter: {}
+  - role: HR_MANAGER
+    permission:
+      columns: "*"
+      filter: {}
+  - role: HOD
+    permission:
+      columns: [id, code, name, applicable_to, default_days_per_year, allow_half_day, is_active]
+      filter: {}
+  - role: HOI
+    permission:
+      columns: [id, code, name, applicable_to, default_days_per_year, allow_half_day, is_active]
+      filter: {}
+  - role: VC
+    permission:
+      columns: [id, code, name, applicable_to, default_days_per_year, allow_half_day, is_active]
+      filter: {}
+  - role: REGISTRAR
+    permission:
+      columns: [id, code, name, applicable_to, default_days_per_year, allow_half_day, is_active]
+      filter: {}
+  - role: EMPLOYEE
+    permission:
+      columns: [id, code, name, applicable_to, default_days_per_year, allow_half_day, requires_document, requires_reason, is_active]
+      filter: {is_active: {_eq: true}}

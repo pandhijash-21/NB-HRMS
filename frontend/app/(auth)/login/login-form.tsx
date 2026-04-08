@@ -43,10 +43,12 @@ export default function LoginForm() {
       return;
     }
 
-    const role = session?.user?.role ?? "";
+    const role = (session?.user as any)?.role ?? "";
 
     if (role === "ADMIN") {
       router.push("/admin/dashboard");
+    } else if (["HOD", "HOI", "REGISTRAR", "VC"].includes(role)) {
+      router.push("/approvals");
     } else {
       router.push("/dashboard");
     }

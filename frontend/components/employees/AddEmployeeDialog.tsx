@@ -59,7 +59,7 @@ const addEmployeeSchema = z.object({
     .email("Invalid institute email format")
     .optional()
     .or(z.literal("")),
-  organization: z.enum(["GU", "Platinum Foundation"], "Organization is required"),
+  organization: z.enum(["Gandhinagar University", "Platinum Foundation"], "Organization is required"),
   subOrganization: z.string().min(1, "Sub-organization is required"),
   designation: z.string().min(2, "Designation is required"),
   department: z.string().min(2, "Department is required"),
@@ -108,7 +108,7 @@ export function AddEmployeeDialog() {
       fullName: "",
       personalEmail: "",
       institutionalEmail: "",
-      organization: "GU",
+      organization: "Gandhinagar University",
       subOrganization: "",
       designation: "",
       department: "",
@@ -292,14 +292,14 @@ export function AddEmployeeDialog() {
                 <Label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Organization *</Label>
                 <Select
                   name="organization"
-                  onValueChange={(v) => setValue("organization", v as "GU" | "Platinum Foundation")}
-                  defaultValue="GU"
+                  onValueChange={(v) => setValue("organization", v as "Gandhinagar University" | "Platinum Foundation")}
+                  defaultValue="Gandhinagar University"
                 >
                   <SelectTrigger id="organization" className="rounded-xl border-slate-200/60 bg-white h-11 text-sm font-medium">
                     <SelectValue placeholder="Select..." />
                   </SelectTrigger>
                   <SelectContent className="rounded-xl border-slate-100 shadow-xl">
-                    <SelectItem value="GU" className="text-[10px] font-bold uppercase">GU</SelectItem>
+                    <SelectItem value="Gandhinagar University" className="text-[10px] font-bold uppercase">Gandhinagar University</SelectItem>
                     <SelectItem value="Platinum Foundation" className="text-[10px] font-bold uppercase">Platinum Foundation</SelectItem>
                   </SelectContent>
                 </Select>

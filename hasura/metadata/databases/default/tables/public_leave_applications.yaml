@@ -1,0 +1,53 @@
+table:
+  name: leave_applications
+  schema: public
+object_relationships:
+  - name: employee
+    using:
+      foreign_key_constraint_on: employee_id
+  - name: leave_type
+    using:
+      foreign_key_constraint_on: leave_type_id
+array_relationships:
+  - name: approval_steps
+    using:
+      foreign_key_constraint_on:
+        column: application_id
+        table:
+          name: leave_approval_steps
+          schema: public
+select_permissions:
+  - role: ADMIN
+    permission:
+      columns: "*"
+      filter: {}
+  - role: HR
+    permission:
+      columns: "*"
+      filter: {}
+  - role: HR_MANAGER
+    permission:
+      columns: "*"
+      filter: {}
+  - role: HOD
+    permission:
+      columns: "*"
+      filter: {}
+  - role: HOI
+    permission:
+      columns: "*"
+      filter: {}
+  - role: VC
+    permission:
+      columns: "*"
+      filter: {}
+  - role: REGISTRAR
+    permission:
+      columns: "*"
+      filter: {}
+  - role: EMPLOYEE
+    permission:
+      columns: "*"
+      filter:
+        employee_id:
+          _eq: X-Hasura-Employee-Id

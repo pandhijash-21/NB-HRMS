@@ -1,0 +1,36 @@
+table:
+  name: public_holidays
+  schema: public
+select_permissions:
+  - role: ADMIN
+    permission:
+      columns: "*"
+      filter: {}
+  - role: HR
+    permission:
+      columns: "*"
+      filter: {}
+  - role: HR_MANAGER
+    permission:
+      columns: "*"
+      filter: {}
+  - role: HOD
+    permission:
+      columns: "*"
+      filter: {}
+  - role: HOI
+    permission:
+      columns: "*"
+      filter: {}
+  - role: VC
+    permission:
+      columns: "*"
+      filter: {}
+  - role: REGISTRAR
+    permission:
+      columns: "*"
+      filter: {}
+  - role: EMPLOYEE
+    permission:
+      columns: [id, name, date, year, is_optional]
+      filter: {}

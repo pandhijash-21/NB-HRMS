@@ -1,0 +1,30 @@
+table:
+  name: monthly_lwp_records
+  schema: public
+object_relationships:
+  - name: employee
+    using:
+      foreign_key_constraint_on: employee_id
+select_permissions:
+  - role: ADMIN
+    permission:
+      columns: "*"
+      filter: {}
+  - role: HR
+    permission:
+      columns: "*"
+      filter: {}
+  - role: HR_MANAGER
+    permission:
+      columns: "*"
+      filter: {}
+  - role: HOD
+    permission:
+      columns: "*"
+      filter: {}
+  - role: EMPLOYEE
+    permission:
+      columns: [id, employee_id, year, month, days, created_at]
+      filter:
+        employee_id:
+          _eq: X-Hasura-Employee-Id

@@ -43,6 +43,10 @@ const PERMISSION_MATRIX: PermissionMatrix = {
 
   HOI: Object.fromEntries(ALL_KEYS.map((k) => [k, { ...RO, canApprove: true, canExport: true }])),
 
+  // Final approvers in Leave workflow (step 3)
+  VC: Object.fromEntries(ALL_KEYS.map((k) => [k, { ...RO, canApprove: true, canExport: true }])),
+  REGISTRAR: Object.fromEntries(ALL_KEYS.map((k) => [k, { ...RO, canApprove: true, canExport: true }])),
+
   HR: {
     PERSONAL_INFO: RWAX,
     EDUCATION:     RWAX,
@@ -81,6 +85,22 @@ const PERMISSION_MATRIX: PermissionMatrix = {
     BANK_DETAILS:  RO,
     DOCUMENTS:     RW,
   },
+
+  // Optional role aligned to Hasura spec language
+  HR_MANAGER: {
+    PERSONAL_INFO: RWAX,
+    EDUCATION:     RWAX,
+    LEAVE:         RWAX,
+    ATTENDANCE:    RX,
+    BANK_DETAILS:  RO,
+    DOCUMENTS:     { canRead: true, canWrite: true, canApprove: true, canDelete: false, canExport: false },
+    REPORTS:       RX,
+    PAYROLL:       RO,
+    SALARY:        RO,
+    USER_MGMT:     RO,
+    ROLE_MGMT:     RO,
+    FIELD_MGMT:    RW,
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -104,6 +124,9 @@ async function main() {
     { name: 'HOI',      description: 'Head of Institution — Principal level', isSystem: true },
     { name: 'HR',       description: 'HR department staff',                   isSystem: true },
     { name: 'HOD',      description: 'Head of Department',                    isSystem: true },
+    { name: 'VC',       description: 'Vice Chancellor',                       isSystem: true },
+    { name: 'REGISTRAR',description: 'Registrar',                             isSystem: true },
+    { name: 'HR_MANAGER', description: 'HR manager (alias role)',             isSystem: true },
     { name: 'FINANCE',  description: 'Finance department staff',              isSystem: true },
     { name: 'EMPLOYEE', description: 'Regular employee',                      isSystem: true },
   ];
@@ -134,6 +157,209 @@ async function main() {
     }
   }
   console.log(`✅  ${permCount} permission entries seeded`);
+
+  // ── Leave Settings + Types ───────────────────────────────────────────────
+  console.log('⏳  Seeding leave settings…');
+  const leaveSettings = [
+    {
+      key: 'absence_window_hours',
+      value: '48',
+      description: 'Hours employee has to apply after absence (null = infinite)',
+    },
+    {
+      key: 'approver_window_hours',
+      value: '48',
+      description: 'Fallback window hours if role-specific window is not set',
+    },
+    {
+      key: 'hod_window_hours',
+      value: '48',
+      description: 'Hours HOD has to recommend/reject before timeout',
+    },
+    {
+      key: 'hoi_window_hours',
+      value: '48',
+      description: 'Hours HOI has to recommend/reject before timeout',
+    },
+    {
+      key: 'global_window_hours',
+      value: '72',
+      description: 'Hours Vice Chancellor/Registrar have to approve/reject before timeout',
+    },
+    {
+      key: 'approver_timeout_action',
+      value: 'escalate',
+      description: 'On approver timeout: escalate or reject',
+    },
+    {
+      key: 'yearend_processing_date',
+      value: '12-31',
+      description: 'Year-end processing date (MM-DD)',
+    },
+    {
+      key: 'new_year_credit_date',
+      value: '01-01',
+      description: 'New year credit date (MM-DD)',
+    },
+    {
+      key: 'mid_year_credit_date',
+      value: '07-01',
+      description: 'Mid year credit date (MM-DD)',
+    },
+    {
+      key: 'lwp_auto_apply',
+      value: 'true',
+      description: 'Auto apply LWP after absence window expiry',
+    },
+  ] as const;
+
+  for (const s of leaveSettings) {
+    await prisma.leaveSetting.upsert({
+      where: { key: s.key },
+      update: { value: s.value, description: s.description, updatedBy: 'seed' },
+      create: { ...s, updatedBy: 'seed' },
+    });
+  }
+  console.log(`✅  ${leaveSettings.length} leave settings seeded`);
+
+  console.log('⏳  Seeding leave types…');
+  const leaveTypes = [
+    {
+      code: 'CL',
+      name: 'Casual Leave',
+      applicableTo: 'BOTH' as const,
+      defaultDaysPerYear: 12,
+      isCarryForward: false,
+      allowHalfDay: true,
+      skipPublicHolidays: true,
+      skipWeekends: true,
+      requiresDocument: false,
+      requiresReason: true,
+      employeeCanApply: true,
+      creditSchedule: { credits: [{ month: 1, day: 1, days: 12 }] },
+    },
+    {
+      code: 'SL',
+      name: 'Sick Leave',
+      applicableTo: 'BOTH' as const,
+      defaultDaysPerYear: 10,
+      isCarryForward: true,
+      allowHalfDay: true,
+      skipPublicHolidays: true,
+      skipWeekends: true,
+      requiresDocument: false,
+      requiresReason: true,
+      employeeCanApply: false,   // HR applies on behalf
+      creditSchedule: { credits: [{ month: 1, day: 1, days: 5 }, { month: 7, day: 1, days: 5 }] },
+    },
+    {
+      code: 'EL',
+      name: 'Earned Leave',
+      applicableTo: 'NON_TEACHING' as const,
+      defaultDaysPerYear: 21,
+      isCarryForward: true,
+      allowHalfDay: true,
+      skipPublicHolidays: true,
+      skipWeekends: true,
+      requiresDocument: false,
+      requiresReason: true,
+      employeeCanApply: false,   // HR applies on behalf
+      creditSchedule: { credits: [{ month: 1, day: 1, days: 10 }, { month: 7, day: 1, days: 11 }] },
+    },
+    {
+      code: 'DL',
+      name: 'Duty Leave',
+      applicableTo: 'BOTH' as const,
+      defaultDaysPerYear: null,
+      isCarryForward: false,
+      allowHalfDay: true,
+      skipPublicHolidays: true,
+      skipWeekends: true,
+      requiresDocument: true,
+      requiresReason: true,
+      employeeCanApply: true,
+      creditSchedule: null,
+    },
+    {
+      code: 'AL',
+      name: 'Academic Leave',
+      applicableTo: 'TEACHING' as const,
+      defaultDaysPerYear: null,
+      isCarryForward: false,
+      allowHalfDay: true,
+      skipPublicHolidays: true,
+      skipWeekends: true,
+      requiresDocument: false,
+      requiresReason: true,
+      employeeCanApply: true,
+      creditSchedule: null,
+    },
+    {
+      code: 'VL',
+      name: 'Vacation Leave',
+      applicableTo: 'TEACHING' as const,
+      defaultDaysPerYear: 21,
+      isCarryForward: false,
+      allowHalfDay: true,
+      skipPublicHolidays: true,
+      skipWeekends: true,
+      requiresDocument: false,
+      requiresReason: true,
+      employeeCanApply: true,
+      creditSchedule: { credits: [{ month: 1, day: 1, days: 21 }] },
+    },
+    {
+      code: 'LWP',
+      name: 'Leave Without Pay',
+      applicableTo: 'BOTH' as const,
+      defaultDaysPerYear: null,
+      isCarryForward: false,
+      allowHalfDay: true,
+      skipPublicHolidays: true,
+      skipWeekends: true,
+      requiresDocument: false,
+      requiresReason: true,
+      employeeCanApply: false,   // System-applied only
+      creditSchedule: null,
+    },
+    {
+      code: 'OT',
+      name: 'Other',
+      applicableTo: 'BOTH' as const,
+      defaultDaysPerYear: null,
+      isCarryForward: false,
+      allowHalfDay: true,
+      skipPublicHolidays: true,
+      skipWeekends: true,
+      requiresDocument: true,
+      requiresReason: true,
+      employeeCanApply: true,
+      creditSchedule: null,
+    },
+  ] as const;
+
+  for (const lt of leaveTypes) {
+    const common = {
+      name:               lt.name,
+      applicableTo:       lt.applicableTo,
+      defaultDaysPerYear: lt.defaultDaysPerYear,
+      isCarryForward:     lt.isCarryForward,
+      allowHalfDay:       lt.allowHalfDay,
+      skipPublicHolidays: lt.skipPublicHolidays,
+      skipWeekends:       lt.skipWeekends,
+      requiresDocument:   lt.requiresDocument,
+      requiresReason:     lt.requiresReason,
+      isActive:           true,
+      employeeCanApply:   (lt as any).employeeCanApply ?? true,
+      creditSchedule:     lt.creditSchedule as any,
+    };
+    await prisma.leaveType.upsert({
+      where:  { code: lt.code },
+      update: common,
+      create: { code: lt.code, ...common },
+    });
+  }
+  console.log(`✅  ${leaveTypes.length} leave types seeded`);
 
   // ── Admin employee + user ──────────────────────────────────────────────
   console.log('⏳  Seeding admin employee & user…');
@@ -317,8 +543,251 @@ async function main() {
     });
   }
 
-  // 10. Reset DB Sequences (Postgres specific)
-  // Ensures manual IDs 1-4 don't break autoincrement for future employee creation
+  // ── Update Employee 3 — set subOrganization so leave routes to GIT HOD/HOI ───
+  await prisma.employeeGeneralInfo.update({
+    where: { employeeId: 3 },
+    data: { subOrganization: 'GIT' },
+  });
+  await prisma.employeeGeneralInfo.update({
+    where: { employeeId: 4 },
+    data: { subOrganization: 'GIT' },
+  });
+  console.log('✅  Updated employees 3 & 4 — subOrganization = GIT');
+
+  // ── Leave workflow test users (IDs 5–8) ─────────────────────────────────────
+  console.log('⏳  Seeding leave workflow users (HOD, HOI, Registrar, VC)…');
+
+  const leaveWorkflowUsers = [
+    {
+      id:           5,
+      abbreviation: 'AP',
+      name:         'DR. AMIT PATEL',
+      designation:  'HEAD OF DEPARTMENT',
+      dept:         'COMPUTER ENGINEERING',
+      subOrg:       'GIT',
+      org:          'GANDHINAGAR UNIVERSITY',
+      category:     'TEACHING' as const,
+      gender:       'MALE' as const,
+      dob:          new Date('1975-04-10'),
+      roleName:     'HOD',
+    },
+    {
+      id:           6,
+      abbreviation: 'RS',
+      name:         'DR. REKHA SHAH',
+      designation:  'PRINCIPAL',
+      dept:         'PRINCIPAL OFFICE',
+      subOrg:       'GIT',
+      org:          'GANDHINAGAR UNIVERSITY',
+      category:     'TEACHING' as const,
+      gender:       'FEMALE' as const,
+      dob:          new Date('1970-08-22'),
+      roleName:     'HOI',
+    },
+    {
+      id:           7,
+      abbreviation: 'SM',
+      name:         'MR. SURESH MEHTA',
+      designation:  'REGISTRAR',
+      dept:         'REGISTRAR OFFICE',
+      subOrg:       null,
+      org:          'GANDHINAGAR UNIVERSITY',
+      category:     'NON_TEACHING' as const,
+      gender:       'MALE' as const,
+      dob:          new Date('1968-12-05'),
+      roleName:     'REGISTRAR',
+    },
+    {
+      id:           8,
+      abbreviation: 'JD',
+      name:         'PROF. JAYESH DESAI',
+      designation:  'VICE CHANCELLOR',
+      dept:         'VICE CHANCELLOR OFFICE',
+      subOrg:       null,
+      org:          'GANDHINAGAR UNIVERSITY',
+      category:     'NON_TEACHING' as const,
+      gender:       'MALE' as const,
+      dob:          new Date('1962-03-17'),
+      roleName:     'VC',
+    },
+  ];
+
+  for (const u of leaveWorkflowUsers) {
+    const emp = await prisma.employee.upsert({
+      where:  { id: u.id },
+      update: {},
+      create: {
+        id:           u.id,
+        abbreviation: u.abbreviation,
+        userId:       `pending-${u.roleName.toLowerCase()}-${u.id}`,
+        status:       'ACTIVE',
+      },
+    });
+
+    const user = await prisma.user.upsert({
+      where:  { employeeId: u.id },
+      update: { passwordHash: defaultHash },
+      create: {
+        employeeId:   u.id,
+        roleId:       roleIdMap[u.roleName],
+        passwordHash: defaultHash,
+        isFirstLogin: true,
+      },
+    });
+
+    await prisma.employee.update({
+      where: { id: u.id },
+      data:  { userId: user.id },
+    });
+
+    await prisma.employeeGeneralInfo.upsert({
+      where: { employeeId: u.id },
+      update: {},
+      create: {
+        employeeId:          u.id,
+        fullName:            u.name,
+        organization:        u.org,
+        subOrganization:     u.subOrg ?? undefined,
+        department:          u.dept,
+        employeeCategory:    u.category,
+        designation:         u.designation,
+        joiningDate:         new Date('2015-06-01'),
+        originalJoiningDate: new Date('2015-06-01'),
+      },
+    });
+
+    await prisma.employeePersonalInfo.upsert({
+      where:  { employeeId: u.id },
+      update: {},
+      create: {
+        employeeId:    u.id,
+        birthDate:     u.dob,
+        gender:        u.gender,
+        maritalStatus: 'MARRIED',
+        nationality:   'INDIAN',
+        bloodGroup:    'B_POS',
+      },
+    });
+
+    console.log(`  ✓  ${u.roleName} (ID ${u.id}): ${u.name}`);
+  }
+
+  // ── Configure leave approval workflow ────────────────────────────────────────
+  console.log('⏳  Configuring leave approval workflow…');
+
+  // HOD for each department at GIT
+  const deptHODs = [
+    { department: 'COMPUTER ENGINEERING',   hodEmployeeId: 5 },
+    { department: 'INFORMATION TECHNOLOGY', hodEmployeeId: 5 }, // same HOD covers IT for now
+  ];
+  for (const d of deptHODs) {
+    const existing = await prisma.departmentApprover.findFirst({ where: { department: d.department } });
+    if (existing) {
+      await prisma.departmentApprover.update({
+        where: { id: existing.id },
+        data:  { hodEmployeeId: d.hodEmployeeId, isActive: true, updatedBy: 'seed' },
+      });
+    } else {
+      await prisma.departmentApprover.create({
+        data: { department: d.department, hodEmployeeId: d.hodEmployeeId, isActive: true, updatedBy: 'seed' },
+      });
+    }
+    console.log(`  ✓  DepartmentApprover: ${d.department} → Employee #${d.hodEmployeeId}`);
+  }
+
+  // HOI for GIT institute
+  const instituteHOIs = [
+    { institute: 'GIT', hoiEmployeeId: 6 },
+  ];
+  for (const i of instituteHOIs) {
+    const existing = await prisma.instituteApprover.findFirst({ where: { institute: i.institute } });
+    if (existing) {
+      await prisma.instituteApprover.update({
+        where: { id: existing.id },
+        data:  { hoiEmployeeId: i.hoiEmployeeId, isActive: true, updatedBy: 'seed' },
+      });
+    } else {
+      await prisma.instituteApprover.create({
+        data: { institute: i.institute, hoiEmployeeId: i.hoiEmployeeId, isActive: true, updatedBy: 'seed' },
+      });
+    }
+    console.log(`  ✓  InstituteApprover: ${i.institute} → Employee #${i.hoiEmployeeId}`);
+  }
+
+  // Global approvers — VC (#8) + Registrar (#7), university-wide
+  const existingGlobal = await prisma.globalApprover.findFirst({ where: { isActive: true } });
+  if (existingGlobal) {
+    await prisma.globalApprover.update({
+      where: { id: existingGlobal.id },
+      data:  { vcEmployeeId: 8, registrarEmployeeId: 7, updatedBy: 'seed' },
+    });
+  } else {
+    await prisma.globalApprover.create({
+      data: { vcEmployeeId: 8, registrarEmployeeId: 7, isActive: true, updatedBy: 'seed' },
+    });
+  }
+  console.log('  ✓  GlobalApprover: VC → Employee #8, Registrar → Employee #7');
+
+  // ── Credit 2026 leave balances for test employees ────────────────────────────
+  console.log('⏳  Crediting 2026 leave balances for test employees…');
+  const currentYear = new Date().getFullYear();
+
+  // Fetch leave types by code
+  const [cl, sl, vl, al, dl] = await Promise.all([
+    prisma.leaveType.findUnique({ where: { code: 'CL' } }),
+    prisma.leaveType.findUnique({ where: { code: 'SL' } }),
+    prisma.leaveType.findUnique({ where: { code: 'VL' } }),
+    prisma.leaveType.findUnique({ where: { code: 'AL' } }),
+    prisma.leaveType.findUnique({ where: { code: 'DL' } }),
+  ]);
+
+  // Balances per employee category
+  const teachingBalances = [
+    { type: cl,  days: 12 },
+    { type: sl,  days: 10 },
+    { type: vl,  days: 21 },
+    { type: al,  days: 0  }, // accrues on admin-managed basis
+    { type: dl,  days: 0  },
+  ];
+  const nonTeachingBalances = [
+    { type: cl, days: 12 },
+    { type: sl, days: 10 },
+    { type: dl, days: 0  },
+  ];
+
+  // Employees 3 + 4 are TEACHING; 5 + 6 are TEACHING; 7 + 8 are NON_TEACHING
+  const balancesToSeed: { empId: number; balances: typeof teachingBalances }[] = [
+    { empId: 3, balances: teachingBalances },
+    { empId: 4, balances: teachingBalances },
+    { empId: 5, balances: teachingBalances },
+    { empId: 6, balances: teachingBalances },
+    { empId: 7, balances: nonTeachingBalances },
+    { empId: 8, balances: nonTeachingBalances },
+  ];
+
+  for (const { empId, balances } of balancesToSeed) {
+    for (const { type, days } of balances) {
+      if (!type) continue;
+      await prisma.leaveBalance.upsert({
+        where: { employeeId_leaveTypeId_year: { employeeId: empId, leaveTypeId: type.id, year: currentYear } },
+        update: { totalCredited: days, available: days },
+        create: {
+          employeeId:    empId,
+          leaveTypeId:   type.id,
+          year:          currentYear,
+          totalCredited: days,
+          carryForward:  0,
+          used:          0,
+          pending:       0,
+          available:     days,
+        },
+      });
+    }
+    console.log(`  ✓  Leave balances credited for Employee #${empId}`);
+  }
+
+  // ── Reset DB Sequences (Postgres specific) ──────────────────────────────────
+  // Ensures manual IDs 1-8 don't break autoincrement for future employee creation
   try {
     await prisma.$executeRawUnsafe("SELECT setval('employees_id_seq', (SELECT MAX(id) FROM employees))");
     console.log('✅  Database sequences synchronized');
@@ -328,12 +797,22 @@ async function main() {
 
   console.log('✅  Demo employees and users seeded');
   console.log('');
-  console.log('═══════════════════════════════════════');
-  console.log(' Admin Login  : employeeId = 1');
-  console.log(' HR Login     : employeeId = 2');
-  console.log(' Emp Login    : employeeId = 3, 4');
-  console.log(' Default Pass : 01011998');
-  console.log('═══════════════════════════════════════');
+  console.log('════════════════════════════════════════════════════════');
+  console.log(' Admin      : employeeId = 1  | Full system access');
+  console.log(' HR         : employeeId = 2  | HR staff');
+  console.log(' Employee   : employeeId = 3  | GIT / COMPUTER ENGINEERING');
+  console.log(' Employee   : employeeId = 4  | GIT / INFORMATION TECHNOLOGY');
+  console.log(' HOD (GIT)  : employeeId = 5  | Approves CE & IT dept leaves');
+  console.log(' HOI (GIT)  : employeeId = 6  | Approves all GIT leaves (step 2)');
+  console.log(' Registrar  : employeeId = 7  | Final approval (step 3)');
+  console.log(' VC         : employeeId = 8  | Final approval (step 3)');
+  console.log(' Default PW : 01011998        | isFirstLogin=true on all');
+  console.log('────────────────────────────────────────────────────────');
+  console.log(' Leave flow : Employee (3/4)');
+  console.log('           → HOD Dr. Amit Patel  (step 1 — dept)');
+  console.log('           → HOI Dr. Rekha Shah  (step 2 — GIT institute)');
+  console.log('           → Registrar + VC       (step 3 — university)');
+  console.log('════════════════════════════════════════════════════════');
 }
 
 main()

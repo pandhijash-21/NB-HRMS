@@ -1,0 +1,16 @@
+table:
+  name: leave_settings
+  schema: public
+select_permissions:
+  - role: ADMIN
+    permission:
+      columns: "*"
+      filter: {}
+  - role: HR
+    permission:
+      columns: "*"
+      filter: {}
+  - role: HR_MANAGER
+    permission:
+      columns: "*"
+      filter: {}

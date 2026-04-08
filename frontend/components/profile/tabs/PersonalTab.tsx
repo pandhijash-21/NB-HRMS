@@ -18,7 +18,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useMutation } from "@apollo/client/react";
-import { UPDATE_EMPLOYEE_PERSONAL, UPDATE_EMPLOYEE_GENERAL } from "@/lib/graphql";
+import {
+  UPDATE_EMPLOYEE_PERSONAL,
+  UPDATE_EMPLOYEE_GENERAL,
+  UPDATE_EMPLOYEE_MEDIA,
+} from "@/lib/graphql";
 import { useRequestChange, usePendingRequest } from "@/lib/hooks/useApprovals";
 import { useUpload } from "@/lib/hooks/useUpload";
 
@@ -72,6 +76,7 @@ function FileUploadBox({
   currentUrl,
   accept,
   onUpload,
+  onRemove,
   uploading,
   icon: Icon,
   required,
@@ -80,6 +85,7 @@ function FileUploadBox({
   currentUrl?: string | null;
   accept: string;
   onUpload: (file: File) => void;
+  onRemove?: () => void;
   uploading?: boolean;
   icon: React.ElementType;
   required?: boolean;
@@ -105,6 +111,7 @@ function FileUploadBox({
         ref={inputRef}
         type="file"
         accept={accept}
+        aria-label={label}
         onChange={handleFileChange}
         className="hidden"
       />
@@ -126,6 +133,18 @@ function FileUploadBox({
               Change
             </Button>
           </div>
+          {onRemove && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={onRemove}
+              className="absolute top-2 left-2 bg-black/40 text-white hover:bg-black/55 hover:text-white"
+              aria-label={`Remove ${label}`}
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          )}
           {uploading && (
             <div className="absolute inset-0 bg-black/50 rounded-xl flex items-center justify-center">
               <div className="animate-spin w-6 h-6 border-2 border-white border-t-transparent rounded-full" />
@@ -157,6 +176,7 @@ export function PersonalTab({ employee, isAdmin, onUpdate }: PersonalTabProps) {
 
   const [mutate, { loading: adminSaving }] = useMutation(UPDATE_EMPLOYEE_PERSONAL);
   const [mutateGeneral] = useMutation(UPDATE_EMPLOYEE_GENERAL);
+  const [mutateMedia] = useMutation(UPDATE_EMPLOYEE_MEDIA);
 
   const requestChange = useRequestChange();
   const { data: pendingRequest } = usePendingRequest("PERSONAL");
@@ -254,14 +274,20 @@ export function PersonalTab({ employee, isAdmin, onUpdate }: PersonalTabProps) {
       }
       await mutate({ variables: { employeeId: employee.id, set: setPayload } });
 
-      if (data.photoUrl || data.signatureUrl) {
-        await mutateGeneral({
+      // Media changes are stored on `employees` (allow explicit null to remove).
+      const photoNext = data.photoUrl ? String(data.photoUrl) : null;
+      const sigNext = data.signatureUrl ? String(data.signatureUrl) : null;
+      const photoPrev = employee.photoUrl ? String(employee.photoUrl) : null;
+      const sigPrev = employee.signatureUrl ? String(employee.signatureUrl) : null;
+      const mediaSet: Record<string, unknown> = {};
+      if (photoNext !== photoPrev) mediaSet.photo_url = photoNext;
+      if (sigNext !== sigPrev) mediaSet.signature_url = sigNext;
+
+      if (Object.keys(mediaSet).length > 0) {
+        await mutateMedia({
           variables: {
-            employeeId: employee.id,
-            set: {
-              photo_url: data.photoUrl || null,
-              signature_url: data.signatureUrl || null,
-            },
+            id: employee.id,
+            set: mediaSet,
           },
         });
       }
@@ -292,9 +318,15 @@ export function PersonalTab({ employee, isAdmin, onUpdate }: PersonalTabProps) {
         passportIssueDate: data.passportIssueDate || null,
         passportExpiryDate: data.passportExpiryDate || null,
         customFields: customFieldsMap,
-        photoUrl: data.photoUrl,
-        signatureUrl: data.signatureUrl,
       };
+
+      // Media (employees table) — include only if changed; allow explicit null to remove.
+      const photoNext = data.photoUrl ? String(data.photoUrl) : null;
+      const sigNext = data.signatureUrl ? String(data.signatureUrl) : null;
+      const photoPrev = employee.photoUrl ? String(employee.photoUrl) : null;
+      const sigPrev = employee.signatureUrl ? String(employee.signatureUrl) : null;
+      if (photoNext !== photoPrev) newData.photoUrl = photoNext;
+      if (sigNext !== sigPrev) newData.signatureUrl = sigNext;
       
       requestChange.mutate(
         { module: "PERSONAL", newData },
@@ -475,6 +507,7 @@ export function PersonalTab({ employee, isAdmin, onUpdate }: PersonalTabProps) {
                 currentUrl={photoUrl}
                 accept="image/*"
                 onUpload={handlePhotoUpload}
+                onRemove={() => setValue("photoUrl", "")}
                 uploading={photoUploading}
                 icon={Camera}
                 required
@@ -485,6 +518,7 @@ export function PersonalTab({ employee, isAdmin, onUpdate }: PersonalTabProps) {
                 currentUrl={signatureUrl}
                 accept="image/*"
                 onUpload={handleSignatureUpload}
+                onRemove={() => setValue("signatureUrl", "")}
                 uploading={signatureUploading}
                 icon={PenTool}
                 required

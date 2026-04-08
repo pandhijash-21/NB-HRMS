@@ -166,7 +166,7 @@ export function OtpVerification({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[400px] border-none shadow-2xl rounded-2xl p-0 overflow-hidden">
+      <DialogContent className="w-full border-none shadow-2xl rounded-2xl p-0 overflow-hidden sm:max-w-[min(98vw,28rem)]">
         <div className="bg-gradient-to-br from-[#1d3459] to-[#2a4a7f] p-6 text-white text-center">
           <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4">
             <Mail className="w-8 h-8 text-[#d9b557]" />

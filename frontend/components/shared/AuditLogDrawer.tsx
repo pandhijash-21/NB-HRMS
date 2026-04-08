@@ -39,7 +39,7 @@ export function AuditLogDrawer({ employeeId, trigger }: AuditLogDrawerProps) {
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>{trigger}</SheetTrigger>
-      <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+      <SheetContent className="w-full overflow-y-auto sm:max-w-[min(98vw,88rem)]">
         <SheetHeader className="mb-4">
           <SheetTitle>Audit Log</SheetTitle>
         </SheetHeader>

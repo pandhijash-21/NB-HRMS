@@ -146,6 +146,7 @@ export function ExperienceTab({ employeeId, isAdmin }: ExperienceTabProps) {
   } = useForm<ExperienceFormData>({
     resolver: zodResolver(experienceSchema),
     defaultValues: {
+      id: undefined,
       type: "TEACHING",
       designation: "",
       organizationName: "",
@@ -162,11 +163,16 @@ export function ExperienceTab({ employeeId, isAdmin }: ExperienceTabProps) {
   const experienceLetterUrl = watch("experienceLetterUrl");
   const lastPaycheckUrl = watch("lastPaycheckUrl");
   const recommendationLetters = watch("recommendationLetters");
+  const draftExperienceId = watch("id");
 
   const handleExperienceLetterUpload = async (file: File) => {
+    if (!draftExperienceId) {
+      toast.error("Missing experience id — close and reopen the form.");
+      return;
+    }
     setExpLetterUploading(true);
     try {
-      const url = await upload("experienceLetter", file);
+      const url = await upload("experienceLetter", file, { experienceId: draftExperienceId });
       setValue("experienceLetterUrl", url);
       toast.success("Experience letter uploaded");
     } catch {
@@ -177,9 +183,13 @@ export function ExperienceTab({ employeeId, isAdmin }: ExperienceTabProps) {
   };
 
   const handlePaycheckUpload = async (file: File) => {
+    if (!draftExperienceId) {
+      toast.error("Missing experience id — close and reopen the form.");
+      return;
+    }
     setPaycheckUploading(true);
     try {
-      const url = await upload("lastPaycheck", file);
+      const url = await upload("lastPaycheck", file, { experienceId: draftExperienceId });
       setValue("lastPaycheckUrl", url);
       toast.success("Last paycheck uploaded");
     } catch {
@@ -190,9 +200,13 @@ export function ExperienceTab({ employeeId, isAdmin }: ExperienceTabProps) {
   };
 
   const handleRecommendationUpload = async (file: File) => {
+    if (!draftExperienceId) {
+      toast.error("Missing experience id — close and reopen the form.");
+      return;
+    }
     setRecommendationUploading(true);
     try {
-      const url = await upload("recommendation", file);
+      const url = await upload("recommendation", file, { experienceId: draftExperienceId });
       const current = recommendationLetters || [];
       setValue("recommendationLetters", [...current, url]);
       toast.success("Recommendation letter uploaded");
@@ -210,6 +224,7 @@ export function ExperienceTab({ employeeId, isAdmin }: ExperienceTabProps) {
 
   const openAdd = () => {
     reset({
+      id: crypto.randomUUID(),
       type: "TEACHING",
       designation: "",
       organizationName: "",
@@ -418,7 +433,7 @@ export function ExperienceTab({ employeeId, isAdmin }: ExperienceTabProps) {
       </Card>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto sm:max-w-2xl">
+        <DialogContent className="w-full max-h-[92vh] overflow-y-auto p-6 sm:max-w-[min(98vw,88rem)] sm:p-8">
           <DialogHeader>
             <DialogTitle>
               {editingExp ? "Edit Experience" : "Add Experience"}
@@ -658,7 +673,7 @@ export function ExperienceTab({ employeeId, isAdmin }: ExperienceTabProps) {
       </Dialog>
 
       <Dialog open={!!deleteId} onOpenChange={(o) => !o && setDeleteId(null)}>
-        <DialogContent className="max-w-xs">
+        <DialogContent className="sm:max-w-xs">
           <DialogHeader>
             <DialogTitle>Remove Experience</DialogTitle>
           </DialogHeader>

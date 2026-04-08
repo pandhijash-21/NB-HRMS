@@ -1,9 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { academicQualSchema, type AcademicQualFormData } from "@/lib/validators/academic.schema";
+import {
+  academicQualSchema,
+  getEffectiveAcademicLevel,
+  type AcademicQualFormData,
+} from "@/lib/validators/academic.schema";
 import { useAcademicQuals } from "@/lib/hooks/useAcademicQuals";
 import { useUpload } from "@/lib/hooks/useUpload";
 import { Card, CardContent } from "@/components/ui/card";
@@ -35,11 +39,19 @@ interface EducationTabProps {
   isAdmin?: boolean;
 }
 
-const LEVELS = ["SSC", "HSC", "DIPLOMA", "UG", "PG", "PHD", "OTHER"];
+const LEVEL_OPTIONS: { value: AcademicQualFormData["level"]; label: string }[] = [
+  { value: "SSC", label: "SSC" },
+  { value: "HSC_DIPLOMA", label: "HSC/Diploma" },
+  { value: "UG", label: "UG" },
+  { value: "PG", label: "PG" },
+  { value: "PHD", label: "PHD" },
+  { value: "OTHER", label: "OTHER" },
+];
 
 const LEVEL_COLORS: Record<string, string> = {
   SSC: "bg-slate-100 text-slate-600",
   HSC: "bg-slate-100 text-slate-600",
+  HSC_DIPLOMA: "bg-slate-100 text-slate-600",
   DIPLOMA: "bg-blue-100 text-blue-700",
   UG: "bg-indigo-100 text-indigo-700",
   PG: "bg-purple-100 text-purple-700",
@@ -72,12 +84,13 @@ export function EducationTab({ employeeId, isAdmin }: EducationTabProps) {
   const [marksheetUploading, setMarksheetUploading] = useState(false);
   const [certificateUploading, setCertificateUploading] = useState(false);
 
-  const { register, handleSubmit, setValue, reset, watch, formState: { errors } } = useForm<AcademicQualFormData>({
-    resolver: zodResolver(academicQualSchema),
-    defaultValues: { 
-      level: "UG", 
-      degreeName: "", 
-      institution: "", 
+  const { register, handleSubmit, setValue, reset, watch, getValues, formState: { errors } } = useForm<AcademicQualFormData>({
+    resolver: zodResolver(academicQualSchema) as Resolver<AcademicQualFormData>,
+    defaultValues: {
+      level: "UG",
+      hscDiplomaTrack: undefined,
+      degreeName: "",
+      institution: "",
       schoolCollege: "",
       medium: "ENGLISH",
       passingYear: new Date().getFullYear(),
@@ -88,16 +101,22 @@ export function EducationTab({ employeeId, isAdmin }: EducationTabProps) {
   });
 
   const level = watch("level");
+  const hscDiplomaTrack = watch("hscDiplomaTrack");
   const hscStream = watch("hscStream");
   const medium = watch("medium");
   const schoolCollege = watch("schoolCollege");
   const certificateUrl = watch("certificateUrl");
   const marksheetUrl = watch("marksheetUrl");
 
+  const effectiveLevel = getEffectiveAcademicLevel({ level, hscDiplomaTrack });
+
   const handleMarksheetUpload = async (file: File) => {
     setMarksheetUploading(true);
     try {
-      const url = await upload("marksheet", file);
+      const qualId = getValues("id");
+      const extra: Record<string, string> = { sem: "1" };
+      if (qualId) extra.qualId = qualId;
+      const url = await upload("marksheet", file, extra);
       setValue("marksheetUrl", url);
       toast.success("Marksheet uploaded successfully");
     } catch {
@@ -110,7 +129,8 @@ export function EducationTab({ employeeId, isAdmin }: EducationTabProps) {
   const handleCertificateUpload = async (file: File) => {
     setCertificateUploading(true);
     try {
-      const url = await upload("certificate", file);
+      const qualId = getValues("id");
+      const url = await upload("certificate", file, qualId ? { qualId } : undefined);
       setValue("certificateUrl", url);
       toast.success("Certificate uploaded successfully");
     } catch {
@@ -150,13 +170,15 @@ export function EducationTab({ employeeId, isAdmin }: EducationTabProps) {
     }
   };
 
-  const requiredUploads = getRequiredUploads(level);
+  const requiredUploads = getRequiredUploads(effectiveLevel);
 
   const openAdd = () => {
-    reset({ 
-      level: "UG", 
-      degreeName: "", 
-      institution: "", 
+    reset({
+      id: crypto.randomUUID(),
+      level: "UG",
+      hscDiplomaTrack: undefined,
+      degreeName: "",
+      institution: "",
       schoolCollege: "",
       medium: "ENGLISH",
       passingYear: new Date().getFullYear(),
@@ -172,19 +194,32 @@ export function EducationTab({ employeeId, isAdmin }: EducationTabProps) {
   };
 
   const openEdit = (qual: AcademicQualFormData) => {
-    reset(qual);
+    const apiLevel = String(qual.level);
+    let level: AcademicQualFormData["level"];
+    let hscDiplomaTrack: AcademicQualFormData["hscDiplomaTrack"];
+
+    if (apiLevel === "HSC" || apiLevel === "DIPLOMA") {
+      level = "HSC_DIPLOMA";
+      hscDiplomaTrack = apiLevel === "HSC" ? "HSC" : "DIPLOMA";
+    } else {
+      level = qual.level as AcademicQualFormData["level"];
+      hscDiplomaTrack = undefined;
+    }
+
+    reset({ ...qual, level, hscDiplomaTrack });
     setEditingQual(qual);
     setSemUrls(qual.semMarksheetUrls ?? []);
-    setMarksheetRequired(qual.level === "HSC" ? true : false);
-    setCertificateRequired(["DIPLOMA", "UG", "PG", "PHD", "OTHER"].includes(qual.level));
+    setMarksheetRequired(apiLevel === "HSC");
+    setCertificateRequired(["DIPLOMA", "UG", "PG", "PHD", "OTHER"].includes(apiLevel));
     setDialogOpen(true);
   };
 
-  const onSubmit = async (data: any) => {
+  const onSubmit = async (data: AcademicQualFormData & { semMarksheetUrls?: string[] }) => {
+    const eff = getEffectiveAcademicLevel(data);
     const submissionData = {
       ...data,
-      id: editingQual?.id,
-      semMarksheetUrls: ["UG", "PG", "DIPLOMA"].includes(data.level) ? semUrls.filter(Boolean) : undefined,
+      id: editingQual?.id ?? data.id,
+      semMarksheetUrls: ["UG", "PG", "DIPLOMA"].includes(eff) ? semUrls.filter(Boolean) : undefined,
     };
     await saveQualification(submissionData);
     setDialogOpen(false);
@@ -201,7 +236,7 @@ export function EducationTab({ employeeId, isAdmin }: EducationTabProps) {
     );
   }
 
-  const semCount = getSemCount(level);
+  const semCount = getSemCount(effectiveLevel);
 
   return (
     <>
@@ -250,7 +285,7 @@ export function EducationTab({ employeeId, isAdmin }: EducationTabProps) {
                       <Badge className={`text-xs ${LEVEL_COLORS[q.level as string] ?? "bg-slate-100"}`}>
                         {q.level as string}
                       </Badge>
-                      {q.medium && (
+                      {Boolean(q.medium) && (
                         <Badge variant="outline" className="text-xs">
                           {(q.medium as string).charAt(0) + (q.medium as string).slice(1).toLowerCase()} Medium
                         </Badge>
@@ -261,7 +296,7 @@ export function EducationTab({ employeeId, isAdmin }: EducationTabProps) {
                       )}
                     </div>
                     <p className="text-xs text-slate-500 mt-1">{q.institution as string}</p>
-                    {q.schoolCollege && q.level !== "SSC" && (
+                    {Boolean(q.schoolCollege) && q.level !== "SSC" && (
                       <p className="text-xs text-slate-400">School/College: {q.schoolCollege as string}</p>
                     )}
                     <div className="flex flex-wrap gap-4 mt-1.5 text-xs text-slate-400">
@@ -328,7 +363,7 @@ export function EducationTab({ employeeId, isAdmin }: EducationTabProps) {
       </Card>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-full max-h-[92vh] overflow-y-auto p-6 sm:max-w-[min(98vw,88rem)] sm:p-8">
           <DialogHeader>
             <DialogTitle>
               {editingQual ? "Edit Qualification" : "Add Qualification"}
@@ -340,24 +375,59 @@ export function EducationTab({ employeeId, isAdmin }: EducationTabProps) {
               <div className="space-y-1">
                 <Label>Level *</Label>
                 <Select
-                  defaultValue={editingQual?.level ?? "UG"}
+                  value={watch("level")}
                   onValueChange={(v) => {
-                    setValue("level", v as AcademicQualFormData["level"]);
-                    setMarksheetRequired(v === "HSC" || v === "SSC");
-                    setCertificateRequired(["DIPLOMA", "UG", "PG", "PHD", "OTHER"].includes(v));
+                    const vl = v as AcademicQualFormData["level"];
+                    setValue("level", vl);
+                    if (vl === "HSC_DIPLOMA") {
+                      const track = getValues("hscDiplomaTrack") ?? "HSC";
+                      setValue("hscDiplomaTrack", track);
+                      setMarksheetRequired(track === "HSC");
+                      setCertificateRequired(track === "DIPLOMA");
+                    } else {
+                      setValue("hscDiplomaTrack", undefined);
+                      setMarksheetRequired(vl === "SSC");
+                      setCertificateRequired(["DIPLOMA", "UG", "PG", "PHD", "OTHER"].includes(vl));
+                    }
                   }}
                 >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {LEVELS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                    {LEVEL_OPTIONS.map(({ value: lv, label }) => (
+                      <SelectItem key={lv} value={lv}>{label}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
 
+              {level === "HSC_DIPLOMA" && (
+                <div className="space-y-1 sm:col-span-2">
+                  <Label>Program *</Label>
+                  <Select
+                    value={hscDiplomaTrack ?? "HSC"}
+                    onValueChange={(v) => {
+                      const t = v as "HSC" | "DIPLOMA";
+                      setValue("hscDiplomaTrack", t);
+                      setMarksheetRequired(t === "HSC");
+                      setCertificateRequired(t === "DIPLOMA");
+                    }}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Select HSC or Diploma" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="HSC">HSC (Higher Secondary)</SelectItem>
+                      <SelectItem value="DIPLOMA">Diploma</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {errors.hscDiplomaTrack && (
+                    <p className="text-xs text-rose-500">{errors.hscDiplomaTrack.message}</p>
+                  )}
+                </div>
+              )}
+
               <div className="space-y-1">
                 <Label>Medium *</Label>
                 <Select
-                  defaultValue={editingQual?.medium ?? "ENGLISH"}
+                  value={watch("medium")}
                   onValueChange={(v) => setValue("medium", v as AcademicQualFormData["medium"])}
                 >
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -373,10 +443,11 @@ export function EducationTab({ employeeId, isAdmin }: EducationTabProps) {
                 {errors.degreeName && <p className="text-xs text-rose-500">{errors.degreeName.message}</p>}
               </div>
 
-              {level === "HSC" && (
+              {effectiveLevel === "HSC" && (
                 <div className="space-y-1">
                   <Label>Stream *</Label>
                   <Select
+                    value={watch("hscStream")}
                     onValueChange={(v) => setValue("hscStream", v as "SCIENCE" | "COMMERCE" | "ARTS_HUMANITIES")}
                   >
                     <SelectTrigger><SelectValue placeholder="Select stream..." /></SelectTrigger>
@@ -396,7 +467,7 @@ export function EducationTab({ employeeId, isAdmin }: EducationTabProps) {
                 {errors.institution && <p className="text-xs text-rose-500">{errors.institution.message}</p>}
               </div>
 
-              {level !== "SSC" && (
+              {effectiveLevel !== "SSC" && (
                 <div className="space-y-1">
                   <Label>School / College Name</Label>
                   <Input {...register("schoolCollege")} placeholder="e.g., XYZ College" />
@@ -425,16 +496,17 @@ export function EducationTab({ employeeId, isAdmin }: EducationTabProps) {
               </div>
             </div>
 
-            {["UG", "PG", "DIPLOMA"].includes(level) && (
+            {["UG", "PG", "DIPLOMA"].includes(effectiveLevel) && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label>Semester Marksheets</Label>
                   <span className="text-xs text-slate-500">
-                    {level === "DIPLOMA" ? "6 semesters" : level === "PG" ? "4 semesters" : "8 semesters"}
+                    {effectiveLevel === "DIPLOMA" ? "6 semesters" : effectiveLevel === "PG" ? "4 semesters" : "8 semesters"}
                   </span>
                 </div>
                 <SemMarksheetGrid
                   employeeId={employeeId}
+                  qualificationId={watch("id")}
                   existingUrls={semUrls}
                   semCount={semCount}
                   onUpdate={(urls) => setSemUrls(urls)}
@@ -442,7 +514,7 @@ export function EducationTab({ employeeId, isAdmin }: EducationTabProps) {
               </div>
             )}
 
-            {(level === "SSC" || level === "HSC") && (
+            {(effectiveLevel === "SSC" || effectiveLevel === "HSC") && (
               <div className="space-y-2">
                 <Label>Marksheet Upload {requiredUploads.marksheet && <span className="text-rose-500">*</span>}</Label>
                 <div className="border-2 border-dashed border-slate-200 rounded-xl p-4">
@@ -491,9 +563,9 @@ export function EducationTab({ employeeId, isAdmin }: EducationTabProps) {
             {requiredUploads.certificate && (
               <div className="space-y-2">
                 <Label>
-                  {level === "DIPLOMA" ? "Diploma Certificate" : 
-                   level === "PHD" ? "PhD Certificate" : 
-                   level === "OTHER" ? "Certificate" : "Degree Certificate"}
+                  {effectiveLevel === "DIPLOMA" ? "Diploma Certificate" :
+                   effectiveLevel === "PHD" ? "PhD Certificate" :
+                   effectiveLevel === "OTHER" ? "Certificate" : "Degree Certificate"}
                   {" "}<span className="text-rose-500">*</span>
                 </Label>
                 <div className="border-2 border-dashed border-slate-200 rounded-xl p-4">
@@ -556,7 +628,7 @@ export function EducationTab({ employeeId, isAdmin }: EducationTabProps) {
       </Dialog>
 
       <Dialog open={!!deleteId} onOpenChange={(o) => !o && setDeleteId(null)}>
-        <DialogContent className="max-w-xs">
+        <DialogContent className="sm:max-w-xs">
           <DialogHeader>
             <DialogTitle>Remove Qualification</DialogTitle>
           </DialogHeader>

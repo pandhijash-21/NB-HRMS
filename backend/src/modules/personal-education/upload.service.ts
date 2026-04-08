@@ -1,11 +1,12 @@
 import type { Express } from 'express';
-import { cloudinary } from '../../config/cloudinary';
-import { env } from '../../config/env';
+import { cloudinary, getCloudinaryCredentials } from '../../config/cloudinary';
 import { prisma } from '../../config/prisma';
 
 function ensureCloudinaryConfigured() {
-  if (!env.CLOUDINARY_CLOUD_NAME || !env.CLOUDINARY_API_KEY || !env.CLOUDINARY_API_SECRET) {
-    throw new Error('Cloudinary is not configured');
+  if (!getCloudinaryCredentials()) {
+    throw new Error(
+      'Cloudinary is not configured. Set CLOUDINARY_URL or CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET in backend/.env'
+    );
   }
 }
 
@@ -19,6 +20,8 @@ export const uploadService = {
     const result = await cloudinary.uploader.upload(dataUri, {
       folder: `hrms/${folder}`,
       resource_type: 'auto',
+      /** Without this, account/upload-preset may default to authenticated → browser gets HTTP 401 on res.cloudinary.com URLs. */
+      access_mode: 'public',
     });
 
     return result.secure_url;
@@ -104,10 +107,10 @@ export const uploadService = {
   },
 
   async setFamilyMemberAadhaar(employeeId: number, memberId: string, url: string, actorId?: string) {
-    const member = await prisma.familyMember.findFirst({ 
-      where: { id: memberId, employeeId, isActive: true } 
+    const member = await prisma.familyMember.findFirst({
+      where: { id: memberId, employeeId, isActive: true },
     });
-    if (!member) throw new Error('Family member not found');
+    if (!member) return null;
 
     return prisma.familyMember.update({
       where: { id: memberId },

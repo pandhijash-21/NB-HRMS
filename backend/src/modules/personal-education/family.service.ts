@@ -5,6 +5,7 @@ import { decrypt, encrypt } from '../../utils/crypto';
 import { diffAndAudit, pushAudit } from './audit.helpers';
 
 type FamilyCreateInput = {
+  id?: string;
   relation: FamilyRelation;
   name: string;
   city?: string | null;
@@ -12,6 +13,7 @@ type FamilyCreateInput = {
   personalEmail?: string | null;
   dateOfBirth?: Date | null;
   aadhaarNo?: string | null;
+  aadhaarUrl?: string | null;
   isNominee?: boolean;
   updatedBy?: string | null;
 };
@@ -28,12 +30,14 @@ export const familyService = {
     return rows.map((r) => ({
       ...r,
       aadhaarNo: r.aadhaarNo ? decrypt(r.aadhaarNo) : null,
+      aadhaarUrl: r.aadhaarUrl ?? null,
     }));
   },
 
   async create(employeeId: number, input: FamilyCreateInput, req: Request) {
     const created = await prisma.familyMember.create({
       data: {
+        ...(input.id ? { id: input.id } : {}),
         employeeId,
         relation: input.relation,
         name: input.name,
@@ -42,6 +46,7 @@ export const familyService = {
         personalEmail: input.personalEmail ?? null,
         dateOfBirth: input.dateOfBirth ?? null,
         aadhaarNo: input.aadhaarNo ? encrypt(input.aadhaarNo) : null,
+        aadhaarUrl: input.aadhaarUrl ?? null,
         isNominee: input.isNominee ?? false,
         updatedBy: input.updatedBy ?? req.user?.id ?? null,
       },
@@ -60,7 +65,7 @@ export const familyService = {
       });
     }
 
-    return { ...created, aadhaarNo: input.aadhaarNo ?? null };
+    return { ...created, aadhaarNo: input.aadhaarNo ?? null, aadhaarUrl: input.aadhaarUrl ?? null };
   },
 
   async update(employeeId: number, memberId: string, input: FamilyUpdateInput, req: Request) {
@@ -84,6 +89,7 @@ export const familyService = {
         personalEmail: input.personalEmail ?? undefined,
         dateOfBirth: input.dateOfBirth ?? undefined,
         aadhaarNo: input.aadhaarNo !== undefined ? (input.aadhaarNo ? encrypt(input.aadhaarNo) : null) : undefined,
+        aadhaarUrl: input.aadhaarUrl !== undefined ? input.aadhaarUrl : undefined,
         isNominee: input.isNominee ?? undefined,
         updatedBy: input.updatedBy ?? req.user?.id ?? undefined,
       },

@@ -56,7 +56,7 @@ export function AddUserDialog({ onUserAdded }: { onUserAdded: () => void }) {
           Add User
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="w-full p-6 sm:max-w-[min(98vw,88rem)] sm:p-8">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold text-[#1d3459]">Create User Account</DialogTitle>
         </DialogHeader>

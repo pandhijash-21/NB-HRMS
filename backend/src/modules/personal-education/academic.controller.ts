@@ -4,6 +4,7 @@ import { ok, fail } from '../../utils/response';
 import { academicService } from './academic.service';
 
 const createSchema = z.object({
+  id: z.string().uuid().optional(),
   degreeType: z.enum(['SSC', 'HSC', 'DIPLOMA', 'BACHELOR', 'MASTER', 'PHD']),
   degreeName: z.string().min(1).nullable().optional(),
   medium: z.enum(['GUJARATI', 'HINDI', 'ENGLISH', 'MARATHI', 'OTHER']).nullable().optional(),

@@ -12,8 +12,14 @@ export const approvalService = {
   ) {
     let oldData: Record<string, unknown> = {};
     if (module === 'PERSONAL') {
-      const p = await prisma.employeePersonalInfo.findUnique({ where: { employeeId } });
-      if (p) oldData = p as unknown as Record<string, unknown>;
+      const [p, e] = await Promise.all([
+        prisma.employeePersonalInfo.findUnique({ where: { employeeId } }),
+        prisma.employee.findUnique({ where: { id: employeeId }, select: { photoUrl: true, signatureUrl: true } }),
+      ]);
+      oldData = {
+        ...(p ? (p as unknown as Record<string, unknown>) : {}),
+        ...(e ? (e as unknown as Record<string, unknown>) : {}),
+      };
     } else if (module === 'ADDRESS_LOCAL') {
       const a = await prisma.employeeAddress.findUnique({
         where: { employeeId_addressType: { employeeId, addressType: 'LOCAL' } },
@@ -97,6 +103,18 @@ export const approvalService = {
           .reduce((obj: any, key) => { obj[key] = dataToUpdate[key]; return obj; }, {});
 
         await prisma.employeePersonalInfo.update({ where: { employeeId }, data: filtered });
+
+        // Also apply media changes (stored on `employees`) when present, including explicit null to remove.
+        const mediaUpdate: { photoUrl?: string | null; signatureUrl?: string | null } = {};
+        if (Object.prototype.hasOwnProperty.call(dataToUpdate, 'photoUrl')) {
+          mediaUpdate.photoUrl = dataToUpdate.photoUrl ?? null;
+        }
+        if (Object.prototype.hasOwnProperty.call(dataToUpdate, 'signatureUrl')) {
+          mediaUpdate.signatureUrl = dataToUpdate.signatureUrl ?? null;
+        }
+        if (Object.keys(mediaUpdate).length > 0) {
+          await prisma.employee.update({ where: { id: employeeId }, data: mediaUpdate });
+        }
       } else if (req.module === 'ADDRESS_LOCAL' || req.module === 'ADDRESS_PERMANENT') {
         const type = req.module === 'ADDRESS_LOCAL' ? 'LOCAL' : 'PERMANENT';
         const allowed = [

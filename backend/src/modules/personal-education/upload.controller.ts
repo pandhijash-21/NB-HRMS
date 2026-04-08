@@ -15,13 +15,14 @@ function single(field: string) {
 
 const marksheetMetaSchema = z.object({
   employeeId: z.coerce.number().int().positive(),
-  qualId: z.string().min(1),
+  /** When omitted, only Cloudinary upload — no DB row yet (new qualification dialog). */
+  qualId: z.string().min(1).optional(),
   sem: z.coerce.number().int().min(1).max(8),
 });
 
 const certificateMetaSchema = z.object({
   employeeId: z.coerce.number().int().positive(),
-  qualId: z.string().min(1),
+  qualId: z.string().min(1).optional(),
 });
 
 const employeeMetaSchema = z.object({
@@ -58,7 +59,7 @@ export const uploadController = {
     assertUploadAccess(req, meta.data.employeeId);
     const url = await uploadService.uploadToCloudinary(req.file, 'employee/photo');
     const updated = await uploadService.setEmployeePhoto(meta.data.employeeId, url, req.user?.id);
-    return res.json(ok(updated));
+    return res.json(ok({ url, photoUrl: url, employee: updated }));
   }],
 
   signature: [single('file'), async (req: Request, res: Response) => {
@@ -68,7 +69,7 @@ export const uploadController = {
     assertUploadAccess(req, meta.data.employeeId);
     const url = await uploadService.uploadToCloudinary(req.file, 'employee/signature');
     const updated = await uploadService.setEmployeeSignature(meta.data.employeeId, url, req.user?.id);
-    return res.json(ok(updated));
+    return res.json(ok({ url, signatureUrl: url, employee: updated }));
   }],
 
   aadhaarCard: [single('file'), async (req: Request, res: Response) => {
@@ -78,7 +79,7 @@ export const uploadController = {
     assertUploadAccess(req, meta.data.employeeId);
     const url = await uploadService.uploadToCloudinary(req.file, 'employee/aadhaar-card');
     const updated = await uploadService.setAadhaarCard(meta.data.employeeId, url, req.user?.id);
-    return res.json(ok(updated));
+    return res.json(ok({ url, employee: updated }));
   }],
 
   panCard: [single('file'), async (req: Request, res: Response) => {
@@ -88,7 +89,17 @@ export const uploadController = {
     assertUploadAccess(req, meta.data.employeeId);
     const url = await uploadService.uploadToCloudinary(req.file, 'employee/pan-card');
     const updated = await uploadService.setPanCard(meta.data.employeeId, url, req.user?.id);
-    return res.json(ok(updated));
+    return res.json(ok({ url, employee: updated }));
+  }],
+
+  /** Offer letter — Cloudinary only (no dedicated DB column in current schema). */
+  offerLetter: [single('file'), async (req: Request, res: Response) => {
+    const meta = employeeMetaSchema.safeParse(req.body);
+    if (!meta.success) return res.status(400).json(fail(meta.error.message));
+    if (!req.file) return res.status(400).json(fail('Missing file'));
+    assertUploadAccess(req, meta.data.employeeId);
+    const url = await uploadService.uploadToCloudinary(req.file, 'employee/offer-letter');
+    return res.json(ok({ url }));
   }],
 
   marksheet: [single('file'), async (req: Request, res: Response) => {
@@ -97,8 +108,11 @@ export const uploadController = {
     if (!req.file) return res.status(400).json(fail('Missing file'));
     assertUploadAccess(req, meta.data.employeeId);
     const url = await uploadService.uploadToCloudinary(req.file, `academic/marksheet/sem${meta.data.sem}`);
-    const updated = await uploadService.setSemMarksheet(meta.data.employeeId, meta.data.qualId, meta.data.sem, url, req.user?.id);
-    return res.json(ok(updated));
+    if (meta.data.qualId) {
+      const updated = await uploadService.setSemMarksheet(meta.data.employeeId, meta.data.qualId, meta.data.sem, url, req.user?.id);
+      return res.json(ok({ url, qualification: updated }));
+    }
+    return res.json(ok({ url }));
   }],
 
   certificate: [single('file'), async (req: Request, res: Response) => {
@@ -107,8 +121,11 @@ export const uploadController = {
     if (!req.file) return res.status(400).json(fail('Missing file'));
     assertUploadAccess(req, meta.data.employeeId);
     const url = await uploadService.uploadToCloudinary(req.file, 'academic/certificate');
-    const updated = await uploadService.setCertificate(meta.data.employeeId, meta.data.qualId, url, req.user?.id);
-    return res.json(ok(updated));
+    if (meta.data.qualId) {
+      const updated = await uploadService.setCertificate(meta.data.employeeId, meta.data.qualId, url, req.user?.id);
+      return res.json(ok({ url, qualification: updated }));
+    }
+    return res.json(ok({ url }));
   }],
 
   // NEW: Passport upload
@@ -119,7 +136,7 @@ export const uploadController = {
     assertUploadAccess(req, meta.data.employeeId);
     const url = await uploadService.uploadToCloudinary(req.file, 'employee/passport');
     const updated = await uploadService.setPassport(meta.data.employeeId, url, req.user?.id);
-    return res.json(ok(updated));
+    return res.json(ok({ url, employee: updated }));
   }],
 
   // NEW: Family member Aadhaar upload
@@ -130,16 +147,23 @@ export const uploadController = {
     assertUploadAccess(req, meta.data.employeeId);
     const url = await uploadService.uploadToCloudinary(req.file, `family/aadhaar/${meta.data.memberId}`);
     const updated = await uploadService.setFamilyMemberAadhaar(meta.data.employeeId, meta.data.memberId, url, req.user?.id);
-    return res.json(ok(updated));
+    return res.json(ok(updated ? { url, member: updated } : { url }));
   }],
 
-  // NEW: Experience letter upload
+  // Experience letter — optional experienceId (Experience tab sends id; Documents tab may omit)
   experienceLetter: [single('file'), async (req: Request, res: Response) => {
-    const meta = experienceMetaSchema.safeParse(req.body);
-    if (!meta.success) return res.status(400).json(fail(meta.error.message));
+    const withExp = experienceMetaSchema.safeParse(req.body);
+    const empOnly = employeeMetaSchema.safeParse(req.body);
+    if (!withExp.success && !empOnly.success) {
+      return res.status(400).json(fail(withExp.success ? empOnly.error.message : withExp.error.message));
+    }
     if (!req.file) return res.status(400).json(fail('Missing file'));
-    assertUploadAccess(req, meta.data.employeeId);
-    const url = await uploadService.uploadToCloudinary(req.file, `experience/letter/${meta.data.experienceId}`);
+    const employeeId = withExp.success ? withExp.data.employeeId : empOnly.data!.employeeId;
+    assertUploadAccess(req, employeeId);
+    const folder = withExp.success
+      ? `experience/letter/${withExp.data.experienceId}`
+      : `employee/experience-letter/${employeeId}`;
+    const url = await uploadService.uploadToCloudinary(req.file, folder);
     return res.json(ok({ url }));
   }],
 

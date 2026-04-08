@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { FileUploadInput } from "./FileUploadInput";
 import { useUpload } from "@/lib/hooks/useUpload";
 
@@ -14,19 +14,28 @@ interface SemMarksheetGridProps {
 
 export function SemMarksheetGrid({
   employeeId,
+  qualificationId,
   semCount = 8,
   existingUrls = [],
   onUpdate,
 }: SemMarksheetGridProps) {
-  const [urls, setUrls] = useState<string[]>(existingUrls);
+  const [urls, setUrls] = useState<string[]>(() =>
+    Array.from({ length: semCount }, (_, i) => existingUrls[i] ?? "")
+  );
   const { upload, uploading } = useUpload(employeeId);
 
+  useEffect(() => {
+    setUrls((prev) =>
+      Array.from({ length: semCount }, (_, i) => existingUrls[i] ?? prev[i] ?? "")
+    );
+  }, [existingUrls, semCount]);
+
   const handleUpload = async (semIndex: number, file: File) => {
-    const result = await upload("marksheet", file, {
-      semIndex: String(semIndex + 1),
-    });
+    const extra: Record<string, string> = { sem: String(semIndex + 1) };
+    if (qualificationId) extra.qualId = qualificationId;
+    const url = await upload("marksheet", file, extra);
     const newUrls = [...urls];
-    newUrls[semIndex] = result.url;
+    newUrls[semIndex] = url;
     setUrls(newUrls);
     onUpdate?.(newUrls);
   };

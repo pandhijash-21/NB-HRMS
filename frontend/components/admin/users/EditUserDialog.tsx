@@ -63,7 +63,7 @@ export function EditUserDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="w-full p-6 sm:max-w-[min(98vw,88rem)] sm:p-8">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold text-[#1d3459]">Edit User Account</DialogTitle>
         </DialogHeader>

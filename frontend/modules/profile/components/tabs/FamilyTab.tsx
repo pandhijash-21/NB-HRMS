@@ -149,7 +149,7 @@ export function FamilyTab({ employeeId }: FamilyTabProps) {
                 <Plus className="w-3 h-3" /> Add Member
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-md rounded-2xl border-none shadow-2xl">
+          <DialogContent className="w-full rounded-2xl border-none shadow-2xl sm:max-w-[min(98vw,88rem)]">
             <DialogHeader>
               <DialogTitle className="text-lg font-bold text-slate-800">New Family Member</DialogTitle>
             </DialogHeader>

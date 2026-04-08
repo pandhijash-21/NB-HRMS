@@ -9,6 +9,7 @@ uploadRouter.post('/photo', requireAuth, uploadController.photo);
 uploadRouter.post('/signature', requireAuth, uploadController.signature);
 uploadRouter.post('/aadhaar-card', requireAuth, uploadController.aadhaarCard);
 uploadRouter.post('/pan-card', requireAuth, uploadController.panCard);
+uploadRouter.post('/offer-letter', requireAuth, uploadController.offerLetter);
 uploadRouter.post('/marksheet', requireAuth, uploadController.marksheet);
 uploadRouter.post('/certificate', requireAuth, uploadController.certificate);
 

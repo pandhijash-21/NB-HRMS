@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useRef } from "react";
-import { useForm } from "react-hook-form";
+import { useState } from "react";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { familyMemberSchema, type FamilyMemberFormData } from "@/lib/validators/family.schema";
 import { useFamilyMembers } from "@/lib/hooks/useFamilyMembers";
@@ -43,6 +43,21 @@ const RELATION_LABELS: Record<string, string> = {
   OTHER: "Other",
 };
 
+function apiRelationToForm(r: string): FamilyMemberFormData["relation"] {
+  const map: Record<string, FamilyMemberFormData["relation"]> = {
+    SPOUSE: "SPOUSE",
+    SON: "CHILD",
+    DAUGHTER: "CHILD",
+    FATHER: "PARENT",
+    MOTHER: "PARENT",
+    BROTHER: "SIBLING",
+    SISTER: "SIBLING",
+    OTHER: "OTHER",
+    GUARDIAN: "OTHER",
+  };
+  return map[r] ?? "OTHER";
+}
+
 export function FamilyTab({ employeeId, isAdmin }: FamilyTabProps) {
   const { members, loading, saving, saveMember, deleteMember } = useFamilyMembers(employeeId);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -53,7 +68,7 @@ export function FamilyTab({ employeeId, isAdmin }: FamilyTabProps) {
   const { upload } = useUpload(employeeId);
 
   const { register, handleSubmit, setValue, reset, watch, formState: { errors } } = useForm<FamilyMemberFormData>({
-    resolver: zodResolver(familyMemberSchema),
+    resolver: zodResolver(familyMemberSchema) as Resolver<FamilyMemberFormData>,
     defaultValues: {
       name: "",
       relation: "SPOUSE",
@@ -69,11 +84,16 @@ export function FamilyTab({ employeeId, isAdmin }: FamilyTabProps) {
 
   const relation = watch("relation");
   const aadhaarUrl = watch("aadhaarUrl");
+  const memberRowId = watch("id");
 
   const handleAadhaarUpload = async (file: File) => {
+    if (!memberRowId) {
+      toast.error("Missing member id — try reopening the form.");
+      return;
+    }
     setAadhaarUploading(true);
     try {
-      const url = await upload("aadhaarFamily", file);
+      const url = await upload("aadhaarFamily", file, { memberId: memberRowId });
       setValue("aadhaarUrl", url);
       toast.success("Aadhaar uploaded successfully");
     } catch {
@@ -84,10 +104,11 @@ export function FamilyTab({ employeeId, isAdmin }: FamilyTabProps) {
   };
 
   const openAdd = () => {
-    reset({ 
-      name: "", 
-      relation: "SPOUSE", 
-      dependent: false, 
+    reset({
+      id: crypto.randomUUID(),
+      name: "",
+      relation: "SPOUSE",
+      dependent: false,
       employed: false,
       isNominee: false,
       city: "",
@@ -101,13 +122,16 @@ export function FamilyTab({ employeeId, isAdmin }: FamilyTabProps) {
   };
 
   const openEdit = (member: FamilyMemberFormData) => {
-    reset(member);
+    const rel = typeof (member as { relation?: string }).relation === "string"
+      ? apiRelationToForm((member as { relation: string }).relation)
+      : member.relation;
+    reset({ ...member, relation: rel });
     setEditingMember(member);
     setDialogOpen(true);
   };
 
   const onSubmit = async (data: any) => {
-    await saveMember({ ...data, id: editingMember?.id });
+    await saveMember({ ...data, id: editingMember?.id ?? data.id });
     setDialogOpen(false);
     reset();
   };
@@ -175,7 +199,7 @@ export function FamilyTab({ employeeId, isAdmin }: FamilyTabProps) {
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-medium text-slate-800">{m.name as string}</p>
                       <Badge variant="outline" className="text-xs border-slate-300 text-slate-500">
-                        {RELATION_LABELS[m.relation as string] ?? m.relation as string}
+                        {RELATION_LABELS[apiRelationToForm(String(m.relation))] ?? String(m.relation)}
                       </Badge>
                       {Boolean(m.dependent) && (
                         <Badge className="text-xs bg-blue-100 text-blue-700">Dependent</Badge>
@@ -247,7 +271,7 @@ export function FamilyTab({ employeeId, isAdmin }: FamilyTabProps) {
       </Card>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-full max-h-[90vh] overflow-y-auto p-6 sm:max-w-[min(98vw,88rem)] sm:p-8">
           <DialogHeader>
             <DialogTitle>
               {editingMember ? "Edit Family Member" : "Add Family Member"}
@@ -398,7 +422,7 @@ export function FamilyTab({ employeeId, isAdmin }: FamilyTabProps) {
       </Dialog>
 
       <Dialog open={!!deleteId} onOpenChange={(o) => !o && setDeleteId(null)}>
-        <DialogContent className="max-w-xs">
+        <DialogContent className="sm:max-w-xs">
           <DialogHeader>
             <DialogTitle>Remove Member</DialogTitle>
           </DialogHeader>

@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { FileUploadInput } from "@/components/shared/FileUploadInput";
 import { useUpload } from "@/lib/hooks/useUpload";
 import { useEmployee } from "@/lib/hooks/useEmployee";
+import api from "@/lib/axios";
 
 interface DocumentsTabProps {
   employeeId: string;
@@ -23,6 +24,17 @@ export function DocumentsTab({ employeeId, isAdmin }: DocumentsTabProps) {
     setActiveUpload(type);
     try {
       await upload(type, file);
+      refetch();
+    } finally {
+      setActiveUpload(null);
+    }
+  };
+
+  const handleRemove = async (type: "photo" | "signature") => {
+    if (!isAdmin) return;
+    setActiveUpload(type);
+    try {
+      await api.patch(`employees/${employeeId}`, type === "photo" ? { photoUrl: null } : { signatureUrl: null });
       refetch();
     } finally {
       setActiveUpload(null);
@@ -56,6 +68,11 @@ export function DocumentsTab({ employeeId, isAdmin }: DocumentsTabProps) {
               label={doc.label}
               accept={doc.accept}
               currentUrl={doc.url}
+              onRemove={
+                isAdmin && (doc.key === "photo" || doc.key === "signature")
+                  ? () => handleRemove(doc.key)
+                  : undefined
+              }
               uploading={uploading && activeUpload === doc.key}
               disabled={!isAdmin}
               onUpload={(file) => handleUpload(doc.key, file)}

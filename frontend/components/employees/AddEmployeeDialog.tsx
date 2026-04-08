@@ -184,7 +184,7 @@ export function AddEmployeeDialog() {
             Add Personnel
           </Button>
         </DialogTrigger>
-        <DialogContent className="sm:max-w-[650px] border-none shadow-2xl rounded-3xl p-0 overflow-hidden bg-slate-50/50 backdrop-blur-xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-full border-none shadow-2xl rounded-3xl p-0 overflow-hidden bg-slate-50/50 backdrop-blur-xl max-h-[90vh] overflow-y-auto sm:max-w-[min(98vw,88rem)]">
           <div className="bg-[#1d3459] p-8 text-white relative h-32 overflow-hidden">
                <div className="relative z-10">
                   <DialogTitle className="text-xl font-extrabold tracking-tight flex items-center gap-2">

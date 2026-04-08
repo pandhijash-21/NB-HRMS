@@ -4,13 +4,16 @@ import { ok, fail } from '../../utils/response';
 import { familyService } from './family.service';
 
 const memberSchema = z.object({
+  id: z.string().uuid().optional(),
   relation: z.enum(['FATHER', 'MOTHER', 'SPOUSE', 'SON', 'DAUGHTER', 'BROTHER', 'SISTER', 'GUARDIAN', 'OTHER']),
   name: z.string().min(1),
   city: z.string().min(1).nullable().optional(),
   mobileNo: z.string().min(1).nullable().optional(),
+  phoneNo: z.string().min(1).nullable().optional(),
   personalEmail: z.string().email().nullable().optional(),
   dateOfBirth: z.string().datetime().nullable().optional(),
   aadhaarNo: z.string().min(4).nullable().optional(), // sensitive
+  aadhaarUrl: z.string().url().nullable().optional(),
   isNominee: z.boolean().optional(),
   updatedBy: z.string().min(1).nullable().optional(),
 });
@@ -43,8 +46,12 @@ export const familyController = {
     const body = memberSchema.safeParse(req.body);
     if (!body.success) return res.status(400).json(fail(body.error.message));
 
+    const { phoneNo, ...rest } = body.data;
+    const mobileNo = body.data.mobileNo ?? phoneNo ?? null;
+
     const created = await familyService.create(employeeId, {
-      ...body.data,
+      ...rest,
+      mobileNo,
       dateOfBirth: body.data.dateOfBirth ? parseDate(body.data.dateOfBirth) : null,
     }, req);
 
@@ -63,8 +70,15 @@ export const familyController = {
     const body = memberSchema.partial().safeParse(req.body);
     if (!body.success) return res.status(400).json(fail(body.error.message));
 
+    const { phoneNo, id: _id, ...rest } = body.data;
+    const mobileNo =
+      body.data.mobileNo !== undefined || body.data.phoneNo !== undefined
+        ? body.data.mobileNo ?? body.data.phoneNo ?? null
+        : undefined;
+
     const updated = await familyService.update(employeeId, memberId, {
-      ...body.data,
+      ...rest,
+      ...(mobileNo !== undefined ? { mobileNo } : {}),
       dateOfBirth: body.data.dateOfBirth ? parseDate(body.data.dateOfBirth) : undefined,
     }, req);
 

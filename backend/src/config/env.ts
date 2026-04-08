@@ -18,6 +18,9 @@ const envSchema = z.object({
     .trim()
     .regex(/^[0-9a-fA-F]{64}$/, 'ENCRYPTION_KEY must be 64 hex chars (32 bytes)'),
 
+  /** Single connection string: cloudinary://API_KEY:API_SECRET@CLOUD_NAME */
+  CLOUDINARY_URL: z.string().optional(),
+
   CLOUDINARY_CLOUD_NAME: optionalNonEmptyString,
   CLOUDINARY_API_KEY: optionalNonEmptyString,
   CLOUDINARY_API_SECRET: optionalNonEmptyString,

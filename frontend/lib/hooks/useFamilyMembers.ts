@@ -6,6 +6,19 @@ import { useQuery, skipToken } from "@apollo/client/react";
 import { GET_FAMILY_MEMBERS } from "@/lib/graphql";
 import type { FamilyMemberFormData } from "@/lib/validators/family.schema";
 
+/** Form uses SPOUSE | CHILD | …; REST expects Prisma `FamilyRelation`. */
+function mapRelationToApi(relation: FamilyMemberFormData["relation"]) {
+  const m = {
+    SPOUSE: "SPOUSE",
+    CHILD: "SON",
+    PARENT: "FATHER",
+    SIBLING: "BROTHER",
+    OTHER: "OTHER",
+  } as const;
+  type ApiRelation = (typeof m)[keyof typeof m];
+  return (m[relation as keyof typeof m] ?? "OTHER") as ApiRelation;
+}
+
 export function useFamilyMembers(employeeId: string) {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -22,15 +35,19 @@ export function useFamilyMembers(employeeId: string) {
     setSaving(true);
     setSaveError(null);
     try {
+      const payload = {
+        ...member,
+        relation: mapRelationToApi(member.relation),
+      };
       if (member.id) {
         await api.patch(
           `employees/${employeeId}/family/${member.id}`,
-          member
+          payload
         );
       } else {
         await api.post(
           `employees/${employeeId}/family`,
-          member
+          payload
         );
       }
       refetch();

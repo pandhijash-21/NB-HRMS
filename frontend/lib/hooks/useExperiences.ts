@@ -41,17 +41,10 @@ export function useExperiences(employeeId: string) {
         updated_at: now,
       };
 
-      if (exp.id) {
-        await upsertExperience({
-          variables: { objects: [{ ...expData, id: exp.id }] },
-        });
-      } else {
-        await upsertExperience({
-          variables: {
-            objects: [{ ...expData, id: crypto.randomUUID(), created_at: now }],
-          },
-        });
-      }
+      const rowId = exp.id ?? crypto.randomUUID();
+      await upsertExperience({
+        variables: { objects: [{ ...expData, id: rowId, created_at: now }] },
+      });
       refetch();
     } finally {
       setSaving(false);

@@ -8,6 +8,7 @@ interface FileUploadInputProps {
   accept?: string;
   currentUrl?: string | null;
   onUpload: (file: File) => Promise<void>;
+  onRemove?: () => void;
   uploading?: boolean;
   disabled?: boolean;
   className?: string;
@@ -18,6 +19,7 @@ export function FileUploadInput({
   accept = "image/*,.pdf",
   currentUrl,
   onUpload,
+  onRemove,
   uploading,
   disabled,
   className,
@@ -57,17 +59,38 @@ export function FileUploadInput({
             alt={label}
             className="w-full h-full object-cover"
           />
+          {onRemove && !disabled && (
+            <button
+              type="button"
+              onClick={onRemove}
+              className="absolute top-1 left-1 rounded bg-black/55 text-white text-[10px] px-1.5 py-0.5 hover:bg-black/70"
+              aria-label={`Remove ${label}`}
+            >
+              Remove
+            </button>
+          )}
         </div>
       )}
       {currentUrl && !isImage && (
-        <a
-          href={currentUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 text-xs text-[#1d3459] underline"
-        >
-          View current file
-        </a>
+        <div className="flex items-center gap-3">
+          <a
+            href={currentUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-xs text-[#1d3459] underline"
+          >
+            View current file
+          </a>
+          {onRemove && !disabled && (
+            <button
+              type="button"
+              onClick={onRemove}
+              className="text-xs text-rose-600 underline"
+            >
+              Remove
+            </button>
+          )}
+        </div>
       )}
 
       <div
@@ -103,6 +126,7 @@ export function FileUploadInput({
         ref={inputRef}
         type="file"
         accept={accept}
+        aria-label={label}
         className="hidden"
         onChange={handleChange}
         disabled={uploading || disabled}

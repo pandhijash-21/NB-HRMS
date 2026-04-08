@@ -5,6 +5,10 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  /* Typography: keep shadcn/tailwind `font-sans` in sync with next/font. */
+  --font-sans: var(--font-geist-sans);
+  /* Force everything to use sans-serif (even "mono" utilities/components). */
+  --font-mono: var(--font-geist-sans);
 
   --primary: oklch(0.205 0 0);
   --primary-soft: #243b63;
@@ -22,7 +26,8 @@
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
+  /* Slightly darker for better contrast/readability. */
+  --muted-foreground: oklch(0.48 0 0);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.922 0 0);
@@ -92,7 +97,7 @@
 }
 
 .app-shell {
-  @apply min-h-screen bg-[color:var(--background)] text-[color:var(--foreground)] flex flex-col;
+  @apply min-h-screen bg-[color:var(--background)] text-[color:var(--foreground)] flex flex-col font-sans text-[16px] leading-7;
 }
 
 .app-header {
@@ -104,7 +109,7 @@
 }
 
 .app-header-subtitle {
-  @apply text-xs font-medium text-slate-500;
+  @apply text-sm font-medium text-slate-600;
 }
 
 .app-main {
@@ -116,11 +121,11 @@
 }
 
 .app-sidebar-section-title {
-  @apply px-6 pt-6 pb-2 text-[0.65rem] font-bold uppercase tracking-widest text-slate-400/80;
+  @apply px-6 pt-6 pb-2 text-xs font-bold uppercase tracking-widest text-slate-500;
 }
 
 .app-sidebar-link {
-  @apply relative flex items-center gap-3 px-4 py-2.5 mx-3 mb-1.5 rounded-xl text-sm font-medium text-slate-500 overflow-hidden transition-all duration-300 hover:text-[#1d3459] hover:translate-x-1 z-10 before:absolute before:inset-0 before:-z-10 before:rounded-xl before:bg-white/50 before:opacity-0 before:transition-all before:duration-300 hover:before:opacity-100;
+  @apply relative flex items-center gap-3 px-4 py-2.5 mx-3 mb-1.5 rounded-xl text-sm font-semibold text-slate-600 overflow-hidden transition-all duration-300 hover:text-[#1d3459] hover:translate-x-1 z-10 before:absolute before:inset-0 before:-z-10 before:rounded-xl before:bg-white/50 before:opacity-0 before:transition-all before:duration-300 hover:before:opacity-100;
 }
 
 .app-sidebar-link-active {
@@ -213,9 +218,22 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    /* More readable defaults across the app. */
+    @apply bg-background text-foreground text-[16px] leading-7;
+    text-rendering: optimizeLegibility;
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
   html {
     @apply font-sans;
+  }
+
+  /* Extra safety for any direct monospace elements. */
+  code,
+  pre,
+  kbd,
+  samp {
+    font-family: var(--font-sans);
   }
 }

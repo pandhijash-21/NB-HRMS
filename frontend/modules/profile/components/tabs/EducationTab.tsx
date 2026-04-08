@@ -74,7 +74,7 @@ export function EducationTab({ employeeId }: EducationTabProps) {
                 <Plus className="w-3 h-3" /> Add Qualification
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-lg rounded-2xl border-none shadow-2xl">
+          <DialogContent className="w-full rounded-2xl border-none shadow-2xl sm:max-w-[min(98vw,88rem)]">
             <DialogHeader>
               <DialogTitle className="text-lg font-bold text-slate-800">Add Academic Record</DialogTitle>
             </DialogHeader>

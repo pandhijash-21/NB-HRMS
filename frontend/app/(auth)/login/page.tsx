@@ -1,46 +1,64 @@
 import { LoginForm } from "@/modules/auth/components/LoginForm";
 import { Suspense } from "react";
+import Image from "next/image";
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#1d3459] to-[#243b63]">
-      <div className="w-full max-w-md mx-4">
-        {/* Glass Card */}
-        <div className="relative rounded-3xl bg-white/5 backdrop-blur-2xl border border-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] px-8 py-12 overflow-hidden before:absolute before:inset-0 before:-z-10 before:bg-gradient-to-b before:from-white/10 before:to-transparent before:opacity-50">
-          {/* Brand */}
-          <div className="mb-10 text-center">
-            <div
-              className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-5 bg-white/10 border border-white/20 shadow-inner backdrop-blur-md"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="#d9b557"
-                strokeWidth={2}
-                className="w-7 h-7"
-              >
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                <circle cx="9" cy="7" r="4" />
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-              </svg>
+    <div className="min-h-screen bg-gradient-to-br from-[#0f1f3a] via-[#1d3459] to-[#2a4a7b]">
+      <div className="min-h-screen flex items-center justify-center px-4 py-10">
+        <div className="w-full max-w-5xl">
+          <div className="grid grid-cols-1 lg:grid-cols-2 overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 backdrop-blur-2xl shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
+            {/* Left: Institutional panel */}
+            <div className="relative p-10 lg:p-12">
+              <div className="absolute inset-0 -z-10 bg-gradient-to-br from-white/10 via-transparent to-transparent" />
+
+              <div className="flex items-center gap-5">
+                <div className="relative h-20 w-20 overflow-hidden rounded-3xl bg-white/10 ring-1 ring-white/15">
+                  <Image
+                    src="/gu-logo.png"
+                    alt="Gandhinagar University"
+                    fill
+                    sizes="80px"
+                    className="object-contain p-3"
+                    priority
+                  />
+                </div>
+                <div>
+                  <p className="text-white/95 text-2xl sm:text-3xl font-extrabold tracking-tight leading-none">
+                    Gandhinagar University
+                  </p>
+                  <p className="mt-1 text-white/70 text-sm font-medium tracking-wide">
+                    HRMS Portal
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-14">
+                <h1 className="text-4xl font-extrabold tracking-tight text-white">
+                  Sign in
+                </h1>
+                <p className="mt-3 text-sm text-white/65">
+                  Staff & Faculty Access
+                </p>
+              </div>
             </div>
-            <h1 className="text-2xl font-bold text-white tracking-wide">
-              HRMS Portal
-            </h1>
-            <p className="mt-2 text-xs text-white/60 font-medium tracking-wide">
-              GANDHINAGAR UNIVERSITY
-            </p>
+
+            {/* Right: Login card */}
+            <div className="p-8 lg:p-12 bg-white/[0.03]">
+              <div className="mx-auto w-full max-w-md">
+                <div className="rounded-3xl bg-white/5 ring-1 ring-white/10 p-6 lg:p-8 shadow-[0_12px_40px_rgba(0,0,0,0.25)]">
+                  <Suspense>
+                    <LoginForm />
+                  </Suspense>
+                </div>
+
+                <p className="mt-6 text-center text-xs text-white/40 tracking-wide">
+                  &copy; {new Date().getFullYear()} Gandhinagar University
+                </p>
+              </div>
+            </div>
           </div>
-
-          <Suspense>
-            <LoginForm />
-          </Suspense>
         </div>
-
-        <p className="mt-6 text-center text-xs text-white/40 tracking-wider font-light">
-          &copy; {new Date().getFullYear()} Gandhinagar University
-        </p>
       </div>
     </div>
   );

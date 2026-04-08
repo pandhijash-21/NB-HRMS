@@ -334,6 +334,7 @@ model FamilyMember {
   // Extended (as requested)
   dateOfBirth    DateTime?      @map("date_of_birth")
   aadhaarNo      String?        @map("aadhaar_no")                      // encrypted AES-256
+  aadhaarUrl     String?        @map("aadhaar_url")                     // Cloudinary scan
   isNominee      Boolean        @default(false) @map("is_nominee")
 
   isActive       Boolean        @default(true) @map("is_active")

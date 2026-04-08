@@ -2,6 +2,7 @@ import type { DegreeType } from '@prisma/client';
 import { prisma } from '../../config/prisma';
 
 type AcademicInput = {
+  id?: string;
   degreeType: DegreeType;
   degreeName?: string | null;
   medium?: any;
@@ -38,6 +39,7 @@ export const academicService = {
     try {
       return await prisma.academicQualification.create({
         data: {
+          ...(input.id ? { id: input.id } : {}),
           employeeId,
           degreeType: input.degreeType,
           degreeName: input.degreeName ?? null,

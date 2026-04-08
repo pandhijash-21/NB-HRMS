@@ -138,6 +138,18 @@ export const UPDATE_EMPLOYEE_GENERAL = gql`
   }
 `;
 
+export const UPDATE_EMPLOYEE_MEDIA = gql`
+  mutation UpdateEmployeeMedia($id: Int!, $set: employees_set_input!) {
+    update_employees(where: { id: { _eq: $id } }, _set: $set) {
+      returning {
+        id
+        photo_url
+        signature_url
+      }
+    }
+  }
+`;
+
 export const UPDATE_EMPLOYEE_OTHER = gql`
   mutation UpdateEmployeeOther($employeeId: Int!, $set: employee_other_info_set_input!) {
     update_employee_other_info(where: { employee_id: { _eq: $employeeId } }, _set: $set) {

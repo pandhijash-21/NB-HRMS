@@ -60,6 +60,10 @@ export function EditUserDialog({
   };
 
   if (!user) return null;
+  const displayName = user.employee?.fullName ?? user.username ?? `User ${user.id.slice(0, 8)}`;
+  const subtitle = user.employee
+    ? `${user.employee.employeeCode} - ${user.employee.designation}`
+    : "Position account (no employee)";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -69,8 +73,8 @@ export function EditUserDialog({
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 mt-4">
           <div className="space-y-1 bg-slate-50 p-3 rounded-lg border border-slate-100 mb-4">
-            <p className="text-sm font-bold text-slate-800">{user.employee.fullName}</p>
-            <p className="text-xs text-slate-500">{user.employee.employeeCode} - {user.employee.designation}</p>
+            <p className="text-sm font-bold text-slate-800">{displayName}</p>
+            <p className="text-xs text-slate-500">{subtitle}</p>
           </div>
           
           <div className="space-y-2">

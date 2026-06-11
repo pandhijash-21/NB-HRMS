@@ -17,6 +17,10 @@ const { ensureLeaveRepeatableJobs } = require('./jobs/leave/leaveSchedulers') as
 const { startLeaveCreditWorker } = require('./jobs/leave/leaveCredit.worker') as typeof import('./jobs/leave/leaveCredit.worker');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { startLeaveAbsenceExpireWorker } = require('./jobs/leave/leaveAbsenceExpire.worker') as typeof import('./jobs/leave/leaveAbsenceExpire.worker');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { ensureAttendanceRepeatableJobs } = require('./jobs/attendance/attendanceSchedulers') as typeof import('./jobs/attendance/attendanceSchedulers');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { startAttendanceSyncWorker } = require('./jobs/attendance/attendanceSync.worker') as typeof import('./jobs/attendance/attendanceSync.worker');
 
 async function start() {
   let redisReady = false;
@@ -32,8 +36,10 @@ async function start() {
     try {
       startLeaveCreditWorker();
       startLeaveAbsenceExpireWorker();
+      startAttendanceSyncWorker();
       await ensureLeaveRepeatableJobs();
-      console.log('Leave jobs started');
+      await ensureAttendanceRepeatableJobs();
+      console.log('Leave & attendance jobs started');
     } catch (err) {
       console.warn('Leave jobs could not be started:', err);
     }

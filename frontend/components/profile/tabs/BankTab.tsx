@@ -8,8 +8,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useMutation } from "@apollo/client/react";
-import { UPDATE_EMPLOYEE_BANK } from "@/lib/graphql";
+import { toast } from "sonner";
+import api from "@/lib/axios";
 
 const bankSchema = z.object({
   bankName: z.string().optional(),
@@ -23,6 +23,8 @@ type BankFormData = z.infer<typeof bankSchema>;
 interface BankTabProps {
   employee: Record<string, unknown>;
   isAdmin?: boolean;
+  allowEdit?: boolean;
+  onUpdate?: () => void;
 }
 
 function Field({ label, value }: { label: string; value?: string | number | null }) {
@@ -34,11 +36,12 @@ function Field({ label, value }: { label: string; value?: string | number | null
   );
 }
 
-export function BankTab({ employee, isAdmin }: BankTabProps) {
+export function BankTab({ employee, isAdmin, allowEdit, onUpdate }: BankTabProps) {
+  const canEdit = Boolean(isAdmin || allowEdit);
   const [editing, setEditing] = useState(false);
-  const [mutate, { loading }] = useMutation(UPDATE_EMPLOYEE_BANK);
+  const [saving, setSaving] = useState(false);
 
-  const { register, handleSubmit, formState: { errors } } = useForm<BankFormData>({
+  const { register, handleSubmit } = useForm<BankFormData>({
     resolver: zodResolver(bankSchema),
     defaultValues: {
       bankName: (employee.bankName as string) ?? "",
@@ -48,19 +51,23 @@ export function BankTab({ employee, isAdmin }: BankTabProps) {
     },
   });
 
-  const onSubmit = async (data: any) => {
-    await mutate({
-      variables: {
-        employeeId: employee.id,
-        set: {
-           bank_name: data.bankName,
-           bank_account_no: data.bankAccountNo,
-           bank_branch_code: data.bankBranchCode,
-           ifsc_code: data.ifscCode,
-        },
-      },
-    });
-    setEditing(false);
+  const onSubmit = async (data: BankFormData) => {
+    setSaving(true);
+    try {
+      await api.patch(`employees/${employee.id}/bank`, {
+        bankName: data.bankName || null,
+        bankAccountNo: data.bankAccountNo || null,
+        bankBranchCode: data.bankBranchCode || null,
+        ifscCode: data.ifscCode || null,
+      });
+      toast.success("Bank details saved");
+      setEditing(false);
+      onUpdate?.();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message ?? "Failed to save bank details");
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (!editing) {
@@ -69,7 +76,7 @@ export function BankTab({ employee, isAdmin }: BankTabProps) {
         <CardContent className="pt-5 space-y-5">
           <div className="flex justify-between items-center">
             <h3 className="text-sm font-semibold text-slate-700">Bank Information</h3>
-            {isAdmin && (
+            {canEdit && (
               <Button size="sm" variant="outline" onClick={() => setEditing(true)} className="text-xs border-[#1d3459] text-[#1d3459] hover:bg-[#1d3459] hover:text-white">
                 Edit
               </Button>
@@ -94,8 +101,8 @@ export function BankTab({ employee, isAdmin }: BankTabProps) {
             <h3 className="text-sm font-semibold text-slate-700">Edit Bank Information</h3>
             <div className="flex gap-2">
               <Button type="button" size="sm" variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>
-              <Button type="submit" size="sm" disabled={loading} style={{ backgroundColor: "#1d3459" }} className="text-white hover:opacity-90">
-                {loading ? "Saving…" : "Save"}
+              <Button type="submit" size="sm" disabled={saving} style={{ backgroundColor: "#1d3459" }} className="text-white hover:opacity-90">
+                {saving ? "Saving…" : "Save"}
               </Button>
             </div>
           </div>

@@ -9,8 +9,9 @@ export const generalInfoSchema = z.object({
   subOrganization: z.string().optional(),
   department: z.string().min(1, "Department is required"),
   functionalDepartment: z.string().optional(),
-  firstReporting: z.string().optional(),
-  secondReporting: z.string().optional(),
+  firstApproverUserId: z.string().nullable().optional(),
+  secondApproverUserId: z.string().nullable().optional(),
+  thirdApproverUserId: z.string().nullable().optional(),
   employeeCategory: z.enum([
     "TEACHING",
     "NON_TEACHING",

@@ -38,7 +38,8 @@ export default function UsersPage() {
   const { deleteUser } = useUserMgmtActions();
 
   const handleDelete = async (user: User) => {
-    if (confirm(`Are you sure you want to delete the user account for ${user.employee.fullName}?`)) {
+    const label = user.employee?.fullName ?? user.username ?? "this account";
+    if (confirm(`Are you sure you want to delete the user account for ${label}?`)) {
       try {
         await deleteUser(user.id);
         refetch();
@@ -53,21 +54,23 @@ export default function UsersPage() {
   const columns: ColumnDef<User>[] = [
     {
       accessorKey: "employee",
-      header: "Employee Details",
+      header: "Account",
       cell: ({ row }) => {
         const user = row.original;
-        const initials = user.employee?.fullName?.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2) || "??";
+        const label = user.employee?.fullName ?? user.username ?? "Unknown";
+        const subLabel = user.employee ? user.employee.employeeCode : "POSITION";
+        const initials = label.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2) || "??";
         return (
           <div className="flex items-center gap-4">
             <Avatar className="h-10 w-10 shrink-0 border-2 border-white shadow-sm ring-1 ring-slate-100">
-              <AvatarImage src={user.employee.photoUrl || ""} />
+              <AvatarImage src={user.employee?.photoUrl || ""} />
               <AvatarFallback style={{ backgroundColor: "#1d3459", color: "#d9b557" }} className="text-xs font-bold">
                 {initials}
               </AvatarFallback>
             </Avatar>
             <div className="space-y-0.5">
-              <p className="font-bold text-slate-800 text-sm">{user.employee.fullName}</p>
-              <p className="text-[10px] text-slate-500 font-medium tracking-wide uppercase">{user.employee.employeeCode}</p>
+              <p className="font-bold text-slate-800 text-sm">{label}</p>
+              <p className="text-[10px] text-slate-500 font-medium tracking-wide uppercase">{subLabel}</p>
             </div>
           </div>
         );

@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { seedDesignationsAndSalaryCatalog } from './seeds/designationSalary.seed';
 
 const prisma = new PrismaClient();
 
@@ -82,7 +83,7 @@ const PERMISSION_MATRIX: PermissionMatrix = {
     EDUCATION:     RW,
     LEAVE:         { canRead: true, canWrite: true, canApprove: false, canDelete: false, canExport: false },
     ATTENDANCE:    RO,
-    BANK_DETAILS:  RO,
+    BANK_DETAILS:  RW,
     DOCUMENTS:     RW,
   },
 
@@ -157,6 +158,8 @@ async function main() {
     }
   }
   console.log(`✅  ${permCount} permission entries seeded`);
+
+  await seedDesignationsAndSalaryCatalog(prisma, roleIdMap);
 
   // ── Leave Settings + Types ───────────────────────────────────────────────
   console.log('⏳  Seeding leave settings…');
@@ -360,6 +363,22 @@ async function main() {
     });
   }
   console.log(`✅  ${leaveTypes.length} leave types seeded`);
+
+  // ── Attendance Policy (default punch timing rules) ─────────────────────────
+  console.log('⏳  Seeding attendance policy…');
+  await prisma.attendancePolicy.upsert({
+    where: { id: 'default' },
+    update: {},
+    create: {
+      id: 'default',
+      defaultPunchInTime: '09:00',
+      defaultPunchOutTime: '15:30',
+      punchInBufferMinutes: 10,
+      punchOutBufferMinutes: 10,
+      updatedBy: 'seed',
+    },
+  });
+  console.log('✅  Attendance policy seeded');
 
   // ── Admin employee + user ──────────────────────────────────────────────
   console.log('⏳  Seeding admin employee & user…');
@@ -794,6 +813,40 @@ async function main() {
   } catch (err: any) {
     console.warn('⚠️  Could not reset sequences (non-critical):', err.message);
   }
+
+  // ── Dummy attendance punches for UI/testing ─────────────────────────────────
+  console.log('⏳  Seeding dummy attendance punches…');
+  const attendanceRows = [
+    { employeeId: 3, punchAt: new Date('2026-04-14T03:35:00.000Z'), terminalId: 'T1', punchType: 'IN', externalKey: 'DUMMY-3-2026-04-14-IN' },
+    { employeeId: 3, punchAt: new Date('2026-04-14T12:10:00.000Z'), terminalId: 'T1', punchType: 'OUT', externalKey: 'DUMMY-3-2026-04-14-OUT' },
+    { employeeId: 3, punchAt: new Date('2026-04-15T03:40:00.000Z'), terminalId: 'T1', punchType: 'IN', externalKey: 'DUMMY-3-2026-04-15-IN' },
+    { employeeId: 3, punchAt: new Date('2026-04-15T12:20:00.000Z'), terminalId: 'T1', punchType: 'OUT', externalKey: 'DUMMY-3-2026-04-15-OUT' },
+
+    { employeeId: 4, punchAt: new Date('2026-04-14T04:05:00.000Z'), terminalId: 'T2', punchType: 'IN', externalKey: 'DUMMY-4-2026-04-14-IN' },
+    { employeeId: 4, punchAt: new Date('2026-04-14T11:55:00.000Z'), terminalId: 'T2', punchType: 'OUT', externalKey: 'DUMMY-4-2026-04-14-OUT' },
+    { employeeId: 4, punchAt: new Date('2026-04-15T04:15:00.000Z'), terminalId: 'T2', punchType: 'IN', externalKey: 'DUMMY-4-2026-04-15-IN' },
+    { employeeId: 4, punchAt: new Date('2026-04-15T12:05:00.000Z'), terminalId: 'T2', punchType: 'OUT', externalKey: 'DUMMY-4-2026-04-15-OUT' },
+  ] as const;
+
+  for (const row of attendanceRows) {
+    await prisma.attendancePunch.upsert({
+      where: { externalKey: row.externalKey },
+      update: {
+        punchAt: row.punchAt,
+        terminalId: row.terminalId,
+        punchType: row.punchType,
+      },
+      create: {
+        employeeId: row.employeeId,
+        punchAt: row.punchAt,
+        source: 'ESSL',
+        terminalId: row.terminalId,
+        punchType: row.punchType,
+        externalKey: row.externalKey,
+      },
+    });
+  }
+  console.log(`✅  ${attendanceRows.length} dummy attendance punches seeded`);
 
   console.log('✅  Demo employees and users seeded');
   console.log('');

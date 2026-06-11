@@ -21,8 +21,9 @@ export const GET_EMPLOYEE = gql`
         joiningDate: joining_date
         originalJoiningDate: original_joining_date
         incrementMonth: increment_month
-        firstReporting: first_reporting
-        secondReporting: second_reporting
+        firstApproverUserId: first_approver_user_id
+        secondApproverUserId: second_approver_user_id
+        thirdApproverUserId: third_approver_user_id
       }
       employee_personal_infos {
         birthDate: birth_date

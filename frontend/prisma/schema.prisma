@@ -125,6 +125,10 @@ model Employee {
   salaryInfo       EmployeeSalaryInfo?
   bankInfo         EmployeeBankInfo?
 
+  firstReportingFor   EmployeeGeneralInfo[] @relation("FirstReporting")
+  secondReportingFor  EmployeeGeneralInfo[] @relation("SecondReporting")
+  thirdReportingFor   EmployeeGeneralInfo[] @relation("ThirdReporting")
+
   @@map("employees")
 }
 
@@ -155,9 +159,14 @@ model EmployeeGeneralInfo {
   department           String                                           // ADMIN DEPARTMENT
   functionalDepartment String?          @map("functional_department")   // ADMIN DEPARTMENT
 
-  // Reporting hierarchy
-  firstReporting       String?          @map("first_reporting")         // DHAVAL CHARANKUMAR SHAH
-  secondReporting      String?          @map("second_reporting")        // KAMALESH VASHANTHKUMARI NAGARAJA
+  // Reporting hierarchy (FK to Employee.id)
+  firstReportingId     Int?             @map("first_reporting_id")
+  secondReportingId    Int?             @map("second_reporting_id")
+  thirdReportingId     Int?             @map("third_reporting_id")
+
+  firstReportingEmployee  Employee? @relation("FirstReporting",  fields: [firstReportingId],  references: [id])
+  secondReportingEmployee Employee? @relation("SecondReporting", fields: [secondReportingId], references: [id])
+  thirdReportingEmployee  Employee? @relation("ThirdReporting",  fields: [thirdReportingId],  references: [id])
 
   // Employment classification
   employeeCategory     EmployeeCategory @map("employee_category")       // NON TEACHING

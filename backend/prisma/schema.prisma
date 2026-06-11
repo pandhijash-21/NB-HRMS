@@ -128,12 +128,49 @@ enum ApproverRole {
   HOI
   VC
   REGISTRAR
+  FIRST_REPORTING
+  SECOND_REPORTING
+  THIRD_REPORTING
 }
 
 enum ApprovalAction {
   RECOMMENDED
   REJECTED
   APPROVED
+}
+
+enum PayCommissionType {
+  FIFTH
+  SIXTH
+}
+
+enum RuleType {
+  FIXED
+  PERCENTAGE
+  CONDITIONAL
+}
+
+enum ConditionComparator {
+  GREATER_THAN
+  LESS_THAN
+  GREATER_THAN_OR_EQUAL
+  LESS_THAN_OR_EQUAL
+  EQUAL
+}
+
+enum ConditionResultType {
+  FIXED_AMOUNT
+  PERCENTAGE_OF_COLUMN
+}
+
+enum SalaryColumnCategory {
+  EARNING
+  DEDUCTION
+}
+
+enum SalaryRecordStatus {
+  DRAFT
+  FINALIZED
 }
 
 // =============================================================================
@@ -174,11 +211,20 @@ model Employee {
   leaveAuditLogs     LeaveAuditLog[]
   monthlyLwpRecords  MonthlyLWPRecord[]
   absences           AbsenceRecord[]
+  attendancePunches  AttendancePunch[]
 
   hodDepartments      DepartmentApprover[] @relation("DepartmentHod")
   hoiInstitutes       InstituteApprover[]  @relation("InstituteHoi")
   vcGlobalApprover    GlobalApprover[]     @relation("GlobalApproverVC")
   registrarGlobalApprover GlobalApprover[] @relation("GlobalApproverRegistrar")
+
+  firstReportingFor   EmployeeGeneralInfo[] @relation("FirstReporting")
+  secondReportingFor  EmployeeGeneralInfo[] @relation("SecondReporting")
+  thirdReportingFor   EmployeeGeneralInfo[] @relation("ThirdReporting")
+
+  assignments        EmployeeAssignment[]
+  salaryRecords      EmployeeSalaryRecord[]
+  positionAssignments PositionAssignment[]
 
   @@map("employees")
 }
@@ -210,13 +256,30 @@ model EmployeeGeneralInfo {
   department           String                                           // ADMIN DEPARTMENT
   functionalDepartment String?          @map("functional_department")   // ADMIN DEPARTMENT
 
-  // Reporting hierarchy
-  firstReporting       String?          @map("first_reporting")         // DHAVAL CHARANKUMAR SHAH
-  secondReporting      String?          @map("second_reporting")        // KAMALESH VASHANTHKUMARI NAGARAJA
+  // Reporting hierarchy (FK to Employee.id)
+  firstReportingId     Int?             @map("first_reporting_id")
+  secondReportingId    Int?             @map("second_reporting_id")
+  thirdReportingId     Int?             @map("third_reporting_id")
+
+  firstReportingEmployee  Employee? @relation("FirstReporting",  fields: [firstReportingId],  references: [id])
+  secondReportingEmployee Employee? @relation("SecondReporting", fields: [secondReportingId], references: [id])
+  thirdReportingEmployee  Employee? @relation("ThirdReporting",  fields: [thirdReportingId],  references: [id])
+
+  // Approver slots (polymorphic: can point to employee-users or position-users)
+  // Preferred for leave workflow; NULL bypasses that layer.
+  firstApproverUserId   String? @map("first_approver_user_id")
+  secondApproverUserId  String? @map("second_approver_user_id")
+  thirdApproverUserId   String? @map("third_approver_user_id")
+
+  firstApproverUser   User? @relation("FirstApproverUser",  fields: [firstApproverUserId],  references: [id])
+  secondApproverUser  User? @relation("SecondApproverUser", fields: [secondApproverUserId], references: [id])
+  thirdApproverUser   User? @relation("ThirdApproverUser",  fields: [thirdApproverUserId],  references: [id])
 
   // Employment classification
   employeeCategory     EmployeeCategory @map("employee_category")       // NON TEACHING
-  designation          String                                           // O.S. ESTABLISHMENT
+  designation          String                                           // O.S. ESTABLISHMENT (legacy, synced from designationRef)
+  designationId        String?          @map("designation_id")
+  designationRef       Designation?     @relation(fields: [designationId], references: [id])
   shift                String?                                          // GENERAL
   appointmentType      AppointmentType? @map("appointment_type")        // Full Time-Regular
   employeeCode         String?          @unique @map("employee_code")   // GU1234
@@ -227,6 +290,41 @@ model EmployeeGeneralInfo {
   employee             Employee         @relation(fields: [employeeId], references: [id])
 
   @@map("employee_general_info")
+}
+
+// =============================================================================
+// EMPLOYMENT ASSIGNMENTS (effective-dated institute/designation history)
+// =============================================================================
+
+model EmployeeAssignment {
+  id             String   @id @default(uuid())
+  employeeId     Int      @map("employee_id")
+
+  effectiveFrom  DateTime @map("effective_from") @db.Date
+  effectiveTo    DateTime? @map("effective_to") @db.Date
+
+  organization    String?  // optional snapshot; current system uses a single org mostly
+  subOrganization String?  @map("sub_organization")
+  department      String?
+  designation     String
+  designationId   String?  @map("designation_id")
+  designationRef  Designation? @relation(fields: [designationId], references: [id])
+  shift           String?
+  appointmentType AppointmentType? @map("appointment_type")
+
+  reason         String?
+  changedBy      String   @map("changed_by")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  leaveApplications LeaveApplication[]
+  absenceRecords    AbsenceRecord[]
+  salaryRecords     EmployeeSalaryRecord[]
+
+  @@index([employeeId, effectiveFrom])
+  @@index([employeeId, effectiveTo])
+  @@map("employee_assignments")
 }
 
 // =============================================================================
@@ -594,6 +692,7 @@ model LeaveApplication {
   id                      String                 @id @default(uuid())
   applicationNo           String                 @unique @map("application_no")
   employeeId              Int                    @map("employee_id")
+  assignmentId            String?                @map("assignment_id")
   leaveTypeId             String                 @map("leave_type_id")
   fromDate                DateTime               @map("from_date")
   toDate                  DateTime               @map("to_date")
@@ -613,10 +712,12 @@ model LeaveApplication {
   updatedAt               DateTime               @updatedAt      @map("updated_at")
 
   employee        Employee           @relation(fields: [employeeId], references: [id])
+  assignment      EmployeeAssignment? @relation(fields: [assignmentId], references: [id])
   leaveType       LeaveType          @relation(fields: [leaveTypeId], references: [id])
   approvalSteps   LeaveApprovalStep[]
   absenceRecords  AbsenceRecord[]    @relation("AbsenceApplication")
 
+  @@index([employeeId, fromDate])
   @@map("leave_applications")
 }
 
@@ -625,7 +726,8 @@ model LeaveApprovalStep {
   applicationId   String         @map("application_id")
   stepNumber      Int            @map("step_number")
   approverRole    ApproverRole   @map("approver_role")
-  approverId      Int?           @map("approver_id")
+  approverId      Int?           @map("approver_id") // legacy (employee id)
+  approverUserId  String?        @map("approver_user_id")
   action          ApprovalAction? 
   remarks         String?
   actionAt        DateTime?      @map("action_at")
@@ -646,13 +748,16 @@ model AbsenceRecord {
   markedAt           DateTime  @map("marked_at")
   windowExpiresAt    DateTime  @map("window_expires_at")
   leaveApplicationId String?   @map("leave_application_id")
+  assignmentId       String?   @map("assignment_id")
   convertedToLwp     Boolean   @default(false) @map("converted_to_lwp")
   bullmqJobId        String?   @map("bullmq_job_id")
   createdAt          DateTime  @default(now()) @map("created_at")
 
   employee      Employee         @relation(fields: [employeeId], references: [id])
   application   LeaveApplication? @relation(fields: [leaveApplicationId], references: [id], name: "AbsenceApplication")
+  assignment    EmployeeAssignment? @relation(fields: [assignmentId], references: [id])
 
+  @@index([employeeId, date])
   @@map("absence_records")
 }
 
@@ -707,6 +812,59 @@ model MonthlyLWPRecord {
 
   @@unique([employeeId, year, month])
   @@map("monthly_lwp_records")
+}
+
+// =============================================================================
+// ATTENDANCE (Biometric punches sync)
+// =============================================================================
+
+enum AttendanceSource {
+  ESSL
+}
+
+model AttendancePunch {
+  id          String           @id @default(uuid())
+  employeeId  Int              @map("employee_id")
+  punchAt     DateTime         @map("punch_at")
+  source      AttendanceSource @default(ESSL)
+  externalKey String           @unique @map("external_key") // idempotency key from MSSQL
+
+  // Optional metadata (depends on MSSQL schema)
+  terminalId  String?          @map("terminal_id")
+  punchType   String?          @map("punch_type")
+
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  employee    Employee         @relation(fields: [employeeId], references: [id])
+
+  @@index([employeeId, punchAt])
+  @@map("attendance_punches")
+}
+
+model AttendanceSyncState {
+  id            String   @id @default(uuid())
+  source        AttendanceSource @unique
+  lastSyncedAt  DateTime? @map("last_synced_at")
+  cursor        String?   @map("cursor") // generic incremental cursor (e.g., last PK or timestamp)
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  @@map("attendance_sync_state")
+}
+
+model AttendancePolicy {
+  /**
+   * Single-row table (id = "default") holding punch timing policy.
+   * Times are stored as "HH:MM" in Asia/Kolkata local time.
+   */
+  id                    String   @id @default("default")
+  defaultPunchInTime    String   @default("09:00") @map("default_punch_in_time")  // "HH:MM" IST
+  defaultPunchOutTime   String   @default("15:30") @map("default_punch_out_time") // "HH:MM" IST
+  punchInBufferMinutes  Int      @default(10)      @map("punch_in_buffer_minutes")
+  punchOutBufferMinutes Int      @default(10)      @map("punch_out_buffer_minutes")
+  updatedBy             String?  @map("updated_by")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  @@map("attendance_policy")
 }
 
 model DepartmentApprover {
@@ -779,8 +937,10 @@ model Role {
   updatedAt   DateTime @updatedAt @map("updated_at")
   updatedBy   String?  @map("updated_by")
 
-  permissions RolePermission[]
-  users       User[]
+  permissions   RolePermission[]
+  users         User[]
+  designations  Designation[]
+  positionSlots PositionSlot[]
 
   @@map("roles")
 }
@@ -810,7 +970,10 @@ model RolePermission {
 // One user account per employee
 model User {
   id                String    @id @default(uuid())
-  employeeId        Int       @unique @map("employee_id")
+  employeeId        Int?      @unique @map("employee_id")
+  username          String?   @unique @map("username")
+  // Scope for position accounts (e.g., HOI-GIT). For employee-linked users this can remain null.
+  subOrganization   String?   @map("sub_organization")
   roleId            String    @map("role_id")
   passwordHash      String    @map("password_hash")
   isFirstLogin      Boolean   @default(true) @map("is_first_login")
@@ -822,8 +985,13 @@ model User {
   updatedAt         DateTime  @updatedAt @map("updated_at")
   updatedBy         String?   @map("updated_by")
 
-  role     Role     @relation(fields: [roleId], references: [id])
-  employee Employee @relation(fields: [employeeId], references: [id])
+  role         Role          @relation(fields: [roleId], references: [id])
+  employee     Employee?     @relation(fields: [employeeId], references: [id])
+  positionSlot PositionSlot?
+
+  firstApproverFor  EmployeeGeneralInfo[] @relation("FirstApproverUser")
+  secondApproverFor EmployeeGeneralInfo[] @relation("SecondApproverUser")
+  thirdApproverFor  EmployeeGeneralInfo[] @relation("ThirdApproverUser")
 
   @@map("users")
 }
@@ -837,18 +1005,217 @@ model EmployeeSalaryInfo {
   id              String    @id @default(uuid())
   employeeId      Int       @unique @map("employee_id")
 
-  payCommission   String?   @map("pay_commission")
-  payGrade        String?   @map("pay_grade")
-  basicSalary     Decimal?  @map("basic_salary") @db.Decimal(12, 2)
-  agp             Decimal?  @db.Decimal(12, 2)
-  grossSalary     Decimal?  @map("gross_salary") @db.Decimal(12, 2)
+  payCommission      String?            @map("pay_commission")
+  payCommissionType  PayCommissionType? @map("pay_commission_type")
+  designationId      String?            @map("designation_id")
+  payGrade           String?            @map("pay_grade")
+  basicSalary        Decimal?           @map("basic_salary") @db.Decimal(12, 2)
+  agp                Decimal?           @db.Decimal(12, 2)
+  grossSalary        Decimal?           @map("gross_salary") @db.Decimal(12, 2)
+  columnOverrides    Json?              @map("column_overrides")
+  columnRules        Json?              @map("column_rules")
 
   updatedAt       DateTime  @updatedAt @map("updated_at")
   updatedBy       String?   @map("updated_by")
 
-  employee        Employee  @relation(fields: [employeeId], references: [id])
+  employee        Employee    @relation(fields: [employeeId], references: [id])
+  designationRef  Designation? @relation(fields: [designationId], references: [id])
 
   @@map("employee_salary_info")
+}
+
+// =============================================================================
+// DESIGNATION MASTER & POSITION SLOTS
+// =============================================================================
+
+model Designation {
+  id            String   @id @default(uuid())
+  name          String   @unique
+  slug          String   @unique
+  isAlias       Boolean  @default(false) @map("is_alias")
+  linkedRoleId  String?  @map("linked_role_id")
+  isActive      Boolean  @default(true) @map("is_active")
+  sortOrder     Int      @default(0) @map("sort_order")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  linkedRole              Role?                    @relation(fields: [linkedRoleId], references: [id])
+  generalInfoRecords      EmployeeGeneralInfo[]
+  assignments             EmployeeAssignment[]
+  salaryInfoRecords       EmployeeSalaryInfo[]
+  positionSlots           PositionSlot[]
+  salaryStructureTemplates SalaryStructureTemplate[]
+
+  @@map("designations")
+}
+
+model PositionSlot {
+  id              String   @id @default(uuid())
+  code            String   @unique
+  name            String
+  designationId   String   @map("designation_id")
+  linkedRoleId    String   @map("linked_role_id")
+  subOrganization String?  @map("sub_organization")
+  userId          String?  @unique @map("user_id")
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  designation  Designation          @relation(fields: [designationId], references: [id])
+  linkedRole   Role                 @relation(fields: [linkedRoleId], references: [id])
+  user         User?                @relation(fields: [userId], references: [id])
+  assignments  PositionAssignment[]
+
+  @@map("position_slots")
+}
+
+model PositionAssignment {
+  id               String    @id @default(uuid())
+  positionSlotId   String    @map("position_slot_id")
+  holderEmployeeId Int       @map("holder_employee_id")
+  effectiveFrom    DateTime  @map("effective_from") @db.Date
+  effectiveTo      DateTime? @map("effective_to") @db.Date
+  assignedBy       String    @map("assigned_by")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  positionSlot   PositionSlot @relation(fields: [positionSlotId], references: [id], onDelete: Cascade)
+  holderEmployee Employee     @relation(fields: [holderEmployeeId], references: [id])
+
+  @@index([positionSlotId, effectiveFrom])
+  @@map("position_assignments")
+}
+
+// =============================================================================
+// SALARY MODULE
+// =============================================================================
+
+model PayCommission {
+  id             String            @id @default(uuid())
+  commissionType PayCommissionType @unique @map("commission_type")
+  name           String
+  isActive       Boolean           @default(true) @map("is_active")
+  createdAt      DateTime          @default(now()) @map("created_at")
+
+  columnDefinitions      SalaryColumnDefinition[]
+  salaryStructureTemplates SalaryStructureTemplate[]
+
+  @@map("pay_commissions")
+}
+
+model SalaryColumnDefinition {
+  id                 String               @id @default(uuid())
+  payCommissionId    String               @map("pay_commission_id")
+  columnIdentifier   String               @map("column_identifier")
+  displayName        String               @map("display_name")
+  category           SalaryColumnCategory
+  evaluationOrder    Int                  @map("evaluation_order")
+  isRuleConfigurable Boolean              @default(true) @map("is_rule_configurable")
+
+  payCommission PayCommission @relation(fields: [payCommissionId], references: [id], onDelete: Cascade)
+
+  @@unique([payCommissionId, columnIdentifier, category])
+  @@map("salary_column_definitions")
+}
+
+model SalaryStructureTemplate {
+  id              String   @id @default(uuid())
+  designationId   String   @map("designation_id")
+  payCommissionId String   @map("pay_commission_id")
+  isActive        Boolean  @default(true) @map("is_active")
+  createdBy       String?  @map("created_by")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  designation   Designation        @relation(fields: [designationId], references: [id])
+  payCommission PayCommission      @relation(fields: [payCommissionId], references: [id])
+  columnRules   SalaryColumnRule[]
+  salaryRecords EmployeeSalaryRecord[]
+
+  @@unique([designationId, payCommissionId])
+  @@map("salary_structure_templates")
+}
+
+model SalaryColumnRule {
+  id                           String               @id @default(uuid())
+  templateId                   String               @map("template_id")
+  columnIdentifier             String               @map("column_identifier")
+  category                     SalaryColumnCategory
+  ruleType                     RuleType             @map("rule_type")
+  formulaPreview               String               @default("") @map("formula_preview")
+  fixedDefaultValue            Decimal?             @map("fixed_default_value") @db.Decimal(14, 4)
+  percentageValue              Decimal?             @map("percentage_value") @db.Decimal(10, 4)
+  percentageReferenceColumns   Json?                @map("percentage_reference_columns")
+  createdAt                    DateTime             @default(now()) @map("created_at")
+  updatedAt                    DateTime             @updatedAt @map("updated_at")
+
+  template   SalaryStructureTemplate   @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  conditions ConditionalRuleCondition[]
+
+  @@unique([templateId, columnIdentifier, category])
+  @@map("salary_column_rules")
+}
+
+model ConditionalRuleCondition {
+  id                                String              @id @default(uuid())
+  columnRuleId                      String              @map("column_rule_id")
+  comparator                        ConditionComparator
+  referenceColumnIdentifier         String              @map("reference_column_identifier")
+  thresholdValue                    Decimal             @map("threshold_value") @db.Decimal(14, 4)
+  resultType                        ConditionResultType @map("result_type")
+  resultValue                       Decimal             @map("result_value") @db.Decimal(14, 4)
+  resultReferenceColumnIdentifier   String?             @map("result_reference_column_identifier")
+  resultReferenceColumns            Json?               @map("result_reference_columns")
+  sortOrder                         Int                 @map("sort_order")
+  isElseFallback                    Boolean             @default(false) @map("is_else_fallback")
+
+  columnRule SalaryColumnRule @relation(fields: [columnRuleId], references: [id], onDelete: Cascade)
+
+  @@index([columnRuleId, sortOrder])
+  @@map("conditional_rule_conditions")
+}
+
+model EmployeeSalaryRecord {
+  id                String             @id @default(uuid())
+  employeeId        Int                @map("employee_id")
+  assignmentId      String?            @map("assignment_id")
+  templateId        String             @map("template_id")
+  payCommissionType PayCommissionType  @map("pay_commission_type")
+  salaryMonth       Int                @map("salary_month")
+  salaryYear        Int                @map("salary_year")
+  status            SalaryRecordStatus @default(DRAFT)
+  grossPay          Decimal            @default(0) @map("gross_pay") @db.Decimal(14, 2)
+  totalDeductions   Decimal            @default(0) @map("total_deductions") @db.Decimal(14, 2)
+  netPay            Decimal            @default(0) @map("net_pay") @db.Decimal(14, 2)
+  finalizedAt       DateTime?          @map("finalized_at")
+  finalizedBy       String?            @map("finalized_by")
+  createdBy         String?            @map("created_by")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+
+  employee   Employee                  @relation(fields: [employeeId], references: [id])
+  assignment EmployeeAssignment?       @relation(fields: [assignmentId], references: [id])
+  template   SalaryStructureTemplate   @relation(fields: [templateId], references: [id])
+  columnValues EmployeeSalaryColumnValue[]
+
+  @@unique([employeeId, salaryMonth, salaryYear])
+  @@index([salaryYear, salaryMonth])
+  @@map("employee_salary_records")
+}
+
+model EmployeeSalaryColumnValue {
+  id                 String               @id @default(uuid())
+  salaryRecordId     String               @map("salary_record_id")
+  columnIdentifier   String               @map("column_identifier")
+  category           SalaryColumnCategory
+  ruleComputedValue  Decimal              @map("rule_computed_value") @db.Decimal(14, 2)
+  overrideValue      Decimal?             @map("override_value") @db.Decimal(14, 2)
+  effectiveValue     Decimal              @map("effective_value") @db.Decimal(14, 2)
+  formulaPreview     String               @default("") @map("formula_preview")
+
+  salaryRecord EmployeeSalaryRecord @relation(fields: [salaryRecordId], references: [id], onDelete: Cascade)
+
+  @@unique([salaryRecordId, columnIdentifier, category])
+  @@map("employee_salary_column_values")
 }
 
 // =============================================================================

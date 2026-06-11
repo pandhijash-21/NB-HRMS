@@ -25,6 +25,14 @@ async function getEmployeeEmail(employeeId: number): Promise<string | null> {
   return row?.instituteEmail ?? row?.personalEmail ?? null;
 }
 
+async function getUserEmployeeId(userId: string): Promise<number | null> {
+  const row = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { employeeId: true },
+  });
+  return row?.employeeId ?? null;
+}
+
 async function getEmployeeName(employeeId: number): Promise<string> {
   const row = await prisma.employeeGeneralInfo.findUnique({
     where: { employeeId },
@@ -86,9 +94,12 @@ export const leaveNotificationService = {
         },
       },
     });
-    if (!step || !step.approverId) return;
-    const approverEmail = await getEmployeeEmail(step.approverId);
-    const approverName = await getEmployeeName(step.approverId);
+    if (!step || !step.approverUserId) return;
+    const approverEmployeeId = await getUserEmployeeId(step.approverUserId);
+    // Position accounts may not have an employeeId/email — skip email notifications for them.
+    if (!approverEmployeeId) return;
+    const approverEmail = await getEmployeeEmail(approverEmployeeId);
+    const approverName = await getEmployeeName(approverEmployeeId);
     const empName = await getEmployeeName(step.application.employeeId);
     if (!approverEmail) return;
     await send(

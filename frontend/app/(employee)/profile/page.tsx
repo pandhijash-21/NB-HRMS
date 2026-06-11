@@ -11,6 +11,9 @@ import { OtherTab } from "@/components/profile/tabs/OtherTab";
 import { FamilyTab } from "@/components/profile/tabs/FamilyTab";
 import { EducationTab } from "@/components/profile/tabs/EducationTab";
 import { ExperienceTab } from "@/components/profile/tabs/ExperienceTab";
+import { AttendanceTab } from "@/components/profile/tabs/AttendanceTab";
+import { BankTab } from "@/components/profile/tabs/BankTab";
+import { SalaryTab } from "@/components/profile/tabs/SalaryTab";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function ProfilePage() {
@@ -24,6 +27,7 @@ export default function ProfilePage() {
     ...rawEmployee.generalInfo,
     ...rawEmployee.personalInfo,
     ...rawEmployee.otherInfo,
+    ...rawEmployee.bankInfo,
     ...rawEmployee,
     employeeCode: rawEmployee.generalInfo?.employeeCode || `EMP-${String(rawEmployee.id).padStart(4, "0")}`,
     // Email comes from the local address record
@@ -55,9 +59,12 @@ export default function ProfilePage() {
     { value: "personal",  label: "Personal",  content: <PersonalTab  employee={employee} isAdmin={false} onUpdate={refetch} /> },
     { value: "address",   label: "Address",   content: <AddressTab   employeeId={String(employeeId)} isAdmin={false} /> },
     { value: "other",     label: "Other",     content: <OtherTab     employee={employee} employeeId={String(employeeId)} isAdmin={false} onUpdate={refetch} /> },
+    { value: "bank",      label: "Bank",      content: <BankTab      employee={employee} allowEdit onUpdate={refetch} /> },
+    { value: "salary",    label: "Salary",    content: <SalaryTab    employee={employee} isAdmin={false} /> },
     { value: "family",    label: "Family",    content: <FamilyTab    employeeId={String(employeeId)} isAdmin={false} /> },
     { value: "education", label: "Education", content: <EducationTab employeeId={String(employeeId)} isAdmin={false} /> },
     { value: "experience", label: "Experience", content: <ExperienceTab employeeId={String(employeeId)} isAdmin={false} /> },
+    { value: "attendance", label: "Attendance", content: <AttendanceTab /> },
   ];
 
   return (

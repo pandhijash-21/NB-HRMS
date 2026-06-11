@@ -8,17 +8,41 @@ const api = axios.create({
     "http://localhost:4000/api/",
 });
 
-import { getSession } from "next-auth/react";
+import { getSession, signOut } from "next-auth/react";
 
 api.interceptors.request.use(async (config) => {
   if (typeof window !== "undefined") {
     const session = await getSession();
-    const token = (session?.user as any)?.token || localStorage.getItem("hrms_token");
+    const token = (session?.user as { token?: string })?.token || localStorage.getItem("hrms_token");
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
   }
   return config;
 });
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    if (typeof window === "undefined" || error.response?.status !== 401) {
+      return Promise.reject(error);
+    }
+    const session = await getSession();
+    const hadToken =
+      !!(session?.user as { token?: string })?.token || !!localStorage.getItem("hrms_token");
+    if (!hadToken) {
+      return Promise.reject(error);
+    }
+    const message = String(error.response?.data?.message ?? "");
+    if (
+      message.includes("Session expired") ||
+      message.includes("Invalid or expired") ||
+      message.includes("Missing bearer")
+    ) {
+      await signOut({ callbackUrl: "/login" });
+    }
+    return Promise.reject(error);
+  },
+);
 
 export default api;

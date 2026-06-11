@@ -31,6 +31,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       roleId:      decoded.roleId,
       roleName:    decoded.roleName,
       role:        decoded.roleName,  // backward compat for existing requireRole checks
+      subOrganization: (decoded as any).subOrganization ?? null,
       permissions: decoded.permissions ?? {},
     };
 

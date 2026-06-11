@@ -2,7 +2,7 @@
 
 import { use } from "react";
 import Link from "next/link";
-import { useAdminEmployee } from "@/modules/admin/hooks/useAdminEmployees";
+import { useAdminEmployee, useAdminEmployeeAssignments } from "@/modules/admin/hooks/useAdminEmployees";
 import { ProfileHeader } from "@/components/profile/ProfileHeader";
 import { ProfileTabs } from "@/components/profile/ProfileTabs";
 import { GeneralTab } from "@/components/profile/tabs/GeneralTab";
@@ -16,6 +16,9 @@ import { SalaryTab } from "@/components/profile/tabs/SalaryTab";
 import { BankTab } from "@/components/profile/tabs/BankTab";
 import { LeaveTab } from "@/components/profile/tabs/LeaveTab";
 import { Skeleton } from "@/components/ui/skeleton";
+import { EmploymentHistory } from "@/components/employees/EmploymentHistory";
+import { InstituteTransferDialog } from "@/components/employees/InstituteTransferDialog";
+import { DesignationUpgradeDialog } from "@/components/employees/DesignationUpgradeDialog";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -24,11 +27,13 @@ interface PageProps {
 export default function AdminEmployeeProfilePage({ params }: PageProps) {
   const { id } = use(params);
   const { data: rawEmployee, isLoading: loading, refetch } = useAdminEmployee(id);
+  const assignmentsQ = useAdminEmployeeAssignments(id);
 
   const employee = rawEmployee ? {
     ...rawEmployee.generalInfo,
     ...rawEmployee.personalInfo,
     ...rawEmployee.otherInfo,
+    ...rawEmployee.bankInfo,
     ...rawEmployee, // Spreading rawEmployee last ensures its 'id' (Int) takes precedence
     employeeCode: rawEmployee.generalInfo?.employeeCode || `EMP-${rawEmployee.id.toString().padStart(4, '0')}`,
   } : null;
@@ -60,7 +65,7 @@ export default function AdminEmployeeProfilePage({ params }: PageProps) {
     { value: "address",   label: "Address",   content: <AddressTab   employeeId={id} isAdmin /> },
     { value: "other",     label: "Other",     content: <OtherTab     employee={employee} employeeId={id} isAdmin onUpdate={refetch} /> },
     { value: "salary",    label: "Salary",    content: <SalaryTab    employee={employee} isAdmin /> },
-    { value: "bank",      label: "Bank",      content: <BankTab      employee={employee} isAdmin /> },
+    { value: "bank",      label: "Bank",      content: <BankTab      employee={employee} isAdmin onUpdate={refetch} /> },
     { value: "family",    label: "Family",    content: <FamilyTab    employeeId={id} isAdmin /> },
     { value: "education", label: "Education", content: <EducationTab employeeId={id} isAdmin /> },
     { value: "experience", label: "Experience", content: <ExperienceTab employeeId={id} isAdmin /> },
@@ -76,10 +81,20 @@ export default function AdminEmployeeProfilePage({ params }: PageProps) {
         employee={employee}
         showAuditLog
         actions={
-          <span className="text-xs px-2 py-1 rounded bg-[#d9b557]/20 text-[#1d3459] font-medium">
-            HR View
-          </span>
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            <InstituteTransferDialog employeeId={id} />
+            <DesignationUpgradeDialog employeeId={id} />
+            <span className="text-xs px-2 py-1 rounded bg-[#d9b557]/20 text-[#1d3459] font-medium">
+              HR View
+            </span>
+          </div>
         }
+      />
+
+      <EmploymentHistory
+        assignments={assignmentsQ.data ?? []}
+        currentSubOrg={employee.subOrganization ?? null}
+        currentDesignation={employee.designation ?? null}
       />
       <ProfileTabs tabs={tabs} defaultTab="general" />
     </div>

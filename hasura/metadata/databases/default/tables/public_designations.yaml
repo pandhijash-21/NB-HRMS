@@ -1,0 +1,11 @@
+table:
+  name: designations
+  schema: public
+array_relationships:
+  - name: salary_structure_templates
+    using:
+      foreign_key_constraint_on:
+        column: designation_id
+        table:
+          name: salary_structure_templates
+          schema: public

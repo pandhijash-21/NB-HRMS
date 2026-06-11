@@ -1,8 +1,15 @@
 import { z } from 'zod';
 
 export const CreateUserSchema = z.object({
-  employeeId: z.coerce.number().int().positive(),
+  employeeId: z.coerce.number().int().positive().optional(),
+  username: z.string().min(2).max(64).optional(),
+  password: z.string().min(8).optional(),
+  subOrganization: z.string().min(1).max(64).optional(),
   roleId:     z.string().uuid(),
+}).refine((d) => d.employeeId !== undefined || d.username !== undefined, {
+  message: 'Either employeeId or username is required',
+}).refine((d) => (d.username ? !!d.password : true), {
+  message: 'Password is required when creating a username-based account',
 });
 
 export const UpdateUserSchema = z.object({

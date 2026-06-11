@@ -2,15 +2,23 @@ import { prisma } from '../../config/prisma';
 import type { EmployeeStatus } from '@prisma/client';
 
 export const employeeService = {
-  async list(params: { search?: string; status?: string; limit?: number; offset?: number }) {
+  async list(params: { search?: string; status?: string; limit?: number; offset?: number; subOrganization?: string | null }) {
     const { search, status, limit = 20, offset = 0 } = params;
 
     const where: any = {};
     if (status) where.status = status as EmployeeStatus;
-    if (search) {
+    if (params.subOrganization) {
+      where.generalInfo = { ...(where.generalInfo ?? {}), subOrganization: params.subOrganization };
+    }
+    const s = search?.trim();
+    if (s) {
+      const isNumeric = /^\d+$/.test(s);
+      const numericId = isNumeric ? Number(s) : null;
+
       where.OR = [
-        { generalInfo: { fullName: { contains: search, mode: 'insensitive' } } },
-        { generalInfo: { employeeCode: { contains: search, mode: 'insensitive' } } },
+        { generalInfo: { fullName: { contains: s, mode: 'insensitive' } } },
+        { generalInfo: { employeeCode: { contains: s, mode: 'insensitive' } } },
+        ...(numericId !== null && Number.isFinite(numericId) ? [{ id: numericId }] : []),
       ];
     }
 
@@ -36,6 +44,7 @@ export const employeeService = {
         personalInfo: true, // NOTE: encrypted fields exist here; do NOT expose decrypted via this service
         addresses: true,
         otherInfo: true,
+        bankInfo: true,
         familyMembers: true,
         academicQuals: true,
       },
@@ -51,6 +60,13 @@ export const employeeService = {
     joiningDate: Date;
     employeeCategory: string;
     employeeCode: string;
+    firstApproverUserId?: string | null;
+    secondApproverUserId?: string | null;
+    thirdApproverUserId?: string | null;
+    // legacy
+    firstReportingId?: number | null;
+    secondReportingId?: number | null;
+    thirdReportingId?: number | null;
   }, creatorId: string) {
     return prisma.$transaction(async (tx) => {
       // 1. Get Employee Role ID
@@ -69,18 +85,31 @@ export const employeeService = {
         },
       });
 
+      const designationRef = await tx.designation.findFirst({
+        where: { name: input.designation, isAlias: false },
+      });
+
       // 3. Create General Info
       await tx.employeeGeneralInfo.create({
         data: {
           employeeId: employee.id,
           fullName: input.fullName,
           designation: input.designation,
+          designationId: designationRef?.id ?? null,
           department: input.department,
           joiningDate: input.joiningDate,
           originalJoiningDate: input.joiningDate,
           employeeCategory: input.employeeCategory as any,
           organization: 'GANDHINAGAR UNIVERSITY',
           employeeCode: input.employeeCode,
+          // New (preferred)
+          firstApproverUserId:  input.firstApproverUserId  ?? null,
+          secondApproverUserId: input.secondApproverUserId ?? null,
+          thirdApproverUserId:  input.thirdApproverUserId  ?? null,
+          // Legacy (kept as null unless provided)
+          firstReportingId:  input.firstReportingId  ?? null,
+          secondReportingId: input.secondReportingId ?? null,
+          thirdReportingId:  input.thirdReportingId  ?? null,
           updatedBy: creatorId,
         },
       });
@@ -128,6 +157,49 @@ export const employeeService = {
         }
       });
     });
+  },
+
+  async listNames() {
+    const employees = await prisma.employee.findMany({
+      where: { status: 'ACTIVE' },
+      select: {
+        id: true,
+        userId: true,
+        generalInfo: {
+          select: { fullName: true, employeeCode: true },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    const employeeItems = employees
+      .filter((e) => e.generalInfo?.fullName)
+      .map((e) => ({
+        type: 'EMPLOYEE' as const,
+        id: e.id,
+        userId: e.userId,
+        fullName: e.generalInfo!.fullName,
+        employeeCode: e.generalInfo!.employeeCode,
+      }));
+
+    const positionUsers = await prisma.user.findMany({
+      where: { employeeId: null, isActive: true, username: { not: null } },
+      select: {
+        id: true,
+        username: true,
+        role: { select: { name: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const positionItems = positionUsers.map((u) => ({
+      type: 'POSITION' as const,
+      id: u.id,
+      userId: u.id,
+      fullName: u.username ?? 'Position Account',
+      employeeCode: u.role.name,
+    }));
+
+    return [...employeeItems, ...positionItems];
   },
 
   async softDelete(employeeId: number, requesterId: string) {

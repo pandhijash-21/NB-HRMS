@@ -635,17 +635,17 @@ export default function LeaveSettingsPage() {
             </div>
           ) : (
             <div>
-              <SettingRow {...rowProps} settingKey="hod_window_hours" label="HOD Window (hours)"
-                description="Hours the Head of Department has to recommend or reject"
-                tooltip="After an employee applies, the HOD must act within this many hours. On expiry the 'Timeout Action' below applies."
+              <SettingRow {...rowProps} settingKey="hod_window_hours" label="1st Reporting Window (hours)"
+                description="Hours the 1st reporting manager has to recommend or reject"
+                tooltip="After an employee applies, the 1st reporting manager must act within this many hours. On expiry the 'Timeout Action' below applies."
                 type="number" />
-              <SettingRow {...rowProps} settingKey="hoi_window_hours" label="HOI Window (hours)"
-                description="Hours the Head of Institution (Principal) has to recommend or reject"
-                tooltip="After HOD recommends, the HOI must act within this many hours."
+              <SettingRow {...rowProps} settingKey="hoi_window_hours" label="2nd Reporting Window (hours)"
+                description="Hours the 2nd reporting manager has to recommend or reject"
+                tooltip="After the 1st reporting manager recommends, the 2nd reporting manager must act within this many hours."
                 type="number" />
-              <SettingRow {...rowProps} settingKey="global_window_hours" label="Vice Chancellor / Registrar Window (hours)"
-                description="Hours the final approver (VC or Registrar) has to approve or reject"
-                tooltip="Either the Vice Chancellor or the Registrar can complete the final approval. Whichever acts first finalises the application."
+              <SettingRow {...rowProps} settingKey="global_window_hours" label="3rd Reporting Window (hours)"
+                description="Hours the 3rd reporting manager has to approve or reject"
+                tooltip="The 3rd reporting manager is the final approver and must act within this many hours."
                 type="number" />
               <SettingRow {...rowProps} settingKey="approver_timeout_action" label="On Timeout"
                 description="What happens when an approver does not act within their window"

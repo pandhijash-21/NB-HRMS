@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useCallback } from "react";
-import { getSession } from "next-auth/react";
+import { useSession } from "next-auth/react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "http://localhost:4000/api";
 
@@ -19,14 +19,14 @@ interface UseSSEOptions {
  * Automatically reconnects on disconnect with exponential backoff.
  */
 export function useSSE(options: UseSSEOptions) {
+  const { data: session, status } = useSession();
   const esRef = useRef<EventSource | null>(null);
   const retryTimeout = useRef<NodeJS.Timeout | null>(null);
   const retryCount = useRef(0);
 
-  const connect = useCallback(async () => {
-    const session = await getSession();
-    const token = (session?.user as any)?.token;
-    if (!token) return; // not logged in
+  const connect = useCallback(() => {
+    const token = (session?.user as { token?: string })?.token;
+    if (!token) return;
 
     const url = `${API_URL}/events/stream?token=${encodeURIComponent(token)}`;
 
@@ -60,13 +60,14 @@ export function useSSE(options: UseSSEOptions) {
       retryCount.current++;
       retryTimeout.current = setTimeout(connect, delay);
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [session?.user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    if (status !== "authenticated") return;
     connect();
     return () => {
       esRef.current?.close();
       if (retryTimeout.current) clearTimeout(retryTimeout.current);
     };
-  }, [connect]);
+  }, [status, connect]);
 }

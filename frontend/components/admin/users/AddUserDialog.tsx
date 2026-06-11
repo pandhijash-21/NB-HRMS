@@ -73,6 +73,7 @@ export function AddUserDialog({ onUserAdded }: { onUserAdded: () => void }) {
             />
             <p className="text-[10px] text-slate-400">The internal employee ID (numeric)</p>
           </div>
+
           <div className="space-y-2">
             <label className="text-xs font-bold text-slate-500 uppercase">Assign Role</label>
             <Select value={roleId} onValueChange={setRoleId} disabled={rolesLoading}>

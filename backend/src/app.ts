@@ -10,6 +10,9 @@ import { userMgmtRouter } from './modules/user-management';
 import { approvalsRouter } from './modules/approvals';
 import { eventsRouter as sseEventsRouter } from './modules/events';
 import { leaveRouter } from './modules/leave';
+import { attendanceRouter } from './modules/attendance';
+import { designationRouter } from './modules/designation';
+import { salaryRouter } from './modules/salary';
 import { env } from './config/env';
 import { configureCloudinary } from './config/cloudinary';
 import { connectRedis } from './config/redis';
@@ -59,6 +62,9 @@ app.use('/api/otp', otpRouter);
 app.use('/api/admin', userMgmtRouter);
 app.use('/api/approvals', approvalsRouter);
 app.use('/api/leave', leaveRouter);
+app.use('/api/attendance', attendanceRouter);
+app.use('/api/admin', designationRouter);
+app.use('/api/salary', salaryRouter);
 app.use('/api/events', sseEventsRouter);
 
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

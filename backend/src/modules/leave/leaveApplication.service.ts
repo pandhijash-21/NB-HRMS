@@ -3,6 +3,7 @@ import { calculateLeaveDays } from './leaveDayCalculator.service';
 import { leaveBalanceService } from './leaveBalance.service';
 import { leaveApprovalWorkflowService } from './leaveApprovalWorkflow.service';
 import { leaveNotificationService } from './leaveNotification.service';
+import { employmentChangeService } from '../personal-education/employmentChange.service';
 
 function toUtcDateOnly(d: Date | string) {
   const src = new Date(d);
@@ -85,10 +86,12 @@ export const leaveApplicationService = {
     if (overlap) throw new Error('Overlapping leave application already exists for this period');
 
     // Create application
+    const assignmentId = await employmentChangeService.resolveAssignmentIdForLeave({ employeeId: input.employeeId, fromDate: from });
     const app = await prisma.leaveApplication.create({
       data: {
         applicationNo: generateApplicationNo(),
         employeeId: input.employeeId,
+        assignmentId,
         leaveTypeId: input.leaveTypeId,
         fromDate: from,
         toDate: to,
@@ -195,6 +198,7 @@ export const leaveApplicationService = {
         include: {
           leaveType: { select: { name: true, code: true } },
           approvalSteps: { where: { isSuperseded: false }, orderBy: { stepNumber: 'asc' } },
+          assignment: { select: { subOrganization: true, designation: true, department: true, effectiveFrom: true, effectiveTo: true } },
           employee: {
             include: {
               generalInfo: { select: { fullName: true, employeeCode: true, designation: true, department: true } },
@@ -214,6 +218,7 @@ export const leaveApplicationService = {
       include: {
         leaveType: true,
         approvalSteps: { orderBy: { stepNumber: 'asc' } },
+        assignment: { select: { subOrganization: true, designation: true, department: true, effectiveFrom: true, effectiveTo: true } },
         employee: {
           include: {
             generalInfo: { select: { fullName: true, employeeCode: true, designation: true, department: true } },
@@ -232,14 +237,14 @@ export const leaveApplicationService = {
     });
   },
 
-  /** Pending applications for approver (by employee id) */
-  async getPendingForApprover(approverEmployeeId: number) {
+  /** Pending applications for approver (by user id — works for position accounts too) */
+  async getPendingForApprover(approverUserId: string) {
     return prisma.leaveApplication.findMany({
       where: {
         status: 'PENDING',
         approvalSteps: {
           some: {
-            approverId: approverEmployeeId,
+            approverUserId,
             action: null,
             isSuperseded: false,
           },
@@ -248,6 +253,7 @@ export const leaveApplicationService = {
       include: {
         leaveType: { select: { name: true, code: true } },
         approvalSteps: { where: { isSuperseded: false }, orderBy: { stepNumber: 'asc' } },
+        assignment: { select: { subOrganization: true, designation: true, department: true, effectiveFrom: true, effectiveTo: true } },
         employee: {
           include: {
             generalInfo: { select: { fullName: true, employeeCode: true, designation: true, department: true } },

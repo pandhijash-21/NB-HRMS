@@ -5,20 +5,21 @@ import api from "@/lib/axios";
 
 export interface User {
   id: string; // The user ID
-  employeeId: number;
+  employeeId: number | null;
+  username?: string | null;
   isActive: boolean;
   roleId: string;
   role: {
     id: string;
     name: string;
   };
-  employee: {
+  employee?: {
     employeeCode: string;
     fullName: string;
     photoUrl: string | null;
     designation: string;
     department: string;
-  };
+  } | null;
   lastLoginAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -56,7 +57,7 @@ export function useUsersList(params?: { search?: string; status?: string; roleId
 }
 
 export function useUserMgmtActions() {
-  const createUser = async (data: { employeeId: number; roleId: string }) => {
+  const createUser = async (data: { employeeId?: number; username?: string; password?: string; subOrganization?: string; roleId: string }) => {
     const res = await api.post("/admin/users", data);
     return res.data;
   };

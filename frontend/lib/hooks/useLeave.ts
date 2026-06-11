@@ -51,7 +51,7 @@ export interface LeaveApprovalStep {
   id: string;
   stepNumber: number;
   approverRole: string;
-  approverId?: number | null;
+  approverUserId?: string | null;
   action?: string | null;
   remarks?: string | null;
   actionAt?: string | null;

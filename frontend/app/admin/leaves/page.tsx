@@ -39,8 +39,8 @@ const STATUS_STYLES: Record<string, string> = {
 
 const STATUS_LABELS: Record<string, string> = {
   PENDING:          "Pending",
-  HOD_RECOMMENDED:  "HOD Recommended",
-  HOI_RECOMMENDED:  "HOI Recommended",
+  HOD_RECOMMENDED:  "1st Reporting Recommended",
+  HOI_RECOMMENDED:  "2nd Reporting Recommended",
   APPROVED:         "Approved",
   REJECTED:         "Rejected",
   CANCELLED:        "Cancelled",
@@ -48,10 +48,11 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const STEP_ROLE_LABELS: Record<string, string> = {
-  HOD:       "Dept. Head",
-  HOI:       "Principal",
-  REGISTRAR: "Registrar",
-  VC:        "Vice Chancellor",
+  FIRST_REPORTING:  "1st Reporting",
+  SECOND_REPORTING: "2nd Reporting",
+  THIRD_REPORTING:  "3rd Reporting",
+  // kept for historical data display
+  HOD: "Dept. Head", HOI: "Principal", VC: "Vice Chancellor", REGISTRAR: "Registrar",
 };
 
 function ApprovalPipeline({ steps }: { steps: LeaveApplication["approvalSteps"] }) {

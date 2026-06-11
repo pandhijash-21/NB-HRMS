@@ -5,14 +5,17 @@ import { authConfig } from "@/app/api/auth/[...nextauth]/route";
 import { redirect } from "next/navigation";
 import { AppProviders } from "../providers";
 
-const APPROVER_ROLES = ["HOD", "HOI", "REGISTRAR", "VC"];
+// Any authenticated employee can be a reporting manager
+const APPROVER_ROLES = ["HOD", "HOI", "REGISTRAR", "VC", "EMPLOYEE", "HR", "ADMIN"];
 
 export const ROLE_LABELS: Record<string, string> = {
-  HOD:       "Head of Department",
-  HOI:       "Head of Institution",
-  REGISTRAR: "Registrar",
-  VC:        "Vice Chancellor",
-  ADMIN:     "Administrator",
+  FIRST_REPORTING:  "1st Reporting Manager",
+  SECOND_REPORTING: "2nd Reporting Manager",
+  THIRD_REPORTING:  "3rd Reporting Manager",
+  // kept for historical data
+  HOD: "Head of Department", HOI: "Head of Institution",
+  REGISTRAR: "Registrar", VC: "Vice Chancellor",
+  ADMIN: "Administrator", HR: "HR", EMPLOYEE: "Reporting Manager",
 };
 
 const approverNav = [
@@ -73,12 +76,14 @@ const approverNav = [
 export default async function ApproverLayout({ children }: { children: React.ReactNode }) {
   const session = await getServerSession(authConfig) as any;
   const role = (session?.user as any)?.role ?? "";
+  const subOrg = (session?.user as any)?.subOrganization ?? null;
 
-  if (!session || !APPROVER_ROLES.includes(role)) {
-    redirect("/dashboard");
+  if (!session) {
+    redirect("/login");
   }
 
-  const roleLabel = ROLE_LABELS[role] ?? role;
+  const roleLabel = ROLE_LABELS[role] ?? "Reporting Manager";
+  const subtitle = subOrg ? `${roleLabel} - ${String(subOrg).toUpperCase()}` : roleLabel;
 
   return (
     <AppProviders>
@@ -86,11 +91,11 @@ export default async function ApproverLayout({ children }: { children: React.Rea
         <div className="app-main">
           <Sidebar
             title="HRMS"
-            subtitle={roleLabel}
+            subtitle={subtitle}
             navGroups={approverNav}
           />
           <div className="flex flex-col flex-1 min-w-0">
-            <Topbar title={roleLabel} />
+            <Topbar title={subtitle} />
             <main className="app-content">{children}</main>
           </div>
         </div>

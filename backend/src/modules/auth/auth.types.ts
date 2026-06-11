@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const LoginSchema = z.object({
-  employeeId: z.coerce.number().int().positive(),
+  identifier: z.string().min(1, 'Employee ID or Username is required'),
   password: z.string().min(1, 'Password is required'),
 });
 

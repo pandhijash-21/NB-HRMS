@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { generalInfoSchema, type GeneralInfoFormData } from "@/lib/validators/generalInfo.schema";
@@ -17,6 +17,9 @@ import {
 } from "@/components/ui/select";
 import { useMutation } from "@apollo/client/react";
 import { UPDATE_EMPLOYEE_GENERAL } from "@/lib/graphql";
+import { useEmployeeNames } from "@/modules/admin/hooks/useAdminEmployees";
+import { DESIGNATIONS } from "@/lib/constants/designations";
+import { Badge } from "@/components/ui/badge";
 
 const INSTITUTES = [
   "Gandhinagar Institute of Technology",
@@ -54,11 +57,24 @@ function Field({ label, value }: { label: string; value?: string | null }) {
 export function GeneralTab({ employee, isAdmin, onUpdate }: GeneralTabProps) {
   const [editing, setEditing] = useState(false);
   const [mutate, { loading }] = useMutation(UPDATE_EMPLOYEE_GENERAL);
+  const { data: employeeNames = [] } = useEmployeeNames();
+
+  const selectableEmployees = useMemo(() => {
+    return employeeNames;
+  }, [employeeNames, employee.id]);
+
+  const resolveApproverLabel = (userId?: string | null) => {
+    if (!userId) return null;
+    const match = employeeNames.find((e) => e.userId === userId);
+    if (!match) return userId;
+    return `${match.fullName}${match.employeeCode ? ` (${match.employeeCode})` : ""}`;
+  };
 
   const {
     register,
     handleSubmit,
     setValue,
+    watch,
     formState: { errors },
   } = useForm<GeneralInfoFormData>({
     resolver: zodResolver(generalInfoSchema),
@@ -71,8 +87,9 @@ export function GeneralTab({ employee, isAdmin, onUpdate }: GeneralTabProps) {
       subOrganization: (employee.subOrganization as string) ?? "",
       department: (employee.department as string) ?? "",
       functionalDepartment: (employee.functionalDepartment as string) ?? "",
-      firstReporting: (employee.firstReporting as string) ?? "",
-      secondReporting: (employee.secondReporting as string) ?? "",
+      firstApproverUserId: (employee.firstApproverUserId as string | null) ?? null,
+      secondApproverUserId: (employee.secondApproverUserId as string | null) ?? null,
+      thirdApproverUserId: (employee.thirdApproverUserId as string | null) ?? null,
       employeeCategory: (employee.employeeCategory as GeneralInfoFormData["employeeCategory"]) ?? "NON_TEACHING",
       designation: (employee.designation as string) ?? "",
       shift: (employee.shift as string) ?? "",
@@ -96,8 +113,9 @@ export function GeneralTab({ employee, isAdmin, onUpdate }: GeneralTabProps) {
           employee_category: data.employeeCategory,
           appointment_type: data.appointmentType,
           shift: data.shift,
-          first_reporting: data.firstReporting,
-          second_reporting: data.secondReporting,
+          first_approver_user_id: data.firstApproverUserId ?? null,
+          second_approver_user_id: data.secondApproverUserId ?? null,
+          third_approver_user_id: data.thirdApproverUserId ?? null,
           increment_month: data.incrementMonth,
         },
       },
@@ -145,8 +163,9 @@ export function GeneralTab({ employee, isAdmin, onUpdate }: GeneralTabProps) {
             <Field label="Joining Date" value={employee.joiningDate ? new Date(employee.joiningDate as string).toLocaleDateString("en-IN") : undefined} />
             <Field label="Original Joining Date" value={employee.originalJoiningDate ? new Date(employee.originalJoiningDate as string).toLocaleDateString("en-IN") : undefined} />
             <Field label="Increment Month" value={employee.incrementMonth as string} />
-            <Field label="First Reporting" value={employee.firstReporting as string} />
-            <Field label="Second Reporting" value={employee.secondReporting as string} />
+            <Field label="First Reporting" value={resolveApproverLabel(employee.firstApproverUserId as string | null)} />
+            <Field label="Second Reporting" value={resolveApproverLabel(employee.secondApproverUserId as string | null)} />
+            <Field label="Third Reporting" value={resolveApproverLabel(employee.thirdApproverUserId as string | null)} />
           </div>
         </CardContent>
       </Card>
@@ -180,6 +199,14 @@ export function GeneralTab({ employee, isAdmin, onUpdate }: GeneralTabProps) {
             </div>
           </div>
 
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            <div className="font-semibold">Institute transfer & promotion history</div>
+            <div className="mt-0.5">
+              Designation/Sub-Organization changes are tracked via <span className="font-semibold">Institute Transfer</span> and{" "}
+              <span className="font-semibold">Designation Upgrade</span> (effective-dated). They are read-only here to preserve history.
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div className="space-y-1">
               <Label>Full Name *</Label>
@@ -190,7 +217,31 @@ export function GeneralTab({ employee, isAdmin, onUpdate }: GeneralTabProps) {
             </div>
             <div className="space-y-1">
               <Label>Designation *</Label>
-              <Input {...register("designation")} />
+              <Select
+                value={watch("designation")}
+                onValueChange={(v) => setValue("designation", v, { shouldValidate: true })}
+                disabled
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select designation..." />
+                </SelectTrigger>
+                <SelectContent className="max-h-[240px]">
+                  {/* keep current value selectable even if it's not in the predefined list */}
+                  {watch("designation") && !(DESIGNATIONS as readonly string[]).includes(watch("designation")) ? (
+                    <SelectItem value={watch("designation")}>
+                      {watch("designation")} (existing)
+                    </SelectItem>
+                  ) : null}
+                  {DESIGNATIONS.map((d) => (
+                    <SelectItem key={d} value={d}>
+                      {d}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <div className="flex gap-2 flex-wrap">
+                <Badge variant="outline" className="text-[10px]">Managed via Designation Upgrade</Badge>
+              </div>
               {errors.designation && (
                 <p className="text-xs text-rose-500">{errors.designation.message}</p>
               )}
@@ -218,6 +269,7 @@ export function GeneralTab({ employee, isAdmin, onUpdate }: GeneralTabProps) {
               <Select
                 defaultValue={(employee.subOrganization as string) ?? ""}
                 onValueChange={(v) => setValue("subOrganization", v)}
+                disabled
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select institute..." />
@@ -228,6 +280,9 @@ export function GeneralTab({ employee, isAdmin, onUpdate }: GeneralTabProps) {
                   ))}
                 </SelectContent>
               </Select>
+              <div className="flex gap-2 flex-wrap">
+                <Badge variant="outline" className="text-[10px]">Managed via Institute Transfer</Badge>
+              </div>
             </div>
             <div className="space-y-1">
               <Label>Employee Category *</Label>
@@ -282,11 +337,60 @@ export function GeneralTab({ employee, isAdmin, onUpdate }: GeneralTabProps) {
             </div>
             <div className="space-y-1">
               <Label>First Reporting Manager</Label>
-              <Input {...register("firstReporting")} />
+              <Select
+                value={watch("firstApproverUserId") == null ? "__null__" : String(watch("firstApproverUserId"))}
+                onValueChange={(v) => setValue("firstApproverUserId", v === "__null__" ? null : v)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select approver..." />
+                </SelectTrigger>
+                <SelectContent className="max-h-[220px]">
+                  <SelectItem value="__null__" className="text-[10px] font-extrabold text-slate-500">NULL (bypass this layer)</SelectItem>
+                  {selectableEmployees.map((emp) => (
+                    <SelectItem key={emp.userId} value={emp.userId} className="text-[10px] font-medium py-2">
+                      {emp.fullName}{emp.employeeCode ? ` (${emp.employeeCode})` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1">
               <Label>Second Reporting Manager</Label>
-              <Input {...register("secondReporting")} />
+              <Select
+                value={watch("secondApproverUserId") == null ? "__null__" : String(watch("secondApproverUserId"))}
+                onValueChange={(v) => setValue("secondApproverUserId", v === "__null__" ? null : v)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select approver..." />
+                </SelectTrigger>
+                <SelectContent className="max-h-[220px]">
+                  <SelectItem value="__null__" className="text-[10px] font-extrabold text-slate-500">NULL (bypass this layer)</SelectItem>
+                  {selectableEmployees.map((emp) => (
+                    <SelectItem key={emp.userId} value={emp.userId} className="text-[10px] font-medium py-2">
+                      {emp.fullName}{emp.employeeCode ? ` (${emp.employeeCode})` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>Third Reporting Manager</Label>
+              <Select
+                value={watch("thirdApproverUserId") == null ? "__null__" : String(watch("thirdApproverUserId"))}
+                onValueChange={(v) => setValue("thirdApproverUserId", v === "__null__" ? null : v)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select approver..." />
+                </SelectTrigger>
+                <SelectContent className="max-h-[220px]">
+                  <SelectItem value="__null__" className="text-[10px] font-extrabold text-slate-500">NULL (bypass this layer)</SelectItem>
+                  {selectableEmployees.map((emp) => (
+                    <SelectItem key={emp.userId} value={emp.userId} className="text-[10px] font-medium py-2">
+                      {emp.fullName}{emp.employeeCode ? ` (${emp.employeeCode})` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </form>

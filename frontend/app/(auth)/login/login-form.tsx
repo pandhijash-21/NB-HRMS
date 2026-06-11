@@ -8,7 +8,7 @@ import { Eye, EyeOff, Hash } from "lucide-react";
 export default function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [employeeId, setEmployeeId] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,7 +22,7 @@ export default function LoginForm() {
 
     const result = await signIn("credentials", {
       redirect: false,
-      employeeId,
+      identifier,
       password,
       callbackUrl,
     });
@@ -30,7 +30,7 @@ export default function LoginForm() {
     setLoading(false);
 
     if (!result || result.error) {
-      setError("Invalid Employee ID or password. Please try again.");
+      setError("Invalid Employee ID/Username or password. Please try again.");
       return;
     }
 
@@ -57,20 +57,20 @@ export default function LoginForm() {
   return (
     <form className="space-y-6" onSubmit={handleSubmit}>
       <div className="space-y-1.5">
-        <label htmlFor="employeeId" className="block text-xs font-semibold tracking-wide text-white/80 uppercase">
-          Employee ID
+        <label htmlFor="identifier" className="block text-xs font-semibold tracking-wide text-white/80 uppercase">
+          Employee ID / Username
         </label>
         <div className="relative">
           <input
-            id="employeeId"
-            name="employeeId"
-            type="number"
+            id="identifier"
+            name="identifier"
+            type="text"
             autoComplete="username"
             required
             className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 pl-11 text-sm text-white placeholder-white/30 outline-none focus:border-white/30 focus:bg-white/10 focus:ring-2 focus:ring-white/20 transition-all duration-300"
-            placeholder="e.g. 1"
-            value={employeeId}
-            onChange={(e) => setEmployeeId(e.target.value)}
+            placeholder="e.g. 3 or HOD_CE_IT"
+            value={identifier}
+            onChange={(e) => setIdentifier(e.target.value)}
           />
           <Hash className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30 w-4 h-4" />
         </div>
@@ -131,7 +131,7 @@ export default function LoginForm() {
       </button>
 
       <p className="text-center text-xs text-white/30 pt-4 pb-2">
-        Use your <strong className="text-white/50">Employee ID</strong> and password to sign in
+        Use your <strong className="text-white/50">Employee ID</strong> or <strong className="text-white/50">Position Username</strong> and password to sign in
       </p>
     </form>
   );

@@ -43,6 +43,25 @@ export function useCreateEmployee() {
   });
 }
 
+export interface EmployeeNameItem {
+  type: "EMPLOYEE" | "POSITION";
+  id: number | string;
+  userId: string;
+  fullName: string;
+  employeeCode: string | null;
+}
+
+export function useEmployeeNames() {
+  return useQuery({
+    queryKey: ["employees", "names"],
+    queryFn: async () => {
+      const { data } = await api.get(`employees/names`);
+      return data.data as EmployeeNameItem[];
+    },
+    staleTime: 60_000,
+  });
+}
+
 export function useAdminEmployee(id: string | number) {
   return useQuery({
     queryKey: ["admin", "employees", id],
@@ -51,6 +70,71 @@ export function useAdminEmployee(id: string | number) {
       return data.data;
     },
     enabled: !!id,
+  });
+}
+
+export type EmployeeAssignment = {
+  id: string;
+  employeeId: number;
+  effectiveFrom: string; // YYYY-MM-DD
+  effectiveTo: string | null; // YYYY-MM-DD
+  organization: string | null;
+  subOrganization: string | null;
+  department: string | null;
+  designation: string;
+  shift: string | null;
+  appointmentType: string | null;
+  reason: string | null;
+  changedBy: string;
+  createdAt: string;
+};
+
+export function useAdminEmployeeAssignments(employeeId: string | number) {
+  return useQuery({
+    queryKey: ["admin", "employees", employeeId, "assignments"],
+    queryFn: async () => {
+      const { data } = await api.get(`employees/${employeeId}/assignments`);
+      return data.data as EmployeeAssignment[];
+    },
+    enabled: !!employeeId,
+  });
+}
+
+export function useInstituteTransfer(employeeId: string | number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { newSubOrganization: string | null; effectiveFrom: string; reason?: string | null }) => {
+      const { data } = await api.post(`employees/${employeeId}/institute-transfer`, payload);
+      return data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "employees", employeeId] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "employees", employeeId, "assignments"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "employees"] });
+      toast.success("Institute transfer recorded");
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || "Institute transfer failed");
+    },
+  });
+}
+
+export function useDesignationUpgrade(employeeId: string | number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { newDesignation: string; effectiveFrom: string; reason?: string | null }) => {
+      const { data } = await api.post(`employees/${employeeId}/designation-upgrade`, payload);
+      return data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "employees", employeeId] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "employees", employeeId, "assignments"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "employees"] });
+      toast.success("Designation upgrade recorded");
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || "Designation upgrade failed");
+    },
   });
 }
 

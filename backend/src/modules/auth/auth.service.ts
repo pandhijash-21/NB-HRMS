@@ -56,9 +56,14 @@ async function deleteSession(userId: string, roleId?: string) {
 
 export const authService = {
   async login(input: LoginInput) {
-    // 1. Find user
+    const identifier = String(input.identifier).trim();
+    const isEmployeeId = /^\d+$/.test(identifier);
+
+    // 1. Find user (either employeeId login or username login for position accounts)
     const user = await prisma.user.findUnique({
-      where: { employeeId: input.employeeId },
+      where: isEmployeeId
+        ? { employeeId: Number(identifier) }
+        : { username: identifier },
       include: {
         role: {
           include: { permissions: true },
@@ -78,14 +83,19 @@ export const authService = {
 
     // 3. Build permissions map
     const permissions = buildPermissionsMap(user.role.permissions);
+    const scopeSubOrg =
+      user.employee?.generalInfo?.subOrganization ??
+      (user as any).subOrganization ??
+      null;
 
     // 4. Sign JWT
     const token = jwt.sign(
       {
         sub:         user.id,
-        employeeId:  user.employeeId,
+        employeeId:  user.employeeId ?? null,
         roleId:      user.roleId,
         roleName:    user.role.name,
+        subOrganization: scopeSubOrg,
         permissions,
       },
       env.JWT_SECRET,
@@ -104,11 +114,17 @@ export const authService = {
     return {
       token,
       isFirstLogin: user.isFirstLogin,
-      employee: {
-        id:       user.employeeId,
-        name:     user.employee?.generalInfo?.fullName ?? `Employee #${user.employeeId}`,
-        role:     user.role.name,
-        photoUrl: user.employee?.photoUrl ?? null,
+      user: {
+        id:         user.id,
+        employeeId: user.employeeId ?? null,
+        name:
+          user.employeeId
+            ? (user.employee?.generalInfo?.fullName ?? `Employee #${user.employeeId}`)
+            : (user.username ?? 'Position Account'),
+        role:       user.role.name,
+        photoUrl:   user.employee?.photoUrl ?? null,
+        username:   user.username ?? null,
+        subOrganization: scopeSubOrg,
       },
     };
   },

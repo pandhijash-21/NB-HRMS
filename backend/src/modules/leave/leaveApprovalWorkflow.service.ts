@@ -17,33 +17,62 @@ function addHours(d: Date, hours: number): Date {
 async function resolveApprovers(employeeId: number) {
   const gi = await prisma.employeeGeneralInfo.findUnique({
     where: { employeeId },
-    select: { department: true, subOrganization: true, organization: true },
+    select: {
+      // New (preferred)
+      firstApproverUserId: true,
+      secondApproverUserId: true,
+      thirdApproverUserId: true,
+      // Legacy fallback (employee ids)
+      firstReportingId: true,
+      secondReportingId: true,
+      thirdReportingId: true,
+    },
   });
   if (!gi) throw new Error('Employee general info not found');
 
-  const dept = gi.department;
-  const institute = gi.subOrganization ?? gi.organization;
+  // Prefer explicit approver user ids. If missing, fall back to legacy employee ids and map to Employee.userId.
+  const approverUserIds = {
+    firstApproverUserId: gi.firstApproverUserId ?? null,
+    secondApproverUserId: gi.secondApproverUserId ?? null,
+    thirdApproverUserId: gi.thirdApproverUserId ?? null,
+  };
 
-  const [deptRow, instRow, globalRow] = await Promise.all([
-    prisma.departmentApprover.findFirst({
-      where: { department: dept, isActive: true },
-      select: { hodEmployeeId: true },
-    }),
-    prisma.instituteApprover.findFirst({
-      where: { institute, isActive: true },
-      select: { hoiEmployeeId: true },
-    }),
-    prisma.globalApprover.findFirst({
-      where: { isActive: true },
-      select: { vcEmployeeId: true, registrarEmployeeId: true },
-    }),
-  ]);
+  const legacyEmployeeIds = {
+    firstReportingId: gi.firstReportingId ?? null,
+    secondReportingId: gi.secondReportingId ?? null,
+    thirdReportingId: gi.thirdReportingId ?? null,
+  };
+
+  const needsLegacy =
+    !approverUserIds.firstApproverUserId &&
+    !approverUserIds.secondApproverUserId &&
+    !approverUserIds.thirdApproverUserId &&
+    (legacyEmployeeIds.firstReportingId || legacyEmployeeIds.secondReportingId || legacyEmployeeIds.thirdReportingId);
+
+  if (!needsLegacy) {
+    return {
+      firstApproverUserId: approverUserIds.firstApproverUserId,
+      secondApproverUserId: approverUserIds.secondApproverUserId,
+      thirdApproverUserId: approverUserIds.thirdApproverUserId,
+    };
+  }
+
+  const ids = [
+    legacyEmployeeIds.firstReportingId,
+    legacyEmployeeIds.secondReportingId,
+    legacyEmployeeIds.thirdReportingId,
+  ].filter((x): x is number => typeof x === 'number' && Number.isFinite(x));
+
+  const employees = await prisma.employee.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, userId: true },
+  });
+  const toUserId = (eid: number | null) => employees.find((e) => e.id === eid)?.userId ?? null;
 
   return {
-    hodEmployeeId: deptRow?.hodEmployeeId ?? null,
-    hoiEmployeeId: instRow?.hoiEmployeeId ?? null,
-    vcEmployeeId: globalRow?.vcEmployeeId ?? null,
-    registrarEmployeeId: globalRow?.registrarEmployeeId ?? null,
+    firstApproverUserId: toUserId(legacyEmployeeIds.firstReportingId),
+    secondApproverUserId: toUserId(legacyEmployeeIds.secondReportingId),
+    thirdApproverUserId: toUserId(legacyEmployeeIds.thirdReportingId),
   };
 }
 
@@ -66,7 +95,8 @@ export const leaveApprovalWorkflowService = {
     if (!app) throw new Error('Application not found');
 
     // Fetch per-role windows in parallel; fall back to shared approver_window_hours
-    const [hodHours, hoiHours, globalHours, fallbackHours] = await Promise.all([
+    // Keys reuse existing hod/hoi/global settings rows — only UI labels change
+    const [firstHours, secondHours, thirdHours, fallbackHours] = await Promise.all([
       getLeaveSettingInt('hod_window_hours'),
       getLeaveSettingInt('hoi_window_hours'),
       getLeaveSettingInt('global_window_hours'),
@@ -79,34 +109,34 @@ export const leaveApprovalWorkflowService = {
       return h ? addHours(now, h) : undefined;
     };
 
-    const { hodEmployeeId, hoiEmployeeId, vcEmployeeId, registrarEmployeeId } =
+    const { firstApproverUserId, secondApproverUserId, thirdApproverUserId } =
       await resolveApprovers(app.employeeId);
 
     type StepRow = {
       stepNumber: number;
       approverRole: any;
-      approverId: number | null;
+      approverUserId: string | null;
       windowExpiresAt?: Date;
     };
     const steps: StepRow[] = [];
 
-    if (hodEmployeeId && hodEmployeeId !== app.employeeId) {
-      steps.push({ stepNumber: 1, approverRole: 'HOD', approverId: hodEmployeeId, windowExpiresAt: windowFor(hodHours) });
+    let stepNumber = 1;
+    if (firstApproverUserId) {
+      steps.push({ stepNumber, approverRole: 'FIRST_REPORTING', approverUserId: firstApproverUserId, windowExpiresAt: windowFor(firstHours) });
+      stepNumber += 1;
     }
-    if (hoiEmployeeId && hoiEmployeeId !== app.employeeId) {
-      steps.push({ stepNumber: 2, approverRole: 'HOI', approverId: hoiEmployeeId, windowExpiresAt: windowFor(hoiHours) });
-    }
-
-    const finalApprovers: Array<{ role: any; id: number }> = [];
-    if (vcEmployeeId) finalApprovers.push({ role: 'VC', id: vcEmployeeId });
-    if (registrarEmployeeId) finalApprovers.push({ role: 'REGISTRAR', id: registrarEmployeeId });
-
-    if (finalApprovers.length === 0) {
-      throw new Error('No final approver configured (VC/REGISTRAR)');
+    if (secondApproverUserId) {
+      steps.push({ stepNumber, approverRole: 'SECOND_REPORTING', approverUserId: secondApproverUserId, windowExpiresAt: windowFor(secondHours) });
+      stepNumber += 1;
     }
 
-    for (const fa of finalApprovers) {
-      steps.push({ stepNumber: 3, approverRole: fa.role, approverId: fa.id, windowExpiresAt: windowFor(globalHours) });
+    if (thirdApproverUserId) {
+      steps.push({ stepNumber, approverRole: 'THIRD_REPORTING', approverUserId: thirdApproverUserId, windowExpiresAt: windowFor(thirdHours) });
+      stepNumber += 1;
+    }
+
+    if (steps.length === 0) {
+      throw new Error('No reporting manager configured for this employee. Please set at least one reporting layer before applying for leave.');
     }
 
     await prisma.leaveApprovalStep.createMany({
@@ -114,7 +144,7 @@ export const leaveApprovalWorkflowService = {
         applicationId: app.id,
         stepNumber:    s.stepNumber,
         approverRole:  s.approverRole,
-        approverId:    s.approverId,
+        approverUserId: s.approverUserId,
         windowExpiresAt: s.windowExpiresAt,
       })),
     });
@@ -124,12 +154,12 @@ export const leaveApprovalWorkflowService = {
 
   async approveOrReject(params: {
     applicationId: string;
-    approverEmployeeId: number;
+    approverUserId: string;
     action: 'APPROVE' | 'REJECT';
     remarks?: string;
     actorId: string;
   }) {
-    const { applicationId, approverEmployeeId, action, remarks, actorId } = params;
+    const { applicationId, approverUserId, action, remarks, actorId } = params;
 
     return prisma.$transaction(async (tx) => {
       const app = await tx.leaveApplication.findUnique({
@@ -140,13 +170,14 @@ export const leaveApprovalWorkflowService = {
       if (app.status !== 'PENDING') throw new Error('Application is not pending');
 
       const steps = app.approvalSteps;
+      const finalTier = steps.length ? Math.max(...steps.map((s) => s.stepNumber)) : 0;
       const pendingSteps = steps.filter((s) => isPendingStep(s));
       if (pendingSteps.length === 0) throw new Error('No pending approval steps');
 
       const minTier = Math.min(...pendingSteps.map((s) => s.stepNumber));
       const tierPending = pendingSteps.filter((s) => s.stepNumber === minTier);
 
-      const myStep = tierPending.find((s) => s.approverId === approverEmployeeId);
+      const myStep = tierPending.find((s) => s.approverUserId === approverUserId);
       if (!myStep) {
         throw new Error('Not authorized for current approval tier');
       }
@@ -154,7 +185,7 @@ export const leaveApprovalWorkflowService = {
       const prismaAction =
         action === 'REJECT'
           ? 'REJECTED'
-          : minTier < 3
+          : minTier < finalTier
             ? 'RECOMMENDED'
             : 'APPROVED';
 
@@ -191,13 +222,13 @@ export const leaveApprovalWorkflowService = {
       }
 
       // If this tier is not final, just continue
-      if (minTier < 3) {
+      if (minTier < finalTier) {
         return { status: 'PENDING' as const };
       }
 
       // Final tier: first approval finalizes; supersede the other final approver (if any)
       await tx.leaveApprovalStep.updateMany({
-        where: { applicationId, id: { not: myStep.id }, stepNumber: 3, action: null, isSuperseded: false },
+        where: { applicationId, id: { not: myStep.id }, stepNumber: finalTier, action: null, isSuperseded: false },
         data: { isSuperseded: true },
       });
 

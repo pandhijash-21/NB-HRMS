@@ -26,21 +26,21 @@ import { CheckCircle2, XCircle, CalendarDays, User, Building2, Clock } from "luc
 import { formatDate } from "@/lib/utils";
 
 const ROLE_LABELS: Record<string, string> = {
-  HOD:       "Head of Department",
-  HOI:       "Head of Institution",
-  REGISTRAR: "Registrar",
-  VC:        "Vice Chancellor",
+  FIRST_REPORTING:  "1st Reporting Manager",
+  SECOND_REPORTING: "2nd Reporting Manager",
+  THIRD_REPORTING:  "3rd Reporting Manager",
+  // kept for historical data
+  HOD: "Head of Department", HOI: "Head of Institution",
+  REGISTRAR: "Registrar", VC: "Vice Chancellor",
 };
 
 const STEP_ROLE_LABELS: Record<string, string> = {
-  HOD:       "Dept. Head",
-  HOI:       "Principal",
-  REGISTRAR: "Registrar",
-  VC:        "Vice Chancellor",
+  FIRST_REPORTING:  "1st Reporting",
+  SECOND_REPORTING: "2nd Reporting",
+  THIRD_REPORTING:  "3rd Reporting",
+  // kept for historical data
+  HOD: "Dept. Head", HOI: "Principal", VC: "Vice Chancellor", REGISTRAR: "Registrar",
 };
-
-// HOD and HOI recommend; Registrar and VC do the final approval
-const RECOMMENDER_ROLES = ["HOD", "HOI"];
 
 type ActionDialog = { type: "approve" | "reject"; app: LeaveApplication } | null;
 
@@ -73,7 +73,8 @@ function StepBadge({ step }: { step: { approverRole: string; action?: string | n
 export default function PendingApprovalsPage() {
   const { data: session } = useSession();
   const role = (session?.user as any)?.role ?? "";
-  const roleLabel = ROLE_LABELS[role] ?? role;
+  const roleLabel = ROLE_LABELS[role] ?? "Reporting Manager";
+  const myUserId = String((session?.user as any)?.id ?? "");
 
   const { data: apps = [], isLoading, refetch } = usePendingApprovals();
   const { mutateAsync: approve, isPending: approving } = useApproveLeave();
@@ -82,8 +83,19 @@ export default function PendingApprovalsPage() {
   const [action, setAction] = useState<ActionDialog>(null);
   const [remarks, setRemarks] = useState("");
 
-  const isRecommender = RECOMMENDER_ROLES.includes(role);
-  const actionLabel   = isRecommender ? "Recommend" : "Approve";
+  // Determine if the current user is a recommender or final approver for a given application
+  // based on which step number they occupy (final tier is the max step number)
+  function getActionLabel(app: { approvalSteps: { stepNumber: number; approverId?: number | null; action?: string | null; isSuperseded: boolean }[] }) {
+    const myStep = app.approvalSteps.find(
+      (s: any) => s.approverUserId === myUserId && !s.isSuperseded && !s.action
+    );
+    const finalTier = app.approvalSteps.length
+      ? Math.max(...app.approvalSteps.map((s) => s.stepNumber))
+      : 0;
+    return myStep && myStep.stepNumber < finalTier ? "Recommend" : "Approve";
+  }
+
+  const actionLabel = action?.type === "approve" && action ? getActionLabel(action.app) : "Approve";
 
   const handleAction = async () => {
     if (!action) return;
@@ -241,7 +253,7 @@ export default function PendingApprovalsPage() {
                       }}
                     >
                       <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
-                      {actionLabel}
+                      {getActionLabel(app)}
                     </Button>
                     <Button
                       size="sm"
@@ -274,7 +286,7 @@ export default function PendingApprovalsPage() {
           <DialogHeader>
             <DialogTitle>
               {action?.type === "approve"
-                ? `${actionLabel} Leave Application`
+                ? `${action.app ? getActionLabel(action.app) : "Approve"} Leave Application`
                 : "Reject Leave Application"}
             </DialogTitle>
           </DialogHeader>

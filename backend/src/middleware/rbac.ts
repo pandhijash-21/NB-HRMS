@@ -22,6 +22,34 @@ export function requirePermission(moduleKey: string, action: PermissionAction) {
   };
 }
 
+/** Allow access when the route employeeId matches the logged-in employee, else require module permission. */
+export function requireSelfEmployeeOrPermission(
+  paramName: string,
+  moduleKey: string,
+  action: PermissionAction,
+) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (!req.user) return res.status(401).json(fail('Unauthenticated'));
+
+    const raw = req.params[paramName];
+    const targetId = Number(Array.isArray(raw) ? raw[0] : raw);
+    const selfId = req.user.employeeId;
+
+    if (Number.isFinite(targetId) && selfId != null && selfId === targetId) {
+      return next();
+    }
+
+    const actions = req.user.permissions?.[moduleKey] ?? [];
+    if (!actions.includes(action)) {
+      return res
+        .status(403)
+        .json(fail(`You do not have ${action} permission on ${moduleKey}`));
+    }
+
+    return next();
+  };
+}
+
 /**
  * Backward-compatible role guard — still used by existing personal-education routes.
  * Checks req.user.roleName (or req.user.role alias).

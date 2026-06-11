@@ -111,10 +111,10 @@ export const leaveAdminService = {
   },
 
   // ─── Applications ─────────────────────────────────────────────────────────────
-  async approveStep(applicationId: string, approverEmployeeId: number, actorId: string, remarks?: string) {
+  async approveStep(applicationId: string, approverUserId: string, actorId: string, remarks?: string) {
     const result = await leaveApprovalWorkflowService.approveOrReject({
       applicationId,
-      approverEmployeeId,
+      approverUserId,
       action: 'APPROVE',
       remarks,
       actorId,
@@ -136,10 +136,10 @@ export const leaveAdminService = {
     return result;
   },
 
-  async rejectStep(applicationId: string, approverEmployeeId: number, actorId: string, remarks?: string) {
+  async rejectStep(applicationId: string, approverUserId: string, actorId: string, remarks?: string) {
     const result = await leaveApprovalWorkflowService.approveOrReject({
       applicationId,
-      approverEmployeeId,
+      approverUserId,
       action: 'REJECT',
       remarks,
       actorId,

@@ -2,6 +2,7 @@ import { prisma } from '../../config/prisma';
 import { leaveBalanceService } from './leaveBalance.service';
 import { leaveNotificationService } from './leaveNotification.service';
 import { leaveAbsenceExpireQueue } from '../../jobs/leave/leave.queues';
+import { employmentChangeService } from '../personal-education/employmentChange.service';
 
 async function getLWPTypeId() {
   const lt = await prisma.leaveType.findUnique({ where: { code: 'LWP' }, select: { id: true } });
@@ -38,7 +39,14 @@ export const absenceLwpService = {
     if (existing) return existing;
 
     const record = await prisma.absenceRecord.create({
-      data: { employeeId, date: dateOnly, markedAt, windowExpiresAt, convertedToLwp: false },
+      data: {
+        employeeId,
+        date: dateOnly,
+        markedAt,
+        windowExpiresAt,
+        convertedToLwp: false,
+        assignmentId: await employmentChangeService.resolveAssignmentIdForLeave({ employeeId, fromDate: dateOnly }),
+      },
     });
 
     // Schedule expiry job in BullMQ (delayed until windowExpiresAt)
@@ -147,6 +155,7 @@ export const absenceLwpService = {
       where,
       orderBy: { date: 'desc' },
       include: {
+        assignment: { select: { subOrganization: true, designation: true, department: true, effectiveFrom: true, effectiveTo: true } },
         employee: {
           include: { generalInfo: { select: { fullName: true, employeeCode: true, designation: true, department: true } } },
         },

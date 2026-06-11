@@ -9,6 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { AddEmployeeDialog } from "@/components/employees/AddEmployeeDialog";
+import { CreatePositionAccountDialog } from "@/components/employees/CreatePositionAccountDialog";
 import { Trash2, MoreHorizontal, Eye, Search, Filter, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   DropdownMenu,
@@ -70,6 +71,7 @@ export default function EmployeeListPage() {
         
         <div className="flex items-center gap-3 w-full md:w-auto">
           <AddEmployeeDialog />
+          <CreatePositionAccountDialog />
         </div>
       </div>
 
@@ -78,7 +80,7 @@ export default function EmployeeListPage() {
         <div className="relative flex-1 w-full">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <Input
-                placeholder="Search by name or code..."
+                placeholder="Search by name, code, or ID..."
                 value={search}
                 onChange={(e) => { setSearch(e.target.value); setPage(0); }}
                 className="w-full pl-10 h-11 border-none bg-transparent focus-visible:ring-0 text-sm font-medium placeholder:text-slate-400"
@@ -147,7 +149,9 @@ export default function EmployeeListPage() {
                           </Avatar>
                           <div className="space-y-1">
                             <p className="font-bold text-slate-800 text-sm group-hover:text-[#1d3459] transition-colors">{info.fullName || "Loading..."}</p>
-                            <Badge variant="outline" className="text-[9px] font-extrabold text-slate-400 border-slate-200 uppercase tracking-widest px-2 py-0 h-4">{info.employeeCode || "N/A"}</Badge>
+                            <Badge variant="outline" className="text-[9px] font-extrabold text-slate-400 border-slate-200 uppercase tracking-widest px-2 py-0 h-4">
+                              {`ID ${emp.id}`}
+                            </Badge>
                           </div>
                         </div>
                       </td>

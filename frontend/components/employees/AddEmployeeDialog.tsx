@@ -23,9 +23,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useCreateEmployee } from "@/modules/admin/hooks/useAdminEmployees";
+import { useCreateEmployee, useEmployeeNames } from "@/modules/admin/hooks/useAdminEmployees";
 import { OtpVerification } from "@/components/shared/OtpVerification";
 import { PlusCircle, Loader2, UserPlus, ShieldAlert, CheckCircle2, Mail } from "lucide-react";
+import { useDesignations } from "@/lib/hooks/useDesignations";
 
 const INSTITUTES = [
   "Gandhinagar Institute of Technology",
@@ -61,10 +62,13 @@ const addEmployeeSchema = z.object({
     .or(z.literal("")),
   organization: z.enum(["Gandhinagar University", "Platinum Foundation"], "Organization is required"),
   subOrganization: z.string().min(1, "Sub-organization is required"),
-  designation: z.string().min(2, "Designation is required"),
+  designation: z.string().min(1, "Designation is required"),
   department: z.string().min(2, "Department is required"),
   employeeCategory: z.enum(["TEACHING", "NON_TEACHING", "CONTRACT", "VISITING"]),
   joiningDate: z.string().min(1, "Joining date is required"),
+  firstApproverUserId: z.string().nullable().optional(),
+  secondApproverUserId: z.string().nullable().optional(),
+  thirdApproverUserId: z.string().nullable().optional(),
 });
 
 type AddEmployeeForm = z.infer<typeof addEmployeeSchema>;
@@ -94,6 +98,8 @@ export function AddEmployeeDialog() {
   const [employeeCode] = useState(generateEmployeeCode());
   const [otpVerified, setOtpVerified] = useState(false);
   const createMutation = useCreateEmployee();
+  const { data: employeeNames = [] } = useEmployeeNames();
+  const { data: designations = [] } = useDesignations(false);
 
   const {
     register,
@@ -115,6 +121,9 @@ export function AddEmployeeDialog() {
       employeeCategory: "TEACHING",
       joiningDate: "",
       personalEmailVerified: false,
+      firstApproverUserId: null,
+      secondApproverUserId: null,
+      thirdApproverUserId: null,
     },
     mode: "onChange",
   });
@@ -152,6 +161,9 @@ export function AddEmployeeDialog() {
         abbreviation,
         employeeCode,
         institutionalEmail: data.institutionalEmail || undefined,
+        firstApproverUserId:  data.firstApproverUserId  ?? null,
+        secondApproverUserId: data.secondApproverUserId ?? null,
+        thirdApproverUserId:  data.thirdApproverUserId  ?? null,
       };
       await createMutation.mutateAsync(submissionData);
       setOpen(false);
@@ -328,12 +340,22 @@ export function AddEmployeeDialog() {
 
               <div className="space-y-2">
                 <Label htmlFor="designation" className="text-[10px] font-bold text-slate-400 uppercase ml-1">Designation *</Label>
-                <Input
-                  id="designation"
-                  {...register("designation")}
-                  placeholder="e.g. Asst. Professor"
-                  className="rounded-xl border-slate-200/60 bg-white focus:ring-2 focus:ring-[#1d3459]/10 transition-all text-sm h-11 font-medium"
-                />
+                <Select
+                  name="designation"
+                  onValueChange={(v) => setValue("designation", v, { shouldValidate: true })}
+                  value={watch("designation")}
+                >
+                  <SelectTrigger id="designation" className="rounded-xl border-slate-200/60 bg-white h-11 text-sm font-medium">
+                    <SelectValue placeholder="Select designation..." />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl border-slate-100 shadow-xl max-h-[220px]">
+                    {designations.map((d) => (
+                      <SelectItem key={d.id} value={d.name} className="text-[10px] font-medium py-2">
+                        {d.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 {errors.designation && <p className="text-[10px] text-rose-500 font-bold uppercase tracking-tight">{errors.designation.message}</p>}
               </div>
 
@@ -376,6 +398,57 @@ export function AddEmployeeDialog() {
                   className="rounded-xl border-slate-200/60 bg-white h-11 text-sm font-medium"
                 />
                 {errors.joiningDate && <p className="text-[10px] text-rose-500 font-bold uppercase tracking-tight">{errors.joiningDate.message}</p>}
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-[10px] font-bold text-slate-400 uppercase ml-1">1st Reporting</Label>
+                <Select onValueChange={(v) => setValue("firstApproverUserId", v === "__null__" ? null : v)}>
+                  <SelectTrigger className="rounded-xl border-slate-200/60 bg-white h-11 text-sm font-medium">
+                    <SelectValue placeholder="Select employee..." />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl border-slate-100 shadow-xl max-h-[220px]">
+                    <SelectItem value="__null__" className="text-[10px] font-extrabold text-slate-500">NULL (bypass this layer)</SelectItem>
+                    {employeeNames.map((emp) => (
+                      <SelectItem key={emp.userId} value={emp.userId} className="text-[10px] font-medium py-2">
+                        {emp.fullName}{emp.employeeCode ? ` (${emp.employeeCode})` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-[10px] font-bold text-slate-400 uppercase ml-1">2nd Reporting</Label>
+                <Select onValueChange={(v) => setValue("secondApproverUserId", v === "__null__" ? null : v)}>
+                  <SelectTrigger className="rounded-xl border-slate-200/60 bg-white h-11 text-sm font-medium">
+                    <SelectValue placeholder="Select employee..." />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl border-slate-100 shadow-xl max-h-[220px]">
+                    <SelectItem value="__null__" className="text-[10px] font-extrabold text-slate-500">NULL (bypass this layer)</SelectItem>
+                    {employeeNames.map((emp) => (
+                      <SelectItem key={emp.userId} value={emp.userId} className="text-[10px] font-medium py-2">
+                        {emp.fullName}{emp.employeeCode ? ` (${emp.employeeCode})` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-[10px] font-bold text-slate-400 uppercase ml-1">3rd Reporting</Label>
+                <Select onValueChange={(v) => setValue("thirdApproverUserId", v === "__null__" ? null : v)}>
+                  <SelectTrigger className="rounded-xl border-slate-200/60 bg-white h-11 text-sm font-medium">
+                    <SelectValue placeholder="Select employee..." />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl border-slate-100 shadow-xl max-h-[220px]">
+                    <SelectItem value="__null__" className="text-[10px] font-extrabold text-slate-500">NULL (bypass this layer)</SelectItem>
+                    {employeeNames.map((emp) => (
+                      <SelectItem key={emp.userId} value={emp.userId} className="text-[10px] font-medium py-2">
+                        {emp.fullName}{emp.employeeCode ? ` (${emp.employeeCode})` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 

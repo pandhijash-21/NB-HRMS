@@ -8,7 +8,7 @@ import { getSession } from "next-auth/react";
 
 export function LoginForm() {
   const router = useRouter();
-  const [employeeId, setEmployeeId] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [errorVisible, setErrorVisible] = useState(false);
@@ -18,7 +18,7 @@ export function LoginForm() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     loginMutation.mutate(
-      { employeeId, password },
+      { identifier, password },
       {
         onSuccess: async () => {
           const session = await getSession();
@@ -30,6 +30,8 @@ export function LoginForm() {
           const role = session?.user?.role ?? "";
           if (role === "ADMIN" || role === "HR") {
             router.push("/admin/dashboard");
+          } else if (["HOD", "HOI", "REGISTRAR", "VC"].includes(role)) {
+            router.push("/approvals");
           } else {
             router.push("/dashboard");
           }
@@ -45,23 +47,23 @@ export function LoginForm() {
     <form className="space-y-6" onSubmit={handleSubmit}>
       <div className="space-y-1.5">
         <label
-          htmlFor="employeeId"
+          htmlFor="identifier"
           className="block text-xs font-semibold tracking-wide text-white/80 uppercase"
         >
-          Employee ID
+          Employee ID / Username
         </label>
         <div className="relative">
           <input
-            id="employeeId"
-            name="employeeId"
-            type="number"
+            id="identifier"
+            name="identifier"
+            type="text"
             autoComplete="username"
             required
             className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3.5 pl-11 text-sm text-white placeholder-white/35 outline-none focus:border-white/30 focus:bg-white/10 focus:ring-2 focus:ring-white/20 transition-all duration-300"
-            placeholder="Enter your Employee ID"
-            value={employeeId}
+            placeholder="e.g. 3 or HOD_CE_IT"
+            value={identifier}
             onChange={(e) => {
-              setEmployeeId(e.target.value);
+              setIdentifier(e.target.value);
               setErrorVisible(false);
             }}
           />
@@ -112,7 +114,7 @@ export function LoginForm() {
       {errorVisible && (
         <div className="rounded-xl bg-rose-500/10 border border-rose-500/20 px-4 py-3 backdrop-blur-sm">
           <p className="text-xs font-medium text-rose-300">
-            Invalid Employee ID or password. Please try again.
+            Invalid Employee ID/Username or password. Please try again.
           </p>
         </div>
       )}

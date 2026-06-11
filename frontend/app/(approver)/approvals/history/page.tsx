@@ -19,17 +19,20 @@ import { ArrowLeft, CalendarDays, CheckCircle2, XCircle, Clock, Building2, User 
 import { formatDate } from "@/lib/utils";
 
 const ROLE_LABELS: Record<string, string> = {
-  HOD:       "Head of Department",
-  HOI:       "Head of Institution",
-  REGISTRAR: "Registrar",
-  VC:        "Vice Chancellor",
+  FIRST_REPORTING:  "1st Reporting Manager",
+  SECOND_REPORTING: "2nd Reporting Manager",
+  THIRD_REPORTING:  "3rd Reporting Manager",
+  // kept for historical data
+  HOD: "Head of Department", HOI: "Head of Institution",
+  REGISTRAR: "Registrar", VC: "Vice Chancellor",
 };
 
 const STEP_ROLE_LABELS: Record<string, string> = {
-  HOD:       "Dept. Head",
-  HOI:       "Principal",
-  REGISTRAR: "Registrar",
-  VC:        "Vice Chancellor",
+  FIRST_REPORTING:  "1st Reporting",
+  SECOND_REPORTING: "2nd Reporting",
+  THIRD_REPORTING:  "3rd Reporting",
+  // kept for historical data
+  HOD: "Dept. Head", HOI: "Principal", VC: "Vice Chancellor", REGISTRAR: "Registrar",
 };
 
 const STATUS_STYLES: Record<string, string> = {
@@ -45,8 +48,8 @@ const STATUS_STYLES: Record<string, string> = {
 const STATUS_LABELS: Record<string, string> = {
   APPROVED:         "Approved",
   REJECTED:         "Rejected",
-  HOD_RECOMMENDED:  "HOD Recommended",
-  HOI_RECOMMENDED:  "HOI Recommended",
+  HOD_RECOMMENDED:  "1st Reporting Recommended",
+  HOI_RECOMMENDED:  "2nd Reporting Recommended",
   PENDING:          "Pending",
   CANCELLED:        "Cancelled",
   AUTO_LWP:         "Auto LWP",

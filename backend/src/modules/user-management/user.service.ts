@@ -81,62 +81,92 @@ export const userService = {
   },
 
   async create(input: CreateUserInput, creatorId: string) {
-    // Check employee exists
-    const employee = await prisma.employee.findUnique({
-      where: { id: input.employeeId },
-      include: { personalInfo: true },
-    });
-    if (!employee) return { error: 'Employee not found', status: 404 } as const;
-
-    // Check user doesn't already exist
-    const existing = await prisma.user.findUnique({ where: { employeeId: input.employeeId } });
-    if (existing) return { error: 'User account already exists for this employee', status: 409 } as const;
-
     // Check role exists
     const role = await prisma.role.findUnique({ where: { id: input.roleId } });
     if (!role) return { error: 'Role not found', status: 404 } as const;
     if (!role.isActive) return { error: 'Role is inactive', status: 400 } as const;
 
-    // Default password: DOB as DDMMYYYY, fallback to 01011990
-    let defaultPassword = '01011990';
-    const dob = employee.personalInfo?.birthDate;
-    if (dob) {
-      const d = String(dob.getDate()).padStart(2, '0');
-      const m = String(dob.getMonth() + 1).padStart(2, '0');
-      const y = dob.getFullYear();
-      defaultPassword = `${d}${m}${y}`;
+    // ─── Employee-linked user ────────────────────────────────────────────────
+    if (input.employeeId !== undefined) {
+      // Check employee exists
+      const employee = await prisma.employee.findUnique({
+        where: { id: input.employeeId },
+        include: { personalInfo: true },
+      });
+      if (!employee) return { error: 'Employee not found', status: 404 } as const;
+
+      // Check user doesn't already exist
+      const existing = await prisma.user.findUnique({ where: { employeeId: input.employeeId } });
+      if (existing) return { error: 'User account already exists for this employee', status: 409 } as const;
+
+      // Default password: DOB as DDMMYYYY, fallback to 01011990
+      let defaultPassword = '01011990';
+      const dob = employee.personalInfo?.birthDate;
+      if (dob) {
+        const d = String(dob.getDate()).padStart(2, '0');
+        const m = String(dob.getMonth() + 1).padStart(2, '0');
+        const y = dob.getFullYear();
+        defaultPassword = `${d}${m}${y}`;
+      }
+
+      const passwordHash = await bcrypt.hash(defaultPassword, 12);
+
+      const user = await prisma.user.create({
+        data: {
+          employeeId:   input.employeeId,
+          roleId:       input.roleId,
+          passwordHash,
+          isFirstLogin: true,
+          createdBy:    creatorId,
+        },
+        select: {
+          id: true, employeeId: true, username: true, isActive: true, isFirstLogin: true, createdAt: true,
+          role: { select: { id: true, name: true } },
+        },
+      });
+
+      // Backfill Employee.userId
+      await prisma.employee.update({
+        where: { id: input.employeeId },
+        data:  { userId: user.id },
+      });
+
+      // Fire-and-forget email notification (non-blocking)
+      const toEmail: string =
+        (employee as any).generalInfo?.instituteEmail ?? '';
+      if (toEmail) {
+        sendAccountCreatedEmail(toEmail, input.employeeId, defaultPassword).catch(console.error);
+      }
+
+      return { user, defaultPasswordUsed: !dob };
     }
 
-    const passwordHash = await bcrypt.hash(defaultPassword, 12);
+    // ─── Position (username-based) user ──────────────────────────────────────
+    const username = String(input.username ?? '').trim();
+    if (!username) return { error: 'Username is required', status: 400 } as const;
+    const password = String((input as any).password ?? '');
+    if (!password) return { error: 'Password is required', status: 400 } as const;
+    const subOrganization = input.subOrganization ? String(input.subOrganization).trim() : null;
+
+    const passwordHash = await bcrypt.hash(password, 12);
 
     const user = await prisma.user.create({
       data: {
-        employeeId:   input.employeeId,
+        employeeId:   null,
+        username,
+        subOrganization,
         roleId:       input.roleId,
         passwordHash,
         isFirstLogin: true,
         createdBy:    creatorId,
       },
       select: {
-        id: true, employeeId: true, isActive: true, isFirstLogin: true, createdAt: true,
+        id: true, employeeId: true, username: true, subOrganization: true, isActive: true, isFirstLogin: true, createdAt: true,
         role: { select: { id: true, name: true } },
       },
     });
 
-    // Backfill Employee.userId
-    await prisma.employee.update({
-      where: { id: input.employeeId },
-      data:  { userId: user.id },
-    });
-
-    // Fire-and-forget email notification (non-blocking)
-    const toEmail: string =
-      (employee as any).generalInfo?.instituteEmail ?? '';
-    if (toEmail) {
-      sendAccountCreatedEmail(toEmail, input.employeeId, defaultPassword).catch(console.error);
-    }
-
-    return { user, defaultPasswordUsed: !dob };
+    return { user, defaultPasswordUsed: false };
   },
 
   async update(id: string, input: UpdateUserInput, requesterId: string) {

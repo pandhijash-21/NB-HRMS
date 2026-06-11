@@ -6,10 +6,10 @@ import { signIn } from "next-auth/react";
 
 export function useLogin() {
   return useMutation({
-    mutationFn: async ({ employeeId, password }: any) => {
+    mutationFn: async ({ identifier, password }: any) => {
       const result = await signIn("credentials", {
         redirect: false,
-        employeeId,
+        identifier,
         password,
       });
       if (result?.error) {

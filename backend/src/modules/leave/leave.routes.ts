@@ -61,8 +61,8 @@ leaveRouter.get('/my/balances', requireAuth, requirePermission('LEAVE', 'READ'),
 });
 
 leaveRouter.get('/my/pending-approvals', requireAuth, approverRoles, async (req: Request, res: Response) => {
-  const approverEmployeeId = Number(req.user!.employeeId);
-  const apps = await leaveApplicationService.getPendingForApprover(approverEmployeeId);
+  const approverUserId = String(req.user!.id);
+  const apps = await leaveApplicationService.getPendingForApprover(approverUserId);
   return res.json(ok(apps));
 });
 
@@ -76,10 +76,10 @@ leaveRouter.get('/applications/:id', requireAuth, async (req: Request, res: Resp
 
 leaveRouter.post('/applications/:id/approve', requireAuth, approverRoles, async (req: Request, res: Response) => {
   try {
-    const approverEmployeeId = Number(req.user!.employeeId);
+    const approverUserId = String(req.user!.id);
     const result = await leaveAdminService.approveStep(
       p(req.params.id),
-      approverEmployeeId,
+      approverUserId,
       req.user!.id,
       String(req.body.remarks ?? ''),
     );
@@ -91,10 +91,10 @@ leaveRouter.post('/applications/:id/approve', requireAuth, approverRoles, async 
 
 leaveRouter.post('/applications/:id/reject', requireAuth, approverRoles, async (req: Request, res: Response) => {
   try {
-    const approverEmployeeId = Number(req.user!.employeeId);
+    const approverUserId = String(req.user!.id);
     const result = await leaveAdminService.rejectStep(
       p(req.params.id),
-      approverEmployeeId,
+      approverUserId,
       req.user!.id,
       String(req.body.remarks ?? ''),
     );

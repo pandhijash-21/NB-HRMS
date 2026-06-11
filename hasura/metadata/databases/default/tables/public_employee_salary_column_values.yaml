@@ -1,0 +1,7 @@
+table:
+  name: employee_salary_column_values
+  schema: public
+object_relationships:
+  - name: salary_record
+    using:
+      foreign_key_constraint_on: salary_record_id

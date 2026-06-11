@@ -1,0 +1,18 @@
+table:
+  name: employee_salary_records
+  schema: public
+object_relationships:
+  - name: employee
+    using:
+      foreign_key_constraint_on: employee_id
+  - name: template
+    using:
+      foreign_key_constraint_on: template_id
+array_relationships:
+  - name: column_values
+    using:
+      foreign_key_constraint_on:
+        column: salary_record_id
+        table:
+          name: employee_salary_column_values
+          schema: public

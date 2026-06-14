@@ -20,7 +20,7 @@ export default function ProfilePage() {
   const { data: session } = useSession();
   const employeeId = (session?.user as any)?.employeeId;
 
-  const { data: rawEmployee, isLoading, refetch } = useAdminEmployee(employeeId);
+  const { data: rawEmployee, isLoading, isError, refetch } = useAdminEmployee(employeeId);
 
   // Same flattening pattern as admin [id]/page.tsx
   const employee = rawEmployee ? {
@@ -49,7 +49,11 @@ export default function ProfilePage() {
   if (!employee) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-slate-400 space-y-3">
-        <p className="text-sm">Profile could not be loaded. Please contact HR.</p>
+        <p className="text-sm">
+          {isError
+            ? "Profile could not be loaded. Log out and log back in after permission changes, or contact HR."
+            : "Profile could not be loaded. Please contact HR."}
+        </p>
       </div>
     );
   }

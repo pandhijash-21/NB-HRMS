@@ -16,6 +16,7 @@ import {
   useEmployeeSalaryPreview,
   useUpdateEmployeePayCommission,
   useSalaryComputeLive,
+  usePayCommissions,
   type SalaryColumnDefinition,
   type SalaryColumnRule,
 } from "@/lib/hooks/useSalary";
@@ -76,7 +77,10 @@ export function SalaryTab({ employee, isAdmin }: SalaryTabProps) {
     queryFn: async () => {
       const { data } = await api.get(`salary/employees/${employeeId}/profile`);
       return data.data as {
-        profile: { payCommissionType: "FIFTH" | "SIXTH" | null; payCommission: string | null } | null;
+        profile: {
+          payCommission: string | null;
+          payCommissionRef?: { code: string; name: string } | null;
+        } | null;
         latestFinalizedRecord: {
           id: string;
           salaryMonth: number;
@@ -90,7 +94,9 @@ export function SalaryTab({ employee, isAdmin }: SalaryTabProps) {
   });
 
   const previewQ = useEmployeeSalaryPreview(employeeId);
+  const commissionsQ = usePayCommissions();
   const updateProfile = useUpdateEmployeePayCommission();
+  const activeCommissions = (commissionsQ.data ?? []).filter((c) => c.isActive);
 
   const templateId = previewQ.data?.templateId ?? null;
   const columnDefinitions = previewQ.data?.columnDefinitions ?? [];
@@ -100,7 +106,7 @@ export function SalaryTab({ employee, isAdmin }: SalaryTabProps) {
     setOverrides(previewQ.data.columnOverrides ?? {});
     setEmployeeColumnRules(previewQ.data.employeeColumnRules ?? {});
     setDirty(false);
-  }, [previewQ.data?.columnOverrides, previewQ.data?.employeeColumnRules, previewQ.data?.payCommissionType]);
+  }, [previewQ.data?.columnOverrides, previewQ.data?.employeeColumnRules, previewQ.data?.payCommissionCode]);
 
   const computeQ = useSalaryComputeLive({
     templateId: isAdmin ? templateId : null,
@@ -172,10 +178,10 @@ export function SalaryTab({ employee, isAdmin }: SalaryTabProps) {
     previewQ.refetch();
   };
 
-  const handleCommissionChange = async (v: "FIFTH" | "SIXTH") => {
+  const handleCommissionChange = async (v: string) => {
     await updateProfile.mutateAsync({
       employeeId,
-      payCommissionType: v,
+      payCommissionCode: v,
       columnOverrides: null,
       columnRules: null,
     });
@@ -224,12 +230,12 @@ export function SalaryTab({ employee, isAdmin }: SalaryTabProps) {
           <h4 className={`text-xs font-semibold uppercase tracking-wide ${accentCls}`}>{title}</h4>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[520px]">
+          <table className={`w-full text-sm ${isAdmin ? "min-w-[520px]" : "min-w-[280px]"}`}>
             <thead>
               <tr className="border-b border-slate-100 text-left text-[11px] uppercase tracking-wide text-slate-400">
                 <th className="px-4 py-2 font-medium">Column</th>
-                <th className="px-2 py-2 font-medium w-24">Source</th>
-                <th className="px-2 py-2 font-medium">Formula</th>
+                {isAdmin && <th className="px-2 py-2 font-medium w-24">Source</th>}
+                {isAdmin && <th className="px-2 py-2 font-medium">Formula</th>}
                 <th className="px-4 py-2 font-medium text-right w-36">Amount</th>
                 {isAdmin && <th className="px-2 py-2 w-20" />}
               </tr>
@@ -252,27 +258,31 @@ export function SalaryTab({ employee, isAdmin }: SalaryTabProps) {
                     key={key}
                     className={`border-b border-slate-50 last:border-0 hover:bg-slate-50/50 ${
                       isTotal ? "bg-slate-50/90" : ""
-                    } ${hasCustomRule ? "border-l-2 border-l-blue-400" : hasOverride ? "border-l-2 border-l-amber-400" : ""}`}
+                    } ${isAdmin && hasCustomRule ? "border-l-2 border-l-blue-400" : isAdmin && hasOverride ? "border-l-2 border-l-amber-400" : ""}`}
                   >
                     <td className="px-4 py-2.5">
                       <span className={`${isTotal ? "font-semibold text-slate-900" : "font-medium text-slate-800"}`}>
                         {col.displayName}
                       </span>
                     </td>
-                    <td className="px-2 py-2.5">
-                      {hasCustomRule ? (
-                        <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100 text-[10px]">Employee</Badge>
-                      ) : hasOverride ? (
-                        <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100 text-[10px]">Override</Badge>
-                      ) : rule ? (
-                        <Badge variant="secondary" className="text-[10px]">Default</Badge>
-                      ) : (
-                        <Badge variant="outline" className="text-[10px]">{isTotal ? "Auto" : "—"}</Badge>
-                      )}
-                    </td>
-                    <td className="px-2 py-2.5 text-xs text-slate-500 max-w-[220px]" title={formula}>
-                      <span className="line-clamp-2">{formula}</span>
-                    </td>
+                    {isAdmin && (
+                      <td className="px-2 py-2.5">
+                        {hasCustomRule ? (
+                          <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100 text-[10px]">Employee</Badge>
+                        ) : hasOverride ? (
+                          <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100 text-[10px]">Override</Badge>
+                        ) : rule ? (
+                          <Badge variant="secondary" className="text-[10px]">Default</Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[10px]">{isTotal ? "Auto" : "—"}</Badge>
+                        )}
+                      </td>
+                    )}
+                    {isAdmin && (
+                      <td className="px-2 py-2.5 text-xs text-slate-500 max-w-[220px]" title={formula}>
+                        <span className="line-clamp-2">{formula}</span>
+                      </td>
+                    )}
                     <td className="px-4 py-2.5 text-right">
                       {canEditAmount ? (
                         <div className="flex items-center justify-end gap-1">
@@ -343,8 +353,21 @@ export function SalaryTab({ employee, isAdmin }: SalaryTabProps) {
     );
   };
 
-  const earnings = columnDefinitions.filter((c) => c.category === "EARNING");
-  const deductions = columnDefinitions.filter((c) => c.category === "DEDUCTION");
+  const columnVisibility = preview?.columnVisibility ?? {};
+  const filterForEmployeeView = (items: SalaryColumnDefinition[]) => {
+    if (isAdmin) return items;
+    return items.filter((col) => {
+      const key = `${col.category}::${col.columnIdentifier}`;
+      return columnVisibility[key] !== false;
+    });
+  };
+
+  const earnings = filterForEmployeeView(
+    columnDefinitions.filter((c) => c.category === "EARNING"),
+  );
+  const deductions = filterForEmployeeView(
+    columnDefinitions.filter((c) => c.category === "DEDUCTION"),
+  );
 
   if (profileQ.isLoading || previewQ.isLoading) {
     return <p className="text-sm text-slate-500 p-4">Loading salary…</p>;
@@ -358,7 +381,7 @@ export function SalaryTab({ employee, isAdmin }: SalaryTabProps) {
           <div>
             <p className="font-medium">View only</p>
             <p className="text-xs text-slate-500 mt-0.5">
-              Your salary breakdown is shown for reference. Contact HR or Finance to request changes.
+              In case of any disperancies, please contact admin department.
             </p>
           </div>
         </div>
@@ -400,13 +423,18 @@ export function SalaryTab({ employee, isAdmin }: SalaryTabProps) {
             <div className="space-y-2 max-w-xs">
               <Label>Pay Commission</Label>
               <Select
-                defaultValue={profile?.payCommissionType ?? preview?.payCommissionType ?? ""}
-                onValueChange={(v) => handleCommissionChange(v as "FIFTH" | "SIXTH")}
+                defaultValue={
+                  profile?.payCommissionRef?.code
+                  ?? preview?.payCommissionCode
+                  ?? ""
+                }
+                onValueChange={handleCommissionChange}
               >
                 <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="FIFTH">5th Pay Commission</SelectItem>
-                  <SelectItem value="SIXTH">6th Pay Commission</SelectItem>
+                  {activeCommissions.map((c) => (
+                    <SelectItem key={c.id} value={c.code}>{c.name}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <Button size="sm" variant="ghost" onClick={() => setEditingCommission(false)}>Cancel</Button>
@@ -415,7 +443,11 @@ export function SalaryTab({ employee, isAdmin }: SalaryTabProps) {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <Field
                 label="Pay Commission"
-                value={profile?.payCommissionType ?? preview?.payCommissionType ?? (employee.payCommission as string)}
+                value={
+                  profile?.payCommissionRef?.name
+                  ?? preview?.payCommission?.name
+                  ?? (employee.payCommission as string)
+                }
               />
               <Field label="Designation" value={preview?.designation?.name ?? (employee.designation as string)} />
               {latest && (
@@ -445,7 +477,7 @@ export function SalaryTab({ employee, isAdmin }: SalaryTabProps) {
               {preview.reason === "NO_RULES" && "Salary structure exists but no rules are configured yet."}
             </p>
             {isAdmin && preview.reason === "NO_RULES" && preview.templateId && (
-              <Link href={`/admin/salary/structures/${preview.designation?.id}/${preview.payCommissionType === "SIXTH" ? "sixth" : "fifth"}`}>
+              <Link href={`/admin/salary/structures/${preview.designation?.id}/${(preview.payCommissionCode ?? "fifth").toLowerCase()}`}>
                 <Button size="sm" className="mt-3">Configure Designation Rules</Button>
               </Link>
             )}
@@ -469,7 +501,7 @@ export function SalaryTab({ employee, isAdmin }: SalaryTabProps) {
                   <p className="text-xs text-slate-500 mt-1">
                     {isAdmin
                       ? (computeQ.isFetching ? "Recalculating dependent columns…" : "Amounts update automatically when you edit a value.")
-                      : "Computed from your designation structure and any HR-applied customizations."}
+                      : "Your monthly salary breakdown as configured by the institution."}
                     {isAdmin && customizationCount > 0 && (
                       <span className="text-blue-700"> · {customizationCount} employee customization(s)</span>
                     )}
@@ -482,11 +514,13 @@ export function SalaryTab({ employee, isAdmin }: SalaryTabProps) {
                 {renderSection("Deductions", deductions, "rose")}
               </div>
 
-              <div className="flex flex-wrap gap-4 text-xs text-slate-500 pt-2 border-t">
-                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-blue-400" /> Employee custom rule</span>
-                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-400" /> Amount override</span>
-                <span className="flex items-center gap-1.5"><Badge variant="secondary" className="text-[9px] py-0">Default</Badge> From designation structure</span>
-              </div>
+              {isAdmin && (
+                <div className="flex flex-wrap gap-4 text-xs text-slate-500 pt-2 border-t">
+                  <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-blue-400" /> Employee custom rule</span>
+                  <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-400" /> Amount override</span>
+                  <span className="flex items-center gap-1.5"><Badge variant="secondary" className="text-[9px] py-0">Default</Badge> From designation structure</span>
+                </div>
+              )}
             </CardContent>
           </Card>
 

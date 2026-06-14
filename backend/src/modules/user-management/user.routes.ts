@@ -6,6 +6,7 @@ import { userController } from './user.controller';
 export const userRouter = Router();
 
 userRouter.get(  '/',    requireAuth, requirePermission('USER_MGMT', 'READ'),   userController.list);
+userRouter.get(  '/:id/credentials', requireAuth, requirePermission('USER_MGMT', 'READ'), userController.getCredentials);
 userRouter.get(  '/:id', requireAuth, requirePermission('USER_MGMT', 'READ'),   userController.getById);
 userRouter.post( '/',    requireAuth, requirePermission('USER_MGMT', 'WRITE'),  userController.create);
 userRouter.patch('/:id', requireAuth, requirePermission('USER_MGMT', 'WRITE'),  userController.update);

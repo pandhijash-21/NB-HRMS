@@ -4,6 +4,7 @@ import { prisma } from '../../config/prisma';
 import { redis, connectRedis } from '../../config/redis';
 import { env } from '../../config/env';
 import { sendPasswordResetEmail } from '../../utils/mailer';
+import { encryptPasswordForAdmin } from '../../utils/passwordCrypto';
 import type { LoginInput, ChangePasswordInput } from './auth.types';
 
 const SESSION_TTL = 8 * 60 * 60; // 8 hours in seconds
@@ -83,10 +84,14 @@ export const authService = {
 
     // 3. Build permissions map
     const permissions = buildPermissionsMap(user.role.permissions);
+    const personalPerm = user.role.permissions.find((p) => p.moduleKey === 'PERSONAL_INFO');
+    const employeeViewScope = personalPerm?.employeeViewScope ?? 'NONE';
     const scopeSubOrg =
-      user.employee?.generalInfo?.subOrganization ??
-      (user as any).subOrganization ??
-      null;
+      employeeViewScope === 'INSTITUTE'
+        ? ((user as { subOrganization?: string | null }).subOrganization ??
+          user.employee?.generalInfo?.subOrganization ??
+          null)
+        : null;
 
     // 4. Sign JWT
     const token = jwt.sign(
@@ -96,6 +101,7 @@ export const authService = {
         roleId:      user.roleId,
         roleName:    user.role.name,
         subOrganization: scopeSubOrg,
+        employeeViewScope,
         permissions,
       },
       env.JWT_SECRET,
@@ -114,6 +120,7 @@ export const authService = {
     return {
       token,
       isFirstLogin: user.isFirstLogin,
+      permissions,
       user: {
         id:         user.id,
         employeeId: user.employeeId ?? null,
@@ -125,6 +132,8 @@ export const authService = {
         photoUrl:   user.employee?.photoUrl ?? null,
         username:   user.username ?? null,
         subOrganization: scopeSubOrg,
+        employeeViewScope,
+        permissions,
       },
     };
   },
@@ -146,6 +155,7 @@ export const authService = {
       where: { id: userId },
       data: {
         passwordHash:      newHash,
+        adminPasswordEnc:  encryptPasswordForAdmin(input.newPassword),
         isFirstLogin:      false,
         passwordChangedAt: new Date(),
       },
@@ -182,6 +192,7 @@ export const authService = {
       where: { id: targetUserId },
       data: {
         passwordHash: newHash,
+        adminPasswordEnc: encryptPasswordForAdmin(defaultPassword),
         isFirstLogin: true,
         updatedBy:    requesterId,
       },
@@ -199,9 +210,46 @@ export const authService = {
       sendPasswordResetEmail(toEmail, user.employeeId, defaultPassword).catch(console.error);
     }
 
+    const loginId = user.username ?? (user.employee as any)?.generalInfo?.employeeCode ?? null;
+
     return {
-      message: `Password reset to default (${dob ? 'DOB' : 'fallback'})`,
-      isDefaultPassword: !dob,
+      message: `Password reset successfully`,
+      loginId,
+      password: defaultPassword,
+      isDefaultPassword: !dob && !user.username,
+    };
+  },
+
+  async adminSetPassword(
+    targetUserId: string,
+    requesterId: string,
+    newPassword: string,
+  ) {
+    const user = await prisma.user.findUnique({
+      where: { id: targetUserId },
+      include: { employee: { include: { generalInfo: true } } },
+    });
+    if (!user) return { error: 'User not found', status: 404 } as const;
+    if (newPassword.length < 8) {
+      return { error: 'Password must be at least 8 characters', status: 400 } as const;
+    }
+
+    const newHash = await bcrypt.hash(newPassword, 12);
+    await prisma.user.update({
+      where: { id: targetUserId },
+      data: {
+        passwordHash: newHash,
+        adminPasswordEnc: encryptPasswordForAdmin(newPassword),
+        isFirstLogin: true,
+        updatedBy: requesterId,
+      },
+    });
+    await deleteSession(targetUserId, user.roleId);
+
+    return {
+      loginId: user.username ?? user.employee?.generalInfo?.employeeCode ?? null,
+      password: newPassword,
+      message: 'Password updated',
     };
   },
 
@@ -211,6 +259,8 @@ export const authService = {
       roleId:      user.roleId,
       roleName:    user.roleName,
       permissions: user.permissions,
+      employeeViewScope: user.employeeViewScope ?? 'NONE',
+      subOrganization: user.subOrganization ?? null,
     };
   },
 };

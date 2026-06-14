@@ -2,14 +2,18 @@
 
 import { useState } from "react";
 import LinkInstance from "next/link";
+import { useSession } from "next-auth/react";
 import { useAdminEmployeeList, useDeleteEmployee } from "@/modules/admin/hooks/useAdminEmployees";
+import { canEditWorkforce } from "@/lib/auth/permissions";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { AddEmployeeDialog } from "@/components/employees/AddEmployeeDialog";
-import { CreatePositionAccountDialog } from "@/components/employees/CreatePositionAccountDialog";
+import { CreatePositionDialog } from "@/components/employees/CreatePositionDialog";
+import { PositionsOverview } from "@/components/employees/PositionsOverview";
+import { formatEmployeePosition } from "@/components/employees/EmployeePositionSelect";
 import { Trash2, MoreHorizontal, Eye, Search, Filter, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   DropdownMenu,
@@ -37,6 +41,9 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function EmployeeListPage() {
+  const { data: session } = useSession();
+  const su = session?.user as { permissions?: Record<string, string[]>; employeeViewScope?: string };
+
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<string>("ALL");
   const [page, setPage] = useState(0);
@@ -47,6 +54,9 @@ export default function EmployeeListPage() {
     search: search || undefined,
     status: status === "ALL" ? undefined : status,
   });
+
+  const canEdit = canEditWorkforce(su?.permissions, su?.employeeViewScope);
+  const viewScope = su?.employeeViewScope ?? (data as { viewScope?: string })?.viewScope ?? "UNIVERSITY";
 
   const deleteMutation = useDeleteEmployee();
 
@@ -66,16 +76,24 @@ export default function EmployeeListPage() {
             <Badge variant="outline" className="bg-[#1d3459]/5 text-[#1d3459] border-none text-[10px] font-bold uppercase py-0.5 tracking-widest px-3">WMS v2.0</Badge>
           </div>
           <h2 className="text-3xl font-extrabold text-slate-800 tracking-tight">Workforce Directory</h2>
-          <p className="text-sm text-slate-500 font-medium">Manage and audit your institutional human capital.</p>
+          <p className="text-sm text-slate-500 font-medium">
+            Employees and institutional positions. Assign a position for admin access; job designation stays on the profile.
+          </p>
+          {viewScope === "INSTITUTE" && (
+            <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-widest">
+              Institute scope only
+            </Badge>
+          )}
         </div>
-        
+
         <div className="flex items-center gap-3 w-full md:w-auto">
-          <AddEmployeeDialog />
-          <CreatePositionAccountDialog />
+          {canEdit && <CreatePositionDialog />}
+          {canEdit && <AddEmployeeDialog />}
         </div>
       </div>
 
-      {/* Filter Bar */}
+      <PositionsOverview />
+
       <div className="bg-white/50 backdrop-blur-sm border border-slate-200/60 p-2 rounded-2xl flex flex-col sm:flex-row items-center gap-2 shadow-sm shadow-slate-100">
         <div className="relative flex-1 w-full">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -110,6 +128,7 @@ export default function EmployeeListPage() {
               <tr className="border-b border-slate-100 bg-slate-50/40">
                 <th className="text-left px-8 py-5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Identiy / Code</th>
                 <th className="text-left px-8 py-5 text-[10px] font-bold text-slate-400 uppercase tracking-widest hidden sm:table-cell">Professional Context</th>
+                <th className="text-left px-8 py-5 text-[10px] font-bold text-slate-400 uppercase tracking-widest hidden md:table-cell">Position</th>
                 <th className="text-left px-8 py-5 text-[10px] font-bold text-slate-400 uppercase tracking-widest hidden lg:table-cell">Tenure</th>
                 <th className="text-left px-8 py-5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Compliance</th>
                 <th className="text-right px-8 py-5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Actions</th>
@@ -119,12 +138,12 @@ export default function EmployeeListPage() {
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i}>
-                    <td className="px-8 py-5 text-center" colSpan={5}><Skeleton className="h-14 w-full rounded-2xl" /></td>
+                    <td className="px-8 py-5 text-center" colSpan={6}><Skeleton className="h-14 w-full rounded-2xl" /></td>
                   </tr>
                 ))
               ) : data?.items.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-8 py-24 text-center">
+                  <td colSpan={6} className="px-8 py-24 text-center">
                     <div className="flex flex-col items-center gap-3">
                         <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
                             <Search className="w-8 h-8" />
@@ -160,6 +179,11 @@ export default function EmployeeListPage() {
                           <p className="text-slate-800 text-xs font-bold uppercase tracking-tight">{info.designation}</p>
                           <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{info.department}</p>
                         </div>
+                      </td>
+                      <td className="px-8 py-5 hidden md:table-cell">
+                        <Badge variant="outline" className="text-[9px] font-bold uppercase tracking-wider border-[#1d3459]/15 text-[#1d3459] bg-[#1d3459]/5">
+                          {formatEmployeePosition(emp.position)}
+                        </Badge>
                       </td>
                       <td className="px-8 py-5 text-slate-500 hidden lg:table-cell">
                          <div className="space-y-1">
@@ -205,7 +229,6 @@ export default function EmployeeListPage() {
           </table>
         </div>
 
-        {/* Pagination */}
         <div className="flex items-center justify-between px-8 py-5 border-t border-slate-100 bg-slate-50/30">
           <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
             {data ? (

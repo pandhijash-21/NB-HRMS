@@ -13,18 +13,23 @@ export default function SalaryStructuresPage() {
   const { data, isLoading, isError, error, refetch, isFetching } = useSalaryStructureStatus();
   const createTemplate = useCreateSalaryTemplate();
 
-  const ensureTemplate = async (designationId: string, payCommissionType: "FIFTH" | "SIXTH") => {
-    const result = await createTemplate.mutateAsync({ designationId, payCommissionType });
+  const ensureTemplate = async (designationId: string, payCommissionCode: string) => {
+    const result = await createTemplate.mutateAsync({ designationId, payCommissionCode });
     return result.id as string;
   };
 
-  const goConfigure = async (designationId: string, commission: "fifth" | "sixth", templateId: string | null) => {
+  const goConfigure = async (
+    designationId: string,
+    commissionCode: string,
+    templateId: string | null,
+  ) => {
+    const slug = commissionCode.toLowerCase();
     if (!templateId) {
-      const id = await ensureTemplate(designationId, commission === "fifth" ? "FIFTH" : "SIXTH");
-      window.location.href = `/admin/salary/structures/${designationId}/${commission}?templateId=${id}`;
+      const id = await ensureTemplate(designationId, commissionCode);
+      window.location.href = `/admin/salary/structures/${designationId}/${slug}?templateId=${id}`;
       return;
     }
-    window.location.href = `/admin/salary/structures/${designationId}/${commission}?templateId=${templateId}`;
+    window.location.href = `/admin/salary/structures/${designationId}/${slug}?templateId=${templateId}`;
   };
 
   if (sessionStatus === "loading" || isLoading) {
@@ -41,16 +46,11 @@ export default function SalaryStructuresPage() {
         <p className="text-sm text-slate-600 mt-2">
           {apiMsg ?? "The server rejected the request. Your session may have expired."}
         </p>
-        <p className="text-xs text-slate-500 mt-2">
-          Log out and log back in, then try again.
-        </p>
         <div className="flex gap-2 mt-4">
           <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
             {isFetching ? "Retrying…" : "Retry"}
           </Button>
-          <Link href="/login">
-            <Button size="sm">Go to login</Button>
-          </Link>
+          <Link href="/login"><Button size="sm">Go to login</Button></Link>
         </div>
       </Card>
     );
@@ -69,9 +69,12 @@ export default function SalaryStructuresPage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-slate-800">Salary Structures</h1>
-          <p className="text-sm text-slate-500">Configure 5th and 6th Pay Commission rules per designation.</p>
+          <p className="text-sm text-slate-500">Configure pay commission rules per designation.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <Link href="/admin/salary/commissions">
+            <Button variant="outline" size="sm">Pay Commissions</Button>
+          </Link>
           <Link href="/admin/salary/entry"><Button variant="outline" size="sm">Salary Entry</Button></Link>
           <Link href="/admin/salary/records"><Button variant="outline" size="sm">Records</Button></Link>
         </div>
@@ -79,38 +82,30 @@ export default function SalaryStructuresPage() {
 
       <div className="grid gap-4">
         {(data ?? []).map((row) => (
-          <Card key={row.designation.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <h2 className="font-semibold">{row.designation.name}</h2>
-              <div className="flex gap-2 mt-1">
-                <Badge variant={row.fifthConfigured ? "default" : "secondary"}>
-                  5th Pay {row.fifthConfigured ? "Configured" : "Not configured"}
+          <Card key={row.designation.id} className="p-4 flex flex-col gap-3">
+            <h2 className="font-semibold">{row.designation.name}</h2>
+            <div className="flex flex-wrap gap-2">
+              {row.commissions.map((c) => (
+                <Badge
+                  key={c.payCommission.id}
+                  variant={c.configured ? "default" : "secondary"}
+                >
+                  {c.payCommission.name} {c.configured ? "Configured" : "Not configured"}
                 </Badge>
-                <Badge variant={row.sixthConfigured ? "default" : "secondary"}>
-                  6th Pay {row.sixthConfigured ? "Configured" : "Not configured"}
-                </Badge>
-              </div>
+              ))}
             </div>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => goConfigure(row.designation.id, "fifth", row.fifthTemplateId)}
-                disabled={createTemplate.isPending}
-              >
-                Configure 5th Pay
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => goConfigure(row.designation.id, "sixth", row.sixthTemplateId)}
-                disabled={createTemplate.isPending}
-              >
-                Configure 6th Pay
-              </Button>
-              {row.fifthTemplateId && (
-                <Link href={`/admin/salary/structures/${row.designation.id}/fifth`} className="sr-only">5th</Link>
-              )}
+            <div className="flex flex-wrap gap-2">
+              {row.commissions.map((c) => (
+                <Button
+                  key={c.payCommission.id}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => goConfigure(row.designation.id, c.payCommission.code, c.templateId)}
+                  disabled={createTemplate.isPending}
+                >
+                  Configure {c.payCommission.name}
+                </Button>
+              ))}
             </div>
           </Card>
         ))}

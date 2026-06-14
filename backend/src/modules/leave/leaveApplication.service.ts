@@ -230,6 +230,7 @@ export const leaveApplicationService = {
 
   async getBalances(employeeId: number, year?: number) {
     const y = year ?? new Date().getUTCFullYear();
+    await leaveBalanceService.syncScheduledCredits(employeeId, y);
     return prisma.leaveBalance.findMany({
       where: { employeeId, year: y },
       include: { leaveType: { select: { name: true, code: true, allowHalfDay: true } } },

@@ -1,4 +1,4 @@
-import { PrismaClient, PayCommissionType, SalaryColumnCategory } from '@prisma/client';
+import { PrismaClient, SalaryColumnCategory } from '@prisma/client';
 
 function slugify(name: string): string {
   return name
@@ -34,11 +34,14 @@ const REGULAR_DESIGNATIONS = [
 ] as const;
 
 const ALIAS_DESIGNATIONS: { name: string; roleName: string }[] = [
+  { name: 'Staff', roleName: 'EMPLOYEE' },
   { name: 'Head of Institute', roleName: 'HOI' },
   { name: 'Vice Chancellor', roleName: 'VC' },
   { name: 'Registrar', roleName: 'REGISTRAR' },
   { name: 'HR Manager', roleName: 'HR_MANAGER' },
+  { name: 'HR Staff', roleName: 'HR' },
   { name: 'Head of Department', roleName: 'HOD' },
+  { name: 'Finance Officer', roleName: 'FINANCE' },
 ];
 
 type ColDef = {
@@ -211,14 +214,26 @@ export async function seedDesignationsAndSalaryCatalog(
 
   console.log('⏳  Seeding pay commissions…');
   const fifth = await prisma.payCommission.upsert({
-    where: { commissionType: PayCommissionType.FIFTH },
-    update: { name: '5th Pay Commission' },
-    create: { commissionType: PayCommissionType.FIFTH, name: '5th Pay Commission' },
+    where: { code: 'FIFTH' },
+    update: { name: '5th Pay Commission', sortOrder: 10 },
+    create: {
+      code: 'FIFTH',
+      name: '5th Pay Commission',
+      description: 'Fifth pay commission salary structure',
+      sortOrder: 10,
+      ruleEditorEnabled: true,
+    },
   });
   const sixth = await prisma.payCommission.upsert({
-    where: { commissionType: PayCommissionType.SIXTH },
-    update: { name: '6th Pay Commission' },
-    create: { commissionType: PayCommissionType.SIXTH, name: '6th Pay Commission' },
+    where: { code: 'SIXTH' },
+    update: { name: '6th Pay Commission', sortOrder: 20 },
+    create: {
+      code: 'SIXTH',
+      name: '6th Pay Commission',
+      description: 'Sixth pay commission salary structure',
+      sortOrder: 20,
+      ruleEditorEnabled: true,
+    },
   });
   console.log('✅  Pay commissions seeded');
 
@@ -229,11 +244,16 @@ export async function seedDesignationsAndSalaryCatalog(
 
   const salaryInfos = await prisma.employeeSalaryInfo.findMany();
   for (const s of salaryInfos) {
-    const updates: { payCommissionType?: PayCommissionType; designationId?: string } = {};
-    if (!s.payCommissionType && s.payCommission) {
-      const pc = s.payCommission.toLowerCase();
-      if (pc.includes('6')) updates.payCommissionType = PayCommissionType.SIXTH;
-      else if (pc.includes('5')) updates.payCommissionType = PayCommissionType.FIFTH;
+    const updates: { payCommissionId?: string; designationId?: string; payCommission?: string } = {};
+    if (!s.payCommissionId) {
+      const label = (s.payCommission ?? '').toLowerCase();
+      if (label.includes('6')) {
+        updates.payCommissionId = sixth.id;
+        updates.payCommission = sixth.name;
+      } else {
+        updates.payCommissionId = fifth.id;
+        updates.payCommission = fifth.name;
+      }
     }
     if (!s.designationId) {
       const emp = await prisma.employeeGeneralInfo.findUnique({

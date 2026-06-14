@@ -43,15 +43,9 @@ export default function LoginForm() {
       return;
     }
 
-    const role = (session?.user as any)?.role ?? "";
-
-    if (role === "ADMIN") {
-      router.push("/admin/dashboard");
-    } else if (["HOD", "HOI", "REGISTRAR", "VC"].includes(role)) {
-      router.push("/approvals");
-    } else {
-      router.push("/dashboard");
-    }
+    const { resolvePostLoginPath } = await import("@/lib/auth/permissions");
+    const su = session?.user as { role?: string; permissions?: Record<string, string[]>; employeeViewScope?: string };
+    router.push(resolvePostLoginPath(su?.permissions, su?.role ?? "", su?.employeeViewScope));
   }
 
   return (

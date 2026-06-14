@@ -3,7 +3,7 @@ import { redis, connectRedis } from '../../config/redis';
 import type { UpdatePermissionsInput, PatchPermissionInput } from './types';
 
 /** Invalidate all active sessions for every user assigned to a given role. */
-async function invalidateRoleSessions(roleId: string) {
+export async function invalidateRoleSessions(roleId: string) {
   try {
     await connectRedis();
     const userIds = await redis.sMembers(`role_users:${roleId}`);
@@ -40,6 +40,7 @@ export const permissionService = {
         canApprove: p?.canApprove ?? false,
         canDelete:  p?.canDelete  ?? false,
         canExport:  p?.canExport  ?? false,
+        employeeViewScope: p?.employeeViewScope ?? 'NONE',
       };
     });
   },
@@ -69,6 +70,7 @@ export const permissionService = {
           canApprove: p.canApprove,
           canDelete:  p.canDelete,
           canExport:  p.canExport,
+          employeeViewScope: p.employeeViewScope ?? 'NONE',
           updatedBy:  updaterId,
         })),
       }),
@@ -102,6 +104,7 @@ export const permissionService = {
         canApprove: input.canApprove ?? false,
         canDelete:  input.canDelete  ?? false,
         canExport:  input.canExport  ?? false,
+        employeeViewScope: input.employeeViewScope ?? 'NONE',
         updatedBy:  updaterId,
       },
     });

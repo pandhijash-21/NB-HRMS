@@ -42,7 +42,11 @@ export const authController = {
 
   async resetPassword(req: Request, res: Response) {
     const userId = String(req.params.userId);
-    const result = await authService.resetPassword(userId, req.user!.id);
+    const customPassword = typeof req.body?.password === 'string' ? req.body.password : undefined;
+
+    const result = customPassword
+      ? await authService.adminSetPassword(userId, req.user!.id, customPassword)
+      : await authService.resetPassword(userId, req.user!.id);
 
     if ('error' in result) {
       return res.status(result.status ?? 400).json(fail(result.error ?? 'Error'));

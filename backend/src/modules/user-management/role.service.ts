@@ -2,11 +2,29 @@ import { prisma } from '../../config/prisma';
 import type { CreateRoleInput, UpdateRoleInput } from './types';
 
 export const roleService = {
-  async list() {
+  async list(opts?: { positionsOnly?: boolean }) {
+    const where: { isActive?: boolean; id?: { in: string[] } } = { isActive: true };
+
+    if (opts?.positionsOnly) {
+      const positionRoles = await prisma.designation.findMany({
+        where: { isAlias: true, isActive: true, linkedRoleId: { not: null } },
+        select: { linkedRoleId: true },
+      });
+      const roleIds = [...new Set(positionRoles.map((p) => p.linkedRoleId!).filter(Boolean))];
+      if (roleIds.length === 0) return [];
+      where.id = { in: roleIds };
+    }
+
     const roles = await prisma.role.findMany({
+      where,
       include: {
         _count: { select: { users: { where: { isActive: true } } } },
         permissions: { select: { moduleKey: true, canRead: true, canWrite: true, canApprove: true } },
+        designations: {
+          where: { isAlias: true, isActive: true },
+          select: { id: true, name: true },
+          take: 1,
+        },
       },
       orderBy: [{ isSystem: 'desc' }, { name: 'asc' }],
     });
@@ -19,6 +37,7 @@ export const roleService = {
       isActive:    r.isActive,
       createdAt:   r.createdAt,
       userCount:   r._count.users,
+      positionName: r.designations[0]?.name ?? null,
       permissionSummary: r.permissions.map((p) => p.moduleKey),
     }));
   },
@@ -56,17 +75,11 @@ export const roleService = {
     };
   },
 
-  async create(input: CreateRoleInput, creatorId: string) {
-    const existing = await prisma.role.findUnique({ where: { name: input.name } });
-    if (existing) return { error: 'Role name already exists', status: 409 } as const;
-
-    return prisma.role.create({
-      data: {
-        name:        input.name,
-        description: input.description,
-        createdBy:   creatorId,
-      },
-    });
+  async create(_input: CreateRoleInput, _creatorId: string) {
+    return {
+      error: 'Roles are created as positions. Use Workforce → Create Position, then set permissions here.',
+      status: 400,
+    } as const;
   },
 
   async update(id: string, input: UpdateRoleInput, updaterId: string) {

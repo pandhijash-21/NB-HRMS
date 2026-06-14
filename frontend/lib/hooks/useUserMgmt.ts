@@ -14,11 +14,17 @@ export interface User {
     name: string;
   };
   employee?: {
-    employeeCode: string;
-    fullName: string;
-    photoUrl: string | null;
-    designation: string;
-    department: string;
+    employeeCode?: string;
+    fullName?: string;
+    photoUrl?: string | null;
+    designation?: string;
+    department?: string;
+    generalInfo?: { fullName?: string; employeeCode?: string };
+  } | null;
+  positionSlot?: {
+    code: string;
+    name: string;
+    designation?: { name: string };
   } | null;
   lastLoginAt: string | null;
   createdAt: string;

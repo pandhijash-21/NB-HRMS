@@ -42,7 +42,7 @@ export const columnRuleSchema = z.discriminatedUnion('rule_type', [
 
 export const createTemplateSchema = z.object({
   designationId: z.string().uuid(),
-  payCommissionType: z.enum(['FIFTH', 'SIXTH']),
+  payCommissionCode: z.string().min(1).max(40),
 });
 
 export const createRecordSchema = z.object({

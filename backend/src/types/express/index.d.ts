@@ -4,12 +4,14 @@ declare global {
   namespace Express {
     interface Request {
       user?: {
-        id: string;                          // User.id (UUID)
-        employeeId: number;
+        id: string;
+        employeeId?: number | null;
         roleId: string;
         roleName: string;
-        role: string;                        // alias for roleName — backward compat
-        permissions: Record<string, string[]>; // { "PERSONAL_INFO": ["READ","WRITE"], ... }
+        role: string;
+        subOrganization?: string | null;
+        employeeViewScope?: 'NONE' | 'SELF' | 'INSTITUTE' | 'UNIVERSITY';
+        permissions: Record<string, string[]>;
       };
       auditEntries?: AuditEntryInput[];
     }

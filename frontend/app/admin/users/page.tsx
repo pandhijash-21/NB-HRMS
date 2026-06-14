@@ -11,7 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Edit, Trash2 } from "lucide-react";
+import { Edit, KeyRound, Trash2 } from "lucide-react";
+import { AccountCredentialsDialog } from "@/components/admin/AccountCredentialsDialog";
 import {
   Select,
   SelectContent,
@@ -27,6 +28,7 @@ export default function UsersPage() {
   
   const [editUser, setEditUser] = useState<User | null>(null);
   const [showEdit, setShowEdit] = useState(false);
+  const [credsUser, setCredsUser] = useState<User | null>(null);
 
   const { users, loading, refetch } = useUsersList({
     search: search ? search : undefined,
@@ -57,8 +59,17 @@ export default function UsersPage() {
       header: "Account",
       cell: ({ row }) => {
         const user = row.original;
-        const label = user.employee?.fullName ?? user.username ?? "Unknown";
-        const subLabel = user.employee ? user.employee.employeeCode : "POSITION";
+        const gi = user.employee?.generalInfo;
+        const empFullName = user.employee?.fullName ?? gi?.fullName;
+        const empCode = user.employee?.employeeCode ?? gi?.employeeCode;
+        const slot = user.positionSlot;
+        const label =
+          empFullName ??
+          slot?.name ??
+          slot?.code ??
+          user.username ??
+          "Unknown";
+        const subLabel = empCode ?? (slot ? `ALIAS · ${slot.designation?.name ?? slot.code}` : user.username ? "POSITION" : "—");
         const initials = label.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2) || "??";
         return (
           <div className="flex items-center gap-4">
@@ -123,6 +134,15 @@ export default function UsersPage() {
         const user = row.original;
         return (
           <div className="flex items-center justify-end gap-2 pr-4">
+            <Button
+              size="sm"
+              variant="ghost"
+              title="View login & password"
+              className="h-8 w-8 p-0 text-slate-400 hover:text-[#1d3459] hover:bg-[#1d3459]/5"
+              onClick={() => setCredsUser(user)}
+            >
+              <KeyRound className="h-4 w-4" />
+            </Button>
             <Button 
               size="sm" 
               variant="ghost" 
@@ -195,6 +215,17 @@ export default function UsersPage() {
         open={showEdit}
         onOpenChange={setShowEdit}
         onUserUpdated={refetch}
+      />
+
+      <AccountCredentialsDialog
+        userId={credsUser?.id ?? null}
+        title={
+          credsUser
+            ? `Credentials — ${credsUser.employee?.fullName ?? credsUser.username ?? "User"}`
+            : "Login credentials"
+        }
+        open={!!credsUser}
+        onOpenChange={(open) => { if (!open) setCredsUser(null); }}
       />
     </div>
   );

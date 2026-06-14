@@ -14,6 +14,9 @@ type GeneralInfoInput = {
   firstReportingId?: number | null;
   secondReportingId?: number | null;
   thirdReportingId?: number | null;
+  firstApproverUserId?: string | null;
+  secondApproverUserId?: string | null;
+  thirdApproverUserId?: string | null;
   employeeCategory?: 'TEACHING' | 'NON_TEACHING' | 'CONTRACT' | 'VISITING';
   designation?: string;
   shift?: string | null;
@@ -37,9 +40,12 @@ export const generalService = {
         subOrganization:      input.subOrganization ?? null,
         department:           input.department!,
         functionalDepartment: input.functionalDepartment ?? null,
-        firstReportingId:     input.firstReportingId  ?? null,
-        secondReportingId:    input.secondReportingId ?? null,
-        thirdReportingId:     input.thirdReportingId  ?? null,
+        firstReportingId:      input.firstReportingId      ?? null,
+        secondReportingId:     input.secondReportingId     ?? null,
+        thirdReportingId:      input.thirdReportingId      ?? null,
+        firstApproverUserId:   input.firstApproverUserId   ?? null,
+        secondApproverUserId:  input.secondApproverUserId  ?? null,
+        thirdApproverUserId:   input.thirdApproverUserId   ?? null,
         employeeCategory:     input.employeeCategory!,
         designation:          input.designation!,
         shift:                input.shift ?? null,

@@ -2,12 +2,19 @@
 
 import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useSalaryTemplate, useUpsertColumnRule, useComputeSalary } from "@/lib/hooks/useSalary";
+import {
+  useSalaryTemplate,
+  useUpsertColumnRule,
+  useComputeSalary,
+  useUpdateTemplateColumnVisibility,
+} from "@/lib/hooks/useSalary";
 import { formatINR } from "@/lib/utils/currency";
 import { RuleEditorDrawer } from "@/components/salary/RuleEditorDrawer";
+import { SimpleRuleDialog } from "@/components/salary/SimpleRuleDialog";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import type { SalaryColumnDefinition, SalaryColumnRule } from "@/lib/hooks/useSalary";
 import api from "@/lib/axios";
 import { useQuery } from "@tanstack/react-query";
@@ -20,13 +27,16 @@ export default function SalaryStructureDetailPage({
   params: Promise<{ designationId: string; commission: string }>;
 }) {
   const { designationId, commission } = use(params);
-  const commissionType = commission.toLowerCase() === "sixth" ? "SIXTH" : "FIFTH";
+  const commissionCode = commission.toUpperCase();
   const authReady = useAuthReady();
-  const tpl = useSalaryTemplate(designationId, commissionType);
+  const tpl = useSalaryTemplate(designationId, commissionCode);
   const upsertRule = useUpsertColumnRule();
+  const updateVisibility = useUpdateTemplateColumnVisibility();
   const [editing, setEditing] = useState<SalaryColumnDefinition | null>(null);
+  const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({});
 
   const templateId = tpl.data?.template?.id;
+  const ruleEditorEnabled = tpl.data?.payCommission?.ruleEditorEnabled ?? true;
 
   const rulesQ = useQuery({
     queryKey: ["salary", "rules", templateId],
@@ -54,11 +64,32 @@ export default function SalaryStructureDetailPage({
   const compute = useComputeSalary();
 
   useEffect(() => {
+    if (tpl.data?.template?.columnVisibility) {
+      setColumnVisibility(tpl.data.template.columnVisibility);
+    } else if (templateId) {
+      setColumnVisibility({});
+    }
+  }, [templateId, tpl.data?.template?.columnVisibility]);
+
+  useEffect(() => {
     if (templateId && !rulesQ.isLoading) {
       compute.mutate({ templateId });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [templateId, rules, rulesQ.isLoading]);
+
+  const isVisibleToEmployee = (key: string) => columnVisibility[key] !== false;
+
+  const toggleEmployeeVisibility = async (key: string, visible: boolean) => {
+    if (!templateId) return;
+    const next = { ...columnVisibility, [key]: visible };
+    setColumnVisibility(next);
+    try {
+      await updateVisibility.mutateAsync({ templateId, columnVisibility: next });
+    } catch {
+      setColumnVisibility(columnVisibility);
+    }
+  };
 
   const computedValueMap = useMemo(() => {
     const m = new Map<string, { amount: number; formula: string }>();
@@ -71,6 +102,19 @@ export default function SalaryStructureDetailPage({
     return m;
   }, [compute.data]);
 
+  const saveRule = async (body: Record<string, unknown>) => {
+    if (!editing || !templateId) return;
+    await upsertRule.mutateAsync({
+      templateId,
+      columnIdentifier: editing.columnIdentifier,
+      category: editing.category,
+      body,
+    });
+    rulesQ.refetch();
+    compute.mutate({ templateId });
+    setEditing(null);
+  };
+
   const renderTable = (items: SalaryColumnDefinition[]) => (
     <table className="w-full text-sm">
       <thead>
@@ -79,7 +123,8 @@ export default function SalaryStructureDetailPage({
           <th className="py-2">Rule</th>
           <th className="py-2">Formula</th>
           <th className="py-2 text-right">Amount</th>
-          <th className="py-2 w-20"></th>
+          <th className="py-2 text-center w-28" title="Whether employees see this line on their profile">Employee view</th>
+          <th className="py-2 w-20" />
         </tr>
       </thead>
       <tbody>
@@ -117,9 +162,24 @@ export default function SalaryStructureDetailPage({
                   </span>
                 )}
               </td>
+              <td className="py-2 text-center">
+                <div className="flex flex-col items-center gap-0.5">
+                  <Switch
+                    checked={isVisibleToEmployee(key)}
+                    onCheckedChange={(v) => toggleEmployeeVisibility(key, v)}
+                    disabled={updateVisibility.isPending}
+                    aria-label={`Show ${col.displayName} to employees`}
+                  />
+                  <span className="text-[9px] text-slate-400">
+                    {isVisibleToEmployee(key) ? "Shown" : "Hidden"}
+                  </span>
+                </div>
+              </td>
               <td className="py-2">
                 {col.isRuleConfigurable && templateId && (
-                  <Button size="sm" variant="ghost" onClick={() => setEditing(col)}>Edit</Button>
+                  <Button size="sm" variant="ghost" onClick={() => setEditing(col)}>
+                    {ruleEditorEnabled ? "Edit" : "Set amount"}
+                  </Button>
                 )}
               </td>
             </tr>
@@ -129,13 +189,18 @@ export default function SalaryStructureDetailPage({
     </table>
   );
 
+  const commissionLabel = tpl.data?.payCommission?.name ?? commissionCode;
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
         <Link href="/admin/salary/structures" className="text-sm text-slate-500 hover:text-slate-800">← Structures</Link>
         <h1 className="text-xl font-bold text-slate-800">
-          {commissionType === "FIFTH" ? "5th" : "6th"} Pay — {tpl.data?.designation?.name ?? tpl.data?.template?.designation?.name ?? "…"}
+          {commissionLabel} — {tpl.data?.designation?.name ?? tpl.data?.template?.designation?.name ?? "…"}
         </h1>
+        {!ruleEditorEnabled && (
+          <Badge variant="secondary">Fixed amounts only — rule editor disabled for this commission</Badge>
+        )}
       </div>
 
       {tpl.isError && (
@@ -145,7 +210,6 @@ export default function SalaryStructureDetailPage({
               ? (tpl.error.response?.data as { message?: string })?.message ?? "Failed to load template."
               : "Failed to load template."}
           </p>
-          <p className="text-xs text-slate-500 mt-1">Log out and log back in if your session expired.</p>
         </Card>
       )}
 
@@ -156,6 +220,12 @@ export default function SalaryStructureDetailPage({
 
       {templateId && (
         <>
+          <Card className="p-4 bg-blue-50/50 border-blue-100">
+            <p className="text-xs text-slate-600">
+              Use <strong>Employee view</strong> to show or hide each column on the employee portal salary tab.
+              Hidden columns are still calculated in gross and net pay — employees simply do not see those line items.
+            </p>
+          </Card>
           <Card className="p-4">
             <h2 className="font-semibold text-emerald-700 mb-3">Earnings</h2>
             {renderTable(earnings)}
@@ -167,9 +237,6 @@ export default function SalaryStructureDetailPage({
 
           <Card className="p-4 bg-slate-50">
             <h2 className="font-semibold text-slate-800 mb-2">Pay Summary Preview</h2>
-            <p className="text-xs text-slate-500 mb-3">
-              Based on configured rules. Unset columns count as ₹0. Override per employee in Salary Entry.
-            </p>
             {compute.isPending && <p className="text-sm text-slate-500">Calculating…</p>}
             {compute.data && (
               <div className="flex flex-wrap gap-6 text-sm">
@@ -191,23 +258,28 @@ export default function SalaryStructureDetailPage({
         </>
       )}
 
-      {editing && templateId && (
+      {editing && templateId && ruleEditorEnabled && (
         <RuleEditorDrawer
           open={!!editing}
           onOpenChange={(o) => !o && setEditing(null)}
           column={editing}
           existingRule={ruleMap.get(`${editing.category}::${editing.columnIdentifier}`)}
           allColumns={columns}
-          onSave={async (body) => {
-            await upsertRule.mutateAsync({
-              templateId,
-              columnIdentifier: editing.columnIdentifier,
-              category: editing.category,
-              body,
-            });
-            rulesQ.refetch();
-            compute.mutate({ templateId });
-          }}
+          onSave={saveRule}
+        />
+      )}
+
+      {editing && templateId && !ruleEditorEnabled && (
+        <SimpleRuleDialog
+          open={!!editing}
+          onOpenChange={(o) => !o && setEditing(null)}
+          column={editing}
+          defaultValue={
+            ruleMap.get(`${editing.category}::${editing.columnIdentifier}`)?.fixedDefaultValue
+              ? Number(ruleMap.get(`${editing.category}::${editing.columnIdentifier}`)!.fixedDefaultValue)
+              : computedValueMap.get(`${editing.category}::${editing.columnIdentifier}`)?.amount
+          }
+          onSave={saveRule}
         />
       )}
     </div>

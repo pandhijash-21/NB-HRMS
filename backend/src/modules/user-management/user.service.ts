@@ -3,6 +3,8 @@ import { prisma } from '../../config/prisma';
 import { redis, connectRedis } from '../../config/redis';
 import { sendAccountCreatedEmail } from '../../utils/mailer';
 import type { CreateUserInput, UpdateUserInput } from './types';
+import { buildCredentialView } from './credentials.util';
+import { encryptPasswordForAdmin } from '../../utils/passwordCrypto';
 
 async function invalidateSession(userId: string, roleId?: string) {
   try {
@@ -33,6 +35,8 @@ export const userService = {
       select: {
         id:          true,
         employeeId:  true,
+        username:      true,
+        subOrganization: true,
         isActive:    true,
         isFirstLogin:true,
         lastLoginAt: true,
@@ -40,17 +44,41 @@ export const userService = {
         role: {
           select: { id: true, name: true },
         },
+        positionSlot: {
+          select: {
+            code: true,
+            name: true,
+            designation: { select: { name: true } },
+          },
+        },
         employee: {
           select: {
             id:         true,
             status:     true,
             photoUrl:   true,
-            generalInfo: { select: { fullName: true, designation: true, department: true } },
+            generalInfo: { select: { fullName: true, employeeCode: true, designation: true, department: true } },
           },
         },
       },
       orderBy: { createdAt: 'asc' },
     });
+  },
+
+  async getCredentials(id: string) {
+    const user = await prisma.user.findUnique({
+      where: { id },
+      include: {
+        employee: {
+          include: {
+            generalInfo: { select: { employeeCode: true, fullName: true } },
+            personalInfo: { select: { birthDate: true } },
+          },
+        },
+        positionSlot: { select: { code: true } },
+      },
+    });
+    if (!user) return null;
+    return buildCredentialView(user);
   },
 
   async getById(id: string) {
@@ -116,6 +144,7 @@ export const userService = {
           employeeId:   input.employeeId,
           roleId:       input.roleId,
           passwordHash,
+          adminPasswordEnc: encryptPasswordForAdmin(defaultPassword),
           isFirstLogin: true,
           createdBy:    creatorId,
         },
@@ -141,32 +170,15 @@ export const userService = {
       return { user, defaultPasswordUsed: !dob };
     }
 
-    // ─── Position (username-based) user ──────────────────────────────────────
-    const username = String(input.username ?? '').trim();
-    if (!username) return { error: 'Username is required', status: 400 } as const;
-    const password = String((input as any).password ?? '');
-    if (!password) return { error: 'Password is required', status: 400 } as const;
-    const subOrganization = input.subOrganization ? String(input.subOrganization).trim() : null;
+    if (input.username) {
+      return {
+        error:
+          'Alias accounts must be created via Designations → Alias accounts (pick a position).',
+        status: 400,
+      } as const;
+    }
 
-    const passwordHash = await bcrypt.hash(password, 12);
-
-    const user = await prisma.user.create({
-      data: {
-        employeeId:   null,
-        username,
-        subOrganization,
-        roleId:       input.roleId,
-        passwordHash,
-        isFirstLogin: true,
-        createdBy:    creatorId,
-      },
-      select: {
-        id: true, employeeId: true, username: true, subOrganization: true, isActive: true, isFirstLogin: true, createdAt: true,
-        role: { select: { id: true, name: true } },
-      },
-    });
-
-    return { user, defaultPasswordUsed: false };
+    return { error: 'employeeId is required', status: 400 } as const;
   },
 
   async update(id: string, input: UpdateUserInput, requesterId: string) {

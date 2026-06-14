@@ -1,9 +1,16 @@
 import { Router, Request, Response } from 'express';
-import { PayCommissionType, SalaryColumnCategory, SalaryRecordStatus } from '@prisma/client';
+import { SalaryColumnCategory, SalaryRecordStatus } from '@prisma/client';
 import { requireAuth } from '../../middleware/auth';
 import { requirePermission, requireSelfEmployeeOrPermission } from '../../middleware/rbac';
 import { ok, fail } from '../../utils/response';
 import { salaryService } from './salary.service';
+import { payCommissionService } from './payCommission.service';
+import {
+  createColumnSchema,
+  createPayCommissionSchema,
+  updateColumnSchema,
+  updatePayCommissionSchema,
+} from './payCommission.validation';
 import { createRecordSchema, createTemplateSchema, updateRecordSchema } from './salary.validation';
 
 export const salaryRouter = Router();
@@ -11,6 +18,122 @@ export const salaryRouter = Router();
 function p(value: string | string[]): string {
   return Array.isArray(value) ? value[0] : value;
 }
+
+salaryRouter.get(
+  '/pay-commissions',
+  requireAuth,
+  requirePermission('SALARY', 'READ'),
+  async (_req: Request, res: Response) => {
+    try {
+      const data = await payCommissionService.list();
+      return res.json(ok(data));
+    } catch (e: unknown) {
+      return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+    }
+  },
+);
+
+salaryRouter.post(
+  '/pay-commissions',
+  requireAuth,
+  requirePermission('SALARY', 'WRITE'),
+  async (req: Request, res: Response) => {
+    try {
+      const body = createPayCommissionSchema.parse(req.body);
+      const data = await payCommissionService.create(body);
+      return res.status(201).json(ok(data));
+    } catch (e: unknown) {
+      return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+    }
+  },
+);
+
+salaryRouter.get(
+  '/pay-commissions/:id',
+  requireAuth,
+  requirePermission('SALARY', 'READ'),
+  async (req: Request, res: Response) => {
+    try {
+      const data = await payCommissionService.getById(p(req.params.id));
+      return res.json(ok(data));
+    } catch (e: unknown) {
+      return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+    }
+  },
+);
+
+salaryRouter.patch(
+  '/pay-commissions/:id',
+  requireAuth,
+  requirePermission('SALARY', 'WRITE'),
+  async (req: Request, res: Response) => {
+    try {
+      const body = updatePayCommissionSchema.parse(req.body);
+      const data = await payCommissionService.update(p(req.params.id), body);
+      return res.json(ok(data));
+    } catch (e: unknown) {
+      return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+    }
+  },
+);
+
+salaryRouter.delete(
+  '/pay-commissions/:id',
+  requireAuth,
+  requirePermission('SALARY', 'DELETE'),
+  async (req: Request, res: Response) => {
+    try {
+      const data = await payCommissionService.remove(p(req.params.id));
+      return res.json(ok(data));
+    } catch (e: unknown) {
+      return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+    }
+  },
+);
+
+salaryRouter.post(
+  '/pay-commissions/:id/columns',
+  requireAuth,
+  requirePermission('SALARY', 'WRITE'),
+  async (req: Request, res: Response) => {
+    try {
+      const body = createColumnSchema.parse(req.body);
+      const data = await payCommissionService.createColumn(p(req.params.id), body);
+      return res.status(201).json(ok(data));
+    } catch (e: unknown) {
+      return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+    }
+  },
+);
+
+salaryRouter.patch(
+  '/pay-commissions/columns/:columnId',
+  requireAuth,
+  requirePermission('SALARY', 'WRITE'),
+  async (req: Request, res: Response) => {
+    try {
+      const body = updateColumnSchema.parse(req.body);
+      const data = await payCommissionService.updateColumn(p(req.params.columnId), body);
+      return res.json(ok(data));
+    } catch (e: unknown) {
+      return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+    }
+  },
+);
+
+salaryRouter.delete(
+  '/pay-commissions/columns/:columnId',
+  requireAuth,
+  requirePermission('SALARY', 'DELETE'),
+  async (req: Request, res: Response) => {
+    try {
+      const data = await payCommissionService.deleteColumn(p(req.params.columnId));
+      return res.json(ok(data));
+    } catch (e: unknown) {
+      return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+    }
+  },
+);
 
 salaryRouter.get(
   '/structures/status',
@@ -33,8 +156,8 @@ salaryRouter.get(
   async (req: Request, res: Response) => {
     try {
       const designationId = req.query.designationId as string | undefined;
-      const payCommissionType = req.query.payCommissionType as PayCommissionType | undefined;
-      const data = await salaryService.listTemplates({ designationId, payCommissionType });
+      const payCommissionCode = req.query.payCommissionCode as string | undefined;
+      const data = await salaryService.listTemplates({ designationId, payCommissionCode });
       return res.json(ok(data));
     } catch (e: unknown) {
       return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
@@ -48,13 +171,9 @@ salaryRouter.get(
   requirePermission('SALARY', 'READ'),
   async (req: Request, res: Response) => {
     try {
-      const commission = p(req.params.commission).toUpperCase() as PayCommissionType;
-      if (!['FIFTH', 'SIXTH'].includes(commission)) {
-        return res.status(400).json(fail('Invalid pay commission'));
-      }
       const data = await salaryService.getTemplateByDesignationAndCommission(
         p(req.params.designationId),
-        commission,
+        p(req.params.commission),
       );
       return res.json(ok(data));
     } catch (e: unknown) {
@@ -72,7 +191,7 @@ salaryRouter.post(
       const body = createTemplateSchema.parse(req.body);
       const data = await salaryService.createTemplate(
         body.designationId,
-        body.payCommissionType,
+        body.payCommissionCode,
         req.user!.id,
       );
       return res.status(201).json(ok(data));
@@ -89,6 +208,27 @@ salaryRouter.delete(
   async (req: Request, res: Response) => {
     try {
       const data = await salaryService.deleteTemplate(p(req.params.id));
+      return res.json(ok(data));
+    } catch (e: unknown) {
+      return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+    }
+  },
+);
+
+salaryRouter.patch(
+  '/templates/:templateId/column-visibility',
+  requireAuth,
+  requirePermission('SALARY', 'WRITE'),
+  async (req: Request, res: Response) => {
+    try {
+      const { columnVisibility } = req.body as { columnVisibility: Record<string, boolean> };
+      if (!columnVisibility || typeof columnVisibility !== 'object') {
+        return res.status(400).json(fail('columnVisibility object is required'));
+      }
+      const data = await salaryService.updateTemplateColumnVisibility(
+        p(req.params.templateId),
+        columnVisibility,
+      );
       return res.json(ok(data));
     } catch (e: unknown) {
       return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
@@ -116,8 +256,7 @@ salaryRouter.get(
   requirePermission('SALARY', 'READ'),
   async (req: Request, res: Response) => {
     try {
-      const commission = p(req.params.commission).toUpperCase() as PayCommissionType;
-      const data = await salaryService.getColumnDefinitions(commission);
+      const data = await salaryService.getColumnDefinitions(p(req.params.commission));
       return res.json(ok(data));
     } catch (e: unknown) {
       return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
@@ -175,20 +314,17 @@ salaryRouter.patch(
   requirePermission('SALARY', 'WRITE'),
   async (req: Request, res: Response) => {
     try {
-      const { payCommissionType, columnOverrides, columnRules } = req.body as {
-        payCommissionType?: PayCommissionType;
+      const { payCommissionCode, columnOverrides, columnRules } = req.body as {
+        payCommissionCode?: string;
         columnOverrides?: Record<string, number> | null;
         columnRules?: Record<string, import('./salary.types').ColumnRuleInput> | null;
       };
-      if (payCommissionType && !['FIFTH', 'SIXTH'].includes(payCommissionType)) {
-        return res.status(400).json(fail('payCommissionType must be FIFTH or SIXTH'));
-      }
-      if (!payCommissionType && columnOverrides === undefined && columnRules === undefined) {
+      if (!payCommissionCode && columnOverrides === undefined && columnRules === undefined) {
         return res.status(400).json(fail('Nothing to update'));
       }
       const data = await salaryService.updateEmployeePayProfile(
         Number(req.params.employeeId),
-        { payCommissionType, columnOverrides, columnRules },
+        { payCommissionCode, columnOverrides, columnRules },
         req.user!.id,
       );
       return res.json(ok(data));
@@ -256,7 +392,7 @@ salaryRouter.get(
       const data = await salaryService.listRecords({
         employeeId: req.query.employeeId ? Number(req.query.employeeId) : undefined,
         designationId: req.query.designationId as string | undefined,
-        payCommissionType: req.query.payCommissionType as PayCommissionType | undefined,
+        payCommissionCode: req.query.payCommissionCode as string | undefined,
         salaryMonth: req.query.salaryMonth ? Number(req.query.salaryMonth) : undefined,
         salaryYear: req.query.salaryYear ? Number(req.query.salaryYear) : undefined,
         status: req.query.status as SalaryRecordStatus | undefined,

@@ -19,6 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmploymentHistory } from "@/components/employees/EmploymentHistory";
 import { InstituteTransferDialog } from "@/components/employees/InstituteTransferDialog";
 import { DesignationUpgradeDialog } from "@/components/employees/DesignationUpgradeDialog";
+import { EmployeePositionDialog } from "@/components/employees/EmployeePositionDialog";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -82,6 +83,11 @@ export default function AdminEmployeeProfilePage({ params }: PageProps) {
         showAuditLog
         actions={
           <div className="flex items-center gap-2 flex-wrap justify-end">
+            <EmployeePositionDialog
+              employeeId={id}
+              currentPosition={rawEmployee?.position ?? null}
+              onUpdated={refetch}
+            />
             <InstituteTransferDialog employeeId={id} />
             <DesignationUpgradeDialog employeeId={id} />
             <span className="text-xs px-2 py-1 rounded bg-[#d9b557]/20 text-[#1d3459] font-medium">

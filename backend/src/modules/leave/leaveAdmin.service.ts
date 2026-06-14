@@ -91,6 +91,7 @@ export const leaveAdminService = {
   // ─── Balances management ─────────────────────────────────────────────────────
   async getEmployeeBalances(employeeId: number, year?: number) {
     const y = year ?? new Date().getUTCFullYear();
+    await leaveBalanceService.syncScheduledCredits(employeeId, y);
     return prisma.leaveBalance.findMany({
       where: { employeeId, year: y },
       include: { leaveType: { select: { code: true, name: true } } },

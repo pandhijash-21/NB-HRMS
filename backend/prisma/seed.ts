@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { seedDesignationsAndSalaryCatalog } from './seeds/designationSalary.seed';
+import { seedInstitutes } from './seeds/institutes.seed';
 
 const prisma = new PrismaClient();
 
@@ -159,6 +160,27 @@ async function main() {
   }
   console.log(`✅  ${permCount} permission entries seeded`);
 
+  const workforceScopeByRole: Record<string, 'UNIVERSITY' | 'INSTITUTE' | 'SELF' | 'NONE'> = {
+    ADMIN: 'UNIVERSITY',
+    HR: 'UNIVERSITY',
+    HR_MANAGER: 'UNIVERSITY',
+    VC: 'UNIVERSITY',
+    REGISTRAR: 'UNIVERSITY',
+    HOI: 'INSTITUTE',
+    HOD: 'INSTITUTE',
+    FINANCE: 'NONE',
+    EMPLOYEE: 'SELF',
+  };
+  for (const [roleName, employeeViewScope] of Object.entries(workforceScopeByRole)) {
+    const roleId = roleIdMap[roleName];
+    if (!roleId) continue;
+    await prisma.rolePermission.updateMany({
+      where: { roleId, moduleKey: 'PERSONAL_INFO' },
+      data: { employeeViewScope },
+    });
+  }
+
+  await seedInstitutes(prisma);
   await seedDesignationsAndSalaryCatalog(prisma, roleIdMap);
 
   // ── Leave Settings + Types ───────────────────────────────────────────────
@@ -784,21 +806,28 @@ async function main() {
     { empId: 8, balances: nonTeachingBalances },
   ];
 
+  const { expectedTotalCredited } = await import('../src/modules/leave/leaveCreditSchedule.util');
+
   for (const { empId, balances } of balancesToSeed) {
     for (const { type, days } of balances) {
       if (!type) continue;
+      const leaveTypeRow = await prisma.leaveType.findUnique({ where: { id: type.id } });
+      const credited =
+        leaveTypeRow?.creditSchedule != null
+          ? expectedTotalCredited(leaveTypeRow.creditSchedule, currentYear)
+          : days;
       await prisma.leaveBalance.upsert({
         where: { employeeId_leaveTypeId_year: { employeeId: empId, leaveTypeId: type.id, year: currentYear } },
-        update: { totalCredited: days, available: days },
+        update: { totalCredited: credited, available: credited },
         create: {
           employeeId:    empId,
           leaveTypeId:   type.id,
           year:          currentYear,
-          totalCredited: days,
+          totalCredited: credited,
           carryForward:  0,
           used:          0,
           pending:       0,
-          available:     days,
+          available:     credited,
         },
       });
     }

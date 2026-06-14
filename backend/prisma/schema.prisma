@@ -139,11 +139,6 @@ enum ApprovalAction {
   APPROVED
 }
 
-enum PayCommissionType {
-  FIFTH
-  SIXTH
-}
-
 enum RuleType {
   FIXED
   PERCENTAGE
@@ -250,7 +245,9 @@ model EmployeeGeneralInfo {
 
   // Organization
   organization         String                                           // GANDHINAGAR UNIVERSITY
-  subOrganization      String?          @map("sub_organization")        // GANDHINAGAR INSTITUTE OF TECHNOLOGY
+  instituteId          String?          @map("institute_id")
+  institute            Institute?       @relation(fields: [instituteId], references: [id])
+  subOrganization      String?          @map("sub_organization")        // institute code (e.g. GIT), synced from institute
 
   // Department
   department           String                                           // ADMIN DEPARTMENT
@@ -304,6 +301,8 @@ model EmployeeAssignment {
   effectiveTo    DateTime? @map("effective_to") @db.Date
 
   organization    String?  // optional snapshot; current system uses a single org mostly
+  instituteId     String?  @map("institute_id")
+  institute       Institute? @relation(fields: [instituteId], references: [id])
   subOrganization String?  @map("sub_organization")
   department      String?
   designation     String
@@ -945,6 +944,13 @@ model Role {
   @@map("roles")
 }
 
+enum EmployeeViewScope {
+  NONE
+  SELF
+  INSTITUTE
+  UNIVERSITY
+}
+
 // Junction: Role → Module with granular action flags
 model RolePermission {
   id        String @id @default(uuid())
@@ -956,6 +962,8 @@ model RolePermission {
   canApprove Boolean @default(false) @map("can_approve")
   canDelete  Boolean @default(false) @map("can_delete")
   canExport  Boolean @default(false) @map("can_export")
+  /// Workforce directory visibility (PERSONAL_INFO module). Edit scope follows this.
+  employeeViewScope EmployeeViewScope @default(NONE) @map("employee_view_scope")
 
   updatedAt DateTime @updatedAt @map("updated_at")
   updatedBy String?  @map("updated_by")
@@ -976,6 +984,8 @@ model User {
   subOrganization   String?   @map("sub_organization")
   roleId            String    @map("role_id")
   passwordHash      String    @map("password_hash")
+  /// AES-encrypted plaintext for admin viewing (not used for auth)
+  adminPasswordEnc  String?   @map("admin_password_enc")
   isFirstLogin      Boolean   @default(true) @map("is_first_login")
   isActive          Boolean   @default(true) @map("is_active")
   lastLoginAt       DateTime? @map("last_login_at")
@@ -1006,7 +1016,7 @@ model EmployeeSalaryInfo {
   employeeId      Int       @unique @map("employee_id")
 
   payCommission      String?            @map("pay_commission")
-  payCommissionType  PayCommissionType? @map("pay_commission_type")
+  payCommissionId    String?            @map("pay_commission_id")
   designationId      String?            @map("designation_id")
   payGrade           String?            @map("pay_grade")
   basicSalary        Decimal?           @map("basic_salary") @db.Decimal(12, 2)
@@ -1018,10 +1028,31 @@ model EmployeeSalaryInfo {
   updatedAt       DateTime  @updatedAt @map("updated_at")
   updatedBy       String?   @map("updated_by")
 
-  employee        Employee    @relation(fields: [employeeId], references: [id])
-  designationRef  Designation? @relation(fields: [designationId], references: [id])
+  employee        Employee       @relation(fields: [employeeId], references: [id])
+  designationRef  Designation?   @relation(fields: [designationId], references: [id])
+  payCommissionRef PayCommission?  @relation(fields: [payCommissionId], references: [id])
 
   @@map("employee_salary_info")
+}
+
+// =============================================================================
+// INSTITUTES (sub-organizations)
+// =============================================================================
+
+model Institute {
+  id        String   @id @default(uuid())
+  code      String   @unique
+  name      String   @unique
+  isActive  Boolean  @default(true) @map("is_active")
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  generalInfoRecords EmployeeGeneralInfo[]
+  positionSlots      PositionSlot[]
+  assignments        EmployeeAssignment[]
+
+  @@map("institutes")
 }
 
 // =============================================================================
@@ -1055,6 +1086,8 @@ model PositionSlot {
   name            String
   designationId   String   @map("designation_id")
   linkedRoleId    String   @map("linked_role_id")
+  instituteId     String?  @map("institute_id")
+  institute       Institute? @relation(fields: [instituteId], references: [id])
   subOrganization String?  @map("sub_organization")
   userId          String?  @unique @map("user_id")
   isActive        Boolean  @default(true) @map("is_active")
@@ -1090,14 +1123,19 @@ model PositionAssignment {
 // =============================================================================
 
 model PayCommission {
-  id             String            @id @default(uuid())
-  commissionType PayCommissionType @unique @map("commission_type")
-  name           String
-  isActive       Boolean           @default(true) @map("is_active")
-  createdAt      DateTime          @default(now()) @map("created_at")
+  id                String   @id @default(uuid())
+  code              String   @unique
+  name              String
+  description       String?
+  isActive          Boolean  @default(true) @map("is_active")
+  ruleEditorEnabled Boolean  @default(true) @map("rule_editor_enabled")
+  sortOrder         Int      @default(0) @map("sort_order")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
 
-  columnDefinitions      SalaryColumnDefinition[]
+  columnDefinitions        SalaryColumnDefinition[]
   salaryStructureTemplates SalaryStructureTemplate[]
+  employeeSalaryInfos      EmployeeSalaryInfo[]
 
   @@map("pay_commissions")
 }
@@ -1118,13 +1156,15 @@ model SalaryColumnDefinition {
 }
 
 model SalaryStructureTemplate {
-  id              String   @id @default(uuid())
-  designationId   String   @map("designation_id")
-  payCommissionId String   @map("pay_commission_id")
-  isActive        Boolean  @default(true) @map("is_active")
-  createdBy       String?  @map("created_by")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  id                String   @id @default(uuid())
+  designationId     String   @map("designation_id")
+  payCommissionId   String   @map("pay_commission_id")
+  isActive          Boolean  @default(true) @map("is_active")
+  /** Per-column employee visibility: { "EARNING::basic": true }. Omitted keys default to visible. */
+  columnVisibility  Json?    @map("column_visibility")
+  createdBy         String?  @map("created_by")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
 
   designation   Designation        @relation(fields: [designationId], references: [id])
   payCommission PayCommission      @relation(fields: [payCommissionId], references: [id])
@@ -1179,7 +1219,7 @@ model EmployeeSalaryRecord {
   employeeId        Int                @map("employee_id")
   assignmentId      String?            @map("assignment_id")
   templateId        String             @map("template_id")
-  payCommissionType PayCommissionType  @map("pay_commission_type")
+  payCommissionCode String             @map("pay_commission_code")
   salaryMonth       Int                @map("salary_month")
   salaryYear        Int                @map("salary_year")
   status            SalaryRecordStatus @default(DRAFT)

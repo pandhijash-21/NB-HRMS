@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -24,27 +24,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useCreateEmployee, useEmployeeNames } from "@/modules/admin/hooks/useAdminEmployees";
+import { formatApproverOption, groupApproverOptions } from "@/lib/utils/approverOptions";
 import { OtpVerification } from "@/components/shared/OtpVerification";
 import { PlusCircle, Loader2, UserPlus, ShieldAlert, CheckCircle2, Mail } from "lucide-react";
 import { useDesignations } from "@/lib/hooks/useDesignations";
-
-const INSTITUTES = [
-  "Gandhinagar Institute of Technology",
-  "Gandhinagar Institute of Management",
-  "Gandhinagar Institute of Commerce",
-  "Gandhinagar Institute of Science",
-  "Gandhinagar Institute of Research & Development",
-  "Gandhinagar Institute of Liberal Studies",
-  "Gandhinagar Institute of Computer Science & Applications",
-  "Gandhinagar Institute of Law",
-  "Gandhinagar Institute of Valuation Studies",
-  "Gandhinagar Institute of Design",
-  "Gandhinagar Institute of Pharmacy",
-  "Gandhinagar Institute of Nursing",
-  "Gandhinagar Institute of Skill Development",
-  "Gandhinagar Institute of Library & Information Science",
-  "Gandhinagar Institute of Vocational Education",
-];
+import { EmployeePositionSelect } from "@/components/employees/EmployeePositionSelect";
+import { InstituteSelect } from "@/components/institutes/InstituteSelect";
 
 const addEmployeeSchema = z.object({
   fullName: z.string()
@@ -61,11 +46,12 @@ const addEmployeeSchema = z.object({
     .optional()
     .or(z.literal("")),
   organization: z.enum(["Gandhinagar University", "Platinum Foundation"], "Organization is required"),
-  subOrganization: z.string().min(1, "Sub-organization is required"),
+  instituteId: z.string().uuid("Institute is required"),
   designation: z.string().min(1, "Designation is required"),
   department: z.string().min(2, "Department is required"),
   employeeCategory: z.enum(["TEACHING", "NON_TEACHING", "CONTRACT", "VISITING"]),
   joiningDate: z.string().min(1, "Joining date is required"),
+  positionDesignationId: z.string().uuid().optional().nullable(),
   firstApproverUserId: z.string().nullable().optional(),
   secondApproverUserId: z.string().nullable().optional(),
   thirdApproverUserId: z.string().nullable().optional(),
@@ -99,7 +85,40 @@ export function AddEmployeeDialog() {
   const [otpVerified, setOtpVerified] = useState(false);
   const createMutation = useCreateEmployee();
   const { data: employeeNames = [] } = useEmployeeNames();
+  const { positions: positionApprovers, employees: employeeApprovers } = useMemo(
+    () => groupApproverOptions(employeeNames),
+    [employeeNames],
+  );
   const { data: designations = [] } = useDesignations(false);
+
+  const renderApproverOptions = () => (
+    <>
+      {positionApprovers.length > 0 && (
+        <>
+          <div className="px-2 py-1.5 text-[10px] font-semibold uppercase text-slate-400">
+            Position / alias accounts
+          </div>
+          {positionApprovers.map((item) => (
+            <SelectItem key={item.userId} value={item.userId} className="text-[10px] font-medium py-2">
+              {formatApproverOption(item)}
+            </SelectItem>
+          ))}
+        </>
+      )}
+      {employeeApprovers.length > 0 && (
+        <>
+          <div className="px-2 py-1.5 text-[10px] font-semibold uppercase text-slate-400">
+            Employees
+          </div>
+          {employeeApprovers.map((item) => (
+            <SelectItem key={item.userId} value={item.userId} className="text-[10px] font-medium py-2">
+              {formatApproverOption(item)}
+            </SelectItem>
+          ))}
+        </>
+      )}
+    </>
+  );
 
   const {
     register,
@@ -115,7 +134,7 @@ export function AddEmployeeDialog() {
       personalEmail: "",
       institutionalEmail: "",
       organization: "Gandhinagar University",
-      subOrganization: "",
+      instituteId: "",
       designation: "",
       department: "",
       employeeCategory: "TEACHING",
@@ -124,6 +143,7 @@ export function AddEmployeeDialog() {
       firstApproverUserId: null,
       secondApproverUserId: null,
       thirdApproverUserId: null,
+      positionDesignationId: null,
     },
     mode: "onChange",
   });
@@ -300,6 +320,13 @@ export function AddEmployeeDialog() {
                 {errors.institutionalEmail && <p className="text-[10px] text-rose-500 font-bold uppercase tracking-tight">{errors.institutionalEmail.message}</p>}
               </div>
 
+              <div className="col-span-2 space-y-2">
+                <EmployeePositionSelect
+                  value={watch("positionDesignationId")}
+                  onValueChange={(v) => setValue("positionDesignationId", v, { shouldValidate: true })}
+                />
+              </div>
+
               <div className="space-y-2">
                 <Label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Organization *</Label>
                 <Select
@@ -319,23 +346,14 @@ export function AddEmployeeDialog() {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Sub-Organization *</Label>
-                <Select
-                  name="subOrganization"
-                  onValueChange={(v) => setValue("subOrganization", v)}
-                >
-                  <SelectTrigger id="subOrganization" className="rounded-xl border-slate-200/60 bg-white h-11 text-sm font-medium">
-                    <SelectValue placeholder="Select Institute..." />
-                  </SelectTrigger>
-                  <SelectContent className="rounded-xl border-slate-100 shadow-xl max-h-[200px]">
-                    {INSTITUTES.map((institute) => (
-                      <SelectItem key={institute} value={institute} className="text-[10px] font-medium py-2">
-                        {institute}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.subOrganization && <p className="text-[10px] text-rose-500 font-bold uppercase tracking-tight">{errors.subOrganization.message}</p>}
+                <Label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Institute *</Label>
+                <InstituteSelect
+                  id="instituteId"
+                  value={watch("instituteId") ?? ""}
+                  onValueChange={(v) => setValue("instituteId", v)}
+                  className="rounded-xl border-slate-200/60 bg-white h-11 text-sm font-medium"
+                />
+                {errors.instituteId && <p className="text-[10px] text-rose-500 font-bold uppercase tracking-tight">{errors.instituteId.message}</p>}
               </div>
 
               <div className="space-y-2">
@@ -408,11 +426,7 @@ export function AddEmployeeDialog() {
                   </SelectTrigger>
                   <SelectContent className="rounded-xl border-slate-100 shadow-xl max-h-[220px]">
                     <SelectItem value="__null__" className="text-[10px] font-extrabold text-slate-500">NULL (bypass this layer)</SelectItem>
-                    {employeeNames.map((emp) => (
-                      <SelectItem key={emp.userId} value={emp.userId} className="text-[10px] font-medium py-2">
-                        {emp.fullName}{emp.employeeCode ? ` (${emp.employeeCode})` : ""}
-                      </SelectItem>
-                    ))}
+                    {renderApproverOptions()}
                   </SelectContent>
                 </Select>
               </div>
@@ -425,11 +439,7 @@ export function AddEmployeeDialog() {
                   </SelectTrigger>
                   <SelectContent className="rounded-xl border-slate-100 shadow-xl max-h-[220px]">
                     <SelectItem value="__null__" className="text-[10px] font-extrabold text-slate-500">NULL (bypass this layer)</SelectItem>
-                    {employeeNames.map((emp) => (
-                      <SelectItem key={emp.userId} value={emp.userId} className="text-[10px] font-medium py-2">
-                        {emp.fullName}{emp.employeeCode ? ` (${emp.employeeCode})` : ""}
-                      </SelectItem>
-                    ))}
+                    {renderApproverOptions()}
                   </SelectContent>
                 </Select>
               </div>
@@ -442,11 +452,7 @@ export function AddEmployeeDialog() {
                   </SelectTrigger>
                   <SelectContent className="rounded-xl border-slate-100 shadow-xl max-h-[220px]">
                     <SelectItem value="__null__" className="text-[10px] font-extrabold text-slate-500">NULL (bypass this layer)</SelectItem>
-                    {employeeNames.map((emp) => (
-                      <SelectItem key={emp.userId} value={emp.userId} className="text-[10px] font-medium py-2">
-                        {emp.fullName}{emp.employeeCode ? ` (${emp.employeeCode})` : ""}
-                      </SelectItem>
-                    ))}
+                    {renderApproverOptions()}
                   </SelectContent>
                 </Select>
               </div>

@@ -1,4 +1,5 @@
 import { prisma } from '../../config/prisma';
+import { resolveInstituteRef } from '../institute/institute.util';
 import { assignmentService } from './assignment.service';
 
 function toUtcDateOnly(d: Date | string) {
@@ -62,8 +63,19 @@ async function validateNoOverlap(employeeId: number, effectiveFrom: Date, exclud
 }
 
 export const employmentChangeService = {
-  async instituteTransfer(params: { employeeId: number; newSubOrganization: string | null; effectiveFrom: Date | string; reason?: string | null; changedBy: string }) {
+  async instituteTransfer(params: {
+    employeeId: number;
+    newSubOrganization?: string | null;
+    instituteId?: string | null;
+    effectiveFrom: Date | string;
+    reason?: string | null;
+    changedBy: string;
+  }) {
     const effectiveFrom = toUtcDateOnly(params.effectiveFrom);
+    const instituteRef = await resolveInstituteRef({
+      instituteId: params.instituteId,
+      subOrganization: params.newSubOrganization,
+    });
 
     return prisma.$transaction(async (tx) => {
       // Ensure we have some baseline assignment history
@@ -94,7 +106,8 @@ export const employmentChangeService = {
           effectiveFrom,
           effectiveTo: null,
           organization: base.organization ?? null,
-          subOrganization: params.newSubOrganization,
+          instituteId: instituteRef.instituteId,
+          subOrganization: instituteRef.subOrganization,
           department: base.department ?? null,
           designation: base.designation,
           shift: base.shift ?? null,
@@ -109,7 +122,10 @@ export const employmentChangeService = {
       if (effectiveFrom <= today) {
         await tx.employeeGeneralInfo.update({
           where: { employeeId: params.employeeId },
-          data: { subOrganization: params.newSubOrganization },
+          data: {
+            instituteId: instituteRef.instituteId,
+            subOrganization: instituteRef.subOrganization,
+          },
         });
       }
 

@@ -4,6 +4,12 @@ import { ok, fail } from '../../utils/response';
 import { employeeService } from './employee.service';
 import { assignmentService } from './assignment.service';
 import { employmentChangeService } from './employmentChange.service';
+import {
+  canViewEmployeeDirectory,
+  canWriteEmployeeDirectory,
+  employeeMatchesDirectoryScope,
+  resolveDirectoryInstituteFilter,
+} from './employeeDirectory.util';
 
 const createSchema = z.object({
   userId: z.string().min(1),
@@ -25,24 +31,24 @@ export const employeeController = {
     const offset = Number(req.query.offset) || 0;
     const search = req.query.search as string | undefined;
     const status = req.query.status as string | undefined;
-    const role = String((req.user as any)?.role ?? '');
-    const subOrganization = (req.user as any)?.subOrganization ?? null;
-    const scopedSubOrg =
-      role === 'HOI' && subOrganization
-        ? String(subOrganization)
-        : undefined;
+    const subOrganization = await resolveDirectoryInstituteFilter(req.user);
 
-    const data = await employeeService.list({ limit, offset, search, status, subOrganization: scopedSubOrg });
-    return res.json(ok(data));
+    const data = await employeeService.list({ limit, offset, search, status, subOrganization });
+    return res.json(ok({ ...data, viewScope: req.user?.employeeViewScope ?? 'NONE' }));
   },
 
   async getById(req: Request, res: Response) {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json(fail('Invalid employee id'));
 
-    // EMPLOYEE can only read self (if token includes employeeId)
-    if (req.user?.role === 'EMPLOYEE' && req.user.employeeId && req.user.employeeId !== id) {
-      return res.status(403).json(fail('Forbidden'));
+    const isSelf =
+      req.user?.employeeId != null && Number(req.user.employeeId) === id;
+    if (!isSelf) {
+      if (!canViewEmployeeDirectory(req.user)) {
+        return res.status(403).json(fail('You do not have permission to view this employee'));
+      }
+      const allowed = await employeeMatchesDirectoryScope(id, req.user);
+      if (!allowed) return res.status(403).json(fail('Employee is outside your access scope'));
     }
 
     const data = await employeeService.getById(id);
@@ -68,15 +74,19 @@ export const employeeController = {
     if (!Number.isFinite(employeeId)) return res.status(400).json(fail('Invalid employee id'));
 
     const Schema = z.object({
-      newSubOrganization: z.string().min(1).nullable(),
+      instituteId: z.string().uuid().optional(),
+      newSubOrganization: z.string().min(1).optional().nullable(),
       effectiveFrom: z.string().min(1),
       reason: z.string().optional().nullable(),
+    }).refine((d) => d.instituteId || d.newSubOrganization, {
+      message: 'instituteId or newSubOrganization is required',
     });
     const body = Schema.safeParse(req.body);
     if (!body.success) return res.status(400).json(fail(body.error.issues[0]?.message ?? 'Validation error'));
 
     const data = await employmentChangeService.instituteTransfer({
       employeeId,
+      instituteId: body.data.instituteId ?? null,
       newSubOrganization: body.data.newSubOrganization ?? null,
       effectiveFrom: body.data.effectiveFrom,
       reason: body.data.reason ?? null,
@@ -111,24 +121,50 @@ export const employeeController = {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json(fail('Invalid employee id'));
 
-    const updateSchema = z.object({
-      abbreviation: z.string().min(1).max(10).nullable().optional(),
-      status: z.enum(['ACTIVE', 'INACTIVE', 'ON_LEAVE', 'RESIGNED', 'RETIRED', 'TERMINATED']).optional(),
-      photoUrl: z.string().url().nullable().optional(),
-      signatureUrl: z.string().url().nullable().optional(),
-    });
-
     const body = updateSchema.safeParse(req.body);
     if (!body.success) return res.status(400).json(fail(body.error.message));
-    
-    // Employee can update self
-    if (req.user?.role === 'EMPLOYEE' && req.user.employeeId && req.user.employeeId !== id) {
-      return res.status(403).json(fail('Forbidden'));
+
+    const isSelf =
+      req.user?.employeeId != null && Number(req.user.employeeId) === id;
+    if (!isSelf) {
+      if (!canWriteEmployeeDirectory(req.user)) {
+        return res.status(403).json(fail('You do not have permission to edit this employee'));
+      }
+      const allowed = await employeeMatchesDirectoryScope(id, req.user);
+      if (!allowed) return res.status(403).json(fail('Employee is outside your access scope'));
     }
 
     const updated = await employeeService.update(id, body.data);
     if (!updated) return res.status(404).json(fail('Employee not found'));
     return res.json(ok(updated));
+  },
+
+  async assignPosition(req: Request, res: Response) {
+    const employeeId = Number(req.params.id);
+    if (!Number.isFinite(employeeId)) return res.status(400).json(fail('Invalid employee id'));
+
+    const Schema = z.object({
+      positionDesignationId: z.string().uuid().nullable(),
+    });
+    const body = Schema.safeParse(req.body);
+    if (!body.success) return res.status(400).json(fail(body.error.issues[0]?.message ?? 'Validation error'));
+
+    if (!canWriteEmployeeDirectory(req.user)) {
+      return res.status(403).json(fail('You do not have permission to assign positions'));
+    }
+    const allowed = await employeeMatchesDirectoryScope(employeeId, req.user);
+    if (!allowed) return res.status(403).json(fail('Employee is outside your access scope'));
+
+    try {
+      const data = await employeeService.assignPosition(
+        employeeId,
+        body.data.positionDesignationId,
+        req.user!.id,
+      );
+      return res.json(ok(data));
+    } catch (err: unknown) {
+      return res.status(400).json(fail(err instanceof Error ? err.message : 'Failed to assign position'));
+    }
   },
 
   async createFull(req: Request, res: Response) {
@@ -150,6 +186,9 @@ export const employeeController = {
       firstReportingId: z.number().int().optional().nullable(),
       secondReportingId: z.number().int().optional().nullable(),
       thirdReportingId: z.number().int().optional().nullable(),
+      instituteId: z.string().uuid().optional(),
+      subOrganization: z.string().optional().nullable(),
+      positionDesignationId: z.string().uuid().optional().nullable(),
     });
 
     const body = FullCreateSchema.safeParse(req.body);
@@ -178,7 +217,8 @@ export const employeeController = {
   },
 
   async listNames(req: Request, res: Response) {
-    const employees = await employeeService.listNames();
+    const subOrganization = await resolveDirectoryInstituteFilter(req.user);
+    const employees = await employeeService.listNames({ subOrganization });
     return res.json(ok(employees));
   },
 

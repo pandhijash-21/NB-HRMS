@@ -30,49 +30,29 @@ async function resolveApprovers(employeeId: number) {
   });
   if (!gi) throw new Error('Employee general info not found');
 
-  // Prefer explicit approver user ids. If missing, fall back to legacy employee ids and map to Employee.userId.
-  const approverUserIds = {
-    firstApproverUserId: gi.firstApproverUserId ?? null,
-    secondApproverUserId: gi.secondApproverUserId ?? null,
-    thirdApproverUserId: gi.thirdApproverUserId ?? null,
+  const legacyIds = [gi.firstReportingId, gi.secondReportingId, gi.thirdReportingId].filter(
+    (x): x is number => typeof x === 'number' && Number.isFinite(x),
+  );
+
+  const legacyEmployees = legacyIds.length
+    ? await prisma.employee.findMany({
+        where: { id: { in: legacyIds } },
+        select: { id: true, userId: true },
+      })
+    : [];
+
+  const legacyUserId = (employeeId: number | null) => {
+    if (employeeId == null) return null;
+    const userId = legacyEmployees.find((e) => e.id === employeeId)?.userId ?? null;
+    if (!userId || userId.startsWith('pending-')) return null;
+    return userId;
   };
 
-  const legacyEmployeeIds = {
-    firstReportingId: gi.firstReportingId ?? null,
-    secondReportingId: gi.secondReportingId ?? null,
-    thirdReportingId: gi.thirdReportingId ?? null,
-  };
-
-  const needsLegacy =
-    !approverUserIds.firstApproverUserId &&
-    !approverUserIds.secondApproverUserId &&
-    !approverUserIds.thirdApproverUserId &&
-    (legacyEmployeeIds.firstReportingId || legacyEmployeeIds.secondReportingId || legacyEmployeeIds.thirdReportingId);
-
-  if (!needsLegacy) {
-    return {
-      firstApproverUserId: approverUserIds.firstApproverUserId,
-      secondApproverUserId: approverUserIds.secondApproverUserId,
-      thirdApproverUserId: approverUserIds.thirdApproverUserId,
-    };
-  }
-
-  const ids = [
-    legacyEmployeeIds.firstReportingId,
-    legacyEmployeeIds.secondReportingId,
-    legacyEmployeeIds.thirdReportingId,
-  ].filter((x): x is number => typeof x === 'number' && Number.isFinite(x));
-
-  const employees = await prisma.employee.findMany({
-    where: { id: { in: ids } },
-    select: { id: true, userId: true },
-  });
-  const toUserId = (eid: number | null) => employees.find((e) => e.id === eid)?.userId ?? null;
-
+  // Per layer: explicit approver user id (employee or position account), else legacy employee → user id
   return {
-    firstApproverUserId: toUserId(legacyEmployeeIds.firstReportingId),
-    secondApproverUserId: toUserId(legacyEmployeeIds.secondReportingId),
-    thirdApproverUserId: toUserId(legacyEmployeeIds.thirdReportingId),
+    firstApproverUserId: gi.firstApproverUserId ?? legacyUserId(gi.firstReportingId),
+    secondApproverUserId: gi.secondApproverUserId ?? legacyUserId(gi.secondReportingId),
+    thirdApproverUserId: gi.thirdApproverUserId ?? legacyUserId(gi.thirdReportingId),
   };
 }
 

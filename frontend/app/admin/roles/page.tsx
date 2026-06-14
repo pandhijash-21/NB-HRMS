@@ -1,24 +1,24 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRolesList, useRoleMgmtActions, Role } from "@/lib/hooks/useRole";
 import { DataTable } from "@/components/shared/DataTable";
-import { AddRoleDialog } from "@/components/admin/roles/AddRoleDialog";
 import { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Edit, Trash2, Settings } from "lucide-react";
-import Link from "next/link";
+import { Trash2, Settings, Shield } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { CreatePositionDialog } from "@/components/employees/CreatePositionDialog";
 
 export default function RolesPage() {
   const [search, setSearch] = useState("");
 
-  const { roles, loading, refetch } = useRolesList();
+  const { roles, loading, refetch } = useRolesList({ positionsOnly: true });
   const { deleteRole } = useRoleMgmtActions();
 
   const handleDelete = async (role: Role) => {
-    if (confirm(`Are you sure you want to delete the role ${role.name}?`)) {
+    if (confirm(`Are you sure you want to delete the position role ${role.name}?`)) {
       try {
         await deleteRole(role.id);
         refetch();
@@ -29,18 +29,25 @@ export default function RolesPage() {
   };
 
   const filteredRoles = roles.filter(
-    (r) => r.name.toLowerCase().includes(search.toLowerCase()) || 
-           r.description?.toLowerCase().includes(search.toLowerCase())
+    (r) =>
+      r.name.toLowerCase().includes(search.toLowerCase()) ||
+      r.description?.toLowerCase().includes(search.toLowerCase()) ||
+      r.positionName?.toLowerCase().includes(search.toLowerCase()),
   );
 
   const columns: ColumnDef<Role>[] = [
     {
-      accessorKey: "name",
-      header: "Role Name",
+      accessorKey: "positionName",
+      header: "Position",
       cell: ({ row }) => (
-        <Badge variant="outline" className="text-xs font-bold tracking-wider uppercase border-[#1d3459]/20 text-[#1d3459] bg-[#1d3459]/5 px-3 py-1">
-          {row.original.name}
-        </Badge>
+        <div className="space-y-1">
+          <span className="text-sm font-bold text-slate-800 block">
+            {row.original.positionName || row.original.name}
+          </span>
+          <Badge variant="outline" className="text-[9px] font-bold tracking-wider uppercase border-[#1d3459]/20 text-[#1d3459] bg-[#1d3459]/5 px-2 py-0">
+            {row.original.name}
+          </Badge>
+        </div>
       ),
     },
     {
@@ -56,7 +63,7 @@ export default function RolesPage() {
       accessorKey: "usersCount",
       header: "Assigned Users",
       cell: ({ row }) => {
-        const count = row.original._count?.users || 0;
+        const count = row.original._count?.users || row.original.userCount || 0;
         return (
           <div className="flex items-center gap-2">
             <span className="text-sm font-bold text-[#1d3459] w-6">{count}</span>
@@ -70,7 +77,7 @@ export default function RolesPage() {
       header: "Actions",
       cell: ({ row }) => {
         const role = row.original;
-        
+
         return (
           <div className="flex items-center justify-end gap-2 pr-4">
             <Link href={`/admin/roles/${role.id}`}>
@@ -78,10 +85,10 @@ export default function RolesPage() {
                 <Settings className="h-3.5 w-3.5" /> Matrix
               </Button>
             </Link>
-            
-            <Button 
-              size="sm" 
-              variant="ghost" 
+
+            <Button
+              size="sm"
+              variant="ghost"
               className="h-8 w-8 p-0 text-slate-400 hover:text-rose-600 hover:bg-rose-50"
               onClick={() => handleDelete(role)}
             >
@@ -97,17 +104,26 @@ export default function RolesPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="space-y-1">
-          <h2 className="text-2xl font-bold text-[#1d3459] tracking-tight">Roles Overview</h2>
-          <p className="text-xs text-slate-500 font-medium">Manage generic institutional security roles and metadata</p>
+          <div className="flex items-center gap-2">
+            <Shield className="h-5 w-5 text-[#1d3459]" />
+            <h2 className="text-2xl font-bold text-[#1d3459] tracking-tight">Roles &amp; Permissions</h2>
+          </div>
+          <p className="text-xs text-slate-500 font-medium max-w-2xl">
+            Only institutional <strong>positions</strong> appear here. Create positions from{" "}
+            <Link href="/admin/employees" className="text-[#1d3459] underline font-semibold">
+              Workforce → Create Position
+            </Link>
+            , assign them to employees, then edit what each position can access below.
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <Input
-            placeholder="Find roles…"
+            placeholder="Find positions…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-64 text-sm bg-white border-slate-200 focus:ring-[#1d3459] h-10"
           />
-          <AddRoleDialog onRoleAdded={refetch} />
+          <CreatePositionDialog onCreated={refetch} />
         </div>
       </div>
 

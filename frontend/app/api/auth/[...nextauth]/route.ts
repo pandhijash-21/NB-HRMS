@@ -23,7 +23,7 @@ export const authConfig = {
             password:   String(credentials.password),
           });
 
-          const { token, isFirstLogin, user } = res.data.data;
+          const { token, isFirstLogin, user, permissions } = res.data.data;
 
           return {
             id:           String(user.id),
@@ -34,6 +34,8 @@ export const authConfig = {
             username:     user.username ?? null,
             subOrganization: user.subOrganization ?? null,
             isFirstLogin: isFirstLogin ?? false,
+            permissions:  permissions ?? user.permissions ?? {},
+            employeeViewScope: user.employeeViewScope ?? "NONE",
             token,
           };
         } catch (err: any) {
@@ -46,7 +48,17 @@ export const authConfig = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        const u = user as { id?: string; role?: string; employeeId?: string | null; username?: string | null; subOrganization?: string | null; token?: string; isFirstLogin?: boolean };
+        const u = user as {
+          id?: string;
+          role?: string;
+          employeeId?: string | null;
+          username?: string | null;
+          subOrganization?: string | null;
+          token?: string;
+          isFirstLogin?: boolean;
+          permissions?: Record<string, string[]>;
+          employeeViewScope?: string;
+        };
         token.userId = u.id;
         token.role = u.role;
         token.employeeId = u.employeeId;
@@ -54,6 +66,8 @@ export const authConfig = {
         token.subOrganization = u.subOrganization;
         token.backendToken = u.token;
         token.isFirstLogin = u.isFirstLogin;
+        token.permissions = u.permissions ?? {};
+        token.employeeViewScope = u.employeeViewScope ?? "NONE";
       }
       return token;
     },
@@ -67,6 +81,8 @@ export const authConfig = {
         u.subOrganization = (token.subOrganization as string | null) ?? null;
         u.token = token.backendToken as string;
         u.isFirstLogin = token.isFirstLogin as boolean;
+        u.permissions = (token.permissions as Record<string, string[]>) ?? {};
+        u.employeeViewScope = (token.employeeViewScope as string) ?? "NONE";
       }
       return session;
     },

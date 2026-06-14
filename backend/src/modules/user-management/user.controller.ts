@@ -14,6 +14,12 @@ export const userController = {
     return res.json(ok(users));
   },
 
+  async getCredentials(req: Request, res: Response) {
+    const creds = await userService.getCredentials(String(req.params.id));
+    if (!creds) return res.status(404).json(fail('User not found'));
+    return res.json(ok(creds));
+  },
+
   async getById(req: Request, res: Response) {
     const user = await userService.getById(String(req.params.id));
     if (!user) return res.status(404).json(fail('User not found'));

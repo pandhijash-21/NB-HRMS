@@ -1,5 +1,4 @@
 import {
-  PayCommissionType,
   Prisma,
   SalaryColumnCategory,
   SalaryRecordStatus,
@@ -7,14 +6,9 @@ import {
 import { prisma } from '../../config/prisma';
 import { assignmentService } from '../personal-education/assignment.service';
 import { buildFormulaPreview, computeFullSalary, mergeEmployeeRules } from './salaryEngine.service';
+import { getPayCommissionByCode } from './payCommission.service';
 import { columnKey, type ColumnRuleInput } from './salary.types';
 import { columnRuleSchema, validateConditionalConditions } from './salary.validation';
-
-async function getPayCommissionId(type: PayCommissionType) {
-  const pc = await prisma.payCommission.findUnique({ where: { commissionType: type } });
-  if (!pc) throw new Error(`Pay commission ${type} not found`);
-  return pc;
-}
 
 async function loadTemplateContext(templateId: string) {
   const template = await prisma.salaryStructureTemplate.findUnique({
@@ -36,11 +30,11 @@ async function loadTemplateContext(templateId: string) {
 }
 
 export const salaryService = {
-  async listTemplates(filters?: { designationId?: string; payCommissionType?: PayCommissionType }) {
+  async listTemplates(filters?: { designationId?: string; payCommissionCode?: string }) {
     const where: Prisma.SalaryStructureTemplateWhereInput = { isActive: true };
     if (filters?.designationId) where.designationId = filters.designationId;
-    if (filters?.payCommissionType) {
-      const pc = await getPayCommissionId(filters.payCommissionType);
+    if (filters?.payCommissionCode) {
+      const pc = await getPayCommissionByCode(filters.payCommissionCode);
       where.payCommissionId = pc.id;
     }
 
@@ -54,12 +48,12 @@ export const salaryService = {
     });
   },
 
-  async getTemplateByDesignationAndCommission(designationId: string, payCommissionType: PayCommissionType) {
+  async getTemplateByDesignationAndCommission(designationId: string, payCommissionCode: string) {
     const designation = await prisma.designation.findUnique({ where: { id: designationId } });
     if (!designation) throw new Error('Designation not found');
     if (designation.isAlias) throw new Error('Alias designations cannot have salary templates');
 
-    const payCommissionId = (await getPayCommissionId(payCommissionType)).id;
+    const payCommissionId = (await getPayCommissionByCode(payCommissionCode)).id;
 
     const template = await prisma.salaryStructureTemplate.findUnique({
       where: { designationId_payCommissionId: { designationId, payCommissionId } },
@@ -75,20 +69,23 @@ export const salaryService = {
       orderBy: { evaluationOrder: 'asc' },
     });
 
+    const payCommission = await prisma.payCommission.findUnique({ where: { id: payCommissionId } });
+
     return {
       template,
       columnDefinitions,
       configured: !!template,
       designation,
+      payCommission,
     };
   },
 
-  async createTemplate(designationId: string, payCommissionType: PayCommissionType, createdBy?: string) {
+  async createTemplate(designationId: string, payCommissionCode: string, createdBy?: string) {
     const designation = await prisma.designation.findUnique({ where: { id: designationId } });
     if (!designation) throw new Error('Designation not found');
     if (designation.isAlias) throw new Error('Alias designations cannot have salary templates');
 
-    const payCommissionId = (await getPayCommissionId(payCommissionType)).id;
+    const payCommissionId = (await getPayCommissionByCode(payCommissionCode)).id;
 
     const existing = await prisma.salaryStructureTemplate.findUnique({
       where: { designationId_payCommissionId: { designationId, payCommissionId } },
@@ -98,6 +95,19 @@ export const salaryService = {
     return prisma.salaryStructureTemplate.create({
       data: { designationId, payCommissionId, createdBy },
       include: { designation: true, payCommission: true },
+    });
+  },
+
+  async updateTemplateColumnVisibility(
+    templateId: string,
+    columnVisibility: Record<string, boolean>,
+  ) {
+    const template = await prisma.salaryStructureTemplate.findUnique({ where: { id: templateId } });
+    if (!template) throw new Error('Salary structure template not found');
+
+    return prisma.salaryStructureTemplate.update({
+      where: { id: templateId },
+      data: { columnVisibility },
     });
   },
 
@@ -117,8 +127,8 @@ export const salaryService = {
     });
   },
 
-  async getColumnDefinitions(payCommissionType: PayCommissionType) {
-    const payCommissionId = (await getPayCommissionId(payCommissionType)).id;
+  async getColumnDefinitions(payCommissionCode: string) {
+    const payCommissionId = (await getPayCommissionByCode(payCommissionCode)).id;
     return prisma.salaryColumnDefinition.findMany({
       where: { payCommissionId },
       orderBy: { evaluationOrder: 'asc' },
@@ -246,7 +256,7 @@ export const salaryService = {
     const assignment = await assignmentService.resolveForDate(employeeId, lastDay);
 
     const salaryInfo = await prisma.employeeSalaryInfo.findUnique({ where: { employeeId } });
-    if (!salaryInfo?.payCommissionType) {
+    if (!salaryInfo?.payCommissionId) {
       throw new Error('Employee pay commission not configured in salary profile');
     }
 
@@ -258,9 +268,14 @@ export const salaryService = {
     const designation = await prisma.designation.findUnique({ where: { id: designationId } });
     if (designation?.isAlias) throw new Error('Cannot create salary for alias designation');
 
+    const payCommission = await prisma.payCommission.findUnique({
+      where: { id: salaryInfo.payCommissionId },
+    });
+    if (!payCommission) throw new Error('Employee pay commission not found');
+
     const { template } = await this.getTemplateByDesignationAndCommission(
       designationId,
-      salaryInfo.payCommissionType,
+      payCommission.code,
     );
     if (!template) {
       throw new Error('No salary structure template configured for this designation and pay commission');
@@ -275,7 +290,7 @@ export const salaryService = {
           employeeId,
           assignmentId: assignment?.id ?? null,
           templateId: template.id,
-          payCommissionType: salaryInfo.payCommissionType!,
+          payCommissionCode: payCommission.code,
           salaryMonth,
           salaryYear,
           status: SalaryRecordStatus.DRAFT,
@@ -412,14 +427,14 @@ export const salaryService = {
   async listRecords(filters: {
     employeeId?: number;
     designationId?: string;
-    payCommissionType?: PayCommissionType;
+    payCommissionCode?: string;
     salaryMonth?: number;
     salaryYear?: number;
     status?: SalaryRecordStatus;
   }) {
     const where: Prisma.EmployeeSalaryRecordWhereInput = {};
     if (filters.employeeId) where.employeeId = filters.employeeId;
-    if (filters.payCommissionType) where.payCommissionType = filters.payCommissionType;
+    if (filters.payCommissionCode) where.payCommissionCode = filters.payCommissionCode.toUpperCase();
     if (filters.salaryMonth) where.salaryMonth = filters.salaryMonth;
     if (filters.salaryYear) where.salaryYear = filters.salaryYear;
     if (filters.status) where.status = filters.status;
@@ -439,37 +454,45 @@ export const salaryService = {
   },
 
   async getStructureStatus() {
-    const designations = await prisma.designation.findMany({
-      where: { isAlias: false, isActive: true },
-      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
-    });
+    const [designations, commissions, templates] = await Promise.all([
+      prisma.designation.findMany({
+        where: { isAlias: false, isActive: true },
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      }),
+      prisma.payCommission.findMany({
+        where: { isActive: true },
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      }),
+      prisma.salaryStructureTemplate.findMany({
+        where: { isActive: true },
+        include: { payCommission: true, _count: { select: { columnRules: true } } },
+      }),
+    ]);
 
-    const templates = await prisma.salaryStructureTemplate.findMany({
-      where: { isActive: true },
-      include: { payCommission: true, _count: { select: { columnRules: true } } },
-    });
-
-    return designations.map((d) => {
-      const fifth = templates.find(
-        (t) => t.designationId === d.id && t.payCommission.commissionType === PayCommissionType.FIFTH,
-      );
-      const sixth = templates.find(
-        (t) => t.designationId === d.id && t.payCommission.commissionType === PayCommissionType.SIXTH,
-      );
-      return {
-        designation: d,
-        fifthConfigured: !!fifth && (fifth._count.columnRules > 0),
-        sixthConfigured: !!sixth && (sixth._count.columnRules > 0),
-        fifthTemplateId: fifth?.id ?? null,
-        sixthTemplateId: sixth?.id ?? null,
-      };
-    });
+    return designations.map((d) => ({
+      designation: d,
+      commissions: commissions.map((pc) => {
+        const tpl = templates.find(
+          (t) => t.designationId === d.id && t.payCommissionId === pc.id,
+        );
+        return {
+          payCommission: {
+            id: pc.id,
+            code: pc.code,
+            name: pc.name,
+            ruleEditorEnabled: pc.ruleEditorEnabled,
+          },
+          configured: !!tpl && tpl._count.columnRules > 0,
+          templateId: tpl?.id ?? null,
+        };
+      }),
+    }));
   },
 
   async updateEmployeePayProfile(
     employeeId: number,
     data: {
-      payCommissionType?: PayCommissionType;
+      payCommissionCode?: string;
       columnOverrides?: Record<string, number> | null;
       columnRules?: Record<string, ColumnRuleInput> | null;
     },
@@ -481,25 +504,33 @@ export const salaryService = {
     }
 
     const existing = await prisma.employeeSalaryInfo.findUnique({ where: { employeeId } });
-    const commissionType = data.payCommissionType ?? existing?.payCommissionType ?? PayCommissionType.FIFTH;
+    let payCommissionId = existing?.payCommissionId ?? null;
+    let payCommissionLabel = existing?.payCommission ?? null;
+
+    if (data.payCommissionCode) {
+      const pc = await getPayCommissionByCode(data.payCommissionCode);
+      payCommissionId = pc.id;
+      payCommissionLabel = pc.name;
+    } else if (!payCommissionId) {
+      const defaultPc = await getPayCommissionByCode('FIFTH');
+      payCommissionId = defaultPc.id;
+      payCommissionLabel = defaultPc.name;
+    }
 
     return prisma.employeeSalaryInfo.upsert({
       where: { employeeId },
       create: {
         employeeId,
-        payCommissionType: commissionType,
-        payCommission: commissionType === PayCommissionType.FIFTH ? '5TH PAY' : '6TH PAY',
+        payCommissionId,
+        payCommission: payCommissionLabel,
         designationId: generalInfo.designationId,
         columnOverrides: data.columnOverrides ?? undefined,
         columnRules: data.columnRules ?? undefined,
         updatedBy,
       },
       update: {
-        ...(data.payCommissionType
-          ? {
-              payCommissionType: data.payCommissionType,
-              payCommission: data.payCommissionType === PayCommissionType.FIFTH ? '5TH PAY' : '6TH PAY',
-            }
+        ...(data.payCommissionCode
+          ? { payCommissionId, payCommission: payCommissionLabel }
           : {}),
         designationId: generalInfo.designationId,
         ...(data.columnOverrides !== undefined
@@ -516,7 +547,7 @@ export const salaryService = {
   async getEmployeePayProfile(employeeId: number) {
     return prisma.employeeSalaryInfo.findUnique({
       where: { employeeId },
-      include: { designationRef: true },
+      include: { designationRef: true, payCommissionRef: true },
     });
   },
 
@@ -527,14 +558,16 @@ export const salaryService = {
     });
     const profile = await this.getEmployeePayProfile(employeeId);
     const designationId = profile?.designationId ?? generalInfo?.designationId ?? null;
-    const payCommissionType = profile?.payCommissionType ?? null;
+    const payCommissionCode = profile?.payCommissionRef?.code ?? null;
+    const payCommissionId = profile?.payCommissionId ?? null;
 
-    if (!designationId || !payCommissionType) {
+    if (!designationId || !payCommissionId) {
       return {
         configured: false,
         reason: !designationId ? 'NO_DESIGNATION' : 'NO_COMMISSION',
         designation: generalInfo?.designationRef ?? null,
-        payCommissionType,
+        payCommissionCode,
+        payCommission: profile?.payCommissionRef ?? null,
         columnOverrides: {},
         computed: null,
         templateId: null,
@@ -545,10 +578,11 @@ export const salaryService = {
       where: {
         designationId,
         isActive: true,
-        payCommission: { commissionType: payCommissionType },
+        payCommissionId,
       },
       include: {
         designation: true,
+        payCommission: true,
         _count: { select: { columnRules: true } },
       },
     });
@@ -557,8 +591,9 @@ export const salaryService = {
       return {
         configured: false,
         reason: 'NO_TEMPLATE',
-        designation: generalInfo?.designationRef ?? template?.designation ?? null,
-        payCommissionType,
+        designation: generalInfo?.designationRef ?? null,
+        payCommissionCode,
+        payCommission: profile?.payCommissionRef ?? null,
         columnOverrides: (profile?.columnOverrides as Record<string, number>) ?? {},
         computed: null,
         templateId: null,
@@ -588,7 +623,11 @@ export const salaryService = {
       configured: template._count.columnRules > 0,
       reason: template._count.columnRules > 0 ? null : 'NO_RULES',
       designation: generalInfo?.designationRef ?? template.designation,
-      payCommissionType,
+      payCommissionCode,
+      payCommission: profile?.payCommissionRef ?? template.payCommission,
+      ruleEditorEnabled: profile?.payCommissionRef?.ruleEditorEnabled ?? true,
+      columnVisibility:
+        (template.columnVisibility as Record<string, boolean> | null) ?? {},
       templateId: template.id,
       columnOverrides: overrides,
       employeeColumnRules,

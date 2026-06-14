@@ -2,6 +2,32 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { fail, ok } from '../../utils/response';
 import { personalService } from './personal.service';
+import {
+  canViewEmployeeDirectory,
+  employeeMatchesDirectoryScope,
+} from './employeeDirectory.util';
+
+async function assertCanAccessEmployeePersonal(
+  req: Request,
+  employeeId: number,
+  res: Response,
+): Promise<boolean> {
+  const isSelf =
+    req.user?.employeeId != null && Number(req.user.employeeId) === employeeId;
+  if (isSelf) return true;
+
+  if (!canViewEmployeeDirectory(req.user)) {
+    res.status(403).json(fail('Forbidden'));
+    return false;
+  }
+
+  const allowed = await employeeMatchesDirectoryScope(employeeId, req.user);
+  if (!allowed) {
+    res.status(403).json(fail('Forbidden'));
+    return false;
+  }
+  return true;
+}
 
 const personalUpsertSchema = z.object({
   birthDate: z.string().datetime().or(z.string().min(4)),
@@ -44,9 +70,7 @@ export const personalController = {
     const employeeId = Number(req.params.id);
     if (!Number.isFinite(employeeId)) return res.status(400).json(fail('Invalid employee id'));
 
-    if (req.user?.role === 'EMPLOYEE' && req.user.employeeId && req.user.employeeId !== employeeId) {
-      return res.status(403).json(fail('Forbidden'));
-    }
+    if (!(await assertCanAccessEmployeePersonal(req, employeeId, res))) return;
 
     const data = await personalService.get(employeeId);
     if (!data) return res.status(404).json(fail('Personal info not found'));
@@ -56,9 +80,7 @@ export const personalController = {
   async create(req: Request, res: Response) {
     const employeeId = Number(req.params.id);
     if (!Number.isFinite(employeeId)) return res.status(400).json(fail('Invalid employee id'));
-    if (req.user?.role === 'EMPLOYEE' && req.user.employeeId && req.user.employeeId !== employeeId) {
-      return res.status(403).json(fail('Forbidden'));
-    }
+    if (!(await assertCanAccessEmployeePersonal(req, employeeId, res))) return;
 
     const body = personalUpsertSchema.safeParse(req.body);
     if (!body.success) return res.status(400).json(fail(body.error.message));
@@ -76,9 +98,7 @@ export const personalController = {
   async update(req: Request, res: Response) {
     const employeeId = Number(req.params.id);
     if (!Number.isFinite(employeeId)) return res.status(400).json(fail('Invalid employee id'));
-    if (req.user?.role === 'EMPLOYEE' && req.user.employeeId && req.user.employeeId !== employeeId) {
-      return res.status(403).json(fail('Forbidden'));
-    }
+    if (!(await assertCanAccessEmployeePersonal(req, employeeId, res))) return;
 
     const body = personalUpsertSchema.partial().safeParse(req.body);
     if (!body.success) return res.status(400).json(fail(body.error.message));

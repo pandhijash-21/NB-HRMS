@@ -45,6 +45,7 @@ export const UpdatePermissionsSchema = z.object({
         canApprove: z.boolean(),
         canDelete:  z.boolean(),
         canExport:  z.boolean(),
+        employeeViewScope: z.enum(['NONE', 'SELF', 'INSTITUTE', 'UNIVERSITY']).optional(),
       })
     )
     .min(1),
@@ -56,6 +57,7 @@ export const PatchPermissionSchema = z.object({
   canApprove: z.boolean().optional(),
   canDelete:  z.boolean().optional(),
   canExport:  z.boolean().optional(),
+  employeeViewScope: z.enum(['NONE', 'SELF', 'INSTITUTE', 'UNIVERSITY']).optional(),
 });
 
 export type CreateUserInput      = z.infer<typeof CreateUserSchema>;

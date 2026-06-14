@@ -27,12 +27,13 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 
     req.user = {
       id:          userId,
-      employeeId:  decoded.employeeId,
-      roleId:      decoded.roleId,
-      roleName:    decoded.roleName,
-      role:        decoded.roleName,  // backward compat for existing requireRole checks
-      subOrganization: (decoded as any).subOrganization ?? null,
-      permissions: decoded.permissions ?? {},
+      employeeId:  decoded.employeeId as number | null | undefined,
+      roleId:      decoded.roleId as string,
+      roleName:    decoded.roleName as string,
+      role:        decoded.roleName as string,
+      subOrganization: (decoded.subOrganization as string | null | undefined) ?? null,
+      employeeViewScope: (decoded.employeeViewScope as 'NONE' | 'SELF' | 'INSTITUTE' | 'UNIVERSITY' | undefined) ?? 'NONE',
+      permissions: (decoded.permissions as Record<string, string[]>) ?? {},
     };
 
     return next();

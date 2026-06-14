@@ -18,26 +18,11 @@ import {
 import { useMutation } from "@apollo/client/react";
 import { UPDATE_EMPLOYEE_GENERAL } from "@/lib/graphql";
 import { useEmployeeNames } from "@/modules/admin/hooks/useAdminEmployees";
+import { formatApproverOption, groupApproverOptions } from "@/lib/utils/approverOptions";
 import { DESIGNATIONS } from "@/lib/constants/designations";
+import { instituteLabel } from "@/lib/constants/institutes";
+import { useInstitutes } from "@/lib/hooks/useInstitutes";
 import { Badge } from "@/components/ui/badge";
-
-const INSTITUTES = [
-  "Gandhinagar Institute of Technology",
-  "Gandhinagar Institute of Management",
-  "Gandhinagar Institute of Commerce",
-  "Gandhinagar Institute of Science",
-  "Gandhinagar Institute of Research & Development",
-  "Gandhinagar Institute of Liberal Studies",
-  "Gandhinagar Institute of Computer Science & Applications",
-  "Gandhinagar Institute of Law",
-  "Gandhinagar Institute of Valuation Studies",
-  "Gandhinagar Institute of Design",
-  "Gandhinagar Institute of Pharmacy",
-  "Gandhinagar Institute of Nursing",
-  "Gandhinagar Institute of Skill Development",
-  "Gandhinagar Institute of Library & Information Science",
-  "Gandhinagar Institute of Vocational Education",
-];
 
 interface GeneralTabProps {
   employee: Record<string, unknown>;
@@ -58,17 +43,55 @@ export function GeneralTab({ employee, isAdmin, onUpdate }: GeneralTabProps) {
   const [editing, setEditing] = useState(false);
   const [mutate, { loading }] = useMutation(UPDATE_EMPLOYEE_GENERAL);
   const { data: employeeNames = [] } = useEmployeeNames();
+  const { data: institutes = [] } = useInstitutes({ activeOnly: true });
 
-  const selectableEmployees = useMemo(() => {
-    return employeeNames;
-  }, [employeeNames, employee.id]);
+  const selectableApprovers = useMemo(() => {
+    const selfUserId = employee.userId as string | undefined;
+    return employeeNames.filter(
+      (item) => !(item.type === "EMPLOYEE" && item.userId === selfUserId),
+    );
+  }, [employeeNames, employee.userId]);
+
+  const { positions: positionApprovers, employees: employeeApprovers } = useMemo(
+    () => groupApproverOptions(selectableApprovers),
+    [selectableApprovers],
+  );
 
   const resolveApproverLabel = (userId?: string | null) => {
     if (!userId) return null;
     const match = employeeNames.find((e) => e.userId === userId);
     if (!match) return userId;
-    return `${match.fullName}${match.employeeCode ? ` (${match.employeeCode})` : ""}`;
+    return formatApproverOption(match);
   };
+
+  const renderApproverOptions = () => (
+    <>
+      {positionApprovers.length > 0 && (
+        <>
+          <div className="px-2 py-1.5 text-[10px] font-semibold uppercase text-slate-400">
+            Position / alias accounts
+          </div>
+          {positionApprovers.map((item) => (
+            <SelectItem key={item.userId} value={item.userId} className="text-[10px] font-medium py-2">
+              {formatApproverOption(item)}
+            </SelectItem>
+          ))}
+        </>
+      )}
+      {employeeApprovers.length > 0 && (
+        <>
+          <div className="px-2 py-1.5 text-[10px] font-semibold uppercase text-slate-400">
+            Employees
+          </div>
+          {employeeApprovers.map((item) => (
+            <SelectItem key={item.userId} value={item.userId} className="text-[10px] font-medium py-2">
+              {formatApproverOption(item)}
+            </SelectItem>
+          ))}
+        </>
+      )}
+    </>
+  );
 
   const {
     register,
@@ -156,7 +179,13 @@ export function GeneralTab({ employee, isAdmin, onUpdate }: GeneralTabProps) {
             <Field label="Department" value={employee.department as string} />
             <Field label="Functional Department" value={employee.functionalDepartment as string} />
             <Field label="Organization" value={employee.organization as string} />
-            <Field label="Sub-Organization" value={employee.subOrganization as string} />
+            <Field
+              label="Institute"
+              value={instituteLabel(
+                (employee.instituteId as string) ?? (employee.subOrganization as string),
+                institutes,
+              )}
+            />
             <Field label="Employee Category" value={(employee.employeeCategory as string)?.replace("_", " ")} />
             <Field label="Appointment Type" value={(employee.appointmentType as string)?.replace(/_/g, " ")} />
             <Field label="Shift" value={employee.shift as string} />
@@ -265,21 +294,15 @@ export function GeneralTab({ employee, isAdmin, onUpdate }: GeneralTabProps) {
               )}
             </div>
             <div className="space-y-1">
-              <Label>Sub-Organization</Label>
-              <Select
-                defaultValue={(employee.subOrganization as string) ?? ""}
-                onValueChange={(v) => setValue("subOrganization", v)}
-                disabled
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select institute..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {INSTITUTES.map((institute) => (
-                    <SelectItem key={institute} value={institute}>{institute}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>Institute</Label>
+              <Input
+                readOnly
+                value={instituteLabel(
+                  (employee.instituteId as string) ?? (employee.subOrganization as string),
+                  institutes,
+                )}
+                className="bg-slate-50"
+              />
               <div className="flex gap-2 flex-wrap">
                 <Badge variant="outline" className="text-[10px]">Managed via Institute Transfer</Badge>
               </div>
@@ -335,6 +358,10 @@ export function GeneralTab({ employee, isAdmin, onUpdate }: GeneralTabProps) {
               <Label>Increment Month</Label>
               <Input {...register("incrementMonth")} placeholder="e.g. July" />
             </div>
+            <p className="text-xs text-slate-500 sm:col-span-2 lg:col-span-3 -mb-2">
+              Reporting managers can be regular employees or position accounts (e.g. Vice Chancellor, Registrar).
+              Leave approvals are routed to the selected user account.
+            </p>
             <div className="space-y-1">
               <Label>First Reporting Manager</Label>
               <Select
@@ -346,11 +373,7 @@ export function GeneralTab({ employee, isAdmin, onUpdate }: GeneralTabProps) {
                 </SelectTrigger>
                 <SelectContent className="max-h-[220px]">
                   <SelectItem value="__null__" className="text-[10px] font-extrabold text-slate-500">NULL (bypass this layer)</SelectItem>
-                  {selectableEmployees.map((emp) => (
-                    <SelectItem key={emp.userId} value={emp.userId} className="text-[10px] font-medium py-2">
-                      {emp.fullName}{emp.employeeCode ? ` (${emp.employeeCode})` : ""}
-                    </SelectItem>
-                  ))}
+                  {renderApproverOptions()}
                 </SelectContent>
               </Select>
             </div>
@@ -365,11 +388,7 @@ export function GeneralTab({ employee, isAdmin, onUpdate }: GeneralTabProps) {
                 </SelectTrigger>
                 <SelectContent className="max-h-[220px]">
                   <SelectItem value="__null__" className="text-[10px] font-extrabold text-slate-500">NULL (bypass this layer)</SelectItem>
-                  {selectableEmployees.map((emp) => (
-                    <SelectItem key={emp.userId} value={emp.userId} className="text-[10px] font-medium py-2">
-                      {emp.fullName}{emp.employeeCode ? ` (${emp.employeeCode})` : ""}
-                    </SelectItem>
-                  ))}
+                  {renderApproverOptions()}
                 </SelectContent>
               </Select>
             </div>
@@ -384,11 +403,7 @@ export function GeneralTab({ employee, isAdmin, onUpdate }: GeneralTabProps) {
                 </SelectTrigger>
                 <SelectContent className="max-h-[220px]">
                   <SelectItem value="__null__" className="text-[10px] font-extrabold text-slate-500">NULL (bypass this layer)</SelectItem>
-                  {selectableEmployees.map((emp) => (
-                    <SelectItem key={emp.userId} value={emp.userId} className="text-[10px] font-medium py-2">
-                      {emp.fullName}{emp.employeeCode ? ` (${emp.employeeCode})` : ""}
-                    </SelectItem>
-                  ))}
+                  {renderApproverOptions()}
                 </SelectContent>
               </Select>
             </div>

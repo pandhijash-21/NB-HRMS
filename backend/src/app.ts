@@ -12,6 +12,7 @@ import { eventsRouter as sseEventsRouter } from './modules/events';
 import { leaveRouter } from './modules/leave';
 import { attendanceRouter } from './modules/attendance';
 import { designationRouter } from './modules/designation';
+import { instituteRouter } from './modules/institute';
 import { salaryRouter } from './modules/salary';
 import { env } from './config/env';
 import { configureCloudinary } from './config/cloudinary';
@@ -64,6 +65,7 @@ app.use('/api/approvals', approvalsRouter);
 app.use('/api/leave', leaveRouter);
 app.use('/api/attendance', attendanceRouter);
 app.use('/api/admin', designationRouter);
+app.use('/api', instituteRouter);
 app.use('/api/salary', salaryRouter);
 app.use('/api/events', sseEventsRouter);
 

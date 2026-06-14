@@ -6,7 +6,8 @@ import {
   useSystemModules, 
   useRoleMgmtActions,
   useRoleDetails,
-  Permission
+  Permission,
+  type EmployeeViewScope,
 } from "@/lib/hooks/useRole";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -55,6 +56,20 @@ export default function PermissionMatrixPage({ params }: { params: Promise<{ id:
   const { updatePermissions } = useRoleMgmtActions();
 
   const [updatingParams, setUpdatingParams] = useState<Record<string, boolean>>({});
+
+  const handleScopeChange = async (moduleKey: string, scope: EmployeeViewScope) => {
+    const key = `${moduleKey}-scope`;
+    setUpdatingParams(prev => ({ ...prev, [key]: true }));
+    try {
+      await updatePermissions(roleId, moduleKey, { employeeViewScope: scope });
+      await refetch();
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } }; message?: string };
+      alert(e?.response?.data?.message || e.message || "Failed to update scope");
+    } finally {
+      setUpdatingParams(prev => ({ ...prev, [key]: false }));
+    }
+  };
 
   const handleToggle = async (moduleKey: string, field: keyof Permission, nextValue: boolean) => {
     const key = `${moduleKey}-${field}`;
@@ -135,7 +150,10 @@ export default function PermissionMatrixPage({ params }: { params: Promise<{ id:
                   canApprove: false,
                   canDelete: false,
                   canExport: false,
+                  employeeViewScope: "NONE" as EmployeeViewScope,
                 } as Permission;
+
+                const viewScope = perm.employeeViewScope ?? "NONE";
 
                 return (
                   <TableRow key={module.key} className="hover:bg-slate-50/50 transition-colors">
@@ -144,6 +162,27 @@ export default function PermissionMatrixPage({ params }: { params: Promise<{ id:
                         <p className="font-bold text-slate-800 text-sm tracking-tight">{module.name}</p>
                         {module.description && (
                           <p className="text-[10px] text-slate-400 font-medium leading-relaxed">{module.description}</p>
+                        )}
+                        {module.key === "PERSONAL_INFO" && (
+                          <div className="pt-2 space-y-1">
+                            <p className="text-[10px] font-bold uppercase text-slate-400 tracking-widest">
+                              View employees
+                            </p>
+                            <select
+                              className="text-xs border rounded-md px-2 py-1 bg-white"
+                              value={viewScope}
+                              disabled={!!updatingParams[`${module.key}-scope`]}
+                              onChange={(e) => handleScopeChange(module.key, e.target.value as EmployeeViewScope)}
+                            >
+                              <option value="NONE">Off</option>
+                              <option value="SELF">Self only</option>
+                              <option value="INSTITUTE">Institute only</option>
+                              <option value="UNIVERSITY">University-wide</option>
+                            </select>
+                            <p className="text-[10px] text-slate-400">
+                              Self = own profile only. Institute / University = workforce directory. Edit follows same scope when Write is enabled.
+                            </p>
+                          </div>
                         )}
                       </div>
                     </TableCell>

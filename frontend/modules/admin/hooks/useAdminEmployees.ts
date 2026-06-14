@@ -24,6 +24,28 @@ export function useAdminEmployeeList(params: AdminEmployeeListParams) {
   });
 }
 
+export function useAssignEmployeePosition() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      employeeId,
+      positionDesignationId,
+    }: {
+      employeeId: string | number;
+      positionDesignationId: string | null;
+    }) => {
+      const { data } = await api.patch(`employees/${employeeId}/position`, {
+        positionDesignationId,
+      });
+      return data.data;
+    },
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "employees"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "employees", String(vars.employeeId)] });
+    },
+  });
+}
+
 export function useCreateEmployee() {
   const queryClient = useQueryClient();
 
@@ -49,6 +71,7 @@ export interface EmployeeNameItem {
   userId: string;
   fullName: string;
   employeeCode: string | null;
+  designationName?: string | null;
 }
 
 export function useEmployeeNames() {
@@ -103,7 +126,7 @@ export function useAdminEmployeeAssignments(employeeId: string | number) {
 export function useInstituteTransfer(employeeId: string | number) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (payload: { newSubOrganization: string | null; effectiveFrom: string; reason?: string | null }) => {
+    mutationFn: async (payload: { instituteId?: string; newSubOrganization?: string | null; effectiveFrom: string; reason?: string | null }) => {
       const { data } = await api.post(`employees/${employeeId}/institute-transfer`, payload);
       return data.data;
     },

@@ -42,17 +42,22 @@ export default function SalaryEntryPage() {
     queryFn: async () => {
       const { data } = await api.get(`salary/employees/${employeeId}/profile`);
       return data.data as {
-        profile: { payCommissionType: "FIFTH" | "SIXTH"; designationId: string } | null;
+        profile: {
+          designationId: string;
+          payCommissionRef?: { code: string } | null;
+        } | null;
       };
     },
     enabled: !!employeeId,
   });
 
-  const payCommission = profileQ.data?.profile?.payCommissionType;
+  const payCommissionCode = profileQ.data?.profile?.payCommissionRef?.code;
   const designationId = profileQ.data?.profile?.designationId
     ?? employeesQ.data?.find((e) => String(e.id) === employeeId)?.generalInfo?.designationId;
 
-  const tpl = useSalaryTemplate(designationId ?? "", payCommission ?? "FIFTH");
+  const tpl = useSalaryTemplate(designationId ?? "", payCommissionCode ?? "FIFTH");
+  const payCommissionLabel =
+    tpl.data?.payCommission?.name ?? payCommissionCode ?? "—";
   const templateId = tpl.data?.template?.id;
 
   const existingRecordQ = useSalaryRecords(
@@ -205,11 +210,11 @@ export default function SalaryEntryPage() {
         </div>
         <div className="space-y-1">
           <Label>Pay Commission</Label>
-          <p className="text-sm pt-2">{payCommission ?? "—"}</p>
+          <p className="text-sm pt-2">{payCommissionLabel}</p>
         </div>
       </Card>
 
-      {employeeId && !payCommission && (
+      {employeeId && !payCommissionCode && (
         <p className="text-sm text-amber-600">Set pay commission on employee salary profile first.</p>
       )}
 

@@ -4,8 +4,9 @@ import { roleService } from './role.service';
 import { CreateRoleSchema, UpdateRoleSchema } from './types';
 
 export const roleController = {
-  async list(_req: Request, res: Response) {
-    return res.json(ok(await roleService.list()));
+  async list(req: Request, res: Response) {
+    const positionsOnly = req.query.positionsOnly === 'true';
+    return res.json(ok(await roleService.list({ positionsOnly })));
   },
 
   async getById(req: Request, res: Response) {

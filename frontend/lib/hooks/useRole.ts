@@ -7,6 +7,8 @@ export interface Role {
   id: string;
   name: string;
   description: string | null;
+  positionName?: string | null;
+  userCount?: number;
   _count?: {
     users: number;
   };
@@ -20,6 +22,8 @@ export interface SystemModule {
   description: string | null;
 }
 
+export type EmployeeViewScope = "NONE" | "SELF" | "INSTITUTE" | "UNIVERSITY";
+
 export interface Permission {
   id: string;
   moduleKey: string;
@@ -28,10 +32,12 @@ export interface Permission {
   canApprove: boolean;
   canDelete: boolean;
   canExport: boolean;
+  employeeViewScope?: EmployeeViewScope;
   module: SystemModule;
 }
 
-export function useRolesList() {
+export function useRolesList(options?: { positionsOnly?: boolean }) {
+  const positionsOnly = options?.positionsOnly ?? false;
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -40,14 +46,16 @@ export function useRolesList() {
     try {
       setLoading(true);
       setError(null);
-      const res = await api.get("/admin/roles");
+      const res = await api.get("/admin/roles", {
+        params: positionsOnly ? { positionsOnly: "true" } : undefined,
+      });
       setRoles(res.data.data ?? []);
     } catch (err: any) {
       setError(err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [positionsOnly]);
 
   useEffect(() => {
     fetchRoles();
@@ -78,6 +86,7 @@ export function useRoleMgmtActions() {
     canApprove?: boolean;
     canDelete?: boolean;
     canExport?: boolean;
+    employeeViewScope?: EmployeeViewScope;
   }) => {
     const res = await api.patch(`/admin/roles/${roleId}/permissions/${moduleKey}`, data);
     return res.data;

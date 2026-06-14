@@ -46,12 +46,28 @@ export type SalaryColumnRule = {
   }>;
 };
 
+export type PayCommission = {
+  id: string;
+  code: string;
+  name: string;
+  description?: string | null;
+  isActive: boolean;
+  ruleEditorEnabled: boolean;
+  sortOrder: number;
+  _count?: {
+    columnDefinitions: number;
+    salaryStructureTemplates: number;
+    employeeSalaryInfos: number;
+  };
+};
+
 export type StructureStatus = {
   designation: { id: string; name: string };
-  fifthConfigured: boolean;
-  sixthConfigured: boolean;
-  fifthTemplateId: string | null;
-  sixthTemplateId: string | null;
+  commissions: Array<{
+    payCommission: Pick<PayCommission, "id" | "code" | "name" | "ruleEditorEnabled">;
+    configured: boolean;
+    templateId: string | null;
+  }>;
 };
 
 export type SalaryRecord = {
@@ -63,7 +79,7 @@ export type SalaryRecord = {
   grossPay: string;
   totalDeductions: string;
   netPay: string;
-  payCommissionType: "FIFTH" | "SIXTH";
+  payCommissionCode: string;
   employee?: { generalInfo?: { fullName: string; department: string } };
   template?: { designation: { name: string }; payCommission: { name: string } };
   columnValues?: Array<{
@@ -89,19 +105,118 @@ export function useSalaryStructureStatus() {
   });
 }
 
-export function useSalaryTemplate(designationId: string, commission: "FIFTH" | "SIXTH") {
+export function usePayCommissions() {
   const authReady = useAuthReady();
   return useQuery({
-    queryKey: ["salary", "template", designationId, commission],
+    queryKey: ["salary", "pay-commissions"],
     queryFn: async () => {
-      const { data } = await api.get(`salary/templates/by-designation/${designationId}/${commission}`);
+      const { data } = await api.get("salary/pay-commissions");
+      return data.data as PayCommission[];
+    },
+    enabled: authReady,
+    retry: 1,
+  });
+}
+
+export function usePayCommission(id: string) {
+  const authReady = useAuthReady();
+  return useQuery({
+    queryKey: ["salary", "pay-commission", id],
+    queryFn: async () => {
+      const { data } = await api.get(`salary/pay-commissions/${id}`);
+      return data.data as PayCommission & { columnDefinitions: SalaryColumnDefinition[] };
+    },
+    enabled: authReady && !!id,
+    retry: 1,
+  });
+}
+
+export function useCreatePayCommission() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: {
+      code: string;
+      name: string;
+      description?: string | null;
+      ruleEditorEnabled?: boolean;
+      cloneFromCommissionId?: string | null;
+    }) => {
+      const { data } = await api.post("salary/pay-commissions", body);
+      return data.data as PayCommission;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["salary"] }),
+  });
+}
+
+export function useUpdatePayCommission() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      ...body
+    }: {
+      id: string;
+      name?: string;
+      description?: string | null;
+      isActive?: boolean;
+      ruleEditorEnabled?: boolean;
+      sortOrder?: number;
+    }) => {
+      const { data } = await api.patch(`salary/pay-commissions/${id}`, body);
+      return data.data as PayCommission;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["salary"] }),
+  });
+}
+
+export function useCreatePayCommissionColumn() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      payCommissionId,
+      ...body
+    }: {
+      payCommissionId: string;
+      columnIdentifier: string;
+      displayName: string;
+      category: "EARNING" | "DEDUCTION";
+      evaluationOrder: number;
+      isRuleConfigurable?: boolean;
+    }) => {
+      const { data } = await api.post(`salary/pay-commissions/${payCommissionId}/columns`, body);
+      return data.data as SalaryColumnDefinition;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["salary"] }),
+  });
+}
+
+export function useDeletePayCommissionColumn() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (columnId: string) => {
+      const { data } = await api.delete(`salary/pay-commissions/columns/${columnId}`);
+      return data.data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["salary"] }),
+  });
+}
+
+export function useSalaryTemplate(designationId: string, commissionCode: string) {
+  const authReady = useAuthReady();
+  return useQuery({
+    queryKey: ["salary", "template", designationId, commissionCode],
+    queryFn: async () => {
+      const { data } = await api.get(
+        `salary/templates/by-designation/${designationId}/${commissionCode}`,
+      );
       return data.data as {
-        template: { id: string } | null;
+        template: { id: string; columnVisibility?: Record<string, boolean> | null } | null;
         columnDefinitions: SalaryColumnDefinition[];
         configured: boolean;
+        payCommission: PayCommission | null;
       };
     },
-    enabled: authReady && !!designationId && !!commission,
+    enabled: authReady && !!designationId && !!commissionCode,
     retry: 1,
   });
 }
@@ -109,13 +224,32 @@ export function useSalaryTemplate(designationId: string, commission: "FIFTH" | "
 export function useCreateSalaryTemplate() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (body: { designationId: string; payCommissionType: "FIFTH" | "SIXTH" }) => {
+    mutationFn: async (body: { designationId: string; payCommissionCode: string }) => {
       const { data } = await api.post("salary/templates", body);
       return data.data;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["salary"] });
     },
+  });
+}
+
+export function useUpdateTemplateColumnVisibility() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      templateId,
+      columnVisibility,
+    }: {
+      templateId: string;
+      columnVisibility: Record<string, boolean>;
+    }) => {
+      const { data } = await api.patch(`salary/templates/${templateId}/column-visibility`, {
+        columnVisibility,
+      });
+      return data.data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["salary"] }),
   });
 }
 
@@ -294,17 +428,17 @@ export function useUpdateEmployeePayCommission() {
   return useMutation({
     mutationFn: async ({
       employeeId,
-      payCommissionType,
+      payCommissionCode,
       columnOverrides,
       columnRules,
     }: {
       employeeId: number;
-      payCommissionType?: "FIFTH" | "SIXTH";
+      payCommissionCode?: string;
       columnOverrides?: Record<string, number> | null;
       columnRules?: Record<string, unknown> | null;
     }) => {
       const { data } = await api.patch(`salary/employees/${employeeId}/profile`, {
-        payCommissionType,
+        payCommissionCode,
         columnOverrides,
         columnRules,
       });
@@ -321,7 +455,10 @@ export type EmployeeSalaryPreview = {
   configured: boolean;
   reason: "NO_DESIGNATION" | "NO_COMMISSION" | "NO_TEMPLATE" | "NO_RULES" | null;
   designation: { id: string; name: string } | null;
-  payCommissionType: "FIFTH" | "SIXTH" | null;
+  payCommissionCode: string | null;
+  payCommission: PayCommission | null;
+  ruleEditorEnabled?: boolean;
+  columnVisibility?: Record<string, boolean>;
   templateId: string | null;
   columnOverrides: Record<string, number>;
   employeeColumnRules: Record<string, Record<string, unknown>>;

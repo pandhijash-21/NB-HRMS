@@ -1,5 +1,7 @@
 import "next-auth";
 
+export type PermissionMap = Record<string, string[]>;
+
 declare module "next-auth" {
   interface Session {
     user: {
@@ -13,6 +15,8 @@ declare module "next-auth" {
       subOrganization?: string | null;
       token?: string;
       isFirstLogin?: boolean;
+      permissions?: PermissionMap;
+      employeeViewScope?: "NONE" | "SELF" | "INSTITUTE" | "UNIVERSITY";
     };
   }
 
@@ -23,6 +27,8 @@ declare module "next-auth" {
     subOrganization?: string | null;
     token?: string;
     isFirstLogin?: boolean;
+    permissions?: PermissionMap;
+    employeeViewScope?: "NONE" | "SELF" | "INSTITUTE" | "UNIVERSITY";
   }
 }
 
@@ -35,5 +41,7 @@ declare module "next-auth/jwt" {
     backendToken?: string;
     isFirstLogin?: boolean;
     userId?: string;
+    permissions?: PermissionMap;
+    employeeViewScope?: "NONE" | "SELF" | "INSTITUTE" | "UNIVERSITY";
   }
 }

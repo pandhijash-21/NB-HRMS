@@ -6,22 +6,36 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
+import { canAccessAdminPortal, canApproveLeave } from "@/lib/auth/permissions";
 
 const APPROVER_ROLES = ["HOD", "HOI", "REGISTRAR", "VC"];
 
 export default function EmployeeDashboard() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const role = (session?.user as any)?.role ?? "";
+  const role = (session?.user as { role?: string })?.role ?? "";
+  const su = session?.user as {
+    permissions?: Record<string, string[]>;
+    employeeViewScope?: string;
+  };
+  const perms = su?.permissions;
+  const viewScope = su?.employeeViewScope;
   const userName = session?.user?.name ?? "Employee";
 
   useEffect(() => {
-    if (status === "authenticated" && APPROVER_ROLES.includes(role)) {
+    if (status !== "authenticated") return;
+    if (canAccessAdminPortal(perms, viewScope)) {
+      router.replace("/admin/dashboard");
+    } else if (canApproveLeave(perms) || APPROVER_ROLES.includes(role)) {
       router.replace("/approvals");
     }
-  }, [status, role, router]);
+  }, [status, role, perms, viewScope, router]);
 
-  if (status === "loading" || (status === "authenticated" && APPROVER_ROLES.includes(role))) {
+  const redirecting =
+    status === "authenticated" &&
+    (canAccessAdminPortal(perms, viewScope) || canApproveLeave(perms) || APPROVER_ROLES.includes(role));
+
+  if (status === "loading" || redirecting) {
     return (
       <div className="space-y-6">
         <Skeleton className="h-8 w-48" />

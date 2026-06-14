@@ -27,14 +27,14 @@ export function LoginForm() {
             return;
           }
 
-          const role = session?.user?.role ?? "";
-          if (role === "ADMIN" || role === "HR") {
-            router.push("/admin/dashboard");
-          } else if (["HOD", "HOI", "REGISTRAR", "VC"].includes(role)) {
-            router.push("/approvals");
-          } else {
-            router.push("/dashboard");
-          }
+          const { resolvePostLoginPath } = await import("@/lib/auth/permissions");
+          router.push(
+            resolvePostLoginPath(
+              session?.user?.permissions,
+              session?.user?.role ?? "",
+              session?.user?.employeeViewScope,
+            ),
+          );
         },
         onError: () => {
           setErrorVisible(true);

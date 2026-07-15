@@ -1,5 +1,9 @@
 # HR Management System — Gandhinagar University (HRMS-GU)
 
+> **NB Developer fork:** This repo is being developed into NB Developer CRM+HRMS+ERP.
+> Locally it uses a **separate** Postgres database (`nb_crm_db`). Do **not** point it at
+> the college project database (`hrms_db`). See [Local databases (isolation)](#local-databases-isolation).
+
 A comprehensive Human Resource Management System for Gandhinagar University. Covers employee profile management, sensitive data handling with AES-256 encryption, document uploads via Cloudinary, family & academic records, full audit logging, JWT-based auth with Redis sessions, and a dynamic role-based permission system.
 
 ---
@@ -20,6 +24,23 @@ A comprehensive Human Resource Management System for Gandhinagar University. Cov
 | Encryption | AES-256-CBC (Node.js `crypto`) — Aadhaar & PAN encrypted at rest |
 | Audit | Append-only `AuditLog` table; every sensitive write is diffed and logged |
 | Containerization | Docker & Docker Compose |
+
+---
+
+## Local databases (isolation)
+
+This Postgres instance (Docker, port **5434**, user `hrms_user`) can hold **two separate databases**. They must never share a connection URL:
+
+| Database | Purpose |
+|---|---|
+| `hrms_db` | Original college HRMS project — leave untouched |
+| `nb_crm_db` | This NB Developer CRM+HRMS+ERP fork |
+
+- App / Hasura / Prisma for **this repo** → `.../nb_crm_db` only
+- College project env (e.g. `backend/.env.hrms`) → `.../hrms_db` only
+- Create & migrate NB DB: `.\scripts\create_nb_crm_db.ps1` or `bash scripts/create_nb_crm_db.sh`
+- Same user/password/port for now; ask before changing credentials or port
+- If college Docker already owns port `5434`, the setup script **reuses that instance** and only creates `nb_crm_db` inside it (it does not start a second Postgres)
 
 ---
 
@@ -60,7 +81,8 @@ cp .env.example .env
 Edit `backend/.env`:
 
 ```env
-DATABASE_URL=postgres://hrms_user:hrms_pass@localhost:5433/hrms_db
+# MUST be nb_crm_db — never hrms_db (see Local databases below)
+DATABASE_URL=postgres://hrms_user:hrms_pass@localhost:5434/nb_crm_db
 REDIS_URL=redis://localhost:6380
 JWT_SECRET=<at_least_32_random_chars>
 ENCRYPTION_KEY=<exactly_64_hex_chars>
@@ -89,10 +111,12 @@ Generate `ENCRYPTION_KEY`:
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
+If you still need the college HRMS connection locally, keep it in `backend/.env.hrms` (not used by this app). Do not overwrite that file when switching projects.
+
 **Frontend** — create `frontend/.env`:
 
 ```env
-DATABASE_URL=postgres://hrms_user:hrms_pass@localhost:5433/hrms_db
+DATABASE_URL=postgres://hrms_user:hrms_pass@localhost:5434/nb_crm_db
 NEXT_PUBLIC_HASURA_URL=http://localhost:8080/v1/graphql
 NEXT_PUBLIC_API_URL=http://127.0.0.1:4000/api
 NEXTAUTH_URL=http://localhost:3000
@@ -107,15 +131,26 @@ NEXTAUTH_SECRET=<any_random_string>
 docker compose up -d postgres redis hasura
 ```
 
-This starts **PostgreSQL** (port `5433`), **Redis** (internal only), and **Hasura** (port `8080`).
+This starts **PostgreSQL** (port `5434`), **Redis** (port `6380`), and **Hasura** (port `8080`).
 
 > Do **not** start the Docker `backend` service during development — run it locally instead (step 6).
 
-### 5. Run database migration & seed
+### 5. Create `nb_crm_db`, run migrations & seed
+
+```powershell
+# Windows
+.\scripts\create_nb_crm_db.ps1
+```
+
+```bash
+# macOS / Linux
+bash scripts/create_nb_crm_db.sh
+```
+
+This creates `nb_crm_db` if missing and runs `prisma migrate deploy` against it only. Then:
 
 ```bash
 cd backend
-npx prisma migrate dev --name init_all
 npx prisma generate
 npx prisma db seed
 cd ..
@@ -412,8 +447,7 @@ HR-Management-System/
 │                                    # family, academic, upload, audit
 │
 ├── hasura/                          # Hasura metadata & migrations
-├── docker-compose.yml               # postgres, redis, hasura, backend (backend = dev only)
-└── schema.prisma                    # Convenience copy of the DB schema
+└── docker-compose.yml               # postgres, redis, hasura, backend (backend = dev only)
 ```
 
 ---
@@ -436,9 +470,9 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
 ### `P1000: Authentication failed` on Prisma migrate
-Your `DATABASE_URL` must use port **`5433`** (not 5432):
+Your `DATABASE_URL` must use port **`5434`** (not 5432) and database **`nb_crm_db`**:
 ```env
-DATABASE_URL=postgres://hrms_user:hrms_pass@localhost:5433/hrms_db
+DATABASE_URL=postgres://hrms_user:hrms_pass@localhost:5434/nb_crm_db
 ```
 
 ### `Database drift detected` on Prisma migrate

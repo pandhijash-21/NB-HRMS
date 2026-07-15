@@ -4,6 +4,8 @@ services:
     image: postgres:15
     restart: always
     environment:
+      # Bootstrap DB only (created on first volume init). NB CRM uses nb_crm_db —
+      # create it via scripts/create_nb_crm_db.ps1 (or .sh). Never merge the two.
       POSTGRES_DB: hrms_db
       POSTGRES_USER: hrms_user
       POSTGRES_PASSWORD: hrms_pass
@@ -27,7 +29,7 @@ services:
     ports:
       - "8080:8080"
     environment:
-      HASURA_GRAPHQL_DATABASE_URL: postgres://hrms_user:hrms_pass@postgres:5432/hrms_db
+      HASURA_GRAPHQL_DATABASE_URL: postgres://hrms_user:hrms_pass@postgres:5432/nb_crm_db
       HASURA_GRAPHQL_ENABLE_CONSOLE: "true"
       HASURA_GRAPHQL_DEV_MODE: "true"
       HASURA_GRAPHQL_ADMIN_SECRET: myadminsecret
@@ -46,7 +48,7 @@ services:
       - ./backend:/app
       - /app/node_modules
     environment:
-      - DATABASE_URL=postgres://hrms_user:hrms_pass@postgres:5432/hrms_db
+      - DATABASE_URL=postgres://hrms_user:hrms_pass@postgres:5432/nb_crm_db
       - REDIS_URL=redis://redis:6379
       - PORT=4000
       - JWT_SECRET=your_jwt_secret_here_change_me

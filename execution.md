@@ -19,9 +19,21 @@ The easiest way to start the infrastructure (DB, Redis, Hasura) is using Docker 
     docker-compose up -d
     ```
     This will start:
-    - **PostgreSQL**: `localhost:5434` (User: `hrms_user`, Pass: `hrms_pass`, DB: `hrms_db`)
+    - **PostgreSQL**: `localhost:5434` (User: `hrms_user`, Pass: `hrms_pass`)
+      - `nb_crm_db` — **this** NB Developer project (required)
+      - `hrms_db` — college HRMS only; do **not** point this app at it
     - **Redis**: `localhost:6380`
     - **Hasura GraphQL Engine**: `http://localhost:8080`
+
+    Create/migrate the NB database (never touches `hrms_db`):
+
+    ```powershell
+    .\scripts\create_nb_crm_db.ps1
+    ```
+
+    ```bash
+    bash scripts/create_nb_crm_db.sh
+    ```
 
 ---
 
@@ -57,16 +69,19 @@ Hasura acts as the GraphQL API layer for the database.
 
 3.  **Configure environment variables**:
     - Create a `.env` file (copy from `.env.example`).
-    - Ensure `DATABASE_URL` matches your PostgreSQL connection string.
+    - Ensure `DATABASE_URL` is `postgres://hrms_user:hrms_pass@localhost:5434/nb_crm_db` (never `hrms_db`).
+    - Optional: keep the college URL in `backend/.env.hrms` for the old project only.
     - Ensure `REDIS_URL` or relevant Redis settings are correct.
 
-4.  **Initialize Database (Prisma)**:
+4.  **Initialize Database (Prisma)** — prefer the setup script first:
+    ```powershell
+    # from repo root
+    .\scripts\create_nb_crm_db.ps1
+    ```
+    Then:
     ```bash
     # Generate Prisma Client
     npx prisma generate
-
-    # Push schema to database (or run migrations)
-    npx prisma db push
 
     # Seed the database (Important for initial admin user and roles)
     npx prisma db seed

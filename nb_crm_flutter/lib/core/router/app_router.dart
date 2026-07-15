@@ -1,0 +1,287 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../features/auth/presentation/auth_notifier.dart';
+import '../../features/auth/presentation/auth_providers.dart';
+import '../../features/auth/presentation/change_password_screen.dart';
+import '../../features/auth/presentation/login_screen.dart';
+import '../../features/home/presentation/home_screen.dart';
+import '../../features/profile/presentation/screens/profile_screen.dart';
+import '../../features/profile/presentation/screens/profile_edit_screen.dart';
+import '../../features/admin/presentation/screens/admin_employees_screen.dart';
+import '../../features/admin/presentation/screens/admin_employee_detail_screen.dart';
+import '../../features/admin/presentation/screens/admin_approvals_screen.dart';
+import '../../features/admin/presentation/screens/admin_dashboard_screen.dart';
+import '../../features/admin/presentation/screens/admin_audit_stub_screen.dart';
+import '../../features/org/presentation/screens/institutes_screen.dart';
+import '../../features/org/presentation/screens/institute_detail_screen.dart';
+import '../../features/org/presentation/screens/designations_screen.dart';
+import '../../features/leave/presentation/screens/leave_hub_screen.dart';
+import '../../features/leave/presentation/screens/leave_apply_screen.dart';
+import '../../features/leave/presentation/screens/leave_history_screen.dart';
+import '../../features/leave/presentation/screens/leave_approvals_screen.dart';
+import '../../features/leave/presentation/screens/leave_approvals_history_screen.dart';
+import '../../features/leave/presentation/screens/admin_leaves_screen.dart';
+import '../../features/leave/presentation/screens/admin_leaves_pending_screen.dart';
+import '../../features/leave/presentation/screens/admin_leaves_settings_screen.dart';
+import '../../features/leave/presentation/screens/admin_leaves_holidays_screen.dart';
+import '../../features/attendance/presentation/screens/attendance_screen.dart';
+import '../../features/attendance/presentation/screens/admin_attendance_screen.dart';
+import '../../features/salary/presentation/screens/admin_salary_commissions_screen.dart';
+import '../../features/salary/presentation/screens/admin_salary_commission_detail_screen.dart';
+import '../../features/salary/presentation/screens/admin_salary_structures_screen.dart';
+import '../../features/salary/presentation/screens/admin_salary_structure_detail_screen.dart';
+import '../../features/salary/presentation/screens/admin_salary_entry_screen.dart';
+import '../../features/salary/presentation/screens/admin_salary_records_screen.dart';
+import '../../features/salary/presentation/screens/admin_salary_slip_screen.dart';
+import '../../features/rbac/presentation/screens/admin_users_screen.dart';
+import '../../features/rbac/presentation/screens/admin_roles_screen.dart';
+import '../../features/rbac/presentation/screens/admin_role_detail_screen.dart';
+
+/// Listenable bridge so GoRouter refreshes when [AuthState] changes.
+class GoRouterAuthRefresh extends ChangeNotifier {
+  GoRouterAuthRefresh(Ref ref) {
+    _subscription = ref.listen<AuthState>(authNotifierProvider, (_, __) {
+      notifyListeners();
+    });
+  }
+
+  late final ProviderSubscription<AuthState> _subscription;
+
+  @override
+  void dispose() {
+    _subscription.close();
+    super.dispose();
+  }
+}
+
+final goRouterProvider = Provider<GoRouter>((ref) {
+  final refresh = GoRouterAuthRefresh(ref);
+  ref.onDispose(refresh.dispose);
+
+  return GoRouter(
+    initialLocation: '/login',
+    refreshListenable: refresh,
+    debugLogDiagnostics: kDebugMode,
+    redirect: (context, state) {
+      final auth = ref.read(authNotifierProvider);
+      final loc = state.matchedLocation;
+
+      if (auth.status == AuthStatus.unknown) {
+        return loc == '/login' ? null : '/login';
+      }
+
+      final loggingIn = loc == '/login';
+      final changingPassword = loc == '/change-password';
+      final authenticated = auth.isAuthenticated;
+
+      if (!authenticated) {
+        return loggingIn ? null : '/login';
+      }
+
+      if (auth.isFirstLogin) {
+        return changingPassword ? null : '/change-password';
+      }
+
+      if (loggingIn || changingPassword) {
+        return '/home';
+      }
+
+      return null;
+    },
+    routes: [
+      GoRoute(
+        path: '/',
+        redirect: (context, state) => '/login',
+      ),
+      GoRoute(
+        path: '/login',
+        builder: (context, state) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: '/change-password',
+        builder: (context, state) => const ChangePasswordScreen(),
+      ),
+      GoRoute(
+        path: '/home',
+        builder: (context, state) => const HomeScreen(),
+      ),
+      GoRoute(
+        path: '/leave',
+        builder: (context, state) => const LeaveHubScreen(),
+      ),
+      GoRoute(
+        path: '/leave/apply',
+        builder: (context, state) => const LeaveApplyScreen(),
+      ),
+      GoRoute(
+        path: '/leave/history',
+        builder: (context, state) => const LeaveHistoryScreen(),
+      ),
+      GoRoute(
+        path: '/approvals',
+        builder: (context, state) => const LeaveApprovalsScreen(),
+      ),
+      GoRoute(
+        path: '/approvals/history',
+        builder: (context, state) => const LeaveApprovalsHistoryScreen(),
+      ),
+      GoRoute(
+        path: '/admin/leaves',
+        builder: (context, state) => const AdminLeavesScreen(),
+      ),
+      GoRoute(
+        path: '/admin/leaves/pending',
+        builder: (context, state) => const AdminLeavesPendingScreen(),
+      ),
+      GoRoute(
+        path: '/admin/leaves/settings',
+        builder: (context, state) => const AdminLeavesSettingsScreen(),
+      ),
+      GoRoute(
+        path: '/admin/leaves/holidays',
+        builder: (context, state) => const AdminLeavesHolidaysScreen(),
+      ),
+      GoRoute(
+        path: '/attendance',
+        builder: (context, state) => const AttendanceScreen(),
+      ),
+      GoRoute(
+        path: '/admin/attendance',
+        builder: (context, state) => const AdminAttendanceScreen(),
+      ),
+      GoRoute(
+        path: '/profile',
+        builder: (context, state) {
+          final idStr = state.uri.queryParameters['employeeId'];
+          final id = idStr != null ? int.tryParse(idStr) : null;
+          return ProfileScreen(employeeId: id);
+        },
+      ),
+      GoRoute(
+        path: '/profile/edit',
+        builder: (context, state) {
+          final idStr = state.uri.queryParameters['employeeId'];
+          final id = idStr != null ? int.tryParse(idStr) : null;
+          return ProfileEditScreen(employeeId: id);
+        },
+      ),
+      GoRoute(
+        path: '/admin/dashboard',
+        builder: (context, state) => const AdminDashboardScreen(),
+      ),
+      GoRoute(
+        path: '/admin/institutes',
+        builder: (context, state) => const InstitutesScreen(),
+      ),
+      GoRoute(
+        path: '/admin/institutes/:id',
+        builder: (context, state) {
+          final id = state.pathParameters['id'];
+          if (id == null || id.isEmpty) {
+            return const Scaffold(body: Center(child: Text('Invalid Institute ID')));
+          }
+          return InstituteDetailScreen(instituteId: id);
+        },
+      ),
+      GoRoute(
+        path: '/admin/designations',
+        builder: (context, state) => const DesignationsScreen(),
+      ),
+      GoRoute(
+        path: '/admin/employees',
+        builder: (context, state) => const AdminEmployeesScreen(),
+      ),
+      GoRoute(
+        path: '/admin/employees/:id',
+        builder: (context, state) {
+          final idStr = state.pathParameters['id'];
+          final id = idStr != null ? int.tryParse(idStr) : null;
+          if (id == null) {
+            return const Scaffold(body: Center(child: Text('Invalid Employee ID')));
+          }
+          return AdminEmployeeDetailScreen(employeeId: id);
+        },
+      ),
+      GoRoute(
+        path: '/admin/approvals',
+        builder: (context, state) => const AdminApprovalsScreen(),
+      ),
+      GoRoute(
+        path: '/admin/audit',
+        builder: (context, state) => const AdminAuditStubScreen(),
+      ),
+      GoRoute(
+        path: '/admin/users',
+        builder: (context, state) => const AdminUsersScreen(),
+      ),
+      GoRoute(
+        path: '/admin/roles',
+        builder: (context, state) => const AdminRolesScreen(),
+      ),
+      GoRoute(
+        path: '/admin/roles/:id',
+        builder: (context, state) {
+          final id = state.pathParameters['id'];
+          if (id == null || id.isEmpty) {
+            return const Scaffold(body: Center(child: Text('Invalid Role ID')));
+          }
+          return AdminRoleDetailScreen(roleId: id);
+        },
+      ),
+      GoRoute(
+        path: '/admin/salary/commissions',
+        builder: (context, state) => const AdminSalaryCommissionsScreen(),
+      ),
+      GoRoute(
+        path: '/admin/salary/commissions/:id',
+        builder: (context, state) {
+          final id = state.pathParameters['id'];
+          if (id == null || id.isEmpty) {
+            return const Scaffold(body: Center(child: Text('Invalid commission ID')));
+          }
+          return AdminSalaryCommissionDetailScreen(commissionId: id);
+        },
+      ),
+      GoRoute(
+        path: '/admin/salary/structures',
+        builder: (context, state) => const AdminSalaryStructuresScreen(),
+      ),
+      GoRoute(
+        path: '/admin/salary/structures/:designationId/:commission',
+        builder: (context, state) {
+          final designationId = state.pathParameters['designationId'];
+          final commission = state.pathParameters['commission'];
+          if (designationId == null || commission == null) {
+            return const Scaffold(body: Center(child: Text('Invalid structure route')));
+          }
+          return AdminSalaryStructureDetailScreen(
+            designationId: designationId,
+            commission: commission,
+            templateId: state.uri.queryParameters['templateId'],
+          );
+        },
+      ),
+      GoRoute(
+        path: '/admin/salary/entry',
+        builder: (context, state) => const AdminSalaryEntryScreen(),
+      ),
+      GoRoute(
+        path: '/admin/salary/records',
+        builder: (context, state) => const AdminSalaryRecordsScreen(),
+      ),
+      GoRoute(
+        path: '/admin/salary/records/:id/slip',
+        builder: (context, state) {
+          final id = state.pathParameters['id'];
+          if (id == null || id.isEmpty) {
+            return const Scaffold(body: Center(child: Text('Invalid record ID')));
+          }
+          return AdminSalarySlipScreen(recordId: id);
+        },
+      ),
+    ],
+  );
+});

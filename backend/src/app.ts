@@ -23,11 +23,28 @@ configureCloudinary();
 
 export const app = express();
 
+const configuredCorsOrigins = env.CORS_ALLOWED_ORIGINS?.split(',')
+  .map((o) => o.trim())
+  .filter(Boolean) ?? [
+  'http://localhost:3000',
+  'http://localhost:9695',
+];
+
+/** Allow configured origins plus any localhost / 127.0.0.1 port (Flutter web). */
+function isAllowedCorsOrigin(origin: string | undefined): boolean {
+  if (!origin) return true;
+  if (configuredCorsOrigins.includes(origin)) return true;
+  return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+}
+
 app.use(cors({
-  origin: env.CORS_ALLOWED_ORIGINS?.split(',').map((o) => o.trim()) ?? [
-    'http://localhost:3000',
-    'http://localhost:9695',
-  ],
+  origin: (origin, callback) => {
+    if (isAllowedCorsOrigin(origin)) {
+      callback(null, true);
+      return;
+    }
+    callback(null, false);
+  },
   credentials: true,
 }));
 app.use(helmet());

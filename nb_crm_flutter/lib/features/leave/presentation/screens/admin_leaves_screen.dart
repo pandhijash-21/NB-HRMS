@@ -28,206 +28,343 @@ class _AdminLeavesScreenState extends ConsumerState<AdminLeavesScreen> {
   Widget build(BuildContext context) {
     final filters = ref.watch(adminApplicationsFilterProvider);
     final appsAsync = ref.watch(adminApplicationsProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: AppColors.sand,
+      backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text('Leave Admin'),
+        backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        title: Text(
+          'Leave Admin',
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: 20,
+            color: isDark ? Colors.white : const Color(0xFF212F3D),
+            letterSpacing: -0.5,
+          ),
+        ),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: Icon(
+            Icons.arrow_back_rounded,
+            color: isDark ? Colors.white.withOpacity(0.8) : const Color(0xFF212F3D),
+          ),
           onPressed: () => context.go('/home'),
         ),
         actions: [
           IconButton(
             tooltip: 'Pending queue',
-            icon: const Icon(Icons.pending_actions),
+            icon: const Icon(Icons.pending_actions_rounded, color: Color(0xFFC5A059)),
             onPressed: () => context.go('/admin/leaves/pending'),
           ),
           IconButton(
             tooltip: 'Settings',
-            icon: const Icon(Icons.settings),
+            icon: const Icon(Icons.settings_rounded, color: Color(0xFFC5A059)),
             onPressed: () => context.go('/admin/leaves/settings'),
           ),
           IconButton(
             tooltip: 'Holidays',
-            icon: const Icon(Icons.event),
+            icon: const Icon(Icons.event_rounded, color: Color(0xFFC5A059)),
             onPressed: () => context.go('/admin/leaves/holidays'),
           ),
           IconButton(
             tooltip: 'Apply on behalf',
-            icon: const Icon(Icons.person_add_alt_1),
+            icon: const Icon(Icons.person_add_alt_1_rounded, color: Color(0xFFC5A059)),
             onPressed: () => showAdminApplyOnBehalfDialog(context, ref),
           ),
+          const SizedBox(width: 8),
         ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1.5),
+          child: Container(
+            color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+            height: 1.5,
+          ),
+        ),
       ),
-      body: Column(
-        children: [
-          Container(
-            color: AppColors.surface,
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              children: [
-                TextField(
-                  controller: _searchCtrl,
-                  decoration: InputDecoration(
-                    labelText: 'Search name, code, application no, or employee ID',
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: _searchCtrl.text.isEmpty
-                        ? null
-                        : IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              _searchCtrl.clear();
-                              ref
-                                  .read(adminApplicationsFilterProvider.notifier)
-                                  .setSearch('');
-                              setState(() {});
-                            },
-                          ),
+      body: TweenAnimationBuilder<double>(
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeOutCubic,
+        tween: Tween(begin: 0.0, end: 1.0),
+        builder: (context, value, child) {
+          return Transform.translate(
+            offset: Offset(0.0, 30.0 * (1.0 - value)),
+            child: Opacity(opacity: value, child: child),
+          );
+        },
+        child: Column(
+          children: [
+            Container(
+              margin: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E1B18) : Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                  width: 1.5,
+                ),
+              ),
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  TextField(
+                    controller: _searchCtrl,
+                    decoration: InputDecoration(
+                      labelText: 'Search name, code, app no, or ID',
+                      labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+                      prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFFC5A059), size: 18),
+                      suffixIcon: _searchCtrl.text.isEmpty
+                          ? null
+                          : IconButton(
+                              icon: const Icon(Icons.clear_rounded, size: 18),
+                              onPressed: () {
+                                _searchCtrl.clear();
+                                ref.read(adminApplicationsFilterProvider.notifier).setSearch('');
+                                setState(() {});
+                              },
+                            ),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(
+                          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: Color(0xFFC5A059), width: 1.5),
+                      ),
+                    ),
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                    onChanged: (v) {
+                      ref.read(adminApplicationsFilterProvider.notifier).setSearch(v);
+                      setState(() {});
+                    },
                   ),
-                  onChanged: (v) {
-                    ref
-                        .read(adminApplicationsFilterProvider.notifier)
-                        .setSearch(v);
-                    setState(() {});
-                  },
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        value: filters.status.isEmpty ? '' : filters.status,
-                        decoration: const InputDecoration(labelText: 'Status'),
-                        items: const [
-                          DropdownMenuItem(value: '', child: Text('All')),
-                          DropdownMenuItem(value: 'PENDING', child: Text('Pending')),
-                          DropdownMenuItem(value: 'APPROVED', child: Text('Approved')),
-                          DropdownMenuItem(value: 'REJECTED', child: Text('Rejected')),
-                          DropdownMenuItem(value: 'CANCELLED', child: Text('Cancelled')),
-                        ],
-                        onChanged: (v) => ref
-                            .read(adminApplicationsFilterProvider.notifier)
-                            .setStatus(v ?? ''),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          initialValue: filters.status.isEmpty ? '' : filters.status,
+                          dropdownColor: isDark ? const Color(0xFF2B2722) : Colors.white,
+                          decoration: InputDecoration(
+                            labelText: 'Status',
+                            labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide(
+                                color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: const BorderSide(color: Color(0xFFC5A059), width: 1.5),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                          ),
+                          items: const [
+                            DropdownMenuItem(value: '', child: Text('All')),
+                            DropdownMenuItem(value: 'PENDING', child: Text('Pending')),
+                            DropdownMenuItem(value: 'APPROVED', child: Text('Approved')),
+                            DropdownMenuItem(value: 'REJECTED', child: Text('Rejected')),
+                            DropdownMenuItem(value: 'CANCELLED', child: Text('Cancelled')),
+                          ],
+                          onChanged: (v) => ref.read(adminApplicationsFilterProvider.notifier).setStatus(v ?? ''),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: DropdownButtonFormField<int?>(
-                        value: filters.year,
-                        decoration: const InputDecoration(labelText: 'Year'),
-                        items: List.generate(5, (i) {
-                          final y = DateTime.now().year - 2 + i;
-                          return DropdownMenuItem<int?>(
-                            value: y,
-                            child: Text('$y'),
-                          );
-                        }),
-                        onChanged: (v) => ref
-                            .read(adminApplicationsFilterProvider.notifier)
-                            .setYear(v),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: DropdownButtonFormField<int?>(
+                          initialValue: filters.year,
+                          dropdownColor: isDark ? const Color(0xFF2B2722) : Colors.white,
+                          decoration: InputDecoration(
+                            labelText: 'Year',
+                            labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide(
+                                color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: const BorderSide(color: Color(0xFFC5A059), width: 1.5),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                          ),
+                          items: List.generate(5, (i) {
+                            final y = DateTime.now().year - 2 + i;
+                            return DropdownMenuItem<int?>(
+                              value: y,
+                              child: Text('$y'),
+                            );
+                          }),
+                          onChanged: (v) => ref.read(adminApplicationsFilterProvider.notifier).setYear(v),
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-              ],
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-          Expanded(
-            child: LeaveAsyncBody<LeaveApplicationsPage>(
-              value: appsAsync,
-              emptyMessage: 'No leave applications.',
-              onRetry: () => ref.invalidate(adminApplicationsProvider),
-              builder: (page) {
-                if (page.items.isEmpty) {
-                  return const Center(child: Text('No leave applications.'));
-                }
-                return Column(
-                  children: [
-                    Expanded(
-                      child: ListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: page.items.length,
-                        itemBuilder: (ctx, i) {
-                          final app = page.items[i];
-                          final isPending = app.status.toUpperCase() == 'PENDING';
-                          return LeaveApplicationCard(
-                            application: app,
-                            subtitle: app.employee?.fullName ??
-                                (app.employee != null
-                                    ? 'Employee #${app.employee!.id}'
-                                    : null),
-                            trailing: isPending
-                                ? Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      IconButton(
-                                        tooltip: 'Approve',
-                                        icon: const Icon(Icons.check_circle_outline,
-                                            color: AppColors.success),
-                                        onPressed: () =>
-                                            _act(app.id, approve: true),
-                                      ),
-                                      IconButton(
-                                        tooltip: 'Reject',
-                                        icon: const Icon(Icons.cancel_outlined,
-                                            color: AppColors.error),
-                                        onPressed: () =>
-                                            _act(app.id, approve: false),
-                                      ),
-                                    ],
-                                  )
-                                : null,
-                          );
-                        },
+            Expanded(
+              child: LeaveAsyncBody<LeaveApplicationsPage>(
+                value: appsAsync,
+                emptyMessage: 'No leave applications.',
+                onRetry: () => ref.invalidate(adminApplicationsProvider),
+                builder: (page) {
+                  if (page.items.isEmpty) {
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(40),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.event_busy_rounded, size: 64, color: isDark ? Colors.white10 : Colors.black12),
+                            const SizedBox(height: 16),
+                            Text(
+                              'No leave applications.',
+                              style: TextStyle(
+                                color: isDark ? Colors.white30 : const Color(0xFF607D8B).withOpacity(0.6),
+                                fontWeight: FontWeight.w600,
+                                fontSize: 15,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    _PagingBar(
-                      page: filters.page,
-                      pageSize: filters.limit,
-                      total: page.total,
-                      onPrev: filters.page > 0
-                          ? () => ref
-                              .read(adminApplicationsFilterProvider.notifier)
-                              .setPage(filters.page - 1)
-                          : null,
-                      onNext: (filters.page + 1) * filters.limit < page.total
-                          ? () => ref
-                              .read(adminApplicationsFilterProvider.notifier)
-                              .setPage(filters.page + 1)
-                          : null,
-                    ),
-                  ],
-                );
-              },
+                    );
+                  }
+                  return Column(
+                    children: [
+                      Expanded(
+                        child: ListView.builder(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          itemCount: page.items.length,
+                          itemBuilder: (ctx, i) {
+                            final app = page.items[i];
+                            final isPending = app.status.toUpperCase() == 'PENDING';
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: LeaveApplicationCard(
+                                application: app,
+                                subtitle: app.employee?.fullName ??
+                                    (app.employee != null ? 'Employee #${app.employee!.id}' : null),
+                                trailing: isPending
+                                    ? Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Container(
+                                            decoration: BoxDecoration(
+                                              color: Colors.green.withOpacity(0.1),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: IconButton(
+                                              tooltip: 'Approve',
+                                              icon: const Icon(Icons.check_circle_outline_rounded, color: Colors.green),
+                                              onPressed: () => _act(app.id, approve: true),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Container(
+                                            decoration: BoxDecoration(
+                                              color: Colors.red.withOpacity(0.1),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: IconButton(
+                                              tooltip: 'Reject',
+                                              icon: const Icon(Icons.cancel_outlined, color: Colors.red),
+                                              onPressed: () => _act(app.id, approve: false),
+                                            ),
+                                          ),
+                                        ],
+                                      )
+                                    : null,
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      _PagingBar(
+                        page: filters.page,
+                        pageSize: filters.limit,
+                        total: page.total,
+                        onPrev: filters.page > 0
+                            ? () => ref.read(adminApplicationsFilterProvider.notifier).setPage(filters.page - 1)
+                            : null,
+                        onNext: (filters.page + 1) * filters.limit < page.total
+                            ? () => ref.read(adminApplicationsFilterProvider.notifier).setPage(filters.page + 1)
+                            : null,
+                      ),
+                    ],
+                  );
+                },
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => showAdminApplyOnBehalfDialog(context, ref),
-        icon: const Icon(Icons.person_add_alt_1),
-        label: const Text('Apply on behalf'),
+        backgroundColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+        foregroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
+        icon: const Icon(Icons.person_add_alt_1_rounded),
+        label: const Text('Apply on behalf', style: TextStyle(fontWeight: FontWeight.w800)),
       ),
     );
   }
 
   Future<void> _act(String id, {required bool approve}) async {
     final remarksCtrl = TextEditingController();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(approve ? 'Approve leave' : 'Reject leave'),
+        backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          approve ? 'Approve Leave' : 'Reject Leave',
+          style: TextStyle(
+            fontWeight: FontWeight.w800,
+            color: isDark ? Colors.white : const Color(0xFF212F3D),
+          ),
+        ),
         content: TextField(
           controller: remarksCtrl,
-          decoration: const InputDecoration(labelText: 'Remarks (optional)'),
+          decoration: InputDecoration(
+            labelText: 'Remarks (optional)',
+            labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(
+                color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: Color(0xFFC5A059), width: 1.5),
+            ),
+          ),
           maxLines: 3,
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancel', style: TextStyle(color: isDark ? Colors.white70 : const Color(0xFF607D8B))),
+          ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text(approve ? 'Approve' : 'Reject'),
+            style: FilledButton.styleFrom(
+              backgroundColor: approve ? Colors.green : Colors.red,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: Text(approve ? 'Approve' : 'Reject', style: const TextStyle(fontWeight: FontWeight.w800)),
           ),
         ],
       ),
@@ -247,13 +384,28 @@ class _AdminLeavesScreenState extends ConsumerState<AdminLeavesScreen> {
       invalidateLeaveAdminData(ref);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(approve ? 'Approved' : 'Rejected')),
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(approve ? Icons.check_circle_rounded : Icons.cancel_rounded, color: Colors.white),
+                const SizedBox(width: 8),
+                Text(approve ? 'Leave Approved' : 'Leave Rejected', style: const TextStyle(fontWeight: FontWeight.w800)),
+              ],
+            ),
+            backgroundColor: approve ? Colors.green : Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$e'), backgroundColor: AppColors.error),
+          SnackBar(
+            content: Text('$e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       }
     } finally {
@@ -281,15 +433,58 @@ class _PagingBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final from = total == 0 ? 0 : page * pageSize + 1;
     final to = ((page + 1) * pageSize).clamp(0, total);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
     return Container(
-      color: AppColors.surface,
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E1B18) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+          width: 1.5,
+        ),
+      ),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
-          Text('$from–$to of $total'),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF2B2722) : const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              '$from–$to of $total',
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 12,
+                color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF212F3D),
+              ),
+            ),
+          ),
           const Spacer(),
-          IconButton(onPressed: onPrev, icon: const Icon(Icons.chevron_left)),
-          IconButton(onPressed: onNext, icon: const Icon(Icons.chevron_right)),
+          IconButton(
+            onPressed: onPrev,
+            icon: const Icon(Icons.chevron_left_rounded),
+            color: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+            style: IconButton.styleFrom(
+              backgroundColor: onPrev != null
+                  ? (isDark ? const Color(0xFFC5A059).withOpacity(0.1) : const Color(0xFFCFD8DC).withOpacity(0.3))
+                  : Colors.transparent,
+            ),
+          ),
+          const SizedBox(width: 4),
+          IconButton(
+            onPressed: onNext,
+            icon: const Icon(Icons.chevron_right_rounded),
+            color: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+            style: IconButton.styleFrom(
+              backgroundColor: onNext != null
+                  ? (isDark ? const Color(0xFFC5A059).withOpacity(0.1) : const Color(0xFFCFD8DC).withOpacity(0.3))
+                  : Colors.transparent,
+            ),
+          ),
         ],
       ),
     );
@@ -435,10 +630,38 @@ class _ApplyOnBehalfDialogState extends ConsumerState<_ApplyOnBehalfDialog> {
     }
   }
 
+  InputDecoration _styledInput(String label, bool isDark) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: BorderSide(
+          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+        ),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: const BorderSide(color: Color(0xFFC5A059), width: 1.5),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return AlertDialog(
-      title: const Text('Apply leave on behalf'),
+      backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Text(
+        'Apply leave on behalf',
+        style: TextStyle(
+          fontWeight: FontWeight.w800,
+          color: isDark ? Colors.white : const Color(0xFF212F3D),
+        ),
+      ),
       content: SizedBox(
         width: 420,
         child: SingleChildScrollView(
@@ -450,21 +673,21 @@ class _ApplyOnBehalfDialogState extends ConsumerState<_ApplyOnBehalfDialog> {
                 enabled: widget.presetEmployeeId == null,
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                decoration: const InputDecoration(
-                  labelText: 'Employee ID *',
+                decoration: _styledInput('Employee ID *', isDark).copyWith(
                   hintText: 'Numeric employee ID',
                 ),
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: _leaveTypeId,
-                decoration: const InputDecoration(labelText: 'Leave type *'),
+                initialValue: _leaveTypeId,
+                decoration: _styledInput('Leave type *', isDark),
+                dropdownColor: isDark ? const Color(0xFF2B2722) : Colors.white,
                 items: widget.types
                     .map(
                       (t) => DropdownMenuItem(
                         value: t.id,
                         child: Text(
-                          '${t.code} — ${t.name}${t.employeeCanApply ? '' : ' (admin-only)'}',
+                          '${t.code} — ${t.name}${t.employeeCanApply ? '' : ' (admin)'}',
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
@@ -477,6 +700,13 @@ class _ApplyOnBehalfDialogState extends ConsumerState<_ApplyOnBehalfDialog> {
                 children: [
                   Expanded(
                     child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        side: BorderSide(
+                          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                        ),
+                      ),
                       onPressed: () async {
                         final d = await showDatePicker(
                           context: context,
@@ -493,63 +723,97 @@ class _ApplyOnBehalfDialogState extends ConsumerState<_ApplyOnBehalfDialog> {
                       },
                       child: Text(
                         _fromDate == null ? 'From *' : formatDateYmd(_fromDate!),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white : const Color(0xFF212F3D),
+                        ),
                       ),
                     ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        side: BorderSide(
+                          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                        ),
+                      ),
                       onPressed: _isHalfDay
                           ? null
                           : () async {
                               final d = await showDatePicker(
                                 context: context,
                                 initialDate: _toDate ?? _fromDate ?? DateTime.now(),
-                                firstDate: DateTime.now()
-                                    .subtract(const Duration(days: 365)),
-                                lastDate: DateTime.now()
-                                    .add(const Duration(days: 730)),
+                                firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                                lastDate: DateTime.now().add(const Duration(days: 730)),
                               );
                               if (d != null) setState(() => _toDate = d);
                             },
                       child: Text(
                         _isHalfDay
-                            ? (_fromDate == null
-                                ? 'To (= from)'
-                                : formatDateYmd(_fromDate!))
+                            ? (_fromDate == null ? 'To (= from)' : formatDateYmd(_fromDate!))
                             : (_toDate == null ? 'To *' : formatDateYmd(_toDate!)),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: _isHalfDay
+                              ? (isDark ? Colors.white38 : Colors.grey)
+                              : (isDark ? Colors.white : const Color(0xFF212F3D)),
+                        ),
                       ),
                     ),
                   ),
                 ],
               ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Half day'),
-                value: _isHalfDay,
-                onChanged: (v) => setState(() {
-                  _isHalfDay = v;
-                  if (v) {
-                    _toDate = _fromDate;
-                  } else {
-                    _halfDaySession = null;
-                  }
-                }),
+              const SizedBox(height: 8),
+              Container(
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF2B2722) : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: isDark ? const Color(0xFFC5A059).withOpacity(0.1) : const Color(0xFFCFD8DC),
+                  ),
+                ),
+                child: SwitchListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                  title: Text(
+                    'Half day',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                      color: isDark ? Colors.white : const Color(0xFF212F3D),
+                    ),
+                  ),
+                  value: _isHalfDay,
+                  activeColor: const Color(0xFFC5A059),
+                  onChanged: (v) => setState(() {
+                    _isHalfDay = v;
+                    if (v) {
+                      _toDate = _fromDate;
+                    } else {
+                      _halfDaySession = null;
+                    }
+                  }),
+                ),
               ),
-              if (_isHalfDay)
+              if (_isHalfDay) ...[
+                const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
-                  value: _halfDaySession,
-                  decoration: const InputDecoration(labelText: 'Session *'),
+                  initialValue: _halfDaySession,
+                  decoration: _styledInput('Session *', isDark),
+                  dropdownColor: isDark ? const Color(0xFF2B2722) : Colors.white,
                   items: const [
                     DropdownMenuItem(value: 'MORNING', child: Text('Morning')),
                     DropdownMenuItem(value: 'AFTERNOON', child: Text('Afternoon')),
                   ],
                   onChanged: (v) => setState(() => _halfDaySession = v),
                 ),
-              const SizedBox(height: 8),
+              ],
+              const SizedBox(height: 12),
               TextField(
                 controller: _reasonCtrl,
-                decoration: const InputDecoration(labelText: 'Reason *'),
+                decoration: _styledInput('Reason *', isDark),
                 minLines: 2,
                 maxLines: 4,
               ),
@@ -560,11 +824,19 @@ class _ApplyOnBehalfDialogState extends ConsumerState<_ApplyOnBehalfDialog> {
       actions: [
         TextButton(
           onPressed: _submitting ? null : () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text('Cancel', style: TextStyle(color: isDark ? Colors.white70 : const Color(0xFF607D8B))),
         ),
         FilledButton(
           onPressed: _submitting ? null : _submit,
-          child: Text(_submitting ? 'Applying…' : 'Apply leave'),
+          style: FilledButton.styleFrom(
+            backgroundColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+            foregroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+          child: Text(
+            _submitting ? 'Applying…' : 'Apply Leave',
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
         ),
       ],
     );

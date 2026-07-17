@@ -41,7 +41,7 @@ class _EmployeeLeaveTabState extends ConsumerState<EmployeeLeaveTab> {
     );
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(16),
       children: [
         Row(
           children: [
@@ -56,9 +56,9 @@ class _EmployeeLeaveTabState extends ConsumerState<EmployeeLeaveTab> {
                           color: AppColors.midnight,
                         ),
                   ),
-                  const Text(
+                  Text(
                     'Balances and application history',
-                    style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                    style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color, fontSize: 12),
                   ),
                 ],
               ),
@@ -68,9 +68,9 @@ class _EmployeeLeaveTabState extends ConsumerState<EmployeeLeaveTab> {
                 _year -= 1;
                 _page = 0;
               }),
-              icon: const Icon(Icons.chevron_left),
+              icon: Icon(Icons.chevron_left),
             ),
-            Text('$_year', style: const TextStyle(fontWeight: FontWeight.w700)),
+            Text('$_year', style: TextStyle(fontWeight: FontWeight.w700)),
             IconButton(
               onPressed: _year >= DateTime.now().year
                   ? null
@@ -78,21 +78,21 @@ class _EmployeeLeaveTabState extends ConsumerState<EmployeeLeaveTab> {
                         _year += 1;
                         _page = 0;
                       }),
-              icon: const Icon(Icons.chevron_right),
+              icon: Icon(Icons.chevron_right),
             ),
-            const SizedBox(width: 8),
+            SizedBox(width: 8),
             FilledButton.icon(
               onPressed: () => showAdminApplyOnBehalfDialog(
                 context,
                 ref,
                 presetEmployeeId: widget.employeeId,
               ),
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('Apply Leave'),
+              icon: Icon(Icons.add, size: 18),
+              label: Text('Apply Leave'),
             ),
           ],
         ),
-        const SizedBox(height: 16),
+        SizedBox(height: 16),
         LeaveAsyncBody<List<LeaveBalance>>(
           value: balancesAsync,
           emptyMessage: 'No leave types / balances.',
@@ -118,26 +118,26 @@ class _EmployeeLeaveTabState extends ConsumerState<EmployeeLeaveTab> {
                     side: const BorderSide(color: AppColors.border),
                   ),
                   child: Padding(
-                    padding: const EdgeInsets.all(12),
+                    padding: EdgeInsets.all(12),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           b.leaveType?.code ?? '—',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w800,
-                            color: AppColors.bronzeDark,
+                            color: Theme.of(context).colorScheme.primary,
                           ),
                         ),
-                        const SizedBox(height: 6),
+                        SizedBox(height: 6),
                         Text(
                           b.displayAvailable.toStringAsFixed(
                             b.displayAvailable == b.displayAvailable.roundToDouble()
                                 ? 0
                                 : 1,
                           ),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.w800,
                             color: AppColors.midnight,
@@ -147,21 +147,21 @@ class _EmployeeLeaveTabState extends ConsumerState<EmployeeLeaveTab> {
                           b.leaveType?.name ?? 'Leave',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 11,
-                            color: AppColors.textSecondary,
+                            color: Theme.of(context).textTheme.bodySmall?.color,
                           ),
                         ),
-                        const SizedBox(height: 6),
+                        SizedBox(height: 6),
                         Text(
                           'Used ${b.used.toStringAsFixed(0)}'
                           '${b.pending > 0 ? ' · Pending ${b.pending.toStringAsFixed(0)}' : ''}',
-                          style: const TextStyle(fontSize: 10, color: AppColors.textSecondary),
+                          style: TextStyle(fontSize: 10, color: AppColors.textSecondary),
                         ),
                         if (adminOnly)
-                          const Text(
+                          Text(
                             'Admin only',
-                            style: TextStyle(fontSize: 10, color: AppColors.bronzeDark),
+                            style: TextStyle(fontSize: 10, color: Theme.of(context).colorScheme.primary),
                           ),
                       ],
                     ),
@@ -171,7 +171,7 @@ class _EmployeeLeaveTabState extends ConsumerState<EmployeeLeaveTab> {
             }).toList(),
           ),
         ),
-        const SizedBox(height: 24),
+        SizedBox(height: 24),
         Text(
           'Applications',
           style: Theme.of(context).textTheme.titleSmall?.copyWith(
@@ -179,7 +179,7 @@ class _EmployeeLeaveTabState extends ConsumerState<EmployeeLeaveTab> {
                 color: AppColors.midnight,
               ),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: 8),
         LeaveAsyncBody<LeaveApplicationsPage>(
           value: appsAsync,
           emptyMessage: 'No applications for $_year.',
@@ -190,7 +190,7 @@ class _EmployeeLeaveTabState extends ConsumerState<EmployeeLeaveTab> {
           ),
           builder: (page) {
             if (page.items.isEmpty) {
-              return const Padding(
+              return Padding(
                 padding: EdgeInsets.all(24),
                 child: Center(child: Text('No applications for this year.')),
               );
@@ -210,14 +210,14 @@ class _EmployeeLeaveTabState extends ConsumerState<EmployeeLeaveTab> {
                       onPressed: _page > 0
                           ? () => setState(() => _page -= 1)
                           : null,
-                      icon: const Icon(Icons.chevron_left),
+                      icon: Icon(Icons.chevron_left),
                     ),
                     Text('Page ${_page + 1}'),
                     IconButton(
                       onPressed: (_page + 1) * 8 < page.total
                           ? () => setState(() => _page += 1)
                           : null,
-                      icon: const Icon(Icons.chevron_right),
+                      icon: Icon(Icons.chevron_right),
                     ),
                   ],
                 ),

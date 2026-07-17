@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/theme/app_colors.dart';
 import '../../domain/salary_models.dart';
 
 enum _UiRuleType { fixed, sum, percentage, conditional }
@@ -189,18 +188,18 @@ class _SalaryRuleEditorSheetState extends State<SalaryRuleEditorSheet> {
               widget.ruleEditorEnabled
                   ? 'Edit rule — ${widget.column.displayName}'
                   : 'Set amount — ${widget.column.displayName}',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
-                color: AppColors.midnight,
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
             if (widget.ruleEditorEnabled) ...[
               DropdownButtonFormField<_UiRuleType>(
-                value: _ruleType,
+                initialValue: _ruleType,
                 decoration: const InputDecoration(labelText: 'Rule type'),
-                items: const [
+                items: [
                   DropdownMenuItem(value: _UiRuleType.fixed, child: Text('Fixed amount')),
                   DropdownMenuItem(value: _UiRuleType.sum, child: Text('Sum of column')),
                   DropdownMenuItem(value: _UiRuleType.percentage, child: Text('Percentage of column')),
@@ -208,7 +207,7 @@ class _SalaryRuleEditorSheetState extends State<SalaryRuleEditorSheet> {
                 ],
                 onChanged: (v) => setState(() => _ruleType = v ?? _UiRuleType.fixed),
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
             ],
             if (_ruleType == _UiRuleType.fixed ||
                 _ruleType == _UiRuleType.conditional) ...[
@@ -232,9 +231,9 @@ class _SalaryRuleEditorSheetState extends State<SalaryRuleEditorSheet> {
             if (_ruleType == _UiRuleType.sum ||
                 _ruleType == _UiRuleType.percentage ||
                 _ruleType == _UiRuleType.conditional) ...[
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: refOptions.contains(_refColumn) ? _refColumn : refOptions.first,
+                initialValue: refOptions.contains(_refColumn) ? _refColumn : refOptions.first,
                 decoration: const InputDecoration(labelText: 'Reference column'),
                 items: refOptions
                     .map((k) => DropdownMenuItem(value: k, child: Text(k)))
@@ -242,12 +241,12 @@ class _SalaryRuleEditorSheetState extends State<SalaryRuleEditorSheet> {
                 onChanged: (v) => setState(() => _refColumn = v ?? _refColumn),
               ),
             ],
-            const SizedBox(height: 20),
+            SizedBox(height: 20),
             Row(
               children: [
                 TextButton(
                   onPressed: _saving ? null : () => Navigator.of(context).pop(),
-                  child: const Text('Cancel'),
+                  child: Text('Cancel'),
                 ),
                 const Spacer(),
                 FilledButton(

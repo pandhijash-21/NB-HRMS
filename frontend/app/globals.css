@@ -5,211 +5,94 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Typography: Roboto across the entire app. */
+  /* Typography */
   --font-sans: var(--font-roboto);
   --font-mono: var(--font-roboto);
 
-  --primary: oklch(0.205 0 0);
-  --primary-soft: #243b63;
-  --primary-muted: #e1e6f2;
-
-  --accent: oklch(0.97 0 0);
-  --accent-soft: #f3e4b2;
-  --background: oklch(1 0 0);
+  /* Light Theme - Crisp, Glassmorphic, Premium */
+  --background: oklch(0.985 0 0); /* Very light gray/white */
   --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
+  
+  --primary: oklch(0.35 0.15 260); /* Deep vibrant Indigo/Purple */
   --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
+  
+  --secondary: oklch(0.95 0.02 260); /* Soft indigo tint */
   --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  /* Slightly darker for better contrast/readability. */
-  --muted-foreground: oklch(0.48 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.809 0.105 251.813);
-  --chart-2: oklch(0.623 0.214 259.815);
-  --chart-3: oklch(0.546 0.245 262.881);
-  --chart-4: oklch(0.488 0.243 264.376);
-  --chart-5: oklch(0.424 0.199 265.638);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  
+  --muted: oklch(0.96 0.01 259);
+  --muted-foreground: oklch(0.45 0.01 259);
+  
+  --accent: oklch(0.94 0.04 260);
+  --accent-foreground: oklch(0.25 0.1 260);
+
+  --card: oklch(1 0 0 / 80%);
+  --card-foreground: oklch(0.145 0 0);
+  
+  --popover: oklch(1 0 0 / 90%);
+  --popover-foreground: oklch(0.145 0 0);
+
+  --destructive: oklch(0.6 0.2 25);
+  --border: oklch(0.9 0.02 260);
+  --input: oklch(0.9 0.02 260);
+  --ring: oklch(0.4 0.15 260);
+
+  --radius: 1rem;
+}
+
+.dark {
+  /* Dark Theme - Deep Indigo, Vibrant Accents */
+  --background: oklch(0.12 0.02 260);
+  --foreground: oklch(0.985 0 0);
+
+  --primary: oklch(0.65 0.2 260); /* Brighter Indigo/Purple for dark mode */
+  --primary-foreground: oklch(0.985 0 0);
+
+  --secondary: oklch(0.2 0.04 260);
+  --secondary-foreground: oklch(0.985 0 0);
+
+  --muted: oklch(0.18 0.02 260);
+  --muted-foreground: oklch(0.65 0.02 260);
+
+  --accent: oklch(0.25 0.08 260);
+  --accent-foreground: oklch(0.985 0 0);
+
+  --card: oklch(0.15 0.03 260 / 60%);
+  --card-foreground: oklch(0.985 0 0);
+
+  --popover: oklch(0.15 0.03 260 / 90%);
+  --popover-foreground: oklch(0.985 0 0);
+
+  --destructive: oklch(0.6 0.2 25);
+  --border: oklch(0.25 0.04 260);
+  --input: oklch(0.25 0.04 260);
+  --ring: oklch(0.65 0.2 260);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-primary: var(--primary);
-  --color-primary-soft: var(--primary-soft);
-  --color-primary-muted: var(--primary-muted);
-  --color-accent: var(--accent);
-  --color-accent-soft: var(--accent-soft);
-
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-roboto);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
   --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
   --color-card: var(--card);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
+  --color-popover: var(--popover);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover-foreground: var(--popover-foreground);
+
+  --radius-sm: calc(var(--radius) * 0.5);
+  --radius-md: calc(var(--radius) * 0.75);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
-}
-
-.app-shell {
-  @apply min-h-screen bg-[color:var(--background)] text-[color:var(--foreground)] flex flex-col font-sans text-[17px] leading-7;
-}
-
-.app-header {
-  @apply flex items-center justify-between px-6 py-3 border-b border-white/20 bg-white/40 backdrop-blur-xl z-10 sticky top-0;
-}
-
-.app-header-title {
-  @apply text-lg font-bold tracking-tight text-[#1d3459];
-}
-
-.app-header-subtitle {
-  @apply text-sm font-medium text-slate-600;
-}
-
-.app-main {
-  @apply flex-1 flex bg-gradient-to-br from-[#e0eaf5] via-[#f1f5f9] to-[#ffffff] relative;
-}
-
-.app-sidebar {
-  @apply hidden md:flex w-72 flex-col border-r border-white/30 bg-white/30 backdrop-blur-2xl shadow-[4px_0_30px_rgba(0,0,0,0.03)] z-20;
-}
-
-.app-sidebar-section-title {
-  @apply px-6 pt-6 pb-2 text-xs font-bold uppercase tracking-widest text-slate-500;
-}
-
-.app-sidebar-link {
-  @apply relative flex items-center gap-3 px-4 py-2.5 mx-3 mb-1.5 rounded-xl text-sm font-semibold text-slate-600 overflow-hidden transition-all duration-300 hover:text-[#1d3459] hover:translate-x-1 z-10 before:absolute before:inset-0 before:-z-10 before:rounded-xl before:bg-white/50 before:opacity-0 before:transition-all before:duration-300 hover:before:opacity-100;
-}
-
-.app-sidebar-link-active {
-  @apply text-[#1d3459] shadow-sm font-semibold translate-x-1 before:opacity-100 before:bg-white/80 before:shadow-[inset_0_1px_1px_rgba(255,255,255,1)];
-}
-
-.app-content {
-  @apply flex-1 px-4 py-6 md:px-8 md:py-8;
-}
-
-.pill-badge {
-  @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
-}
-
-.pill-badge-required {
-  @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-rose-100 text-rose-700;
-}
-
-.pill-badge-verified {
-  @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-700;
-}
-
-.dark {
-
-  --background: oklch(0.145 0 0);
-
-  --foreground: oklch(0.985 0 0);
-
-  --card: oklch(0.205 0 0);
-
-  --card-foreground: oklch(0.985 0 0);
-
-  --popover: oklch(0.205 0 0);
-
-  --popover-foreground: oklch(0.985 0 0);
-
-  --primary: oklch(0.922 0 0);
-
-  --primary-foreground: oklch(0.205 0 0);
-
-  --secondary: oklch(0.269 0 0);
-
-  --secondary-foreground: oklch(0.985 0 0);
-
-  --muted: oklch(0.269 0 0);
-
-  --muted-foreground: oklch(0.708 0 0);
-
-  --accent: oklch(0.269 0 0);
-
-  --accent-foreground: oklch(0.985 0 0);
-
-  --destructive: oklch(0.704 0.191 22.216);
-
-  --border: oklch(1 0 0 / 10%);
-
-  --input: oklch(1 0 0 / 15%);
-
-  --ring: oklch(0.556 0 0);
-
-  --chart-1: oklch(0.809 0.105 251.813);
-
-  --chart-2: oklch(0.623 0.214 259.815);
-
-  --chart-3: oklch(0.546 0.245 262.881);
-
-  --chart-4: oklch(0.488 0.243 264.376);
-
-  --chart-5: oklch(0.424 0.199 265.638);
-
-  --sidebar: oklch(0.205 0 0);
-
-  --sidebar-foreground: oklch(0.985 0 0);
-
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-
-  --sidebar-accent: oklch(0.269 0 0);
-
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-
-  --sidebar-border: oklch(1 0 0 / 10%);
-
-  --sidebar-ring: oklch(0.556 0 0);
+  --radius-xl: calc(var(--radius) * 1.5);
+  --radius-2xl: calc(var(--radius) * 2);
 }
 
 @layer base {
@@ -217,22 +100,68 @@
     @apply border-border outline-ring/50;
   }
   body {
-    /* More readable defaults across the app. */
-    @apply bg-background text-foreground text-[17px] leading-7;
+    @apply bg-background text-foreground text-[16px] leading-relaxed transition-colors duration-300 ease-in-out;
     text-rendering: optimizeLegibility;
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
-  html {
-    @apply font-sans;
-  }
+}
 
-  /* Extra safety for any direct monospace elements. */
-  code,
-  pre,
-  kbd,
-  samp {
-    font-family: var(--font-sans);
-  }
+/* Glassmorphism & Custom App Utilities */
+
+.app-shell {
+  @apply min-h-screen bg-background text-foreground flex flex-col font-sans transition-colors duration-300;
+}
+
+.app-header {
+  @apply flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-border/40 bg-background/60 backdrop-blur-xl z-20 sticky top-0 transition-all duration-300;
+}
+
+.app-header-title {
+  @apply text-xl font-bold tracking-tight text-foreground transition-colors duration-300;
+}
+
+.app-header-subtitle {
+  @apply text-sm font-medium text-muted-foreground hidden sm:block;
+}
+
+.app-main {
+  @apply flex-1 flex flex-col md:flex-row relative overflow-hidden transition-all duration-300;
+}
+
+.app-sidebar {
+  @apply hidden md:flex w-72 flex-col border-r border-border/40 bg-card backdrop-blur-2xl shadow-lg z-10 transition-all duration-300;
+}
+
+.app-sidebar-section-title {
+  @apply px-6 pt-8 pb-3 text-xs font-extrabold uppercase tracking-[0.15em] text-muted-foreground;
+}
+
+.app-sidebar-link {
+  @apply relative flex items-center gap-4 px-4 py-3 mx-4 mb-2 rounded-xl text-sm font-semibold text-muted-foreground overflow-hidden transition-all duration-300 hover:text-foreground hover:translate-x-1 hover:bg-accent/50 z-10;
+}
+
+.app-sidebar-link-active {
+  @apply text-primary-foreground font-bold translate-x-1 bg-primary shadow-md hover:bg-primary/90 hover:text-primary-foreground;
+}
+
+.app-content {
+  @apply flex-1 px-4 py-6 sm:px-8 sm:py-10 overflow-y-auto w-full max-w-7xl mx-auto transition-all duration-300;
+}
+
+.glass-card {
+  @apply bg-card border border-border/50 rounded-2xl shadow-sm backdrop-blur-lg p-6 transition-all duration-300 hover:shadow-md;
+}
+
+.pill-badge {
+  @apply inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold tracking-wide shadow-sm transition-all;
+}
+
+.pill-badge-required {
+  @apply inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold tracking-wide bg-destructive/10 text-destructive shadow-sm;
+}
+
+.pill-badge-verified {
+  @apply inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold tracking-wide bg-green-500/10 text-green-600 dark:text-green-400 shadow-sm;
 }

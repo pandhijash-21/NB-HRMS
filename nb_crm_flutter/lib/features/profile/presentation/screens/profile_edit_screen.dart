@@ -52,17 +52,17 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> with Sing
 
     // Privilege detection
     final roleName = authState.user?.role ?? '';
-    final isPrivileged = const ['ADMIN', 'HR', 'HOI', 'REGISTRAR', 'VC'].contains(roleName.toUpperCase());
+    final isPrivileged = ['ADMIN', 'HR', 'HOI', 'REGISTRAR', 'VC'].contains(roleName.toUpperCase());
 
     return Scaffold(
-      backgroundColor: AppColors.sand,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text('Edit Profile'),
+        title: Text('Edit Profile'),
         bottom: TabBar(
           controller: _tabController,
           isScrollable: true,
-          indicatorColor: AppColors.bronze,
-          labelColor: AppColors.bronze,
+          indicatorColor: Theme.of(context).colorScheme.primary,
+          labelColor: Theme.of(context).colorScheme.primary,
           unselectedLabelColor: Colors.white70,
           tabs: _tabs.map((tab) => Tab(text: tab)).toList(),
         ),
@@ -80,18 +80,18 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> with Sing
             EditBankTab(profile: profile),
           ],
         ),
-        loading: () => const Center(child: CircularProgressIndicator(color: AppColors.bronze)),
+        loading: () => Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary)),
         error: (err, stack) => Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.error_outline, size: 48, color: AppColors.error),
-              const SizedBox(height: 12),
+              Icon(Icons.error_outline, size: 48, color: AppColors.error),
+              SizedBox(height: 12),
               Text('Failed to load profile for editing\n$err', textAlign: TextAlign.center),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
               FilledButton(
                 onPressed: () => ref.read(profileProvider.notifier).refresh(),
-                child: const Text('Retry'),
+                child: Text('Retry'),
               ),
             ],
           ),
@@ -151,22 +151,22 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
   Widget build(BuildContext context) {
     if (!widget.isPrivileged) {
       return ListView(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(24),
         children: [
-          const Icon(Icons.lock_outline, size: 48, color: AppColors.textSecondary),
-          const SizedBox(height: 12),
-          const Text(
+          Icon(Icons.lock_outline, size: 48, color: AppColors.textSecondary),
+          SizedBox(height: 12),
+          Text(
             'Employment details are read-only.',
             textAlign: TextAlign.center,
             style: TextStyle(fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 4),
-          const Text(
+          SizedBox(height: 4),
+          Text(
             'Please contact HR to update employment fields. You can still upload your photo and signature below.',
             textAlign: TextAlign.center,
             style: TextStyle(color: AppColors.textSecondary),
           ),
-          const SizedBox(height: 24),
+          SizedBox(height: 24),
           BonusUploadZone(
             employeeId: widget.profile.id,
             photoUrl: widget.profile.photoUrl,
@@ -179,24 +179,24 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
     return Form(
       key: _formKey,
       child: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(16),
         children: [
           BonusUploadZone(
             employeeId: widget.profile.id,
             photoUrl: widget.profile.photoUrl,
             signatureUrl: widget.profile.signatureUrl,
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           _buildTextField('Full Name', _fullNameCtrl, required: true),
           _buildTextField('Employee Code', _empCodeCtrl),
           _buildTextField('Department', _departmentCtrl, required: true),
           _buildTextField('Designation', _designationCtrl, required: true),
           _buildTextField('Shift', _shiftCtrl),
           _buildTextField('Appointment Type', _appointmentCtrl),
-          const SizedBox(height: 24),
+          SizedBox(height: 24),
           FilledButton(
             onPressed: _save,
-            child: const Text('Save General Details'),
+            child: Text('Save General Details'),
           ),
         ],
       ),
@@ -302,18 +302,18 @@ class _EditPersonalTabState extends ConsumerState<EditPersonalTab> {
       data: (req) => Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.all(16),
           children: [
             if (req != null)
               Container(
-                margin: const EdgeInsets.only(bottom: 16),
-                padding: const EdgeInsets.all(12),
+                margin: EdgeInsets.only(bottom: 16),
+                padding: EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: AppColors.errorSoft,
                   border: Border.all(color: AppColors.error),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
                     Icon(Icons.warning, color: AppColors.error),
                     SizedBox(width: 12),
@@ -327,9 +327,9 @@ class _EditPersonalTabState extends ConsumerState<EditPersonalTab> {
                 ),
               ),
             DropdownButtonFormField<String>(
-              value: _gender,
+              initialValue: _gender,
               decoration: const InputDecoration(labelText: 'Gender'),
-              items: const [
+              items: [
                 DropdownMenuItem(value: 'MALE', child: Text('Male')),
                 DropdownMenuItem(value: 'FEMALE', child: Text('Female')),
                 DropdownMenuItem(value: 'OTHER', child: Text('Other')),
@@ -338,11 +338,11 @@ class _EditPersonalTabState extends ConsumerState<EditPersonalTab> {
                 if (v != null) setState(() => _gender = v);
               },
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
             DropdownButtonFormField<String>(
-              value: _maritalStatus,
+              initialValue: _maritalStatus,
               decoration: const InputDecoration(labelText: 'Marital Status'),
-              items: const [
+              items: [
                 DropdownMenuItem(value: 'SINGLE', child: Text('Single')),
                 DropdownMenuItem(value: 'MARRIED', child: Text('Married')),
                 DropdownMenuItem(value: 'DIVORCED', child: Text('Divorced')),
@@ -352,9 +352,9 @@ class _EditPersonalTabState extends ConsumerState<EditPersonalTab> {
                 if (v != null) setState(() => _maritalStatus = v);
               },
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
             DropdownButtonFormField<String?>(
-              value: _bloodGroup,
+              initialValue: _bloodGroup,
               decoration: const InputDecoration(labelText: 'Blood Group'),
               items: [
                 const DropdownMenuItem<String?>(value: null, child: Text('Not set')),
@@ -367,7 +367,7 @@ class _EditPersonalTabState extends ConsumerState<EditPersonalTab> {
               ],
               onChanged: (v) => setState(() => _bloodGroup = v),
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
             _buildTextField('Nationality', _nationalityCtrl, required: true),
             _buildTextField('Home Town', _homeTownCtrl),
             _buildTextField('Aadhaar Number', _aadhaarNoCtrl),
@@ -375,30 +375,30 @@ class _EditPersonalTabState extends ConsumerState<EditPersonalTab> {
             _buildTextField('Nominee Name', _nomineeNameCtrl),
             _buildTextField('Nominee Relation', _nomineeRelationCtrl),
             const Divider(height: 32),
-            const Text('Photo & Signature', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-            const SizedBox(height: 12),
+            Text('Photo & Signature', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            SizedBox(height: 12),
             BonusUploadZone(
               employeeId: widget.profile.id,
               photoUrl: widget.profile.photoUrl,
               signatureUrl: widget.profile.signatureUrl,
             ),
-            const SizedBox(height: 16),
-            const Text('Identity Documents', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-            const SizedBox(height: 12),
+            SizedBox(height: 16),
+            Text('Identity Documents', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            SizedBox(height: 12),
             _DocumentUploadTile(
               label: 'Upload Aadhaar Card',
               kebabType: 'aadhaar-card',
               employeeId: widget.profile.id,
               currentUrl: widget.profile.personalInfo?.aadhaarCardUrl,
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             _DocumentUploadTile(
               label: 'Upload PAN Card',
               kebabType: 'pan-card',
               employeeId: widget.profile.id,
               currentUrl: widget.profile.personalInfo?.panCardUrl,
             ),
-            const SizedBox(height: 24),
+            SizedBox(height: 24),
             FilledButton(
               onPressed: _save,
               child: Text(widget.isPrivileged ? 'Save Personal Info Direct' : 'Submit Personal Change Request'),
@@ -406,8 +406,8 @@ class _EditPersonalTabState extends ConsumerState<EditPersonalTab> {
           ],
         ),
       ),
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (_, __) => const Center(child: Text('Error loading pending request status')),
+      loading: () => Center(child: CircularProgressIndicator()),
+      error: (_, __) => Center(child: Text('Error loading pending request status')),
     );
   }
 
@@ -517,18 +517,18 @@ class _EditAddressTabState extends ConsumerState<EditAddressTab> {
       data: (req) => Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.all(16),
           children: [
             if (req != null)
               Container(
-                margin: const EdgeInsets.only(bottom: 16),
-                padding: const EdgeInsets.all(12),
+                margin: EdgeInsets.only(bottom: 16),
+                padding: EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: AppColors.errorSoft,
                   border: Border.all(color: AppColors.error),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
                     Icon(Icons.warning, color: AppColors.error),
                     SizedBox(width: 12),
@@ -548,14 +548,14 @@ class _EditAddressTabState extends ConsumerState<EditAddressTab> {
             _buildTextField('Zip Code', _localZipCtrl),
             _buildTextField('Mobile Number', _localMobileCtrl),
             _buildTextField('Institute Email', _localInstEmailCtrl),
-            const SizedBox(height: 24),
+            SizedBox(height: 24),
             Text('Permanent Address', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
             const Divider(),
             _buildTextField('City', _permCityCtrl),
             _buildTextField('State', _permStateCtrl),
             _buildTextField('Zip Code', _permZipCtrl),
             _buildTextField('Mobile Number', _permMobileCtrl),
-            const SizedBox(height: 24),
+            SizedBox(height: 24),
             FilledButton(
               onPressed: _save,
               child: Text(widget.isPrivileged ? 'Save Address Direct' : 'Submit Address Change Request'),
@@ -563,8 +563,8 @@ class _EditAddressTabState extends ConsumerState<EditAddressTab> {
           ],
         ),
       ),
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (_, __) => const Center(child: Text('Error loading pending request status')),
+      loading: () => Center(child: CircularProgressIndicator()),
+      error: (_, __) => Center(child: Text('Error loading pending request status')),
     );
   }
 
@@ -665,34 +665,34 @@ class _EditOtherTabState extends ConsumerState<EditOtherTab> {
     return Form(
       key: _formKey,
       child: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(16),
         children: [
           _buildTextField('Skill Set', _skillSetCtrl),
           _buildTextField('Hobbies', _hobbiesCtrl),
           _buildTextField('Strengths', _strengthCtrl),
           _buildTextField('Weaknesses', _weaknessCtrl),
           SwitchListTile(
-            title: const Text('Is Handicapped'),
+            title: Text('Is Handicapped'),
             value: _isHandicapped,
-            activeColor: AppColors.bronze,
+            activeThumbColor: Theme.of(context).colorScheme.primary,
             onChanged: (v) => setState(() => _isHandicapped = v),
           ),
           if (_isHandicapped) _buildTextField('Handicap Details', _handicapDetailsCtrl),
           _buildTextField('Height (ft)', _heightCtrl, isNumber: true),
           _buildTextField('Weight (kg)', _weightCtrl, isNumber: true),
           const Divider(height: 32),
-          const Text('Passport Document', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-          const SizedBox(height: 12),
+          Text('Passport Document', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+          SizedBox(height: 12),
           _DocumentUploadTile(
             label: 'Upload Passport',
             kebabType: 'passport',
             employeeId: widget.profile.id,
             currentUrl: widget.profile.otherInfo?.passportUrl,
           ),
-          const SizedBox(height: 24),
+          SizedBox(height: 24),
           FilledButton(
             onPressed: _save,
-            child: const Text('Save Traits & Other Info'),
+            child: Text('Save Traits & Other Info'),
           ),
         ],
       ),
@@ -742,17 +742,17 @@ class _EditFamilyTabState extends ConsumerState<EditFamilyTab> {
   Widget build(BuildContext context) {
     final list = widget.profile.familyMembers;
     return Scaffold(
-      backgroundColor: AppColors.sand,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: list.isEmpty
-          ? const Center(child: Text('No family members yet.'))
+          ? Center(child: Text('No family members yet.'))
           : ListView.builder(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(16),
               itemCount: list.length,
               itemBuilder: (context, i) {
                 final member = list[i];
                 return Card(
                   elevation: 1,
-                  margin: const EdgeInsets.only(bottom: 12),
+                  margin: EdgeInsets.only(bottom: 12),
                   child: ListTile(
                     title: Text(member.name),
                     subtitle: Text('${member.relation}  |  ${member.mobileNo ?? "No Contact"}'),
@@ -760,11 +760,11 @@ class _EditFamilyTabState extends ConsumerState<EditFamilyTab> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
-                          icon: const Icon(Icons.edit_outlined, color: AppColors.bronze),
+                          icon: Icon(Icons.edit_outlined, color: Theme.of(context).colorScheme.primary),
                           onPressed: () => _showDialog(member: member),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.delete_outline, color: AppColors.error),
+                          icon: Icon(Icons.delete_outline, color: AppColors.error),
                           onPressed: () => _delete(member.id),
                         ),
                       ],
@@ -774,10 +774,10 @@ class _EditFamilyTabState extends ConsumerState<EditFamilyTab> {
               },
             ),
       floatingActionButton: FloatingActionButton(
-        backgroundColor: AppColors.bronze,
+        backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: AppColors.midnight,
         onPressed: () => _showDialog(),
-        child: const Icon(Icons.add),
+        child: Icon(Icons.add),
       ),
     );
   }
@@ -825,17 +825,17 @@ class _EditAcademicTabState extends ConsumerState<EditAcademicTab> {
   Widget build(BuildContext context) {
     final list = widget.profile.academicQuals;
     return Scaffold(
-      backgroundColor: AppColors.sand,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: list.isEmpty
-          ? const Center(child: Text('No academic qualifications added yet.'))
+          ? Center(child: Text('No academic qualifications added yet.'))
           : ListView.builder(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(16),
               itemCount: list.length,
               itemBuilder: (context, i) {
                 final qual = list[i];
                 return Card(
                   elevation: 1,
-                  margin: const EdgeInsets.only(bottom: 12),
+                  margin: EdgeInsets.only(bottom: 12),
                   child: ListTile(
                     title: Text(qual.degreeName ?? qual.degreeType),
                     subtitle: Text('${qual.schoolCollege}  |  ${qual.passingYear}'),
@@ -843,11 +843,11 @@ class _EditAcademicTabState extends ConsumerState<EditAcademicTab> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
-                          icon: const Icon(Icons.edit_outlined, color: AppColors.bronze),
+                          icon: Icon(Icons.edit_outlined, color: Theme.of(context).colorScheme.primary),
                           onPressed: () => _showDialog(qual: qual),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.delete_outline, color: AppColors.error),
+                          icon: Icon(Icons.delete_outline, color: AppColors.error),
                           onPressed: () => _delete(qual.id),
                         ),
                       ],
@@ -857,10 +857,10 @@ class _EditAcademicTabState extends ConsumerState<EditAcademicTab> {
               },
             ),
       floatingActionButton: FloatingActionButton(
-        backgroundColor: AppColors.bronze,
+        backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: AppColors.midnight,
         onPressed: () => _showDialog(),
-        child: const Icon(Icons.add),
+        child: Icon(Icons.add),
       ),
     );
   }
@@ -934,22 +934,22 @@ class _EditBankTabState extends ConsumerState<EditBankTab> {
     return Form(
       key: _formKey,
       child: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(16),
         children: [
           _buildTextField('Bank Name', _bankNameCtrl, required: true),
           _buildTextField('Account Number', _accountNoCtrl, required: true),
           _buildTextField('Branch Code', _branchCodeCtrl),
           _buildTextField('IFSC Code', _ifscCtrl, required: true),
-          const SizedBox(height: 24),
+          SizedBox(height: 24),
           BonusUploadZone(
             employeeId: widget.profile.id,
             photoUrl: widget.profile.photoUrl,
             signatureUrl: widget.profile.signatureUrl,
           ),
-          const SizedBox(height: 24),
+          SizedBox(height: 24),
           FilledButton(
             onPressed: _save,
-            child: const Text('Save Bank Info'),
+            child: Text('Save Bank Info'),
           ),
         ],
       ),
@@ -1045,9 +1045,9 @@ class _FamilyMemberDialogState extends ConsumerState<FamilyMemberDialog> {
           children: [
             _buildTextField('Full Name', _nameCtrl, required: true),
             DropdownButtonFormField<String>(
-              value: _relation,
+              initialValue: _relation,
               decoration: const InputDecoration(labelText: 'Relationship'),
-              items: const [
+              items: [
                 DropdownMenuItem(value: 'FATHER', child: Text('Father')),
                 DropdownMenuItem(value: 'MOTHER', child: Text('Mother')),
                 DropdownMenuItem(value: 'SPOUSE', child: Text('Spouse')),
@@ -1060,15 +1060,15 @@ class _FamilyMemberDialogState extends ConsumerState<FamilyMemberDialog> {
                 if (v != null) setState(() => _relation = v);
               },
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             _buildTextField('Mobile No', _mobileCtrl),
             _buildTextField('Personal Email', _emailCtrl),
             _buildTextField('City', _cityCtrl),
             _buildTextField('Aadhaar No', _aadhaarNoCtrl),
             SwitchListTile(
-              title: const Text('Is Nominee?'),
+              title: Text('Is Nominee?'),
               value: _isNominee,
-              activeColor: AppColors.bronze,
+              activeThumbColor: Theme.of(context).colorScheme.primary,
               onChanged: (v) => setState(() => _isNominee = v),
             ),
             if (widget.member != null) ...[
@@ -1085,8 +1085,8 @@ class _FamilyMemberDialogState extends ConsumerState<FamilyMemberDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-        FilledButton(onPressed: _save, child: const Text('Save')),
+        TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancel')),
+        FilledButton(onPressed: _save, child: Text('Save')),
       ],
     );
   }
@@ -1237,9 +1237,9 @@ class _AcademicQualDialogState extends ConsumerState<AcademicQualDialog> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               DropdownButtonFormField<String>(
-                value: _degreeType,
+                initialValue: _degreeType,
                 decoration: const InputDecoration(labelText: 'Degree Type'),
-                items: const [
+                items: [
                   DropdownMenuItem(value: 'SSC', child: Text('SSC / 10th')),
                   DropdownMenuItem(value: 'HSC', child: Text('HSC / 12th')),
                   DropdownMenuItem(value: 'DIPLOMA', child: Text('Diploma')),
@@ -1251,16 +1251,16 @@ class _AcademicQualDialogState extends ConsumerState<AcademicQualDialog> {
                   if (v != null) setState(() => _degreeType = v);
                 },
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
               _buildTextField('Degree/Course Name', _degreeNameCtrl, required: true),
               _buildTextField('Board / University', _universityCtrl, required: true),
               _buildTextField('School / College', _collegeCtrl, required: true),
               _buildTextField('Passing Year', _passingYearCtrl, required: true, isNumber: true),
               _buildTextField('Percentage Marks', _percentCtrl, isNumber: true),
               DropdownButtonFormField<String>(
-                value: _medium,
+                initialValue: _medium,
                 decoration: const InputDecoration(labelText: 'Instruction Medium'),
-                items: const [
+                items: [
                   DropdownMenuItem(value: 'ENGLISH', child: Text('English')),
                   DropdownMenuItem(value: 'GUJARATI', child: Text('Gujarati')),
                   DropdownMenuItem(value: 'HINDI', child: Text('Hindi')),
@@ -1272,27 +1272,27 @@ class _AcademicQualDialogState extends ConsumerState<AcademicQualDialog> {
                 },
               ),
               const Divider(height: 24),
-              const Text(
+              Text(
                 'Documents (PDF / Image)',
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: 8),
               if (semCount > 0) ...[
                 Text(
                   semCount == 1
                       ? 'Marksheet Upload'
                       : 'Semester Marksheets ($semCount)',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.textSecondary,
+                    color: Theme.of(context).textTheme.bodySmall?.color,
                   ),
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: 8),
                 ...List.generate(semCount, (i) {
                   final sem = i + 1;
                   return Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
+                    padding: EdgeInsets.only(bottom: 10),
                     child: _DocumentUploadTile(
                       label: semCount == 1 ? 'Marksheet' : 'SEM $sem Marksheet',
                       kebabType: 'marksheet',
@@ -1306,7 +1306,7 @@ class _AcademicQualDialogState extends ConsumerState<AcademicQualDialog> {
                 }),
               ],
               if (_showCertificate) ...[
-                if (semCount > 0) const SizedBox(height: 4),
+                if (semCount > 0) SizedBox(height: 4),
                 _DocumentUploadTile(
                   label: _degreeType == 'DIPLOMA'
                       ? 'Diploma Certificate'
@@ -1325,8 +1325,8 @@ class _AcademicQualDialogState extends ConsumerState<AcademicQualDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-        FilledButton(onPressed: _save, child: const Text('Save')),
+        TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancel')),
+        FilledButton(onPressed: _save, child: Text('Save')),
       ],
     );
   }
@@ -1426,11 +1426,11 @@ class _DocumentUploadTileState extends ConsumerState<_DocumentUploadTile> {
     final isUploaded = _localUrl != null && _localUrl!.isNotEmpty;
 
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: isUploaded ? Colors.white : AppColors.mist.withValues(alpha: 0.35),
         border: Border.all(
-          color: isUploaded ? AppColors.border : AppColors.bronze.withValues(alpha: 0.55),
+          color: isUploaded ? AppColors.border : Theme.of(context).colorScheme.primary.withValues(alpha: 0.55),
         ),
         borderRadius: BorderRadius.circular(10),
       ),
@@ -1447,7 +1447,7 @@ class _DocumentUploadTileState extends ConsumerState<_DocumentUploadTile> {
                 ),
               ),
               if (isUploaded)
-                const Row(
+                Row(
                   children: [
                     Icon(Icons.check_circle, color: Colors.green, size: 16),
                     SizedBox(width: 4),
@@ -1458,24 +1458,24 @@ class _DocumentUploadTileState extends ConsumerState<_DocumentUploadTile> {
                   ],
                 )
               else
-                const Text(
+                Text(
                   'Placeholder — upload file',
-                  style: TextStyle(fontSize: 11, color: AppColors.bronzeDark),
+                  style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.primary),
                 ),
             ],
           ),
           if (!isUploaded) ...[
-            const SizedBox(height: 10),
+            SizedBox(height: 10),
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 18),
+              padding: EdgeInsets.symmetric(vertical: 18),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppColors.border, style: BorderStyle.solid),
+                border: Border.all(color: Theme.of(context).colorScheme.outlineVariant, style: BorderStyle.solid),
               ),
-              child: const Column(
+              child: Column(
                 children: [
-                  Icon(Icons.cloud_upload_outlined, color: AppColors.textSecondary, size: 28),
+                  Icon(Icons.cloud_upload_outlined, color: Theme.of(context).textTheme.bodySmall?.color, size: 28),
                   SizedBox(height: 6),
                   Text(
                     'No file yet — enter a path below or use dummy upload',
@@ -1486,7 +1486,7 @@ class _DocumentUploadTileState extends ConsumerState<_DocumentUploadTile> {
               ),
             ),
           ],
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           Row(
             children: [
               Expanded(
@@ -1499,9 +1499,9 @@ class _DocumentUploadTileState extends ConsumerState<_DocumentUploadTile> {
                   style: const TextStyle(fontSize: 12),
                 ),
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: 8),
               _uploading
-                  ? const SizedBox(width: 32, height: 32, child: CircularProgressIndicator(strokeWidth: 2))
+                  ? SizedBox(width: 32, height: 32, child: CircularProgressIndicator(strokeWidth: 2))
                   : ElevatedButton(
                       onPressed: _startUpload,
                       style: ElevatedButton.styleFrom(
@@ -1509,15 +1509,15 @@ class _DocumentUploadTileState extends ConsumerState<_DocumentUploadTile> {
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
-                      child: const Text('Upload', style: TextStyle(fontSize: 12)),
+                      child: Text('Upload', style: TextStyle(fontSize: 12)),
                     ),
             ],
           ),
-          const SizedBox(height: 6),
+          SizedBox(height: 6),
           TextButton(
             onPressed: _uploadDummyFile,
             style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: Size.zero),
-            child: const Text('Or generate & upload dummy pdf file', style: TextStyle(fontSize: 11, color: AppColors.bronze)),
+            child: Text('Or generate & upload dummy pdf file', style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.primary)),
           ),
         ],
       ),
@@ -1607,13 +1607,13 @@ class _BonusUploadZoneState extends ConsumerState<BonusUploadZone> {
         side: const BorderSide(color: AppColors.border),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
+            Row(
               children: [
-                Icon(Icons.photo_camera_back, color: AppColors.bronze),
+                Icon(Icons.photo_camera_back, color: Theme.of(context).colorScheme.primary),
                 SizedBox(width: 8),
                 Text(
                   'Profile Photo & Signature',
@@ -1626,14 +1626,14 @@ class _BonusUploadZoneState extends ConsumerState<BonusUploadZone> {
               photoUrl: widget.photoUrl,
               signatureUrl: widget.signatureUrl,
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             _DocumentUploadTile(
               label: 'Upload Profile Photo',
               kebabType: 'photo',
               employeeId: widget.employeeId,
               currentUrl: widget.photoUrl,
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             _DocumentUploadTile(
               label: 'Upload Digital Signature',
               kebabType: 'signature',
@@ -1657,14 +1657,14 @@ class _MediaPreviewRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Expanded(child: _previewBox('Photo', photoUrl, Icons.person_outline)),
-        const SizedBox(width: 12),
-        Expanded(child: _previewBox('Signature', signatureUrl, Icons.draw_outlined)),
+        Expanded(child: _previewBox(context, 'Photo', photoUrl, Icons.person_outline)),
+        SizedBox(width: 12),
+        Expanded(child: _previewBox(context, 'Signature', signatureUrl, Icons.draw_outlined)),
       ],
     );
   }
 
-  Widget _previewBox(String label, String? url, IconData icon) {
+  Widget _previewBox(BuildContext context, String label, String? url, IconData icon) {
     final has = url != null && url.isNotEmpty;
     return Container(
       height: 110,
@@ -1672,7 +1672,7 @@ class _MediaPreviewRow extends StatelessWidget {
         color: AppColors.mist.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: has ? AppColors.bronze : AppColors.border,
+          color: has ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outlineVariant,
           style: has ? BorderStyle.solid : BorderStyle.solid,
         ),
       ),
@@ -1683,20 +1683,20 @@ class _MediaPreviewRow extends StatelessWidget {
                 url,
                 fit: BoxFit.cover,
                 width: double.infinity,
-                errorBuilder: (_, __, ___) => _empty(label, icon),
+                errorBuilder: (_, __, ___) => _empty(context, label, icon),
               ),
             )
-          : _empty(label, icon),
+          : _empty(context, label, icon),
     );
   }
 
-  Widget _empty(String label, IconData icon) {
+  Widget _empty(BuildContext context, String label, IconData icon) {
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: AppColors.textSecondary, size: 28),
-          const SizedBox(height: 6),
+          Icon(icon, color: Theme.of(context).textTheme.bodySmall?.color, size: 28),
+          SizedBox(height: 6),
           Text(
             'No $label uploaded',
             style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
@@ -1711,7 +1711,7 @@ class _MediaPreviewRow extends StatelessWidget {
 
 Widget _buildTextField(String label, TextEditingController controller, {bool required = false, bool isNumber = false}) {
   return Padding(
-    padding: const EdgeInsets.only(bottom: 16.0),
+    padding: EdgeInsets.only(bottom: 16.0),
     child: TextFormField(
       controller: controller,
       keyboardType: isNumber ? TextInputType.number : TextInputType.text,

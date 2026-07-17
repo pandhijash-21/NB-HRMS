@@ -17,11 +17,10 @@ class AdminSalarySlipScreen extends ConsumerWidget {
     final slipAsync = ref.watch(salarySlipProvider(recordId));
 
     return Scaffold(
-      backgroundColor: AppColors.sand,
       appBar: AppBar(
-        title: const Text('Salary Slip'),
+        title: Text('Salary Slip'),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: Icon(Icons.arrow_back),
           onPressed: () => context.go('/admin/salary/records'),
         ),
       ),
@@ -30,13 +29,13 @@ class AdminSalarySlipScreen extends ConsumerWidget {
         emptyMessage: 'Slip not found.',
         onRetry: () => ref.invalidate(salarySlipProvider(recordId)),
         builder: (slip) => SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.all(16),
           child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 720),
               child: Card(
                 child: Padding(
-                  padding: const EdgeInsets.all(24),
+                  padding: EdgeInsets.all(24),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -51,19 +50,19 @@ class AdminSalarySlipScreen extends ConsumerWidget {
                       Text(
                         'Salary Slip — ${slip.monthYear}',
                         textAlign: TextAlign.center,
-                        style: const TextStyle(color: AppColors.textSecondary),
+                        style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color),
                       ),
                       const Divider(height: 32),
                       _InfoRow(label: 'Employee', value: slip.employee.name),
                       _InfoRow(label: 'Employee ID', value: '${slip.employee.id}'),
                       _InfoRow(label: 'Designation', value: slip.employee.designation),
                       _InfoRow(label: 'Department', value: slip.employee.department),
-                      const SizedBox(height: 20),
+                      SizedBox(height: 20),
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Expanded(child: _SlipColumn(title: 'Earnings', lines: slip.earnings, color: AppColors.success)),
-                          const SizedBox(width: 16),
+                          SizedBox(width: 16),
                           Expanded(child: _SlipColumn(title: 'Deductions', lines: slip.deductions, color: AppColors.error)),
                         ],
                       ),
@@ -96,12 +95,12 @@ class _InfoRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
+      padding: EdgeInsets.only(bottom: 6),
       child: Row(
         children: [
           SizedBox(
             width: 110,
-            child: Text(label, style: const TextStyle(color: AppColors.textSecondary)),
+            child: Text(label, style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color)),
           ),
           Expanded(child: Text(value)),
         ],
@@ -127,10 +126,10 @@ class _SlipColumn extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(title, style: TextStyle(fontWeight: FontWeight.w700, color: color)),
-        const SizedBox(height: 8),
+        SizedBox(height: 8),
         ...lines.map(
           (line) => Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
+            padding: EdgeInsets.symmetric(vertical: 4),
             child: Row(
               children: [
                 Expanded(
@@ -160,7 +159,7 @@ class _SummaryRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: EdgeInsets.symmetric(vertical: 4),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [

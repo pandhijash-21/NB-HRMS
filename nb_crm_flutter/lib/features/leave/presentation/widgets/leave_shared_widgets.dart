@@ -20,9 +20,13 @@ class LeaveAsyncBody<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return value.when(
-      loading: () => const Center(
-        child: CircularProgressIndicator(color: AppColors.bronze),
+      loading: () => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: CircularProgressIndicator(color: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238)),
+        ),
       ),
       error: (err, _) => Center(
         child: Padding(
@@ -30,10 +34,25 @@ class LeaveAsyncBody<T> extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('$err', textAlign: TextAlign.center),
+              Text(
+                '$err', 
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: isDark ? Colors.white70 : const Color(0xFF607D8B),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
               if (onRetry != null) ...[
-                const SizedBox(height: 12),
-                FilledButton(onPressed: onRetry, child: const Text('Retry')),
+                const SizedBox(height: 16),
+                FilledButton(
+                  onPressed: onRetry, 
+                  style: FilledButton.styleFrom(
+                    backgroundColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+                    foregroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('Retry'),
+                ),
               ],
             ],
           ),
@@ -41,7 +60,30 @@ class LeaveAsyncBody<T> extends StatelessWidget {
       ),
       data: (data) {
         if (data is List && data.isEmpty) {
-          return Center(child: Text(emptyMessage));
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.assignment_turned_in_outlined,
+                    size: 64,
+                    color: isDark ? Colors.white10 : Colors.black12,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    emptyMessage,
+                    style: TextStyle(
+                      color: isDark ? Colors.white30 : const Color(0xFF607D8B).withOpacity(0.6),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
         }
         return builder(data);
       },
@@ -49,32 +91,34 @@ class LeaveAsyncBody<T> extends StatelessWidget {
   }
 }
 
-Color leaveStatusColor(String status) {
+Color leaveStatusColor(BuildContext context, String status) {
   switch (status.toUpperCase()) {
     case 'APPROVED':
-      return AppColors.success;
+      return Colors.green;
     case 'REJECTED':
     case 'CANCELLED':
-      return AppColors.error;
+      return Colors.red;
     default:
-      return AppColors.bronzeDark;
+      return Colors.orange;
   }
 }
 
-Widget leaveStatusChip(String status) {
-  final color = leaveStatusColor(status);
+Widget leaveStatusChip(BuildContext context, String status) {
+  final color = leaveStatusColor(context, status);
   return Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
     decoration: BoxDecoration(
-      color: color.withValues(alpha: 0.12),
-      borderRadius: BorderRadius.circular(999),
+      color: color.withOpacity(0.12),
+      border: Border.all(color: color, width: 1.2),
+      borderRadius: BorderRadius.circular(30),
     ),
     child: Text(
-      status,
+      status.toUpperCase(),
       style: TextStyle(
         color: color,
-        fontSize: 11,
-        fontWeight: FontWeight.w700,
+        fontSize: 10,
+        fontWeight: FontWeight.w800,
+        letterSpacing: 0.5,
       ),
     ),
   );
@@ -96,20 +140,27 @@ class LeaveApplicationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final typeName = application.leaveType?.name ?? application.leaveTypeId;
     final employeeName = application.employee?.fullName;
+
+    final cardBg = isDark ? const Color(0xFF1E1B18) : Colors.white;
+    final cardBorder = isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC);
+    
     return Card(
       elevation: 0,
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 16),
+      color: cardBg,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: AppColors.border),
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: cardBorder, width: 1.5),
       ),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -118,42 +169,76 @@ class LeaveApplicationCard extends StatelessWidget {
                   Expanded(
                     child: Text(
                       typeName,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.w700,
-                        color: AppColors.midnight,
+                        fontSize: 15,
+                        color: isDark ? Colors.white : const Color(0xFF212F3D),
                       ),
                     ),
                   ),
-                  leaveStatusChip(application.status),
+                  leaveStatusChip(context, application.status),
                 ],
               ),
+              Divider(
+                height: 24,
+                thickness: 1.2,
+                color: isDark ? const Color(0xFFC5A059).withOpacity(0.12) : Colors.black.withOpacity(0.06),
+              ),
               if (employeeName != null) ...[
-                const SizedBox(height: 4),
                 Text(
                   employeeName,
-                  style: const TextStyle(color: AppColors.textSecondary),
+                  style: TextStyle(
+                    color: isDark ? Colors.white70 : const Color(0xFF607D8B),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
                 ),
+                const SizedBox(height: 6),
               ],
               if (subtitle != null) ...[
-                const SizedBox(height: 4),
-                Text(subtitle!, style: const TextStyle(color: AppColors.textSecondary)),
+                Text(
+                  subtitle!, 
+                  style: TextStyle(
+                    color: isDark ? Colors.white60 : const Color(0xFF607D8B).withOpacity(0.8),
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 6),
               ],
-              const SizedBox(height: 8),
               Text(
                 '${application.fromDate} → ${application.toDate}'
                 '${application.isHalfDay ? ' (Half day${application.halfDaySession != null ? ': ${application.halfDaySession}' : ''})' : ''}',
+                style: TextStyle(
+                  color: isDark ? Colors.white : const Color(0xFF212F3D),
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 6),
               Text(
                 '${application.totalDays} day(s) · ${application.applicationNo}',
-                style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                style: TextStyle(
+                  color: isDark ? Colors.white38 : const Color(0xFF607D8B), 
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
               if (application.reason.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(application.reason),
+                Divider(
+                  height: 24,
+                  thickness: 1,
+                  color: isDark ? const Color(0xFFC5A059).withOpacity(0.12) : Colors.black.withOpacity(0.06),
+                ),
+                Text(
+                  application.reason,
+                  style: TextStyle(
+                    color: isDark ? Colors.white70 : const Color(0xFF263238).withOpacity(0.85),
+                    fontSize: 13,
+                  ),
+                ),
               ],
               if (trailing != null) ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 trailing!,
               ],
             ],

@@ -16,6 +16,7 @@ import { Bell } from "lucide-react";
 import { useSSE } from "@/lib/hooks/useSSE";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 interface TopbarActionsProps {
   isAdmin?: boolean;
@@ -160,6 +161,9 @@ export function TopbarActions({ isAdmin = false }: TopbarActionsProps) {
           </DropdownMenuContent>
         </DropdownMenu>
       )}
+
+      {/* Theme Toggle */}
+      <ThemeToggle />
 
       {/* User Menu */}
       <DropdownMenu>

@@ -1,25 +1,30 @@
 import Link from "next/link";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 export default function Home() {
   return (
-    <div
-      className="min-h-screen flex flex-col items-center justify-center"
-      style={{
-        background: "linear-gradient(135deg, #1d3459 0%, #243b63 60%, #1a2e50 100%)",
-      }}
-    >
-      <div className="text-center max-w-xl px-6">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background text-foreground relative overflow-hidden transition-colors duration-500">
+      
+      {/* Absolute Header for Theme Toggle */}
+      <div className="absolute top-6 right-6 z-50">
+        <ThemeToggle />
+      </div>
+
+      {/* Background decoration */}
+      <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-1/4 -right-1/4 w-[800px] h-[800px] rounded-full bg-primary/10 blur-3xl opacity-50 dark:opacity-30" />
+        <div className="absolute -bottom-1/4 -left-1/4 w-[600px] h-[600px] rounded-full bg-secondary/10 blur-3xl opacity-50 dark:opacity-30" />
+      </div>
+
+      <div className="text-center max-w-xl px-6 z-10 glass-card">
         {/* Logo */}
-        <div
-          className="inline-flex items-center justify-center w-20 h-20 rounded-3xl mb-6 shadow-xl"
-          style={{ backgroundColor: "rgba(217,181,87,0.2)", border: "2px solid #d9b557" }}
-        >
+        <div className="inline-flex items-center justify-center w-24 h-24 rounded-[2rem] mb-8 shadow-xl bg-primary/10 border-2 border-primary/20 backdrop-blur-md">
           <svg
             viewBox="0 0 24 24"
             fill="none"
-            stroke="#d9b557"
+            stroke="currentColor"
             strokeWidth={2}
-            className="w-10 h-10"
+            className="w-12 h-12 text-primary"
           >
             <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
             <circle cx="9" cy="7" r="4" />
@@ -28,49 +33,48 @@ export default function Home() {
           </svg>
         </div>
 
-        <h1 className="text-4xl font-bold text-white tracking-tight">
+        <h1 className="text-5xl font-extrabold tracking-tight text-foreground">
           HRMS Portal
         </h1>
-        <p className="mt-2 text-lg text-slate-300 font-light">
+        <p className="mt-3 text-xl text-primary font-medium tracking-wide">
           Gandhinagar University
         </p>
-        <p className="mt-4 text-sm text-slate-400 max-w-sm mx-auto leading-relaxed">
-          Human Resource Management System — manage employees, profiles, documents, and more.
+        <p className="mt-5 text-base text-muted-foreground max-w-md mx-auto leading-relaxed">
+          Human Resource Management System — manage employees, profiles, documents, and seamlessly orchestrate workflows.
         </p>
 
-        <div className="mt-10 flex flex-col sm:flex-row gap-3 justify-center">
+        <div className="mt-12 flex flex-col sm:flex-row gap-4 justify-center">
           <Link
             href="/login"
-            className="inline-flex items-center justify-center px-6 py-3 rounded-xl text-sm font-semibold text-[#1d3459] shadow-lg transition hover:scale-[1.02] hover:shadow-xl"
-            style={{ backgroundColor: "#d9b557" }}
+            className="inline-flex items-center justify-center px-8 py-3.5 rounded-2xl text-sm font-bold text-primary-foreground bg-primary shadow-lg shadow-primary/30 transition-all hover:scale-[1.02] hover:shadow-xl hover:bg-primary/90"
           >
             Employee Login
           </Link>
           <Link
             href="/admin/dashboard"
-            className="inline-flex items-center justify-center px-6 py-3 rounded-xl text-sm font-semibold text-white border border-white/20 shadow-lg transition hover:bg-white/10"
+            className="inline-flex items-center justify-center px-8 py-3.5 rounded-2xl text-sm font-bold text-foreground bg-card border border-border shadow-sm transition-all hover:bg-accent/50 hover:scale-[1.02]"
           >
             Admin Panel →
           </Link>
         </div>
 
-        <div className="mt-8 flex items-center justify-center gap-6 text-xs text-slate-500">
-          <span className="flex items-center gap-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 inline-block" />
-            Secure Access
+        <div className="mt-10 flex items-center justify-center gap-6 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
+          <span className="flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+            Secure
           </span>
-          <span className="flex items-center gap-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-blue-400 inline-block" />
-            Role-based Permissions
+          <span className="flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]" />
+            Roles
           </span>
-          <span className="flex items-center gap-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-amber-400 inline-block" />
-            Audit Logging
+          <span className="flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
+            Audit
           </span>
         </div>
       </div>
 
-      <p className="mt-16 text-xs text-slate-600">
+      <p className="mt-16 text-xs text-muted-foreground font-medium z-10">
         &copy; {new Date().getFullYear()} Gandhinagar University · All rights reserved
       </p>
     </div>

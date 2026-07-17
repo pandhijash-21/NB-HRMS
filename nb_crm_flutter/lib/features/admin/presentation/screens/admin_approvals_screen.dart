@@ -14,14 +14,37 @@ class AdminApprovalsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authNotifierProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     // Gate screen with Role Check (Admin/HR only)
     final role = authState.user?.role ?? '';
-    final hasAccess = const ['ADMIN', 'HR'].contains(role.toUpperCase());
+    final hasAccess = ['ADMIN', 'HR'].contains(role.toUpperCase());
 
     if (!hasAccess) {
-      return const Scaffold(
-        body: Center(child: Text('Access Denied: Admin or HR permissions required.')),
+      return Scaffold(
+        backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.gpp_bad_rounded, size: 64, color: Colors.red),
+              const SizedBox(height: 16),
+              Text(
+                'Access Denied',
+                style: TextStyle(
+                  fontSize: 20, 
+                  fontWeight: FontWeight.w800, 
+                  color: isDark ? Colors.white : const Color(0xFF212F3D),
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Access Denied: Admin or HR permissions required.',
+                style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w500),
+              ),
+            ],
+          ),
+        ),
       );
     }
 
@@ -29,97 +52,197 @@ class AdminApprovalsScreen extends ConsumerWidget {
     final approvalsQueue = ref.watch(approvalsQueueProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.sand,
+      backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text('Profile Update Approvals'),
+        backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        title: Text(
+          'Profile Update Approvals',
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: 20,
+            color: isDark ? Colors.white : const Color(0xFF212F3D),
+            letterSpacing: -0.5,
+          ),
+        ),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: Icon(
+            Icons.arrow_back_rounded,
+            color: isDark ? Colors.white.withOpacity(0.8) : const Color(0xFF212F3D),
+          ),
           onPressed: () => context.pop(),
         ),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1.5),
+          child: Container(
+            color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+            height: 1.5,
+          ),
+        ),
       ),
-      body: Column(
-        children: [
-          _buildFilterTabs(ref, activeFilter),
-          Expanded(
-            child: approvalsQueue.when(
-              data: (list) {
-                if (list.isEmpty) {
-                  return const Center(child: Text('No change requests in this queue.'));
-                }
-                return ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: list.length,
-                  itemBuilder: (ctx, i) {
-                    final req = list[i];
-                    return _buildRequestCard(context, ref, req);
-                  },
-                );
-              },
-              loading: () => const Center(child: CircularProgressIndicator(color: AppColors.bronze)),
-              error: (err, _) => Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('Failed to load approvals: $err'),
-                    const SizedBox(height: 12),
-                    FilledButton(
-                      onPressed: () => ref.invalidate(approvalsQueueProvider),
-                      child: const Text('Retry'),
-                    ),
-                  ],
+      body: TweenAnimationBuilder<double>(
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeOutCubic,
+        tween: Tween(begin: 0.0, end: 1.0),
+        builder: (context, value, child) {
+          return Transform.translate(
+            offset: Offset(0.0, 30.0 * (1.0 - value)),
+            child: Opacity(
+              opacity: value,
+              child: child,
+            ),
+          );
+        },
+        child: Column(
+          children: [
+            _buildFilterTabs(context, ref, activeFilter),
+            Expanded(
+              child: approvalsQueue.when(
+                data: (list) {
+                  if (list.isEmpty) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.assignment_turned_in_rounded,
+                            size: 64,
+                            color: isDark ? Colors.white10 : Colors.black12,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'No change requests in this queue.',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? Colors.white30 : const Color(0xFF607D8B).withOpacity(0.6),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                  return ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                    itemCount: list.length,
+                    itemBuilder: (ctx, i) {
+                      final req = list[i];
+                      return _buildRequestCard(context, ref, req);
+                    },
+                  );
+                },
+                loading: () => const Center(
+                  child: CircularProgressIndicator(color: Color(0xFFC5A059)),
+                ),
+                error: (err, _) => Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.error_outline_rounded, size: 48, color: Colors.red),
+                      const SizedBox(height: 12),
+                      Text('Failed to load approvals: $err', style: const TextStyle(fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 16),
+                      FilledButton(
+                        onPressed: () => ref.invalidate(approvalsQueueProvider),
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildFilterTabs(WidgetRef ref, String activeFilter) {
+  Widget _buildFilterTabs(BuildContext context, WidgetRef ref, String activeFilter) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
-      color: AppColors.midnight,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          _buildTabButton(ref, 'PENDING', activeFilter == 'PENDING'),
-          _buildTabButton(ref, 'APPROVED', activeFilter == 'APPROVED'),
-          _buildTabButton(ref, 'REJECTED', activeFilter == 'REJECTED'),
-          _buildTabButton(ref, 'ALL', activeFilter == 'ALL'),
-        ],
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E1B18) : Colors.white,
+        border: Border(
+          bottom: BorderSide(
+            color: isDark ? const Color(0xFFC5A059).withOpacity(0.12) : const Color(0xFFCFD8DC),
+            width: 1.5,
+          ),
+        ),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        child: Row(
+          children: [
+            _buildTabButton(context, ref, 'PENDING', activeFilter == 'PENDING'),
+            const SizedBox(width: 8),
+            _buildTabButton(context, ref, 'APPROVED', activeFilter == 'APPROVED'),
+            const SizedBox(width: 8),
+            _buildTabButton(context, ref, 'REJECTED', activeFilter == 'REJECTED'),
+            const SizedBox(width: 8),
+            _buildTabButton(context, ref, 'ALL', activeFilter == 'ALL'),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildTabButton(WidgetRef ref, String label, bool isSelected) {
-    return TextButton(
-      onPressed: () => ref.read(approvalsFilterProvider.notifier).set(label),
-      style: TextButton.styleFrom(
-        foregroundColor: isSelected ? AppColors.bronze : Colors.white70,
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        padding: const EdgeInsets.symmetric(vertical: 14),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+  Widget _buildTabButton(BuildContext context, WidgetRef ref, String label, bool isSelected) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      height: 36,
+      child: TextButton(
+        onPressed: () => ref.read(approvalsFilterProvider.notifier).set(label),
+        style: TextButton.styleFrom(
+          backgroundColor: isSelected
+              ? (isDark ? const Color(0xFFC5A059) : const Color(0xFF263238))
+              : Colors.transparent,
+          foregroundColor: isSelected
+              ? (isDark ? const Color(0xFF1A1816) : Colors.white)
+              : (isDark ? Colors.white38 : const Color(0xFF607D8B)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: BorderSide(
+              color: isSelected
+                  ? Colors.transparent
+                  : (isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC)),
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.5,
+          ),
         ),
       ),
     );
   }
 
   Widget _buildRequestCard(BuildContext context, WidgetRef ref, ChangeRequest req) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final statusColor = _getStatusColor(req.status);
+
     return Card(
       elevation: 0,
       margin: const EdgeInsets.only(bottom: 12),
+      color: isDark ? const Color(0xFF1E1B18) : Colors.white,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: AppColors.border),
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+          width: 1.5,
+        ),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(14.0),
+        padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -128,17 +251,22 @@ class AdminApprovalsScreen extends ConsumerWidget {
               children: [
                 Text(
                   req.employee.generalInfo?.fullName ?? 'Employee #${req.employeeId}',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.midnight),
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800, 
+                    fontSize: 15, 
+                    color: isDark ? Colors.white : const Color(0xFF212F3D),
+                  ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(12),
+                    color: statusColor.withOpacity(0.12),
+                    border: Border.all(color: statusColor, width: 1.2),
+                    borderRadius: BorderRadius.circular(30),
                   ),
                   child: Text(
                     req.status,
-                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: statusColor),
+                    style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: statusColor, letterSpacing: 0.5),
                   ),
                 ),
               ],
@@ -146,32 +274,43 @@ class AdminApprovalsScreen extends ConsumerWidget {
             const SizedBox(height: 6),
             Text(
               'Module: ${req.module}  ·  Submitted: ${_formatDate(req.requestedAt)}',
-              style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              style: TextStyle(
+                fontSize: 12, 
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.white54 : const Color(0xFF607D8B),
+              ),
             ),
-            const Divider(height: 20),
+            Divider(
+              height: 24,
+              thickness: 1.2,
+              color: isDark ? const Color(0xFFC5A059).withOpacity(0.12) : Colors.black.withOpacity(0.06),
+            ),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                ElevatedButton.icon(
+                OutlinedButton.icon(
                   onPressed: () => _showDiffDialog(context, req),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.sand,
-                    foregroundColor: AppColors.midnight,
-                    elevation: 0,
-                    side: const BorderSide(color: AppColors.border),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
+                    side: BorderSide(
+                      color: isDark ? const Color(0xFFC5A059).withOpacity(0.4) : const Color(0xFFCFD8DC),
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   ),
-                  icon: const Icon(Icons.difference_outlined, size: 14),
-                  label: const Text('View Changes Diff', style: TextStyle(fontSize: 11)),
+                  icon: const Icon(Icons.difference_outlined, size: 14, color: Color(0xFFC5A059)),
+                  label: const Text('View Changes Diff', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11)),
                 ),
                 if (req.status == 'PENDING')
                   Row(
                     children: [
                       TextButton.icon(
                         onPressed: () => _confirmAction(context, ref, req, approve: false),
-                        style: TextButton.styleFrom(foregroundColor: AppColors.error),
-                        icon: const Icon(Icons.close, size: 14),
-                        label: const Text('Reject', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        style: TextButton.styleFrom(foregroundColor: Colors.red),
+                        icon: const Icon(Icons.close_rounded, size: 14),
+                        label: const Text('Reject', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
                       ),
                       const SizedBox(width: 8),
                       ElevatedButton.icon(
@@ -180,10 +319,11 @@ class AdminApprovalsScreen extends ConsumerWidget {
                           backgroundColor: Colors.green,
                           foregroundColor: Colors.white,
                           elevation: 0,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                         ),
-                        icon: const Icon(Icons.check, size: 14),
-                        label: const Text('Approve', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        icon: const Icon(Icons.check_rounded, size: 14),
+                        label: const Text('Approve', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
                       ),
                     ],
                   ),
@@ -194,8 +334,8 @@ class AdminApprovalsScreen extends ConsumerWidget {
       ),
     );
   }
-
   void _showDiffDialog(BuildContext context, ChangeRequest req) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final oldData = req.oldData;
     final newData = req.newData;
 
@@ -205,12 +345,27 @@ class AdminApprovalsScreen extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('${req.employee.generalInfo?.fullName ?? "Employee"} - ${req.module} Changes'),
+        backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC),
+            width: 1.5,
+          ),
+        ),
+        title: Text(
+          '${req.employee.generalInfo?.fullName ?? "Employee"} - ${req.module} Changes',
+          style: TextStyle(
+            color: isDark ? Colors.white : const Color(0xFF212F3D),
+            fontWeight: FontWeight.w800,
+            fontSize: 16,
+          ),
+        ),
         content: SizedBox(
           width: 500,
-          height: 300,
+          height: 350,
           child: keys.isEmpty
-              ? const Center(child: Text('No explicit changes listed in payload.'))
+              ? const Center(child: Text('No explicit changes listed in request payload.', style: TextStyle(fontWeight: FontWeight.w600)))
               : ListView.builder(
                   itemCount: keys.length,
                   itemBuilder: (context, index) {
@@ -225,30 +380,49 @@ class AdminApprovalsScreen extends ConsumerWidget {
                         children: [
                           Text(
                             _formatKeyName(key),
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.bronze),
+                            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12, color: Color(0xFFC5A059)),
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 6),
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Expanded(
                                 child: Container(
-                                  padding: const EdgeInsets.all(6),
-                                  color: AppColors.errorSoft.withValues(alpha: 0.5),
-                                  child: Text('Old: $oldVal', style: const TextStyle(fontSize: 11)),
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red.withOpacity(0.12),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: Colors.red.withOpacity(0.2)),
+                                  ),
+                                  child: Text(
+                                    'Old: $oldVal', 
+                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.redAccent),
+                                  ),
                                 ),
                               ),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Container(
-                                  padding: const EdgeInsets.all(6),
-                                  color: AppColors.successSoft.withValues(alpha: 0.5),
-                                  child: Text('New: $newVal', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.green.withOpacity(0.12),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: Colors.green.withOpacity(0.2)),
+                                  ),
+                                  child: Text(
+                                    'New: $newVal', 
+                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Colors.green),
+                                  ),
                                 ),
                               ),
                             ],
                           ),
-                          const Divider(),
+                          const SizedBox(height: 8),
+                          Divider(
+                            height: 1,
+                            thickness: 1,
+                            color: isDark ? const Color(0xFFC5A059).withOpacity(0.1) : Colors.black.withOpacity(0.04),
+                          ),
                         ],
                       ),
                     );
@@ -256,7 +430,16 @@ class AdminApprovalsScreen extends ConsumerWidget {
                 ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              'Close',
+              style: TextStyle(
+                color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF607D8B),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -264,14 +447,44 @@ class AdminApprovalsScreen extends ConsumerWidget {
 
   void _confirmAction(BuildContext context, WidgetRef ref, ChangeRequest req, {required bool approve}) {
     final actionName = approve ? 'Approve' : 'Reject';
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('$actionName Request'),
-        content: Text('Are you sure you want to $actionName the change request for ${req.employee.generalInfo?.fullName ?? "this employee"}?'),
+        backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC),
+            width: 1.5,
+          ),
+        ),
+        title: Text(
+          '$actionName Request',
+          style: TextStyle(
+            color: isDark ? Colors.white : const Color(0xFF212F3D),
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        content: Text(
+          'Are you sure you want to $actionName the change request for ${req.employee.generalInfo?.fullName ?? "this employee"}?',
+          style: TextStyle(
+            color: isDark ? Colors.white70 : const Color(0xFF607D8B),
+          ),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              'Cancel',
+              style: TextStyle(
+                color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF607D8B),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          FilledButton(
             onPressed: () async {
               Navigator.pop(ctx);
               try {
@@ -291,12 +504,17 @@ class AdminApprovalsScreen extends ConsumerWidget {
               } catch (e) {
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Action failed: $e'), backgroundColor: AppColors.error),
+                    SnackBar(content: Text('Action failed: $e'), backgroundColor: Colors.red),
                   );
                 }
               }
             },
-            child: Text(actionName, style: TextStyle(color: approve ? Colors.green : AppColors.error)),
+            style: FilledButton.styleFrom(
+              backgroundColor: approve ? Colors.green : Colors.red,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: Text(actionName, style: const TextStyle(fontWeight: FontWeight.w800)),
           ),
         ],
       ),
@@ -308,7 +526,7 @@ class AdminApprovalsScreen extends ConsumerWidget {
       case 'APPROVED':
         return Colors.green;
       case 'REJECTED':
-        return AppColors.error;
+        return Colors.red;
       case 'PENDING':
       default:
         return Colors.orange;

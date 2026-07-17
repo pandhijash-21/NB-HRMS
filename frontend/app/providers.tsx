@@ -5,14 +5,17 @@ import { ApolloProvider } from "@apollo/client/react";
 import { apolloClient } from "@/lib/apollo-client";
 import type { ReactNode } from "react";
 import { QueryProvider } from "@/components/providers/QueryProvider";
+import { ThemeProvider } from "next-themes";
 
 export function AppProviders({ children }: { children: ReactNode }) {
   return (
-    <QueryProvider>
-      <SessionProvider>
-        <ApolloProvider client={apolloClient}>{children}</ApolloProvider>
-      </SessionProvider>
-    </QueryProvider>
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+      <QueryProvider>
+        <SessionProvider>
+          <ApolloProvider client={apolloClient}>{children}</ApolloProvider>
+        </SessionProvider>
+      </QueryProvider>
+    </ThemeProvider>
   );
 }
 

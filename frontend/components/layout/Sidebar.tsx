@@ -23,10 +23,10 @@ export function Sidebar({ title, subtitle, navGroups, footer }: SidebarProps) {
   return (
     <aside className="app-sidebar flex flex-col h-full">
       {/* Logo / Brand */}
-      <div className="flex flex-col px-6 py-6 border-b border-white/20 bg-white/10 backdrop-blur-md">
-        <span className="text-xl font-extrabold tracking-tight text-[#1d3459] flex items-center gap-2">
-          <div className="w-6 h-6 rounded-lg bg-[#1d3459] text-[#d9b557] flex items-center justify-center">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+      <div className="flex flex-col px-6 py-6 border-b border-border/40 bg-card/50 backdrop-blur-md">
+        <span className="text-xl font-extrabold tracking-tight text-foreground flex items-center gap-3">
+          <div className="w-8 h-8 rounded-xl bg-primary text-primary-foreground flex items-center justify-center shadow-md">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-5 h-5">
               <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
               <circle cx="9" cy="7" r="4" />
               <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
@@ -36,16 +36,16 @@ export function Sidebar({ title, subtitle, navGroups, footer }: SidebarProps) {
           {title}
         </span>
         {subtitle && (
-          <span className="text-[0.65rem] font-bold uppercase tracking-wider text-slate-400 mt-1 pl-8">
+          <span className="text-[0.65rem] font-bold uppercase tracking-[0.2em] text-muted-foreground mt-2 pl-11">
             {subtitle}
           </span>
         )}
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto py-2">
+      <nav className="flex-1 overflow-y-auto py-4">
         {navGroups.map((group, gi) => (
-          <div key={gi}>
+          <div key={gi} className="mb-4">
             {group.heading && (
               <p className="app-sidebar-section-title">{group.heading}</p>
             )}
@@ -62,7 +62,7 @@ export function Sidebar({ title, subtitle, navGroups, footer }: SidebarProps) {
                     active && "app-sidebar-link-active"
                   )}
                 >
-                  <span className="w-4 h-4 shrink-0">{item.icon}</span>
+                  <span className="w-5 h-5 shrink-0 transition-transform duration-300 group-hover:scale-110">{item.icon}</span>
                   {item.label}
                 </Link>
               );
@@ -73,7 +73,7 @@ export function Sidebar({ title, subtitle, navGroups, footer }: SidebarProps) {
 
       {/* Footer */}
       {footer && (
-        <div className="border-t border-slate-100 px-5 py-4">{footer}</div>
+        <div className="border-t border-border/50 px-5 py-4 bg-muted/20">{footer}</div>
       )}
     </aside>
   );

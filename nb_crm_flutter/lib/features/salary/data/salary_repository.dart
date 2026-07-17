@@ -248,7 +248,7 @@ class SalaryRepository {
           throw const FormatException('Invalid employees response');
         }
         final items = raw['items'] ?? raw['employees'] ?? raw;
-        if (items is! List) return const [];
+        if (items is! List) return [];
         return items.map((e) {
           final map = Map<String, dynamic>.from(e as Map);
           final general = map['generalInfo'] ?? map['general_info'];

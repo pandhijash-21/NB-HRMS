@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/theme/app_colors.dart';
 import '../../domain/leave_models.dart';
 import '../leave_providers.dart';
 import '../widgets/leave_shared_widgets.dart';
@@ -15,11 +14,11 @@ class AdminLeavesPendingScreen extends ConsumerWidget {
     final queue = ref.watch(pendingApprovalsProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.sand,
+
       appBar: AppBar(
-        title: const Text('Pending Leave Queue'),
+        title: Text('Pending Leave Queue'),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: Icon(Icons.arrow_back),
           onPressed: () => context.go('/admin/leaves'),
         ),
       ),
@@ -28,7 +27,7 @@ class AdminLeavesPendingScreen extends ConsumerWidget {
         emptyMessage: 'No pending applications.',
         onRetry: () => ref.invalidate(pendingApprovalsProvider),
         builder: (items) => ListView.builder(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.all(16),
           itemCount: items.length,
           itemBuilder: (ctx, i) {
             final app = items[i];
@@ -39,11 +38,11 @@ class AdminLeavesPendingScreen extends ConsumerWidget {
                 children: [
                   TextButton(
                     onPressed: () => _act(context, ref, app, approve: false),
-                    child: const Text('Reject'),
+                    child: Text('Reject'),
                   ),
                   FilledButton(
                     onPressed: () => _act(context, ref, app, approve: true),
-                    child: const Text('Approve'),
+                    child: Text('Approve'),
                   ),
                 ],
               ),
@@ -71,7 +70,7 @@ class AdminLeavesPendingScreen extends ConsumerWidget {
           minLines: 2,
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text('Cancel')),
           FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(approve ? 'Approve' : 'Reject')),
         ],
       ),

@@ -10,25 +10,25 @@ class AdminAuditStubScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.sand,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text('Audit log'),
+        title: Text('Audit log'),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: Icon(Icons.arrow_back),
           onPressed: () => context.go('/home'),
         ),
       ),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),
-          child: const Card(
+          child: Card(
             margin: EdgeInsets.all(24),
             child: Padding(
               padding: EdgeInsets.all(28),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.history_edu_outlined, size: 48, color: AppColors.bronze),
+                  Icon(Icons.history_edu_outlined, size: 48, color: Theme.of(context).colorScheme.primary),
                   SizedBox(height: 16),
                   Text(
                     'Audit API unavailable',

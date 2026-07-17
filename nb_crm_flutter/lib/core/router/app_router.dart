@@ -39,6 +39,7 @@ import '../../features/salary/presentation/screens/admin_salary_slip_screen.dart
 import '../../features/rbac/presentation/screens/admin_users_screen.dart';
 import '../../features/rbac/presentation/screens/admin_roles_screen.dart';
 import '../../features/rbac/presentation/screens/admin_role_detail_screen.dart';
+import '../widgets/responsive_shell.dart';
 
 /// Listenable bridge so GoRouter refreshes when [AuthState] changes.
 class GoRouterAuthRefresh extends ChangeNotifier {
@@ -104,10 +105,13 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         path: '/change-password',
         builder: (context, state) => const ChangePasswordScreen(),
       ),
-      GoRoute(
-        path: '/home',
-        builder: (context, state) => const HomeScreen(),
-      ),
+      ShellRoute(
+        builder: (context, state, child) => ResponsiveShell(child: child),
+        routes: [
+          GoRoute(
+            path: '/home',
+            builder: (context, state) => const HomeScreen(),
+          ),
       GoRoute(
         path: '/leave',
         builder: (context, state) => const LeaveHubScreen(),
@@ -281,6 +285,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           }
           return AdminSalarySlipScreen(recordId: id);
         },
+      ),
+      ],
       ),
     ],
   );

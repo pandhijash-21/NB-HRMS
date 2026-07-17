@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -55,169 +56,267 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final wide = size.width >= 720;
 
     return Scaffold(
-      body: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              AppColors.midnight,
-              AppColors.slate,
-              Color(0xFF314E5C),
-            ],
-          ),
-        ),
-        child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: EdgeInsets.symmetric(
-                horizontal: wide ? 32 : 20,
-                vertical: 24,
-              ),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 440),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _BrandHeader(compact: !wide),
-                    const SizedBox(height: 28),
-                    Material(
-                      color: AppColors.surface,
-                      elevation: 8,
-                      shadowColor: Colors.black.withValues(alpha: 0.28),
-                      borderRadius: BorderRadius.circular(20),
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(28, 32, 28, 28),
-                        child: Form(
-                          key: _formKey,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Text(
-                                'Sign in',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .headlineSmall
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.w700,
-                                      color: AppColors.midnight,
-                                    ),
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                'Use your employee ID or username to continue.',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodyMedium
-                                    ?.copyWith(color: AppColors.textSecondary),
-                              ),
-                              if (auth.infoMessage != null) ...[
-                                const SizedBox(height: 16),
-                                InlineBanner.info(message: auth.infoMessage!),
-                              ],
-                              const SizedBox(height: 28),
-                              TextFormField(
-                                controller: _identifierController,
-                                enabled: !submitting,
-                                textInputAction: TextInputAction.next,
-                                autofillHints: const [AutofillHints.username],
-                                decoration: const InputDecoration(
-                                  labelText: 'Employee ID / Username',
-                                  hintText: 'e.g. 1 or HOD_OPS',
-                                  prefixIcon: Icon(Icons.badge_outlined),
-                                ),
-                                validator: (value) {
-                                  if (value == null || value.trim().isEmpty) {
-                                    return 'Employee ID or username is required';
-                                  }
-                                  return null;
-                                },
-                                onChanged: (_) => auth.errorMessage != null
-                                    ? ref
-                                        .read(authNotifierProvider.notifier)
-                                        .clearError()
-                                    : null,
-                              ),
-                              const SizedBox(height: 16),
-                              TextFormField(
-                                controller: _passwordController,
-                                enabled: !submitting,
-                                obscureText: _obscurePassword,
-                                textInputAction: TextInputAction.done,
-                                autofillHints: const [AutofillHints.password],
-                                onFieldSubmitted: (_) =>
-                                    submitting ? null : _submit(),
-                                decoration: InputDecoration(
-                                  labelText: 'Password',
-                                  hintText: '••••••••',
-                                  prefixIcon: const Icon(Icons.lock_outline),
-                                  suffixIcon: IconButton(
-                                    tooltip: _obscurePassword
-                                        ? 'Show password'
-                                        : 'Hide password',
-                                    onPressed: submitting
-                                        ? null
-                                        : () => setState(
-                                              () => _obscurePassword =
-                                                  !_obscurePassword,
-                                            ),
-                                    icon: Icon(
-                                      _obscurePassword
-                                          ? Icons.visibility_outlined
-                                          : Icons.visibility_off_outlined,
-                                    ),
-                                  ),
-                                ),
-                                validator: (value) {
-                                  if (value == null || value.isEmpty) {
-                                    return 'Password is required';
-                                  }
-                                  return null;
-                                },
-                                onChanged: (_) => auth.errorMessage != null
-                                    ? ref
-                                        .read(authNotifierProvider.notifier)
-                                        .clearError()
-                                    : null,
-                              ),
-                              if (auth.errorMessage != null) ...[
-                                const SizedBox(height: 16),
-                                InlineBanner.error(message: auth.errorMessage!),
-                              ],
-                              const SizedBox(height: 24),
-                              FilledButton(
-                                onPressed: submitting ? null : _submit,
-                                child: submitting
-                                    ? const SizedBox(
-                                        height: 22,
-                                        width: 22,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2.4,
-                                          color: AppColors.midnight,
-                                        ),
-                                      )
-                                    : const Text('Sign in'),
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                'Having trouble signing in? Contact your administrator.',
-                                textAlign: TextAlign.center,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.copyWith(color: AppColors.textSecondary),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
+      body: Stack(
+        children: [
+          // Background Gradient
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color(0xFF0F0E0D), // Deep rich black
+                    Color(0xFF1A1816), // Very dark brown/black
+                    Color(0xFF2B2722), // Lighter dark brown
                   ],
                 ),
               ),
             ),
           ),
-        ),
+          
+          // Subtle glowing orb effect in the background
+          Positioned(
+            top: -100,
+            right: -100,
+            child: Container(
+              width: 400,
+              height: 400,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: const Color(0xFFC5A059).withOpacity(0.05),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFC5A059).withOpacity(0.1),
+                    blurRadius: 100,
+                    spreadRadius: 50,
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.symmetric(
+                  horizontal: wide ? 32 : 20,
+                  vertical: 24,
+                ),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 440),
+                  child: TweenAnimationBuilder<double>(
+                    duration: const Duration(milliseconds: 800),
+                    curve: Curves.easeOutExpo,
+                    tween: Tween(begin: 0.0, end: 1.0),
+                    builder: (context, value, child) {
+                      return Transform.translate(
+                        offset: Offset(0.0, 40.0 * (1.0 - value)),
+                        child: Opacity(opacity: value, child: child),
+                      );
+                    },
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _BrandHeader(compact: !wide),
+                        const SizedBox(height: 36),
+                        
+                        // Glassmorphism Card
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(24),
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1E1B18).withOpacity(0.7),
+                                borderRadius: BorderRadius.circular(24),
+                                border: Border.all(
+                                  color: const Color(0xFFC5A059).withOpacity(0.2),
+                                  width: 1.5,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.4),
+                                    blurRadius: 30,
+                                    offset: const Offset(0, 15),
+                                  ),
+                                ],
+                              ),
+                              padding: const EdgeInsets.fromLTRB(32, 40, 32, 36),
+                              child: Form(
+                                key: _formKey,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: [
+                                    const Text(
+                                      'Welcome Back',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontSize: 28,
+                                        fontWeight: FontWeight.w800,
+                                        color: Colors.white,
+                                        letterSpacing: -0.5,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Sign in with your employee credentials to continue.',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: Colors.white.withOpacity(0.6),
+                                      ),
+                                    ),
+                                    if (auth.infoMessage != null) ...[
+                                      const SizedBox(height: 24),
+                                      InlineBanner.info(message: auth.infoMessage!),
+                                    ],
+                                    const SizedBox(height: 32),
+                                    
+                                    // Username Field
+                                    TextFormField(
+                                      controller: _identifierController,
+                                      enabled: !submitting,
+                                      textInputAction: TextInputAction.next,
+                                      autofillHints: const [AutofillHints.username],
+                                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                                      decoration: InputDecoration(
+                                        labelText: 'Employee ID / Username',
+                                        labelStyle: TextStyle(color: Colors.white.withOpacity(0.5), fontWeight: FontWeight.w600),
+                                        hintText: 'e.g. 1 or HOD_OPS',
+                                        hintStyle: TextStyle(color: Colors.white.withOpacity(0.2)),
+                                        prefixIcon: const Icon(Icons.person_rounded, color: Color(0xFFC5A059)),
+                                        filled: true,
+                                        fillColor: const Color(0xFF2B2722).withOpacity(0.5),
+                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+                                        focusedBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(14),
+                                          borderSide: const BorderSide(color: Color(0xFFC5A059), width: 1.5),
+                                        ),
+                                        enabledBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(14),
+                                          borderSide: BorderSide(color: const Color(0xFFC5A059).withOpacity(0.1), width: 1.5),
+                                        ),
+                                      ),
+                                      validator: (value) {
+                                        if (value == null || value.trim().isEmpty) {
+                                          return 'Employee ID or username is required';
+                                        }
+                                        return null;
+                                      },
+                                      onChanged: (_) => auth.errorMessage != null
+                                          ? ref.read(authNotifierProvider.notifier).clearError()
+                                          : null,
+                                    ),
+                                    const SizedBox(height: 20),
+                                    
+                                    // Password Field
+                                    TextFormField(
+                                      controller: _passwordController,
+                                      enabled: !submitting,
+                                      obscureText: _obscurePassword,
+                                      textInputAction: TextInputAction.done,
+                                      autofillHints: const [AutofillHints.password],
+                                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                                      onFieldSubmitted: (_) => submitting ? null : _submit(),
+                                      decoration: InputDecoration(
+                                        labelText: 'Password',
+                                        labelStyle: TextStyle(color: Colors.white.withOpacity(0.5), fontWeight: FontWeight.w600),
+                                        hintText: '••••••••',
+                                        hintStyle: TextStyle(color: Colors.white.withOpacity(0.2)),
+                                        prefixIcon: const Icon(Icons.lock_rounded, color: Color(0xFFC5A059)),
+                                        filled: true,
+                                        fillColor: const Color(0xFF2B2722).withOpacity(0.5),
+                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+                                        focusedBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(14),
+                                          borderSide: const BorderSide(color: Color(0xFFC5A059), width: 1.5),
+                                        ),
+                                        enabledBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(14),
+                                          borderSide: BorderSide(color: const Color(0xFFC5A059).withOpacity(0.1), width: 1.5),
+                                        ),
+                                        suffixIcon: IconButton(
+                                          tooltip: _obscurePassword ? 'Show password' : 'Hide password',
+                                          onPressed: submitting
+                                              ? null
+                                              : () => setState(() => _obscurePassword = !_obscurePassword),
+                                          icon: Icon(
+                                            _obscurePassword ? Icons.visibility_rounded : Icons.visibility_off_rounded,
+                                            color: Colors.white.withOpacity(0.5),
+                                          ),
+                                        ),
+                                      ),
+                                      validator: (value) {
+                                        if (value == null || value.isEmpty) {
+                                          return 'Password is required';
+                                        }
+                                        return null;
+                                      },
+                                      onChanged: (_) => auth.errorMessage != null
+                                          ? ref.read(authNotifierProvider.notifier).clearError()
+                                          : null,
+                                    ),
+                                    if (auth.errorMessage != null) ...[
+                                      const SizedBox(height: 20),
+                                      InlineBanner.error(message: auth.errorMessage!),
+                                    ],
+                                    const SizedBox(height: 36),
+                                    
+                                    // Submit Button
+                                    SizedBox(
+                                      height: 54,
+                                      child: FilledButton(
+                                        onPressed: submitting ? null : _submit,
+                                        style: FilledButton.styleFrom(
+                                          backgroundColor: const Color(0xFFC5A059),
+                                          foregroundColor: const Color(0xFF1A1816),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                          elevation: 4,
+                                          shadowColor: const Color(0xFFC5A059).withOpacity(0.5),
+                                        ),
+                                        child: submitting
+                                            ? const SizedBox(
+                                                height: 24,
+                                                width: 24,
+                                                child: CircularProgressIndicator(
+                                                  strokeWidth: 3,
+                                                  color: Color(0xFF1A1816),
+                                                ),
+                                              )
+                                            : const Text(
+                                                'Sign in',
+                                                style: TextStyle(
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.w800,
+                                                  letterSpacing: 0.5,
+                                                ),
+                                              ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 24),
+                                    Text(
+                                      'Having trouble signing in? Contact your administrator.',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.white.withOpacity(0.4),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -233,42 +332,42 @@ class _BrandHeader extends StatelessWidget {
     return Column(
       children: [
         Container(
-          width: compact ? 56 : 64,
-          height: compact ? 56 : 64,
+          height: compact ? 80 : 100,
           decoration: BoxDecoration(
-            color: AppColors.bronze,
-            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFC5A059).withOpacity(0.15),
+                blurRadius: 30,
+                offset: const Offset(0, 10),
+              ),
+            ],
           ),
-          alignment: Alignment.center,
-          child: Text(
-            'NB',
-            style: TextStyle(
-              color: AppColors.midnight,
-              fontWeight: FontWeight.w800,
-              fontSize: compact ? 20 : 22,
-              letterSpacing: 1,
-            ),
+          child: Image.asset(
+            'assets/images/nbdeveloperlogo.png',
+            fit: BoxFit.contain,
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 20),
         Text(
           'NB Developer',
           textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.2,
-              ),
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
+            fontSize: compact ? 24 : 28,
+            letterSpacing: 0.5,
+          ),
         ),
         const SizedBox(height: 6),
         Text(
           'CRM · HRMS · ERP',
           textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                color: AppColors.bronze,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 1.4,
-              ),
+          style: TextStyle(
+            color: const Color(0xFFC5A059),
+            fontWeight: FontWeight.w700,
+            fontSize: compact ? 12 : 14,
+            letterSpacing: 2,
+          ),
         ),
       ],
     );

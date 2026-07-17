@@ -15,10 +15,10 @@ class AdminUsersScreen extends ConsumerStatefulWidget {
   const AdminUsersScreen({super.key});
 
   @override
-  ConsumerState<AdminUsersScreen> createState() => _AdminUsersScreenState();
+  ConsumerState<AdminUsersScreen> createState() => _AdminEmployeesScreenState();
 }
 
-class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
+class _AdminEmployeesScreenState extends ConsumerState<AdminUsersScreen> {
   final _searchController = TextEditingController();
   Timer? _debounce;
 
@@ -39,8 +39,10 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authNotifierProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     if (!Permissions.canManageUsers(auth.permissions)) {
-      return _accessDenied();
+      return _accessDenied(context);
     }
 
     final filters = ref.watch(usersFilterProvider);
@@ -48,97 +50,170 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
     final rolesAsync = ref.watch(allRolesProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.sand,
+      backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text('System Users'),
+        backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        title: Text(
+          'System Users',
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: 20,
+            color: isDark ? Colors.white : const Color(0xFF212F3D),
+            letterSpacing: -0.5,
+          ),
+        ),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: Icon(
+            Icons.arrow_back_rounded,
+            color: isDark ? Colors.white.withOpacity(0.8) : const Color(0xFF212F3D),
+          ),
           onPressed: () => context.pop(),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh list',
+            icon: Icon(
+              Icons.refresh_rounded,
+              color: isDark ? Colors.white.withOpacity(0.8) : const Color(0xFF212F3D),
+            ),
             onPressed: () => ref.read(usersListProvider.notifier).refresh(),
           ),
           Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: ElevatedButton.icon(
-              onPressed: () => _showAddUserDialog(context, rolesAsync),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.bronze,
-                foregroundColor: AppColors.midnight,
-                elevation: 0,
+            padding: const EdgeInsets.only(right: 16.0, left: 4.0),
+            child: SizedBox(
+              height: 38,
+              child: FilledButton.icon(
+                onPressed: () => _showAddUserDialog(context, rolesAsync),
+                style: FilledButton.styleFrom(
+                  backgroundColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+                  foregroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                ),
+                icon: const Icon(Icons.add_rounded, size: 16),
+                label: const Text('Add User', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
               ),
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('Add User'),
             ),
           ),
         ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1.5),
+          child: Container(
+            color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+            height: 1.5,
+          ),
+        ),
       ),
-      body: Column(
-        children: [
-          _buildFilterBar(context, filters, rolesAsync),
-          Expanded(
-            child: usersAsync.when(
-              data: (users) {
-                if (users.isEmpty) {
-                  return const Center(
-                    child: Text('No users found matching filters.'),
-                  );
-                }
-                return ListView.separated(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: users.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 10),
-                  itemBuilder: (context, index) => _UserCard(
-                    user: users[index],
-                    onCredentials: () => _showCredentialsDialog(context, users[index]),
-                    onEdit: () => _showEditUserDialog(context, users[index], rolesAsync),
-                    onDelete: () => _confirmDelete(context, users[index]),
-                  ),
-                );
-              },
-              loading: () => const Center(
-                child: CircularProgressIndicator(color: AppColors.bronze),
-              ),
-              error: (err, _) => Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.error_outline, size: 48, color: AppColors.error),
-                    const SizedBox(height: 12),
-                    Text('Failed to load users\n$err', textAlign: TextAlign.center),
-                    const SizedBox(height: 16),
-                    FilledButton(
-                      onPressed: () => ref.read(usersListProvider.notifier).refresh(),
-                      child: const Text('Retry'),
+      body: TweenAnimationBuilder<double>(
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeOutCubic,
+        tween: Tween(begin: 0.0, end: 1.0),
+        builder: (context, value, child) {
+          return Transform.translate(
+            offset: Offset(0.0, 30.0 * (1.0 - value)),
+            child: Opacity(
+              opacity: value,
+              child: child,
+            ),
+          );
+        },
+        child: Column(
+          children: [
+            _buildFilterBar(context, filters, rolesAsync),
+            Expanded(
+              child: usersAsync.when(
+                data: (users) {
+                  if (users.isEmpty) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.people_rounded,
+                            size: 64,
+                            color: isDark ? Colors.white10 : Colors.black12,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'No users found matching filters.',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? Colors.white30 : const Color(0xFF607D8B).withOpacity(0.6),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                  return ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                    itemCount: users.length,
+                    itemBuilder: (context, index) => _UserCard(
+                      user: users[index],
+                      onCredentials: () => _showCredentialsDialog(context, users[index]),
+                      onEdit: () => _showEditUserDialog(context, users[index], rolesAsync),
+                      onDelete: () => _confirmDelete(context, users[index]),
                     ),
-                  ],
+                  );
+                },
+                loading: () => const Center(
+                  child: CircularProgressIndicator(color: Color(0xFFC5A059)),
+                ),
+                error: (err, _) => Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.error_outline_rounded, size: 48, color: Colors.red),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Failed to load users\n$err', 
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 16),
+                      FilledButton(
+                        onPressed: () => ref.read(usersListProvider.notifier).refresh(),
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  Widget _accessDenied() {
-    return const Scaffold(
+  Widget _accessDenied(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Scaffold(
+      backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.gpp_bad, size: 64, color: AppColors.error),
-            SizedBox(height: 16),
+            const Icon(Icons.gpp_bad_rounded, size: 64, color: Colors.red),
+            const SizedBox(height: 16),
             Text(
               'Access Denied',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.midnight),
+              style: TextStyle(
+                fontSize: 20, 
+                fontWeight: FontWeight.w800, 
+                color: isDark ? Colors.white : const Color(0xFF212F3D),
+              ),
             ),
-            SizedBox(height: 8),
+            const SizedBox(height: 8),
             Text(
               'You do not have permission to manage users.',
-              style: TextStyle(color: AppColors.textSecondary),
+              style: TextStyle(
+                color: isDark ? Colors.white54 : const Color(0xFF607D8B),
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ],
         ),
@@ -152,32 +227,61 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
     AsyncValue<List<RoleSummary>> rolesAsync,
   ) {
     final roles = rolesAsync.value ?? const <RoleSummary>[];
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
-      color: AppColors.midnight,
-      padding: const EdgeInsets.all(16),
-      child: Wrap(
-        spacing: 12,
-        runSpacing: 12,
-        crossAxisAlignment: WrapCrossAlignment.center,
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E1B18) : Colors.white,
+        border: Border(
+          bottom: BorderSide(
+            color: isDark ? const Color(0xFFC5A059).withOpacity(0.12) : const Color(0xFFCFD8DC),
+            width: 1.5,
+          ),
+        ),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+      child: Row(
         children: [
-          SizedBox(
-            width: 260,
+          Expanded(
             child: TextField(
               controller: _searchController,
               onChanged: _onSearchChanged,
-              style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
-                hintText: 'Search by name or code…',
-                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.6)),
-                prefixIcon: Icon(Icons.search, color: Colors.white.withValues(alpha: 0.7)),
+                hintText: 'Search by name or code...',
+                hintStyle: TextStyle(color: isDark ? Colors.white30 : const Color(0xFF607D8B).withOpacity(0.6)),
+                prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFFC5A059), size: 20),
                 filled: true,
-                fillColor: AppColors.slate,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                fillColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(
+                    color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC),
+                    width: 1,
+                  ),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(
+                    color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                    width: 1,
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(
+                    color: Color(0xFFC5A059),
+                    width: 1.5,
+                  ),
+                ),
+                contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+              ),
+              style: TextStyle(
+                color: isDark ? Colors.white : const Color(0xFF212F3D),
+                fontSize: 14,
               ),
             ),
           ),
+          const SizedBox(width: 12),
           _filterDropdown(
             label: 'Status',
             value: filters.status,
@@ -190,6 +294,7 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
               if (v != null) ref.read(usersFilterProvider.notifier).setStatus(v);
             },
           ),
+          const SizedBox(width: 12),
           _filterDropdown(
             label: 'Role',
             value: filters.roleId,
@@ -214,17 +319,28 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
     required List<DropdownMenuItem<String>> items,
     required ValueChanged<String?> onChanged,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 1),
       decoration: BoxDecoration(
-        color: AppColors.slate,
-        borderRadius: BorderRadius.circular(8),
+        color: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+          width: 1.2,
+        ),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           value: items.any((i) => i.value == value) ? value : items.first.value,
-          dropdownColor: AppColors.slate,
-          style: const TextStyle(color: Colors.white),
+          dropdownColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+          style: TextStyle(
+            color: isDark ? Colors.white : const Color(0xFF212F3D), 
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+          ),
+          icon: const Icon(Icons.arrow_drop_down_rounded, color: Color(0xFFC5A059)),
           items: items,
           onChanged: onChanged,
         ),
@@ -236,6 +352,7 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
     BuildContext context,
     AsyncValue<List<RoleSummary>> rolesAsync,
   ) async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final employeeIdController = TextEditingController();
     String? roleId;
     final roles = rolesAsync.value ?? const <RoleSummary>[];
@@ -243,7 +360,21 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Create User Account'),
+        backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC),
+            width: 1.5,
+          ),
+        ),
+        title: Text(
+          'Create User Account',
+          style: TextStyle(
+            color: isDark ? Colors.white : const Color(0xFF212F3D),
+            fontWeight: FontWeight.w800,
+          ),
+        ),
         content: SizedBox(
           width: 420,
           child: Column(
@@ -256,11 +387,17 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
                   labelText: 'Employee ID',
                   hintText: 'e.g. 1',
                   helperText: 'The internal employee ID (numeric)',
+                  border: OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
-                decoration: const InputDecoration(labelText: 'Assign Role'),
+                dropdownColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+                style: TextStyle(color: isDark ? Colors.white : const Color(0xFF212F3D), fontWeight: FontWeight.w600),
+                decoration: const InputDecoration(
+                  labelText: 'Assign Role',
+                  border: OutlineInputBorder(),
+                ),
                 items: roles
                     .map((r) => DropdownMenuItem(value: r.id, child: Text(r.name)))
                     .toList(),
@@ -270,10 +407,24 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(
+              'Cancel',
+              style: TextStyle(
+                color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF607D8B),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Create Account'),
+            style: FilledButton.styleFrom(
+              backgroundColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+              foregroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('Create Account', style: TextStyle(fontWeight: FontWeight.w800)),
           ),
         ],
       ),
@@ -303,6 +454,7 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
     UserAccount user,
     AsyncValue<List<RoleSummary>> rolesAsync,
   ) async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     var isActive = user.isActive;
     var roleId = user.roleId;
     final roles = rolesAsync.value ?? const <RoleSummary>[];
@@ -311,7 +463,21 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setLocal) => AlertDialog(
-          title: const Text('Edit User Account'),
+          backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(
+              color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC),
+              width: 1.5,
+            ),
+          ),
+          title: Text(
+            'Edit User Account',
+            style: TextStyle(
+              color: isDark ? Colors.white : const Color(0xFF212F3D),
+              fontWeight: FontWeight.w800,
+            ),
+          ),
           content: SizedBox(
             width: 420,
             child: Column(
@@ -321,39 +487,76 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppColors.mist,
-                    borderRadius: BorderRadius.circular(8),
+                    color: isDark ? const Color(0xFF121212) : const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                    ),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(user.displayName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                      Text(user.displaySubtitle, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                      Text(
+                        user.displayName, 
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          color: isDark ? Colors.white : const Color(0xFF212F3D),
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        user.displaySubtitle, 
+                        style: TextStyle(
+                          color: isDark ? Colors.white30 : const Color(0xFF607D8B), 
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 OutlinedButton.icon(
                   onPressed: () {
                     Navigator.pop(ctx);
                     _showCredentialsDialog(context, user);
                   },
-                  icon: const Icon(Icons.key_outlined, size: 18),
-                  label: const Text('View login & password'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
+                    side: BorderSide(
+                      color: isDark ? const Color(0xFFC5A059).withOpacity(0.4) : const Color(0xFFCFD8DC),
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  icon: const Icon(Icons.key_outlined, size: 16, color: Color(0xFFC5A059)),
+                  label: const Text('View login & password', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   initialValue: roles.any((r) => r.id == roleId) ? roleId : null,
-                  decoration: const InputDecoration(labelText: 'Assigned Role'),
+                  dropdownColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+                  style: TextStyle(color: isDark ? Colors.white : const Color(0xFF212F3D), fontWeight: FontWeight.w600),
+                  decoration: const InputDecoration(
+                    labelText: 'Assigned Role',
+                    border: OutlineInputBorder(),
+                  ),
                   items: roles
                       .map((r) => DropdownMenuItem(value: r.id, child: Text(r.name)))
                       .toList(),
                   onChanged: (v) => setLocal(() => roleId = v ?? roleId),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 DropdownButtonFormField<bool>(
                   initialValue: isActive,
-                  decoration: const InputDecoration(labelText: 'Status'),
+                  dropdownColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+                  style: TextStyle(color: isDark ? Colors.white : const Color(0xFF212F3D), fontWeight: FontWeight.w600),
+                  decoration: const InputDecoration(
+                    labelText: 'Status',
+                    border: OutlineInputBorder(),
+                  ),
                   items: const [
                     DropdownMenuItem(value: true, child: Text('Active (Can Login)')),
                     DropdownMenuItem(value: false, child: Text('Inactive (Suspended)')),
@@ -364,10 +567,24 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(
+                'Cancel',
+                style: TextStyle(
+                  color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF607D8B),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
             FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Save Changes'),
+              style: FilledButton.styleFrom(
+                backgroundColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+                foregroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text('Save Changes', style: TextStyle(fontWeight: FontWeight.w800)),
             ),
           ],
         ),
@@ -398,19 +615,52 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
   }
 
   Future<void> _confirmDelete(BuildContext context, UserAccount user) async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete User'),
+        backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC),
+            width: 1.5,
+          ),
+        ),
+        title: Text(
+          'Delete User',
+          style: TextStyle(
+            color: isDark ? Colors.white : const Color(0xFF212F3D),
+            fontWeight: FontWeight.w800,
+          ),
+        ),
         content: Text(
           'Are you sure you want to delete the user account for ${user.displayName}?',
+          style: TextStyle(
+            color: isDark ? Colors.white70 : const Color(0xFF607D8B),
+          ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(
+              'Cancel',
+              style: TextStyle(
+                color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF607D8B),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete'),
+            child: const Text('Delete Account', style: TextStyle(fontWeight: FontWeight.w800)),
           ),
         ],
       ),
@@ -453,71 +703,123 @@ class _UserCard extends StatelessWidget {
         .take(2)
         .join()
         .toUpperCase();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Material(
-      color: AppColors.surface,
-      borderRadius: BorderRadius.circular(12),
-      elevation: 1,
-      shadowColor: Colors.black.withValues(alpha: 0.06),
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.only(bottom: 12),
+      color: isDark ? const Color(0xFF1E1B18) : Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+          width: 1.5,
+        ),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(16),
         child: Row(
           children: [
-            CircleAvatar(
-              backgroundColor: AppColors.midnight,
-              foregroundColor: AppColors.bronze,
-              child: Text(initials.isEmpty ? '??' : initials, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+            Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFF263238).withOpacity(0.15),
+                  width: 1.5,
+                ),
+              ),
+              child: CircleAvatar(
+                radius: 22,
+                backgroundColor: isDark ? const Color(0xFF2B2722) : const Color(0xFFECEFF1),
+                child: Text(
+                  initials.isEmpty ? '??' : initials, 
+                  style: TextStyle(
+                    color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238), 
+                    fontWeight: FontWeight.bold, 
+                    fontSize: 12,
+                  ),
+                ),
+              ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(user.displayName, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.midnight)),
+                  Text(
+                    user.displayName, 
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800, 
+                      fontSize: 15,
+                      color: isDark ? Colors.white : const Color(0xFF212F3D),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
                   Text(
                     user.displaySubtitle,
-                    style: const TextStyle(fontSize: 10, color: AppColors.textSecondary, letterSpacing: 0.5),
+                    style: TextStyle(
+                      fontSize: 11, 
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white54 : const Color(0xFF607D8B),
+                    ),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
-                    runSpacing: 4,
+                    runSpacing: 6,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      _badge(user.role.name, AppColors.midnight),
+                      _badge(user.role.name, isDark ? const Color(0xFFC5A059) : const Color(0xFF263238)),
                       _badge(
                         user.isActive ? 'ACTIVE' : 'INACTIVE',
-                        user.isActive ? AppColors.success : AppColors.error,
+                        user.isActive ? Colors.green : Colors.red,
                         soft: true,
                       ),
+                      const SizedBox(width: 4),
                       if (user.lastLoginAt != null)
                         Text(
                           'Last login: ${_formatDate(user.lastLoginAt!)}',
-                          style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                          style: TextStyle(
+                            fontSize: 11, 
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? Colors.white30 : const Color(0xFF607D8B),
+                          ),
                         )
                       else
-                        const Text(
+                        Text(
                           'Never logged in',
-                          style: TextStyle(fontSize: 11, color: AppColors.textSecondary, fontStyle: FontStyle.italic),
+                          style: TextStyle(
+                            fontSize: 11, 
+                            fontWeight: FontWeight.w600,
+                            fontStyle: FontStyle.italic,
+                            color: isDark ? Colors.white30 : const Color(0xFF607D8B).withOpacity(0.6),
+                          ),
                         ),
                     ],
                   ),
                 ],
               ),
             ),
-            IconButton(
-              tooltip: 'Credentials',
-              onPressed: onCredentials,
-              icon: const Icon(Icons.key_outlined, color: AppColors.textSecondary),
-            ),
-            IconButton(
-              tooltip: 'Edit',
-              onPressed: onEdit,
-              icon: const Icon(Icons.edit_outlined, color: AppColors.textSecondary),
-            ),
-            IconButton(
-              tooltip: 'Delete',
-              onPressed: onDelete,
-              icon: const Icon(Icons.delete_outline, color: AppColors.error),
+            const SizedBox(width: 8),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  tooltip: 'Credentials',
+                  onPressed: onCredentials,
+                  icon: const Icon(Icons.key_outlined, color: Color(0xFFC5A059), size: 18),
+                ),
+                IconButton(
+                  tooltip: 'Edit',
+                  onPressed: onEdit,
+                  icon: const Icon(Icons.edit_outlined, color: Color(0xFFC5A059), size: 18),
+                ),
+                IconButton(
+                  tooltip: 'Delete',
+                  onPressed: onDelete,
+                  icon: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
+                ),
+              ],
             ),
           ],
         ),
@@ -527,15 +829,15 @@ class _UserCard extends StatelessWidget {
 
   Widget _badge(String text, Color color, {bool soft = false}) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
       decoration: BoxDecoration(
-        color: soft ? color.withValues(alpha: 0.12) : color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withValues(alpha: 0.25)),
+        color: soft ? color.withOpacity(0.12) : color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(30),
+        border: Border.all(color: color.withOpacity(0.25), width: 1.2),
       ),
       child: Text(
         text.toUpperCase(),
-        style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: color),
+        style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: color, letterSpacing: 0.5),
       ),
     );
   }
@@ -645,21 +947,39 @@ class _CredentialsDialogState extends ConsumerState<_CredentialsDialog> {
   Widget build(BuildContext context) {
     final loginId = _creds?.loginId;
     final password = _revealedPassword ?? _creds?.password;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return AlertDialog(
+      backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC),
+          width: 1.5,
+        ),
+      ),
       title: Row(
         children: [
-          const Icon(Icons.key_outlined, color: AppColors.midnight),
-          const SizedBox(width: 8),
-          Expanded(child: Text('Credentials — ${widget.user.displayName}')),
+          const Icon(Icons.key_outlined, color: Color(0xFFC5A059)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Credentials',
+              style: TextStyle(
+                color: isDark ? Colors.white : const Color(0xFF212F3D),
+                fontWeight: FontWeight.w800,
+                fontSize: 16,
+              ),
+            ),
+          ),
         ],
       ),
       content: SizedBox(
-        width: 400,
+        width: 420,
         child: _loading
             ? const Padding(
                 padding: EdgeInsets.all(24),
-                child: Center(child: CircularProgressIndicator(color: AppColors.bronze)),
+                child: Center(child: CircularProgressIndicator(color: Color(0xFFC5A059))),
               )
             : Column(
                 mainAxisSize: MainAxisSize.min,
@@ -667,83 +987,155 @@ class _CredentialsDialogState extends ConsumerState<_CredentialsDialog> {
                 children: [
                   if (_creds?.canLogin == false)
                     Container(
-                      padding: const EdgeInsets.all(10),
-                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      margin: const EdgeInsets.only(bottom: 16),
                       decoration: BoxDecoration(
-                        color: Colors.amber.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.amber.shade100),
+                        color: Colors.amber.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.amber, width: 1.2),
                       ),
                       child: const Text(
-                        'Account inactive or missing login id.',
-                        style: TextStyle(fontSize: 12, color: Colors.amber),
+                        'Account inactive or missing login ID.',
+                        style: TextStyle(fontSize: 12, color: Colors.amber, fontWeight: FontWeight.w700),
                       ),
                     ),
                   Container(
-                    padding: const EdgeInsets.all(14),
+                    padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: AppColors.mist,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppColors.border),
+                      color: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                      ),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('LOGIN ID', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textSecondary)),
+                        const Text(
+                          'LOGIN ID', 
+                          style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: Colors.grey, letterSpacing: 0.5),
+                        ),
+                        const SizedBox(height: 4),
                         Row(
                           children: [
-                            Expanded(child: Text(loginId ?? '—', style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold))),
+                            Expanded(
+                              child: Text(
+                                loginId ?? '—', 
+                                style: TextStyle(
+                                  fontFamily: 'monospace', 
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 14,
+                                  color: isDark ? Colors.white : const Color(0xFF212F3D),
+                                ),
+                              ),
+                            ),
                             if (loginId != null)
                               IconButton(
-                                icon: const Icon(Icons.copy, size: 18),
+                                icon: const Icon(Icons.copy_rounded, size: 18, color: Color(0xFFC5A059)),
                                 onPressed: () => _copy(loginId, 'Login ID'),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
                               ),
                           ],
                         ),
-                        const SizedBox(height: 12),
-                        const Text('PASSWORD', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textSecondary)),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'PASSWORD', 
+                          style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: Colors.grey, letterSpacing: 0.5),
+                        ),
+                        const SizedBox(height: 4),
                         Row(
                           children: [
-                            Expanded(child: Text(password ?? '—', style: const TextStyle(fontFamily: 'monospace'))),
+                            Expanded(
+                              child: Text(
+                                password ?? '—', 
+                                style: TextStyle(
+                                  fontFamily: 'monospace',
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 14,
+                                  color: isDark ? Colors.white : const Color(0xFF212F3D),
+                                ),
+                              ),
+                            ),
                             if (password != null)
                               IconButton(
-                                icon: const Icon(Icons.copy, size: 18),
+                                icon: const Icon(Icons.copy_rounded, size: 18, color: Color(0xFFC5A059)),
                                 onPressed: () => _copy(password, 'Password'),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
                               ),
                           ],
                         ),
                         if (_creds != null) ...[
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 12),
+                          const Divider(height: 1, thickness: 1),
+                          const SizedBox(height: 10),
                           Text(
                             _creds!.passwordNote,
-                            style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                            style: TextStyle(
+                              fontSize: 11, 
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? Colors.white30 : const Color(0xFF607D8B),
+                            ),
                           ),
                         ],
                       ],
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  const Text('Reset password', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 20),
+                  Text(
+                    'Reset Account Password', 
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800, 
+                      fontSize: 13,
+                      color: isDark ? Colors.white : const Color(0xFF212F3D),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
                   TextField(
                     controller: _customPasswordController,
                     decoration: const InputDecoration(
                       hintText: 'Optional custom password (min 8 chars)',
+                      border: OutlineInputBorder(),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  OutlinedButton.icon(
-                    onPressed: _resetting ? null : _resetPassword,
-                    icon: _resetting
-                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Icon(Icons.refresh),
-                    label: Text(_resetting ? 'Resetting…' : 'Reset & show new password'),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    height: 44,
+                    child: OutlinedButton.icon(
+                      onPressed: _resetting ? null : _resetPassword,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
+                        side: BorderSide(
+                          color: isDark ? const Color(0xFFC5A059).withOpacity(0.4) : const Color(0xFF263238).withOpacity(0.5),
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      icon: _resetting
+                          ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFC5A059)))
+                          : const Icon(Icons.refresh_rounded, size: 16, color: Color(0xFFC5A059)),
+                      label: Text(
+                        _resetting ? 'Resetting…' : 'Reset & Show New Password',
+                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+                      ),
+                    ),
                   ),
                 ],
               ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(
+            'Close',
+            style: TextStyle(
+              color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF607D8B),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
       ],
     );
   }

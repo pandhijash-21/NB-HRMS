@@ -88,25 +88,25 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                               fontWeight: FontWeight.w700,
                             ),
                       ),
-                      const SizedBox(height: 8),
+                      SizedBox(height: 8),
                       Text(
                         forced
                             ? 'First sign-in — set a new password to continue'
                             : 'Change your password',
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: AppColors.bronze,
+                              color: Theme.of(context).colorScheme.primary,
                               fontWeight: FontWeight.w600,
                             ),
                       ),
-                      const SizedBox(height: 28),
+                      SizedBox(height: 28),
                       Material(
                         color: AppColors.surface,
                         elevation: 8,
                         shadowColor: Colors.black.withValues(alpha: 0.28),
                         borderRadius: BorderRadius.circular(20),
                         child: Padding(
-                          padding: const EdgeInsets.fromLTRB(28, 32, 28, 28),
+                          padding: EdgeInsets.fromLTRB(28, 32, 28, 28),
                           child: Form(
                             key: _formKey,
                             child: Column(
@@ -122,7 +122,7 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                                         color: AppColors.midnight,
                                       ),
                                 ),
-                                const SizedBox(height: 6),
+                                SizedBox(height: 6),
                                 Text(
                                   'Use at least 8 characters with a letter and a number. '
                                   'You will need to sign in again afterward.',
@@ -131,7 +131,7 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                                       .bodyMedium
                                       ?.copyWith(color: AppColors.textSecondary),
                                 ),
-                                const SizedBox(height: 24),
+                                SizedBox(height: 24),
                                 _PasswordField(
                                   controller: _currentController,
                                   label: 'Current password',
@@ -145,7 +145,7 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                                       ? 'Current password is required'
                                       : null,
                                 ),
-                                const SizedBox(height: 14),
+                                SizedBox(height: 14),
                                 _PasswordField(
                                   controller: _newController,
                                   label: 'New password',
@@ -157,7 +157,7 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                                   textInputAction: TextInputAction.next,
                                   validator: validateNewPassword,
                                 ),
-                                const SizedBox(height: 14),
+                                SizedBox(height: 14),
                                 _PasswordField(
                                   controller: _confirmController,
                                   label: 'Confirm new password',
@@ -180,16 +180,16 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                                   },
                                 ),
                                 if (auth.errorMessage != null) ...[
-                                  const SizedBox(height: 16),
+                                  SizedBox(height: 16),
                                   InlineBanner.error(
                                     message: auth.errorMessage!,
                                   ),
                                 ],
-                                const SizedBox(height: 24),
+                                SizedBox(height: 24),
                                 FilledButton(
                                   onPressed: submitting ? null : _submit,
                                   child: submitting
-                                      ? const SizedBox(
+                                      ? SizedBox(
                                           height: 22,
                                           width: 22,
                                           child: CircularProgressIndicator(
@@ -197,10 +197,10 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                                             color: AppColors.midnight,
                                           ),
                                         )
-                                      : const Text('Update password'),
+                                      : Text('Update password'),
                                 ),
                                 if (forced) ...[
-                                  const SizedBox(height: 14),
+                                  SizedBox(height: 14),
                                   Text(
                                     'This step is required before you can use the app.',
                                     textAlign: TextAlign.center,
@@ -208,7 +208,7 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                                         .textTheme
                                         .bodySmall
                                         ?.copyWith(
-                                          color: AppColors.textSecondary,
+                                          color: Theme.of(context).textTheme.bodySmall?.color,
                                         ),
                                   ),
                                 ],
@@ -258,10 +258,10 @@ class _PasswordField extends StatelessWidget {
       obscureText: obscure,
       textInputAction: textInputAction,
       onFieldSubmitted: onSubmitted,
-      autofillHints: const [AutofillHints.password],
+      autofillHints: [AutofillHints.password],
       decoration: InputDecoration(
         labelText: label,
-        prefixIcon: const Icon(Icons.lock_outline),
+        prefixIcon: Icon(Icons.lock_outline),
         suffixIcon: IconButton(
           tooltip: obscure ? 'Show password' : 'Hide password',
           onPressed: enabled ? onToggle : null,

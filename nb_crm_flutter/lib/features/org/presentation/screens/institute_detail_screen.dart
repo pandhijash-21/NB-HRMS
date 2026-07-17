@@ -30,39 +30,39 @@ class InstituteDetailScreen extends ConsumerWidget {
     final membersAsync = ref.watch(instituteMembersProvider(instituteId));
 
     return Scaffold(
-      backgroundColor: AppColors.sand,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text('Institute Detail'),
+        title: Text('Institute Detail'),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: Icon(Icons.arrow_back),
           onPressed: () => context.pop(),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: Icon(Icons.refresh),
             onPressed: () => ref.invalidate(instituteMembersProvider(instituteId)),
           ),
         ],
       ),
       body: membersAsync.when(
         data: (data) => _buildContent(context, data),
-        loading: () => const Center(
-          child: CircularProgressIndicator(color: AppColors.bronze),
+        loading: () => Center(
+          child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary),
         ),
         error: (err, _) => Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text('Failed to load institute\n$err', textAlign: TextAlign.center),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
               TextButton(
                 onPressed: () => context.go('/admin/institutes'),
-                child: const Text('← Back to institutes'),
+                child: Text('← Back to institutes'),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: 8),
               FilledButton(
                 onPressed: () => ref.invalidate(instituteMembersProvider(instituteId)),
-                child: const Text('Retry'),
+                child: Text('Retry'),
               ),
             ],
           ),
@@ -73,7 +73,7 @@ class InstituteDetailScreen extends ConsumerWidget {
 
   Widget _buildContent(BuildContext context, InstituteMembersPayload data) {
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(16),
       children: [
         TextButton(
           onPressed: () => context.go('/admin/institutes'),
@@ -91,24 +91,24 @@ class InstituteDetailScreen extends ConsumerWidget {
         ),
         Text(
           data.institute.code,
-          style: const TextStyle(
+          style: TextStyle(
             fontFamily: 'monospace',
-            color: AppColors.textSecondary,
+            color: Theme.of(context).textTheme.bodySmall?.color,
           ),
         ),
-        const SizedBox(height: 16),
+        SizedBox(height: 16),
         Row(
           children: [
-            Expanded(child: _statCard('Employees', '${data.employees.length}')),
-            const SizedBox(width: 12),
-            Expanded(child: _statCard('Alias accounts', '${data.aliases.length}')),
+            Expanded(child: _statCard(context, 'Employees', '${data.employees.length}')),
+            SizedBox(width: 12),
+            Expanded(child: _statCard(context, 'Alias accounts', '${data.aliases.length}')),
           ],
         ),
-        const SizedBox(height: 16),
+        SizedBox(height: 16),
         _sectionCard(
           title: 'Employees',
           child: data.employees.isEmpty
-              ? const Text(
+              ? Text(
                   'No employees assigned to this institute.',
                   style: TextStyle(color: AppColors.textSecondary),
                 )
@@ -116,13 +116,13 @@ class InstituteDetailScreen extends ConsumerWidget {
                   children: data.employees.map((emp) => _employeeRow(context, emp)).toList(),
                 ),
         ),
-        const SizedBox(height: 16),
+        SizedBox(height: 16),
         _sectionCard(
           title: 'Alias accounts',
           subtitle:
               'Logins scoped to this institute (e.g. HOI-GIT). Matched by institute code or login suffix.',
           child: data.aliases.isEmpty
-              ? const Text(
+              ? Text(
                   'No alias accounts for this institute.',
                   style: TextStyle(color: AppColors.textSecondary),
                 )
@@ -134,7 +134,7 @@ class InstituteDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _statCard(String label, String value) {
+  Widget _statCard(BuildContext context, String label, String value) {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
@@ -142,7 +142,7 @@ class InstituteDetailScreen extends ConsumerWidget {
         side: const BorderSide(color: AppColors.border),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(16),
         child: Column(
           children: [
             Text(
@@ -153,14 +153,14 @@ class InstituteDetailScreen extends ConsumerWidget {
                 color: AppColors.midnight,
               ),
             ),
-            const SizedBox(height: 4),
+            SizedBox(height: 4),
             Text(
               label.toUpperCase(),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w700,
                 letterSpacing: 1.2,
-                color: AppColors.textSecondary,
+                color: Theme.of(context).textTheme.bodySmall?.color,
               ),
             ),
           ],
@@ -181,7 +181,7 @@ class InstituteDetailScreen extends ConsumerWidget {
         side: const BorderSide(color: AppColors.border),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -190,13 +190,13 @@ class InstituteDetailScreen extends ConsumerWidget {
               style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.midnight),
             ),
             if (subtitle != null) ...[
-              const SizedBox(height: 4),
+              SizedBox(height: 4),
               Text(
                 subtitle,
                 style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
               ),
             ],
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             child,
           ],
         ),
@@ -209,7 +209,7 @@ class InstituteDetailScreen extends ConsumerWidget {
     return InkWell(
       onTap: () => context.push('/admin/employees/${emp.id}'),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 10),
+        padding: EdgeInsets.symmetric(vertical: 10),
         child: Row(
           children: [
             Expanded(
@@ -244,8 +244,8 @@ class InstituteDetailScreen extends ConsumerWidget {
   Widget _aliasRow(AliasAccount alias) {
     final active = alias.userActive ?? false;
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
+      margin: EdgeInsets.only(bottom: 8),
+      padding: EdgeInsets.all(12),
       decoration: BoxDecoration(
         border: Border.all(color: AppColors.border),
         borderRadius: BorderRadius.circular(10),
@@ -274,7 +274,7 @@ class InstituteDetailScreen extends ConsumerWidget {
             ),
           ),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
               color: active ? AppColors.successSoft : AppColors.mist,
               borderRadius: BorderRadius.circular(999),

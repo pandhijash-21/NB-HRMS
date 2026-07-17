@@ -30,11 +30,10 @@ class _DesignationsScreenState extends ConsumerState<DesignationsScreen> {
     final auth = ref.watch(authNotifierProvider);
     final role = auth.user?.role ?? '';
     final hasAccess = Permissions.canManageUsers(auth.permissions, role);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     if (!hasAccess) {
-      return const Scaffold(
-        body: Center(child: Text('Access Denied')),
-      );
+      return _accessDenied(isDark);
     }
 
     final jobDesignations = ref.watch(jobDesignationsProvider);
@@ -42,56 +41,93 @@ class _DesignationsScreenState extends ConsumerState<DesignationsScreen> {
     final slots = ref.watch(positionSlotsProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.sand,
+      backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text('Designations'),
+        backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        title: Text(
+          'Designations',
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: 20,
+            color: isDark ? Colors.white : const Color(0xFF212F3D),
+            letterSpacing: -0.5,
+          ),
+        ),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: Icon(
+            Icons.arrow_back_rounded,
+            color: isDark ? Colors.white.withOpacity(0.8) : const Color(0xFF212F3D),
+          ),
           onPressed: () => context.canPop() ? context.pop() : context.go('/home'),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh_rounded, color: Color(0xFFC5A059)),
+            tooltip: 'Refresh',
             onPressed: _refreshAll,
           ),
+          const SizedBox(width: 8),
         ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1.5),
+          child: Container(
+            color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+            height: 1.5,
+          ),
+        ),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Text(
-            'Create job designations for employees, then alias accounts (HOI-GIT, …) linked to positions.',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.textSecondary,
-                ),
-          ),
-          const SizedBox(height: 16),
-          _buildCreateDesignationCard(),
-          const SizedBox(height: 16),
-          jobDesignations.when(
-            data: (list) => _buildDesignationsList(list),
-            loading: () => const _LoadingCard(),
-            error: (err, _) => _ErrorCard(
-              message: 'Failed to load designations',
-              detail: '$err',
-              onRetry: () => ref.invalidate(jobDesignationsProvider),
+      body: TweenAnimationBuilder<double>(
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeOutCubic,
+        tween: Tween(begin: 0.0, end: 1.0),
+        builder: (context, value, child) {
+          return Transform.translate(
+            offset: Offset(0.0, 30.0 * (1.0 - value)),
+            child: Opacity(opacity: value, child: child),
+          );
+        },
+        child: ListView(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+          children: [
+            Text(
+              'Create job designations for employees, then alias accounts (HOI-GIT, …) linked to positions.',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.white54 : const Color(0xFF607D8B),
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
-          positions.when(
-            data: (list) {
-              if (list.isEmpty) return const SizedBox.shrink();
-              return _buildPositionsReference(list);
-            },
-            loading: () => const SizedBox.shrink(),
-            error: (_, __) => const SizedBox.shrink(),
-          ),
-          const SizedBox(height: 16),
-          _AliasAccountsSection(
-            slotsAsync: slots,
-            onRefresh: _refreshAll,
-          ),
-        ],
+            const SizedBox(height: 20),
+            _buildCreateDesignationCard(isDark),
+            const SizedBox(height: 20),
+            jobDesignations.when(
+              data: (list) => _buildDesignationsList(list, isDark),
+              loading: () => _LoadingCard(isDark: isDark),
+              error: (err, _) => _ErrorCard(
+                isDark: isDark,
+                message: 'Failed to load designations',
+                detail: '$err',
+                onRetry: () => ref.invalidate(jobDesignationsProvider),
+              ),
+            ),
+            const SizedBox(height: 20),
+            positions.when(
+              data: (list) {
+                if (list.isEmpty) return const SizedBox.shrink();
+                return _buildPositionsReference(list, isDark);
+              },
+              loading: () => const SizedBox.shrink(),
+              error: (_, __) => const SizedBox.shrink(),
+            ),
+            const SizedBox(height: 20),
+            _AliasAccountsSection(
+              slotsAsync: slots,
+              onRefresh: _refreshAll,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -104,48 +140,92 @@ class _DesignationsScreenState extends ConsumerState<DesignationsScreen> {
     ref.invalidate(activeInstitutesProvider);
   }
 
-  Widget _buildCreateDesignationCard() {
+  Widget _buildCreateDesignationCard(bool isDark) {
     return Card(
       elevation: 0,
+      color: isDark ? const Color(0xFF1E1B18) : Colors.white,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: AppColors.border),
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+          width: 1.5,
+        ),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              'Add job designation',
-              style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.midnight),
+            Row(
+              children: [
+                const Icon(Icons.badge_rounded, color: Color(0xFFC5A059), size: 20),
+                const SizedBox(width: 10),
+                Text(
+                  'Add Job Designation',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14,
+                    color: isDark ? Colors.white : const Color(0xFF212F3D),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 4),
-            const Text(
+            const SizedBox(height: 6),
+            Text(
               'For employees (Professor, Clerk, …). Supports salary structures.',
-              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: isDark ? Colors.white38 : const Color(0xFF607D8B),
+              ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             TextField(
               controller: _nameCtrl,
-              decoration: const InputDecoration(labelText: 'Name'),
+              decoration: InputDecoration(
+                labelText: 'Name',
+                labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+                prefixIcon: const Icon(Icons.work_rounded, color: Color(0xFFC5A059), size: 18),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(
+                    color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: Color(0xFFC5A059), width: 1.5),
+                ),
+              ),
+              style: const TextStyle(fontWeight: FontWeight.w600),
+              onChanged: (_) => setState(() {}),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             Align(
               alignment: Alignment.centerRight,
-              child: FilledButton(
-                onPressed: _creating || _nameCtrl.text.trim().isEmpty ? null : _createDesignation,
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.bronze,
-                  foregroundColor: AppColors.midnight,
+              child: SizedBox(
+                height: 40,
+                child: FilledButton.icon(
+                  onPressed: _creating || _nameCtrl.text.trim().isEmpty ? null : _createDesignation,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+                    foregroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
+                    disabledBackgroundColor: isDark ? const Color(0xFFC5A059).withOpacity(0.3) : const Color(0xFFCFD8DC),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  icon: _creating
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.add_rounded, size: 16),
+                  label: Text(
+                    _creating ? 'Adding…' : 'Add',
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
                 ),
-                child: _creating
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Add'),
               ),
             ),
           ],
@@ -154,100 +234,257 @@ class _DesignationsScreenState extends ConsumerState<DesignationsScreen> {
     );
   }
 
-  Widget _buildDesignationsList(List<Designation> list) {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: AppColors.border),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'Job designations',
-              style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.midnight),
-            ),
-            const SizedBox(height: 12),
-            if (list.isEmpty)
-              const Text('No designations yet.', style: TextStyle(color: AppColors.textSecondary))
-            else
-              ...list.map((d) => _designationRow(d)),
-          ],
+  Widget _buildDesignationsList(List<Designation> list, bool isDark) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Row(
+            children: [
+              const Icon(Icons.list_alt_rounded, color: Color(0xFFC5A059), size: 20),
+              const SizedBox(width: 10),
+              Text(
+                'Job Designations',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 14,
+                  color: isDark ? Colors.white : const Color(0xFF212F3D),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF2B2722) : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                  ),
+                ),
+                child: Text(
+                  '${list.length}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
-      ),
+        if (list.isEmpty)
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.all(40),
+              child: Column(
+                children: [
+                  Icon(Icons.badge_rounded, size: 64, color: isDark ? Colors.white10 : Colors.black12),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No designations yet.',
+                    style: TextStyle(
+                      color: isDark ? Colors.white30 : const Color(0xFF607D8B).withOpacity(0.6),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          ...list.map((d) => _designationRow(d, isDark)),
+      ],
     );
   }
 
-  Widget _designationRow(Designation d) {
+  Widget _designationRow(Designation d, bool isDark) {
     return Opacity(
-      opacity: d.isActive ? 1 : 0.6,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Row(
-          children: [
-            Expanded(child: Text(d.name)),
-            Text(
-              d.isActive ? 'Active' : 'Inactive',
-              style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
-            ),
-            Switch(
-              value: d.isActive,
-              activeThumbColor: AppColors.bronze,
-              onChanged: (checked) => _toggleDesignation(d.id, checked),
-            ),
-          ],
+      opacity: d.isActive ? 1 : 0.5,
+      child: Card(
+        elevation: 0,
+        margin: const EdgeInsets.only(bottom: 10),
+        color: isDark ? const Color(0xFF1E1B18) : Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(
+            color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+            width: 1.5,
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF2B2722) : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                  ),
+                ),
+                child: Icon(
+                  Icons.work_rounded,
+                  color: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Text(
+                  d.name,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                    color: isDark ? Colors.white : const Color(0xFF212F3D),
+                  ),
+                ),
+              ),
+              Container(
+                margin: const EdgeInsets.only(right: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: d.isActive
+                      ? Colors.green.withOpacity(0.1)
+                      : Colors.grey.withOpacity(0.1),
+                  border: Border.all(
+                    color: d.isActive ? Colors.green : Colors.grey,
+                    width: 1.2,
+                  ),
+                  borderRadius: BorderRadius.circular(30),
+                ),
+                child: Text(
+                  d.isActive ? 'ACTIVE' : 'INACTIVE',
+                  style: TextStyle(
+                    fontSize: 8,
+                    fontWeight: FontWeight.w800,
+                    color: d.isActive ? Colors.green : Colors.grey,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+              Switch(
+                value: d.isActive,
+                activeColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+                onChanged: (checked) => _toggleDesignation(d.id, checked),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildPositionsReference(List<Designation> positions) {
+  Widget _buildPositionsReference(List<Designation> positions, bool isDark) {
     return Card(
       elevation: 0,
+      color: isDark ? const Color(0xFF1E1B18) : Colors.white,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: AppColors.border),
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+          width: 1.5,
+        ),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              'Positions',
-              style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.midnight),
+            Row(
+              children: [
+                const Icon(Icons.account_tree_rounded, color: Color(0xFFC5A059), size: 20),
+                const SizedBox(width: 10),
+                Text(
+                  'Positions',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14,
+                    color: isDark ? Colors.white : const Color(0xFF212F3D),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF2B2722) : const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                    ),
+                  ),
+                  child: Text(
+                    '${positions.length}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
+                    ),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 4),
-            const Text(
+            const SizedBox(height: 6),
+            Text(
               'Created from Workforce. Edit permissions in Roles & Permissions.',
-              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: isDark ? Colors.white38 : const Color(0xFF607D8B),
+              ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             Wrap(
-              spacing: 8,
-              runSpacing: 8,
+              spacing: 10,
+              runSpacing: 10,
               children: positions.map((p) {
                 return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
-                    border: Border.all(color: AppColors.border),
-                    borderRadius: BorderRadius.circular(10),
+                    color: isDark ? const Color(0xFF2B2722) : const Color(0xFFF1F5F9),
+                    border: Border.all(
+                      color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                      width: 1.5,
+                    ),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(p.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                      Icon(
+                        Icons.person_rounded,
+                        color: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+                        size: 16,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        p.name,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                          color: isDark ? Colors.white : const Color(0xFF212F3D),
+                        ),
+                      ),
                       if (p.linkedRole != null) ...[
                         const SizedBox(width: 8),
-                        Text(
-                          p.linkedRole!.name,
-                          style: const TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.midnight,
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFE8F5E9),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            p.linkedRole!.name,
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF2E7D32),
+                            ),
                           ),
                         ),
                       ],
@@ -274,7 +511,7 @@ class _DesignationsScreenState extends ConsumerState<DesignationsScreen> {
       messenger.showSnackBar(const SnackBar(content: Text('Designation added')));
     } catch (e) {
       messenger.showSnackBar(
-        SnackBar(content: Text('Failed: $e'), backgroundColor: AppColors.error),
+        SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.red),
       );
     } finally {
       if (mounted) setState(() => _creating = false);
@@ -288,9 +525,32 @@ class _DesignationsScreenState extends ConsumerState<DesignationsScreen> {
       ref.invalidate(jobDesignationsProvider);
     } catch (e) {
       messenger.showSnackBar(
-        SnackBar(content: Text('Update failed: $e'), backgroundColor: AppColors.error),
+        SnackBar(content: Text('Update failed: $e'), backgroundColor: Colors.red),
       );
     }
+  }
+
+  Widget _accessDenied(bool isDark) {
+    return Scaffold(
+      backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.gpp_bad_rounded, size: 64, color: Colors.red),
+            const SizedBox(height: 16),
+            Text(
+              'Access Denied',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                color: isDark ? Colors.white : const Color(0xFF212F3D),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -325,77 +585,155 @@ class _AliasAccountsSectionState extends ConsumerState<_AliasAccountsSection> {
     super.dispose();
   }
 
+  InputDecoration _styledInput(String label, IconData icon, bool isDark) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+      prefixIcon: Icon(icon, color: const Color(0xFFC5A059), size: 18),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: BorderSide(
+          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+        ),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: const BorderSide(color: Color(0xFFC5A059), width: 1.5),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final positionsAsync = ref.watch(positionDesignationsProvider);
     final institutesAsync = ref.watch(activeInstitutesProvider);
 
     return Card(
       elevation: 0,
+      color: isDark ? const Color(0xFF1E1B18) : Colors.white,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: AppColors.border),
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+          width: 1.5,
+        ),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              'Alias accounts',
-              style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.midnight),
+            Row(
+              children: [
+                const Icon(Icons.manage_accounts_rounded, color: Color(0xFFC5A059), size: 20),
+                const SizedBox(width: 10),
+                Text(
+                  'Alias Accounts',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14,
+                    color: isDark ? Colors.white : const Color(0xFF212F3D),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 4),
-            const Text(
+            const SizedBox(height: 6),
+            Text(
               'Institute logins (e.g. HOI-GIT). Each picks a position and inherits its permissions.',
-              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: isDark ? Colors.white38 : const Color(0xFF607D8B),
+              ),
             ),
             const SizedBox(height: 16),
             positionsAsync.when(
               data: (positions) {
                 if (positions.isEmpty) {
                   return Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: AppColors.errorSoft,
-                      borderRadius: BorderRadius.circular(8),
+                      color: Colors.orange.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.orange.withOpacity(0.3)),
                     ),
-                    child: const Text(
-                      'No positions yet. Create one from Workforce → Positions first.',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 20),
+                        const SizedBox(width: 10),
+                        const Expanded(
+                          child: Text(
+                            'No positions yet. Create one from Workforce → Positions first.',
+                            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                          ),
+                        ),
+                      ],
                     ),
                   );
                 }
-                return _buildForm(positions, institutesAsync);
+                return _buildForm(positions, institutesAsync, isDark);
               },
-              loading: () => const _LoadingCard(),
+              loading: () => _LoadingCard(isDark: isDark),
               error: (err, _) => _ErrorCard(
+                isDark: isDark,
                 message: 'Failed to load positions',
                 detail: '$err',
                 onRetry: () => ref.invalidate(positionDesignationsProvider),
               ),
             ),
-            const Divider(height: 32),
-            const Text(
-              'EXISTING ALIAS ACCOUNTS',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1,
-                color: AppColors.textSecondary,
-              ),
+            const SizedBox(height: 24),
+            Container(
+              height: 1.5,
+              color: isDark ? const Color(0xFFC5A059).withOpacity(0.1) : const Color(0xFFCFD8DC),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                const Icon(Icons.key_rounded, color: Color(0xFFC5A059), size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  'EXISTING ALIAS ACCOUNTS',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1,
+                    color: isDark ? Colors.white54 : const Color(0xFF607D8B),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 12),
             widget.slotsAsync.when(
               data: (slots) {
                 if (slots.isEmpty) {
-                  return const Text('None yet.', style: TextStyle(color: AppColors.textSecondary));
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        children: [
+                          Icon(Icons.key_off_rounded, size: 48, color: isDark ? Colors.white10 : Colors.black12),
+                          const SizedBox(height: 12),
+                          Text(
+                            'None yet.',
+                            style: TextStyle(
+                              color: isDark ? Colors.white30 : const Color(0xFF607D8B).withOpacity(0.6),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
                 }
                 return Column(
-                  children: slots.map(_slotRow).toList(),
+                  children: slots.map((s) => _slotRow(s, isDark)).toList(),
                 );
               },
-              loading: () => const Center(child: CircularProgressIndicator(color: AppColors.bronze)),
+              loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFFC5A059))),
               error: (err, _) => _ErrorCard(
+                isDark: isDark,
                 message: 'Failed to load alias accounts',
                 detail: '$err',
                 onRetry: widget.onRefresh,
@@ -407,7 +745,7 @@ class _AliasAccountsSectionState extends ConsumerState<_AliasAccountsSection> {
     );
   }
 
-  Widget _buildForm(List<Designation> positions, AsyncValue<List<Institute>> institutesAsync) {
+  Widget _buildForm(List<Designation> positions, AsyncValue<List<Institute>> institutesAsync, bool isDark) {
     final selected = _designationId == null
         ? null
         : positions.cast<Designation?>().firstWhere(
@@ -421,7 +759,8 @@ class _AliasAccountsSectionState extends ConsumerState<_AliasAccountsSection> {
       children: [
         DropdownButtonFormField<String>(
           initialValue: _designationId,
-          decoration: const InputDecoration(labelText: 'Position'),
+          decoration: _styledInput('Position', Icons.account_tree_rounded, isDark),
+          dropdownColor: isDark ? const Color(0xFF2B2722) : Colors.white,
           items: positions
               .map(
                 (p) => DropdownMenuItem(
@@ -441,36 +780,80 @@ class _AliasAccountsSectionState extends ConsumerState<_AliasAccountsSection> {
             });
           },
         ),
-        const SizedBox(height: 12),
-        CheckboxListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('University-wide (no institute binding)'),
-          subtitle: const Text('For IT Admin, VC, Registrar, etc.'),
-          value: _universityWide,
-          onChanged: (v) {
-            setState(() {
-              _universityWide = v ?? false;
-              if (_universityWide) {
-                _instituteId = null;
-              } else {
-                _grantUniversityAccess = false;
-              }
-              _syncCodeName(selected, instituteList);
-            });
-          },
-        ),
-        if (_universityWide)
-          CheckboxListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Grant full university admin access'),
-            value: _grantUniversityAccess,
-            onChanged: (v) => setState(() => _grantUniversityAccess = v ?? false),
+        const SizedBox(height: 14),
+        Container(
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF2B2722) : const Color(0xFFF1F5F9),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isDark ? const Color(0xFFC5A059).withOpacity(0.1) : const Color(0xFFCFD8DC),
+            ),
           ),
-        if (!_universityWide)
+          child: CheckboxListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+            title: Text(
+              'University-wide (no institute binding)',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+                color: isDark ? Colors.white : const Color(0xFF212F3D),
+              ),
+            ),
+            subtitle: Text(
+              'For IT Admin, VC, Registrar, etc.',
+              style: TextStyle(
+                fontSize: 11,
+                color: isDark ? Colors.white38 : const Color(0xFF607D8B),
+              ),
+            ),
+            value: _universityWide,
+            activeColor: const Color(0xFFC5A059),
+            onChanged: (v) {
+              setState(() {
+                _universityWide = v ?? false;
+                if (_universityWide) {
+                  _instituteId = null;
+                } else {
+                  _grantUniversityAccess = false;
+                }
+                _syncCodeName(selected, instituteList);
+              });
+            },
+          ),
+        ),
+        if (_universityWide) ...[
+          const SizedBox(height: 8),
+          Container(
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF2B2722) : const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: isDark ? const Color(0xFFC5A059).withOpacity(0.1) : const Color(0xFFCFD8DC),
+              ),
+            ),
+            child: CheckboxListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+              title: Text(
+                'Grant full university admin access',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                  color: isDark ? Colors.white : const Color(0xFF212F3D),
+                ),
+              ),
+              value: _grantUniversityAccess,
+              activeColor: const Color(0xFFC5A059),
+              onChanged: (v) => setState(() => _grantUniversityAccess = v ?? false),
+            ),
+          ),
+        ],
+        if (!_universityWide) ...[
+          const SizedBox(height: 14),
           institutesAsync.when(
             data: (institutes) => DropdownButtonFormField<String>(
               initialValue: _instituteId,
-              decoration: const InputDecoration(labelText: 'Institute'),
+              decoration: _styledInput('Institute', Icons.domain_rounded, isDark),
+              dropdownColor: isDark ? const Color(0xFF2B2722) : Colors.white,
               items: institutes
                   .map(
                     (i) => DropdownMenuItem(
@@ -486,48 +869,78 @@ class _AliasAccountsSectionState extends ConsumerState<_AliasAccountsSection> {
                 });
               },
             ),
-            loading: () => const LinearProgressIndicator(),
-            error: (_, __) => const Text('Failed to load institutes'),
-          ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _codeCtrl,
-          decoration: const InputDecoration(labelText: 'Login code'),
-          textCapitalization: TextCapitalization.characters,
-        ),
-        const SizedBox(height: 8),
-        TextField(
-          controller: _nameCtrl,
-          decoration: const InputDecoration(labelText: 'Display name'),
-        ),
-        const SizedBox(height: 8),
-        TextField(
-          controller: _passwordCtrl,
-          decoration: const InputDecoration(labelText: 'Initial password'),
-          obscureText: true,
-        ),
-        if (selected != null && selected.linkedRoleId == null)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text(
-              'This position has no role linked.',
-              style: TextStyle(color: AppColors.error.withValues(alpha: 0.9)),
+            loading: () => const LinearProgressIndicator(color: Color(0xFFC5A059)),
+            error: (_, __) => Text(
+              'Failed to load institutes',
+              style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
             ),
           ),
-        const SizedBox(height: 12),
-        FilledButton(
-          onPressed: _canSubmit(selected) && !_creating ? _createAlias : null,
-          style: FilledButton.styleFrom(
-            backgroundColor: AppColors.midnight,
-            foregroundColor: Colors.white,
+        ],
+        const SizedBox(height: 14),
+        TextField(
+          controller: _codeCtrl,
+          decoration: _styledInput('Login code', Icons.tag_rounded, isDark),
+          style: const TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1),
+          textCapitalization: TextCapitalization.characters,
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _nameCtrl,
+          decoration: _styledInput('Display name', Icons.label_rounded, isDark),
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _passwordCtrl,
+          decoration: _styledInput('Initial password', Icons.lock_rounded, isDark),
+          obscureText: true,
+        ),
+        if (selected != null && selected.linkedRoleId == null) ...[
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.red.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.red.withOpacity(0.3)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.warning_rounded, color: Colors.red, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'This position has no role linked.',
+                    style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600, fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
           ),
-          child: _creating
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                )
-              : const Text('Create alias account'),
+        ],
+        const SizedBox(height: 16),
+        SizedBox(
+          height: 44,
+          child: FilledButton.icon(
+            onPressed: _canSubmit(selected) && !_creating ? _createAlias : null,
+            style: FilledButton.styleFrom(
+              backgroundColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+              foregroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
+              disabledBackgroundColor: isDark ? const Color(0xFFC5A059).withOpacity(0.3) : const Color(0xFFCFD8DC),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            icon: _creating
+                ? const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  )
+                : const Icon(Icons.person_add_alt_1_rounded, size: 18),
+            label: Text(
+              _creating ? 'Creating…' : 'Create Alias Account',
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
+          ),
         ),
       ],
     );
@@ -562,6 +975,7 @@ class _AliasAccountsSectionState extends ConsumerState<_AliasAccountsSection> {
   Future<void> _createAlias() async {
     setState(() => _creating = true);
     final messenger = ScaffoldMessenger.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     try {
       final result = await ref.read(orgRepositoryProvider).createPositionSlot(
             code: _codeCtrl.text.trim().toUpperCase(),
@@ -576,12 +990,39 @@ class _AliasAccountsSectionState extends ConsumerState<_AliasAccountsSection> {
       showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Alias created'),
+          backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              const Icon(Icons.check_circle_rounded, color: Colors.green, size: 22),
+              const SizedBox(width: 8),
+              Text(
+                'Alias Created',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  color: isDark ? Colors.white : const Color(0xFF212F3D),
+                ),
+              ),
+            ],
+          ),
           content: Text(
             'Login: ${result.loginId ?? result.slot.code}\nPassword: ${result.password ?? _passwordCtrl.text}',
+            style: TextStyle(
+              fontFamily: 'monospace',
+              fontWeight: FontWeight.w600,
+              color: isDark ? Colors.white70 : const Color(0xFF263238),
+            ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK')),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx),
+              style: FilledButton.styleFrom(
+                backgroundColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+                foregroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text('OK', style: TextStyle(fontWeight: FontWeight.w800)),
+            ),
           ],
         ),
       );
@@ -595,58 +1036,94 @@ class _AliasAccountsSectionState extends ConsumerState<_AliasAccountsSection> {
       });
     } catch (e) {
       messenger.showSnackBar(
-        SnackBar(content: Text('Failed: $e'), backgroundColor: AppColors.error),
+        SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.red),
       );
     } finally {
       if (mounted) setState(() => _creating = false);
     }
   }
 
-  Widget _slotRow(PositionSlot slot) {
+  Widget _slotRow(PositionSlot slot, bool isDark) {
     final active = slot.user?.isActive ?? false;
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        border: Border.all(color: AppColors.border),
-        borderRadius: BorderRadius.circular(10),
+        color: isDark ? const Color(0xFF2B2722) : const Color(0xFFF8FAFC),
+        border: Border.all(
+          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+          width: 1.5,
+        ),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1A1816) : Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+              ),
+            ),
+            child: Icon(
+              Icons.key_rounded,
+              color: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+              size: 18,
+            ),
+          ),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   slot.code,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: 'monospace',
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.midnight,
+                    fontWeight: FontWeight.w800,
+                    color: isDark ? Colors.white : const Color(0xFF212F3D),
                   ),
                 ),
-                Text(slot.name, style: const TextStyle(fontSize: 13)),
+                const SizedBox(height: 2),
+                Text(
+                  slot.name,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white70 : const Color(0xFF263238),
+                  ),
+                ),
+                const SizedBox(height: 4),
                 Text(
                   'Position: ${slot.designation.name} · Role: ${slot.linkedRole.name}'
                   '${slot.subOrganization != null ? ' · ${slot.subOrganization}' : ' · University-wide'}',
-                  style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: isDark ? Colors.white38 : const Color(0xFF607D8B),
+                  ),
                 ),
               ],
             ),
           ),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
-              color: active ? AppColors.successSoft : AppColors.mist,
-              borderRadius: BorderRadius.circular(999),
+              color: active ? Colors.green.withOpacity(0.1) : Colors.grey.withOpacity(0.1),
+              border: Border.all(color: active ? Colors.green : Colors.grey, width: 1.2),
+              borderRadius: BorderRadius.circular(30),
             ),
             child: Text(
-              active ? 'Active' : 'Inactive',
+              active ? 'ACTIVE' : 'INACTIVE',
               style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: active ? AppColors.success : AppColors.textSecondary,
+                fontSize: 8,
+                fontWeight: FontWeight.w800,
+                color: active ? Colors.green : Colors.grey,
+                letterSpacing: 0.5,
               ),
             ),
           ),
@@ -657,14 +1134,24 @@ class _AliasAccountsSectionState extends ConsumerState<_AliasAccountsSection> {
 }
 
 class _LoadingCard extends StatelessWidget {
-  const _LoadingCard();
+  const _LoadingCard({required this.isDark});
+  final bool isDark;
 
   @override
   Widget build(BuildContext context) {
-    return const Card(
-      child: Padding(
-        padding: EdgeInsets.all(32),
-        child: Center(child: CircularProgressIndicator(color: AppColors.bronze)),
+    return Card(
+      elevation: 0,
+      color: isDark ? const Color(0xFF1E1B18) : Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+          width: 1.5,
+        ),
+      ),
+      child: const Padding(
+        padding: EdgeInsets.all(40),
+        child: Center(child: CircularProgressIndicator(color: Color(0xFFC5A059))),
       ),
     );
   }
@@ -672,11 +1159,13 @@ class _LoadingCard extends StatelessWidget {
 
 class _ErrorCard extends StatelessWidget {
   const _ErrorCard({
+    required this.isDark,
     required this.message,
     required this.detail,
     required this.onRetry,
   });
 
+  final bool isDark;
   final String message;
   final String detail;
   final VoidCallback onRetry;
@@ -684,15 +1173,44 @@ class _ErrorCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
+      elevation: 0,
+      color: isDark ? const Color(0xFF1E1B18) : Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+          width: 1.5,
+        ),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           children: [
-            Text(message, style: const TextStyle(fontWeight: FontWeight.w600)),
+            const Icon(Icons.error_outline_rounded, size: 48, color: Colors.red),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                color: isDark ? Colors.white : const Color(0xFF212F3D),
+              ),
+            ),
             const SizedBox(height: 8),
-            Text(detail, textAlign: TextAlign.center),
+            Text(
+              detail,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: isDark ? Colors.white54 : const Color(0xFF607D8B)),
+            ),
             const SizedBox(height: 16),
-            FilledButton(onPressed: onRetry, child: const Text('Retry')),
+            FilledButton(
+              onPressed: onRetry,
+              style: FilledButton.styleFrom(
+                backgroundColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+                foregroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text('Retry', style: TextStyle(fontWeight: FontWeight.w800)),
+            ),
           ],
         ),
       ),

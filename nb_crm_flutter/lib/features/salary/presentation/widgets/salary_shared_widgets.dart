@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/theme/app_colors.dart';
 
 class SalaryAsyncBody<T> extends StatelessWidget {
   const SalaryAsyncBody({
@@ -20,19 +19,19 @@ class SalaryAsyncBody<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return value.when(
-      loading: () => const Center(
-        child: CircularProgressIndicator(color: AppColors.bronze),
+      loading: () => Center(
+        child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary),
       ),
       error: (err, _) => Center(
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text('$err', textAlign: TextAlign.center),
               if (onRetry != null) ...[
-                const SizedBox(height: 12),
-                FilledButton(onPressed: onRetry, child: const Text('Retry')),
+                SizedBox(height: 12),
+                FilledButton(onPressed: onRetry, child: Text('Retry')),
               ],
             ],
           ),
@@ -40,7 +39,31 @@ class SalaryAsyncBody<T> extends StatelessWidget {
       ),
       data: (data) {
         if (data is List && data.isEmpty) {
-          return Center(child: Text(emptyMessage));
+          final isDark = Theme.of(context).brightness == Brightness.dark;
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.account_balance_wallet_outlined,
+                    size: 64,
+                    color: isDark ? Colors.white10 : Colors.black12,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    emptyMessage,
+                    style: TextStyle(
+                      color: isDark ? Colors.white30 : const Color(0xFF607D8B).withOpacity(0.6),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
         }
         return builder(data);
       },
@@ -94,18 +117,24 @@ String columnDisplayLabel(String identifier) {
   return labels[identifier] ?? identifier.replaceAll('_', ' ');
 }
 
-Widget salaryStatusChip(String status) {
+Widget salaryStatusChip(BuildContext context, String status) {
   final finalized = status.toUpperCase() == 'FINALIZED';
-  final color = finalized ? AppColors.success : AppColors.bronzeDark;
+  final color = finalized ? Colors.green : Colors.orange;
   return Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
     decoration: BoxDecoration(
-      color: color.withValues(alpha: 0.12),
-      borderRadius: BorderRadius.circular(999),
+      color: color.withOpacity(0.12),
+      border: Border.all(color: color, width: 1.2),
+      borderRadius: BorderRadius.circular(30),
     ),
     child: Text(
-      status,
-      style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w700),
+      status.toUpperCase(),
+      style: TextStyle(
+        color: color,
+        fontSize: 10,
+        fontWeight: FontWeight.w800,
+        letterSpacing: 0.5,
+      ),
     ),
   );
 }
@@ -118,7 +147,7 @@ Widget salarySectionCard({
   return Card(
     margin: EdgeInsets.zero,
     child: Padding(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -129,7 +158,7 @@ Widget salarySectionCard({
               color: titleColor,
             ),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           child,
         ],
       ),

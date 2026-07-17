@@ -11,7 +11,7 @@ class AuthState {
   const AuthState({
     required this.status,
     this.user,
-    this.permissions = const {},
+    this.permissions = const <String, List<String>>{},
     this.isFirstLogin = false,
     this.errorMessage,
     this.infoMessage,

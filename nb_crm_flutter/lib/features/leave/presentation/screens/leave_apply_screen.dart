@@ -105,17 +105,17 @@ class _LeaveApplyScreenState extends ConsumerState<LeaveApplyScreen> {
     final typesAsync = ref.watch(leaveTypesProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.sand,
+
       appBar: AppBar(
-        title: const Text('Apply Leave'),
+        title: Text('Apply Leave'),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: Icon(Icons.arrow_back),
           onPressed: () => context.go('/leave'),
         ),
       ),
       body: typesAsync.when(
-        loading: () => const Center(
-          child: CircularProgressIndicator(color: AppColors.bronze),
+        loading: () => Center(
+          child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary),
         ),
         error: (e, _) => Center(
           child: Column(
@@ -124,7 +124,7 @@ class _LeaveApplyScreenState extends ConsumerState<LeaveApplyScreen> {
               Text('$e'),
               FilledButton(
                 onPressed: () => ref.invalidate(leaveTypesProvider),
-                child: const Text('Retry'),
+                child: Text('Retry'),
               ),
             ],
           ),
@@ -132,7 +132,7 @@ class _LeaveApplyScreenState extends ConsumerState<LeaveApplyScreen> {
         data: (types) {
           final applicable = types.where((t) => t.employeeCanApply && t.isActive).toList();
           return SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.all(16),
             child: Form(
               key: _formKey,
               child: Column(
@@ -150,7 +150,7 @@ class _LeaveApplyScreenState extends ConsumerState<LeaveApplyScreen> {
                     onChanged: (v) => setState(() => _leaveTypeId = v),
                     validator: (v) => v == null ? 'Select leave type' : null,
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: 16),
                   Row(
                     children: [
                       Expanded(
@@ -163,7 +163,7 @@ class _LeaveApplyScreenState extends ConsumerState<LeaveApplyScreen> {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      SizedBox(width: 12),
                       Expanded(
                         child: OutlinedButton(
                           onPressed: () => _pickDate(isFrom: false),
@@ -174,10 +174,10 @@ class _LeaveApplyScreenState extends ConsumerState<LeaveApplyScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: 16),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: const Text('Half day'),
+                    title: Text('Half day'),
                     value: _isHalfDay,
                     onChanged: (v) => setState(() {
                       _isHalfDay = v;
@@ -191,13 +191,13 @@ class _LeaveApplyScreenState extends ConsumerState<LeaveApplyScreen> {
                         labelText: 'Session *',
                         border: OutlineInputBorder(),
                       ),
-                      items: const [
+                      items: [
                         DropdownMenuItem(value: 'MORNING', child: Text('Morning')),
                         DropdownMenuItem(value: 'AFTERNOON', child: Text('Afternoon')),
                       ],
                       onChanged: (v) => setState(() => _halfDaySession = v),
                     ),
-                    const SizedBox(height: 16),
+                    SizedBox(height: 16),
                   ],
                   TextFormField(
                     controller: _reasonController,
@@ -213,7 +213,7 @@ class _LeaveApplyScreenState extends ConsumerState<LeaveApplyScreen> {
                       return null;
                     },
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: 16),
                   InputDecorator(
                     decoration: const InputDecoration(
                       labelText: 'Supporting document',
@@ -227,20 +227,20 @@ class _LeaveApplyScreenState extends ConsumerState<LeaveApplyScreen> {
                             style: TextStyle(color: AppColors.textSecondary),
                           ),
                         ),
-                        TextButton(onPressed: null, child: const Text('Upload')),
+                        TextButton(onPressed: null, child: Text('Upload')),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 24),
+                  SizedBox(height: 24),
                   FilledButton(
                     onPressed: _submitting ? null : _submit,
                     child: _submitting
-                        ? const SizedBox(
+                        ? SizedBox(
                             height: 20,
                             width: 20,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Text('Submit application'),
+                        : Text('Submit application'),
                   ),
                 ],
               ),

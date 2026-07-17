@@ -263,6 +263,124 @@ export const attendanceService = {
     }));
   },
 
+  /**
+   * Admin: multi-day punch history for one employee with policy evaluation per day.
+   */
+  async getAdminEmployeeHistory(params: {
+    employeeId: number;
+    from: string;
+    to: string;
+  }) {
+    parseYmd(params.from);
+    parseYmd(params.to);
+
+    const employee = await prisma.employee.findUnique({
+      where: { id: params.employeeId },
+      include: {
+        generalInfo: {
+          select: { fullName: true, employeeCode: true, designation: true, department: true },
+        },
+      },
+    });
+    if (!employee) throw new Error('Employee not found');
+
+    const { from: fromUtc } = istDayRangeUtc(params.from);
+    const toExclusive = new Date(istDayStartUtc(params.to).getTime() + 24 * 60 * 60 * 1000);
+
+    const punches = await prisma.attendancePunch.findMany({
+      where: {
+        employeeId: params.employeeId,
+        punchAt: { gte: fromUtc, lt: toExclusive },
+      },
+      orderBy: { punchAt: 'asc' },
+      select: { id: true, punchAt: true, terminalId: true, punchType: true, source: true },
+    });
+
+    const policy = await getAttendancePolicy();
+    const defaultInMin = parseHmToMinutes(policy.defaultPunchInTime);
+    const defaultOutMin = parseHmToMinutes(policy.defaultPunchOutTime);
+    const lateAfterMin = defaultInMin + policy.punchInBufferMinutes;
+    const eligibleOutAfterMin = defaultOutMin - policy.punchOutBufferMinutes;
+
+    type PunchRow = {
+      id: string;
+      punchAt: string;
+      terminalId: string | null;
+      punchType: string | null;
+      source: string;
+    };
+    const byDay: Record<string, PunchRow[]> = {};
+    for (const p of punches) {
+      const iso = new Date(p.punchAt).toISOString();
+      const key = istKeyFromUtcDate(new Date(p.punchAt));
+      const arr = byDay[key] ?? (byDay[key] = []);
+      arr.push({
+        id: p.id,
+        punchAt: iso,
+        terminalId: p.terminalId ?? null,
+        punchType: p.punchType ?? null,
+        source: String(p.source),
+      });
+    }
+
+    // Iterate every IST day in [from, to] inclusive so empty days appear.
+    const days: Array<{
+      date: string;
+      firstIn: string | null;
+      lastOut: string | null;
+      totalMinutes: number;
+      punches: PunchRow[];
+      isLate: boolean | null;
+      isHalfDay: boolean | null;
+      meetsPunchOut: boolean | null;
+    }> = [];
+
+    let cursor = istDayStartUtc(params.from);
+    const end = istDayStartUtc(params.to);
+    while (cursor.getTime() <= end.getTime()) {
+      const date = istKeyFromUtcDate(cursor);
+      const dayPunches = byDay[date] ?? [];
+      const firstIn = dayPunches[0]?.punchAt ?? null;
+      const lastOut = dayPunches.length ? dayPunches[dayPunches.length - 1].punchAt : null;
+      const totalMinutes =
+        firstIn && lastOut
+          ? Math.max(0, Math.floor((new Date(lastOut).getTime() - new Date(firstIn).getTime()) / 60000))
+          : 0;
+      const punchInMin = firstIn ? minutesInIstDayFromUtcDate(new Date(firstIn)) : null;
+      const punchOutMin = lastOut ? minutesInIstDayFromUtcDate(new Date(lastOut)) : null;
+      const isLate = punchInMin == null ? null : punchInMin > lateAfterMin;
+      const isHalfDay = isLate;
+      const meetsPunchOut = punchOutMin == null ? null : punchOutMin >= eligibleOutAfterMin;
+
+      days.push({
+        date,
+        firstIn,
+        lastOut,
+        totalMinutes,
+        punches: dayPunches,
+        isLate,
+        isHalfDay,
+        meetsPunchOut,
+      });
+
+      cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
+    }
+
+    return {
+      employee: {
+        employeeId: employee.id,
+        fullName: employee.generalInfo?.fullName ?? `Employee #${employee.id}`,
+        employeeCode: employee.generalInfo?.employeeCode ?? null,
+        designation: employee.generalInfo?.designation ?? null,
+        department: employee.generalInfo?.department ?? null,
+      },
+      from: params.from,
+      to: params.to,
+      policy,
+      days,
+    };
+  },
+
   async createAdminPunch(params: { employeeId: number; punchAt: string; punchType?: string | null; terminalId?: string | null }) {
     const dt = new Date(params.punchAt);
     if (!Number.isFinite(dt.getTime())) throw new Error('Invalid punchAt datetime');

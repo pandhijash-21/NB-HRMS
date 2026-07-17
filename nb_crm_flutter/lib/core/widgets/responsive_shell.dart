@@ -6,7 +6,6 @@ import 'radial_menu.dart';
 import '../../features/auth/domain/permissions.dart';
 import '../../features/auth/presentation/auth_providers.dart';
 import '../theme/theme_provider.dart';
-import '../theme/app_colors.dart';
 
 class ResponsiveShell extends ConsumerStatefulWidget {
   const ResponsiveShell({super.key, required this.child});
@@ -113,7 +112,13 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
         'Profile',
       ),
       if (Permissions.canReadLeave(auth.permissions) ||
-          Permissions.canWriteLeave(auth.permissions))
+          Permissions.canWriteLeave(auth.permissions) ||
+          canApproveLeave ||
+          Permissions.canAdminLeave(
+            auth.permissions,
+            auth.user?.role ?? '',
+            auth.user?.employeeViewScope,
+          ))
         const _Destination(
           '/leave',
           Icons.event_available_outlined,
@@ -148,13 +153,6 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
           Icons.shield,
           'Roles',
         ),
-      if (canApproveLeave)
-        const _Destination(
-          '/approvals',
-          Icons.rule_outlined,
-          Icons.rule,
-          'Leave Approvals',
-        ),
       if (isHR)
         const _Destination(
           '/admin/approvals',
@@ -166,7 +164,14 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
 
     final currentPath = GoRouterState.of(context).matchedLocation;
     final selectedIndex = destinations
-        .indexWhere((d) => currentPath.startsWith(d.route))
+        .indexWhere((d) {
+          if (d.route == '/leave') {
+            return currentPath.startsWith('/leave') ||
+                currentPath.startsWith('/approvals') ||
+                currentPath.startsWith('/admin/leaves');
+          }
+          return currentPath.startsWith(d.route);
+        })
         .clamp(0, destinations.length - 1);
 
     // Ensure index doesn't fall below 0 if not matched exactly

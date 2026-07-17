@@ -1,11 +1,10 @@
-import type { DegreeType } from '@prisma/client';
 import { prisma } from '../../config/prisma';
 
 type AcademicInput = {
   id?: string;
-  degreeType: DegreeType;
+  degreeType: string;
   degreeName?: string | null;
-  medium?: any;
+  medium?: string | null;
   boardUniversity: string;
   schoolCollege: string;
   passingYear: number;

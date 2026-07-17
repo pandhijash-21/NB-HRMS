@@ -77,6 +77,7 @@ enum DegreeType {
   BACHELOR     // UG degree     — compulsory
   MASTER       // PG degree     — compulsory
   PHD          // Doctorate     — optional
+  OTHER        // Other qualifications
 }
 
 enum AcademicMedium {
@@ -273,12 +274,12 @@ model EmployeeGeneralInfo {
   thirdApproverUser   User? @relation("ThirdApproverUser",  fields: [thirdApproverUserId],  references: [id])
 
   // Employment classification
-  employeeCategory     EmployeeCategory @map("employee_category")       // NON TEACHING
+  employeeCategory     String           @map("employee_category")       // NON_TEACHING (lookup)
   designation          String                                           // O.S. ESTABLISHMENT (legacy, synced from designationRef)
   designationId        String?          @map("designation_id")
   designationRef       Designation?     @relation(fields: [designationId], references: [id])
-  shift                String?                                          // GENERAL
-  appointmentType      AppointmentType? @map("appointment_type")        // Full Time-Regular
+  shift                String?                                          // GENERAL (lookup)
+  appointmentType      String?          @map("appointment_type")        // FULL_TIME_REGULAR (lookup)
   employeeCode         String?          @unique @map("employee_code")   // GU1234
 
   updatedAt            DateTime         @updatedAt @map("updated_at")
@@ -309,7 +310,7 @@ model EmployeeAssignment {
   designationId   String?  @map("designation_id")
   designationRef  Designation? @relation(fields: [designationId], references: [id])
   shift           String?
-  appointmentType AppointmentType? @map("appointment_type")
+  appointmentType String? @map("appointment_type")
 
   reason         String?
   changedBy      String   @map("changed_by")
@@ -344,11 +345,11 @@ model EmployeePersonalInfo {
   birthDate        DateTime      @map("birth_date")                     // 27/05/1974
   birthPlace       String?       @map("birth_place")                    // RUPAL
   homeTown         String?       @map("home_town")                      // RUPAL
-  gender           Gender
-  maritalStatus    MaritalStatus @map("marital_status")                 // MARRIED
-  nationality      String        @default("INDIAN")
-  motherTongue     String?       @map("mother_tongue")                  // GUJARATI
-  bloodGroup       BloodGroup?   @map("blood_group")                    // A+
+  gender           String                                               // MALE (lookup)
+  maritalStatus    String        @map("marital_status")                 // MARRIED (lookup)
+  nationality      String        @default("INDIAN")                     // lookup
+  motherTongue     String?       @map("mother_tongue")                  // GUJARATI (lookup)
+  bloodGroup       String?       @map("blood_group")                    // A_POS (lookup)
 
   // Caste — Indian govt. requirement
   castCategory     String?       @map("cast_category")                  // OPEN
@@ -365,6 +366,7 @@ model EmployeePersonalInfo {
   // Identity document scans — Cloudinary
   aadhaarCardUrl   String?       @map("aadhaar_card_url")
   panCardUrl       String?       @map("pan_card_url")
+  otherDocumentUrl String?       @map("other_document_url")
 
   // Passport — from PDF
   passportNo         String?     @map("passport_no")
@@ -469,7 +471,7 @@ model FamilyMember {
   employeeId     Int            @map("employee_id")
 
   // PDF fields
-  relation       FamilyRelation
+  relation       String                                                 // FATHER (lookup)
   name           String
   city           String?
   mobileNo       String?        @map("mobile_no")                       // 9998414432
@@ -480,6 +482,9 @@ model FamilyMember {
   aadhaarNo      String?        @map("aadhaar_no")                      // encrypted AES-256
   aadhaarUrl     String?        @map("aadhaar_url")                     // Cloudinary scan
   isNominee      Boolean        @default(false) @map("is_nominee")
+  isDependent    Boolean        @default(false) @map("is_dependent")
+  isEmployed     Boolean        @default(false) @map("is_employed")
+  employerName   String?        @map("employer_name")
 
   isActive       Boolean        @default(true) @map("is_active")
   deletedAt      DateTime?      @map("deleted_at")
@@ -514,9 +519,9 @@ model AcademicQualification {
   employeeId       Int             @map("employee_id")
 
   // PDF fields
-  degreeType       DegreeType      @map("degree_type")
+  degreeType       String          @map("degree_type")                  // SSC (lookup)
   degreeName       String?         @map("degree_name")                  // B.E. Computer Engineering
-  medium           AcademicMedium?
+  medium           String?                                              // ENGLISH (lookup)
   boardUniversity  String          @map("board_university")             // GSEB / GUJARAT UNIVERSITY
   schoolCollege    String          @map("school_college")               // Shree Vardayini High School, Rupal
   passingYear      Int             @map("passing_year")                 // 1990
@@ -576,7 +581,7 @@ enum ExperienceType {
 model EmployeeExperience {
   id                    String         @id @default(uuid())
   employeeId            Int            @map("employee_id")
-  type                  ExperienceType
+  type                  String                                          // TEACHING (lookup)
   designation           String
   organizationName      String         @map("organization_name")
   fromDate              DateTime       @map("from_date") @db.Date
@@ -1271,6 +1276,8 @@ model EmployeeBankInfo {
   bankAccountNo   String?   @map("bank_account_no")
   bankBranchCode  String?   @map("bank_branch_code")
   ifscCode        String?   @map("ifsc_code")
+  cancelledChequeUrl String? @map("cancelled_cheque_url")
+  passbookUrl     String?   @map("passbook_url")
 
   updatedAt       DateTime  @updatedAt @map("updated_at")
   updatedBy       String?   @map("updated_by")
@@ -1280,4 +1287,22 @@ model EmployeeBankInfo {
   @@map("employee_bank_info")
 }
 
+// =============================================================================
+// SYSTEM LOOKUPS — configurable dropdown options (FIELD_MGMT)
+// =============================================================================
+
+model SystemLookup {
+  id        String   @id @default(uuid())
+  category  String   // ORGANIZATION, BLOOD_GROUP, GENDER, ...
+  code      String   // stored value (e.g. A_POS, MALE)
+  label     String   // display label (e.g. A+, Male)
+  isActive  Boolean  @default(true) @map("is_active")
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([category, code])
+  @@index([category, isActive, sortOrder])
+  @@map("system_lookups")
+}
 

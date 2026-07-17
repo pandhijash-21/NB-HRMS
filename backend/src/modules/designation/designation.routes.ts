@@ -50,6 +50,20 @@ designationRouter.patch(
   },
 );
 
+designationRouter.delete(
+  '/designations/:id',
+  requireAuth,
+  requirePermission('USER_MGMT', 'WRITE'),
+  async (req: Request, res: Response) => {
+    try {
+      const data = await designationService.remove(String(req.params.id));
+      return res.json(ok(data));
+    } catch (e: unknown) {
+      return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+    }
+  },
+);
+
 designationRouter.get(
   '/positions',
   requireAuth,

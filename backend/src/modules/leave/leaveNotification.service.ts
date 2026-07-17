@@ -113,7 +113,7 @@ export const leaveNotificationService = {
       <strong>To:</strong> ${step.application.toDate.toDateString()}<br/>
       <strong>Days:</strong> ${step.application.totalDays}<br/>
       <strong>Reason:</strong> ${step.application.reason}</p>
-      <a href="${BASE}/admin/leaves/pending">Review &amp; Approve</a>
+      <a href="${BASE}/approvals">Review &amp; Approve</a>
       `,
     );
   },

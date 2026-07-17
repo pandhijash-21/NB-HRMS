@@ -11,7 +11,8 @@ import { absenceLwpService } from './absenceLwp.service';
 export const leaveRouter = Router();
 
 const adminOrHR = requireRole(['ADMIN', 'HR', 'HR_MANAGER']);
-const approverRoles = requireRole(['ADMIN', 'HR', 'HR_MANAGER', 'HOD', 'HOI', 'VC', 'REGISTRAR']);
+// Any authenticated user may be a reporting manager; authorization is enforced
+// per LeaveApprovalStep.approverUserId inside the workflow service.
 
 // ─── Employee: apply / cancel / view own leaves ─────────────────────────────
 
@@ -60,9 +61,11 @@ leaveRouter.get('/my/balances', requireAuth, requirePermission('LEAVE', 'READ'),
   return res.json(ok(balances));
 });
 
-leaveRouter.get('/my/pending-approvals', requireAuth, approverRoles, async (req: Request, res: Response) => {
+leaveRouter.get('/my/pending-approvals', requireAuth, async (req: Request, res: Response) => {
   const approverUserId = String(req.user!.id);
-  const apps = await leaveApplicationService.getPendingForApprover(approverUserId);
+  const role = String(req.user!.roleName ?? req.user!.role ?? '').toUpperCase();
+  const privilegedAdmin = ['ADMIN', 'HR', 'HR_MANAGER'].includes(role);
+  const apps = await leaveApplicationService.getPendingForApprover(approverUserId, { privilegedAdmin });
   return res.json(ok(apps));
 });
 
@@ -74,14 +77,17 @@ leaveRouter.get('/applications/:id', requireAuth, async (req: Request, res: Resp
 
 // ─── Approver: approve / reject ─────────────────────────────────────────────
 
-leaveRouter.post('/applications/:id/approve', requireAuth, approverRoles, async (req: Request, res: Response) => {
+leaveRouter.post('/applications/:id/approve', requireAuth, async (req: Request, res: Response) => {
   try {
     const approverUserId = String(req.user!.id);
+    const role = String(req.user!.roleName ?? req.user!.role ?? '').toUpperCase();
+    const allowAdminOverride = ['ADMIN', 'HR', 'HR_MANAGER'].includes(role);
     const result = await leaveAdminService.approveStep(
       p(req.params.id),
       approverUserId,
       req.user!.id,
       String(req.body.remarks ?? ''),
+      { allowAdminOverride },
     );
     return res.json(ok(result));
   } catch (e: any) {
@@ -89,14 +95,17 @@ leaveRouter.post('/applications/:id/approve', requireAuth, approverRoles, async 
   }
 });
 
-leaveRouter.post('/applications/:id/reject', requireAuth, approverRoles, async (req: Request, res: Response) => {
+leaveRouter.post('/applications/:id/reject', requireAuth, async (req: Request, res: Response) => {
   try {
     const approverUserId = String(req.user!.id);
+    const role = String(req.user!.roleName ?? req.user!.role ?? '').toUpperCase();
+    const allowAdminOverride = ['ADMIN', 'HR', 'HR_MANAGER'].includes(role);
     const result = await leaveAdminService.rejectStep(
       p(req.params.id),
       approverUserId,
       req.user!.id,
       String(req.body.remarks ?? ''),
+      { allowAdminOverride },
     );
     return res.json(ok(result));
   } catch (e: any) {

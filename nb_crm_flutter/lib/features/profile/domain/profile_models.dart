@@ -1,5 +1,6 @@
 /// Domain models for the Employee Profile section.
 /// Matches the Prisma schema backend payload from `GET /employees/{id}`.
+library;
 
 Map<String, dynamic>? _asMap(Object? value) {
   if (value is Map<String, dynamic>) return value;
@@ -12,12 +13,36 @@ List<Map<String, dynamic>> _asMapList(Object? value) {
   return value.map(_asMap).whereType<Map<String, dynamic>>().toList();
 }
 
+class EmployeePosition {
+  final String id;
+  final String name;
+  final String linkedRoleId;
+  final String linkedRoleName;
+
+  const EmployeePosition({
+    required this.id,
+    required this.name,
+    required this.linkedRoleId,
+    required this.linkedRoleName,
+  });
+
+  factory EmployeePosition.fromJson(Map<String, dynamic> json) {
+    return EmployeePosition(
+      id: json['id']?.toString() ?? '',
+      name: json['name'] as String? ?? '',
+      linkedRoleId: json['linkedRoleId']?.toString() ?? '',
+      linkedRoleName: json['linkedRoleName'] as String? ?? '',
+    );
+  }
+}
+
 class EmployeeProfile {
   final int id;
   final String? abbreviation;
   final String status;
   final String? photoUrl;
   final String? signatureUrl;
+  final EmployeePosition? position;
   final GeneralInfo? generalInfo;
   final PersonalInfo? personalInfo;
   final List<AddressInfo> addresses;
@@ -33,6 +58,7 @@ class EmployeeProfile {
     required this.status,
     this.photoUrl,
     this.signatureUrl,
+    this.position,
     this.generalInfo,
     this.personalInfo,
     required this.addresses,
@@ -49,6 +75,7 @@ class EmployeeProfile {
     final other = _asMap(json['otherInfo']);
     final salary = _asMap(json['salaryInfo']);
     final bank = _asMap(json['bankInfo']);
+    final position = _asMap(json['position']);
 
     return EmployeeProfile(
       id: json['id'] is int ? json['id'] as int : int.parse(json['id'].toString()),
@@ -56,6 +83,7 @@ class EmployeeProfile {
       status: json['status'] as String? ?? 'ACTIVE',
       photoUrl: json['photoUrl'] as String?,
       signatureUrl: json['signatureUrl'] as String?,
+      position: position != null ? EmployeePosition.fromJson(position) : null,
       generalInfo: general != null ? GeneralInfo.fromJson(general) : null,
       personalInfo: personal != null ? PersonalInfo.fromJson(personal) : null,
       addresses: _asMapList(json['addresses']).map(AddressInfo.fromJson).toList(),
@@ -73,6 +101,14 @@ class EmployeeProfile {
         'status': status,
         'photoUrl': photoUrl,
         'signatureUrl': signatureUrl,
+        'position': position != null
+            ? {
+                'id': position!.id,
+                'name': position!.name,
+                'linkedRoleId': position!.linkedRoleId,
+                'linkedRoleName': position!.linkedRoleName,
+              }
+            : null,
         'generalInfo': generalInfo?.toJson(),
         'personalInfo': personalInfo?.toJson(),
         'addresses': addresses.map((e) => e.toJson()).toList(),
@@ -82,6 +118,82 @@ class EmployeeProfile {
         'salaryInfo': salaryInfo?.toJson(),
         'bankInfo': bankInfo?.toJson(),
       };
+
+  EmployeeProfile copyWithMedia({String? photoUrl, String? signatureUrl}) {
+    return EmployeeProfile(
+      id: id,
+      abbreviation: abbreviation,
+      status: status,
+      photoUrl: photoUrl ?? this.photoUrl,
+      signatureUrl: signatureUrl ?? this.signatureUrl,
+      position: position,
+      generalInfo: generalInfo,
+      personalInfo: personalInfo,
+      addresses: addresses,
+      otherInfo: otherInfo,
+      familyMembers: familyMembers,
+      academicQuals: academicQuals,
+      salaryInfo: salaryInfo,
+      bankInfo: bankInfo,
+    );
+  }
+
+  EmployeeProfile copyWithPersonalInfo(PersonalInfo personalInfo) {
+    return EmployeeProfile(
+      id: id,
+      abbreviation: abbreviation,
+      status: status,
+      photoUrl: photoUrl,
+      signatureUrl: signatureUrl,
+      position: position,
+      generalInfo: generalInfo,
+      personalInfo: personalInfo,
+      addresses: addresses,
+      otherInfo: otherInfo,
+      familyMembers: familyMembers,
+      academicQuals: academicQuals,
+      salaryInfo: salaryInfo,
+      bankInfo: bankInfo,
+    );
+  }
+
+  EmployeeProfile copyWithOtherInfo(OtherInfo otherInfo) {
+    return EmployeeProfile(
+      id: id,
+      abbreviation: abbreviation,
+      status: status,
+      photoUrl: photoUrl,
+      signatureUrl: signatureUrl,
+      position: position,
+      generalInfo: generalInfo,
+      personalInfo: personalInfo,
+      addresses: addresses,
+      otherInfo: otherInfo,
+      familyMembers: familyMembers,
+      academicQuals: academicQuals,
+      salaryInfo: salaryInfo,
+      bankInfo: bankInfo,
+    );
+  }
+
+  EmployeeProfile copyWithBankInfo(BankInfo bankInfo) {
+    return EmployeeProfile(
+      id: id,
+      abbreviation: abbreviation,
+      status: status,
+      photoUrl: photoUrl,
+      signatureUrl: signatureUrl,
+      position: position,
+      generalInfo: generalInfo,
+      personalInfo: personalInfo,
+      addresses: addresses,
+      otherInfo: otherInfo,
+      familyMembers: familyMembers,
+      academicQuals: academicQuals,
+      salaryInfo: salaryInfo,
+      bankInfo: bankInfo,
+    );
+  }
 }
 
 class GeneralInfo {
@@ -93,6 +205,7 @@ class GeneralInfo {
   final String? incrementMonth;
   final String organization;
   final String? instituteId;
+  final String? instituteName;
   final String? subOrganization;
   final String department;
   final String? functionalDepartment;
@@ -118,6 +231,7 @@ class GeneralInfo {
     this.incrementMonth,
     required this.organization,
     this.instituteId,
+    this.instituteName,
     this.subOrganization,
     required this.department,
     this.functionalDepartment,
@@ -136,6 +250,7 @@ class GeneralInfo {
   });
 
   factory GeneralInfo.fromJson(Map<String, dynamic> json) {
+    final institute = _asMap(json['institute']);
     return GeneralInfo(
       id: json['id'] as String? ?? '',
       employeeId: json['employeeId'] is int ? json['employeeId'] as int : int.parse(json['employeeId'].toString()),
@@ -149,6 +264,7 @@ class GeneralInfo {
       incrementMonth: json['incrementMonth'] as String?,
       organization: json['organization'] as String? ?? 'GANDHINAGAR UNIVERSITY',
       instituteId: json['instituteId'] as String?,
+      instituteName: institute?['name'] as String?,
       subOrganization: json['subOrganization'] as String?,
       department: json['department'] as String? ?? '',
       functionalDepartment: json['functionalDepartment'] as String?,
@@ -176,6 +292,7 @@ class GeneralInfo {
         'incrementMonth': incrementMonth,
         'organization': organization,
         'instituteId': instituteId,
+        'instituteName': instituteName,
         'subOrganization': subOrganization,
         'department': department,
         'functionalDepartment': functionalDepartment,
@@ -213,6 +330,7 @@ class PersonalInfo {
   final String? panNo;
   final String? aadhaarCardUrl;
   final String? panCardUrl;
+  final String? otherDocumentUrl;
   final String? passportNo;
   final String? passportIssuePlace;
   final DateTime? passportIssueDate;
@@ -237,6 +355,7 @@ class PersonalInfo {
     this.panNo,
     this.aadhaarCardUrl,
     this.panCardUrl,
+    this.otherDocumentUrl,
     this.passportNo,
     this.passportIssuePlace,
     this.passportIssueDate,
@@ -263,6 +382,7 @@ class PersonalInfo {
       panNo: json['panNo'] as String?,
       aadhaarCardUrl: json['aadhaarCardUrl'] as String?,
       panCardUrl: json['panCardUrl'] as String?,
+      otherDocumentUrl: json['otherDocumentUrl'] as String?,
       passportNo: json['passportNo'] as String?,
       passportIssuePlace: json['passportIssuePlace'] as String?,
       passportIssueDate: json['passportIssueDate'] != null ? DateTime.parse(json['passportIssueDate'].toString()) : null,
@@ -289,11 +409,44 @@ class PersonalInfo {
         'panNo': panNo,
         'aadhaarCardUrl': aadhaarCardUrl,
         'panCardUrl': panCardUrl,
+        'otherDocumentUrl': otherDocumentUrl,
         'passportNo': passportNo,
         'passportIssuePlace': passportIssuePlace,
         'passportIssueDate': passportIssueDate?.toIso8601String(),
         'passportExpiryDate': passportExpiryDate?.toIso8601String(),
       };
+
+  PersonalInfo copyWith({
+    String? aadhaarCardUrl,
+    String? panCardUrl,
+    String? otherDocumentUrl,
+  }) {
+    return PersonalInfo(
+      id: id,
+      employeeId: employeeId,
+      birthDate: birthDate,
+      birthPlace: birthPlace,
+      homeTown: homeTown,
+      gender: gender,
+      maritalStatus: maritalStatus,
+      nationality: nationality,
+      motherTongue: motherTongue,
+      bloodGroup: bloodGroup,
+      castCategory: castCategory,
+      subCaste: subCaste,
+      nomineeName: nomineeName,
+      nomineeRelation: nomineeRelation,
+      aadhaarNo: aadhaarNo,
+      panNo: panNo,
+      aadhaarCardUrl: aadhaarCardUrl ?? this.aadhaarCardUrl,
+      panCardUrl: panCardUrl ?? this.panCardUrl,
+      otherDocumentUrl: otherDocumentUrl ?? this.otherDocumentUrl,
+      passportNo: passportNo,
+      passportIssuePlace: passportIssuePlace,
+      passportIssueDate: passportIssueDate,
+      passportExpiryDate: passportExpiryDate,
+    );
+  }
 }
 
 class AddressInfo {
@@ -434,6 +587,22 @@ class OtherInfo {
         'heightInFeet': heightInFeet,
         'weightInKg': weightInKg,
       };
+
+  OtherInfo copyWith({String? passportUrl}) {
+    return OtherInfo(
+      id: id,
+      employeeId: employeeId,
+      skillSet: skillSet,
+      hobbies: hobbies,
+      strength: strength,
+      weakness: weakness,
+      isHandicapped: isHandicapped,
+      handicapDetails: handicapDetails,
+      passportUrl: passportUrl ?? this.passportUrl,
+      heightInFeet: heightInFeet,
+      weightInKg: weightInKg,
+    );
+  }
 }
 
 class FamilyMember {
@@ -448,6 +617,9 @@ class FamilyMember {
   final String? aadhaarNo;
   final String? aadhaarUrl;
   final bool isNominee;
+  final bool isDependent;
+  final bool isEmployed;
+  final String? employerName;
 
   const FamilyMember({
     required this.id,
@@ -461,6 +633,9 @@ class FamilyMember {
     this.aadhaarNo,
     this.aadhaarUrl,
     required this.isNominee,
+    this.isDependent = false,
+    this.isEmployed = false,
+    this.employerName,
   });
 
   factory FamilyMember.fromJson(Map<String, dynamic> json) {
@@ -476,6 +651,9 @@ class FamilyMember {
       aadhaarNo: json['aadhaarNo'] as String?,
       aadhaarUrl: json['aadhaarUrl'] as String?,
       isNominee: json['isNominee'] == true,
+      isDependent: json['isDependent'] == true || json['dependent'] == true,
+      isEmployed: json['isEmployed'] == true || json['employed'] == true,
+      employerName: json['employerName'] as String?,
     );
   }
 
@@ -491,7 +669,29 @@ class FamilyMember {
         'aadhaarNo': aadhaarNo,
         'aadhaarUrl': aadhaarUrl,
         'isNominee': isNominee,
+        'isDependent': isDependent,
+        'isEmployed': isEmployed,
+        'employerName': employerName,
       };
+
+  FamilyMember copyWith({String? aadhaarUrl}) {
+    return FamilyMember(
+      id: id,
+      employeeId: employeeId,
+      relation: relation,
+      name: name,
+      city: city,
+      mobileNo: mobileNo,
+      personalEmail: personalEmail,
+      dateOfBirth: dateOfBirth,
+      aadhaarNo: aadhaarNo,
+      aadhaarUrl: aadhaarUrl ?? this.aadhaarUrl,
+      isNominee: isNominee,
+      isDependent: isDependent,
+      isEmployed: isEmployed,
+      employerName: employerName,
+    );
+  }
 }
 
 class AcademicQualification {
@@ -612,10 +812,17 @@ class SalaryInfo {
   });
 
   factory SalaryInfo.fromJson(Map<String, dynamic> json) {
+    final pcRef = json['payCommissionRef'] ?? json['pay_commission_ref'];
+    String? payCommission = json['payCommission'] as String?;
+    if ((payCommission == null || payCommission.isEmpty) && pcRef is Map) {
+      payCommission = pcRef['name']?.toString() ?? pcRef['code']?.toString();
+    }
     return SalaryInfo(
       id: json['id'] as String? ?? '',
-      employeeId: json['employeeId'] is int ? json['employeeId'] as int : int.parse(json['employeeId'].toString()),
-      payCommission: json['payCommission'] as String?,
+      employeeId: json['employeeId'] is int
+          ? json['employeeId'] as int
+          : int.tryParse(json['employeeId']?.toString() ?? '') ?? 0,
+      payCommission: payCommission,
       payGrade: json['payGrade'] as String?,
       basicSalary: json['basicSalary'] != null ? double.tryParse(json['basicSalary'].toString()) : null,
       agp: json['agp'] != null ? double.tryParse(json['agp'].toString()) : null,
@@ -641,6 +848,8 @@ class BankInfo {
   final String? bankAccountNo;
   final String? bankBranchCode;
   final String? ifscCode;
+  final String? cancelledChequeUrl;
+  final String? passbookUrl;
 
   const BankInfo({
     required this.id,
@@ -649,6 +858,8 @@ class BankInfo {
     this.bankAccountNo,
     this.bankBranchCode,
     this.ifscCode,
+    this.cancelledChequeUrl,
+    this.passbookUrl,
   });
 
   factory BankInfo.fromJson(Map<String, dynamic> json) {
@@ -659,6 +870,8 @@ class BankInfo {
       bankAccountNo: json['bankAccountNo'] as String?,
       bankBranchCode: json['bankBranchCode'] as String?,
       ifscCode: json['ifscCode'] as String?,
+      cancelledChequeUrl: json['cancelledChequeUrl'] as String?,
+      passbookUrl: json['passbookUrl'] as String?,
     );
   }
 
@@ -669,5 +882,27 @@ class BankInfo {
         'bankAccountNo': bankAccountNo,
         'bankBranchCode': bankBranchCode,
         'ifscCode': ifscCode,
+        'cancelledChequeUrl': cancelledChequeUrl,
+        'passbookUrl': passbookUrl,
       };
+
+  BankInfo copyWith({
+    String? cancelledChequeUrl,
+    String? passbookUrl,
+    String? bankName,
+    String? bankAccountNo,
+    String? bankBranchCode,
+    String? ifscCode,
+  }) {
+    return BankInfo(
+      id: id,
+      employeeId: employeeId,
+      bankName: bankName ?? this.bankName,
+      bankAccountNo: bankAccountNo ?? this.bankAccountNo,
+      bankBranchCode: bankBranchCode ?? this.bankBranchCode,
+      ifscCode: ifscCode ?? this.ifscCode,
+      cancelledChequeUrl: cancelledChequeUrl ?? this.cancelledChequeUrl,
+      passbookUrl: passbookUrl ?? this.passbookUrl,
+    );
+  }
 }

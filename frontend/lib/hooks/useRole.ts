@@ -121,16 +121,16 @@ export function useRolePermissions(roleId: string) {
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchPermissions = useCallback(async () => {
+  const fetchPermissions = useCallback(async (opts?: { silent?: boolean }) => {
     if (!roleId) return;
     try {
-      setLoading(true);
+      if (!opts?.silent) setLoading(true);
       const res = await api.get(`/admin/roles/${roleId}/permissions`);
       setPermissions(res.data.data ?? []);
     } catch (err: any) {
       console.error(err);
     } finally {
-      setLoading(false);
+      if (!opts?.silent) setLoading(false);
     }
   }, [roleId]);
 
@@ -138,7 +138,24 @@ export function useRolePermissions(roleId: string) {
     fetchPermissions();
   }, [fetchPermissions]);
 
-  return { permissions, loading, refetch: fetchPermissions };
+  const applyOptimistic = useCallback(
+    (moduleKey: string, patch: Partial<Permission>) => {
+      setPermissions((prev) =>
+        prev.map((p) =>
+          p.moduleKey === moduleKey ? ({ ...p, ...patch } as Permission) : p,
+        ),
+      );
+    },
+    [],
+  );
+
+  return {
+    permissions,
+    loading,
+    refetch: fetchPermissions,
+    applyOptimistic,
+    setPermissions,
+  };
 }
 
 export function useRoleDetails(roleId: string) {

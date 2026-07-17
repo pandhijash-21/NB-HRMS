@@ -1,3 +1,7 @@
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
+
 import '../../../core/network/dio_client.dart';
 import '../domain/leave_models.dart';
 
@@ -84,6 +88,35 @@ class LeaveRepository {
         return LeaveApplication.fromJson(Map<String, dynamic>.from(raw));
       },
     );
+  }
+
+  /// Upload supporting document for a leave application. Returns Cloudinary URL.
+  Future<String> uploadLeaveDocument({
+    required int employeeId,
+    required Uint8List bytes,
+    String? filename,
+  }) async {
+    final multipart = MultipartFile.fromBytes(
+      bytes,
+      filename: filename ?? 'leave-document.bin',
+    );
+
+    final response = await _dio.dio.post<Map<String, dynamic>>(
+      'upload/leave-document',
+      data: FormData.fromMap({
+        'employeeId': employeeId,
+        'file': multipart,
+      }),
+    );
+    final body = response.data;
+    if (body == null || body['success'] != true) {
+      throw Exception(body?['error'] ?? 'Document upload failed');
+    }
+    final data = body['data'];
+    if (data is Map && data['url'] is String) {
+      return data['url'] as String;
+    }
+    throw const FormatException('Upload response missing URL');
   }
 
   Future<void> cancelApplication(String id) async {

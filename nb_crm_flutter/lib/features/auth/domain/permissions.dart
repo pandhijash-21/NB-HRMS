@@ -140,11 +140,11 @@ class Permissions {
     String? employeeViewScope,
   ) {
     if (canAccessAdminPortal(perms, employeeViewScope)) return '/admin/dashboard';
-    if (canApproveLeave(perms)) return '/approvals';
+    if (canApproveLeave(perms)) return '/leave';
     if (canViewOwnWorkforce(perms, employeeViewScope)) return '/profile';
 
     if (const ['HOD', 'HOI', 'REGISTRAR', 'VC', 'HR', 'HR_MANAGER'].contains(role)) {
-      return '/approvals';
+      return '/leave';
     }
     return '/home'; // Flutter fallback instead of /dashboard since dashboard links here/home.
   }

@@ -169,7 +169,60 @@ final systemModulesProvider = FutureProvider.autoDispose<List<SystemModule>>((re
   return ref.watch(rbacRepositoryProvider).listModules();
 });
 
-final rolePermissionsProvider =
-    FutureProvider.family.autoDispose<List<ModulePermission>, String>((ref, roleId) async {
-  return ref.watch(rbacRepositoryProvider).getRolePermissions(roleId);
-});
+class RolePermissionsNotifier extends AsyncNotifier<List<ModulePermission>> {
+  RolePermissionsNotifier(this.roleId);
+
+  final String roleId;
+
+  @override
+  FutureOr<List<ModulePermission>> build() {
+    return ref.watch(rbacRepositoryProvider).getRolePermissions(roleId);
+  }
+
+  Future<void> refresh() async {
+    final next = await ref.read(rbacRepositoryProvider).getRolePermissions(roleId);
+    state = AsyncData(next);
+  }
+
+  /// Optimistically flip a flag (or scope), then sync from the server response.
+  Future<void> patch(String moduleKey, Map<String, dynamic> data) async {
+    final previous = state.asData?.value;
+    if (previous != null) {
+      state = AsyncData(
+        previous.map((p) {
+          if (p.moduleKey != moduleKey) return p;
+          return p.copyWith(
+            canRead: data.containsKey('canRead') ? data['canRead'] as bool : null,
+            canWrite: data.containsKey('canWrite') ? data['canWrite'] as bool : null,
+            canApprove:
+                data.containsKey('canApprove') ? data['canApprove'] as bool : null,
+            canDelete:
+                data.containsKey('canDelete') ? data['canDelete'] as bool : null,
+            canExport:
+                data.containsKey('canExport') ? data['canExport'] as bool : null,
+            employeeViewScope: data.containsKey('employeeViewScope')
+                ? employeeViewScopeFromJson(data['employeeViewScope']?.toString())
+                : null,
+          );
+        }).toList(),
+      );
+    }
+
+    try {
+      final updated = await ref.read(rbacRepositoryProvider).patchRolePermission(
+            roleId,
+            moduleKey,
+            data,
+          );
+      state = AsyncData(updated);
+    } catch (e) {
+      if (previous != null) state = AsyncData(previous);
+      rethrow;
+    }
+  }
+}
+
+final rolePermissionsProvider = AsyncNotifierProvider.autoDispose
+    .family<RolePermissionsNotifier, List<ModulePermission>, String>(
+  RolePermissionsNotifier.new,
+);

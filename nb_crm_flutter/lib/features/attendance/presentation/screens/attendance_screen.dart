@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../auth/domain/permissions.dart';
+import '../../../auth/presentation/auth_providers.dart';
 import '../../domain/attendance_models.dart';
 import '../../../leave/presentation/widgets/leave_shared_widgets.dart';
 import '../attendance_providers.dart';
@@ -16,6 +18,11 @@ class AttendanceScreen extends ConsumerWidget {
     final selectedDate = ref.watch(selectedAttendanceDayProvider);
     final dayAsync = ref.watch(myAttendanceDayProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final auth = ref.watch(authNotifierProvider);
+    final canAdmin = Permissions.canAdminAttendance(
+      auth.permissions,
+      auth.user?.role ?? '',
+    );
 
     final daysInMonth =
         DateTime(monthFilter.year, monthFilter.month + 1, 0).day;
@@ -68,6 +75,62 @@ class AttendanceScreen extends ConsumerWidget {
         child: ListView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
           children: [
+            if (canAdmin) ...[
+              Row(
+                children: [
+                  Container(
+                    width: 4,
+                    height: 18,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFC5A059),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Attendance Workspace',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: isDark ? Colors.white : const Color(0xFF212F3D),
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              _AttendanceWorkspaceTile(
+                icon: Icons.admin_panel_settings_rounded,
+                title: 'Manage Attendance',
+                subtitle: 'Policy, manual punches & all employees',
+                color: const Color(0xFF16a34a),
+                onTap: () => context.go('/admin/attendance'),
+              ),
+              const SizedBox(height: 28),
+              Row(
+                children: [
+                  Container(
+                    width: 4,
+                    height: 18,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFC5A059),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    'My Attendance',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: isDark ? Colors.white : const Color(0xFF212F3D),
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+            ],
             // Month Navigator
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -650,6 +713,88 @@ class _DayDetail extends StatelessWidget {
                 },
               ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AttendanceWorkspaceTile extends StatelessWidget {
+  const _AttendanceWorkspaceTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.color,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E1B18) : Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isDark
+                  ? const Color(0xFFC5A059).withOpacity(0.15)
+                  : const Color(0xFFCFD8DC),
+              width: 1.5,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: color, size: 22),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 14,
+                        color: isDark ? Colors.white : const Color(0xFF212F3D),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? Colors.white54 : const Color(0xFF607D8B),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: isDark ? Colors.white38 : const Color(0xFF90A4AE),
+              ),
+            ],
+          ),
         ),
       ),
     );

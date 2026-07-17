@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/profile_repository.dart';
@@ -42,7 +43,7 @@ class ProfileNotifier extends AsyncNotifier<EmployeeProfile> {
   }
 
   Future<void> refresh() async {
-    state = const AsyncValue.loading();
+    // Prefer data refresh without wiping UI to a loading spinner when possible.
     state = await AsyncValue.guard(() => _repo.getProfile(employeeId));
   }
 
@@ -51,6 +52,16 @@ class ProfileNotifier extends AsyncNotifier<EmployeeProfile> {
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() async {
       await _repo.updateGeneralInfo(employeeId, data);
+      return _repo.getProfile(employeeId);
+    });
+  }
+
+  /// Update abbreviation on core employee row.
+  Future<void> updateEmployeeAbbreviation(String? abbreviation) async {
+    if (abbreviation == null || abbreviation.trim().isEmpty) return;
+    state = const AsyncValue.loading();
+    state = await AsyncValue.guard(() async {
+      await _repo.updateEmployeeCore(employeeId, {'abbreviation': abbreviation.trim()});
       return _repo.getProfile(employeeId);
     });
   }
@@ -79,13 +90,30 @@ class ProfileNotifier extends AsyncNotifier<EmployeeProfile> {
     ref.invalidate(pendingRequestProvider('PERSONAL'));
   }
 
-  /// Submit change request for Address info (self-service).
-  Future<void> submitAddressChangeRequest(Map<String, dynamic> data) async {
-    await _repo.submitChangeRequest(module: 'ADDRESS', newData: data);
-    ref.invalidate(pendingRequestProvider('ADDRESS'));
+  /// Submit change requests for Local + Permanent address (self-service).
+  Future<void> submitAddressChangeRequest({
+    required Map<String, dynamic> local,
+    required Map<String, dynamic> permanent,
+  }) async {
+    await _repo.submitChangeRequest(module: 'ADDRESS_LOCAL', newData: local);
+    await _repo.submitChangeRequest(module: 'ADDRESS_PERMANENT', newData: permanent);
+    ref.invalidate(pendingRequestProvider('ADDRESS_LOCAL'));
+    ref.invalidate(pendingRequestProvider('ADDRESS_PERMANENT'));
   }
 
-  /// Update bank info (direct).
+  /// Submit change request for Other info (self-service).
+  Future<void> submitOtherChangeRequest(Map<String, dynamic> data) async {
+    await _repo.submitChangeRequest(module: 'OTHER', newData: data);
+    ref.invalidate(pendingRequestProvider('OTHER'));
+  }
+
+  /// Submit change request for Bank info (self-service).
+  Future<void> submitBankChangeRequest(Map<String, dynamic> data) async {
+    await _repo.submitChangeRequest(module: 'BANK', newData: data);
+    ref.invalidate(pendingRequestProvider('BANK'));
+  }
+
+  /// Update bank info (direct — privileged only).
   Future<void> updateBankInfo(Map<String, dynamic> data) async {
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() async {
@@ -94,7 +122,7 @@ class ProfileNotifier extends AsyncNotifier<EmployeeProfile> {
     });
   }
 
-  /// Update other info (direct).
+  /// Update other info (direct — privileged only).
   Future<void> updateOtherInfo(Map<String, dynamic> data) async {
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() async {
@@ -104,20 +132,16 @@ class ProfileNotifier extends AsyncNotifier<EmployeeProfile> {
   }
 
   /// CRUD Family
-  Future<void> addFamilyMember(Map<String, dynamic> data) async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
-      await _repo.addFamilyMember(employeeId, data);
-      return _repo.getProfile(employeeId);
-    });
+  Future<String?> addFamilyMember(Map<String, dynamic> data) async {
+    // Avoid AsyncLoading while a dialog may be open (locked widget tree on web).
+    final createdId = await _repo.addFamilyMember(employeeId, data);
+    state = await AsyncValue.guard(() => _repo.getProfile(employeeId));
+    return createdId;
   }
 
   Future<void> updateFamilyMember(String memberId, Map<String, dynamic> data) async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
-      await _repo.updateFamilyMember(employeeId, memberId, data);
-      return _repo.getProfile(employeeId);
-    });
+    await _repo.updateFamilyMember(employeeId, memberId, data);
+    state = await AsyncValue.guard(() => _repo.getProfile(employeeId));
   }
 
   Future<void> deleteFamilyMember(String memberId) async {
@@ -130,19 +154,14 @@ class ProfileNotifier extends AsyncNotifier<EmployeeProfile> {
 
   /// CRUD Academic
   Future<void> addAcademicQualification(Map<String, dynamic> data) async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
-      await _repo.addAcademicQualification(employeeId, data);
-      return _repo.getProfile(employeeId);
-    });
+    // Avoid AsyncLoading while a dialog may be open (locked widget tree on web).
+    await _repo.addAcademicQualification(employeeId, data);
+    state = await AsyncValue.guard(() => _repo.getProfile(employeeId));
   }
 
   Future<void> updateAcademicQualification(String qualId, Map<String, dynamic> data) async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
-      await _repo.updateAcademicQualification(employeeId, qualId, data);
-      return _repo.getProfile(employeeId);
-    });
+    await _repo.updateAcademicQualification(employeeId, qualId, data);
+    state = await AsyncValue.guard(() => _repo.getProfile(employeeId));
   }
 
   Future<void> deleteAcademicQualification(String qualId) async {
@@ -156,7 +175,9 @@ class ProfileNotifier extends AsyncNotifier<EmployeeProfile> {
   /// Upload file helper
   Future<String> uploadFile({
     required String kebabType,
-    required File file,
+    File? file,
+    Uint8List? bytes,
+    String? filename,
     String? qualId,
     int? sem,
     String? memberId,
@@ -166,13 +187,80 @@ class ProfileNotifier extends AsyncNotifier<EmployeeProfile> {
       employeeId: employeeId,
       kebabType: kebabType,
       file: file,
+      bytes: bytes,
+      filename: filename,
       qualId: qualId,
       sem: sem,
       memberId: memberId,
       experienceId: experienceId,
     );
-    // Reload state after upload
-    await refresh();
+
+    final current = state.asData?.value;
+    if (current != null) {
+      // Academic / family uploads are applied by the dialog (or already saved server-side
+      // when qualId/memberId is present). Avoid rebuilding the profile tree while a dialog
+      // is open — that triggers "widget tree was locked" on web.
+      if (kebabType == 'marksheet' ||
+          kebabType == 'certificate' ||
+          kebabType == 'aadhaar-family') {
+        return url;
+      }
+
+      EmployeeProfile updated = current;
+      switch (kebabType) {
+        case 'photo':
+          updated = current.copyWithMedia(photoUrl: url);
+        case 'signature':
+          updated = current.copyWithMedia(signatureUrl: url);
+        case 'aadhaar-card':
+          final personal = current.personalInfo;
+          if (personal != null) {
+            updated = current.copyWithPersonalInfo(personal.copyWith(aadhaarCardUrl: url));
+          }
+        case 'pan-card':
+          final personal = current.personalInfo;
+          if (personal != null) {
+            updated = current.copyWithPersonalInfo(personal.copyWith(panCardUrl: url));
+          }
+        case 'other-document':
+          final personal = current.personalInfo;
+          if (personal != null) {
+            updated = current.copyWithPersonalInfo(personal.copyWith(otherDocumentUrl: url));
+          }
+        case 'passport':
+          final other = current.otherInfo;
+          updated = current.copyWithOtherInfo(
+            other?.copyWith(passportUrl: url) ??
+                OtherInfo(
+                  id: '',
+                  employeeId: current.id,
+                  isHandicapped: false,
+                  passportUrl: url,
+                ),
+          );
+        case 'cancelled-cheque':
+          final bank = current.bankInfo;
+          updated = current.copyWithBankInfo(
+            bank?.copyWith(cancelledChequeUrl: url) ??
+                BankInfo(
+                  id: '',
+                  employeeId: current.id,
+                  cancelledChequeUrl: url,
+                ),
+          );
+        case 'passbook':
+          final bank = current.bankInfo;
+          updated = current.copyWithBankInfo(
+            bank?.copyWith(passbookUrl: url) ??
+                BankInfo(
+                  id: '',
+                  employeeId: current.id,
+                  passbookUrl: url,
+                ),
+          );
+      }
+      state = AsyncValue.data(updated);
+    }
     return url;
   }
 }

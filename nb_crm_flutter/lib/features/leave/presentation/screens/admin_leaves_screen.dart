@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/platform_file_picker.dart';
 import '../../domain/leave_models.dart';
 import '../leave_providers.dart';
 import '../widgets/leave_shared_widgets.dart';
@@ -50,13 +51,13 @@ class _AdminLeavesScreenState extends ConsumerState<AdminLeavesScreen> {
             Icons.arrow_back_rounded,
             color: isDark ? Colors.white.withOpacity(0.8) : const Color(0xFF212F3D),
           ),
-          onPressed: () => context.go('/home'),
+          onPressed: () => context.go('/leave'),
         ),
         actions: [
           IconButton(
-            tooltip: 'Pending queue',
-            icon: const Icon(Icons.pending_actions_rounded, color: Color(0xFFC5A059)),
-            onPressed: () => context.go('/admin/leaves/pending'),
+            tooltip: 'Leave Approvals',
+            icon: const Icon(Icons.rule_rounded, color: Color(0xFFC5A059)),
+            onPressed: () => context.go('/approvals'),
           ),
           IconButton(
             tooltip: 'Settings',
@@ -255,33 +256,9 @@ class _AdminLeavesScreenState extends ConsumerState<AdminLeavesScreen> {
                                 subtitle: app.employee?.fullName ??
                                     (app.employee != null ? 'Employee #${app.employee!.id}' : null),
                                 trailing: isPending
-                                    ? Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Container(
-                                            decoration: BoxDecoration(
-                                              color: Colors.green.withOpacity(0.1),
-                                              shape: BoxShape.circle,
-                                            ),
-                                            child: IconButton(
-                                              tooltip: 'Approve',
-                                              icon: const Icon(Icons.check_circle_outline_rounded, color: Colors.green),
-                                              onPressed: () => _act(app.id, approve: true),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Container(
-                                            decoration: BoxDecoration(
-                                              color: Colors.red.withOpacity(0.1),
-                                              shape: BoxShape.circle,
-                                            ),
-                                            child: IconButton(
-                                              tooltip: 'Reject',
-                                              icon: const Icon(Icons.cancel_outlined, color: Colors.red),
-                                              onPressed: () => _act(app.id, approve: false),
-                                            ),
-                                          ),
-                                        ],
+                                    ? TextButton(
+                                        onPressed: () => context.go('/approvals'),
+                                        child: const Text('Review in Approvals'),
                                       )
                                     : null,
                               ),
@@ -316,101 +293,6 @@ class _AdminLeavesScreenState extends ConsumerState<AdminLeavesScreen> {
         label: const Text('Apply on behalf', style: TextStyle(fontWeight: FontWeight.w800)),
       ),
     );
-  }
-
-  Future<void> _act(String id, {required bool approve}) async {
-    final remarksCtrl = TextEditingController();
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          approve ? 'Approve Leave' : 'Reject Leave',
-          style: TextStyle(
-            fontWeight: FontWeight.w800,
-            color: isDark ? Colors.white : const Color(0xFF212F3D),
-          ),
-        ),
-        content: TextField(
-          controller: remarksCtrl,
-          decoration: InputDecoration(
-            labelText: 'Remarks (optional)',
-            labelStyle: const TextStyle(fontWeight: FontWeight.w600),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(
-                color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
-              ),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Color(0xFFC5A059), width: 1.5),
-            ),
-          ),
-          maxLines: 3,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Cancel', style: TextStyle(color: isDark ? Colors.white70 : const Color(0xFF607D8B))),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(
-              backgroundColor: approve ? Colors.green : Colors.red,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            child: Text(approve ? 'Approve' : 'Reject', style: const TextStyle(fontWeight: FontWeight.w800)),
-          ),
-        ],
-      ),
-    );
-    if (ok != true || !mounted) {
-      remarksCtrl.dispose();
-      return;
-    }
-    try {
-      final repo = ref.read(leaveRepositoryProvider);
-      if (approve) {
-        await repo.approveApplication(id, remarks: remarksCtrl.text.trim());
-      } else {
-        await repo.rejectApplication(id, remarks: remarksCtrl.text.trim());
-      }
-      invalidateLeaveApprovalData(ref);
-      invalidateLeaveAdminData(ref);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                Icon(approve ? Icons.check_circle_rounded : Icons.cancel_rounded, color: Colors.white),
-                const SizedBox(width: 8),
-                Text(approve ? 'Leave Approved' : 'Leave Rejected', style: const TextStyle(fontWeight: FontWeight.w800)),
-              ],
-            ),
-            backgroundColor: approve ? Colors.green : Colors.red,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$e'),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    } finally {
-      remarksCtrl.dispose();
-    }
   }
 }
 
@@ -552,6 +434,18 @@ class _ApplyOnBehalfDialogState extends ConsumerState<_ApplyOnBehalfDialog> {
   bool _isHalfDay = false;
   String? _halfDaySession;
   bool _submitting = false;
+  bool _uploadingDoc = false;
+  String? _documentUrl;
+  String? _documentName;
+
+  LeaveType? get _selectedType {
+    if (_leaveTypeId == null) return null;
+    try {
+      return widget.types.firstWhere((t) => t.id == _leaveTypeId);
+    } catch (_) {
+      return null;
+    }
+  }
 
   @override
   void initState() {
@@ -582,7 +476,45 @@ class _ApplyOnBehalfDialogState extends ConsumerState<_ApplyOnBehalfDialog> {
     if (_reasonCtrl.text.trim().length < 5) {
       return 'Reason must be at least 5 characters.';
     }
+    if (_selectedType?.requiresDocument == true &&
+        (_documentUrl == null || _documentUrl!.isEmpty)) {
+      return 'Supporting document is required for this leave type.';
+    }
     return null;
+  }
+
+  Future<void> _pickDocument() async {
+    final empId = int.tryParse(_employeeIdCtrl.text.trim());
+    if (empId == null || empId <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter employee ID before uploading a document.')),
+      );
+      return;
+    }
+    final picked = await pickFileFromDevice(
+      imagesOnly: false,
+      extensions: const ['pdf', 'jpg', 'jpeg', 'png', 'webp'],
+    );
+    if (picked == null) return;
+    setState(() => _uploadingDoc = true);
+    try {
+      final url = await widget.parentRef.read(leaveRepositoryProvider).uploadLeaveDocument(
+            employeeId: empId,
+            bytes: picked.bytes,
+            filename: picked.name,
+          );
+      if (!mounted) return;
+      setState(() {
+        _documentUrl = url;
+        _documentName = picked.name;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    } finally {
+      if (mounted) setState(() => _uploadingDoc = false);
+    }
   }
 
   Future<void> _submit() async {
@@ -603,6 +535,7 @@ class _ApplyOnBehalfDialogState extends ConsumerState<_ApplyOnBehalfDialog> {
         'isHalfDay': _isHalfDay,
         'halfDaySession': _isHalfDay ? _halfDaySession : null,
         'reason': _reasonCtrl.text.trim(),
+        if (_documentUrl != null) 'documentUrl': _documentUrl,
       });
       invalidateLeaveAdminData(widget.parentRef);
       widget.parentRef.invalidate(
@@ -693,7 +626,11 @@ class _ApplyOnBehalfDialogState extends ConsumerState<_ApplyOnBehalfDialog> {
                       ),
                     )
                     .toList(),
-                onChanged: (v) => setState(() => _leaveTypeId = v),
+                onChanged: (v) => setState(() {
+                  _leaveTypeId = v;
+                  _documentUrl = null;
+                  _documentName = null;
+                }),
               ),
               const SizedBox(height: 12),
               Row(
@@ -817,17 +754,63 @@ class _ApplyOnBehalfDialogState extends ConsumerState<_ApplyOnBehalfDialog> {
                 minLines: 2,
                 maxLines: 4,
               ),
+              const SizedBox(height: 12),
+              InputDecorator(
+                decoration: _styledInput(
+                  _selectedType?.requiresDocument == true
+                      ? 'Supporting document *'
+                      : 'Supporting document',
+                  isDark,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _documentName ??
+                            (_selectedType?.requiresDocument == true
+                                ? 'Upload required (PDF/image)'
+                                : 'Optional PDF or image'),
+                        style: TextStyle(
+                          color: _documentUrl != null
+                              ? (isDark ? Colors.white : const Color(0xFF212F3D))
+                              : (isDark ? Colors.white54 : const Color(0xFF607D8B)),
+                        ),
+                      ),
+                    ),
+                    if (_documentUrl != null)
+                      TextButton(
+                        onPressed: _uploadingDoc || _submitting
+                            ? null
+                            : () => setState(() {
+                                  _documentUrl = null;
+                                  _documentName = null;
+                                }),
+                        child: const Text('Remove'),
+                      ),
+                    TextButton(
+                      onPressed: _uploadingDoc || _submitting ? null : _pickDocument,
+                      child: _uploadingDoc
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : Text(_documentUrl == null ? 'Upload' : 'Replace'),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
       ),
       actions: [
         TextButton(
-          onPressed: _submitting ? null : () => Navigator.pop(context),
+          onPressed: _submitting || _uploadingDoc ? null : () => Navigator.pop(context),
           child: Text('Cancel', style: TextStyle(color: isDark ? Colors.white70 : const Color(0xFF607D8B))),
         ),
         FilledButton(
-          onPressed: _submitting ? null : _submit,
+          onPressed: _submitting || _uploadingDoc ? null : _submit,
           style: FilledButton.styleFrom(
             backgroundColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
             foregroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,

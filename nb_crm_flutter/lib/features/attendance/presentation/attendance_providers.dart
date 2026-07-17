@@ -110,6 +110,50 @@ final adminAttendancePolicyProvider =
   return ref.watch(attendanceRepositoryProvider).getAdminPolicy();
 });
 
+class AdminEmployeeHistoryMonthFilter extends Notifier<AttendanceMonthFilter> {
+  @override
+  AttendanceMonthFilter build() {
+    final now = DateTime.now();
+    return AttendanceMonthFilter(year: now.year, month: now.month);
+  }
+
+  void setMonth(int year, int month) =>
+      state = AttendanceMonthFilter(year: year, month: month);
+
+  void previousMonth() {
+    if (state.month == 1) {
+      state = AttendanceMonthFilter(year: state.year - 1, month: 12);
+    } else {
+      state = AttendanceMonthFilter(year: state.year, month: state.month - 1);
+    }
+  }
+
+  void nextMonth() {
+    if (state.month == 12) {
+      state = AttendanceMonthFilter(year: state.year + 1, month: 1);
+    } else {
+      state = AttendanceMonthFilter(year: state.year, month: state.month + 1);
+    }
+  }
+}
+
+final adminEmployeeHistoryMonthProvider =
+    NotifierProvider<AdminEmployeeHistoryMonthFilter, AttendanceMonthFilter>(
+  AdminEmployeeHistoryMonthFilter.new,
+);
+
+final adminEmployeeHistoryProvider = FutureProvider.autoDispose
+    .family<AdminAttendanceEmployeeHistory, int>((ref, employeeId) async {
+  final filter = ref.watch(adminEmployeeHistoryMonthProvider);
+  final from = DateTime(filter.year, filter.month, 1);
+  final to = DateTime(filter.year, filter.month + 1, 0);
+  return ref.watch(attendanceRepositoryProvider).getAdminEmployeeHistory(
+        employeeId: employeeId,
+        from: _formatDate(from),
+        to: _formatDate(to),
+      );
+});
+
 void invalidateAttendanceSelfData(WidgetRef ref) {
   ref.invalidate(myAttendanceCalendarProvider);
   ref.invalidate(myAttendanceDayProvider);
@@ -118,4 +162,5 @@ void invalidateAttendanceSelfData(WidgetRef ref) {
 void invalidateAttendanceAdminData(WidgetRef ref) {
   ref.invalidate(adminAttendanceDayProvider);
   ref.invalidate(adminAttendancePolicyProvider);
+  ref.invalidate(adminEmployeeHistoryProvider);
 }

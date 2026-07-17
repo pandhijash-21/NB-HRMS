@@ -100,6 +100,7 @@ export function useAdminAddPunch() {
       queryClient.invalidateQueries({ queryKey: ["attendance", "admin-day"] });
       queryClient.invalidateQueries({ queryKey: ["attendance", "my-day"] });
       queryClient.invalidateQueries({ queryKey: ["attendance", "my-calendar"] });
+      queryClient.invalidateQueries({ queryKey: ["attendance", "admin-employee-history"] });
     },
   });
 }
@@ -116,6 +117,7 @@ export function useAdminUpdatePunch() {
       queryClient.invalidateQueries({ queryKey: ["attendance", "admin-day"] });
       queryClient.invalidateQueries({ queryKey: ["attendance", "my-day"] });
       queryClient.invalidateQueries({ queryKey: ["attendance", "my-calendar"] });
+      queryClient.invalidateQueries({ queryKey: ["attendance", "admin-employee-history"] });
     },
   });
 }
@@ -140,7 +142,56 @@ export function useAdminUpdateAttendancePolicy() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["attendance", "admin-policy"] });
       queryClient.invalidateQueries({ queryKey: ["attendance", "my-day"] });
+      queryClient.invalidateQueries({ queryKey: ["attendance", "admin-employee-history"] });
     },
+  });
+}
+
+export type AdminEmployeeHistoryDay = {
+  date: string;
+  firstIn: string | null;
+  lastOut: string | null;
+  totalMinutes: number;
+  punches: Array<{
+    id: string;
+    punchAt: string;
+    terminalId: string | null;
+    punchType: string | null;
+    source: string;
+  }>;
+  isLate: boolean | null;
+  isHalfDay: boolean | null;
+  meetsPunchOut: boolean | null;
+};
+
+export type AdminEmployeeHistory = {
+  employee: {
+    employeeId: number;
+    fullName: string;
+    employeeCode: string | null;
+    designation: string | null;
+    department: string | null;
+  };
+  from: string;
+  to: string;
+  policy: AttendancePolicy;
+  days: AdminEmployeeHistoryDay[];
+};
+
+export function useAdminEmployeeHistory(params: {
+  employeeId: number;
+  from: string;
+  to: string;
+}) {
+  return useQuery({
+    queryKey: ["attendance", "admin-employee-history", params],
+    queryFn: async () => {
+      const { data } = await api.get(`attendance/admin/employee/${params.employeeId}/history`, {
+        params: { from: params.from, to: params.to },
+      });
+      return data.data as AdminEmployeeHistory;
+    },
+    enabled: !!params.employeeId && !!params.from && !!params.to,
   });
 }
 

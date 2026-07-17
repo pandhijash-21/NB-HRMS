@@ -80,6 +80,13 @@ class OrgRepository {
     );
   }
 
+  Future<void> deleteInstitute(String id) async {
+    await _dio.deleteEnvelope<void>(
+      'admin/institutes/$id',
+      parse: (_) {},
+    );
+  }
+
   Future<List<Designation>> listDesignations({
     bool? isAlias,
     bool includeInactive = false,
@@ -143,6 +150,13 @@ class OrgRepository {
         }
         return Designation.fromJson(Map<String, dynamic>.from(raw));
       },
+    );
+  }
+
+  Future<void> deleteDesignation(String id) async {
+    await _dio.deleteEnvelope<void>(
+      'admin/designations/$id',
+      parse: (_) {},
     );
   }
 

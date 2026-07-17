@@ -68,7 +68,7 @@ export const employeeService = {
       prisma.employee.findUnique({
         where: { id: employeeId },
         include: {
-          generalInfo: true,
+          generalInfo: { include: { institute: true } },
           personalInfo: true,
           addresses: true,
           otherInfo: true,
@@ -102,6 +102,7 @@ export const employeeService = {
     thirdReportingId?: number | null;
     instituteId?: string | null;
     subOrganization?: string | null;
+    abbreviation?: string | null;
   }, creatorId: string) {
     const instituteRef = await resolveInstituteRef({
       instituteId: input.instituteId,
@@ -115,6 +116,7 @@ export const employeeService = {
       const employee = await tx.employee.create({
         data: {
           status: 'ACTIVE',
+          abbreviation: input.abbreviation ?? null,
           createdBy: creatorId,
           userId: tempUserId,
         },

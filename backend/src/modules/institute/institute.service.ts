@@ -93,6 +93,37 @@ export const instituteService = {
     });
   },
 
+  async remove(id: string) {
+    const current = await prisma.institute.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: {
+            generalInfoRecords: true,
+            positionSlots: true,
+            assignments: true,
+          },
+        },
+      },
+    });
+    if (!current) throw new Error('Institute not found');
+
+    const inUse =
+      current._count.generalInfoRecords +
+      current._count.positionSlots +
+      current._count.assignments;
+    if (inUse > 0) {
+      // Soft-delete when referenced
+      return prisma.institute.update({
+        where: { id },
+        data: { isActive: false },
+      });
+    }
+
+    await prisma.institute.delete({ where: { id } });
+    return { deleted: true, id, hard: true };
+  },
+
   async getMembers(instituteId: string) {
     const institute = await prisma.institute.findUnique({ where: { id: instituteId } });
     if (!institute) return null;

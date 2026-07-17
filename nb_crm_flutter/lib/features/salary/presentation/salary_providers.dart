@@ -116,6 +116,11 @@ final employeeSalaryProfileProvider = FutureProvider.autoDispose
   return ref.watch(salaryRepositoryProvider).getEmployeeProfile(employeeId);
 });
 
+final employeeSalaryPreviewProvider = FutureProvider.autoDispose
+    .family<EmployeeSalaryPreview, int>((ref, employeeId) async {
+  return ref.watch(salaryRepositoryProvider).getEmployeeSalaryPreview(employeeId);
+});
+
 typedef SalaryEntryPeriod = ({int employeeId, int month, int year});
 
 final salaryEntryRecordsProvider = FutureProvider.autoDispose

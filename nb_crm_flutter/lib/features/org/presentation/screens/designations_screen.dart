@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/theme/app_colors.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/auth_providers.dart';
 import '../../domain/org_models.dart';
@@ -60,7 +59,9 @@ class _DesignationsScreenState extends ConsumerState<DesignationsScreen> {
             Icons.arrow_back_rounded,
             color: isDark ? Colors.white.withOpacity(0.8) : const Color(0xFF212F3D),
           ),
-          onPressed: () => context.canPop() ? context.pop() : context.go('/home'),
+          onPressed: () => context.canPop()
+              ? context.pop()
+              : context.go('/admin/configurations'),
         ),
         actions: [
           IconButton(
@@ -373,6 +374,11 @@ class _DesignationsScreenState extends ConsumerState<DesignationsScreen> {
                 activeColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
                 onChanged: (checked) => _toggleDesignation(d.id, checked),
               ),
+              IconButton(
+                tooltip: 'Delete',
+                icon: Icon(Icons.delete_outline, color: Colors.red.shade400, size: 20),
+                onPressed: () => _confirmDeleteDesignation(d),
+              ),
             ],
           ),
         ),
@@ -526,6 +532,38 @@ class _DesignationsScreenState extends ConsumerState<DesignationsScreen> {
     } catch (e) {
       messenger.showSnackBar(
         SnackBar(content: Text('Update failed: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  Future<void> _confirmDeleteDesignation(Designation d) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete designation?'),
+        content: Text(
+          'Delete "${d.name}"?\n\n'
+          'If employees or salary structures still use it, it will be deactivated instead.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref.read(orgRepositoryProvider).deleteDesignation(d.id);
+      ref.invalidate(jobDesignationsProvider);
+      messenger.showSnackBar(const SnackBar(content: Text('Designation deleted / deactivated')));
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.red),
       );
     }
   }

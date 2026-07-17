@@ -1,3 +1,50 @@
+class EmployeeNameOption {
+  final String type;
+  final String userId;
+  final String fullName;
+  final String? employeeCode;
+  final String? designationName;
+  final int? employeeId;
+
+  const EmployeeNameOption({
+    required this.type,
+    required this.userId,
+    required this.fullName,
+    this.employeeCode,
+    this.designationName,
+    this.employeeId,
+  });
+
+  factory EmployeeNameOption.fromJson(Map<String, dynamic> json) {
+    final rawId = json['id'];
+    int? employeeId;
+    if (json['type'] == 'EMPLOYEE' || json['type'] == null) {
+      if (rawId is int) {
+        employeeId = rawId;
+      } else if (rawId != null) {
+        employeeId = int.tryParse(rawId.toString());
+      }
+    }
+    return EmployeeNameOption(
+      type: json['type'] as String? ?? 'EMPLOYEE',
+      userId: json['userId']?.toString() ?? '',
+      fullName: json['fullName'] as String? ?? '',
+      employeeCode: json['employeeCode'] as String?,
+      designationName: json['designationName'] as String?,
+      employeeId: employeeId,
+    );
+  }
+
+  String get displayLabel {
+    final code = employeeCode;
+    final designation = designationName;
+    final parts = <String>[fullName];
+    if (code != null && code.isNotEmpty) parts.add(code);
+    if (designation != null && designation.isNotEmpty) parts.add(designation);
+    return parts.join(' • ');
+  }
+}
+
 class ChangeRequestGeneralInfo {
   final String fullName;
   final String? employeeCode;

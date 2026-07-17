@@ -5,7 +5,7 @@ import { familyService } from './family.service';
 
 const memberSchema = z.object({
   id: z.string().uuid().optional(),
-  relation: z.enum(['FATHER', 'MOTHER', 'SPOUSE', 'SON', 'DAUGHTER', 'BROTHER', 'SISTER', 'GUARDIAN', 'OTHER']),
+  relation: z.string().min(1),
   name: z.string().min(1),
   city: z.string().min(1).nullable().optional(),
   mobileNo: z.string().min(1).nullable().optional(),
@@ -15,6 +15,9 @@ const memberSchema = z.object({
   aadhaarNo: z.string().min(4).nullable().optional(), // sensitive
   aadhaarUrl: z.string().url().nullable().optional(),
   isNominee: z.boolean().optional(),
+  isDependent: z.boolean().optional(),
+  isEmployed: z.boolean().optional(),
+  employerName: z.string().min(1).nullable().optional(),
   updatedBy: z.string().min(1).nullable().optional(),
 });
 

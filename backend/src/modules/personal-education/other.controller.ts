@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { ok, fail } from '../../utils/response';
 import { otherService } from './other.service';
+import { assertMayDirectWriteProfile } from './profileWriteGuard';
 
 const OtherInfoSchema = z.object({
   skillSet:        z.string().optional().nullable(),
@@ -33,6 +34,11 @@ export const otherController = {
     const employeeId = Number(req.params.id);
     if (!Number.isFinite(employeeId)) return res.status(400).json(fail('Invalid employee id'));
     assertSelfAccess(req, employeeId);
+    try {
+      assertMayDirectWriteProfile(req, employeeId);
+    } catch (err: any) {
+      return res.status(err.status ?? 403).json(fail(err.message));
+    }
 
     const body = OtherInfoSchema.safeParse(req.body);
     if (!body.success) return res.status(400).json(fail(body.error.issues[0]?.message ?? 'Validation error'));
@@ -50,6 +56,11 @@ export const otherController = {
     const employeeId = Number(req.params.id);
     if (!Number.isFinite(employeeId)) return res.status(400).json(fail('Invalid employee id'));
     assertSelfAccess(req, employeeId);
+    try {
+      assertMayDirectWriteProfile(req, employeeId);
+    } catch (err: any) {
+      return res.status(err.status ?? 403).json(fail(err.message));
+    }
 
     const body = OtherInfoSchema.safeParse(req.body);
     if (!body.success) return res.status(400).json(fail(body.error.issues[0]?.message ?? 'Validation error'));

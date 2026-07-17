@@ -76,6 +76,11 @@ export const absenceLwpService = {
     const record = await prisma.absenceRecord.findUnique({ where: { id: absenceRecordId } });
     if (!record || record.convertedToLwp || record.leaveApplicationId) return null;
 
+    const autoApply = await prisma.leaveSetting.findUnique({ where: { key: 'lwp_auto_apply' } });
+    if (autoApply && autoApply.value.toLowerCase() === 'false') {
+      return null;
+    }
+
     const lwpTypeId = await getLWPTypeId();
     const year = record.date.getUTCFullYear();
     const month = record.date.getUTCMonth() + 1;

@@ -135,3 +135,8 @@ final approvalsQueueProvider = FutureProvider.autoDispose<List<ChangeRequest>>((
   final actualStatus = status == 'ALL' ? null : status;
   return ref.watch(adminRepositoryProvider).listApprovals(status: actualStatus);
 });
+
+/// Approver picker list for reporting managers.
+final employeeNamesProvider = FutureProvider.autoDispose<List<EmployeeNameOption>>((ref) async {
+  return ref.watch(adminRepositoryProvider).listEmployeeNames();
+});

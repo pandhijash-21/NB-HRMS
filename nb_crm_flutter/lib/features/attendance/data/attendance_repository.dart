@@ -115,4 +115,23 @@ class AttendanceRepository {
       },
     );
   }
+
+  Future<AdminAttendanceEmployeeHistory> getAdminEmployeeHistory({
+    required int employeeId,
+    required String from,
+    required String to,
+  }) async {
+    return _dio.getEnvelope<AdminAttendanceEmployeeHistory>(
+      'attendance/admin/employee/$employeeId/history',
+      queryParameters: {'from': from, 'to': to},
+      parse: (raw) {
+        if (raw is! Map) {
+          throw const FormatException('Invalid employee history response');
+        }
+        return AdminAttendanceEmployeeHistory.fromJson(
+          Map<String, dynamic>.from(raw),
+        );
+      },
+    );
+  }
 }

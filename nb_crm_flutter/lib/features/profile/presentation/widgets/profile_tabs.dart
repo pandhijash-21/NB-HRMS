@@ -1,20 +1,108 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/name_utils.dart';
 import '../../domain/profile_models.dart';
+import '../../../admin/presentation/admin_notifier.dart';
+import '../../../admin/domain/admin_models.dart';
+import '../../../org/domain/org_models.dart';
+import '../../../org/presentation/org_providers.dart';
+import '../../../salary/presentation/salary_providers.dart';
 
-class GeneralViewTab extends StatelessWidget {
+class GeneralViewTab extends ConsumerWidget {
   final EmployeeProfile profile;
 
   const GeneralViewTab({super.key, required this.profile});
 
-  @override
-  Widget build(BuildContext context) {
+  AddressInfo? _localAddress() {
+    for (final a in profile.addresses) {
+      if (a.addressType.toUpperCase() == 'LOCAL') return a;
+    }
+    return null;
+  }
+
+  String _instituteLabel(List<Institute> institutes) {
     final info = profile.generalInfo;
+    if (info?.instituteName != null && info!.instituteName!.isNotEmpty) {
+      return info.instituteName!;
+    }
+    if (info?.instituteId != null) {
+      for (final inst in institutes) {
+        if (inst.id == info!.instituteId) return inst.name;
+      }
+    }
+    final subOrg = info?.subOrganization;
+    if (subOrg != null && subOrg.isNotEmpty) return subOrg;
+    return '—';
+  }
+
+  String? _approverLabel(String? userId, List<EmployeeNameOption> names) {
+    if (userId == null || userId.isEmpty) return null;
+    for (final item in names) {
+      if (item.userId == userId) return item.displayLabel;
+    }
+    return userId;
+  }
+
+  String _formatEnum(String? value) {
+    if (value == null || value.trim().isEmpty) return '—';
+    return value.replaceAll('_', ' ');
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final info = profile.generalInfo;
+    final local = _localAddress();
+    final institutesAsync = ref.watch(institutesListProvider);
+    final namesAsync = ref.watch(employeeNamesProvider);
+    final institutes = institutesAsync.asData?.value ?? const <Institute>[];
+    final names = namesAsync.asData?.value ?? const <EmployeeNameOption>[];
 
     return SingleChildScrollView(
-      padding: EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
       child: Column(
         children: [
+          _buildSectionCard(
+            context: context,
+            title: 'Identity & Media',
+            icon: Icons.badge_outlined,
+            children: [
+              _buildField(
+                context,
+                'Abbreviation',
+                profile.abbreviation ??
+                    generateAbbreviation(info?.fullName ?? ''),
+              ),
+              _buildMediaPlaceholder(
+                context,
+                label: 'Profile Photo',
+                url: profile.photoUrl,
+                emptyHint: 'No photo uploaded',
+              ),
+              _buildMediaPlaceholder(
+                context,
+                label: 'Digital Signature',
+                url: profile.signatureUrl,
+                emptyHint: 'No signature uploaded',
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _buildSectionCard(
+            context: context,
+            title: 'Contact & Access',
+            icon: Icons.contact_mail_outlined,
+            children: [
+              _buildField(context, 'Personal Email (Gmail)', local?.personalEmail ?? '—'),
+              _buildField(context, 'Institutional Email', local?.instituteEmail ?? '—'),
+              _buildField(
+                context,
+                'Position (Permissions)',
+                profile.position?.name ?? 'Staff — no admin position',
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
           _buildSectionCard(
             context: context,
             title: 'Employment Details',
@@ -23,40 +111,46 @@ class GeneralViewTab extends StatelessWidget {
               _buildField(context, 'Full Name', info?.fullName ?? '—'),
               _buildField(context, 'Employee Code', info?.employeeCode ?? '—'),
               _buildField(context, 'Organization', info?.organization ?? '—'),
+              _buildField(context, 'Institute', _instituteLabel(institutes)),
               _buildField(context, 'Department', info?.department ?? '—'),
               _buildField(context, 'Functional Dept', info?.functionalDepartment ?? '—'),
               _buildField(context, 'Designation', info?.designation ?? '—'),
-              _buildField(context, 'Employee Category', info?.employeeCategory ?? '—'),
-              _buildField(context, 'Appointment Type', info?.appointmentType ?? '—'),
+              _buildField(context, 'Employee Category', _formatEnum(info?.employeeCategory)),
+              _buildField(context, 'Appointment Type', _formatEnum(info?.appointmentType)),
               _buildField(context, 'Shift', info?.shift ?? '—'),
             ],
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
           _buildSectionCard(
             context: context,
             title: 'Timeline & Reporting',
             icon: Icons.timeline,
             children: [
-              _buildField(context, 
+              _buildField(
+                context,
                 'Joining Date',
                 info != null ? _formatDate(info.joiningDate) : '—',
               ),
-              _buildField(context, 
+              _buildField(
+                context,
                 'Original Joining Date',
                 info != null ? _formatDate(info.originalJoiningDate) : '—',
               ),
               _buildField(context, 'Increment Month', info?.incrementMonth ?? '—'),
-              _buildField(context, 
-                '1st Reporting ID',
-                info?.firstReportingId?.toString() ?? '—',
+              _buildField(
+                context,
+                '1st Reporting',
+                _approverLabel(info?.firstApproverUserId, names) ?? '—',
               ),
-              _buildField(context, 
-                '2nd Reporting ID',
-                info?.secondReportingId?.toString() ?? '—',
+              _buildField(
+                context,
+                '2nd Reporting',
+                _approverLabel(info?.secondApproverUserId, names) ?? '—',
               ),
-              _buildField(context, 
-                '3rd Reporting ID',
-                info?.thirdReportingId?.toString() ?? '—',
+              _buildField(
+                context,
+                '3rd Reporting',
+                _approverLabel(info?.thirdApproverUserId, names) ?? '—',
               ),
             ],
           ),
@@ -81,75 +175,42 @@ class PersonalViewTab extends StatelessWidget {
         children: [
           _buildSectionCard(
             context: context,
-            title: 'Identity & Details',
+            title: 'Personal Details',
             icon: Icons.person_outline,
             children: [
-              _buildField(context, 
+              _buildField(
+                context,
                 'Date of Birth',
                 info != null ? _formatDate(info.birthDate) : '—',
               ),
-              _buildField(context, 'Gender', info?.gender ?? '—'),
-              _buildField(context, 'Marital Status', info?.maritalStatus ?? '—'),
-              _buildField(context, 'Blood Group', info?.bloodGroup ?? '—'),
-              _buildField(context, 'Nationality', info?.nationality ?? '—'),
               _buildField(context, 'Birth Place', info?.birthPlace ?? '—'),
               _buildField(context, 'Home Town', info?.homeTown ?? '—'),
+              _buildField(context, 'Gender', info?.gender ?? '—'),
+              _buildField(context, 'Marital Status', info?.maritalStatus ?? '—'),
+              _buildField(context, 'Nationality', info?.nationality ?? '—'),
               _buildField(context, 'Mother Tongue', info?.motherTongue ?? '—'),
-            ],
-          ),
-          SizedBox(height: 16),
-          _buildSectionCard(
-            context: context,
-            title: 'Government Identity & Caste',
-            icon: Icons.badge_outlined,
-            children: [
-              _buildField(context, 'Aadhaar Number', info?.aadhaarNo ?? '—'),
-              _buildField(context, 'PAN Number', info?.panNo ?? '—'),
-              _buildField(context, 'Caste Category', info?.castCategory ?? '—'),
-              _buildField(context, 'Sub-Caste', info?.subCaste ?? '—'),
+              _buildField(context, 'Blood Group', _formatBloodGroup(info?.bloodGroup)),
+              _buildField(context, 'Cast Category', info?.castCategory ?? '—'),
+              _buildField(context, 'Sub Caste', info?.subCaste ?? '—'),
               _buildField(context, 'Nominee Name', info?.nomineeName ?? '—'),
               _buildField(context, 'Nominee Relation', info?.nomineeRelation ?? '—'),
-            ],
-          ),
-          SizedBox(height: 16),
-          _buildSectionCard(
-            context: context,
-            title: 'Passport Details',
-            icon: Icons.flight_takeoff,
-            children: [
-              _buildField(context, 'Passport Number', info?.passportNo ?? '—'),
-              _buildField(context, 'Issue Place', info?.passportIssuePlace ?? '—'),
-              _buildField(context, 
-                'Issue Date',
+              _buildField(context, 'Aadhaar Number', info?.aadhaarNo ?? '—'),
+              _buildField(context, 'PAN Number', info?.panNo ?? '—'),
+              _buildField(context, 'Passport No', info?.passportNo ?? '—'),
+              _buildField(context, 'Passport Issue Place', info?.passportIssuePlace ?? '—'),
+              _buildField(
+                context,
+                'Passport Issue Date',
                 info?.passportIssueDate != null
                     ? _formatDate(info!.passportIssueDate!)
                     : '—',
               ),
-              _buildField(context, 
-                'Expiry Date',
+              _buildField(
+                context,
+                'Passport Expiry Date',
                 info?.passportExpiryDate != null
                     ? _formatDate(info!.passportExpiryDate!)
                     : '—',
-              ),
-            ],
-          ),
-          SizedBox(height: 16),
-          _buildSectionCard(
-            context: context,
-            title: 'Photo & Signature',
-            icon: Icons.photo_camera_outlined,
-            children: [
-              _buildMediaPlaceholder(
-                context,
-                label: 'Profile Photo',
-                url: profile.photoUrl,
-                emptyHint: 'No photo uploaded — use Edit Profile → Personal',
-              ),
-              _buildMediaPlaceholder(
-                context,
-                label: 'Digital Signature',
-                url: profile.signatureUrl,
-                emptyHint: 'No signature uploaded — use Edit Profile → Personal',
               ),
             ],
           ),
@@ -162,12 +223,18 @@ class PersonalViewTab extends StatelessWidget {
               _buildDocItem(context, 'Aadhaar Card', info?.aadhaarCardUrl),
               _buildDocItem(context, 'PAN Card', info?.panCardUrl),
               _buildDocItem(context, 'Passport Document', profile.otherInfo?.passportUrl),
+              _buildDocItem(context, 'Other Document', info?.otherDocumentUrl),
             ],
           ),
         ],
       ),
     );
   }
+}
+
+String _formatBloodGroup(String? value) {
+  if (value == null || value.isEmpty) return '—';
+  return value.replaceAll('_POS', '+').replaceAll('_NEG', '-');
 }
 
 class AddressViewTab extends StatelessWidget {
@@ -298,19 +365,14 @@ class AddressViewTab extends StatelessWidget {
             ),
             _buildFieldDetail(context, 'Flat / Block No', addr?.flatBlockNo),
             _buildFieldDetail(context, 'Building / Society', addr?.buildingSociety),
-            _buildFieldDetail(context, 'Area', addr?.area),
+            _buildFieldDetail(context, 'Area / Street', addr?.area),
             _buildFieldDetail(context, 'City', addr?.city),
             _buildFieldDetail(context, 'State', addr?.state),
-            _buildFieldDetail(context, 'Country', addr?.country ?? 'INDIA'),
-            _buildFieldDetail(context, 'Zip / Postal Code', addr?.zipPostalCode),
-            _buildFieldDetail(context, 'Mobile No', addr?.mobileNo),
-            _buildFieldDetail(context, 'Phone No', addr?.phoneNo),
-            if (isLocal) ...[
-              _buildFieldDetail(context, 'Intercom No', addr?.intercomNo),
-              _buildFieldDetail(context, 'Personal Email', addr?.personalEmail),
-              _buildFieldDetail(context, 'Institute Email', addr?.instituteEmail),
-              _buildFieldDetail(context, 'Personal Web URL', addr?.url),
-            ],
+            _buildFieldDetail(context, 'Pincode', addr?.zipPostalCode),
+            _buildFieldDetail(context, 'Country', addr?.country ?? 'India'),
+            _buildFieldDetail(context, 'Phone', addr?.phoneNo),
+            _buildFieldDetail(context, 'Mobile', addr?.mobileNo),
+            if (isLocal) _buildFieldDetail(context, 'Personal Email', addr?.personalEmail),
           ],
         ),
       ),
@@ -492,7 +554,8 @@ class FamilyViewTab extends StatelessWidget {
                     runSpacing: 16,
                     children: [
                       _buildWrapField(context, 'Relationship', member.relation),
-                      _buildWrapField(context, 
+                      _buildWrapField(
+                        context,
                         'DOB',
                         member.dateOfBirth != null
                             ? _formatDate(member.dateOfBirth!)
@@ -502,6 +565,9 @@ class FamilyViewTab extends StatelessWidget {
                       _buildWrapField(context, 'Email', member.personalEmail ?? '—'),
                       _buildWrapField(context, 'City', member.city ?? '—'),
                       _buildWrapField(context, 'Aadhaar No', member.aadhaarNo ?? '—'),
+                      _buildWrapField(context, 'Dependent', member.isDependent ? 'YES' : 'NO'),
+                      _buildWrapField(context, 'Employed', member.isEmployed ? 'YES' : 'NO'),
+                      _buildWrapField(context, 'Employer', member.employerName ?? '—'),
                       _buildWrapField(context, 'Is Nominee', member.isNominee ? 'YES' : 'NO'),
                     ],
                   ),
@@ -807,45 +873,147 @@ class BankViewTab extends StatelessWidget {
               _buildField(context, 'IFSC Code', info?.ifscCode ?? '—'),
             ],
           ),
+          const SizedBox(height: 16),
+          _buildSectionCard(
+            context: context,
+            title: 'Bank Documents',
+            icon: Icons.account_balance_wallet_outlined,
+            children: [
+              _buildDocPreview(context, 'Cancelled Cheque', info?.cancelledChequeUrl),
+              _buildDocPreview(context, 'Passbook', info?.passbookUrl),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDocPreview(BuildContext context, String label, String? url) {
+    final has = url != null && url.isNotEmpty;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+          const SizedBox(height: 6),
+          if (!has)
+            Text('Not uploaded', style: TextStyle(fontSize: 13, color: AppColors.textSecondary))
+          else
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: AspectRatio(
+                aspectRatio: 16 / 9,
+                child: Image.network(url, fit: BoxFit.cover),
+              ),
+            ),
         ],
       ),
     );
   }
 }
 
-class SalaryViewTab extends StatelessWidget {
+class SalaryViewTab extends ConsumerWidget {
   final EmployeeProfile profile;
 
   const SalaryViewTab({super.key, required this.profile});
 
   @override
-  Widget build(BuildContext context) {
-    final info = profile.salaryInfo;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final previewAsync = ref.watch(employeeSalaryPreviewProvider(profile.id));
 
-    return SingleChildScrollView(
-      padding: EdgeInsets.all(16),
-      child: Column(
-        children: [
-          _buildSectionCard(
-            context: context,
-            title: 'Salary Structure',
-            icon: Icons.payments_outlined,
+    return previewAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Center(child: Text('Could not load salary: $e')),
+      data: (preview) {
+        final computed = preview.computed;
+        final info = profile.salaryInfo;
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
             children: [
-              _buildField(context, 'Pay Commission', info?.payCommission ?? '—'),
-              _buildField(context, 'Pay Grade', info?.payGrade ?? '—'),
-              _buildField(context, 
-                'Basic Salary',
-                info?.basicSalary != null ? '₹${info!.basicSalary}' : '—',
+              _buildSectionCard(
+                context: context,
+                title: 'Salary Structure',
+                icon: Icons.payments_outlined,
+                children: [
+                  _buildField(
+                    context,
+                    'Pay Commission',
+                    preview.payCommission?.name ??
+                        preview.payCommissionCode ??
+                        info?.payCommission ??
+                        '—',
+                  ),
+                  _buildField(
+                    context,
+                    'Designation',
+                    preview.designation?.name ?? '—',
+                  ),
+                  if (computed != null) ...[
+                    _buildField(context, 'Gross Pay', '₹${computed.grossPay}'),
+                    _buildField(
+                      context,
+                      'Total Deductions',
+                      '₹${computed.totalDeductions}',
+                    ),
+                    _buildField(context, 'Net Pay', '₹${computed.netPay}'),
+                  ] else ...[
+                    _buildField(
+                      context,
+                      'Basic Salary',
+                      info?.basicSalary != null ? '₹${info!.basicSalary}' : '—',
+                    ),
+                    _buildField(
+                      context,
+                      'Gross Salary',
+                      info?.grossSalary != null ? '₹${info!.grossSalary}' : '—',
+                    ),
+                    if (preview.reason != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          preview.reason == 'NO_TEMPLATE'
+                              ? 'Salary structure not configured for this designation yet.'
+                              : preview.reason == 'NO_COMMISSION'
+                                  ? 'Pay commission not assigned.'
+                                  : 'Salary preview unavailable (${preview.reason}).',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.orange.shade800,
+                          ),
+                        ),
+                      ),
+                  ],
+                ],
               ),
-              _buildField(context, 'AGP', info?.agp != null ? '₹${info!.agp}' : '—'),
-              _buildField(context, 
-                'Gross Salary',
-                info?.grossSalary != null ? '₹${info!.grossSalary}' : '—',
-              ),
+              if (computed != null && preview.columnDefinitions.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                _buildSectionCard(
+                  context: context,
+                  title: 'Columns',
+                  icon: Icons.view_column_outlined,
+                  children: [
+                    for (final col in preview.columnDefinitions)
+                      if (preview.columnVisibility[col.visibilityKey] != false)
+                        _buildField(
+                          context,
+                          col.displayName,
+                          () {
+                            final row = computed.columns
+                                .where((c) => c.key == col.visibilityKey)
+                                .toList();
+                            if (row.isEmpty) return '—';
+                            return '₹${row.first.effectiveValue}';
+                          }(),
+                        ),
+                  ],
+                ),
+              ],
             ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

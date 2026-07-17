@@ -163,7 +163,6 @@ class AdminSalaryStructuresScreen extends ConsumerWidget {
 
   Widget _buildStatusChip(BuildContext context, SalaryStructureCommissionStatus c) {
     final color = c.configured ? Colors.green : Colors.orange;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),

@@ -189,6 +189,7 @@ export const employeeController = {
       instituteId: z.string().uuid().optional(),
       subOrganization: z.string().optional().nullable(),
       positionDesignationId: z.string().uuid().optional().nullable(),
+      abbreviation: z.string().min(1).max(10).optional().nullable(),
     });
 
     const body = FullCreateSchema.safeParse(req.body);

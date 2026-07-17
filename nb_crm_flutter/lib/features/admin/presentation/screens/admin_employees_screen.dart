@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/name_utils.dart';
 import '../../../auth/presentation/auth_providers.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../presentation/admin_notifier.dart';
 import '../../../profile/domain/profile_models.dart';
+import '../../domain/admin_models.dart';
 import '../../../org/presentation/org_providers.dart';
+import '../../../lookups/presentation/lookup_providers.dart';
 
 class AdminEmployeesScreen extends ConsumerStatefulWidget {
   const AdminEmployeesScreen({super.key});
@@ -788,32 +790,63 @@ class _AddEmployeeDialog extends ConsumerStatefulWidget {
 }
 
 class _AddEmployeeDialogState extends ConsumerState<_AddEmployeeDialog> {
+  static const _fallbackOrgs = ['Gandhinagar University', 'Platinum Foundation'];
+  static const _fallbackCategories = ['TEACHING', 'NON_TEACHING', 'CONTRACT', 'VISITING'];
+
   final _formKey = GlobalKey<FormState>();
   final _fullNameCtrl = TextEditingController();
   final _personalEmailCtrl = TextEditingController();
   final _instEmailCtrl = TextEditingController();
-  final _designationCtrl = TextEditingController();
   final _departmentCtrl = TextEditingController();
   final _employeeCodeCtrl = TextEditingController();
-  final _subOrgCtrl = TextEditingController(text: 'GIT');
+  final _abbreviationCtrl = TextEditingController();
+
+  String? _organization;
+  String? _instituteId;
+  String? _designation;
+  String? _positionDesignationId;
   String _category = 'TEACHING';
-  DateTime _joiningDate = DateTime.now();
+  DateTime? _joiningDate;
+  String? _firstApproverUserId;
+  String? _secondApproverUserId;
+  String? _thirdApproverUserId;
 
   @override
   void dispose() {
     _fullNameCtrl.dispose();
     _personalEmailCtrl.dispose();
     _instEmailCtrl.dispose();
-    _designationCtrl.dispose();
     _departmentCtrl.dispose();
     _employeeCodeCtrl.dispose();
-    _subOrgCtrl.dispose();
+    _abbreviationCtrl.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final institutesAsync = ref.watch(activeInstitutesProvider);
+    final designationsAsync = ref.watch(jobDesignationsProvider);
+    final positionsAsync = ref.watch(positionDesignationsProvider);
+    final namesAsync = ref.watch(employeeNamesProvider);
+    final orgLookups = ref.watch(activeLookupsByCategoryProvider('ORGANIZATION'));
+    final catLookups = ref.watch(activeLookupsByCategoryProvider('EMPLOYEE_CATEGORY'));
+    final institutes = institutesAsync.asData?.value ?? const [];
+    final designations = designationsAsync.asData?.value ?? const [];
+    final positions = positionsAsync.asData?.value ?? const [];
+    final names = namesAsync.asData?.value ?? const [];
+    final organizations = (orgLookups.asData?.value ?? const [])
+        .map((o) => o.label)
+        .toList();
+    final orgItems = organizations.isNotEmpty ? organizations : _fallbackOrgs;
+    final categories = (catLookups.asData?.value ?? const [])
+        .map((o) => o.code)
+        .toList();
+    final categoryItems = categories.isNotEmpty ? categories : _fallbackCategories;
+    final organizationValue = _organization ??
+        (orgItems.contains('Gandhinagar University')
+            ? 'Gandhinagar University'
+            : orgItems.first);
 
     return AlertDialog(
       backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
@@ -824,64 +857,126 @@ class _AddEmployeeDialogState extends ConsumerState<_AddEmployeeDialog> {
           width: 1.5,
         ),
       ),
-      title: Text(
-        'Onboard New Employee',
-        style: TextStyle(
-          color: isDark ? Colors.white : const Color(0xFF212F3D),
-          fontWeight: FontWeight.w800,
-        ),
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Onboard New Employee',
+            style: TextStyle(
+              color: isDark ? Colors.white : const Color(0xFF212F3D),
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Establish a new institutional record and system credentials.',
+            style: TextStyle(
+              fontSize: 12,
+              color: isDark ? Colors.white60 : const Color(0xFF607D8B),
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
       ),
       scrollable: true,
       content: SizedBox(
-        width: 440,
+        width: 520,
         child: Form(
           key: _formKey,
           child: Column(
             children: [
-              _buildDialogField('Full Name', _fullNameCtrl, required: true),
-              _buildDialogField('Personal Email', _personalEmailCtrl, required: true, isEmail: true),
-              _buildDialogField('Institutional Email', _instEmailCtrl, isEmail: true),
-              _buildDialogField('Employee Code', _employeeCodeCtrl, required: true),
-              _buildDialogField('Designation', _designationCtrl, required: true),
-              _buildDialogField('Department', _departmentCtrl, required: true),
-              _buildDialogField('Sub-Organization (e.g. GIT, GIC)', _subOrgCtrl),
-              DropdownButtonFormField<String>(
-                initialValue: _category,
-                dropdownColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
-                style: TextStyle(color: isDark ? Colors.white : const Color(0xFF212F3D), fontWeight: FontWeight.w600),
-                decoration: const InputDecoration(
-                  labelText: 'Employee Category',
-                  border: OutlineInputBorder(),
-                ),
-                items: const [
-                  DropdownMenuItem(value: 'TEACHING', child: Text('Teaching / Faculty')),
-                  DropdownMenuItem(value: 'NON_TEACHING', child: Text('Non-Teaching / Admin')),
-                  DropdownMenuItem(value: 'SUPPORT', child: Text('Support Staff')),
+              _buildDialogField('Full Name', _fullNameCtrl, required: true, hint: 'e.g. Dr. Rajesh Kumar', onChanged: (v) {
+                setState(() => _abbreviationCtrl.text = generateAbbreviation(v));
+              }),
+              _buildDialogField('Employee Code', _employeeCodeCtrl, required: true, hint: 'e.g. GU1234'),
+              _buildReadOnlyDialogField(
+                'Abbreviation',
+                _abbreviationCtrl.text.isEmpty ? '—' : _abbreviationCtrl.text,
+                helper: 'Auto-generated from name (e.g. Jash Pandhi → JP)',
+              ),
+              _buildDialogField('Personal Email (Gmail)', _personalEmailCtrl, required: true, isEmail: true, hint: 'yourname@gmail.com'),
+              _buildDialogField(
+                'Institutional Email (Optional)',
+                _instEmailCtrl,
+                isEmail: true,
+                hint: 'firstname.lastname@gandhinagaruni.ac.in',
+                helper: 'Format: firstname.lastname@gandhinagaruni.ac.in',
+              ),
+              _buildDropdown(
+                isDark: isDark,
+                label: 'Position (Permissions)',
+                value: _positionDesignationId,
+                helper: 'Controls admin portal access. Job designation is separate.',
+                items: [
+                  const DropdownMenuItem<String?>(value: null, child: Text('Staff — no admin position')),
+                  ...positions.map(
+                    (p) => DropdownMenuItem<String?>(value: p.id, child: Text(p.name)),
+                  ),
                 ],
+                onChanged: (v) => setState(() => _positionDesignationId = v),
+              ),
+              _buildDropdown(
+                isDark: isDark,
+                label: 'Organization *',
+                value: organizationValue,
+                items: orgItems
+                    .map((org) => DropdownMenuItem<String?>(value: org, child: Text(org)))
+                    .toList(),
+                onChanged: (v) {
+                  if (v != null) setState(() => _organization = v);
+                },
+              ),
+              _buildDropdown(
+                isDark: isDark,
+                label: 'Institute *',
+                value: _instituteId,
+                items: [
+                  const DropdownMenuItem<String?>(value: null, child: Text('Select institute...')),
+                  ...institutes.map(
+                    (inst) => DropdownMenuItem<String?>(value: inst.id, child: Text(inst.name)),
+                  ),
+                ],
+                onChanged: (v) => setState(() => _instituteId = v),
+                validator: (v) => v == null ? 'Institute is required' : null,
+              ),
+              _buildDropdown(
+                isDark: isDark,
+                label: 'Designation *',
+                value: _designation,
+                items: [
+                  const DropdownMenuItem<String?>(value: null, child: Text('Select designation...')),
+                  ...designations.map(
+                    (d) => DropdownMenuItem<String?>(value: d.name, child: Text(d.name)),
+                  ),
+                ],
+                onChanged: (v) => setState(() => _designation = v),
+                validator: (v) => v == null || v.isEmpty ? 'Designation is required' : null,
+              ),
+              _buildDialogField('Department', _departmentCtrl, required: true, hint: 'e.g. Comp. Science'),
+              _buildDropdown(
+                isDark: isDark,
+                label: 'Engagement Category *',
+                value: categoryItems.contains(_category) ? _category : categoryItems.first,
+                items: categoryItems
+                    .map((c) => DropdownMenuItem<String?>(
+                          value: c,
+                          child: Text(c.replaceAll('_', ' ')),
+                        ))
+                    .toList(),
                 onChanged: (v) {
                   if (v != null) setState(() => _category = v);
                 },
               ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Joining Date: ${_formatDate(_joiningDate)}',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: isDark ? Colors.white70 : const Color(0xFF212F3D),
-                      ),
-                    ),
-                  ),
-                  TextButton.icon(
-                    onPressed: _pickJoiningDate,
-                    style: TextButton.styleFrom(foregroundColor: const Color(0xFFC5A059)),
-                    icon: const Icon(Icons.calendar_today_rounded, size: 14),
-                    label: const Text('Select Date', style: TextStyle(fontWeight: FontWeight.w800)),
-                  ),
-                ],
-              ),
+              _buildDateRow(isDark),
+              _buildApproverDropdown(isDark, '1st Reporting', _firstApproverUserId, names, (v) {
+                setState(() => _firstApproverUserId = v);
+              }),
+              _buildApproverDropdown(isDark, '2nd Reporting', _secondApproverUserId, names, (v) {
+                setState(() => _secondApproverUserId = v);
+              }),
+              _buildApproverDropdown(isDark, '3rd Reporting', _thirdApproverUserId, names, (v) {
+                setState(() => _thirdApproverUserId = v);
+              }),
             ],
           ),
         ),
@@ -904,16 +999,112 @@ class _AddEmployeeDialogState extends ConsumerState<_AddEmployeeDialog> {
             foregroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
-          child: const Text('Onboard Employee', style: TextStyle(fontWeight: FontWeight.w800)),
+          child: const Text('Finalize Records', style: TextStyle(fontWeight: FontWeight.w800)),
         ),
       ],
+    );
+  }
+
+  Widget _buildDateRow(bool isDark) {
+    final label = _joiningDate == null
+        ? 'Appointment Date *'
+        : 'Appointment Date *: ${_formatDate(_joiningDate!)}';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: isDark ? Colors.white70 : const Color(0xFF212F3D),
+              ),
+            ),
+          ),
+          TextButton.icon(
+            onPressed: _pickJoiningDate,
+            icon: const Icon(Icons.calendar_today_rounded, size: 14),
+            label: const Text('Select Date'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDropdown({
+    required bool isDark,
+    required String label,
+    required String? value,
+    required List<DropdownMenuItem<String?>> items,
+    required ValueChanged<String?> onChanged,
+    String? helper,
+    String? Function(String?)? validator,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          DropdownButtonFormField<String?>(
+            initialValue: value,
+            dropdownColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+            style: TextStyle(
+              color: isDark ? Colors.white : const Color(0xFF212F3D),
+              fontWeight: FontWeight.w600,
+            ),
+            decoration: InputDecoration(
+              labelText: label,
+              border: const OutlineInputBorder(),
+            ),
+            items: items,
+            onChanged: onChanged,
+            validator: validator,
+          ),
+          if (helper != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4, left: 4),
+              child: Text(
+                helper,
+                style: TextStyle(fontSize: 11, color: isDark ? Colors.white38 : const Color(0xFF607D8B)),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildApproverDropdown(
+    bool isDark,
+    String label,
+    String? value,
+    List<EmployeeNameOption> names,
+    ValueChanged<String?> onChanged,
+  ) {
+    return _buildDropdown(
+      isDark: isDark,
+      label: label,
+      value: value,
+      items: [
+        const DropdownMenuItem<String?>(
+          value: null,
+          child: Text('NULL (bypass this layer)'),
+        ),
+        ...names.map(
+          (item) => DropdownMenuItem<String?>(
+            value: item.userId,
+            child: Text(item.displayLabel),
+          ),
+        ),
+      ],
+      onChanged: onChanged,
     );
   }
 
   Future<void> _pickJoiningDate() async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: _joiningDate,
+      initialDate: _joiningDate ?? DateTime.now(),
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
     );
@@ -923,6 +1114,24 @@ class _AddEmployeeDialogState extends ConsumerState<_AddEmployeeDialog> {
   }
 
   Future<void> _submit() async {
+    if (_joiningDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Appointment date is required'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+    if (_instituteId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Institute is required'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+    if (_designation == null || _designation!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Designation is required'), backgroundColor: Colors.red),
+      );
+      return;
+    }
     if (!_formKey.currentState!.validate()) return;
 
     final data = {
@@ -930,11 +1139,17 @@ class _AddEmployeeDialogState extends ConsumerState<_AddEmployeeDialog> {
       'personalEmail': _personalEmailCtrl.text.trim(),
       'institutionalEmail': _instEmailCtrl.text.trim().isEmpty ? null : _instEmailCtrl.text.trim(),
       'employeeCode': _employeeCodeCtrl.text.trim(),
-      'designation': _designationCtrl.text.trim(),
+      'abbreviation': generateAbbreviation(_fullNameCtrl.text.trim()),
+      'organization': _organization ?? 'Gandhinagar University',
+      'designation': _designation,
       'department': _departmentCtrl.text.trim(),
-      'subOrganization': _subOrgCtrl.text.trim().isEmpty ? null : _subOrgCtrl.text.trim(),
+      'instituteId': _instituteId,
       'employeeCategory': _category,
-      'joiningDate': _joiningDate.toIso8601String(),
+      'joiningDate': _joiningDate!.toIso8601String(),
+      'positionDesignationId': _positionDesignationId,
+      'firstApproverUserId': _firstApproverUserId,
+      'secondApproverUserId': _secondApproverUserId,
+      'thirdApproverUserId': _thirdApproverUserId,
     };
 
     final navigator = Navigator.of(context);
@@ -949,28 +1164,77 @@ class _AddEmployeeDialogState extends ConsumerState<_AddEmployeeDialog> {
     }
   }
 
-  Widget _buildDialogField(String label, TextEditingController ctrl, {bool required = false, bool isEmail = false}) {
+  Widget _buildReadOnlyDialogField(String label, String value, {String? helper}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InputDecorator(
+            decoration: InputDecoration(
+              labelText: label,
+              border: const OutlineInputBorder(),
+              filled: true,
+              fillColor: Colors.grey.shade100,
+            ),
+            child: Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
+          ),
+          if (helper != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4, left: 4),
+              child: Text(helper, style: const TextStyle(fontSize: 11, color: Color(0xFF607D8B))),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDialogField(
+    String label,
+    TextEditingController ctrl, {
+    bool required = false,
+    bool isEmail = false,
+    String? hint,
+    String? helper,
+    ValueChanged<String>? onChanged,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16.0),
-      child: TextFormField(
-        controller: ctrl,
-        decoration: InputDecoration(
-          labelText: required ? '$label *' : label,
-          labelStyle: const TextStyle(fontWeight: FontWeight.w600),
-          border: const OutlineInputBorder(),
-        ),
-        validator: (v) {
-          if (required && (v == null || v.trim().isEmpty)) {
-            return '$label is required';
-          }
-          if (isEmail && v != null && v.trim().isNotEmpty) {
-            final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
-            if (!emailRegex.hasMatch(v.trim())) {
-              return 'Enter a valid email address';
-            }
-          }
-          return null;
-        },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextFormField(
+            controller: ctrl,
+            onChanged: onChanged,
+            decoration: InputDecoration(
+              labelText: required ? '$label *' : label,
+              hintText: hint,
+              labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+              border: const OutlineInputBorder(),
+            ),
+            validator: (v) {
+              if (required && (v == null || v.trim().isEmpty)) {
+                return '$label is required';
+              }
+              if (isEmail && v != null && v.trim().isNotEmpty) {
+                final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+                if (!emailRegex.hasMatch(v.trim())) {
+                  return 'Enter a valid email address';
+                }
+                if (label.toLowerCase().contains('gmail') &&
+                    !v.trim().toLowerCase().endsWith('@gmail.com')) {
+                  return 'Personal email must be a Gmail address';
+                }
+              }
+              return null;
+            },
+          ),
+          if (helper != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4, left: 4),
+              child: Text(helper, style: const TextStyle(fontSize: 11, color: Color(0xFF607D8B))),
+            ),
+        ],
       ),
     );
   }

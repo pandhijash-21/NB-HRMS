@@ -48,6 +48,11 @@ export const roleService = {
       include: {
         permissions: true,
         _count: { select: { users: { where: { isActive: true } } } },
+        designations: {
+          where: { isAlias: true, isActive: true },
+          select: { id: true, name: true },
+          take: 1,
+        },
       },
     });
     if (!role) return null;
@@ -60,6 +65,7 @@ export const roleService = {
         canApprove: p.canApprove,
         canDelete:  p.canDelete,
         canExport:  p.canExport,
+        employeeViewScope: p.employeeViewScope,
       };
     }
 
@@ -71,6 +77,7 @@ export const roleService = {
       isActive:    role.isActive,
       createdAt:   role.createdAt,
       userCount:   role._count.users,
+      positionName: role.designations[0]?.name ?? null,
       permissions: permissionsMap,
     };
   },

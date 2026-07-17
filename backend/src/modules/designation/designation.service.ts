@@ -114,6 +114,45 @@ export const designationService = {
     });
   },
 
+  async remove(id: string) {
+    const current = await prisma.designation.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: {
+            generalInfoRecords: true,
+            assignments: true,
+            salaryInfoRecords: true,
+            positionSlots: true,
+            salaryStructureTemplates: true,
+          },
+        },
+      },
+    });
+    if (!current) throw new Error('Designation not found');
+    if (current.isAlias) {
+      throw new Error('Position types cannot be deleted here. Deactivate them instead.');
+    }
+
+    const inUse =
+      current._count.generalInfoRecords +
+      current._count.assignments +
+      current._count.salaryInfoRecords +
+      current._count.positionSlots +
+      current._count.salaryStructureTemplates;
+
+    if (inUse > 0) {
+      return prisma.designation.update({
+        where: { id },
+        data: { isActive: false },
+        include: { linkedRole: { select: { id: true, name: true } } },
+      });
+    }
+
+    await prisma.designation.delete({ where: { id } });
+    return { deleted: true, id, hard: true };
+  },
+
   /** Creates a position: system role (permissions) + alias designation (for alias account linking). */
   async createPosition(data: {
     displayName: string;

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { ok, fail } from '../../utils/response';
 import { addressService } from './address.service';
 import { parseAddressType } from './types';
-
+import { assertMayDirectWriteProfile } from './profileWriteGuard';
 const addressSchema = z.object({
   addressType: z.enum(['LOCAL', 'PERMANENT']).optional(),
   flatBlockNo: z.string().min(1).nullable().optional(),
@@ -49,6 +49,11 @@ export const addressController = {
     if (req.user?.role === 'EMPLOYEE' && req.user.employeeId && req.user.employeeId !== employeeId) {
       return res.status(403).json(fail('Forbidden'));
     }
+    try {
+      assertMayDirectWriteProfile(req, employeeId);
+    } catch (err: any) {
+      return res.status(err.status ?? 403).json(fail(err.message));
+    }
 
     const body = addressSchema.extend({ addressType: z.enum(['LOCAL', 'PERMANENT']) }).safeParse(req.body);
     if (!body.success) return res.status(400).json(fail(body.error.message));
@@ -62,6 +67,11 @@ export const addressController = {
     if (!Number.isFinite(employeeId)) return res.status(400).json(fail('Invalid employee id'));
     if (req.user?.role === 'EMPLOYEE' && req.user.employeeId && req.user.employeeId !== employeeId) {
       return res.status(403).json(fail('Forbidden'));
+    }
+    try {
+      assertMayDirectWriteProfile(req, employeeId);
+    } catch (err: any) {
+      return res.status(err.status ?? 403).json(fail(err.message));
     }
 
     let addressType;

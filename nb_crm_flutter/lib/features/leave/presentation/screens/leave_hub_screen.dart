@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 
+import '../../../auth/domain/permissions.dart';
+import '../../../auth/presentation/auth_providers.dart';
 import '../../domain/leave_models.dart';
 import '../leave_providers.dart';
 import '../widgets/leave_shared_widgets.dart';
@@ -16,6 +18,14 @@ class LeaveHubScreen extends ConsumerWidget {
     final balances = ref.watch(leaveBalancesProvider);
     final recentApps = ref.watch(myApplicationsProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final auth = ref.watch(authNotifierProvider);
+    final canApprove = Permissions.canApproveLeave(auth.permissions) ||
+        Permissions.canReadLeave(auth.permissions);
+    final canAdmin = Permissions.canAdminLeave(
+      auth.permissions,
+      auth.user?.role ?? '',
+      auth.user?.employeeViewScope,
+    );
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
@@ -170,6 +180,49 @@ class LeaveHubScreen extends ConsumerWidget {
                 ),
               ],
             ),
+            if (canApprove || canAdmin) ...[
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Container(
+                    width: 4,
+                    height: 18,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFC5A059),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Leave Workspace',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: isDark ? Colors.white : const Color(0xFF212F3D),
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (canApprove)
+                _LeaveWorkspaceTile(
+                  icon: Icons.rule_rounded,
+                  title: 'Leave Approvals',
+                  subtitle: 'Review pending leave requests',
+                  color: const Color(0xFF2563eb),
+                  onTap: () => context.go('/approvals'),
+                ),
+              if (canApprove && canAdmin) const SizedBox(height: 10),
+              if (canAdmin)
+                _LeaveWorkspaceTile(
+                  icon: Icons.calendar_month_rounded,
+                  title: 'Leave Admin',
+                  subtitle: 'Policies, holidays, settings & apply on behalf',
+                  color: const Color(0xFF0891b2),
+                  onTap: () => context.go('/admin/leaves'),
+                ),
+            ],
             const SizedBox(height: 36),
             Row(
               children: [
@@ -202,12 +255,13 @@ class LeaveHubScreen extends ConsumerWidget {
                 // Map to chart items
                 final chartItems = items.map((b) {
                   final name = b.leaveType?.name ?? b.leaveTypeId;
+                  final adminOnly = !(b.leaveType?.employeeCanApply ?? true);
                   final avail = b.displayAvailable;
                   final total = b.totalCredited + b.carryForward;
                   return LeaveChartData(
-                    label: name,
+                    label: adminOnly ? '$name (Admin)' : name,
                     actualAvailable: avail,
-                    chartValue: avail <= 0 ? 0.8 : avail, // tiny sliver for zero balance to show red border
+                    chartValue: avail <= 0 ? 0.8 : avail,
                     totalAllocated: total,
                     isZero: avail <= 0,
                   );
@@ -395,4 +449,84 @@ class LeaveChartData {
   final double chartValue;
   final double totalAllocated;
   final bool isZero;
+}
+
+class _LeaveWorkspaceTile extends StatelessWidget {
+  const _LeaveWorkspaceTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.color,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E1B18) : Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+              width: 1.5,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: color, size: 22),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                        color: isDark ? Colors.white : const Color(0xFF212F3D),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? Colors.white60 : const Color(0xFF607D8B),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: isDark ? Colors.white38 : Colors.grey.shade400,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

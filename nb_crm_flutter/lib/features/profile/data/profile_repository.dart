@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import '../../../core/network/dio_client.dart';
 import '../domain/profile_models.dart';
@@ -40,6 +41,7 @@ class ProfileRepository {
           status: emp.status,
           photoUrl: emp.photoUrl,
           signatureUrl: emp.signatureUrl,
+          position: emp.position,
           generalInfo: emp.generalInfo,
           personalInfo: emp.personalInfo,
           addresses: emp.addresses,
@@ -111,8 +113,21 @@ class ProfileRepository {
     }
   }
 
-  /// Save employee general info directly via `PATCH employees/{id}`.
+  /// Save employee general info directly via `PATCH employees/{id}/general`.
   Future<void> updateGeneralInfo(int employeeId, Map<String, dynamic> data) async {
+    try {
+      final response = await _dio.dio.patch<Map<String, dynamic>>(
+        'employees/$employeeId/general',
+        data: data,
+      );
+      _unwrapResponse(response);
+    } on DioException catch (e) {
+      throw _mapDioException(e);
+    }
+  }
+
+  /// Update core employee row (abbreviation, photo, signature) via `PATCH employees/{id}`.
+  Future<void> updateEmployeeCore(int employeeId, Map<String, dynamic> data) async {
     try {
       final response = await _dio.dio.patch<Map<String, dynamic>>(
         'employees/$employeeId',
@@ -151,12 +166,18 @@ class ProfileRepository {
   }
 
   /// Add family member info via `POST employees/{id}/family`.
-  Future<void> addFamilyMember(int employeeId, Map<String, dynamic> data) async {
-    await _dio.postEnvelope<dynamic>(
+  /// Returns the created member id when present.
+  Future<String?> addFamilyMember(int employeeId, Map<String, dynamic> data) async {
+    final created = await _dio.postEnvelope<Map<String, dynamic>?>(
       'employees/$employeeId/family',
       data: data,
-      parse: (raw) => raw,
+      parse: (raw) {
+        if (raw is Map<String, dynamic>) return raw;
+        if (raw is Map) return Map<String, dynamic>.from(raw);
+        return null;
+      },
     );
+    return created?['id']?.toString();
   }
 
   /// Update family member info via `PATCH employees/{id}/family/{memberId}`.
@@ -219,19 +240,34 @@ class ProfileRepository {
   }
 
   /// Upload file multipart helper: `POST upload/{kebab-type}`.
-  /// kebabType: photo, signature, aadhaar-card, pan-card, passport, aadhaar-family, marksheet, certificate
+  /// kebabType: photo, signature, aadhaar-card, pan-card, passport, other-document, aadhaar-family, marksheet, certificate
   Future<String> uploadFile({
     required int employeeId,
     required String kebabType,
-    required File file,
+    File? file,
+    Uint8List? bytes,
+    String? filename,
     String? qualId,
     int? sem,
     String? memberId,
     String? experienceId,
   }) async {
+    final MultipartFile multipart;
+    if (file != null) {
+      final name = filename ?? file.path.split(Platform.pathSeparator).last;
+      multipart = await MultipartFile.fromFile(file.path, filename: name);
+    } else if (bytes != null) {
+      multipart = MultipartFile.fromBytes(
+        bytes,
+        filename: filename ?? 'upload.bin',
+      );
+    } else {
+      throw ArgumentError('Either file or bytes must be provided');
+    }
+
     final Map<String, dynamic> formDataMap = {
       'employeeId': employeeId,
-      'file': await MultipartFile.fromFile(file.path, filename: file.path.split('/').last),
+      'file': multipart,
     };
     if (qualId != null) formDataMap['qualId'] = qualId;
     if (sem != null) formDataMap['sem'] = sem.toString();

@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/theme/app_colors.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/auth_providers.dart';
+import '../../../org/presentation/org_providers.dart';
 import '../../domain/rbac_models.dart';
 import '../rbac_providers.dart';
 
@@ -94,7 +94,7 @@ class _AdminRolesScreenState extends ConsumerState<AdminRolesScreen> {
         leading: IconButton(
           icon: Icon(
             Icons.arrow_back_rounded,
-            color: isDark ? Colors.white.withOpacity(0.8) : const Color(0xFF212F3D),
+            color: isDark ? Colors.white.withValues(alpha: 0.8) : const Color(0xFF212F3D),
           ),
           onPressed: () => context.pop(),
         ),
@@ -103,7 +103,7 @@ class _AdminRolesScreenState extends ConsumerState<AdminRolesScreen> {
             tooltip: 'Refresh list',
             icon: Icon(
               Icons.refresh_rounded,
-              color: isDark ? Colors.white.withOpacity(0.8) : const Color(0xFF212F3D),
+              color: isDark ? Colors.white.withValues(alpha: 0.8) : const Color(0xFF212F3D),
             ),
             onPressed: () => ref.read(rolesListProvider.notifier).refresh(),
           ),
@@ -112,7 +112,7 @@ class _AdminRolesScreenState extends ConsumerState<AdminRolesScreen> {
             child: SizedBox(
               height: 38,
               child: FilledButton.icon(
-                onPressed: () => _showCreateRoleDialog(context),
+                onPressed: () => _showCreatePositionDialog(context),
                 style: FilledButton.styleFrom(
                   backgroundColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
                   foregroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
@@ -120,7 +120,10 @@ class _AdminRolesScreenState extends ConsumerState<AdminRolesScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                 ),
                 icon: const Icon(Icons.add_rounded, size: 16),
-                label: const Text('Create Role', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+                label: const Text(
+                  'Create Position',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                ),
               ),
             ),
           ),
@@ -128,7 +131,9 @@ class _AdminRolesScreenState extends ConsumerState<AdminRolesScreen> {
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1.5),
           child: Container(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+            color: isDark
+                ? const Color(0xFFC5A059).withValues(alpha: 0.15)
+                : const Color(0xFFCFD8DC),
             height: 1.5,
           ),
         ),
@@ -165,7 +170,8 @@ class _AdminRolesScreenState extends ConsumerState<AdminRolesScreen> {
                           ),
                           const SizedBox(height: 16),
                           Text(
-                            'No roles found.',
+                            'No designations / positions found.\nCreate one with “Create Position”.',
+                            textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w600,
@@ -295,9 +301,9 @@ class _AdminRolesScreenState extends ConsumerState<AdminRolesScreen> {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              'Only institutional positions appear here. Create positions from Workforce, then edit permissions below.',
+              'Each row is a designation / institutional position. Open its matrix to turn permissions on or off. New positions appear here automatically.',
               style: TextStyle(
-                fontSize: 12, 
+                fontSize: 12,
                 fontWeight: FontWeight.w600,
                 color: isDark ? Colors.white70 : const Color(0xFF607D8B),
                 height: 1.35,
@@ -309,10 +315,27 @@ class _AdminRolesScreenState extends ConsumerState<AdminRolesScreen> {
     );
   }
 
-  Future<void> _showCreateRoleDialog(BuildContext context) async {
+  Future<void> _showCreatePositionDialog(BuildContext context) async {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final nameController = TextEditingController();
-    final descController = TextEditingController();
+    final displayCtrl = TextEditingController();
+    final roleCtrl = TextEditingController();
+    final descCtrl = TextEditingController();
+
+    void suggestRoleCode(String label) {
+      final words = label.trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty);
+      if (words.isEmpty) {
+        roleCtrl.text = '';
+        return;
+      }
+      if (words.length == 1) {
+        roleCtrl.text = words.first.toUpperCase().substring(
+              0,
+              words.first.length.clamp(0, 12),
+            );
+      } else {
+        roleCtrl.text = words.map((w) => w[0].toUpperCase()).join();
+      }
+    }
 
     final ok = await showDialog<bool>(
       context: context,
@@ -321,12 +344,14 @@ class _AdminRolesScreenState extends ConsumerState<AdminRolesScreen> {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
           side: BorderSide(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC),
+            color: isDark
+                ? const Color(0xFFC5A059).withValues(alpha: 0.2)
+                : const Color(0xFFCFD8DC),
             width: 1.5,
           ),
         ),
         title: Text(
-          'Create Position Role',
+          'Create Position',
           style: TextStyle(
             color: isDark ? Colors.white : const Color(0xFF212F3D),
             fontWeight: FontWeight.w800,
@@ -337,19 +362,37 @@ class _AdminRolesScreenState extends ConsumerState<AdminRolesScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              Text(
+                'Creates a designation (position type) linked to a role. It will show up in this list so you can set its permission matrix.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDark ? Colors.white60 : const Color(0xFF607D8B),
+                ),
+              ),
+              const SizedBox(height: 16),
               TextField(
-                controller: nameController,
+                controller: displayCtrl,
+                onChanged: suggestRoleCode,
                 decoration: const InputDecoration(
-                  labelText: 'Role Name',
-                  hintText: 'e.g. HR_MANAGER',
-                  helperText: 'Uppercase with underscores only',
+                  labelText: 'Display name *',
+                  hintText: 'e.g. Head of Institute',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: roleCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Role code *',
+                  hintText: 'e.g. HOI',
+                  helperText: 'Uppercase letters / underscores',
                   border: OutlineInputBorder(),
                 ),
                 textCapitalization: TextCapitalization.characters,
               ),
               const SizedBox(height: 16),
               TextField(
-                controller: descController,
+                controller: descCtrl,
                 decoration: const InputDecoration(
                   labelText: 'Description (optional)',
                   border: OutlineInputBorder(),
@@ -362,22 +405,15 @@ class _AdminRolesScreenState extends ConsumerState<AdminRolesScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text(
-              'Cancel',
-              style: TextStyle(
-                color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF607D8B),
-                fontWeight: FontWeight.w700,
-              ),
-            ),
+            child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.w700)),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: FilledButton.styleFrom(
               backgroundColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
               foregroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
-            child: const Text('Create Role', style: TextStyle(fontWeight: FontWeight.w800)),
+            child: const Text('Create', style: TextStyle(fontWeight: FontWeight.w800)),
           ),
         ],
       ),
@@ -385,18 +421,29 @@ class _AdminRolesScreenState extends ConsumerState<AdminRolesScreen> {
 
     if (ok != true || !mounted) return;
 
-    final name = nameController.text.trim();
-    if (name.isEmpty) {
-      _snack('Role name is required.');
+    final displayName = displayCtrl.text.trim();
+    final roleName = roleCtrl.text.trim().toUpperCase().replaceAll(RegExp(r'\s+'), '_');
+    if (displayName.isEmpty || roleName.isEmpty) {
+      _snack('Display name and role code are required.');
       return;
     }
 
     try {
-      await ref.read(rolesListProvider.notifier).createRole({
-        'name': name,
-        if (descController.text.trim().isNotEmpty) 'description': descController.text.trim(),
-      });
-      if (mounted) _snack('Role created.');
+      final result = await ref.read(orgRepositoryProvider).createPosition(
+            displayName: displayName,
+            roleName: roleName,
+            description: descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim(),
+          );
+      await ref.read(rolesListProvider.notifier).refresh();
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.showSnackBar(
+        SnackBar(content: Text('Position "$displayName" created.')),
+      );
+      final newRoleId = result.role.id;
+      if (newRoleId.isNotEmpty && mounted) {
+        context.go('/admin/roles/$newRoleId');
+      }
     } catch (e) {
       if (mounted) {
         _snack(e.toString().replaceFirst('Exception: ', ''));

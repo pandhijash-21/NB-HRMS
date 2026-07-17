@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   useAdminAddPunch,
   useAdminAttendanceDay,
@@ -106,7 +107,9 @@ export default function AdminAttendancePage() {
       <div className="flex flex-col md:flex-row md:items-end gap-3">
         <div className="flex-1">
           <h1 className="text-xl font-bold text-[#1d3459]">Attendance</h1>
-          <p className="text-xs text-slate-500">Pick a date to see all employees and their punch logs.</p>
+          <p className="text-xs text-slate-500">
+            Pick a date to see all employees and their punch logs. Open an employee for history.
+          </p>
         </div>
         <div className="w-full md:w-[220px]">
           <label className="text-xs font-semibold text-slate-600">Date</label>
@@ -170,96 +173,102 @@ export default function AdminAttendancePage() {
         ) : q.isError ? (
           <div className="text-sm text-red-600">Failed to load attendance.</div>
         ) : rows.length === 0 ? (
-          <div className="text-sm text-slate-500">No punches found for this date.</div>
+          <div className="text-sm text-slate-500">No employees found.</div>
         ) : (
           <div className="space-y-3">
-            {rows.map((r) => (
-              <div key={r.employeeId} className="rounded-lg border border-slate-200 p-3">
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="font-semibold text-slate-800 truncate">{r.fullName}</div>
-                    <div className="text-xs text-slate-500">
-                      {r.employeeCode ? `Code ${r.employeeCode}` : `ID ${r.employeeId}`}
-                      {r.department ? ` • ${r.department}` : ""}
+            {rows.map((r) => {
+              const firstIn = r.punches[0]?.punchAt;
+              const lastOut = r.punches.length ? r.punches[r.punches.length - 1].punchAt : undefined;
+              return (
+                <div key={r.employeeId} className="rounded-lg border border-slate-200 p-3 hover:border-slate-300 transition-colors">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                    <Link href={`/admin/attendance/${r.employeeId}`} className="min-w-0 group">
+                      <div className="font-semibold text-slate-800 truncate group-hover:text-[#1d3459] group-hover:underline">
+                        {r.fullName}
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        {r.employeeCode ? `Code ${r.employeeCode}` : `ID ${r.employeeId}`}
+                        {r.department ? ` • ${r.department}` : ""}
+                      </div>
+                    </Link>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Badge variant="outline">{r.punches.length} punches</Badge>
+                      <Badge variant="secondary">
+                        In {firstIn ? fmtTime(firstIn) : "—"} · Out {lastOut ? fmtTime(lastOut) : "—"}
+                      </Badge>
+                      <Button asChild size="sm" variant="outline">
+                        <Link href={`/admin/attendance/${r.employeeId}`}>History</Link>
+                      </Button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline">{r.punches.length} punches</Badge>
-                    {r.punches.length ? (
-                      <Badge variant="secondary">
-                        {fmtTime(r.punches[0].punchAt)} - {fmtTime(r.punches[r.punches.length - 1].punchAt)}
-                      </Badge>
-                    ) : null}
-                  </div>
-                </div>
 
-                {r.punches.length ? (
-                  <div className="mt-3 overflow-x-auto">
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="text-left text-slate-500">
-                          <th className="py-2 pr-3">Time</th>
-                          <th className="py-2 pr-3">Type</th>
-                          <th className="py-2 pr-3">Terminal</th>
-                          <th className="py-2 pr-3">Source</th>
-                          <th className="py-2 pr-3">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {r.punches.map((p, idx) => (
-                          <tr key={`${r.employeeId}-${idx}`} className="border-t border-slate-100">
-                            <td className="py-2 pr-3 font-medium text-slate-700">
-                              {editingPunchId === p.id ? (
-                                <Input type="time" value={editingTime} onChange={(e) => setEditingTime(e.target.value)} />
-                              ) : (
-                                fmtTime(p.punchAt)
-                              )}
-                            </td>
-                            <td className="py-2 pr-3 text-slate-600">
-                              {editingPunchId === p.id ? (
-                                <Input value={editingType} onChange={(e) => setEditingType(e.target.value)} />
-                              ) : (
-                                p.punchType ?? "-"
-                              )}
-                            </td>
-                            <td className="py-2 pr-3 text-slate-600">
-                              {editingPunchId === p.id ? (
-                                <Input value={editingTerminal} onChange={(e) => setEditingTerminal(e.target.value)} />
-                              ) : (
-                                p.terminalId ?? "-"
-                              )}
-                            </td>
-                            <td className="py-2 pr-3 text-slate-600">{p.source}</td>
-                            <td className="py-2 pr-3">
-                              {editingPunchId === p.id ? (
-                                <div className="flex gap-2">
-                                  <Button size="sm" onClick={submitEdit} disabled={updatePunch.isPending}>
-                                    Save
-                                  </Button>
-                                  <Button size="sm" variant="outline" onClick={() => setEditingPunchId(null)}>
-                                    Cancel
-                                  </Button>
-                                </div>
-                              ) : (
-                                <Button size="sm" variant="outline" onClick={() => startEdit(p)}>
-                                  Edit
-                                </Button>
-                              )}
-                            </td>
+                  {r.punches.length ? (
+                    <div className="mt-3 overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="text-left text-slate-500">
+                            <th className="py-2 pr-3">Time</th>
+                            <th className="py-2 pr-3">Type</th>
+                            <th className="py-2 pr-3">Terminal</th>
+                            <th className="py-2 pr-3">Source</th>
+                            <th className="py-2 pr-3">Action</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <div className="mt-2 text-xs text-slate-500">No punches.</div>
-                )}
-              </div>
-            ))}
+                        </thead>
+                        <tbody>
+                          {r.punches.map((p, idx) => (
+                            <tr key={`${r.employeeId}-${idx}`} className="border-t border-slate-100">
+                              <td className="py-2 pr-3 font-medium text-slate-700">
+                                {editingPunchId === p.id ? (
+                                  <Input type="time" value={editingTime} onChange={(e) => setEditingTime(e.target.value)} />
+                                ) : (
+                                  fmtTime(p.punchAt)
+                                )}
+                              </td>
+                              <td className="py-2 pr-3 text-slate-600">
+                                {editingPunchId === p.id ? (
+                                  <Input value={editingType} onChange={(e) => setEditingType(e.target.value)} />
+                                ) : (
+                                  p.punchType ?? "-"
+                                )}
+                              </td>
+                              <td className="py-2 pr-3 text-slate-600">
+                                {editingPunchId === p.id ? (
+                                  <Input value={editingTerminal} onChange={(e) => setEditingTerminal(e.target.value)} />
+                                ) : (
+                                  p.terminalId ?? "-"
+                                )}
+                              </td>
+                              <td className="py-2 pr-3 text-slate-600">{p.source}</td>
+                              <td className="py-2 pr-3">
+                                {editingPunchId === p.id ? (
+                                  <div className="flex gap-2">
+                                    <Button size="sm" onClick={submitEdit} disabled={updatePunch.isPending}>
+                                      Save
+                                    </Button>
+                                    <Button size="sm" variant="outline" onClick={() => setEditingPunchId(null)}>
+                                      Cancel
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <Button size="sm" variant="outline" onClick={() => startEdit(p)}>
+                                    Edit
+                                  </Button>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="mt-2 text-xs text-slate-500">No punches for this date.</div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </Card>
     </div>
   );
 }
-

@@ -73,6 +73,22 @@ export const uploadService = {
     });
   },
 
+  setOtherDocument(employeeId: number, otherDocumentUrl: string, actorId?: string) {
+    return prisma.employeePersonalInfo.upsert({
+      where: { employeeId },
+      update: { otherDocumentUrl, updatedBy: actorId ?? undefined },
+      create: {
+        employeeId,
+        birthDate: new Date('1970-01-01T00:00:00.000Z'),
+        gender: 'OTHER',
+        maritalStatus: 'SINGLE',
+        nationality: 'INDIAN',
+        otherDocumentUrl,
+        updatedBy: actorId ?? null,
+      },
+    });
+  },
+
   setPassport(employeeId: number, passportUrl: string, actorId?: string) {
     return prisma.employeeOtherInfo.upsert({
       where: { employeeId },
@@ -115,6 +131,30 @@ export const uploadService = {
     return prisma.familyMember.update({
       where: { id: memberId },
       data: { aadhaarUrl: url, updatedBy: actorId ?? undefined },
+    });
+  },
+
+  setCancelledCheque(employeeId: number, cancelledChequeUrl: string, actorId?: string) {
+    return prisma.employeeBankInfo.upsert({
+      where: { employeeId },
+      update: { cancelledChequeUrl, updatedBy: actorId ?? undefined },
+      create: {
+        employeeId,
+        cancelledChequeUrl,
+        updatedBy: actorId ?? null,
+      },
+    });
+  },
+
+  setPassbook(employeeId: number, passbookUrl: string, actorId?: string) {
+    return prisma.employeeBankInfo.upsert({
+      where: { employeeId },
+      update: { passbookUrl, updatedBy: actorId ?? undefined },
+      create: {
+        employeeId,
+        passbookUrl,
+        updatedBy: actorId ?? null,
+      },
     });
   },
 };

@@ -17,10 +17,12 @@ type GeneralInfoInput = {
   firstApproverUserId?: string | null;
   secondApproverUserId?: string | null;
   thirdApproverUserId?: string | null;
-  employeeCategory?: 'TEACHING' | 'NON_TEACHING' | 'CONTRACT' | 'VISITING';
+  employeeCategory?: string;
   designation?: string;
   shift?: string | null;
-  appointmentType?: 'FULL_TIME_REGULAR' | 'FULL_TIME_CONTRACT' | 'PART_TIME' | 'VISITING' | 'DEPUTATION' | null;
+  appointmentType?: string | null;
+  employeeCode?: string | null;
+  instituteId?: string | null;
 };
 
 export const generalService = {

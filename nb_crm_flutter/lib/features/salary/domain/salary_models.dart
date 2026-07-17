@@ -860,6 +860,123 @@ class EmployeeSalaryProfileResponse {
   }
 }
 
+/// Full structure preview for an employee (designation template + overrides).
+class EmployeeSalaryPreview {
+  const EmployeeSalaryPreview({
+    required this.configured,
+    this.reason,
+    this.designation,
+    this.payCommissionCode,
+    this.payCommission,
+    this.ruleEditorEnabled = true,
+    this.columnVisibility = const {},
+    this.templateId,
+    this.columnOverrides = const {},
+    this.employeeColumnRules = const {},
+    this.templateRules = const [],
+    this.columnDefinitions = const [],
+    this.computed,
+  });
+
+  final bool configured;
+  final String? reason;
+  final DesignationRef? designation;
+  final String? payCommissionCode;
+  final PayCommissionRef? payCommission;
+  final bool ruleEditorEnabled;
+  final Map<String, bool> columnVisibility;
+  final String? templateId;
+  final Map<String, num> columnOverrides;
+  final Map<String, Map<String, dynamic>> employeeColumnRules;
+  final List<SalaryRule> templateRules;
+  final List<PayCommissionColumn> columnDefinitions;
+  final ComputedSalaryResult? computed;
+
+  factory EmployeeSalaryPreview.fromJson(Map<String, dynamic> json) {
+    final vis = json['columnVisibility'] ?? json['column_visibility'];
+    final visibility = <String, bool>{};
+    if (vis is Map) {
+      vis.forEach((k, v) => visibility[k.toString()] = v == true);
+    }
+
+    final overrides = json['columnOverrides'] ?? json['column_overrides'];
+    final overrideMap = <String, num>{};
+    if (overrides is Map) {
+      overrides.forEach((k, v) => overrideMap[k.toString()] = _asNum(v));
+    }
+
+    final rules = json['employeeColumnRules'] ?? json['employee_column_rules'];
+    final rulesMap = <String, Map<String, dynamic>>{};
+    if (rules is Map) {
+      rules.forEach((k, v) {
+        if (v is Map) rulesMap[k.toString()] = Map<String, dynamic>.from(v);
+      });
+    }
+
+    final templateRulesRaw = json['templateRules'] ?? json['template_rules'];
+    final cols = json['columnDefinitions'] ?? json['column_definitions'];
+    final pc = json['payCommission'] ?? json['pay_commission'];
+    final des = json['designation'];
+
+    return EmployeeSalaryPreview(
+      configured: json['configured'] == true,
+      reason: json['reason']?.toString(),
+      designation: des is Map
+          ? DesignationRef.fromJson(Map<String, dynamic>.from(des))
+          : null,
+      payCommissionCode: json['payCommissionCode']?.toString() ??
+          json['pay_commission_code']?.toString(),
+      payCommission: pc is Map
+          ? PayCommissionRef.fromJson(Map<String, dynamic>.from(pc))
+          : null,
+      ruleEditorEnabled:
+          json['ruleEditorEnabled'] ?? json['rule_editor_enabled'] ?? true,
+      columnVisibility: visibility,
+      templateId: json['templateId']?.toString() ?? json['template_id']?.toString(),
+      columnOverrides: overrideMap,
+      employeeColumnRules: rulesMap,
+      templateRules: templateRulesRaw is List
+          ? templateRulesRaw
+              .map((e) => SalaryRule.fromJson(Map<String, dynamic>.from(e as Map)))
+              .toList()
+          : const [],
+      columnDefinitions: cols is List
+          ? cols
+              .map((e) => PayCommissionColumn.fromJson(
+                    Map<String, dynamic>.from(e as Map),
+                  ))
+              .toList()
+          : const [],
+      computed: json['computed'] is Map
+          ? ComputedSalaryResult.fromJson(
+              Map<String, dynamic>.from(json['computed'] as Map),
+            )
+          : null,
+    );
+  }
+}
+
+/// Convert a saved employee rule payload into a [SalaryRule] for the editor.
+SalaryRule employeeRuleBodyToColumnRule(String key, Map<String, dynamic> body) {
+  final parts = key.split('::');
+  final category = parts.isNotEmpty ? parts.first : 'EARNING';
+  final identifier = parts.length > 1 ? parts.sublist(1).join('::') : key;
+  return SalaryRule.fromJson({
+    'id': 'employee-$key',
+    'columnIdentifier': identifier,
+    'category': category,
+    'ruleType': body['rule_type'] ?? body['ruleType'] ?? 'FIXED',
+    'fixedDefaultValue': body['default_value']?.toString() ??
+        body['fixed_default_value']?.toString(),
+    'percentageValue': body['percentage_value']?.toString() ??
+        body['percentageValue']?.toString(),
+    'percentageReferenceColumns':
+        body['percentage_reference_columns'] ?? body['percentageReferenceColumns'],
+    'conditions': body['conditions'],
+    'formulaPreview': body['formula_preview'] ?? '',
+  });
+}
+
 class SalaryEmployeeOption {
   const SalaryEmployeeOption({
     required this.id,

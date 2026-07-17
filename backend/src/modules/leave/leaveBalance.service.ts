@@ -103,6 +103,63 @@ export const leaveBalanceService = {
     });
   },
 
+  /**
+   * Year-end: move unused available days into next year's `carryForward` field
+   * (only for leave types with isCarryForward enabled — caller filters).
+   */
+  async applyYearEndCarryForward(params: {
+    employeeId: number;
+    leaveTypeId: string;
+    fromYear: number;
+    toYear: number;
+    days: number;
+    actorId: string;
+  }) {
+    const { employeeId, leaveTypeId, fromYear, toYear, days, actorId } = params;
+    if (!Number.isFinite(days) || days <= 0) return null;
+
+    return prisma.$transaction(async (tx) => {
+      const row = await tx.leaveBalance.upsert({
+        where: {
+          employeeId_leaveTypeId_year: { employeeId, leaveTypeId, year: toYear },
+        },
+        update: {},
+        create: {
+          employeeId,
+          leaveTypeId,
+          year: toYear,
+          totalCredited: 0,
+          carryForward: 0,
+          used: 0,
+          pending: 0,
+          available: 0,
+        },
+      });
+
+      const oldValue = { ...row };
+      const carryForward = row.carryForward + days;
+      const available = computeAvailable(row.totalCredited, carryForward, row.used, row.pending);
+
+      const updated = await tx.leaveBalance.update({
+        where: { id: row.id },
+        data: { carryForward, available },
+      });
+
+      await tx.leaveAuditLog.create({
+        data: {
+          employeeId,
+          actorId,
+          action: 'CARRY_FORWARD',
+          context: `YearEnd:${fromYear}->${toYear}:${leaveTypeId}`,
+          oldValue: oldValue as any,
+          newValue: updated as any,
+        },
+      });
+
+      return updated;
+    });
+  },
+
   async applyPending(params: {
     employeeId: number;
     leaveTypeId: string;

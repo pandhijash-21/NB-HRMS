@@ -92,6 +92,16 @@ export const uploadController = {
     return res.json(ok({ url, employee: updated }));
   }],
 
+  otherDocument: [single('file'), async (req: Request, res: Response) => {
+    const meta = employeeMetaSchema.safeParse(req.body);
+    if (!meta.success) return res.status(400).json(fail(meta.error.message));
+    if (!req.file) return res.status(400).json(fail('Missing file'));
+    assertUploadAccess(req, meta.data.employeeId);
+    const url = await uploadService.uploadToCloudinary(req.file, 'employee/other-document');
+    const updated = await uploadService.setOtherDocument(meta.data.employeeId, url, req.user?.id);
+    return res.json(ok({ url, otherDocumentUrl: url, employee: updated }));
+  }],
+
   /** Offer letter — Cloudinary only (no dedicated DB column in current schema). */
   offerLetter: [single('file'), async (req: Request, res: Response) => {
     const meta = employeeMetaSchema.safeParse(req.body);
@@ -184,6 +194,39 @@ export const uploadController = {
     if (!req.file) return res.status(400).json(fail('Missing file'));
     assertUploadAccess(req, meta.data.employeeId);
     const url = await uploadService.uploadToCloudinary(req.file, `experience/recommendation/${meta.data.experienceId}`);
+    return res.json(ok({ url }));
+  }],
+
+  cancelledCheque: [single('file'), async (req: Request, res: Response) => {
+    const meta = employeeMetaSchema.safeParse(req.body);
+    if (!meta.success) return res.status(400).json(fail(meta.error.message));
+    if (!req.file) return res.status(400).json(fail('Missing file'));
+    assertUploadAccess(req, meta.data.employeeId);
+    const url = await uploadService.uploadToCloudinary(req.file, 'bank/cancelled-cheque');
+    const updated = await uploadService.setCancelledCheque(meta.data.employeeId, url, req.user?.id);
+    return res.json(ok({ url, cancelledChequeUrl: url, bankInfo: updated }));
+  }],
+
+  passbook: [single('file'), async (req: Request, res: Response) => {
+    const meta = employeeMetaSchema.safeParse(req.body);
+    if (!meta.success) return res.status(400).json(fail(meta.error.message));
+    if (!req.file) return res.status(400).json(fail('Missing file'));
+    assertUploadAccess(req, meta.data.employeeId);
+    const url = await uploadService.uploadToCloudinary(req.file, 'bank/passbook');
+    const updated = await uploadService.setPassbook(meta.data.employeeId, url, req.user?.id);
+    return res.json(ok({ url, passbookUrl: url, bankInfo: updated }));
+  }],
+
+  /** Supporting document for leave applications (Cloudinary URL only). */
+  leaveDocument: [single('file'), async (req: Request, res: Response) => {
+    const meta = employeeMetaSchema.safeParse(req.body);
+    if (!meta.success) return res.status(400).json(fail(meta.error.message));
+    if (!req.file) return res.status(400).json(fail('Missing file'));
+    assertUploadAccess(req, meta.data.employeeId);
+    const url = await uploadService.uploadToCloudinary(
+      req.file,
+      `leave/documents/${meta.data.employeeId}`,
+    );
     return res.json(ok({ url }));
   }],
 };

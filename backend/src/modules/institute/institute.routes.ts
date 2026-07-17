@@ -63,6 +63,20 @@ instituteRouter.patch(
   },
 );
 
+instituteRouter.delete(
+  '/admin/institutes/:id',
+  requireAuth,
+  requirePermission('USER_MGMT', 'WRITE'),
+  async (req: Request, res: Response) => {
+    try {
+      const data = await instituteService.remove(String(req.params.id));
+      return res.json(ok(data));
+    } catch (e: unknown) {
+      return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+    }
+  },
+);
+
 instituteRouter.get(
   '/admin/institutes/:id/members',
   requireAuth,

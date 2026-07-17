@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/theme/app_colors.dart';
 import '../../../auth/presentation/auth_providers.dart';
 import '../../presentation/admin_notifier.dart';
 import '../../domain/admin_models.dart';
@@ -273,13 +272,24 @@ class AdminApprovalsScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              'Module: ${req.module}  ·  Submitted: ${_formatDate(req.requestedAt)}',
+              'Module: ${_moduleLabel(req.module)}  ·  Submitted: ${_formatDate(req.requestedAt)}',
               style: TextStyle(
                 fontSize: 12, 
                 fontWeight: FontWeight.w600,
                 color: isDark ? Colors.white54 : const Color(0xFF607D8B),
               ),
             ),
+            if (_changedFieldNames(req).isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                'Changing: ${_changedFieldNames(req).take(6).join(', ')}${_changedFieldNames(req).length > 6 ? '…' : ''}',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
+                ),
+              ),
+            ],
             Divider(
               height: 24,
               thickness: 1.2,
@@ -544,5 +554,37 @@ class AdminApprovalsScreen extends ConsumerWidget {
 
   String _formatDate(DateTime date) {
     return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+  }
+
+  String _moduleLabel(String module) {
+    switch (module) {
+      case 'PERSONAL':
+        return 'Personal Info';
+      case 'ADDRESS_LOCAL':
+        return 'Local Address';
+      case 'ADDRESS_PERMANENT':
+        return 'Permanent Address';
+      case 'ADDRESS':
+        return 'Address';
+      case 'OTHER':
+        return 'Other Info';
+      case 'BANK':
+        return 'Bank Info';
+      default:
+        return module;
+    }
+  }
+
+  List<String> _changedFieldNames(ChangeRequest req) {
+    final skip = {'id', 'employeeId', 'updatedAt', 'updatedBy', 'createdAt', 'employee'};
+    final keys = <String>{...req.oldData.keys, ...req.newData.keys};
+    final changed = <String>[];
+    for (final key in keys) {
+      if (skip.contains(key)) continue;
+      final oldVal = req.oldData[key];
+      final newVal = req.newData[key];
+      if ('$oldVal' != '$newVal') changed.add(_formatKeyName(key));
+    }
+    return changed;
   }
 }

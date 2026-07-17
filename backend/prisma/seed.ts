@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { seedDesignationsAndSalaryCatalog } from './seeds/designationSalary.seed';
 import { seedInstitutes } from './seeds/institutes.seed';
+import { seedSystemLookups } from './seeds/lookups.seed';
 
 const prisma = new PrismaClient();
 
@@ -182,6 +183,7 @@ async function main() {
 
   await seedInstitutes(prisma);
   await seedDesignationsAndSalaryCatalog(prisma, roleIdMap);
+  await seedSystemLookups(prisma);
 
   // ── Leave Settings + Types ───────────────────────────────────────────────
   console.log('⏳  Seeding leave settings…');

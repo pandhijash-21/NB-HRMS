@@ -41,6 +41,21 @@ class AdminRepository {
     );
   }
 
+  /// Fetch approver picker list via GET `employees/names`.
+  Future<List<EmployeeNameOption>> listEmployeeNames() async {
+    return _dio.getEnvelope<List<EmployeeNameOption>>(
+      'employees/names',
+      parse: (raw) {
+        if (raw is! List) {
+          throw const FormatException('Invalid employee names response');
+        }
+        return raw
+            .map((e) => EmployeeNameOption.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList();
+      },
+    );
+  }
+
   /// Create an employee directly via POST `employees/full`.
   Future<EmployeeProfile> createEmployee(Map<String, dynamic> data) async {
     return _dio.postEnvelope<EmployeeProfile>(

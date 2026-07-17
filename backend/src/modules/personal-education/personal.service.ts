@@ -1,5 +1,4 @@
 import type { Request } from 'express';
-import type { BloodGroup, Gender, MaritalStatus } from '@prisma/client';
 import { prisma } from '../../config/prisma';
 import { decrypt, encrypt } from '../../utils/crypto';
 import { diffAndAudit, pushAudit } from './audit.helpers';
@@ -8,11 +7,11 @@ type PersonalCreateInput = {
   birthDate: Date;
   birthPlace?: string | null;
   homeTown?: string | null;
-  gender: Gender;
-  maritalStatus: MaritalStatus;
+  gender: string;
+  maritalStatus: string;
   nationality?: string;
   motherTongue?: string | null;
-  bloodGroup?: BloodGroup | null;
+  bloodGroup?: string | null;
   castCategory?: string | null;
   subCaste?: string | null;
   nomineeName?: string | null;
@@ -21,6 +20,7 @@ type PersonalCreateInput = {
   panNo?: string | null;
   aadhaarCardUrl?: string | null;
   panCardUrl?: string | null;
+  otherDocumentUrl?: string | null;
   passportNo?: string | null;
   passportIssuePlace?: string | null;
   passportIssueDate?: Date | null;
@@ -65,6 +65,7 @@ export const personalService = {
         panNo: input.panNo ? encrypt(input.panNo) : null,
         aadhaarCardUrl: input.aadhaarCardUrl ?? null,
         panCardUrl: input.panCardUrl ?? null,
+        otherDocumentUrl: input.otherDocumentUrl ?? null,
         passportNo: input.passportNo ?? null,
         passportIssuePlace: input.passportIssuePlace ?? null,
         passportIssueDate: input.passportIssueDate ?? null,
@@ -123,6 +124,7 @@ export const personalService = {
         panNo: input.panNo !== undefined ? (input.panNo ? encrypt(input.panNo) : null) : undefined,
         aadhaarCardUrl: input.aadhaarCardUrl ?? undefined,
         panCardUrl: input.panCardUrl ?? undefined,
+        otherDocumentUrl: input.otherDocumentUrl ?? undefined,
         passportNo: input.passportNo ?? undefined,
         passportIssuePlace: input.passportIssuePlace ?? undefined,
         passportIssueDate: input.passportIssueDate ?? undefined,

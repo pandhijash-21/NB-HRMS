@@ -7,6 +7,7 @@ import '../../../auth/presentation/auth_providers.dart';
 import '../profile_notifier.dart';
 import '../widgets/profile_tabs.dart';
 import '../../domain/profile_models.dart';
+import '../../../leave/presentation/widgets/employee_leave_tab.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   final int? employeeId;
@@ -30,6 +31,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> with SingleTicker
     'Experience',
     'Bank',
     'Salary',
+    'Leave',
   ];
 
   @override
@@ -170,6 +172,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> with SingleTicker
                     const ExperienceViewTab(),
                     BankViewTab(profile: profile),
                     SalaryViewTab(profile: profile),
+                    EmployeeLeaveTab(employeeId: profile.id),
                   ],
                 ),
               ),

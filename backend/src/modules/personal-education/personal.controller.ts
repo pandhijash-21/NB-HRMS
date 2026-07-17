@@ -6,7 +6,7 @@ import {
   canViewEmployeeDirectory,
   employeeMatchesDirectoryScope,
 } from './employeeDirectory.util';
-
+import { assertMayDirectWriteProfile } from './profileWriteGuard';
 async function assertCanAccessEmployeePersonal(
   req: Request,
   employeeId: number,
@@ -33,11 +33,11 @@ const personalUpsertSchema = z.object({
   birthDate: z.string().datetime().or(z.string().min(4)),
   birthPlace: z.string().min(1).nullable().optional(),
   homeTown: z.string().min(1).nullable().optional(),
-  gender: z.enum(['MALE', 'FEMALE', 'OTHER']),
-  maritalStatus: z.enum(['SINGLE', 'MARRIED', 'DIVORCED', 'WIDOWED']),
+  gender: z.string().min(1),
+  maritalStatus: z.string().min(1),
   nationality: z.string().min(1).optional(),
   motherTongue: z.string().min(1).nullable().optional(),
-  bloodGroup: z.enum(['A_POS', 'A_NEG', 'B_POS', 'B_NEG', 'O_POS', 'O_NEG', 'AB_POS', 'AB_NEG']).nullable().optional(),
+  bloodGroup: z.string().nullable().optional(),
   castCategory: z.string().min(1).nullable().optional(),
   subCaste: z.string().min(1).nullable().optional(),
   nomineeName: z.string().min(1).nullable().optional(),
@@ -50,6 +50,7 @@ const personalUpsertSchema = z.object({
   // urls
   aadhaarCardUrl: z.string().url().nullable().optional(),
   panCardUrl: z.string().url().nullable().optional(),
+  otherDocumentUrl: z.string().url().nullable().optional(),
 
   passportNo: z.string().min(1).nullable().optional(),
   passportIssuePlace: z.string().min(1).nullable().optional(),
@@ -82,6 +83,12 @@ export const personalController = {
     if (!Number.isFinite(employeeId)) return res.status(400).json(fail('Invalid employee id'));
     if (!(await assertCanAccessEmployeePersonal(req, employeeId, res))) return;
 
+    try {
+      assertMayDirectWriteProfile(req, employeeId);
+    } catch (err: any) {
+      return res.status(err.status ?? 403).json(fail(err.message));
+    }
+
     const body = personalUpsertSchema.safeParse(req.body);
     if (!body.success) return res.status(400).json(fail(body.error.message));
 
@@ -99,6 +106,12 @@ export const personalController = {
     const employeeId = Number(req.params.id);
     if (!Number.isFinite(employeeId)) return res.status(400).json(fail('Invalid employee id'));
     if (!(await assertCanAccessEmployeePersonal(req, employeeId, res))) return;
+
+    try {
+      assertMayDirectWriteProfile(req, employeeId);
+    } catch (err: any) {
+      return res.status(err.status ?? 403).json(fail(err.message));
+    }
 
     const body = personalUpsertSchema.partial().safeParse(req.body);
     if (!body.success) return res.status(400).json(fail(body.error.message));

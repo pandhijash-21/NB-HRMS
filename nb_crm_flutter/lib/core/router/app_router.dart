@@ -18,6 +18,8 @@ import '../../features/admin/presentation/screens/admin_audit_stub_screen.dart';
 import '../../features/org/presentation/screens/institutes_screen.dart';
 import '../../features/org/presentation/screens/institute_detail_screen.dart';
 import '../../features/org/presentation/screens/designations_screen.dart';
+import '../../features/lookups/presentation/screens/configurations_hub_screen.dart';
+import '../../features/lookups/presentation/screens/lookup_category_screen.dart';
 import '../../features/leave/presentation/screens/leave_hub_screen.dart';
 import '../../features/leave/presentation/screens/leave_apply_screen.dart';
 import '../../features/leave/presentation/screens/leave_history_screen.dart';
@@ -29,6 +31,7 @@ import '../../features/leave/presentation/screens/admin_leaves_settings_screen.d
 import '../../features/leave/presentation/screens/admin_leaves_holidays_screen.dart';
 import '../../features/attendance/presentation/screens/attendance_screen.dart';
 import '../../features/attendance/presentation/screens/admin_attendance_screen.dart';
+import '../../features/attendance/presentation/screens/admin_employee_attendance_history_screen.dart';
 import '../../features/salary/presentation/screens/admin_salary_commissions_screen.dart';
 import '../../features/salary/presentation/screens/admin_salary_commission_detail_screen.dart';
 import '../../features/salary/presentation/screens/admin_salary_structures_screen.dart';
@@ -157,6 +160,13 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const AdminAttendanceScreen(),
       ),
       GoRoute(
+        path: '/admin/attendance/employee/:employeeId',
+        builder: (context, state) {
+          final id = int.tryParse(state.pathParameters['employeeId'] ?? '') ?? 0;
+          return AdminEmployeeAttendanceHistoryScreen(employeeId: id);
+        },
+      ),
+      GoRoute(
         path: '/profile',
         builder: (context, state) {
           final idStr = state.uri.queryParameters['employeeId'];
@@ -175,6 +185,17 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/admin/dashboard',
         builder: (context, state) => const AdminDashboardScreen(),
+      ),
+      GoRoute(
+        path: '/admin/configurations',
+        builder: (context, state) => const ConfigurationsHubScreen(),
+      ),
+      GoRoute(
+        path: '/admin/configurations/lookups/:category',
+        builder: (context, state) {
+          final category = state.pathParameters['category'] ?? '';
+          return LookupCategoryScreen(category: category);
+        },
       ),
       GoRoute(
         path: '/admin/institutes',

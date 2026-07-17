@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { ok, fail } from '../../utils/response';
 import { bankService } from './bank.service';
+import { assertMayDirectWriteProfile } from './profileWriteGuard';
 
 const BankInfoSchema = z.object({
   bankName:       z.string().optional().nullable(),
@@ -39,6 +40,7 @@ export const bankController = {
 
     try {
       assertSelfAccess(req, employeeId);
+      assertMayDirectWriteProfile(req, employeeId);
       const updated = await bankService.upsert(employeeId, body.data, req.user!.id, req);
       return res.json(ok(updated));
     } catch (err: any) {

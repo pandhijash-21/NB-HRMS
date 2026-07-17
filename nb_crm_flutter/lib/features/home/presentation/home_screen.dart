@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/theme/app_colors.dart';
 import '../../auth/presentation/auth_providers.dart';
 import '../../auth/domain/permissions.dart';
 
@@ -69,7 +68,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     final hasWorkforce = Permissions.canViewWorkforce(auth.permissions, auth.user?.employeeViewScope);
     final isHR = ['ADMIN', 'HR'].contains(role.toUpperCase());
-    final canApproveLeave = Permissions.canApproveLeave(auth.permissions);
+    final canApproveLeave = Permissions.canApproveLeave(auth.permissions) ||
+        Permissions.canReadLeave(auth.permissions);
     final canAdminLeave = Permissions.canAdminLeave(
       auth.permissions,
       role,
@@ -87,21 +87,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final modules = <_ModuleCardData>[
       _ModuleCardData(
         title: 'Leave',
-        subtitle: 'Balances, apply, and history',
+        subtitle: () {
+          final parts = <String>['Balances', 'apply', 'history'];
+          if (canApproveLeave) parts.add('approvals');
+          if (canAdminLeave) parts.add('admin');
+          return parts.join(', ');
+        }(),
         icon: Icons.event_available_rounded,
         route: '/leave',
         enabled: Permissions.canReadLeave(auth.permissions) ||
             Permissions.canWriteLeave(auth.permissions) ||
+            canApproveLeave ||
+            canAdminLeave ||
             user?.employeeId != null,
         category: ModuleCategory.mySpace,
         color: const Color(0xFF0284c7), // Sky Blue
       ),
       _ModuleCardData(
         title: 'Attendance',
-        subtitle: 'Calendar and punch history',
+        subtitle: canAdminAttendance
+            ? 'My punches, policy, manual punches & all employees'
+            : 'Calendar and punch history',
         icon: Icons.fingerprint_rounded,
         route: '/attendance',
         enabled: Permissions.canReadAttendance(auth.permissions) ||
+            canAdminAttendance ||
             user?.employeeId != null,
         category: ModuleCategory.mySpace,
         color: const Color(0xFF16a34a), // Green
@@ -118,24 +128,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       _ModuleCardData(
         title: 'Payroll',
         subtitle: Permissions.canReadSalary(auth.permissions)
-            ? 'Records, entry, structures'
+            ? 'Commissions, structures, entry & records'
             : 'No salary access',
         icon: Icons.payments_rounded,
-        route: '/admin/salary/records',
+        route: '/admin/salary/structures',
         enabled: Permissions.canReadSalary(auth.permissions),
         category: ModuleCategory.mySpace,
         color: const Color(0xFFea580c), // Orange
       ),
-      if (canApproveLeave)
-        _ModuleCardData(
-          title: 'Leave Approvals',
-          subtitle: 'Pending leave requests to review',
-          icon: Icons.rule_rounded,
-          route: '/approvals',
-          enabled: true,
-          category: ModuleCategory.management,
-          color: const Color(0xFF2563eb), // Royal Blue
-        ),
       if (hasWorkforce)
         _ModuleCardData(
           title: 'Workforce',
@@ -188,43 +188,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ),
       if (canManageUsers || canManageInstitutes)
         _ModuleCardData(
-          title: 'Institutes',
-          subtitle: 'Campuses and sub-organizations',
-          icon: Icons.business_rounded,
-          route: '/admin/institutes',
+          title: 'Configurations',
+          subtitle: 'Institutes, designations & all dropdowns',
+          icon: Icons.tune_rounded,
+          route: '/admin/configurations',
           enabled: true,
           category: ModuleCategory.system,
-          color: const Color(0xFFc2410c), // Orange Dark
-        ),
-      if (canManageUsers)
-        _ModuleCardData(
-          title: 'Designations',
-          subtitle: 'Job titles and alias accounts',
-          icon: Icons.badge_rounded,
-          route: '/admin/designations',
-          enabled: true,
-          category: ModuleCategory.system,
-          color: const Color(0xFFdb2777), // Pink
-        ),
-      if (canAdminLeave)
-        _ModuleCardData(
-          title: 'Leave Admin',
-          subtitle: 'Policies, holidays, and settings',
-          icon: Icons.calendar_month_rounded,
-          route: '/admin/leaves',
-          enabled: true,
-          category: ModuleCategory.system,
-          color: const Color(0xFF0891b2), // Cyan
-        ),
-      if (canAdminAttendance)
-        _ModuleCardData(
-          title: 'Attendance Admin',
-          subtitle: 'Manage attendance records',
-          icon: Icons.admin_panel_settings_rounded,
-          route: '/admin/attendance',
-          enabled: true,
-          category: ModuleCategory.system,
-          color: const Color(0xFF65a30d), // Lime
+          color: const Color(0xFF0d9488),
         ),
       if (canAccessAdmin)
         _ModuleCardData(
@@ -347,7 +317,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               crossAxisCount: wide ? 3 : (medium ? 2 : 1),
               mainAxisSpacing: 16,
               crossAxisSpacing: 16,
-              childAspectRatio: medium ? 2.0 : 2.8,
+              childAspectRatio: medium ? 1.85 : 2.5,
             ),
             itemBuilder: (context, index) {
               final item = categoryModules[index];
@@ -444,8 +414,6 @@ class _GreetingsCardState extends State<_GreetingsCard> {
 
   @override
   Widget build(BuildContext context) {
-    const showDarkStyle = true;
-
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
@@ -485,22 +453,22 @@ class _GreetingsCardState extends State<_GreetingsCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            AnimatedDefaultTextStyle(
-              duration: const Duration(milliseconds: 300),
+            const AnimatedDefaultTextStyle(
+              duration: Duration(milliseconds: 300),
               style: TextStyle(
-                color: showDarkStyle ? const Color(0xFFD4C3A3) : const Color(0xFF66786F),
+                color: Color(0xFFD4C3A3),
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 0.5,
                 fontFamily: 'Inter',
               ),
-              child: const Text('Welcome back,'),
+              child: Text('Welcome back,'),
             ),
             const SizedBox(height: 8),
             AnimatedDefaultTextStyle(
               duration: const Duration(milliseconds: 300),
-              style: TextStyle(
-                color: showDarkStyle ? Colors.white : const Color(0xFF1B2B23),
+              style: const TextStyle(
+                color: Colors.white,
                 fontSize: 34,
                 fontWeight: FontWeight.w800,
                 letterSpacing: -0.5,
@@ -514,26 +482,21 @@ class _GreetingsCardState extends State<_GreetingsCard> {
                 duration: const Duration(milliseconds: 300),
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                 decoration: BoxDecoration(
-                  color: showDarkStyle ? null : const Color(0xFFD8E2DC),
-                  gradient: showDarkStyle
-                      ? LinearGradient(
-                          colors: [
-                            const Color(0xFFC5A059).withOpacity(0.2),
-                            const Color(0xFFC5A059).withOpacity(0.1),
-                          ],
-                        )
-                      : null,
+                  gradient: LinearGradient(
+                    colors: [
+                      const Color(0xFFC5A059).withOpacity(0.2),
+                      const Color(0xFFC5A059).withOpacity(0.1),
+                    ],
+                  ),
                   borderRadius: BorderRadius.circular(30),
                   border: Border.all(
-                    color: showDarkStyle
-                        ? const Color(0xFFC5A059).withOpacity(0.3)
-                        : const Color(0xFFA6B8AE),
+                    color: const Color(0xFFC5A059).withOpacity(0.3),
                   ),
                 ),
                 child: Text(
                   widget.role.toUpperCase(),
-                  style: TextStyle(
-                    color: showDarkStyle ? const Color(0xFFE2D6BE) : const Color(0xFF2A4237),
+                  style: const TextStyle(
+                    color: Color(0xFFE2D6BE),
                     fontWeight: FontWeight.w700,
                     fontSize: 11,
                     letterSpacing: 1.5,
@@ -597,7 +560,7 @@ class _ModernModuleCardState extends State<_ModernModuleCard> {
             child: Opacity(
               opacity: enabled ? 1 : 0.5,
               child: Padding(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
                 child: Row(
                   children: [
                     AnimatedContainer(
@@ -621,9 +584,12 @@ class _ModernModuleCardState extends State<_ModernModuleCard> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
                             widget.data.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontWeight: FontWeight.w700,
                               fontSize: 17,
@@ -631,13 +597,13 @@ class _ModernModuleCardState extends State<_ModernModuleCard> {
                               letterSpacing: -0.3,
                             ),
                           ),
-                          const SizedBox(height: 6),
+                          const SizedBox(height: 4),
                           Text(
                             widget.data.subtitle,
                             style: TextStyle(
                               color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
                               fontSize: 13,
-                              height: 1.3,
+                              height: 1.25,
                             ),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,

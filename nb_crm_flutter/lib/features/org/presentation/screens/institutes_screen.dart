@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/theme/app_colors.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/auth_providers.dart';
 import '../../domain/org_models.dart';
@@ -61,7 +60,9 @@ class _InstitutesScreenState extends ConsumerState<InstitutesScreen> {
             Icons.arrow_back_rounded,
             color: isDark ? Colors.white.withOpacity(0.8) : const Color(0xFF212F3D),
           ),
-          onPressed: () => context.canPop() ? context.pop() : context.go('/home'),
+          onPressed: () => context.canPop()
+              ? context.pop()
+              : context.go('/admin/configurations'),
         ),
         actions: [
           IconButton(
@@ -408,6 +409,11 @@ class _InstitutesScreenState extends ConsumerState<InstitutesScreen> {
                   activeColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
                   onChanged: (checked) => _toggleActive(inst.id, checked),
                 ),
+                IconButton(
+                  tooltip: 'Delete',
+                  icon: Icon(Icons.delete_outline, color: Colors.red.shade400, size: 20),
+                  onPressed: () => _confirmDelete(inst),
+                ),
                 Icon(
                   Icons.chevron_right_rounded,
                   color: isDark ? Colors.white24 : Colors.grey,
@@ -460,6 +466,39 @@ class _InstitutesScreenState extends ConsumerState<InstitutesScreen> {
           content: Text('Failed to update institute: $e'),
           backgroundColor: Colors.red,
         ),
+      );
+    }
+  }
+
+  Future<void> _confirmDelete(Institute inst) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete institute?'),
+        content: Text(
+          'Delete "${inst.name}"?\n\n'
+          'If employees or alias accounts still use it, it will be deactivated instead of permanently removed.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref.read(orgRepositoryProvider).deleteInstitute(inst.id);
+      ref.invalidate(institutesListProvider);
+      ref.invalidate(activeInstitutesProvider);
+      messenger.showSnackBar(const SnackBar(content: Text('Institute deleted / deactivated')));
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.red),
       );
     }
   }

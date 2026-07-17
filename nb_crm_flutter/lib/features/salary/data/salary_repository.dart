@@ -167,6 +167,40 @@ class SalaryRepository {
     );
   }
 
+  Future<EmployeeSalaryPreview> getEmployeeSalaryPreview(int employeeId) async {
+    return _dio.getEnvelope<EmployeeSalaryPreview>(
+      'salary/employees/$employeeId/salary-preview',
+      parse: (raw) => EmployeeSalaryPreview.fromJson(
+        Map<String, dynamic>.from(raw as Map),
+      ),
+    );
+  }
+
+  Future<void> updateEmployeeProfile(
+    int employeeId, {
+    String? payCommissionCode,
+    Map<String, num>? columnOverrides,
+    Map<String, Map<String, dynamic>>? columnRules,
+    bool clearOverrides = false,
+    bool clearRules = false,
+  }) async {
+    await _dio.patchEnvelope<Object?>(
+      'salary/employees/$employeeId/profile',
+      data: {
+        if (payCommissionCode != null) 'payCommissionCode': payCommissionCode,
+        if (clearOverrides)
+          'columnOverrides': null
+        else if (columnOverrides != null)
+          'columnOverrides': columnOverrides,
+        if (clearRules)
+          'columnRules': null
+        else if (columnRules != null)
+          'columnRules': columnRules,
+      },
+      parse: (raw) => raw,
+    );
+  }
+
   Future<List<SalaryRecord>> listRecords({
     int? employeeId,
     int? salaryMonth,

@@ -1,12 +1,11 @@
 import type { Request } from 'express';
-import type { FamilyRelation } from '@prisma/client';
 import { prisma } from '../../config/prisma';
 import { decrypt, encrypt } from '../../utils/crypto';
 import { diffAndAudit, pushAudit } from './audit.helpers';
 
 type FamilyCreateInput = {
   id?: string;
-  relation: FamilyRelation;
+  relation: string;
   name: string;
   city?: string | null;
   mobileNo?: string | null;
@@ -15,6 +14,9 @@ type FamilyCreateInput = {
   aadhaarNo?: string | null;
   aadhaarUrl?: string | null;
   isNominee?: boolean;
+  isDependent?: boolean;
+  isEmployed?: boolean;
+  employerName?: string | null;
   updatedBy?: string | null;
 };
 
@@ -48,6 +50,9 @@ export const familyService = {
         aadhaarNo: input.aadhaarNo ? encrypt(input.aadhaarNo) : null,
         aadhaarUrl: input.aadhaarUrl ?? null,
         isNominee: input.isNominee ?? false,
+        isDependent: input.isDependent ?? false,
+        isEmployed: input.isEmployed ?? false,
+        employerName: input.employerName ?? null,
         updatedBy: input.updatedBy ?? req.user?.id ?? null,
       },
     });
@@ -91,6 +96,9 @@ export const familyService = {
         aadhaarNo: input.aadhaarNo !== undefined ? (input.aadhaarNo ? encrypt(input.aadhaarNo) : null) : undefined,
         aadhaarUrl: input.aadhaarUrl !== undefined ? input.aadhaarUrl : undefined,
         isNominee: input.isNominee ?? undefined,
+        isDependent: input.isDependent ?? undefined,
+        isEmployed: input.isEmployed ?? undefined,
+        employerName: input.employerName ?? undefined,
         updatedBy: input.updatedBy ?? req.user?.id ?? undefined,
       },
     });

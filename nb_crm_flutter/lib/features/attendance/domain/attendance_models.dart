@@ -190,6 +190,9 @@ class AdminAttendanceEmployeeRow {
   final String? department;
   final List<AttendancePunch> punches;
 
+  String? get firstIn => punches.isEmpty ? null : punches.first.punchAt;
+  String? get lastOut => punches.isEmpty ? null : punches.last.punchAt;
+
   factory AdminAttendanceEmployeeRow.fromJson(Map<String, dynamic> json) {
     return AdminAttendanceEmployeeRow(
       employeeId: _asInt(json['employeeId']),
@@ -198,6 +201,81 @@ class AdminAttendanceEmployeeRow {
       designation: json['designation'] as String?,
       department: json['department'] as String?,
       punches: _asMapList(json['punches']).map(AttendancePunch.fromJson).toList(),
+    );
+  }
+}
+
+class AdminAttendanceHistoryDay {
+  const AdminAttendanceHistoryDay({
+    required this.date,
+    this.firstIn,
+    this.lastOut,
+    this.totalMinutes = 0,
+    required this.punches,
+    this.isLate,
+    this.isHalfDay,
+    this.meetsPunchOut,
+  });
+
+  final String date;
+  final String? firstIn;
+  final String? lastOut;
+  final int totalMinutes;
+  final List<AttendancePunch> punches;
+  final bool? isLate;
+  final bool? isHalfDay;
+  final bool? meetsPunchOut;
+
+  factory AdminAttendanceHistoryDay.fromJson(Map<String, dynamic> json) {
+    return AdminAttendanceHistoryDay(
+      date: json['date']?.toString() ?? '',
+      firstIn: json['firstIn'] as String?,
+      lastOut: json['lastOut'] as String?,
+      totalMinutes: _asInt(json['totalMinutes']),
+      punches: _asMapList(json['punches']).map(AttendancePunch.fromJson).toList(),
+      isLate: json['isLate'] as bool?,
+      isHalfDay: json['isHalfDay'] as bool?,
+      meetsPunchOut: json['meetsPunchOut'] as bool?,
+    );
+  }
+}
+
+class AdminAttendanceEmployeeHistory {
+  const AdminAttendanceEmployeeHistory({
+    required this.employeeId,
+    required this.fullName,
+    this.employeeCode,
+    this.designation,
+    this.department,
+    required this.from,
+    required this.to,
+    this.policy,
+    required this.days,
+  });
+
+  final int employeeId;
+  final String fullName;
+  final String? employeeCode;
+  final String? designation;
+  final String? department;
+  final String from;
+  final String to;
+  final AttendancePolicy? policy;
+  final List<AdminAttendanceHistoryDay> days;
+
+  factory AdminAttendanceEmployeeHistory.fromJson(Map<String, dynamic> json) {
+    final employee = _asMap(json['employee']) ?? {};
+    final policy = _asMap(json['policy']);
+    return AdminAttendanceEmployeeHistory(
+      employeeId: _asInt(employee['employeeId'] ?? json['employeeId']),
+      fullName: employee['fullName'] as String? ?? '',
+      employeeCode: employee['employeeCode'] as String?,
+      designation: employee['designation'] as String?,
+      department: employee['department'] as String?,
+      from: json['from']?.toString() ?? '',
+      to: json['to']?.toString() ?? '',
+      policy: policy != null ? AttendancePolicy.fromJson(policy) : null,
+      days: _asMapList(json['days']).map(AdminAttendanceHistoryDay.fromJson).toList(),
     );
   }
 }

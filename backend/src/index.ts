@@ -18,6 +18,10 @@ const { startLeaveCreditWorker } = require('./jobs/leave/leaveCredit.worker') as
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { startLeaveAbsenceExpireWorker } = require('./jobs/leave/leaveAbsenceExpire.worker') as typeof import('./jobs/leave/leaveAbsenceExpire.worker');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
+const { startLeaveYearEndWorker } = require('./jobs/leave/leaveYearEnd.worker') as typeof import('./jobs/leave/leaveYearEnd.worker');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { startLeaveApproverTimeoutWorker } = require('./jobs/leave/leaveApproverTimeout.worker') as typeof import('./jobs/leave/leaveApproverTimeout.worker');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
 const { ensureAttendanceRepeatableJobs } = require('./jobs/attendance/attendanceSchedulers') as typeof import('./jobs/attendance/attendanceSchedulers');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { startAttendanceSyncWorker } = require('./jobs/attendance/attendanceSync.worker') as typeof import('./jobs/attendance/attendanceSync.worker');
@@ -36,6 +40,8 @@ async function start() {
     try {
       startLeaveCreditWorker();
       startLeaveAbsenceExpireWorker();
+      startLeaveYearEndWorker();
+      startLeaveApproverTimeoutWorker();
       startAttendanceSyncWorker();
       await ensureLeaveRepeatableJobs();
       await ensureAttendanceRepeatableJobs();

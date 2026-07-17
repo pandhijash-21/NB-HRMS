@@ -47,6 +47,34 @@ attendanceRouter.get('/admin/day', requireAuth, requirePermission('ATTENDANCE', 
   }
 });
 
+attendanceRouter.get('/admin/employee/:employeeId/history', requireAuth, requirePermission('ATTENDANCE', 'READ'), async (req: Request, res: Response) => {
+  try {
+    const role = String((req.user as any)?.role ?? '');
+    if (!['ADMIN', 'HR', 'HR_MANAGER'].includes(role)) {
+      return res.status(403).json(fail('Forbidden'));
+    }
+    const employeeId = Number(req.params.employeeId);
+    if (!Number.isFinite(employeeId) || employeeId <= 0) {
+      return res.status(400).json(fail('Invalid employeeId'));
+    }
+
+    // Default range = current month in IST (UTC+05:30)
+    const istNow = new Date(Date.now() + 330 * 60 * 1000);
+    const y = istNow.getUTCFullYear();
+    const m = istNow.getUTCMonth() + 1;
+    const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    const defaultFrom = `${y}-${String(m).padStart(2, '0')}-01`;
+    const defaultTo = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+    const from = String(req.query.from ?? defaultFrom);
+    const to = String(req.query.to ?? defaultTo);
+    const data = await attendanceService.getAdminEmployeeHistory({ employeeId, from, to });
+    return res.json(ok(data));
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});
+
 attendanceRouter.post('/admin/punch', requireAuth, requirePermission('ATTENDANCE', 'WRITE'), async (req: Request, res: Response) => {
   try {
     const role = String((req.user as any)?.role ?? '');
@@ -95,7 +123,7 @@ attendanceRouter.get('/admin/policy', requireAuth, requirePermission('ATTENDANCE
   }
 });
 
-attendanceRouter.patch('/admin/policy', requireAuth, requirePermission('ATTENDANCE', 'READ'), async (req: Request, res: Response) => {
+attendanceRouter.patch('/admin/policy', requireAuth, requirePermission('ATTENDANCE', 'WRITE'), async (req: Request, res: Response) => {
   try {
     const role = String((req.user as any)?.role ?? '');
     if (!['ADMIN', 'HR', 'HR_MANAGER'].includes(role)) {

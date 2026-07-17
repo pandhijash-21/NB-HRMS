@@ -18,12 +18,12 @@ const GeneralInfoSchema = z.object({
   firstApproverUserId:  z.string().uuid().optional().nullable(),
   secondApproverUserId: z.string().uuid().optional().nullable(),
   thirdApproverUserId:  z.string().uuid().optional().nullable(),
-  employeeCategory:     z.enum(['TEACHING', 'NON_TEACHING', 'CONTRACT', 'VISITING']),
+  employeeCategory:     z.string().min(1),
   designation:          z.string().min(1),
   shift:                z.string().optional().nullable(),
-  appointmentType:      z.enum([
-    'FULL_TIME_REGULAR', 'FULL_TIME_CONTRACT', 'PART_TIME', 'VISITING', 'DEPUTATION',
-  ]).optional().nullable(),
+  appointmentType:      z.string().optional().nullable(),
+  employeeCode:         z.string().min(1).optional().nullable(),
+  instituteId:          z.string().uuid().optional().nullable(),
 });
 
 const GeneralInfoPatchSchema = GeneralInfoSchema.partial();

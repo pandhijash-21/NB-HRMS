@@ -52,18 +52,21 @@ export default function PermissionMatrixPage({ params }: { params: Promise<{ id:
 
   const { role, loading: roleLoading } = useRoleDetails(roleId);
   const { modules, loading: modulesLoading } = useSystemModules();
-  const { permissions, loading: permsLoading, refetch } = useRolePermissions(roleId);
+  const { permissions, loading: permsLoading, refetch, applyOptimistic } = useRolePermissions(roleId);
   const { updatePermissions } = useRoleMgmtActions();
 
   const [updatingParams, setUpdatingParams] = useState<Record<string, boolean>>({});
 
   const handleScopeChange = async (moduleKey: string, scope: EmployeeViewScope) => {
     const key = `${moduleKey}-scope`;
+    const prev = permissions.find((p) => p.moduleKey === moduleKey);
     setUpdatingParams(prev => ({ ...prev, [key]: true }));
+    applyOptimistic(moduleKey, { employeeViewScope: scope });
     try {
       await updatePermissions(roleId, moduleKey, { employeeViewScope: scope });
-      await refetch();
+      await refetch({ silent: true });
     } catch (err: unknown) {
+      if (prev) applyOptimistic(moduleKey, { employeeViewScope: prev.employeeViewScope });
       const e = err as { response?: { data?: { message?: string } }; message?: string };
       alert(e?.response?.data?.message || e.message || "Failed to update scope");
     } finally {
@@ -73,19 +76,22 @@ export default function PermissionMatrixPage({ params }: { params: Promise<{ id:
 
   const handleToggle = async (moduleKey: string, field: keyof Permission, nextValue: boolean) => {
     const key = `${moduleKey}-${field}`;
+    const prev = permissions.find((p) => p.moduleKey === moduleKey);
     setUpdatingParams(prev => ({ ...prev, [key]: true }));
+    applyOptimistic(moduleKey, { [field]: nextValue } as Partial<Permission>);
 
     try {
       await updatePermissions(roleId, moduleKey, { [field]: nextValue });
-      await refetch();
+      await refetch({ silent: true });
     } catch (err: any) {
+      if (prev) applyOptimistic(moduleKey, { [field]: prev[field] } as Partial<Permission>);
       alert(err?.response?.data?.message || err.message || "Failed to update permission");
     } finally {
       setUpdatingParams(prev => ({ ...prev, [key]: false }));
     }
   };
 
-  const loading = roleLoading || modulesLoading || permsLoading;
+  const loading = roleLoading || modulesLoading || (permsLoading && permissions.length === 0);
 
   if (loading) {
     return (

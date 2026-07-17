@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/theme/app_colors.dart';
 import '../../domain/leave_models.dart';
 import '../leave_providers.dart';
 import '../widgets/leave_shared_widgets.dart';
@@ -35,7 +34,7 @@ class LeaveApprovalsScreen extends ConsumerWidget {
             Icons.arrow_back_rounded,
             color: isDark ? Colors.white.withOpacity(0.8) : const Color(0xFF212F3D),
           ),
-          onPressed: () => context.go('/home'),
+          onPressed: () => context.go('/leave'),
         ),
         actions: [
           Padding(

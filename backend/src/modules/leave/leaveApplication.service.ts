@@ -41,6 +41,14 @@ export const leaveApplicationService = {
     const lt = await prisma.leaveType.findUnique({ where: { id: input.leaveTypeId } });
     if (!lt || !lt.isActive) throw new Error('Invalid or inactive leave type');
 
+    if (!input.isAppliedByAdmin && !lt.employeeCanApply) {
+      throw new Error('Employees cannot apply for this leave type. Contact HR/Admin.');
+    }
+
+    if (lt.requiresDocument && !(input.documentUrl && String(input.documentUrl).trim())) {
+      throw new Error('Supporting document is required for this leave type');
+    }
+
     // Check employee category eligibility
     const gi = await prisma.employeeGeneralInfo.findUnique({
       where: { employeeId: input.employeeId },
@@ -50,6 +58,10 @@ export const leaveApplicationService = {
     const cat = gi.employeeCategory === 'TEACHING' ? 'TEACHING' : 'NON_TEACHING';
     if (lt.applicableTo !== 'BOTH' && lt.applicableTo !== cat) {
       throw new Error(`This leave type is not applicable to ${cat} employees`);
+    }
+
+    if (input.isHalfDay && !lt.allowHalfDay) {
+      throw new Error('Half-day leave is not allowed for this leave type');
     }
 
     // Calculate days
@@ -233,14 +245,42 @@ export const leaveApplicationService = {
     await leaveBalanceService.syncScheduledCredits(employeeId, y);
     return prisma.leaveBalance.findMany({
       where: { employeeId, year: y },
-      include: { leaveType: { select: { name: true, code: true, allowHalfDay: true } } },
+      include: {
+        leaveType: {
+          select: {
+            name: true,
+            code: true,
+            allowHalfDay: true,
+            employeeCanApply: true,
+            isActive: true,
+          },
+        },
+      },
       orderBy: { leaveType: { code: 'asc' } },
     });
   },
 
-  /** Pending applications for approver (by user id — works for position accounts too) */
-  async getPendingForApprover(approverUserId: string) {
-    return prisma.leaveApplication.findMany({
+  /** Pending applications for approver (by user id — works for position accounts too).
+   *  Privileged admins (ADMIN/HR) see all PENDING apps so they can act from Leave Approvals. */
+  async getPendingForApprover(approverUserId: string, opts?: { privilegedAdmin?: boolean }) {
+    if (opts?.privilegedAdmin) {
+      return prisma.leaveApplication.findMany({
+        where: { status: 'PENDING' },
+        include: {
+          leaveType: { select: { name: true, code: true } },
+          approvalSteps: { where: { isSuperseded: false }, orderBy: { stepNumber: 'asc' } },
+          assignment: { select: { subOrganization: true, designation: true, department: true, effectiveFrom: true, effectiveTo: true } },
+          employee: {
+            include: {
+              generalInfo: { select: { fullName: true, employeeCode: true, designation: true, department: true } },
+            },
+          },
+        },
+        orderBy: { appliedAt: 'asc' },
+      });
+    }
+
+    const apps = await prisma.leaveApplication.findMany({
       where: {
         status: 'PENDING',
         approvalSteps: {
@@ -262,6 +302,14 @@ export const leaveApplicationService = {
         },
       },
       orderBy: { appliedAt: 'asc' },
+    });
+
+    // Only return apps where this user is on the *current* (lowest pending) tier
+    return apps.filter((app) => {
+      const pending = app.approvalSteps.filter((s) => s.action == null && !s.isSuperseded);
+      if (pending.length === 0) return false;
+      const minTier = Math.min(...pending.map((s) => s.stepNumber));
+      return pending.some((s) => s.stepNumber === minTier && s.approverUserId === approverUserId);
     });
   },
 };

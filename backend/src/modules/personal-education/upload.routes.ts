@@ -23,3 +23,4 @@ uploadRouter.post('/recommendation', requireAuth, uploadController.recommendatio
 uploadRouter.post('/cancelled-cheque', requireAuth, uploadController.cancelledCheque);
 uploadRouter.post('/passbook', requireAuth, uploadController.passbook);
 uploadRouter.post('/leave-document', requireAuth, uploadController.leaveDocument);
+uploadRouter.post('/reimbursement-proof', requireAuth, uploadController.reimbursementProof);

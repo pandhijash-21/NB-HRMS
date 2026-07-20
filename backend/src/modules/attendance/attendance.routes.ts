@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { requireAuth } from '../../middleware/auth';
-import { requirePermission } from '../../middleware/rbac';
+import { requirePermission, requireSelfEmployeeOrPermission } from '../../middleware/rbac';
 import { ok, fail } from '../../utils/response';
 import { attendanceService } from './attendance.service';
 
@@ -148,4 +148,93 @@ attendanceRouter.patch('/admin/policy', requireAuth, requirePermission('ATTENDAN
     return res.status(400).json(fail(e.message));
   }
 });
+
+// Employee-specific punch windows (self read; admin/HR write)
+attendanceRouter.get(
+  '/employee/:employeeId/settings',
+  requireAuth,
+  requireSelfEmployeeOrPermission('employeeId', 'ATTENDANCE', 'READ'),
+  async (req: Request, res: Response) => {
+    try {
+      const employeeId = Number(req.params.employeeId);
+      const data = await attendanceService.getEmployeeAttendanceSettings(employeeId);
+      return res.json(ok(data));
+    } catch (e: any) {
+      return res.status(400).json(fail(e.message));
+    }
+  },
+);
+
+attendanceRouter.patch(
+  '/employee/:employeeId/settings',
+  requireAuth,
+  (req, res, next) => {
+    const role = String((req.user as { role?: string })?.role ?? '').toUpperCase();
+    if (['ADMIN', 'HR', 'HR_MANAGER'].includes(role)) return next();
+    return requirePermission('ATTENDANCE', 'WRITE')(req, res, next);
+  },
+  async (req: Request, res: Response) => {
+    try {
+      const role = String((req.user as any)?.role ?? '');
+      if (!['ADMIN', 'HR', 'HR_MANAGER'].includes(role)) {
+        return res.status(403).json(fail('Forbidden'));
+      }
+      const employeeId = Number(req.params.employeeId);
+      const updatedBy = String((req.user as any)?.id ?? 'unknown');
+      const data = await attendanceService.updateEmployeeAttendanceSettings(employeeId, {
+        useGlobalPolicy: req.body?.useGlobalPolicy,
+        punchInTime: req.body?.punchInTime,
+        punchOutTime: req.body?.punchOutTime,
+        punchInBufferMinutes: req.body?.punchInBufferMinutes,
+        punchOutBufferMinutes: req.body?.punchOutBufferMinutes,
+        updatedBy,
+      });
+      return res.json(ok(data));
+    } catch (e: any) {
+      return res.status(400).json(fail(e.message));
+    }
+  },
+);
+
+// Monthly attendance + leave summary (self or admin)
+attendanceRouter.get(
+  '/employee/:employeeId/monthly-summary',
+  requireAuth,
+  requireSelfEmployeeOrPermission('employeeId', 'ATTENDANCE', 'READ'),
+  async (req: Request, res: Response) => {
+    try {
+      const employeeId = Number(req.params.employeeId);
+      const year = Number(req.query.year ?? new Date().getFullYear());
+      const month = Number(req.query.month ?? new Date().getMonth() + 1);
+      const data = await attendanceService.getEmployeeMonthlySummary({ employeeId, year, month });
+      return res.json(ok(data));
+    } catch (e: any) {
+      return res.status(400).json(fail(e.message));
+    }
+  },
+);
+
+// Employee history with evaluation (self or admin)
+attendanceRouter.get(
+  '/employee/:employeeId/history',
+  requireAuth,
+  requireSelfEmployeeOrPermission('employeeId', 'ATTENDANCE', 'READ'),
+  async (req: Request, res: Response) => {
+    try {
+      const employeeId = Number(req.params.employeeId);
+      const istNow = new Date(Date.now() + 330 * 60 * 1000);
+      const y = istNow.getUTCFullYear();
+      const m = istNow.getUTCMonth() + 1;
+      const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+      const defaultFrom = `${y}-${String(m).padStart(2, '0')}-01`;
+      const defaultTo = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+      const from = String(req.query.from ?? defaultFrom);
+      const to = String(req.query.to ?? defaultTo);
+      const data = await attendanceService.getAdminEmployeeHistory({ employeeId, from, to });
+      return res.json(ok(data));
+    } catch (e: any) {
+      return res.status(400).json(fail(e.message));
+    }
+  },
+);
 

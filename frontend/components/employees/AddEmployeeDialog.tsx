@@ -30,6 +30,13 @@ import { PlusCircle, Loader2, UserPlus, ShieldAlert, CheckCircle2, Mail } from "
 import { useDesignations } from "@/lib/hooks/useDesignations";
 import { EmployeePositionSelect } from "@/components/employees/EmployeePositionSelect";
 import { InstituteSelect } from "@/components/institutes/InstituteSelect";
+import { LetterEditorDialog } from "@/components/letters/LetterEditorDialog";
+import {
+  useCreateLetterDraft,
+  useFinalizeLetterDraft,
+  useLetterTemplates,
+  useUpdateLetterDraft,
+} from "@/lib/hooks/useLetters";
 
 const addEmployeeSchema = z.object({
   fullName: z.string()
@@ -51,6 +58,7 @@ const addEmployeeSchema = z.object({
   department: z.string().min(2, "Department is required"),
   employeeCategory: z.enum(["TEACHING", "NON_TEACHING", "CONTRACT", "VISITING"]),
   joiningDate: z.string().min(1, "Joining date is required"),
+  birthDate: z.string().min(1, "Birth date is required"),
   positionDesignationId: z.string().uuid().optional().nullable(),
   firstApproverUserId: z.string().nullable().optional(),
   secondApproverUserId: z.string().nullable().optional(),
@@ -58,6 +66,7 @@ const addEmployeeSchema = z.object({
 });
 
 type AddEmployeeForm = z.infer<typeof addEmployeeSchema>;
+type EmployeeCategory = AddEmployeeForm["employeeCategory"];
 
 function generateAbbreviation(fullName: string): string {
   const names = fullName.trim().split(/\s+/);
@@ -84,12 +93,23 @@ export function AddEmployeeDialog() {
   const [employeeCode] = useState(generateEmployeeCode());
   const [otpVerified, setOtpVerified] = useState(false);
   const createMutation = useCreateEmployee();
+  const createDraft = useCreateLetterDraft();
+  const updateDraft = useUpdateLetterDraft();
+  const finalizeDraft = useFinalizeLetterDraft();
+  const { data: letterTemplates = [] } = useLetterTemplates();
   const { data: employeeNames = [] } = useEmployeeNames();
   const { positions: positionApprovers, employees: employeeApprovers } = useMemo(
     () => groupApproverOptions(employeeNames),
     [employeeNames],
   );
   const { data: designations = [] } = useDesignations(false);
+  const [createOfferLetterAfterSave, setCreateOfferLetterAfterSave] = useState(false);
+  const [offerDraft, setOfferDraft] = useState<{
+    employeeId: number;
+    documentId: string;
+    contentHtml: string;
+    templateName: string;
+  } | null>(null);
 
   const renderApproverOptions = () => (
     <>
@@ -139,6 +159,7 @@ export function AddEmployeeDialog() {
       department: "",
       employeeCategory: "TEACHING",
       joiningDate: "",
+      birthDate: "",
       personalEmailVerified: false,
       firstApproverUserId: null,
       secondApproverUserId: null,
@@ -185,13 +206,35 @@ export function AddEmployeeDialog() {
         secondApproverUserId: data.secondApproverUserId ?? null,
         thirdApproverUserId:  data.thirdApproverUserId  ?? null,
       };
-      await createMutation.mutateAsync(submissionData);
+      const created = await createMutation.mutateAsync(submissionData);
       setOpen(false);
       reset();
       setOtpVerified(false);
       setAbbreviation("");
-    } catch (err: any) {
-      const msg = err.response?.data?.error || err.response?.data?.message || err.message || "An unexpected error occurred";
+
+      if (createOfferLetterAfterSave) {
+        const offerTemplate = letterTemplates.find((tpl) => tpl.key === "offer_letter");
+        const createdEmployeeId = Number(created?.id);
+        if (offerTemplate && Number.isFinite(createdEmployeeId)) {
+          const draft = await createDraft.mutateAsync({
+            employeeId: createdEmployeeId,
+            templateId: offerTemplate.id,
+          });
+          setOfferDraft({
+            employeeId: createdEmployeeId,
+            documentId: draft.id,
+            contentHtml: draft.contentHtml,
+            templateName: offerTemplate.name,
+          });
+        }
+      }
+    } catch (err: unknown) {
+      const maybeAxios = err as { response?: { data?: { error?: string; message?: string } }; message?: string };
+      const msg =
+        maybeAxios.response?.data?.error ||
+        maybeAxios.response?.data?.message ||
+        maybeAxios.message ||
+        "An unexpected error occurred";
       setServerError(msg);
     }
   };
@@ -203,6 +246,7 @@ export function AddEmployeeDialog() {
       setAbbreviation("");
       setShowOtpVerification(false);
       setServerError(null);
+      setCreateOfferLetterAfterSave(false);
     }
     setOpen(isOpen);
   };
@@ -224,7 +268,7 @@ export function AddEmployeeDialog() {
                       Onboard New Employee
                   </DialogTitle>
                   <DialogDescription className="text-white/60 text-[11px] font-medium mt-1">
-                      Establish a new institutional record and system credentials.
+                      Login password defaults to birth date (DDMMYYYY). User must change it on first sign-in.
                   </DialogDescription>
                </div>
                <ShieldAlert className="absolute -right-8 -bottom-8 w-40 h-40 text-white/5 rotate-12" />
@@ -392,7 +436,7 @@ export function AddEmployeeDialog() {
                 <Label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Engagement Category *</Label>
                 <Select
                   name="category"
-                  onValueChange={(v) => setValue("employeeCategory", v as any)}
+                  onValueChange={(v) => setValue("employeeCategory", v as EmployeeCategory)}
                   defaultValue="TEACHING"
                 >
                   <SelectTrigger id="category" className="rounded-xl border-slate-200/60 bg-white h-11 text-sm font-medium">
@@ -416,6 +460,37 @@ export function AddEmployeeDialog() {
                   className="rounded-xl border-slate-200/60 bg-white h-11 text-sm font-medium"
                 />
                 {errors.joiningDate && <p className="text-[10px] text-rose-500 font-bold uppercase tracking-tight">{errors.joiningDate.message}</p>}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="birthDate" className="text-[10px] font-bold text-slate-400 uppercase ml-1">Birth Date * (login password)</Label>
+                <Input
+                  id="birthDate"
+                  type="date"
+                  {...register("birthDate")}
+                  className="rounded-xl border-slate-200/60 bg-white h-11 text-sm font-medium"
+                />
+                <p className="text-[9px] text-slate-400 uppercase ml-1">Temporary password = DDMMYYYY (e.g. 15 Mar 1998 → 15031998)</p>
+                {errors.birthDate && <p className="text-[10px] text-rose-500 font-bold uppercase tracking-tight">{errors.birthDate.message}</p>}
+              </div>
+
+              <div className="col-span-2 rounded-2xl border border-[#d9b557]/30 bg-[#d9b557]/10 p-4">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={createOfferLetterAfterSave}
+                    onChange={(e) => setCreateOfferLetterAfterSave(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#1d3459] focus:ring-[#1d3459]"
+                  />
+                  <div>
+                    <p className="text-sm font-semibold text-[#1d3459]">
+                      Create offer letter after employee is added
+                    </p>
+                    <p className="mt-1 text-xs text-slate-600">
+                      After saving the employee, an offer-letter draft will open so you can edit and generate it immediately.
+                    </p>
+                  </div>
+                </label>
               </div>
 
               <div className="space-y-2">
@@ -492,6 +567,49 @@ export function AddEmployeeDialog() {
         onOpenChange={setShowOtpVerification}
         email={pendingEmail}
         onVerified={handleOtpVerified}
+      />
+
+      <LetterEditorDialog
+        key={offerDraft?.documentId ?? "offer-draft"}
+        open={!!offerDraft}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) setOfferDraft(null);
+        }}
+        title={offerDraft ? `Generate ${offerDraft.templateName}` : "Generate Offer Letter"}
+        description="Review the draft, make changes if needed, then generate and store the letter in the employee documents section."
+        initialHtml={offerDraft?.contentHtml ?? ""}
+        placeholders={[
+          "fullName",
+          "employeeCode",
+          "designation",
+          "department",
+          "organization",
+          "instituteName",
+          "subOrganization",
+          "joiningDate",
+          "birthDate",
+          "aadhaarNo",
+          "panNo",
+          "passportNo",
+          "passportIssueDate",
+          "passportExpiryDate",
+          "todayDate",
+        ]}
+        saving={updateDraft.isPending || finalizeDraft.isPending}
+        onSaveGenerate={async (html) => {
+          if (!offerDraft) return;
+          await updateDraft.mutateAsync({
+            documentId: offerDraft.documentId,
+            contentHtml: html,
+            employeeId: offerDraft.employeeId,
+          });
+          await finalizeDraft.mutateAsync({
+            draftId: offerDraft.documentId,
+            employeeId: offerDraft.employeeId,
+          });
+          setOfferDraft(null);
+          setCreateOfferLetterAfterSave(false);
+        }}
       />
     </>
   );

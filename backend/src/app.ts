@@ -19,6 +19,8 @@ import { env } from './config/env';
 import { configureCloudinary } from './config/cloudinary';
 import { connectRedis } from './config/redis';
 import { fail, ok } from './utils/response';
+import { lettersRouter } from './modules/letters';
+import { reimbursementsRouter } from './modules/reimbursements';
 
 configureCloudinary();
 
@@ -82,6 +84,8 @@ app.use('/api/admin', userMgmtRouter);
 app.use('/api/approvals', approvalsRouter);
 app.use('/api/leave', leaveRouter);
 app.use('/api/attendance', attendanceRouter);
+app.use('/api/letters', lettersRouter);
+app.use('/api/reimbursements', reimbursementsRouter);
 app.use('/api/admin', designationRouter);
 app.use('/api', instituteRouter);
 app.use('/api/salary', salaryRouter);

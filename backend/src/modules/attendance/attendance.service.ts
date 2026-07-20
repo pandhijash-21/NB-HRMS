@@ -67,6 +67,95 @@ async function getAttendancePolicy() {
   };
 }
 
+type EffectivePolicy = {
+  source: 'GLOBAL' | 'EMPLOYEE';
+  punchInTime: string;
+  punchOutTime: string;
+  punchInBufferMinutes: number;
+  punchOutBufferMinutes: number;
+  globalPolicy: Awaited<ReturnType<typeof getAttendancePolicy>>;
+  employeeSettings: {
+    useGlobalPolicy: boolean;
+    punchInTime: string | null;
+    punchOutTime: string | null;
+    punchInBufferMinutes: number | null;
+    punchOutBufferMinutes: number | null;
+  } | null;
+};
+
+async function resolveEffectivePolicy(employeeId: number): Promise<EffectivePolicy> {
+  const globalPolicy = await getAttendancePolicy();
+  const settings = await prisma.employeeAttendanceSettings.findUnique({
+    where: { employeeId },
+  });
+
+  if (!settings || settings.useGlobalPolicy) {
+    return {
+      source: 'GLOBAL',
+      punchInTime: globalPolicy.defaultPunchInTime,
+      punchOutTime: globalPolicy.defaultPunchOutTime,
+      punchInBufferMinutes: globalPolicy.punchInBufferMinutes,
+      punchOutBufferMinutes: globalPolicy.punchOutBufferMinutes,
+      globalPolicy,
+      employeeSettings: settings
+        ? {
+            useGlobalPolicy: true,
+            punchInTime: settings.punchInTime,
+            punchOutTime: settings.punchOutTime,
+            punchInBufferMinutes: settings.punchInBufferMinutes,
+            punchOutBufferMinutes: settings.punchOutBufferMinutes,
+          }
+        : null,
+    };
+  }
+
+  return {
+    source: 'EMPLOYEE',
+    punchInTime: settings.punchInTime ?? globalPolicy.defaultPunchInTime,
+    punchOutTime: settings.punchOutTime ?? globalPolicy.defaultPunchOutTime,
+    punchInBufferMinutes: settings.punchInBufferMinutes ?? globalPolicy.punchInBufferMinutes,
+    punchOutBufferMinutes: settings.punchOutBufferMinutes ?? globalPolicy.punchOutBufferMinutes,
+    globalPolicy,
+    employeeSettings: {
+      useGlobalPolicy: false,
+      punchInTime: settings.punchInTime,
+      punchOutTime: settings.punchOutTime,
+      punchInBufferMinutes: settings.punchInBufferMinutes,
+      punchOutBufferMinutes: settings.punchOutBufferMinutes,
+    },
+  };
+}
+
+function evaluateDayPunches(
+  policy: Pick<EffectivePolicy, 'punchInTime' | 'punchOutTime' | 'punchInBufferMinutes' | 'punchOutBufferMinutes'>,
+  firstIn: string | null,
+  lastOut: string | null,
+) {
+  const totalMinutes =
+    firstIn && lastOut
+      ? Math.max(0, Math.floor((new Date(lastOut).getTime() - new Date(firstIn).getTime()) / 60000))
+      : 0;
+  const punchInMin = firstIn ? minutesInIstDayFromUtcDate(new Date(firstIn)) : null;
+  const punchOutMin = lastOut ? minutesInIstDayFromUtcDate(new Date(lastOut)) : null;
+  const defaultInMin = parseHmToMinutes(policy.punchInTime);
+  const defaultOutMin = parseHmToMinutes(policy.punchOutTime);
+  const lateAfterMin = defaultInMin + policy.punchInBufferMinutes;
+  const eligibleOutAfterMin = defaultOutMin - policy.punchOutBufferMinutes;
+  const isLate = punchInMin == null ? null : punchInMin > lateAfterMin;
+  const isHalfDay = isLate;
+  const meetsPunchOut = punchOutMin == null ? null : punchOutMin >= eligibleOutAfterMin;
+  return { totalMinutes, isLate, isHalfDay, meetsPunchOut };
+}
+
+function monthRangeYmd(year: number, month: number) {
+  if (!Number.isFinite(year) || year < 2000 || year > 2100) throw new Error('Invalid year');
+  if (!Number.isFinite(month) || month < 1 || month > 12) throw new Error('Invalid month');
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const from = `${year}-${String(month).padStart(2, '0')}-01`;
+  const to = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+  return { from, to };
+}
+
 export const attendanceService = {
   async getAdminPolicy() {
     // Ensure row exists so admin UI always has something to edit
@@ -176,24 +265,13 @@ export const attendanceService = {
 
     const firstIn = punches[0]?.punchAt ? new Date(punches[0].punchAt).toISOString() : null;
     const lastOut = punches.length ? new Date(punches[punches.length - 1].punchAt).toISOString() : null;
-    const totalMinutes =
-      firstIn && lastOut
-        ? Math.max(0, Math.floor((new Date(lastOut).getTime() - new Date(firstIn).getTime()) / 60000))
-        : 0;
 
-    const policy = await getAttendancePolicy();
-    const punchInMin = firstIn ? minutesInIstDayFromUtcDate(new Date(firstIn)) : null;
-    const punchOutMin = lastOut ? minutesInIstDayFromUtcDate(new Date(lastOut)) : null;
-
-    const defaultInMin = parseHmToMinutes(policy.defaultPunchInTime);
-    const defaultOutMin = parseHmToMinutes(policy.defaultPunchOutTime);
-
-    const lateAfterMin = defaultInMin + policy.punchInBufferMinutes;
-    const eligibleOutAfterMin = defaultOutMin - policy.punchOutBufferMinutes;
-
-    const isLate = punchInMin == null ? null : punchInMin > lateAfterMin;
-    const isHalfDay = isLate;
-    const meetsPunchOut = punchOutMin == null ? null : punchOutMin >= eligibleOutAfterMin;
+    const policy = await resolveEffectivePolicy(params.employeeId);
+    const { totalMinutes, isLate, isHalfDay, meetsPunchOut } = evaluateDayPunches(
+      policy,
+      firstIn,
+      lastOut,
+    );
 
     return {
       punches,
@@ -201,17 +279,23 @@ export const attendanceService = {
         firstIn,
         lastOut,
         totalMinutes,
-        policy,
+        policy: {
+          source: policy.source,
+          punchInTime: policy.punchInTime,
+          punchOutTime: policy.punchOutTime,
+          punchInBufferMinutes: policy.punchInBufferMinutes,
+          punchOutBufferMinutes: policy.punchOutBufferMinutes,
+          globalPolicy: policy.globalPolicy,
+          employeeSettings: policy.employeeSettings,
+        },
         evaluation: {
-          // If punchIn is after (default + buffer) => half day
           isLate,
           isHalfDay,
-          // If punchOut is after/equal (defaultOut - buffer) => eligible
           meetsPunchOut,
           thresholds: {
-            lateAfter: policy.defaultPunchInTime,
+            lateAfter: policy.punchInTime,
             lateBufferMinutes: policy.punchInBufferMinutes,
-            punchOutEligibleAfter: policy.defaultPunchOutTime,
+            punchOutEligibleAfter: policy.punchOutTime,
             punchOutBufferMinutes: policy.punchOutBufferMinutes,
           },
         },
@@ -296,11 +380,7 @@ export const attendanceService = {
       select: { id: true, punchAt: true, terminalId: true, punchType: true, source: true },
     });
 
-    const policy = await getAttendancePolicy();
-    const defaultInMin = parseHmToMinutes(policy.defaultPunchInTime);
-    const defaultOutMin = parseHmToMinutes(policy.defaultPunchOutTime);
-    const lateAfterMin = defaultInMin + policy.punchInBufferMinutes;
-    const eligibleOutAfterMin = defaultOutMin - policy.punchOutBufferMinutes;
+    const policy = await resolveEffectivePolicy(params.employeeId);
 
     type PunchRow = {
       id: string;
@@ -342,15 +422,11 @@ export const attendanceService = {
       const dayPunches = byDay[date] ?? [];
       const firstIn = dayPunches[0]?.punchAt ?? null;
       const lastOut = dayPunches.length ? dayPunches[dayPunches.length - 1].punchAt : null;
-      const totalMinutes =
-        firstIn && lastOut
-          ? Math.max(0, Math.floor((new Date(lastOut).getTime() - new Date(firstIn).getTime()) / 60000))
-          : 0;
-      const punchInMin = firstIn ? minutesInIstDayFromUtcDate(new Date(firstIn)) : null;
-      const punchOutMin = lastOut ? minutesInIstDayFromUtcDate(new Date(lastOut)) : null;
-      const isLate = punchInMin == null ? null : punchInMin > lateAfterMin;
-      const isHalfDay = isLate;
-      const meetsPunchOut = punchOutMin == null ? null : punchOutMin >= eligibleOutAfterMin;
+      const { totalMinutes, isLate, isHalfDay, meetsPunchOut } = evaluateDayPunches(
+        policy,
+        firstIn,
+        lastOut,
+      );
 
       days.push({
         date,
@@ -376,8 +452,148 @@ export const attendanceService = {
       },
       from: params.from,
       to: params.to,
-      policy,
+      policy: {
+        source: policy.source,
+        punchInTime: policy.punchInTime,
+        punchOutTime: policy.punchOutTime,
+        punchInBufferMinutes: policy.punchInBufferMinutes,
+        punchOutBufferMinutes: policy.punchOutBufferMinutes,
+        globalPolicy: policy.globalPolicy,
+        employeeSettings: policy.employeeSettings,
+      },
       days,
+    };
+  },
+
+  async getEmployeeAttendanceSettings(employeeId: number) {
+    const employee = await prisma.employee.findUnique({ where: { id: employeeId }, select: { id: true } });
+    if (!employee) throw new Error('Employee not found');
+    const effective = await resolveEffectivePolicy(employeeId);
+    const row = await prisma.employeeAttendanceSettings.findUnique({ where: { employeeId } });
+    return {
+      employeeId,
+      useGlobalPolicy: row?.useGlobalPolicy ?? true,
+      punchInTime: row?.punchInTime ?? null,
+      punchOutTime: row?.punchOutTime ?? null,
+      punchInBufferMinutes: row?.punchInBufferMinutes ?? null,
+      punchOutBufferMinutes: row?.punchOutBufferMinutes ?? null,
+      effective: {
+        source: effective.source,
+        punchInTime: effective.punchInTime,
+        punchOutTime: effective.punchOutTime,
+        punchInBufferMinutes: effective.punchInBufferMinutes,
+        punchOutBufferMinutes: effective.punchOutBufferMinutes,
+      },
+      globalPolicy: effective.globalPolicy,
+    };
+  },
+
+  async updateEmployeeAttendanceSettings(
+    employeeId: number,
+    input: {
+      useGlobalPolicy?: boolean;
+      punchInTime?: string | null;
+      punchOutTime?: string | null;
+      punchInBufferMinutes?: number | null;
+      punchOutBufferMinutes?: number | null;
+      updatedBy: string;
+    },
+  ) {
+    const employee = await prisma.employee.findUnique({ where: { id: employeeId }, select: { id: true } });
+    if (!employee) throw new Error('Employee not found');
+
+    if (input.punchInTime) parseHmToMinutes(input.punchInTime);
+    if (input.punchOutTime) parseHmToMinutes(input.punchOutTime);
+    if (input.punchInBufferMinutes != null && (input.punchInBufferMinutes < 0 || input.punchInBufferMinutes > 240)) {
+      throw new Error('Invalid punchInBufferMinutes (expected 0-240)');
+    }
+    if (input.punchOutBufferMinutes != null && (input.punchOutBufferMinutes < 0 || input.punchOutBufferMinutes > 240)) {
+      throw new Error('Invalid punchOutBufferMinutes (expected 0-240)');
+    }
+
+    await prisma.employeeAttendanceSettings.upsert({
+      where: { employeeId },
+      update: {
+        useGlobalPolicy: input.useGlobalPolicy ?? undefined,
+        punchInTime: input.punchInTime === undefined ? undefined : input.punchInTime,
+        punchOutTime: input.punchOutTime === undefined ? undefined : input.punchOutTime,
+        punchInBufferMinutes: input.punchInBufferMinutes === undefined ? undefined : input.punchInBufferMinutes,
+        punchOutBufferMinutes: input.punchOutBufferMinutes === undefined ? undefined : input.punchOutBufferMinutes,
+        updatedBy: input.updatedBy,
+      },
+      create: {
+        employeeId,
+        useGlobalPolicy: input.useGlobalPolicy ?? false,
+        punchInTime: input.punchInTime ?? null,
+        punchOutTime: input.punchOutTime ?? null,
+        punchInBufferMinutes: input.punchInBufferMinutes ?? null,
+        punchOutBufferMinutes: input.punchOutBufferMinutes ?? null,
+        updatedBy: input.updatedBy,
+      },
+    });
+
+    return this.getEmployeeAttendanceSettings(employeeId);
+  },
+
+  async getEmployeeMonthlySummary(params: { employeeId: number; year: number; month: number }) {
+    const { from, to } = monthRangeYmd(params.year, params.month);
+    const history = await this.getAdminEmployeeHistory({ employeeId: params.employeeId, from, to });
+
+    const monthStart = istDayStartUtc(from);
+    const monthEndExclusive = new Date(istDayStartUtc(to).getTime() + 24 * 60 * 60 * 1000);
+
+    const leaveApps = await prisma.leaveApplication.findMany({
+      where: {
+        employeeId: params.employeeId,
+        status: { in: ['APPROVED', 'PENDING', 'HOD_RECOMMENDED', 'HOI_RECOMMENDED'] },
+        fromDate: { lt: monthEndExclusive },
+        toDate: { gte: monthStart },
+      },
+      include: { leaveType: { select: { code: true, name: true } } },
+      orderBy: { fromDate: 'asc' },
+    });
+
+    const leaveDaysInMonth = leaveApps.reduce((sum, app) => sum + Number(app.totalDays), 0);
+
+    let presentDays = 0;
+    let lateDays = 0;
+    let halfDays = 0;
+    let totalWorkingMinutes = 0;
+    for (const day of history.days) {
+      if (day.firstIn) presentDays += 1;
+      if (day.isLate === true) lateDays += 1;
+      if (day.isHalfDay === true) halfDays += 1;
+      totalWorkingMinutes += day.totalMinutes;
+    }
+
+    return {
+      year: params.year,
+      month: params.month,
+      from,
+      to,
+      policy: history.policy,
+      stats: {
+        presentDays,
+        lateDays,
+        halfDays,
+        absentDays: Math.max(0, history.days.length - presentDays),
+        totalWorkingMinutes,
+        totalWorkingHours: Math.round((totalWorkingMinutes / 60) * 100) / 100,
+        leaveApplications: leaveApps.length,
+        leaveDaysInMonth,
+      },
+      days: history.days,
+      leaveApplications: leaveApps.map((a) => ({
+        id: a.id,
+        applicationNo: a.applicationNo,
+        status: a.status,
+        fromDate: a.fromDate.toISOString(),
+        toDate: a.toDate.toISOString(),
+        totalDays: Number(a.totalDays),
+        isHalfDay: a.isHalfDay,
+        leaveType: a.leaveType,
+        reason: a.reason,
+      })),
     };
   },
 

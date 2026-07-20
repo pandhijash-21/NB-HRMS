@@ -7,7 +7,8 @@ import '../../../auth/presentation/auth_providers.dart';
 import '../profile_notifier.dart';
 import '../widgets/profile_tabs.dart';
 import '../../domain/profile_models.dart';
-import '../../../leave/presentation/widgets/employee_leave_tab.dart';
+import '../../../auth/domain/permissions.dart';
+import '../widgets/employee_attendance_tab.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   final int? employeeId;
@@ -29,9 +30,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> with SingleTicker
     'Family',
     'Academic',
     'Experience',
+    'Documents',
     'Bank',
     'Salary',
-    'Leave',
+    'Attendance',
   ];
 
   @override
@@ -76,6 +78,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> with SingleTicker
     final userScope = authState.permissions['PERSONAL_INFO']?.contains('WRITE') == true;
     final isOwnProfile = authState.user?.employeeId == empId;
     final canEdit = isOwnProfile || userScope;
+
+    final canManageLetters = Permissions.canManageLetters(
+      authState.permissions,
+      authState.user?.role,
+    ) && !isOwnProfile;
+
+    final canManageAttendanceSettings =
+        Permissions.canManageEmployeeAttendance(
+          authState.permissions,
+          authState.user?.role,
+        ) &&
+        (widget.employeeId != null || !isOwnProfile);
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
@@ -170,9 +184,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> with SingleTicker
                     FamilyViewTab(profile: profile),
                     AcademicViewTab(profile: profile),
                     const ExperienceViewTab(),
+                    DocumentsViewTab(profile: profile, canManageLetters: canManageLetters),
                     BankViewTab(profile: profile),
                     SalaryViewTab(profile: profile),
-                    EmployeeLeaveTab(employeeId: profile.id),
+                    EmployeeAttendanceTab(
+                      employeeId: profile.id,
+                      canManageSettings: canManageAttendanceSettings,
+                    ),
                   ],
                 ),
               ),

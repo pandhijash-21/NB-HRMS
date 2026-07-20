@@ -1,6 +1,7 @@
 "use client";
 
 import { useSession } from "next-auth/react";
+import { useSearchParams } from "next/navigation";
 import { useEmployee } from "@/lib/hooks/useEmployee";
 import { Skeleton } from "@/components/ui/skeleton";
 import { GeneralTab } from "@/components/profile/tabs/GeneralTab";
@@ -11,13 +12,28 @@ import { SalaryTab } from "@/components/profile/tabs/SalaryTab";
 import { BankTab } from "@/components/profile/tabs/BankTab";
 import { FamilyTab } from "@/components/profile/tabs/FamilyTab";
 import { EducationTab } from "@/components/profile/tabs/EducationTab";
+import { EditAttendanceSettingsTab } from "@/components/profile/tabs/EditAttendanceSettingsTab";
+import { canManageEmployeeAttendance } from "@/lib/auth/permissions";
 
 export default function EmployeeProfileEditPage() {
   const { data: session } = useSession();
-  const employeeId = session?.user?.employeeId;
-  const { employee, loading, refetch } = useEmployee(employeeId);
+  const searchParams = useSearchParams();
+  const queryEmployeeId = searchParams.get("employeeId");
+  const sessionEmployeeId = session?.user?.employeeId;
+  const targetEmployeeId = queryEmployeeId ?? sessionEmployeeId;
+  const isAdminEditingOther =
+    !!queryEmployeeId &&
+    (!sessionEmployeeId || String(sessionEmployeeId) !== String(queryEmployeeId));
+  const canEditAttendance =
+    isAdminEditingOther &&
+    canManageEmployeeAttendance(
+      (session?.user as { permissions?: Record<string, string[]>; role?: string })?.permissions,
+      (session?.user as { role?: string })?.role,
+    );
 
-  if (loading || !employeeId) {
+  const { employee, loading, refetch } = useEmployee(targetEmployeeId ?? undefined);
+
+  if (loading || !targetEmployeeId) {
     return (
       <div className="space-y-6">
         <header className="mb-8">
@@ -93,6 +109,13 @@ export default function EmployeeProfileEditPage() {
           <h2 className="text-lg font-bold text-slate-700 mb-4 px-1">8. Bank Details</h2>
           <BankTab employee={employee} isAdmin={true} />
         </section>
+
+        {canEditAttendance && (
+          <section id="attendance">
+            <h2 className="text-lg font-bold text-slate-700 mb-4 px-1">9. Attendance — Punch window</h2>
+            <EditAttendanceSettingsTab employeeId={Number(queryEmployeeId)} />
+          </section>
+        )}
       </div>
     </div>
   );

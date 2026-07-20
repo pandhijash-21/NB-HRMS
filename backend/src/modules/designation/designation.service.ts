@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../../config/prisma';
 import { resolveInstituteRef } from '../institute/institute.util';
 import { encryptPasswordForAdmin } from '../../utils/passwordCrypto';
@@ -9,6 +10,38 @@ function slugify(name: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '_')
     .replace(/^_|_$/g, '');
+}
+
+function roleCodeFromName(name: string): string {
+  return slugify(name).toUpperCase();
+}
+
+async function copyRolePermissionsFromTemplate(
+  tx: Prisma.TransactionClient,
+  templateRoleName: string,
+  targetRoleId: string,
+  updatedBy?: string,
+) {
+  const template = await tx.role.findUnique({ where: { name: templateRoleName } });
+  if (!template) return;
+
+  const perms = await tx.rolePermission.findMany({ where: { roleId: template.id } });
+  if (!perms.length) return;
+
+  await tx.rolePermission.createMany({
+    data: perms.map((p) => ({
+      roleId: targetRoleId,
+      moduleKey: p.moduleKey,
+      canRead: p.canRead,
+      canWrite: p.canWrite,
+      canApprove: p.canApprove,
+      canDelete: p.canDelete,
+      canExport: p.canExport,
+      employeeViewScope: p.employeeViewScope,
+      updatedBy,
+    })),
+    skipDuplicates: true,
+  });
 }
 
 export const designationService = {
@@ -35,6 +68,7 @@ export const designationService = {
     isAlias?: boolean;
     linkedRoleId?: string | null;
     sortOrder?: number;
+    createdBy?: string;
   }) {
     const slug = slugify(data.name);
     const existing = await prisma.designation.findFirst({
@@ -47,15 +81,35 @@ export const designationService = {
       throw new Error('Positions are created from Workforce → Create Position, not here.');
     }
 
-    return prisma.designation.create({
-      data: {
-        name: data.name,
-        slug,
-        isAlias,
-        linkedRoleId: isAlias ? data.linkedRoleId ?? null : null,
-        sortOrder: data.sortOrder ?? 0,
-      },
-      include: { linkedRole: { select: { id: true, name: true } } },
+    return prisma.$transaction(async (tx) => {
+      const roleName = roleCodeFromName(data.name);
+      if (!/^[A-Z][A-Z0-9_]*$/.test(roleName)) {
+        throw new Error('Could not derive a valid role code from this designation name');
+      }
+
+      let role = await tx.role.findUnique({ where: { name: roleName } });
+      if (!role) {
+        role = await tx.role.create({
+          data: {
+            name: roleName,
+            description: `Permissions for ${data.name}`,
+            isSystem: false,
+            createdBy: data.createdBy ?? null,
+          },
+        });
+        await copyRolePermissionsFromTemplate(tx, 'EMPLOYEE', role.id, data.createdBy);
+      }
+
+      return tx.designation.create({
+        data: {
+          name: data.name,
+          slug,
+          isAlias,
+          linkedRoleId: role.id,
+          sortOrder: data.sortOrder ?? 0,
+        },
+        include: { linkedRole: { select: { id: true, name: true } } },
+      });
     });
   },
 

@@ -117,7 +117,7 @@ class RolesFilterNotifier extends Notifier<RolesFilterState> {
   @override
   RolesFilterState build() => const RolesFilterState(
         search: '',
-        positionsOnly: true,
+        positionsOnly: false,
       );
 
   void setSearch(String search) => state = state.copyWith(search: search);

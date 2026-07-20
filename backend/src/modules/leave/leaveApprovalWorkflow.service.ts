@@ -34,6 +34,24 @@ function windowSettingKeyForRole(approverRole: string): string {
   }
 }
 
+/** True when user role or employee designation is Admin (final authority in this project). */
+async function isAdminAuthority(userId: string): Promise<boolean> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      role: { select: { name: true } },
+      employee: { select: { generalInfo: { select: { designation: true } } } },
+    },
+  });
+  if (!user) return false;
+  const role = String(user.role?.name ?? '').toUpperCase();
+  if (role === 'ADMIN') return true;
+  const designation = String(user.employee?.generalInfo?.designation ?? '')
+    .trim()
+    .toUpperCase();
+  return designation === 'ADMIN';
+}
+
 async function resolveApprovers(employeeId: number) {
   const gi = await prisma.employeeGeneralInfo.findUnique({
     where: { employeeId },
@@ -80,12 +98,26 @@ async function resolveApprovers(employeeId: number) {
     return userId;
   };
 
-  // Per layer: explicit approver user id, else legacy employee → user id. NULL = bypass.
-  return {
-    firstApproverUserId: normalize(gi.firstApproverUserId ?? legacyUserId(gi.firstReportingId)),
-    secondApproverUserId: normalize(gi.secondApproverUserId ?? legacyUserId(gi.secondReportingId)),
-    thirdApproverUserId: normalize(gi.thirdApproverUserId ?? legacyUserId(gi.thirdReportingId)),
-  };
+  // Only 1st → 2nd → 3rd. Last non-null is final.
+  // If a layer is Admin (role/designation), that layer is final — do not add later layers.
+  const raw = [
+    normalize(gi.firstApproverUserId ?? legacyUserId(gi.firstReportingId)),
+    normalize(gi.secondApproverUserId ?? legacyUserId(gi.secondReportingId)),
+    normalize(gi.thirdApproverUserId ?? legacyUserId(gi.thirdReportingId)),
+  ];
+
+  const firstApproverUserId = raw[0];
+  let secondApproverUserId = raw[1];
+  let thirdApproverUserId = raw[2];
+
+  if (firstApproverUserId && (await isAdminAuthority(firstApproverUserId))) {
+    secondApproverUserId = null;
+    thirdApproverUserId = null;
+  } else if (secondApproverUserId && (await isAdminAuthority(secondApproverUserId))) {
+    thirdApproverUserId = null;
+  }
+
+  return { firstApproverUserId, secondApproverUserId, thirdApproverUserId };
 }
 
 function isPendingStep(s: { action: unknown; isSuperseded: boolean }) {
@@ -234,6 +266,7 @@ export const leaveApprovalWorkflowService = {
     allowAdminOverride?: boolean;
   }) {
     const { applicationId, approverUserId, action, remarks, actorId, allowAdminOverride } = params;
+    const actorIsAdminFinal = await isAdminAuthority(approverUserId);
 
     return prisma.$transaction(async (tx) => {
       const app = await tx.leaveApplication.findUnique({
@@ -258,12 +291,11 @@ export const leaveApprovalWorkflowService = {
         throw new Error('Not authorized for current approval tier');
       }
 
+      // Last reporting layer is final. Admin role/designation is also final authority.
+      const treatAsFinal = minTier >= finalTier || actorIsAdminFinal;
+
       const prismaAction =
-        action === 'REJECT'
-          ? 'REJECTED'
-          : minTier < finalTier
-            ? 'RECOMMENDED'
-            : 'APPROVED';
+        action === 'REJECT' ? 'REJECTED' : treatAsFinal ? 'APPROVED' : 'RECOMMENDED';
 
       await tx.leaveApprovalStep.update({
         where: { id: myStep.id },
@@ -297,16 +329,15 @@ export const leaveApprovalWorkflowService = {
       }
 
       // Intermediate approve → stay PENDING; next reporting layer becomes current
-      if (minTier < finalTier) {
+      if (!treatAsFinal) {
         return { status: 'PENDING' as const };
       }
 
-      // Final tier approve → leave APPROVED
+      // Final tier / Admin approve → leave APPROVED
       await tx.leaveApprovalStep.updateMany({
         where: {
           applicationId,
           id: { not: myStep.id },
-          stepNumber: finalTier,
           action: null,
           isSuperseded: false,
         },

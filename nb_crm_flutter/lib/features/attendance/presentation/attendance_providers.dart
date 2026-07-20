@@ -164,3 +164,34 @@ void invalidateAttendanceAdminData(WidgetRef ref) {
   ref.invalidate(adminAttendancePolicyProvider);
   ref.invalidate(adminEmployeeHistoryProvider);
 }
+
+class ProfileAttendanceMonthFilter extends Notifier<AttendanceMonthFilter> {
+  @override
+  AttendanceMonthFilter build() {
+    final now = DateTime.now();
+    return AttendanceMonthFilter(year: now.year, month: now.month);
+  }
+
+  void setMonth(int year, int month) =>
+      state = AttendanceMonthFilter(year: year, month: month);
+}
+
+final profileAttendanceMonthProvider =
+    NotifierProvider<ProfileAttendanceMonthFilter, AttendanceMonthFilter>(
+  ProfileAttendanceMonthFilter.new,
+);
+
+final employeeAttendanceSettingsProvider = FutureProvider.autoDispose
+    .family<EmployeeAttendanceSettings, int>((ref, employeeId) async {
+  return ref.watch(attendanceRepositoryProvider).getEmployeeSettings(employeeId);
+});
+
+final employeeMonthlyAttendanceProvider = FutureProvider.autoDispose
+    .family<AttendanceMonthlySummary, ({int employeeId, int year, int month})>(
+        (ref, params) async {
+  return ref.watch(attendanceRepositoryProvider).getEmployeeMonthlySummary(
+        employeeId: params.employeeId,
+        year: params.year,
+        month: params.month,
+      );
+});

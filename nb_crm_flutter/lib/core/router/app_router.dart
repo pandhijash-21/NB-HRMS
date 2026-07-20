@@ -20,6 +20,7 @@ import '../../features/org/presentation/screens/institute_detail_screen.dart';
 import '../../features/org/presentation/screens/designations_screen.dart';
 import '../../features/lookups/presentation/screens/configurations_hub_screen.dart';
 import '../../features/lookups/presentation/screens/lookup_category_screen.dart';
+import '../../features/letters/presentation/screens/admin_letters_screen.dart';
 import '../../features/leave/presentation/screens/leave_hub_screen.dart';
 import '../../features/leave/presentation/screens/leave_apply_screen.dart';
 import '../../features/leave/presentation/screens/leave_history_screen.dart';
@@ -29,6 +30,9 @@ import '../../features/leave/presentation/screens/admin_leaves_screen.dart';
 import '../../features/leave/presentation/screens/admin_leaves_pending_screen.dart';
 import '../../features/leave/presentation/screens/admin_leaves_settings_screen.dart';
 import '../../features/leave/presentation/screens/admin_leaves_holidays_screen.dart';
+import '../../features/reimbursements/presentation/screens/reimbursements_hub_screen.dart';
+import '../../features/reimbursements/presentation/screens/reimbursement_apply_screen.dart';
+import '../../features/recruitment/presentation/screens/recruitment_stub_screen.dart';
 import '../../features/attendance/presentation/screens/attendance_screen.dart';
 import '../../features/attendance/presentation/screens/admin_attendance_screen.dart';
 import '../../features/attendance/presentation/screens/admin_employee_attendance_history_screen.dart';
@@ -39,6 +43,7 @@ import '../../features/salary/presentation/screens/admin_salary_structure_detail
 import '../../features/salary/presentation/screens/admin_salary_entry_screen.dart';
 import '../../features/salary/presentation/screens/admin_salary_records_screen.dart';
 import '../../features/salary/presentation/screens/admin_salary_slip_screen.dart';
+import '../../features/salary/presentation/screens/employee_salary_slip_screen.dart';
 import '../../features/rbac/presentation/screens/admin_users_screen.dart';
 import '../../features/rbac/presentation/screens/admin_roles_screen.dart';
 import '../../features/rbac/presentation/screens/admin_role_detail_screen.dart';
@@ -89,7 +94,11 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         return changingPassword ? null : '/change-password';
       }
 
-      if (loggingIn || changingPassword) {
+      if (changingPassword) {
+        return '/home';
+      }
+
+      if (loggingIn) {
         return '/home';
       }
 
@@ -126,6 +135,27 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/leave/history',
         builder: (context, state) => const LeaveHistoryScreen(),
+      ),
+      GoRoute(
+        path: '/reimbursements',
+        builder: (context, state) => const ReimbursementsHubScreen(),
+      ),
+      GoRoute(
+        path: '/reimbursements/apply',
+        builder: (context, state) => const ReimbursementApplyScreen(),
+      ),
+      GoRoute(
+        path: '/reimbursements/admin',
+        builder: (context, state) => const ReimbursementsAdminScreen(),
+      ),
+      GoRoute(
+        path: '/recruitment',
+        builder: (context, state) {
+          final auth = ref.read(authNotifierProvider);
+          final role = (auth.user?.role ?? '').toUpperCase();
+          final isAdmin = ['ADMIN', 'HR', 'HR_MANAGER'].contains(role);
+          return RecruitmentStubScreen(isAdmin: isAdmin);
+        },
       ),
       GoRoute(
         path: '/approvals',
@@ -183,12 +213,27 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         },
       ),
       GoRoute(
+        path: '/profile/salary-slip/:recordId',
+        builder: (context, state) {
+          final recordId = state.pathParameters['recordId'] ?? '';
+          final employeeId = int.tryParse(state.uri.queryParameters['employeeId'] ?? '') ?? 0;
+          if (recordId.isEmpty || employeeId == 0) {
+            return const Scaffold(body: Center(child: Text('Invalid slip request')));
+          }
+          return EmployeeSalarySlipScreen(recordId: recordId, employeeId: employeeId);
+        },
+      ),
+      GoRoute(
         path: '/admin/dashboard',
         builder: (context, state) => const AdminDashboardScreen(),
       ),
       GoRoute(
         path: '/admin/configurations',
         builder: (context, state) => const ConfigurationsHubScreen(),
+      ),
+      GoRoute(
+        path: '/admin/configurations/letters',
+        builder: (context, state) => const AdminLettersConfigScreen(),
       ),
       GoRoute(
         path: '/admin/configurations/lookups/:category',

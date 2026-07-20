@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import { useChangePassword } from "../hooks/useAuth";
@@ -11,7 +11,7 @@ import { Lock, Eye, EyeOff, Loader2, CheckCircle2 } from "lucide-react";
 
 export function ChangePasswordForm() {
   const router = useRouter();
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const changePasswordMutation = useChangePassword();
   
   const [showCurrent, setShowCurrent] = useState(false);
@@ -26,6 +26,16 @@ export function ChangePasswordForm() {
   });
 
   const isFirstLogin = (session?.user as any)?.isFirstLogin;
+
+  useEffect(() => {
+    if (status === "authenticated" && !isFirstLogin) {
+      router.replace("/home");
+    }
+  }, [status, isFirstLogin, router]);
+
+  if (status === "authenticated" && !isFirstLogin) {
+    return null;
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

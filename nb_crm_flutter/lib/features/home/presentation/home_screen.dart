@@ -126,6 +126,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         color: const Color(0xFF9333ea), // Purple
       ),
       _ModuleCardData(
+        title: 'Reimbursements',
+        subtitle: 'Apply, track & approve claims',
+        icon: Icons.receipt_long_rounded,
+        route: '/reimbursements',
+        enabled: Permissions.canReadReimbursements(auth.permissions) ||
+            Permissions.canWriteReimbursements(auth.permissions) ||
+            user?.employeeId != null,
+        category: ModuleCategory.mySpace,
+        color: const Color(0xFF0f766e), // Teal dark
+      ),
+      _ModuleCardData(
+        title: 'Recruitment',
+        subtitle: isHR || canAccessAdmin
+            ? 'Vacancies (coming soon)'
+            : 'Openings (view only when posted)',
+        icon: Icons.work_outline_rounded,
+        route: '/recruitment',
+        enabled: true,
+        category: ModuleCategory.mySpace,
+        color: const Color(0xFF7c3aed),
+      ),
+      _ModuleCardData(
         title: 'Payroll',
         subtitle: Permissions.canReadSalary(auth.permissions)
             ? 'Commissions, structures, entry & records'
@@ -179,7 +201,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       if (canManageRoles)
         _ModuleCardData(
           title: 'Roles',
-          subtitle: 'Position permissions matrix',
+          subtitle: 'Roles & permission matrix',
           icon: Icons.shield_rounded,
           route: '/admin/roles',
           enabled: true,

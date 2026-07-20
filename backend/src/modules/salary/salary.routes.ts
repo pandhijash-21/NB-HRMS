@@ -419,6 +419,63 @@ salaryRouter.get(
 );
 
 salaryRouter.get(
+  '/employees/:employeeId/monthly-overview',
+  requireAuth,
+  requireSelfEmployeeOrPermission('employeeId', 'SALARY', 'READ'),
+  async (req: Request, res: Response) => {
+    try {
+      const employeeId = Number(req.params.employeeId);
+      const year = Number(req.query.year ?? new Date().getFullYear());
+      const month = Number(req.query.month ?? new Date().getMonth() + 1);
+      const data = await salaryService.getEmployeeMonthlyOverview(employeeId, year, month);
+      return res.json(ok(data));
+    } catch (e: unknown) {
+      return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+    }
+  },
+);
+
+salaryRouter.get(
+  '/employees/:employeeId/records',
+  requireAuth,
+  requireSelfEmployeeOrPermission('employeeId', 'SALARY', 'READ'),
+  async (req: Request, res: Response) => {
+    try {
+      const employeeId = Number(req.params.employeeId);
+      const salaryYear = req.query.salaryYear ? Number(req.query.salaryYear) : undefined;
+      const salaryMonth = req.query.salaryMonth ? Number(req.query.salaryMonth) : undefined;
+      const data = await salaryService.listEmployeeRecords(employeeId, { salaryYear, salaryMonth });
+      return res.json(ok(data));
+    } catch (e: unknown) {
+      return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+    }
+  },
+);
+
+salaryRouter.get(
+  '/employees/:employeeId/slip/:recordId',
+  requireAuth,
+  requireSelfEmployeeOrPermission('employeeId', 'SALARY', 'READ'),
+  async (req: Request, res: Response) => {
+    try {
+      const employeeId = Number(req.params.employeeId);
+      const recordId = p(req.params.recordId);
+      const record = await salaryService.getRecord(recordId);
+      if (record.employeeId !== employeeId) {
+        return res.status(403).json(fail('Record does not belong to this employee'));
+      }
+      if (record.status !== 'FINALIZED') {
+        return res.status(400).json(fail('Salary slip is available only for finalized records'));
+      }
+      const data = await salaryService.getSlipData(recordId);
+      return res.json(ok(data));
+    } catch (e: unknown) {
+      return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+    }
+  },
+);
+
+salaryRouter.get(
   '/records/:id/slip',
   requireAuth,
   requirePermission('SALARY', 'READ'),

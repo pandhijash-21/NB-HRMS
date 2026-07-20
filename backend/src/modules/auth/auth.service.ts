@@ -5,6 +5,7 @@ import { redis, connectRedis } from '../../config/redis';
 import { env } from '../../config/env';
 import { sendPasswordResetEmail } from '../../utils/mailer';
 import { encryptPasswordForAdmin } from '../../utils/passwordCrypto';
+import { passwordFromBirthDate } from '../../utils/dobPassword';
 import type { LoginInput, ChangePasswordInput } from './auth.types';
 
 const SESSION_TTL = 8 * 60 * 60; // 8 hours in seconds
@@ -146,6 +147,13 @@ export const authService = {
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) return { error: 'User not found', status: 404 } as const;
 
+    if (!user.isFirstLogin) {
+      return {
+        error: 'Password can only be changed on first login. Contact an administrator to reset your password.',
+        status: 403,
+      } as const;
+    }
+
     const valid = await bcrypt.compare(input.currentPassword, user.passwordHash);
     if (!valid) return { error: 'Current password is incorrect', status: 400 } as const;
 
@@ -180,10 +188,7 @@ export const authService = {
     let defaultPassword = '01011990';
     const dob = user.employee?.personalInfo?.birthDate;
     if (dob) {
-      const d = String(dob.getDate()).padStart(2, '0');
-      const m = String(dob.getMonth() + 1).padStart(2, '0');
-      const y = dob.getFullYear();
-      defaultPassword = `${d}${m}${y}`;
+      defaultPassword = passwordFromBirthDate(dob);
     }
 
     const newHash = await bcrypt.hash(defaultPassword, 12);

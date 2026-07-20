@@ -9,7 +9,7 @@ import '../../../profile/presentation/profile_notifier.dart';
 import '../../../profile/presentation/widgets/profile_tabs.dart';
 import '../../../profile/domain/profile_models.dart';
 import '../../domain/admin_models.dart';
-import '../../../leave/presentation/widgets/employee_leave_tab.dart';
+import '../../../profile/presentation/widgets/employee_attendance_tab.dart';
 
 class AdminEmployeeDetailScreen extends ConsumerStatefulWidget {
   final int employeeId;
@@ -30,9 +30,10 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
     'Family',
     'Academic',
     'Experience',
+    'Documents',
     'Bank',
     'Salary',
-    'Leave',
+    'Attendance',
   ];
 
   @override
@@ -92,6 +93,14 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
 
     final profileAsyncVal = ref.watch(profileProvider);
     final assignmentsAsync = ref.watch(employeeAssignmentsProvider(widget.employeeId));
+    final canManageAttendanceSettings =
+        Permissions.canManageEmployeeAttendance(
+          authState.permissions,
+          authState.user?.role,
+        );
+
+    final canManageLetters =
+        Permissions.canManageLetters(authState.permissions, authState.user?.role);
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
@@ -175,9 +184,16 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
                     FamilyViewTab(profile: profile),
                     AcademicViewTab(profile: profile),
                     const ExperienceViewTab(),
+                    DocumentsViewTab(
+                      profile: profile,
+                      canManageLetters: canManageLetters,
+                    ),
                     BankViewTab(profile: profile),
                     SalaryViewTab(profile: profile),
-                    EmployeeLeaveTab(employeeId: widget.employeeId),
+                    EmployeeAttendanceTab(
+                      employeeId: widget.employeeId,
+                      canManageSettings: canManageAttendanceSettings,
+                    ),
                   ],
                 ),
               ),

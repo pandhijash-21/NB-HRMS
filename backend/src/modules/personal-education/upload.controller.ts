@@ -229,4 +229,17 @@ export const uploadController = {
     );
     return res.json(ok({ url }));
   }],
+
+  /** Proof/bill for reimbursement claims (Cloudinary URL only). */
+  reimbursementProof: [single('file'), async (req: Request, res: Response) => {
+    const meta = employeeMetaSchema.safeParse(req.body);
+    if (!meta.success) return res.status(400).json(fail(meta.error.message));
+    if (!req.file) return res.status(400).json(fail('Missing file'));
+    assertUploadAccess(req, meta.data.employeeId);
+    const url = await uploadService.uploadToCloudinary(
+      req.file,
+      `reimbursements/proof/${meta.data.employeeId}`,
+    );
+    return res.json(ok({ url }));
+  }],
 };

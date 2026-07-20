@@ -50,11 +50,10 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
   Widget build(BuildContext context) {
     final auth = ref.watch(authNotifierProvider);
     final submitting = auth.isSubmitting;
-    final forced = auth.isFirstLogin;
     final wide = MediaQuery.sizeOf(context).width >= 720;
 
     return PopScope(
-      canPop: !forced,
+      canPop: false,
       child: Scaffold(
         body: DecoratedBox(
           decoration: const BoxDecoration(
@@ -79,7 +78,7 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                   constraints: const BoxConstraints(maxWidth: 460),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
+                      children: [
                       Text(
                         'NB Developer',
                         textAlign: TextAlign.center,
@@ -90,9 +89,7 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                       ),
                       SizedBox(height: 8),
                       Text(
-                        forced
-                            ? 'First sign-in — set a new password to continue'
-                            : 'Change your password',
+                        'First sign-in — set a new password to continue',
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                               color: Theme.of(context).colorScheme.primary,
@@ -113,7 +110,7 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 Text(
-                                  'Change password',
+                                  'Set new password',
                                   style: Theme.of(context)
                                       .textTheme
                                       .headlineSmall
@@ -124,8 +121,8 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                                 ),
                                 SizedBox(height: 6),
                                 Text(
-                                  'Use at least 8 characters with a letter and a number. '
-                                  'You will need to sign in again afterward.',
+                                  'Enter your temporary password (birth date as DDMMYYYY), then choose a new one. '
+                                  'You will sign in again afterward.',
                                   style: Theme.of(context)
                                       .textTheme
                                       .bodyMedium
@@ -134,7 +131,7 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                                 SizedBox(height: 24),
                                 _PasswordField(
                                   controller: _currentController,
-                                  label: 'Current password',
+                                  label: 'Temporary password (DOB)',
                                   obscure: _obscureCurrent,
                                   enabled: !submitting,
                                   onToggle: () => setState(
@@ -197,21 +194,19 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                                             color: AppColors.midnight,
                                           ),
                                         )
-                                      : Text('Update password'),
+                                      : Text('Set password'),
                                 ),
-                                if (forced) ...[
-                                  SizedBox(height: 14),
-                                  Text(
-                                    'This step is required before you can use the app.',
-                                    textAlign: TextAlign.center,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodySmall
-                                        ?.copyWith(
-                                          color: Theme.of(context).textTheme.bodySmall?.color,
-                                        ),
-                                  ),
-                                ],
+                                SizedBox(height: 14),
+                                Text(
+                                  'This step is required before you can use the app.',
+                                  textAlign: TextAlign.center,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(
+                                        color: Theme.of(context).textTheme.bodySmall?.color,
+                                      ),
+                                ),
                               ],
                             ),
                           ),

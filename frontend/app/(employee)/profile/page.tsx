@@ -1,6 +1,7 @@
 "use client";
 
 import { useSession } from "next-auth/react";
+import { useSearchParams } from "next/navigation";
 import { useAdminEmployee } from "@/modules/admin/hooks/useAdminEmployees";
 import { ProfileHeader } from "@/components/profile/ProfileHeader";
 import { ProfileTabs } from "@/components/profile/ProfileTabs";
@@ -12,12 +13,15 @@ import { FamilyTab } from "@/components/profile/tabs/FamilyTab";
 import { EducationTab } from "@/components/profile/tabs/EducationTab";
 import { ExperienceTab } from "@/components/profile/tabs/ExperienceTab";
 import { AttendanceTab } from "@/components/profile/tabs/AttendanceTab";
+import { DocumentsTab } from "@/components/profile/tabs/DocumentsTab";
 import { BankTab } from "@/components/profile/tabs/BankTab";
 import { SalaryTab } from "@/components/profile/tabs/SalaryTab";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function ProfilePage() {
   const { data: session } = useSession();
+  const searchParams = useSearchParams();
+  const defaultTab = searchParams.get("tab") ?? "general";
   const employeeId = (session?.user as any)?.employeeId;
 
   const { data: rawEmployee, isLoading, isError, refetch } = useAdminEmployee(employeeId);
@@ -68,13 +72,14 @@ export default function ProfilePage() {
     { value: "family",    label: "Family",    content: <FamilyTab    employeeId={String(employeeId)} isAdmin={false} /> },
     { value: "education", label: "Education", content: <EducationTab employeeId={String(employeeId)} isAdmin={false} /> },
     { value: "experience", label: "Experience", content: <ExperienceTab employeeId={String(employeeId)} isAdmin={false} /> },
-    { value: "attendance", label: "Attendance", content: <AttendanceTab /> },
+    { value: "documents", label: "Documents", content: <DocumentsTab profile={rawEmployee} canManageLetters={false} /> },
+    { value: "attendance", label: "Attendance", content: <AttendanceTab employeeId={Number(employeeId)} canManageSettings={false} /> },
   ];
 
   return (
     <div className="max-w-5xl mx-auto space-y-4">
       <ProfileHeader employee={employee} />
-      <ProfileTabs tabs={tabs} defaultTab="general" />
+      <ProfileTabs tabs={tabs} defaultTab={defaultTab} />
     </div>
   );
 }

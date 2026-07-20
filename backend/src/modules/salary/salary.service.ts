@@ -678,4 +678,60 @@ export const salaryService = {
       netPay: Number(record.netPay),
     };
   },
+
+  async listEmployeeRecords(employeeId: number, filters?: { salaryYear?: number; salaryMonth?: number }) {
+    return this.listRecords({
+      employeeId,
+      salaryYear: filters?.salaryYear,
+      salaryMonth: filters?.salaryMonth,
+    });
+  },
+
+  async getEmployeeMonthlyOverview(employeeId: number, year: number, month: number) {
+    const { attendanceService } = await import('../attendance/attendance.service');
+    const attendance = await attendanceService.getEmployeeMonthlySummary({ employeeId, year, month });
+
+    const [record, balances] = await Promise.all([
+      prisma.employeeSalaryRecord.findFirst({
+        where: { employeeId, salaryYear: year, salaryMonth: month },
+        include: {
+          template: { include: { designation: true, payCommission: true } },
+        },
+      }),
+      prisma.leaveBalance.findMany({
+        where: { employeeId, year },
+        include: { leaveType: { select: { code: true, name: true } } },
+      }),
+    ]);
+
+    return {
+      year,
+      month,
+      attendance: attendance.stats,
+      attendancePolicy: attendance.policy,
+      days: attendance.days,
+      leaveApplications: attendance.leaveApplications,
+      leaveBalances: balances.map((b) => ({
+        leaveType: b.leaveType,
+        totalCredited: Number(b.totalCredited),
+        carryForward: Number(b.carryForward),
+        used: Number(b.used),
+        available: Number(b.available),
+      })),
+      salaryRecord: record
+        ? {
+            id: record.id,
+            status: record.status,
+            salaryMonth: record.salaryMonth,
+            salaryYear: record.salaryYear,
+            grossPay: Number(record.grossPay),
+            totalDeductions: Number(record.totalDeductions),
+            netPay: Number(record.netPay),
+            payCommissionCode: record.payCommissionCode,
+            designation: record.template.designation.name,
+            canDownloadSlip: record.status === 'FINALIZED',
+          }
+        : null,
+    };
+  },
 };

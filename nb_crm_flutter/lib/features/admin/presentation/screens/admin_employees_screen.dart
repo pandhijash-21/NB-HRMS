@@ -10,6 +10,7 @@ import '../../../profile/domain/profile_models.dart';
 import '../../domain/admin_models.dart';
 import '../../../org/presentation/org_providers.dart';
 import '../../../lookups/presentation/lookup_providers.dart';
+import '../../../rbac/presentation/rbac_providers.dart';
 
 class AdminEmployeesScreen extends ConsumerStatefulWidget {
   const AdminEmployeesScreen({super.key});
@@ -88,23 +89,6 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminEmployeesScreen> {
           ),
         ),
         actions: [
-          OutlinedButton.icon(
-            onPressed: () => _showPositionsDialog(context),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
-              side: BorderSide(
-                color: isDark ? const Color(0xFFC5A059).withOpacity(0.4) : const Color(0xFF263238).withOpacity(0.5),
-                width: 1.2,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            ),
-            icon: const Icon(Icons.shield_outlined, size: 14, color: Color(0xFFC5A059)),
-            label: const Text('Positions', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-          ),
-          const SizedBox(width: 8),
           IconButton(
             tooltip: 'Refresh list',
             icon: Icon(
@@ -154,7 +138,6 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminEmployeesScreen> {
         },
         child: Column(
           children: [
-            _buildPositionsOverview(context),
             _buildFilterBar(context, filters),
             Expanded(
               child: workforceListAsync.when(
@@ -617,164 +600,29 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminEmployeesScreen> {
   }
 
   void _showAddEmployeeDialog(BuildContext context) {
+    final messenger = ScaffoldMessenger.of(context);
     showDialog(
       context: context,
       builder: (_) => const _AddEmployeeDialog(),
     ).then((created) {
-      if (created is EmployeeProfile) {
-        final name = created.generalInfo?.fullName ?? '';
-        if (name.isNotEmpty) {
-          _searchController.text = name;
-        }
+      if (created is! ({EmployeeProfile profile, String? initialPassword})) return;
+      final name = created.profile.generalInfo?.fullName ?? '';
+      if (name.isNotEmpty) {
+        _searchController.text = name;
+      }
+      final pwd = created.initialPassword;
+      if (!mounted) return;
+      if (pwd != null && pwd.isNotEmpty) {
+        messenger.showSnackBar(
+          SnackBar(
+            duration: const Duration(seconds: 12),
+            content: Text(
+              'Employee created. Temporary password (DOB): $pwd — they must change it on first login.',
+            ),
+          ),
+        );
       }
     });
-  }
-
-  void _showPositionsDialog(BuildContext context) {
-    showDialog<void>(
-      context: context,
-      builder: (_) => const _PositionsDialog(),
-    );
-  }
-
-  Widget _buildPositionsOverview(BuildContext context) {
-    final positionsAsync = ref.watch(positionsListProvider);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1A1816) : Colors.white,
-        border: Border(
-          bottom: BorderSide(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.1) : const Color(0xFFCFD8DC),
-            width: 1,
-          ),
-        ),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-      child: positionsAsync.when(
-        data: (positions) {
-          if (positions.isEmpty) {
-            return Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'No positions yet. Use Manage to create one.',
-                    style: TextStyle(
-                      fontSize: 13, 
-                      fontWeight: FontWeight.w600,
-                      color: isDark ? Colors.white30 : const Color(0xFF607D8B),
-                    ),
-                  ),
-                ),
-                TextButton.icon(
-                  onPressed: () => _showPositionsDialog(context),
-                  style: TextButton.styleFrom(foregroundColor: const Color(0xFFC5A059)),
-                  icon: const Icon(Icons.add_rounded, size: 16),
-                  label: const Text('Create Position', style: TextStyle(fontWeight: FontWeight.w700)),
-                ),
-              ],
-            );
-          }
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.shield_outlined, size: 16, color: Color(0xFFC5A059)),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Institutional Positions (${positions.length})',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                      color: isDark ? Colors.white : const Color(0xFF212F3D),
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                  const Spacer(),
-                  TextButton(
-                    onPressed: () => _showPositionsDialog(context),
-                    style: TextButton.styleFrom(
-                      foregroundColor: const Color(0xFFC5A059),
-                      textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
-                    ),
-                    child: const Text('Manage'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                physics: const BouncingScrollPhysics(),
-                child: Row(
-                  children: positions
-                      .map(
-                        (p) => Container(
-                          margin: const EdgeInsets.only(right: 8),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: isDark ? const Color(0xFF2B2722) : const Color(0xFFF1F5F9),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                p.name,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w800,
-                                  color: isDark ? Colors.white : const Color(0xFF212F3D),
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                                decoration: BoxDecoration(
-                                  color: isDark ? const Color(0xFF1E1B18) : Colors.white,
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  p.linkedRoleName,
-                                  style: TextStyle(
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w800,
-                                    color: isDark ? const Color(0xFFC5A059) : const Color(0xFF607D8B),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
-                      .toList(),
-                ),
-              ),
-            ],
-          );
-        },
-        loading: () => const LinearProgressIndicator(color: Color(0xFFC5A059)),
-        error: (_, __) => Row(
-          children: [
-            const Expanded(
-              child: Text(
-                'Failed to load positions.',
-                style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
-              ),
-            ),
-            TextButton(
-              onPressed: () => ref.invalidate(positionsListProvider),
-              child: const Text('Retry'),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }
 
@@ -804,9 +652,10 @@ class _AddEmployeeDialogState extends ConsumerState<_AddEmployeeDialog> {
   String? _organization;
   String? _instituteId;
   String? _designation;
-  String? _positionDesignationId;
+  String? _roleId;
   String _category = 'TEACHING';
   DateTime? _joiningDate;
+  DateTime? _birthDate;
   String? _firstApproverUserId;
   String? _secondApproverUserId;
   String? _thirdApproverUserId;
@@ -827,13 +676,13 @@ class _AddEmployeeDialogState extends ConsumerState<_AddEmployeeDialog> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final institutesAsync = ref.watch(activeInstitutesProvider);
     final designationsAsync = ref.watch(jobDesignationsProvider);
-    final positionsAsync = ref.watch(positionDesignationsProvider);
+    final rolesAsync = ref.watch(allRolesProvider);
     final namesAsync = ref.watch(employeeNamesProvider);
     final orgLookups = ref.watch(activeLookupsByCategoryProvider('ORGANIZATION'));
     final catLookups = ref.watch(activeLookupsByCategoryProvider('EMPLOYEE_CATEGORY'));
     final institutes = institutesAsync.asData?.value ?? const [];
     final designations = designationsAsync.asData?.value ?? const [];
-    final positions = positionsAsync.asData?.value ?? const [];
+    final roles = rolesAsync.asData?.value ?? const [];
     final names = namesAsync.asData?.value ?? const [];
     final organizations = (orgLookups.asData?.value ?? const [])
         .map((o) => o.label)
@@ -869,7 +718,7 @@ class _AddEmployeeDialogState extends ConsumerState<_AddEmployeeDialog> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Establish a new institutional record and system credentials.',
+            'Establish a new institutional record. Login password defaults to birth date (DDMMYYYY).',
             style: TextStyle(
               fontSize: 12,
               color: isDark ? Colors.white60 : const Color(0xFF607D8B),
@@ -904,16 +753,16 @@ class _AddEmployeeDialogState extends ConsumerState<_AddEmployeeDialog> {
               ),
               _buildDropdown(
                 isDark: isDark,
-                label: 'Position (Permissions)',
-                value: _positionDesignationId,
-                helper: 'Controls admin portal access. Job designation is separate.',
+                label: 'Role',
+                value: _roleId,
+                helper: 'RBAC role for permissions. Leave empty for default EMPLOYEE.',
                 items: [
-                  const DropdownMenuItem<String?>(value: null, child: Text('Staff — no admin position')),
-                  ...positions.map(
-                    (p) => DropdownMenuItem<String?>(value: p.id, child: Text(p.name)),
+                  const DropdownMenuItem<String?>(value: null, child: Text('Default (EMPLOYEE)')),
+                  ...roles.map(
+                    (r) => DropdownMenuItem<String?>(value: r.id, child: Text(r.name)),
                   ),
                 ],
-                onChanged: (v) => setState(() => _positionDesignationId = v),
+                onChanged: (v) => setState(() => _roleId = v),
               ),
               _buildDropdown(
                 isDark: isDark,
@@ -968,6 +817,7 @@ class _AddEmployeeDialogState extends ConsumerState<_AddEmployeeDialog> {
                 },
               ),
               _buildDateRow(isDark),
+              _buildBirthDateRow(isDark),
               _buildApproverDropdown(isDark, '1st Reporting', _firstApproverUserId, names, (v) {
                 setState(() => _firstApproverUserId = v);
               }),
@@ -1030,6 +880,62 @@ class _AddEmployeeDialogState extends ConsumerState<_AddEmployeeDialog> {
         ],
       ),
     );
+  }
+
+  Widget _buildBirthDateRow(bool isDark) {
+    final label = _birthDate == null
+        ? 'Birth Date * (login password)'
+        : 'Birth Date *: ${_formatDate(_birthDate!)} → ${_dobPassword(_birthDate!)}';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: isDark ? Colors.white70 : const Color(0xFF212F3D),
+                  ),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: _pickBirthDate,
+                icon: const Icon(Icons.cake_outlined, size: 14),
+                label: const Text('Select DOB'),
+              ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: 0, top: 2),
+            child: Text(
+              'Temporary password is DDMMYYYY from this date (e.g. 15 Mar 1998 → 15031998).',
+              style: TextStyle(
+                fontSize: 11,
+                color: isDark ? Colors.white38 : const Color(0xFF607D8B),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _dobPassword(DateTime d) {
+    final dd = d.day.toString().padLeft(2, '0');
+    final mm = d.month.toString().padLeft(2, '0');
+    final yyyy = d.year.toString();
+    return '$dd$mm$yyyy';
+  }
+
+  String _ymd(DateTime d) {
+    final y = d.year.toString().padLeft(4, '0');
+    final m = d.month.toString().padLeft(2, '0');
+    final day = d.day.toString().padLeft(2, '0');
+    return '$y-$m-$day';
   }
 
   Widget _buildDropdown({
@@ -1113,10 +1019,29 @@ class _AddEmployeeDialogState extends ConsumerState<_AddEmployeeDialog> {
     }
   }
 
+  Future<void> _pickBirthDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _birthDate ?? DateTime(1995, 1, 1),
+      firstDate: DateTime(1940),
+      lastDate: DateTime.now(),
+      helpText: 'Select birth date (becomes login password)',
+    );
+    if (picked != null) {
+      setState(() => _birthDate = picked);
+    }
+  }
+
   Future<void> _submit() async {
     if (_joiningDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Appointment date is required'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+    if (_birthDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Birth date is required (sets the login password)'), backgroundColor: Colors.red),
       );
       return;
     }
@@ -1146,7 +1071,8 @@ class _AddEmployeeDialogState extends ConsumerState<_AddEmployeeDialog> {
       'instituteId': _instituteId,
       'employeeCategory': _category,
       'joiningDate': _joiningDate!.toIso8601String(),
-      'positionDesignationId': _positionDesignationId,
+      'birthDate': _ymd(_birthDate!),
+      'roleId': _roleId,
       'firstApproverUserId': _firstApproverUserId,
       'secondApproverUserId': _secondApproverUserId,
       'thirdApproverUserId': _thirdApproverUserId,
@@ -1241,187 +1167,5 @@ class _AddEmployeeDialogState extends ConsumerState<_AddEmployeeDialog> {
 
   String _formatDate(DateTime date) {
     return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
-  }
-}
-
-class _PositionsDialog extends ConsumerStatefulWidget {
-  const _PositionsDialog();
-
-  @override
-  ConsumerState<_PositionsDialog> createState() => _PositionsDialogState();
-}
-
-class _PositionsDialogState extends ConsumerState<_PositionsDialog> {
-  final _displayNameCtrl = TextEditingController();
-  final _roleNameCtrl = TextEditingController();
-  bool _creating = false;
-
-  @override
-  void dispose() {
-    _displayNameCtrl.dispose();
-    _roleNameCtrl.dispose();
-    super.dispose();
-  }
-
-  String _suggestRoleCode(String label) {
-    final words = label.trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
-    if (words.isEmpty) return '';
-    if (words.length == 1) return words.first.toUpperCase().substring(0, words.first.length.clamp(0, 12));
-    return words.map((w) => w[0]).join().toUpperCase();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final positionsAsync = ref.watch(positionsListProvider);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return AlertDialog(
-      backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC),
-          width: 1.5,
-        ),
-      ),
-      title: Text(
-        'Institutional Positions',
-        style: TextStyle(
-          color: isDark ? Colors.white : const Color(0xFF212F3D),
-          fontWeight: FontWeight.w800,
-        ),
-      ),
-      scrollable: true,
-      content: SizedBox(
-        width: 440,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            positionsAsync.when(
-              data: (positions) {
-                if (positions.isEmpty) {
-                  return const Text(
-                    'No positions yet. Create one below, then configure permissions in Roles.',
-                    style: TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.w600),
-                  );
-                }
-                return Column(
-                  children: positions
-                      .map(
-                        (p) => Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          decoration: BoxDecoration(
-                            color: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.04),
-                            ),
-                          ),
-                          child: ListTile(
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
-                            title: Text(p.name, style: TextStyle(fontWeight: FontWeight.w800, color: isDark ? Colors.white : const Color(0xFF212F3D))),
-                            subtitle: Text('Role: ${p.linkedRoleName}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 11)),
-                          ),
-                        ),
-                      )
-                      .toList(),
-                );
-              },
-              loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFFC5A059))),
-              error: (err, _) => Column(
-                children: [
-                  Text('Failed to load: $err', style: const TextStyle(color: Colors.red)),
-                  TextButton(
-                    onPressed: () => ref.invalidate(positionsListProvider),
-                    child: const Text('Retry'),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(height: 32),
-            Text(
-              'Create New Position',
-              style: TextStyle(fontWeight: FontWeight.w800, color: isDark ? Colors.white : const Color(0xFF212F3D), fontSize: 14),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _displayNameCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Position Name',
-                border: OutlineInputBorder(),
-              ),
-              onChanged: (v) {
-                final suggested = _suggestRoleCode(v);
-                if (_roleNameCtrl.text.isEmpty || _roleNameCtrl.text == _suggestRoleCode(_displayNameCtrl.text)) {
-                  _roleNameCtrl.text = suggested;
-                }
-              },
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _roleNameCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Role Code',
-                border: OutlineInputBorder(),
-              ),
-              textCapitalization: TextCapitalization.characters,
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(
-            'Close',
-            style: TextStyle(
-              color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF607D8B),
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-        FilledButton(
-          onPressed: _creating ||
-                  _displayNameCtrl.text.trim().isEmpty ||
-                  _roleNameCtrl.text.trim().isEmpty
-              ? null
-              : _createPosition,
-          style: FilledButton.styleFrom(
-            backgroundColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
-            foregroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-          child: _creating
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                )
-              : const Text('Create Position', style: TextStyle(fontWeight: FontWeight.w800)),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _createPosition() async {
-    setState(() => _creating = true);
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      await ref.read(orgRepositoryProvider).createPosition(
-            displayName: _displayNameCtrl.text.trim(),
-            roleName: _roleNameCtrl.text.trim().toUpperCase(),
-          );
-      _displayNameCtrl.clear();
-      _roleNameCtrl.clear();
-      ref.invalidate(positionsListProvider);
-      ref.invalidate(positionDesignationsProvider);
-      messenger.showSnackBar(const SnackBar(content: Text('Position created')));
-    } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.red),
-      );
-    } finally {
-      if (mounted) setState(() => _creating = false);
-    }
   }
 }

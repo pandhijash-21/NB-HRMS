@@ -7,12 +7,13 @@ import '../../../../core/utils/name_utils.dart';
 import '../../../admin/presentation/admin_notifier.dart';
 import '../../../admin/domain/admin_models.dart';
 import '../../../auth/presentation/auth_providers.dart';
-import '../../../leave/presentation/widgets/employee_leave_tab.dart';
 import '../../../org/presentation/org_providers.dart';
 import '../../../org/domain/org_models.dart';
 import '../../../salary/domain/salary_models.dart';
 import '../../../salary/presentation/salary_providers.dart';
 import '../../../salary/presentation/widgets/salary_rule_editor_sheet.dart';
+import '../../../auth/domain/permissions.dart';
+import '../widgets/edit_attendance_settings_tab.dart';
 import '../../../lookups/presentation/lookup_dropdown.dart';
 import '../../../lookups/domain/lookup_models.dart';
 import '../../domain/profile_models.dart';
@@ -28,13 +29,25 @@ class ProfileEditScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-  final _tabs = ['General', 'Personal', 'Address', 'Other', 'Family', 'Academic', 'Bank', 'Salary', 'Leave'];
+  TabController? _tabController;
+  int _tabCount = 0;
+
+  List<String> _tabsFor(bool showAttendance) {
+    final base = ['General', 'Personal', 'Address', 'Other', 'Family', 'Academic', 'Bank', 'Salary'];
+    if (showAttendance) return [...base, 'Attendance'];
+    return base;
+  }
+
+  void _syncTabController(int count) {
+    if (_tabController != null && _tabCount == count) return;
+    _tabController?.dispose();
+    _tabController = TabController(length: count, vsync: this);
+    _tabCount = count;
+  }
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: _tabs.length, vsync: this);
     Future.microtask(() {
       final auth = ref.read(authNotifierProvider);
       final empId = widget.employeeId ?? auth.user?.employeeId;
@@ -46,7 +59,7 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> with Sing
 
   @override
   void dispose() {
-    _tabController.dispose();
+    _tabController?.dispose();
     super.dispose();
   }
 
@@ -65,23 +78,35 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> with Sing
     final roleName = authState.user?.role ?? '';
     final isPrivileged = ['ADMIN', 'HR', 'HR_MANAGER', 'HOI', 'REGISTRAR', 'VC']
         .contains(roleName.toUpperCase());
+    final sessionEmployeeId = authState.user?.employeeId;
+    final targetEmployeeId = widget.employeeId ?? empId;
+    final isAdminEditingEmployee = widget.employeeId != null &&
+        Permissions.canManageEmployeeAttendance(
+          authState.permissions,
+          authState.user?.role,
+        ) &&
+        (sessionEmployeeId == null || widget.employeeId != sessionEmployeeId);
+    final showAttendanceTab = isAdminEditingEmployee;
+    final tabs = _tabsFor(showAttendanceTab);
+    _syncTabController(tabs.length);
+    final tabController = _tabController!;
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text('Edit Profile'),
         bottom: TabBar(
-          controller: _tabController,
+          controller: tabController,
           isScrollable: true,
           indicatorColor: Theme.of(context).colorScheme.primary,
           labelColor: Theme.of(context).colorScheme.primary,
           unselectedLabelColor: Colors.white70,
-          tabs: _tabs.map((tab) => Tab(text: tab)).toList(),
+          tabs: tabs.map((tab) => Tab(text: tab)).toList(),
         ),
       ),
       body: profileAsyncVal.when(
         data: (profile) => TabBarView(
-          controller: _tabController,
+          controller: tabController,
           children: [
             EditGeneralTab(profile: profile, isPrivileged: isPrivileged),
             EditPersonalTab(profile: profile, isPrivileged: isPrivileged),
@@ -95,7 +120,8 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> with Sing
             EditAcademicTab(profile: profile),
             EditBankTab(profile: profile, isPrivileged: isPrivileged),
             EditSalaryTab(profile: profile, isPrivileged: isPrivileged),
-            EmployeeLeaveTab(employeeId: profile.id),
+            if (showAttendanceTab)
+              EditAttendanceSettingsTab(employeeId: targetEmployeeId),
           ],
         ),
         loading: () => Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary)),

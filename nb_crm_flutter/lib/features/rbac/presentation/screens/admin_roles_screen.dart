@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/auth_providers.dart';
-import '../../../org/presentation/org_providers.dart';
 import '../../domain/rbac_models.dart';
 import '../rbac_providers.dart';
 
@@ -107,26 +106,7 @@ class _AdminRolesScreenState extends ConsumerState<AdminRolesScreen> {
             ),
             onPressed: () => ref.read(rolesListProvider.notifier).refresh(),
           ),
-          Padding(
-            padding: const EdgeInsets.only(right: 16.0, left: 4.0),
-            child: SizedBox(
-              height: 38,
-              child: FilledButton.icon(
-                onPressed: () => _showCreatePositionDialog(context),
-                style: FilledButton.styleFrom(
-                  backgroundColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
-                  foregroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                ),
-                icon: const Icon(Icons.add_rounded, size: 16),
-                label: const Text(
-                  'Create Position',
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
-                ),
-              ),
-            ),
-          ),
+          const SizedBox(width: 8),
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1.5),
@@ -170,7 +150,7 @@ class _AdminRolesScreenState extends ConsumerState<AdminRolesScreen> {
                           ),
                           const SizedBox(height: 16),
                           Text(
-                            'No designations / positions found.\nCreate one with “Create Position”.',
+                            'No designation roles yet.\nAdd designations under Configurations first.',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: 15,
@@ -242,7 +222,7 @@ class _AdminRolesScreenState extends ConsumerState<AdminRolesScreen> {
         controller: _searchController,
         onChanged: (v) => ref.read(rolesFilterProvider.notifier).setSearch(v),
         decoration: InputDecoration(
-          hintText: 'Find positions...',
+          hintText: 'Find roles...',
           hintStyle: TextStyle(color: isDark ? Colors.white30 : const Color(0xFF607D8B).withOpacity(0.6)),
           prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFFC5A059), size: 20),
           filled: true,
@@ -280,175 +260,52 @@ class _AdminRolesScreenState extends ConsumerState<AdminRolesScreen> {
 
   Widget _buildInfoBanner(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final borderColor =
+        isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC);
 
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.fromLTRB(24, 16, 24, 10),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E1B18) : const Color(0xFFF0F4F8),
         borderRadius: BorderRadius.circular(10),
-        border: Border(
-          left: const BorderSide(color: Color(0xFFC5A059), width: 4),
-          top: BorderSide(color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC)),
-          right: BorderSide(color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC)),
-          bottom: BorderSide(color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC)),
-        ),
+        border: Border.all(color: borderColor),
       ),
-      child: Row(
-        children: [
-          const Icon(Icons.info_outline_rounded, color: Color(0xFFC5A059), size: 18),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              'Each row is a designation / institutional position. Open its matrix to turn permissions on or off. New positions appear here automatically.',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: isDark ? Colors.white70 : const Color(0xFF607D8B),
-                height: 1.35,
+      clipBehavior: Clip.antiAlias,
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const ColoredBox(
+              color: Color(0xFFC5A059),
+              child: SizedBox(width: 4),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline_rounded, color: Color(0xFFC5A059), size: 18),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Each designation gets a linked role. Add designations first, then open the matrix to set permissions.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white70 : const Color(0xFF607D8B),
+                          height: 1.35,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
-  }
-
-  Future<void> _showCreatePositionDialog(BuildContext context) async {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final displayCtrl = TextEditingController();
-    final roleCtrl = TextEditingController();
-    final descCtrl = TextEditingController();
-
-    void suggestRoleCode(String label) {
-      final words = label.trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty);
-      if (words.isEmpty) {
-        roleCtrl.text = '';
-        return;
-      }
-      if (words.length == 1) {
-        roleCtrl.text = words.first.toUpperCase().substring(
-              0,
-              words.first.length.clamp(0, 12),
-            );
-      } else {
-        roleCtrl.text = words.map((w) => w[0].toUpperCase()).join();
-      }
-    }
-
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(
-            color: isDark
-                ? const Color(0xFFC5A059).withValues(alpha: 0.2)
-                : const Color(0xFFCFD8DC),
-            width: 1.5,
-          ),
-        ),
-        title: Text(
-          'Create Position',
-          style: TextStyle(
-            color: isDark ? Colors.white : const Color(0xFF212F3D),
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        content: SizedBox(
-          width: 420,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Creates a designation (position type) linked to a role. It will show up in this list so you can set its permission matrix.',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: isDark ? Colors.white60 : const Color(0xFF607D8B),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: displayCtrl,
-                onChanged: suggestRoleCode,
-                decoration: const InputDecoration(
-                  labelText: 'Display name *',
-                  hintText: 'e.g. Head of Institute',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: roleCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Role code *',
-                  hintText: 'e.g. HOI',
-                  helperText: 'Uppercase letters / underscores',
-                  border: OutlineInputBorder(),
-                ),
-                textCapitalization: TextCapitalization.characters,
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: descCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Description (optional)',
-                  border: OutlineInputBorder(),
-                ),
-                maxLines: 2,
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.w700)),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(
-              backgroundColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
-              foregroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
-            ),
-            child: const Text('Create', style: TextStyle(fontWeight: FontWeight.w800)),
-          ),
-        ],
-      ),
-    );
-
-    if (ok != true || !mounted) return;
-
-    final displayName = displayCtrl.text.trim();
-    final roleName = roleCtrl.text.trim().toUpperCase().replaceAll(RegExp(r'\s+'), '_');
-    if (displayName.isEmpty || roleName.isEmpty) {
-      _snack('Display name and role code are required.');
-      return;
-    }
-
-    try {
-      final result = await ref.read(orgRepositoryProvider).createPosition(
-            displayName: displayName,
-            roleName: roleName,
-            description: descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim(),
-          );
-      await ref.read(rolesListProvider.notifier).refresh();
-      if (!mounted) return;
-      final messenger = ScaffoldMessenger.of(context);
-      messenger.showSnackBar(
-        SnackBar(content: Text('Position "$displayName" created.')),
-      );
-      final newRoleId = result.role.id;
-      if (newRoleId.isNotEmpty && mounted) {
-        context.go('/admin/roles/$newRoleId');
-      }
-    } catch (e) {
-      if (mounted) {
-        _snack(e.toString().replaceFirst('Exception: ', ''));
-      }
-    }
   }
 
   Future<void> _confirmDelete(BuildContext context, RoleSummary role) async {
@@ -472,7 +329,7 @@ class _AdminRolesScreenState extends ConsumerState<AdminRolesScreen> {
           ),
         ),
         content: Text(
-          'Are you sure you want to delete the position role ${role.name}?',
+          'Are you sure you want to delete the role ${role.name}?',
           style: TextStyle(
             color: isDark ? Colors.white70 : const Color(0xFF607D8B),
           ),

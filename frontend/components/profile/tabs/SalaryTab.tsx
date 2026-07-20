@@ -23,6 +23,7 @@ import {
 import { useAuthReady } from "@/lib/hooks/useAuthReady";
 import { RuleEditorDrawer } from "@/components/salary/RuleEditorDrawer";
 import { employeeRuleBodyToColumnRule } from "@/lib/salary/employeeRules";
+import { SalaryMonthlySection } from "@/components/profile/tabs/SalaryMonthlySection";
 
 interface SalaryTabProps {
   employee: Record<string, unknown>;
@@ -549,6 +550,8 @@ export function SalaryTab({ employee, isAdmin }: SalaryTabProps) {
           employeeLabel={employeeName}
         />
       )}
+
+      <SalaryMonthlySection employeeId={employeeId} isAdmin={isAdmin} />
     </div>
   );
 }

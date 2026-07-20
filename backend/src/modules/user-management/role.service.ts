@@ -1,9 +1,30 @@
 import { prisma } from '../../config/prisma';
 import type { CreateRoleInput, UpdateRoleInput } from './types';
 
+function pickDesignationLabel(
+  designations: Array<{ name: string; isAlias: boolean }>,
+): string | null {
+  const job = designations.find((d) => !d.isAlias);
+  return job?.name ?? designations[0]?.name ?? null;
+}
+
+const roleInclude = {
+  _count: { select: { users: { where: { isActive: true } } } },
+  permissions: { select: { moduleKey: true, canRead: true, canWrite: true, canApprove: true } },
+  designations: {
+    where: { isActive: true },
+    select: { id: true, name: true, isAlias: true },
+    orderBy: [{ isAlias: 'asc' as const }, { name: 'asc' as const }],
+  },
+};
+
 export const roleService = {
-  async list(opts?: { positionsOnly?: boolean }) {
-    const where: { isActive?: boolean; id?: { in: string[] } } = { isActive: true };
+  async list(opts?: { positionsOnly?: boolean; designationsOnly?: boolean }) {
+    const where: {
+      isActive?: boolean;
+      id?: { in: string[] };
+      OR?: Array<Record<string, unknown>>;
+    } = { isActive: true };
 
     if (opts?.positionsOnly) {
       const positionRoles = await prisma.designation.findMany({
@@ -13,19 +34,17 @@ export const roleService = {
       const roleIds = [...new Set(positionRoles.map((p) => p.linkedRoleId!).filter(Boolean))];
       if (roleIds.length === 0) return [];
       where.id = { in: roleIds };
+    } else if (opts?.designationsOnly !== false) {
+      // Roles tied to a designation, plus core system roles (ADMIN matrix + EMPLOYEE default).
+      where.OR = [
+        { designations: { some: { isActive: true } } },
+        { name: { in: ['ADMIN', 'EMPLOYEE'] } },
+      ];
     }
 
     const roles = await prisma.role.findMany({
       where,
-      include: {
-        _count: { select: { users: { where: { isActive: true } } } },
-        permissions: { select: { moduleKey: true, canRead: true, canWrite: true, canApprove: true } },
-        designations: {
-          where: { isAlias: true, isActive: true },
-          select: { id: true, name: true },
-          take: 1,
-        },
-      },
+      include: roleInclude,
       orderBy: [{ isSystem: 'desc' }, { name: 'asc' }],
     });
 
@@ -37,7 +56,7 @@ export const roleService = {
       isActive:    r.isActive,
       createdAt:   r.createdAt,
       userCount:   r._count.users,
-      positionName: r.designations[0]?.name ?? null,
+      positionName: pickDesignationLabel(r.designations),
       permissionSummary: r.permissions.map((p) => p.moduleKey),
     }));
   },
@@ -49,9 +68,9 @@ export const roleService = {
         permissions: true,
         _count: { select: { users: { where: { isActive: true } } } },
         designations: {
-          where: { isAlias: true, isActive: true },
-          select: { id: true, name: true },
-          take: 1,
+          where: { isActive: true },
+          select: { id: true, name: true, isAlias: true },
+          orderBy: [{ isAlias: 'asc' }, { name: 'asc' }],
         },
       },
     });
@@ -77,16 +96,30 @@ export const roleService = {
       isActive:    role.isActive,
       createdAt:   role.createdAt,
       userCount:   role._count.users,
-      positionName: role.designations[0]?.name ?? null,
+      positionName: pickDesignationLabel(role.designations),
       permissions: permissionsMap,
     };
   },
 
-  async create(_input: CreateRoleInput, _creatorId: string) {
-    return {
-      error: 'Roles are created as positions. Use Workforce → Create Position, then set permissions here.',
-      status: 400,
-    } as const;
+  async create(input: CreateRoleInput, creatorId: string) {
+    const name = input.name.trim().toUpperCase().replace(/\s+/g, '_');
+    if (!/^[A-Z][A-Z0-9_]*$/.test(name)) {
+      return {
+        error: 'Role name must be uppercase letters, numbers, and underscores (e.g. HR_MANAGER)',
+        status: 400,
+      } as const;
+    }
+    const clash = await prisma.role.findUnique({ where: { name } });
+    if (clash) return { error: 'Role name already exists', status: 409 } as const;
+
+    return prisma.role.create({
+      data: {
+        name,
+        description: input.description?.trim() || null,
+        isSystem: false,
+        createdBy: creatorId,
+      },
+    });
   },
 
   async update(id: string, input: UpdateRoleInput, updaterId: string) {
@@ -116,10 +149,20 @@ export const roleService = {
   },
 
   async softDelete(id: string, requesterId: string) {
-    const role = await prisma.role.findUnique({ where: { id } });
+    const role = await prisma.role.findUnique({
+      where: { id },
+      include: { designations: { where: { isActive: true }, take: 1 } },
+    });
     if (!role) return { error: 'Role not found', status: 404 } as const;
 
     if (role.isSystem) return { error: 'Cannot delete a system role', status: 400 } as const;
+
+    if (role.designations.length > 0) {
+      return {
+        error: 'This role is linked to a designation. Remove or deactivate the designation instead.',
+        status: 400,
+      } as const;
+    }
 
     const userCount = await prisma.user.count({ where: { roleId: id, isActive: true } });
     if (userCount > 0) {

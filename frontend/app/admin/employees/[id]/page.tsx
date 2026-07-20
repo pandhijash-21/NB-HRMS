@@ -2,6 +2,7 @@
 
 import { use } from "react";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 import { useAdminEmployee, useAdminEmployeeAssignments } from "@/modules/admin/hooks/useAdminEmployees";
 import { ProfileHeader } from "@/components/profile/ProfileHeader";
 import { ProfileTabs } from "@/components/profile/ProfileTabs";
@@ -12,9 +13,11 @@ import { OtherTab } from "@/components/profile/tabs/OtherTab";
 import { FamilyTab } from "@/components/profile/tabs/FamilyTab";
 import { EducationTab } from "@/components/profile/tabs/EducationTab";
 import { ExperienceTab } from "@/components/profile/tabs/ExperienceTab";
+import { AttendanceTab } from "@/components/profile/tabs/AttendanceTab";
+import { DocumentsTab } from "@/components/profile/tabs/DocumentsTab";
 import { SalaryTab } from "@/components/profile/tabs/SalaryTab";
 import { BankTab } from "@/components/profile/tabs/BankTab";
-import { LeaveTab } from "@/components/profile/tabs/LeaveTab";
+import { canManageEmployeeAttendance, canManageLetters } from "@/lib/auth/permissions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmploymentHistory } from "@/components/employees/EmploymentHistory";
 import { InstituteTransferDialog } from "@/components/employees/InstituteTransferDialog";
@@ -27,6 +30,11 @@ interface PageProps {
 
 export default function AdminEmployeeProfilePage({ params }: PageProps) {
   const { id } = use(params);
+  const { data: session } = useSession();
+  const perms = (session?.user as { permissions?: Record<string, string[]> })?.permissions;
+  const role = (session?.user as { role?: string })?.role;
+  const canManageAttendanceSettings = canManageEmployeeAttendance(perms, role);
+  const canGenerateLetters = canManageLetters(perms, role);
   const { data: rawEmployee, isLoading: loading, refetch } = useAdminEmployee(id);
   const assignmentsQ = useAdminEmployeeAssignments(id);
 
@@ -70,7 +78,8 @@ export default function AdminEmployeeProfilePage({ params }: PageProps) {
     { value: "family",    label: "Family",    content: <FamilyTab    employeeId={id} isAdmin /> },
     { value: "education", label: "Education", content: <EducationTab employeeId={id} isAdmin /> },
     { value: "experience", label: "Experience", content: <ExperienceTab employeeId={id} isAdmin /> },
-    { value: "leave",      label: "Leave",      content: <LeaveTab employeeId={Number(id)} /> },
+    { value: "documents", label: "Documents", content: <DocumentsTab profile={rawEmployee} canManageLetters={canGenerateLetters} /> },
+    { value: "attendance", label: "Attendance", content: <AttendanceTab employeeId={Number(id)} canManageSettings={canManageAttendanceSettings} /> },
   ];
 
   return (
@@ -90,6 +99,12 @@ export default function AdminEmployeeProfilePage({ params }: PageProps) {
             />
             <InstituteTransferDialog employeeId={id} />
             <DesignationUpgradeDialog employeeId={id} />
+            <Link
+              href={`/profile/edit?employeeId=${id}`}
+              className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-[#1d3459] font-semibold hover:bg-slate-50"
+            >
+              Edit Profile
+            </Link>
             <span className="text-xs px-2 py-1 rounded bg-[#d9b557]/20 text-[#1d3459] font-medium">
               HR View
             </span>

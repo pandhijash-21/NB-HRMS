@@ -7,7 +7,11 @@ import '../../../admin/presentation/admin_notifier.dart';
 import '../../../admin/domain/admin_models.dart';
 import '../../../org/domain/org_models.dart';
 import '../../../org/presentation/org_providers.dart';
+import '../../../letters/domain/letter_models.dart';
 import '../../../salary/presentation/salary_providers.dart';
+import '../../../letters/presentation/letters_providers.dart';
+import '../../../letters/presentation/letter_pdf.dart';
+import 'employee_salary_monthly_section.dart';
 
 class GeneralViewTab extends ConsumerWidget {
   final EmployeeProfile profile;
@@ -913,6 +917,655 @@ class BankViewTab extends StatelessWidget {
   }
 }
 
+class DocumentsViewTab extends ConsumerWidget {
+  final EmployeeProfile profile;
+  final bool canManageLetters;
+
+  const DocumentsViewTab({
+    super.key,
+    required this.profile,
+    this.canManageLetters = false,
+  });
+
+  String _stripHtml(String html) {
+    return html.replaceAll(RegExp(r'<[^>]*>'), ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  String _htmlToPlainText(String html) {
+    return html
+        .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
+        .replaceAll(RegExp(r'</(p|div|h[1-6]|li|tr)>', caseSensitive: false), '\n')
+        .replaceAll(RegExp(r'<li[^>]*>', caseSensitive: false), '• ')
+        .replaceAll(RegExp(r'<[^>]+>'), '')
+        .replaceAll('&nbsp;', ' ')
+        .replaceAll('&amp;', '&')
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&quot;', '"')
+        .replaceAll('&#039;', "'")
+        .replaceAll(RegExp(r'\n{3,}'), '\n\n')
+        .trim();
+  }
+
+  String _escapeHtml(String input) {
+    return input
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+  }
+
+  String _plainTextToHtml(String text) {
+    final paragraphs = text
+        .replaceAll('\r\n', '\n')
+        .split(RegExp(r'\n{2,}'))
+        .map((b) => b.trim())
+        .where((b) => b.isNotEmpty)
+        .toList();
+    if (paragraphs.isEmpty) return '<div></div>';
+    final body = paragraphs.map((block) {
+      final withBreaks = _escapeHtml(block).replaceAll('\n', '<br/>');
+      return '<p style="margin:0 0 12px;">$withBreaks</p>';
+    }).join();
+    return '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6;color:#111;">$body</div>';
+  }
+
+  Future<void> _showLetterEditDialog({
+    required BuildContext context,
+    required WidgetRef ref,
+    required String title,
+    required String initialHtml,
+    required Future<void> Function(String html) onGenerate,
+  }) async {
+    final controller = TextEditingController(text: _htmlToPlainText(initialHtml));
+    await showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            final preview = _plainTextToHtml(controller.text);
+            return AlertDialog(
+              title: Text(title),
+              content: SizedBox(
+                width: 720,
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Edit in simple English. Preview updates below.',
+                        style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                      ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: _knownLetterPlaceholders.map((p) {
+                          return ActionChip(
+                            label: Text('{{$p}}'),
+                            onPressed: () {
+                              controller.text = '${controller.text}{{$p}}';
+                              setLocal(() {});
+                            },
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: controller,
+                        minLines: 8,
+                        maxLines: 14,
+                        keyboardType: TextInputType.multiline,
+                        onChanged: (_) => setLocal(() {}),
+                        decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                          hintText: 'Type the letter in plain English...',
+                          labelText: 'Letter text',
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Live Preview',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppColors.border),
+                        ),
+                        child: Text(
+                          _htmlToPlainText(preview),
+                          style: const TextStyle(fontSize: 13, height: 1.45),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () async {
+                    final html = _plainTextToHtml(controller.text);
+                    await onGenerate(html);
+                    if (ctx.mounted) Navigator.pop(ctx);
+                  },
+                  child: const Text('Generate Final'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _confirmDeleteLetter({
+    required BuildContext context,
+    required WidgetRef ref,
+    required String documentId,
+    required String name,
+  }) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete letter'),
+        content: Text('Delete $name? This cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final repo = ref.read(lettersRepositoryProvider);
+    try {
+      await repo.deleteDocument(documentId: documentId);
+      ref.invalidate(employeeLetterDocumentsProvider(profile.id));
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Letter deleted')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Delete failed: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _createCustomLetter({
+    required BuildContext context,
+    required WidgetRef ref,
+  }) async {
+    final titleController = TextEditingController(text: 'Custom Letter');
+    final title = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('New letter'),
+        content: TextField(
+          controller: titleController,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Letter title',
+            hintText: 'e.g. Experience Certificate, NOC',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, titleController.text.trim()),
+            child: const Text('Create'),
+          ),
+        ],
+      ),
+    );
+    if (title == null) return;
+    final repo = ref.read(lettersRepositoryProvider);
+    try {
+      final draft = await repo.createCustomDraft(
+        employeeId: profile.id,
+        title: title.isEmpty ? 'Custom Letter' : title,
+      );
+      if (!context.mounted) return;
+      await _showLetterEditDialog(
+        context: context,
+        ref: ref,
+        title: 'Draft — ${draft.template?.name ?? title}',
+        initialHtml: draft.contentHtml,
+        onGenerate: (html) async {
+          await repo.updateDraftContent(documentId: draft.id, contentHtml: html);
+          await repo.finalizeDraft(draftId: draft.id);
+          ref.invalidate(employeeLetterDocumentsProvider(profile.id));
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Letter generated')),
+            );
+          }
+        },
+      );
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to create letter: $e')),
+        );
+      }
+    }
+  }
+
+  static const _knownLetterPlaceholders = <String>[
+    'fullName',
+    'employeeCode',
+    'designation',
+    'department',
+    'organization',
+    'instituteName',
+    'joiningDate',
+    'birthDate',
+    'aadhaarNo',
+    'panNo',
+    'passportNo',
+    'passportIssueDate',
+    'passportExpiryDate',
+    'todayDate',
+  ];
+
+  String _qualTitle(AcademicQualification q) {
+    final degreeName = (q.degreeName ?? '').trim();
+    final degreeType = q.degreeType.trim();
+    final base = degreeName.isNotEmpty ? degreeName : degreeType;
+    return '$base (${q.passingYear})';
+  }
+
+  List<Widget> _academicDocs(BuildContext context) {
+    final items = <Widget>[];
+    for (final q in profile.academicQuals) {
+      if (q.certificateUrl != null && q.certificateUrl!.isNotEmpty) {
+        items.add(_buildDocItem(context, '${_qualTitle(q)} Certificate', q.certificateUrl));
+      }
+      final semDocs = <String?>[
+        q.sem1MarksheetUrl,
+        q.sem2MarksheetUrl,
+        q.sem3MarksheetUrl,
+        q.sem4MarksheetUrl,
+        q.sem5MarksheetUrl,
+        q.sem6MarksheetUrl,
+        q.sem7MarksheetUrl,
+        q.sem8MarksheetUrl,
+      ];
+      for (var i = 0; i < semDocs.length; i += 1) {
+        final url = semDocs[i];
+        if (url != null && url.isNotEmpty) {
+          items.add(_buildDocItem(context, '${_qualTitle(q)} Marksheet', url));
+        }
+      }
+    }
+    if (items.isEmpty) {
+      items.add(_buildDocItem(context, 'Academic Documents', null));
+    }
+    return items;
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final personal = profile.personalInfo;
+    final other = profile.otherInfo;
+    final bank = profile.bankInfo;
+
+    final templatesAsync = ref.watch(letterTemplatesProvider);
+    final documentsAsync = ref.watch(employeeLetterDocumentsProvider(profile.id));
+    final repo = ref.read(lettersRepositoryProvider);
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          _buildSectionCard(
+            context: context,
+            title: 'Identity & Media',
+            icon: Icons.perm_media_outlined,
+            children: [
+              _buildDocItem(context, 'Profile Photo', profile.photoUrl),
+              _buildDocItem(context, 'Digital Signature', profile.signatureUrl),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _buildSectionCard(
+            context: context,
+            title: 'KYC & Passport',
+            icon: Icons.badge_outlined,
+            children: [
+              _buildDocItem(context, 'Aadhaar Card', personal?.aadhaarCardUrl),
+              _buildDocItem(context, 'PAN Card', personal?.panCardUrl),
+              _buildDocItem(context, 'Passport Document', other?.passportUrl),
+              _buildDocItem(context, 'Other Personal Document', personal?.otherDocumentUrl),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _buildSectionCard(
+            context: context,
+            title: 'Academic Records',
+            icon: Icons.school_outlined,
+            children: _academicDocs(context),
+          ),
+          const SizedBox(height: 16),
+          _buildSectionCard(
+            context: context,
+            title: 'Bank Documents',
+            icon: Icons.account_balance_wallet_outlined,
+            children: [
+              _buildDocItem(context, 'Cancelled Cheque', bank?.cancelledChequeUrl),
+              _buildDocItem(context, 'Passbook', bank?.passbookUrl),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _buildSectionCard(
+            context: context,
+            title: 'Letters',
+            icon: Icons.description_outlined,
+            children: [
+              Builder(
+                builder: (context) {
+                  if (templatesAsync.isLoading || documentsAsync.isLoading) {
+                    return const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 12),
+                      child: Center(child: CircularProgressIndicator()),
+                    );
+                  }
+                  if (templatesAsync.hasError || documentsAsync.hasError) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Text(
+                        'Failed to load letters',
+                        style: TextStyle(
+                          color: AppColors.error,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    );
+                  }
+
+                  final templates = templatesAsync.asData?.value ?? const <LetterTemplate>[];
+                  final docs = documentsAsync.asData?.value ?? const <LetterDocument>[];
+
+                  // Backend already hides drafts from employees; keep UI defensive.
+                  final draftDocs = canManageLetters
+                      ? docs.where((d) => d.status == LetterDocumentStatus.DRAFT).toList()
+                      : const <LetterDocument>[];
+                  final finalDocs =
+                      docs.where((d) => d.status == LetterDocumentStatus.FINAL).toList();
+
+                  final children = <Widget>[];
+
+                  if (canManageLetters) {
+                    children.add(
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: FilledButton.icon(
+                          onPressed: () => _createCustomLetter(context: context, ref: ref),
+                          icon: const Icon(Icons.add_rounded, size: 18),
+                          label: const Text('New letter'),
+                        ),
+                      ),
+                    );
+                    children.add(const SizedBox(height: 10));
+                    children.add(
+                      Text(
+                        'Employees only see letters after you click Generate Final.',
+                        style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                      ),
+                    );
+                    children.add(const SizedBox(height: 10));
+                  }
+
+                  for (final doc in finalDocs) {
+                    final tName = doc.template?.name ?? 'Letter';
+                    final preview = _stripHtml(doc.contentHtml);
+                    children.add(
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).cardColor,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.border.withOpacity(0.6)),
+                        ),
+                        margin: const EdgeInsets.only(bottom: 10),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.description_outlined, size: 18, color: AppColors.bronze),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    tName,
+                                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              preview.length > 160 ? '${preview.substring(0, 160)}...' : preview,
+                              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                            ),
+                            const SizedBox(height: 10),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                OutlinedButton.icon(
+                                  icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
+                                  label: const Text('Download PDF'),
+                                  onPressed: () {
+                                    downloadLetterPdf(
+                                      title: tName,
+                                      html: doc.contentHtml,
+                                      onMessage: (msg) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text(msg)),
+                                        );
+                                      },
+                                    );
+                                  },
+                                ),
+                                if (canManageLetters)
+                                  OutlinedButton.icon(
+                                    icon: const Icon(Icons.delete_outline, size: 16, color: Colors.red),
+                                    label: const Text('Delete', style: TextStyle(color: Colors.red)),
+                                    onPressed: () => _confirmDeleteLetter(
+                                      context: context,
+                                      ref: ref,
+                                      documentId: doc.id,
+                                      name: tName,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+
+                  for (final doc in draftDocs) {
+                    children.add(
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).cardColor,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.amber.shade300),
+                        ),
+                        margin: const EdgeInsets.only(bottom: 10),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${doc.template?.name ?? 'Letter'} (DRAFT — admin only)',
+                              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              children: [
+                                FilledButton(
+                                  onPressed: () async {
+                                    await _showLetterEditDialog(
+                                      context: context,
+                                      ref: ref,
+                                      title: 'Edit Draft — ${doc.template?.name ?? 'Letter'}',
+                                      initialHtml: doc.contentHtml,
+                                      onGenerate: (html) async {
+                                        await repo.updateDraftContent(
+                                          documentId: doc.id,
+                                          contentHtml: html,
+                                        );
+                                        await repo.finalizeDraft(draftId: doc.id);
+                                        ref.invalidate(employeeLetterDocumentsProvider(profile.id));
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(content: Text('Letter generated')),
+                                          );
+                                        }
+                                      },
+                                    );
+                                  },
+                                  child: const Text('Edit & Generate'),
+                                ),
+                                OutlinedButton(
+                                  onPressed: () => _confirmDeleteLetter(
+                                    context: context,
+                                    ref: ref,
+                                    documentId: doc.id,
+                                    name: doc.template?.name ?? 'draft',
+                                  ),
+                                  child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+
+                  if (canManageLetters) {
+                    children.add(const SizedBox(height: 8));
+                    children.add(
+                      Text(
+                        'Generate letters:',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 13,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    );
+                    children.add(const SizedBox(height: 10));
+
+                    for (final t in templates) {
+                      children.add(
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).cardColor,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppColors.border.withOpacity(0.6)),
+                          ),
+                          margin: const EdgeInsets.only(bottom: 10),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.edit_note_outlined, size: 18, color: AppColors.bronze),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  t.name,
+                                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              OutlinedButton(
+                                onPressed: () async {
+                                  final draft = await repo.createOrUpdateDraft(
+                                    employeeId: profile.id,
+                                    templateId: t.id,
+                                  );
+                                  if (!context.mounted) return;
+                                  await _showLetterEditDialog(
+                                    context: context,
+                                    ref: ref,
+                                    title: 'Draft — ${t.name}',
+                                    initialHtml: draft.contentHtml,
+                                    onGenerate: (html) async {
+                                      await repo.updateDraftContent(
+                                        documentId: draft.id,
+                                        contentHtml: html,
+                                      );
+                                      await repo.finalizeDraft(draftId: draft.id);
+                                      ref.invalidate(employeeLetterDocumentsProvider(profile.id));
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text('Letter generated')),
+                                        );
+                                      }
+                                    },
+                                  );
+                                },
+                                child: const Text('Generate'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }
+                  }
+
+                  if (children.isEmpty) {
+                    children.add(
+                      Text(
+                        canManageLetters
+                            ? 'No letters yet. Generate one above.'
+                            : 'No letters available yet. They appear after HR finalizes them.',
+                        style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w700),
+                      ),
+                    );
+                  }
+
+                  return Column(crossAxisAlignment: CrossAxisAlignment.start, children: children);
+                },
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class SalaryViewTab extends ConsumerWidget {
   final EmployeeProfile profile;
 
@@ -924,7 +1577,17 @@ class SalaryViewTab extends ConsumerWidget {
 
     return previewAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Could not load salary: $e')),
+      error: (e, _) => SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Could not load salary structure: $e'),
+            const SizedBox(height: 16),
+            EmployeeSalaryMonthlySection(employeeId: profile.id),
+          ],
+        ),
+      ),
       data: (preview) {
         final computed = preview.computed;
         final info = profile.salaryInfo;
@@ -1010,6 +1673,8 @@ class SalaryViewTab extends ConsumerWidget {
                   ],
                 ),
               ],
+              const SizedBox(height: 16),
+              EmployeeSalaryMonthlySection(employeeId: profile.id),
             ],
           ),
         );

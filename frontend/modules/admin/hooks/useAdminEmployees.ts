@@ -54,9 +54,14 @@ export function useCreateEmployee() {
       const { data } = await api.post(`employees/full`, payload);
       return data.data;
     },
-    onSuccess: () => {
+    onSuccess: (created: any) => {
       queryClient.invalidateQueries({ queryKey: ["admin", "employees"] });
-      toast.success("Employee record created successfully");
+      const pwd = created?.initialPassword;
+      if (pwd) {
+        toast.success(`Employee created. Temporary password (DOB): ${pwd}`);
+      } else {
+        toast.success("Employee record created successfully");
+      }
     },
     onError: (error: any) => {
       const message = error.response?.data?.message || "Failed to create employee";

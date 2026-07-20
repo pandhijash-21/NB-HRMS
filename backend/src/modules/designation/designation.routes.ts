@@ -28,7 +28,10 @@ designationRouter.post(
   requirePermission('USER_MGMT', 'WRITE'),
   async (req: Request, res: Response) => {
     try {
-      const data = await designationService.create(req.body);
+      const data = await designationService.create({
+        ...req.body,
+        createdBy: req.user!.id,
+      });
       return res.status(201).json(ok(data));
     } catch (e: unknown) {
       return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));

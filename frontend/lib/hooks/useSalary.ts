@@ -4,6 +4,12 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/axios";
 import { useAuthReady } from "@/lib/hooks/useAuthReady";
+import type {
+  AttendanceMonthlyStats,
+  AttendanceMonthlySummary,
+  AdminEmployeeHistoryDay,
+  AttendancePolicy,
+} from "@/lib/hooks/useAttendance";
 
 function useDebouncedValue<T>(value: T, delay = 400): T {
   const [debounced, setDebounced] = useState(value);
@@ -419,6 +425,66 @@ export function useSalarySlip(id: string) {
       return data.data;
     },
     enabled: authReady && !!id,
+    retry: 1,
+  });
+}
+
+export function useEmployeeSalarySlip(employeeId: number, recordId: string) {
+  const authReady = useAuthReady();
+  return useQuery({
+    queryKey: ["salary", "employee-slip", employeeId, recordId],
+    queryFn: async () => {
+      const { data } = await api.get(`salary/employees/${employeeId}/slip/${recordId}`);
+      return data.data;
+    },
+    enabled: authReady && Number.isFinite(employeeId) && !!recordId,
+    retry: 1,
+  });
+}
+
+export type EmployeeSalaryMonthlyOverview = {
+  year: number;
+  month: number;
+  attendance: AttendanceMonthlyStats;
+  attendancePolicy: AttendancePolicy;
+  days: AdminEmployeeHistoryDay[];
+  leaveApplications: AttendanceMonthlySummary["leaveApplications"];
+  leaveBalances: Array<{
+    leaveType: { code: string; name: string };
+    totalCredited: number;
+    carryForward: number;
+    used: number;
+    available: number;
+  }>;
+  salaryRecord: {
+    id: string;
+    status: string;
+    salaryMonth: number;
+    salaryYear: number;
+    grossPay: number;
+    totalDeductions: number;
+    netPay: number;
+    payCommissionCode: string;
+    designation: string;
+    canDownloadSlip: boolean;
+  } | null;
+};
+
+export function useEmployeeSalaryMonthlyOverview(params: {
+  employeeId: number;
+  year: number;
+  month: number;
+}) {
+  const authReady = useAuthReady();
+  return useQuery({
+    queryKey: ["salary", "employee-monthly-overview", params.employeeId, params.year, params.month],
+    queryFn: async () => {
+      const { data } = await api.get(`salary/employees/${params.employeeId}/monthly-overview`, {
+        params: { year: params.year, month: params.month },
+      });
+      return data.data as EmployeeSalaryMonthlyOverview;
+    },
+    enabled: authReady && !!params.employeeId && !!params.year && !!params.month,
     retry: 1,
   });
 }

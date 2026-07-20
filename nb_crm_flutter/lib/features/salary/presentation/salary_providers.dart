@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../attendance/presentation/attendance_providers.dart';
 import '../../auth/presentation/auth_providers.dart';
 import '../data/salary_repository.dart';
 import '../domain/salary_models.dart';
@@ -115,6 +116,42 @@ final employeeSalaryProfileProvider = FutureProvider.autoDispose
     .family<EmployeeSalaryProfileResponse, int>((ref, employeeId) async {
   return ref.watch(salaryRepositoryProvider).getEmployeeProfile(employeeId);
 });
+
+final employeeSalaryMonthlyOverviewProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>, ({int employeeId, int year, int month})>(
+        (ref, params) async {
+  return ref.watch(salaryRepositoryProvider).getEmployeeMonthlyOverview(
+        employeeId: params.employeeId,
+        year: params.year,
+        month: params.month,
+      );
+});
+
+typedef EmployeeSalarySlipParams = ({int employeeId, String recordId});
+
+final employeeSalarySlipProvider = FutureProvider.autoDispose
+    .family<SalarySlip, EmployeeSalarySlipParams>((ref, params) async {
+  return ref.watch(salaryRepositoryProvider).getEmployeeSlip(
+        employeeId: params.employeeId,
+        recordId: params.recordId,
+      );
+});
+
+class ProfileSalaryMonthFilter extends Notifier<AttendanceMonthFilter> {
+  @override
+  AttendanceMonthFilter build() {
+    final now = DateTime.now();
+    return AttendanceMonthFilter(year: now.year, month: now.month);
+  }
+
+  void setMonth(int year, int month) =>
+      state = AttendanceMonthFilter(year: year, month: month);
+}
+
+final profileSalaryMonthProvider =
+    NotifierProvider<ProfileSalaryMonthFilter, AttendanceMonthFilter>(
+  ProfileSalaryMonthFilter.new,
+);
 
 final employeeSalaryPreviewProvider = FutureProvider.autoDispose
     .family<EmployeeSalaryPreview, int>((ref, employeeId) async {

@@ -57,15 +57,23 @@ class AdminRepository {
   }
 
   /// Create an employee directly via POST `employees/full`.
-  Future<EmployeeProfile> createEmployee(Map<String, dynamic> data) async {
-    return _dio.postEnvelope<EmployeeProfile>(
+  /// Returns profile plus generated initial password (DOB as DDMMYYYY).
+  Future<({EmployeeProfile profile, String? initialPassword})> createEmployee(
+    Map<String, dynamic> data,
+  ) async {
+    return _dio.postEnvelope<({EmployeeProfile profile, String? initialPassword})>(
       'employees/full',
       data: data,
       parse: (raw) {
         if (raw is! Map) {
           throw const FormatException('Invalid response format for employee creation');
         }
-        return EmployeeProfile.fromJson(Map<String, dynamic>.from(raw));
+        final map = Map<String, dynamic>.from(raw);
+        final password = map['initialPassword']?.toString();
+        return (
+          profile: EmployeeProfile.fromJson(map),
+          initialPassword: (password != null && password.isNotEmpty) ? password : null,
+        );
       },
     );
   }

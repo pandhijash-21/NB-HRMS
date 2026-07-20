@@ -134,4 +134,43 @@ class AttendanceRepository {
       },
     );
   }
+
+  Future<EmployeeAttendanceSettings> getEmployeeSettings(int employeeId) async {
+    return _dio.getEnvelope<EmployeeAttendanceSettings>(
+      'attendance/employee/$employeeId/settings',
+      parse: (raw) {
+        if (raw is! Map) throw const FormatException('Invalid settings response');
+        return EmployeeAttendanceSettings.fromJson(Map<String, dynamic>.from(raw));
+      },
+    );
+  }
+
+  Future<EmployeeAttendanceSettings> updateEmployeeSettings(
+    int employeeId,
+    Map<String, dynamic> body,
+  ) async {
+    return _dio.patchEnvelope<EmployeeAttendanceSettings>(
+      'attendance/employee/$employeeId/settings',
+      data: body,
+      parse: (raw) {
+        if (raw is! Map) throw const FormatException('Invalid settings update response');
+        return EmployeeAttendanceSettings.fromJson(Map<String, dynamic>.from(raw));
+      },
+    );
+  }
+
+  Future<AttendanceMonthlySummary> getEmployeeMonthlySummary({
+    required int employeeId,
+    required int year,
+    required int month,
+  }) async {
+    return _dio.getEnvelope<AttendanceMonthlySummary>(
+      'attendance/employee/$employeeId/monthly-summary',
+      queryParameters: {'year': year, 'month': month},
+      parse: (raw) {
+        if (raw is! Map) throw const FormatException('Invalid monthly summary response');
+        return AttendanceMonthlySummary.fromJson(Map<String, dynamic>.from(raw));
+      },
+    );
+  }
 }

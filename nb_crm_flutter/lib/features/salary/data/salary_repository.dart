@@ -273,6 +273,31 @@ class SalaryRepository {
     );
   }
 
+  Future<Map<String, dynamic>> getEmployeeMonthlyOverview({
+    required int employeeId,
+    required int year,
+    required int month,
+  }) async {
+    return _dio.getEnvelope<Map<String, dynamic>>(
+      'salary/employees/$employeeId/monthly-overview',
+      queryParameters: {'year': year, 'month': month},
+      parse: (raw) {
+        if (raw is! Map) throw const FormatException('Invalid monthly overview');
+        return Map<String, dynamic>.from(raw);
+      },
+    );
+  }
+
+  Future<SalarySlip> getEmployeeSlip({
+    required int employeeId,
+    required String recordId,
+  }) async {
+    return _dio.getEnvelope<SalarySlip>(
+      'salary/employees/$employeeId/slip/$recordId',
+      parse: (raw) => SalarySlip.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
   Future<List<SalaryEmployeeOption>> listEmployeesForEntry({int limit = 500}) async {
     return _dio.getEnvelope<List<SalaryEmployeeOption>>(
       'employees',

@@ -100,8 +100,6 @@ class InstituteDetailScreen extends ConsumerWidget {
         Row(
           children: [
             Expanded(child: _statCard(context, 'Employees', '${data.employees.length}')),
-            SizedBox(width: 12),
-            Expanded(child: _statCard(context, 'Alias accounts', '${data.aliases.length}')),
           ],
         ),
         SizedBox(height: 16),
@@ -114,20 +112,6 @@ class InstituteDetailScreen extends ConsumerWidget {
                 )
               : Column(
                   children: data.employees.map((emp) => _employeeRow(context, emp)).toList(),
-                ),
-        ),
-        SizedBox(height: 16),
-        _sectionCard(
-          title: 'Alias accounts',
-          subtitle:
-              'Logins scoped to this institute (e.g. HOI-GIT). Matched by institute code or login suffix.',
-          child: data.aliases.isEmpty
-              ? Text(
-                  'No alias accounts for this institute.',
-                  style: TextStyle(color: AppColors.textSecondary),
-                )
-              : Column(
-                  children: data.aliases.map((alias) => _aliasRow(alias)).toList(),
                 ),
         ),
       ],
@@ -237,58 +221,6 @@ class InstituteDetailScreen extends ConsumerWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _aliasRow(AliasAccount alias) {
-    final active = alias.userActive ?? false;
-    return Container(
-      margin: EdgeInsets.only(bottom: 8),
-      padding: EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        border: Border.all(color: AppColors.border),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  alias.code,
-                  style: const TextStyle(
-                    fontFamily: 'monospace',
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.midnight,
-                  ),
-                ),
-                Text(alias.name, style: const TextStyle(fontSize: 13)),
-                Text(
-                  'Position: ${alias.designationName} · ${alias.linkedRoleName}',
-                  style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: active ? AppColors.successSoft : AppColors.mist,
-              borderRadius: BorderRadius.circular(999),
-            ),
-            child: Text(
-              active ? 'Active' : 'Inactive',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: active ? AppColors.success : AppColors.textSecondary,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

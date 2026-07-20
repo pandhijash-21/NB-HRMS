@@ -4,6 +4,7 @@ import { ok, fail } from '../../utils/response';
 import { employeeService } from './employee.service';
 import { assignmentService } from './assignment.service';
 import { employmentChangeService } from './employmentChange.service';
+import { parseBirthDateInput } from '../../utils/dobPassword';
 import {
   canViewEmployeeDirectory,
   canWriteEmployeeDirectory,
@@ -178,6 +179,7 @@ export const employeeController = {
       joiningDate: z.string().transform((str) => new Date(str)),
       employeeCategory: z.string().min(1),
       employeeCode: z.string().min(1),
+      birthDate: z.string().min(1).transform((str) => parseBirthDateInput(str)),
       // New: approver user ids (employee user or position user). NULL bypasses layer.
       firstApproverUserId: z.string().optional().nullable(),
       secondApproverUserId: z.string().optional().nullable(),
@@ -189,6 +191,7 @@ export const employeeController = {
       instituteId: z.string().uuid().optional(),
       subOrganization: z.string().optional().nullable(),
       positionDesignationId: z.string().uuid().optional().nullable(),
+      roleId: z.string().uuid().optional().nullable(),
       abbreviation: z.string().min(1).max(10).optional().nullable(),
     });
 

@@ -50,13 +50,35 @@ const LEVEL_OPTIONS: { value: AcademicQualFormData["level"]; label: string }[] =
 
 const LEVEL_COLORS: Record<string, string> = {
   SSC: "bg-slate-100 text-slate-600",
-  HSC: "bg-slate-100 text-slate-600",
-  HSC_DIPLOMA: "bg-slate-100 text-slate-600",
+  HSC: "bg-teal-100 text-teal-700",
+  HSC_DIPLOMA: "bg-teal-100 text-teal-700",
   DIPLOMA: "bg-blue-100 text-blue-700",
   UG: "bg-indigo-100 text-indigo-700",
   PG: "bg-purple-100 text-purple-700",
   PHD: "bg-amber-100 text-amber-700",
   OTHER: "bg-slate-100 text-slate-500",
+};
+
+const LEVEL_BORDER: Record<string, string> = {
+  SSC: "border-l-4 border-l-slate-400",
+  HSC: "border-l-4 border-l-teal-400",
+  HSC_DIPLOMA: "border-l-4 border-l-teal-400",
+  DIPLOMA: "border-l-4 border-l-blue-400",
+  UG: "border-l-4 border-l-indigo-400",
+  PG: "border-l-4 border-l-purple-400",
+  PHD: "border-l-4 border-l-amber-400",
+  OTHER: "border-l-4 border-l-slate-300",
+};
+
+const LEVEL_LABEL: Record<string, string> = {
+  SSC: "Secondary (SSC)",
+  HSC: "Higher Secondary (HSC)",
+  HSC_DIPLOMA: "HSC / Diploma",
+  DIPLOMA: "Diploma",
+  UG: "Under Graduate",
+  PG: "Post Graduate",
+  PHD: "Doctorate (PhD)",
+  OTHER: "Other",
 };
 
 const HSC_STREAMS = [
@@ -274,16 +296,20 @@ export function EducationTab({ employeeId, isAdmin }: EducationTabProps) {
           )}
 
           <div className="space-y-3">
-            {qualifications.map((q: Record<string, unknown>) => (
+            {qualifications.map((q: Record<string, unknown>) => {
+              const levelKey = q.level as string;
+              const borderClass = LEVEL_BORDER[levelKey] ?? "border-l-4 border-l-slate-300";
+              const levelLabel = LEVEL_LABEL[levelKey] ?? levelKey;
+              return (
               <div
                 key={q.id as string}
-                className="p-4 bg-slate-50 rounded-lg border border-slate-100"
+                className={`p-4 bg-white rounded-lg border border-slate-100 shadow-sm ${borderClass}`}
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <Badge className={`text-xs ${LEVEL_COLORS[q.level as string] ?? "bg-slate-100"}`}>
-                        {q.level as string}
+                      <Badge className={`text-xs ${LEVEL_COLORS[levelKey] ?? "bg-slate-100"}`}>
+                        {levelLabel}
                       </Badge>
                       {Boolean(q.medium) && (
                         <Badge variant="outline" className="text-xs">
@@ -357,7 +383,8 @@ export function EducationTab({ employeeId, isAdmin }: EducationTabProps) {
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </CardContent>
       </Card>

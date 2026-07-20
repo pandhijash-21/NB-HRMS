@@ -1,7 +1,10 @@
 import { prisma } from '../../config/prisma';
 import type { EmployeeStatus } from '@prisma/client';
 import { resolveInstituteRef } from '../institute/institute.util';
-import { loadPositionMapByRoleId, resolveRoleIdForPosition } from '../designation/position.util';
+import { loadPositionMapByRoleId, resolveRoleIdForPosition, resolveRoleIdDirect } from '../designation/position.util';
+import { encryptPasswordForAdmin } from '../../utils/passwordCrypto';
+import { passwordFromBirthDate, parseBirthDateInput } from '../../utils/dobPassword';
+import bcrypt from 'bcryptjs';
 
 function attachPosition<T extends { user?: { roleId: string } | null }>(
   employee: T,
@@ -93,7 +96,9 @@ export const employeeService = {
     joiningDate: Date;
     employeeCategory: string;
     employeeCode: string;
+    birthDate: Date;
     positionDesignationId?: string | null;
+    roleId?: string | null;
     firstApproverUserId?: string | null;
     secondApproverUserId?: string | null;
     thirdApproverUserId?: string | null;
@@ -109,7 +114,9 @@ export const employeeService = {
       subOrganization: input.subOrganization,
     });
 
-    const assignedRoleId = await resolveRoleIdForPosition(input.positionDesignationId ?? null);
+    const assignedRoleId = input.roleId
+      ? await resolveRoleIdDirect(input.roleId)
+      : await resolveRoleIdForPosition(input.positionDesignationId ?? null);
 
     return prisma.$transaction(async (tx) => {
       const tempUserId = `pending-${Math.random().toString(36).substring(2, 11)}`;
@@ -159,18 +166,19 @@ export const employeeService = {
         },
       });
 
+      const birthDate = parseBirthDateInput(input.birthDate);
+      const defaultPassword = passwordFromBirthDate(birthDate);
+
       await tx.employeePersonalInfo.create({
         data: {
           employeeId: employee.id,
-          birthDate: new Date('1990-01-01'),
+          birthDate,
           gender: 'MALE',
           maritalStatus: 'SINGLE',
         },
       });
 
-      const defaultPassword = '01011990';
-      const passwordHash = await require('bcryptjs').hash(defaultPassword, 12);
-      const { encryptPasswordForAdmin } = await import('../../utils/passwordCrypto');
+      const passwordHash = await bcrypt.hash(defaultPassword, 12);
       const user = await tx.user.create({
         data: {
           employeeId: employee.id,
@@ -182,7 +190,7 @@ export const employeeService = {
         }
       });
 
-      return tx.employee.update({
+      const created = await tx.employee.update({
         where: { id: employee.id },
         data: { userId: user.id },
         include: {
@@ -190,6 +198,12 @@ export const employeeService = {
           addresses: true,
         }
       });
+
+      return {
+        ...created,
+        initialPassword: defaultPassword,
+        loginHint: input.employeeCode,
+      };
     });
   },
 

@@ -279,3 +279,109 @@ class AdminAttendanceEmployeeHistory {
     );
   }
 }
+
+class EmployeeAttendanceSettings {
+  const EmployeeAttendanceSettings({
+    required this.employeeId,
+    required this.useGlobalPolicy,
+    this.punchInTime,
+    this.punchOutTime,
+    this.punchInBufferMinutes,
+    this.punchOutBufferMinutes,
+    required this.effective,
+    this.globalPolicy,
+  });
+
+  final int employeeId;
+  final bool useGlobalPolicy;
+  final String? punchInTime;
+  final String? punchOutTime;
+  final int? punchInBufferMinutes;
+  final int? punchOutBufferMinutes;
+  final Map<String, dynamic> effective;
+  final AttendancePolicy? globalPolicy;
+
+  factory EmployeeAttendanceSettings.fromJson(Map<String, dynamic> json) {
+    final effective = _asMap(json['effective']) ?? {};
+    final global = _asMap(json['globalPolicy']);
+    return EmployeeAttendanceSettings(
+      employeeId: _asInt(json['employeeId']),
+      useGlobalPolicy: json['useGlobalPolicy'] as bool? ?? true,
+      punchInTime: json['punchInTime'] as String?,
+      punchOutTime: json['punchOutTime'] as String?,
+      punchInBufferMinutes: json['punchInBufferMinutes'] as int?,
+      punchOutBufferMinutes: json['punchOutBufferMinutes'] as int?,
+      effective: effective,
+      globalPolicy: global != null ? AttendancePolicy.fromJson(global) : null,
+    );
+  }
+}
+
+class AttendanceMonthlyStats {
+  const AttendanceMonthlyStats({
+    required this.presentDays,
+    required this.lateDays,
+    required this.halfDays,
+    required this.absentDays,
+    required this.totalWorkingMinutes,
+    required this.totalWorkingHours,
+    required this.leaveApplications,
+    required this.leaveDaysInMonth,
+  });
+
+  final int presentDays;
+  final int lateDays;
+  final int halfDays;
+  final int absentDays;
+  final int totalWorkingMinutes;
+  final double totalWorkingHours;
+  final int leaveApplications;
+  final double leaveDaysInMonth;
+
+  factory AttendanceMonthlyStats.fromJson(Map<String, dynamic> json) {
+    return AttendanceMonthlyStats(
+      presentDays: _asInt(json['presentDays']),
+      lateDays: _asInt(json['lateDays']),
+      halfDays: _asInt(json['halfDays']),
+      absentDays: _asInt(json['absentDays']),
+      totalWorkingMinutes: _asInt(json['totalWorkingMinutes']),
+      totalWorkingHours: (json['totalWorkingHours'] as num?)?.toDouble() ?? 0,
+      leaveApplications: _asInt(json['leaveApplications']),
+      leaveDaysInMonth: (json['leaveDaysInMonth'] as num?)?.toDouble() ?? 0,
+    );
+  }
+}
+
+class AttendanceMonthlySummary {
+  const AttendanceMonthlySummary({
+    required this.year,
+    required this.month,
+    required this.from,
+    required this.to,
+    required this.stats,
+    required this.days,
+    required this.leaveApplications,
+  });
+
+  final int year;
+  final int month;
+  final String from;
+  final String to;
+  final AttendanceMonthlyStats stats;
+  final List<AdminAttendanceHistoryDay> days;
+  final List<Map<String, dynamic>> leaveApplications;
+
+  factory AttendanceMonthlySummary.fromJson(Map<String, dynamic> json) {
+    return AttendanceMonthlySummary(
+      year: _asInt(json['year']),
+      month: _asInt(json['month']),
+      from: json['from']?.toString() ?? '',
+      to: json['to']?.toString() ?? '',
+      stats: AttendanceMonthlyStats.fromJson(
+        _asMap(json['stats']) ?? const {},
+      ),
+      days: _asMapList(json['days']).map(AdminAttendanceHistoryDay.fromJson).toList(),
+      leaveApplications: _asMapList(json['leaveApplications']),
+    );
+  }
+}

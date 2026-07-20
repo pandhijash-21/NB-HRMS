@@ -148,33 +148,48 @@ class AdminSalaryCommissionDetailScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 18),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   decoration: BoxDecoration(
                     color: isDark ? const Color(0xFF1E1B18) : const Color(0xFFF0F4F8),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border(
-                      left: const BorderSide(color: Color(0xFFC5A059), width: 4),
-                      top: BorderSide(color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC)),
-                      right: BorderSide(color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC)),
-                      bottom: BorderSide(color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC)),
+                    border: Border.all(
+                      color: isDark
+                          ? const Color(0xFFC5A059).withOpacity(0.15)
+                          : const Color(0xFFCFD8DC),
                     ),
                   ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.info_outline_rounded, color: Color(0xFFC5A059), size: 18),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'Order controls calculation sequence — lower numbers run first. Use gaps of 10 so you can insert columns without renumbering.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: isDark ? Colors.white70 : const Color(0xFF607D8B),
-                            height: 1.4,
+                  clipBehavior: Clip.antiAlias,
+                  child: IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const ColoredBox(
+                          color: Color(0xFFC5A059),
+                          child: SizedBox(width: 4),
+                        ),
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.info_outline_rounded, color: Color(0xFFC5A059), size: 18),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    'Order controls calculation sequence — lower numbers run first. Use gaps of 10 so you can insert columns without renumbering.',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: isDark ? Colors.white70 : const Color(0xFF607D8B),
+                                      height: 1.4,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 20),

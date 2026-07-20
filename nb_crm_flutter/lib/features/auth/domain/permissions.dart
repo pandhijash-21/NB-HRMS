@@ -119,6 +119,13 @@ class Permissions {
     return hasPermission(perms, 'ATTENDANCE', 'WRITE');
   }
 
+  /// Admin/HR can set per-employee punch windows (matches backend PATCH guard).
+  static bool canManageEmployeeAttendance(PermissionMap? perms, String? role) {
+    final r = (role ?? '').toUpperCase();
+    if (const ['ADMIN', 'HR', 'HR_MANAGER'].contains(r)) return true;
+    return canWriteAttendance(perms);
+  }
+
   static bool canAdminAttendance(PermissionMap? perms, String role) {
     return canReadAttendance(perms) &&
         const ['ADMIN', 'HR', 'HR_MANAGER'].contains(role.toUpperCase());
@@ -132,6 +139,36 @@ class Permissions {
   static bool canWriteSalary(PermissionMap? perms) {
     return hasPermission(perms, 'SALARY', 'WRITE') ||
         hasPermission(perms, 'PAYROLL', 'WRITE');
+  }
+
+  static bool canReadDocuments(PermissionMap? perms) {
+    return hasPermission(perms, 'DOCUMENTS', 'READ');
+  }
+
+  static bool canWriteDocuments(PermissionMap? perms) {
+    return hasPermission(perms, 'DOCUMENTS', 'WRITE');
+  }
+
+  static bool canManageLetters(PermissionMap? perms, String? role) {
+    final r = (role ?? '').toUpperCase();
+    if (const ['ADMIN', 'HR', 'HR_MANAGER'].contains(r)) return true;
+    return canWriteDocuments(perms);
+  }
+
+  static bool canReadReimbursements(PermissionMap? perms) {
+    return hasPermission(perms, 'REIMBURSEMENTS', 'READ') ||
+        hasPermission(perms, 'REIMBURSEMENTS', 'WRITE');
+  }
+
+  static bool canWriteReimbursements(PermissionMap? perms) {
+    return hasPermission(perms, 'REIMBURSEMENTS', 'WRITE');
+  }
+
+  static bool canAdminReimbursements(PermissionMap? perms, String role) {
+    final r = role.toUpperCase();
+    if (const ['ADMIN', 'HR', 'HR_MANAGER'].contains(r)) return true;
+    return hasPermission(perms, 'REIMBURSEMENTS', 'APPROVE') ||
+        hasPermission(perms, 'REIMBURSEMENTS', 'WRITE');
   }
 
   static String resolvePostLoginPath(

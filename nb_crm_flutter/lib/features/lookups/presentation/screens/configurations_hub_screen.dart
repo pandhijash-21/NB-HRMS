@@ -86,9 +86,17 @@ class ConfigurationsHubScreen extends ConsumerWidget {
           _HubTile(
             icon: Icons.badge_rounded,
             title: 'Designations',
-            subtitle: 'Job titles and alias accounts',
+            subtitle: 'Job titles for employees',
             color: const Color(0xFFdb2777),
             onTap: () => context.go('/admin/designations'),
+          ),
+          const SizedBox(height: 10),
+          _HubTile(
+            icon: Icons.description_outlined,
+            title: 'Letters',
+            subtitle: 'Offer letter, LOR, exit templates',
+            color: const Color(0xFF0d9488),
+            onTap: () => context.go('/admin/configurations/letters'),
           ),
           const SizedBox(height: 24),
           Text(

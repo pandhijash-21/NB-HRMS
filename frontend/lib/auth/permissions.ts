@@ -101,6 +101,24 @@ export type NavGroupDef = {
   items: NavItemDef[];
 };
 
+export function canManageEmployeeAttendance(
+  perms: PermissionMap | undefined | null,
+  role?: string | null,
+): boolean {
+  const r = (role ?? '').toUpperCase();
+  if (['ADMIN', 'HR', 'HR_MANAGER'].includes(r)) return true;
+  return hasPermission(perms, 'ATTENDANCE', 'WRITE');
+}
+
+export function canManageLetters(
+  perms: PermissionMap | undefined | null,
+  role?: string | null,
+): boolean {
+  const r = (role ?? "").toUpperCase();
+  if (["ADMIN", "HR", "HR_MANAGER"].includes(r)) return true;
+  return hasPermission(perms, "DOCUMENTS", "WRITE");
+}
+
 /** Filter admin sidebar items by the user's role permissions. */
 export function filterAdminNav(
   groups: NavGroupDef[],

@@ -84,6 +84,7 @@ const SIXTH_PAY_COLUMNS: ColDef[] = [
   { columnIdentifier: 'travel_allowance', displayName: 'Travel Allowance', category: 'EARNING', evaluationOrder: 80 },
   { columnIdentifier: 'special_allowance', displayName: 'Special Allowance', category: 'EARNING', evaluationOrder: 90 },
   { columnIdentifier: 'other_allowance', displayName: 'Other Allowance', category: 'EARNING', evaluationOrder: 100 },
+  { columnIdentifier: 'reimbursement', displayName: 'Reimbursement', category: 'EARNING', evaluationOrder: 105 },
   { columnIdentifier: 'gratuity', displayName: 'Gratuity', category: 'EARNING', evaluationOrder: 110 },
   { columnIdentifier: 'provident_fund', displayName: 'Provident Fund', category: 'EARNING', evaluationOrder: 120 },
   { columnIdentifier: 'gross_pay', displayName: 'Gross Pay', category: 'EARNING', evaluationOrder: 130 },
@@ -128,90 +129,7 @@ async function seedColumnDefinitions(
   }
 }
 
-export async function seedDesignationsAndSalaryCatalog(
-  prisma: PrismaClient,
-  roleIdMap: Record<string, string>,
-) {
-  console.log('⏳  Seeding designations…');
-  let sortOrder = 0;
-  const designationByName = new Map<string, string>();
-
-  for (const name of REGULAR_DESIGNATIONS) {
-    const d = await prisma.designation.upsert({
-      where: { name },
-      update: { sortOrder: sortOrder++, isAlias: false },
-      create: {
-        name,
-        slug: slugify(name),
-        isAlias: false,
-        sortOrder: sortOrder++,
-      },
-    });
-    designationByName.set(name, d.id);
-  }
-
-  for (const alias of ALIAS_DESIGNATIONS) {
-    const d = await prisma.designation.upsert({
-      where: { name: alias.name },
-      update: {
-        isAlias: true,
-        linkedRoleId: roleIdMap[alias.roleName],
-      },
-      create: {
-        name: alias.name,
-        slug: slugify(alias.name),
-        isAlias: true,
-        linkedRoleId: roleIdMap[alias.roleName],
-        sortOrder: sortOrder++,
-      },
-    });
-    designationByName.set(alias.name, d.id);
-  }
-  console.log(`✅  ${designationByName.size} designations seeded`);
-
-  console.log('⏳  Backfilling designation_id on employees…');
-  const generalInfos = await prisma.employeeGeneralInfo.findMany({
-    select: { id: true, designation: true, designationId: true },
-  });
-  for (const info of generalInfos) {
-    if (info.designationId) continue;
-    const exact = designationByName.get(info.designation);
-    if (exact) {
-      await prisma.employeeGeneralInfo.update({
-        where: { id: info.id },
-        data: { designationId: exact },
-      });
-      continue;
-    }
-    const fuzzy = await prisma.designation.findFirst({
-      where: { name: { contains: info.designation, mode: 'insensitive' }, isAlias: false },
-    });
-    if (fuzzy) {
-      await prisma.employeeGeneralInfo.update({
-        where: { id: info.id },
-        data: { designationId: fuzzy.id },
-      });
-    }
-  }
-
-  const assignments = await prisma.employeeAssignment.findMany({
-    select: { id: true, designation: true, designationId: true },
-  });
-  for (const a of assignments) {
-    if (a.designationId) continue;
-    const exact = designationByName.get(a.designation);
-    const designationId = exact ?? (await prisma.designation.findFirst({
-      where: { name: { contains: a.designation, mode: 'insensitive' }, isAlias: false },
-    }))?.id;
-    if (designationId) {
-      await prisma.employeeAssignment.update({
-        where: { id: a.id },
-        data: { designationId },
-      });
-    }
-  }
-  console.log('✅  designation_id backfill complete');
-
+export async function seedSalaryCatalog(prisma: PrismaClient) {
   console.log('⏳  Seeding pay commissions…');
   const fifth = await prisma.payCommission.upsert({
     where: { code: 'FIFTH' },
@@ -241,29 +159,12 @@ export async function seedDesignationsAndSalaryCatalog(
   await seedColumnDefinitions(prisma, fifth.id, FIFTH_PAY_COLUMNS);
   await seedColumnDefinitions(prisma, sixth.id, SIXTH_PAY_COLUMNS);
   console.log('✅  Salary column catalog seeded');
+}
 
-  const salaryInfos = await prisma.employeeSalaryInfo.findMany();
-  for (const s of salaryInfos) {
-    const updates: { payCommissionId?: string; designationId?: string; payCommission?: string } = {};
-    if (!s.payCommissionId) {
-      const label = (s.payCommission ?? '').toLowerCase();
-      if (label.includes('6')) {
-        updates.payCommissionId = sixth.id;
-        updates.payCommission = sixth.name;
-      } else {
-        updates.payCommissionId = fifth.id;
-        updates.payCommission = fifth.name;
-      }
-    }
-    if (!s.designationId) {
-      const emp = await prisma.employeeGeneralInfo.findUnique({
-        where: { employeeId: s.employeeId },
-        select: { designationId: true },
-      });
-      if (emp?.designationId) updates.designationId = emp.designationId;
-    }
-    if (Object.keys(updates).length > 0) {
-      await prisma.employeeSalaryInfo.update({ where: { id: s.id }, data: updates });
-    }
-  }
+/** @deprecated Prefer seedSalaryCatalog — designations/positions are configured in-app. */
+export async function seedDesignationsAndSalaryCatalog(
+  prisma: PrismaClient,
+  _roleIdMap: Record<string, string>,
+) {
+  await seedSalaryCatalog(prisma);
 }

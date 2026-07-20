@@ -102,9 +102,12 @@ class WorkforceListNotifier extends AsyncNotifier<Map<String, dynamic>> {
     });
   }
 
-  Future<EmployeeProfile> createEmployee(Map<String, dynamic> data) async {
+  Future<({EmployeeProfile profile, String? initialPassword})> createEmployee(
+    Map<String, dynamic> data,
+  ) async {
     final created = await ref.read(adminRepositoryProvider).createEmployee(data);
-    final name = created.generalInfo?.fullName.trim() ?? '';
+    ref.invalidateSelf();
+    final name = created.profile.generalInfo?.fullName.trim() ?? '';
     ref.read(workforceFilterProvider.notifier).setSearch(name);
     return created;
   }

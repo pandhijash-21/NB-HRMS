@@ -195,3 +195,100 @@ export function useAdminEmployeeHistory(params: {
   });
 }
 
+export type EmployeeAttendanceSettings = {
+  employeeId: number;
+  useGlobalPolicy: boolean;
+  punchInTime: string | null;
+  punchOutTime: string | null;
+  punchInBufferMinutes: number | null;
+  punchOutBufferMinutes: number | null;
+  effective: {
+    source: string;
+    punchInTime: string;
+    punchOutTime: string;
+    punchInBufferMinutes: number;
+    punchOutBufferMinutes: number;
+  };
+  globalPolicy?: AttendancePolicy;
+};
+
+export function useEmployeeAttendanceSettings(employeeId: number) {
+  return useQuery({
+    queryKey: ["attendance", "employee-settings", employeeId],
+    queryFn: async () => {
+      const { data } = await api.get(`attendance/employee/${employeeId}/settings`);
+      return data.data as EmployeeAttendanceSettings;
+    },
+    enabled: Number.isFinite(employeeId) && employeeId > 0,
+  });
+}
+
+export function useUpdateEmployeeAttendanceSettings(employeeId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: {
+      useGlobalPolicy?: boolean;
+      punchInTime?: string | null;
+      punchOutTime?: string | null;
+      punchInBufferMinutes?: number | null;
+      punchOutBufferMinutes?: number | null;
+    }) => {
+      const { data } = await api.patch(`attendance/employee/${employeeId}/settings`, payload);
+      return data.data as EmployeeAttendanceSettings;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["attendance", "employee-settings", employeeId] });
+      queryClient.invalidateQueries({ queryKey: ["attendance", "employee-monthly-summary", employeeId] });
+    },
+  });
+}
+
+export type AttendanceMonthlyStats = {
+  presentDays: number;
+  lateDays: number;
+  halfDays: number;
+  absentDays: number;
+  totalWorkingMinutes: number;
+  totalWorkingHours: number;
+  leaveApplications: number;
+  leaveDaysInMonth: number;
+};
+
+export type AttendanceMonthlySummary = {
+  year: number;
+  month: number;
+  from: string;
+  to: string;
+  policy: AttendancePolicy;
+  stats: AttendanceMonthlyStats;
+  days: AdminEmployeeHistoryDay[];
+  leaveApplications: Array<{
+    id: string;
+    applicationNo: string;
+    status: string;
+    fromDate: string;
+    toDate: string;
+    totalDays: number;
+    isHalfDay: boolean;
+    leaveType: { code: string; name: string };
+    reason: string;
+  }>;
+};
+
+export function useEmployeeMonthlyAttendanceSummary(params: {
+  employeeId: number;
+  year: number;
+  month: number;
+}) {
+  return useQuery({
+    queryKey: ["attendance", "employee-monthly-summary", params.employeeId, params.year, params.month],
+    queryFn: async () => {
+      const { data } = await api.get(`attendance/employee/${params.employeeId}/monthly-summary`, {
+        params: { year: params.year, month: params.month },
+      });
+      return data.data as AttendanceMonthlySummary;
+    },
+    enabled: !!params.employeeId && !!params.year && !!params.month,
+  });
+}
+

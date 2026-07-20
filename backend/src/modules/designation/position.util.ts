@@ -43,3 +43,12 @@ export async function resolveRoleIdForPosition(positionDesignationId: string | n
   }
   return position.linkedRoleId;
 }
+
+/** Assign a role directly (RBAC) without institutional positions. */
+export async function resolveRoleIdDirect(roleId: string): Promise<string> {
+  const role = await prisma.role.findFirst({
+    where: { id: roleId, isActive: true },
+  });
+  if (!role) throw new Error('Invalid role selected');
+  return role.id;
+}

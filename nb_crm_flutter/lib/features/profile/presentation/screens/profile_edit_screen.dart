@@ -91,6 +91,8 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> with Sing
     _syncTabController(tabs.length);
     final tabController = _tabController!;
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
@@ -98,9 +100,9 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> with Sing
         bottom: TabBar(
           controller: tabController,
           isScrollable: true,
-          indicatorColor: Theme.of(context).colorScheme.primary,
-          labelColor: Theme.of(context).colorScheme.primary,
-          unselectedLabelColor: Colors.white70,
+          indicatorColor: isDark ? Theme.of(context).colorScheme.primary : Colors.black,
+          labelColor: isDark ? Theme.of(context).colorScheme.primary : Colors.black,
+          unselectedLabelColor: isDark ? Colors.white70 : const Color(0xFF607D8B),
           tabs: tabs.map((tab) => Tab(text: tab)).toList(),
         ),
       ),
@@ -432,17 +434,18 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
   }
 
   Widget _buildInfoBanner(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.amber.shade50,
+        color: isDark ? const Color(0xFF2E2415) : Colors.amber.shade50,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.amber.shade200),
+        border: Border.all(color: isDark ? const Color(0xFF785B12) : Colors.amber.shade200),
       ),
-      child: const Text(
+      child: Text(
         'Institute transfer & promotion history\n'
         'Designation/Sub-Organization changes are tracked via Institute Transfer and Designation Upgrade (effective-dated). They are read-only here to preserve history.',
-        style: TextStyle(fontSize: 12, color: Color(0xFF92400E)),
+        style: TextStyle(fontSize: 12, color: isDark ? const Color(0xFFFDE68A) : const Color(0xFF92400E)),
       ),
     );
   }
@@ -461,16 +464,23 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
   }
 
   Widget _buildReadOnlyField(String label, String value) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: InputDecorator(
         decoration: InputDecoration(
           labelText: label,
           filled: true,
-          fillColor: Colors.grey.shade100,
+          fillColor: isDark ? Theme.of(context).colorScheme.surfaceContainerHighest : Colors.grey.shade100,
           border: const OutlineInputBorder(),
         ),
-        child: Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
+        child: Text(
+          value,
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            color: isDark ? Colors.white70 : Colors.black87,
+          ),
+        ),
       ),
     );
   }
@@ -2126,7 +2136,9 @@ class _EditSalaryTabState extends ConsumerState<EditSalaryTab> {
                   prefixText: '₹ ',
                   border: const OutlineInputBorder(),
                   filled: hasOverride,
-                  fillColor: hasOverride ? Colors.amber.shade50 : null,
+                  fillColor: hasOverride
+                      ? (Theme.of(context).brightness == Brightness.dark ? const Color(0xFF2E2415) : Colors.amber.shade50)
+                      : null,
                 ),
                 onChanged: (v) {
                   final n = num.tryParse(v);
@@ -2529,7 +2541,9 @@ class _FamilyMemberDialogState extends ConsumerState<FamilyMemberDialog> {
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
                     decoration: BoxDecoration(
-                      color: aadhaarReady ? Colors.white : AppColors.mist.withValues(alpha: 0.35),
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? (aadhaarReady ? Theme.of(context).cardColor : const Color(0xFF242424))
+                          : (aadhaarReady ? Colors.white : AppColors.mist.withValues(alpha: 0.35)),
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
                         color: aadhaarReady
@@ -2920,7 +2934,9 @@ class _AcademicQualDialogState extends ConsumerState<AcademicQualDialog> {
           width: double.infinity,
           padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 12),
           decoration: BoxDecoration(
-            color: filled ? Colors.white : AppColors.mist.withValues(alpha: 0.35),
+            color: Theme.of(context).brightness == Brightness.dark
+                ? (filled ? Theme.of(context).cardColor : const Color(0xFF242424))
+                : (filled ? Colors.white : AppColors.mist.withValues(alpha: 0.35)),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: filled
@@ -3294,7 +3310,9 @@ class _DocumentUploadTile extends ConsumerWidget {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: isUploaded ? Colors.white : AppColors.mist.withValues(alpha: 0.35),
+          color: Theme.of(context).brightness == Brightness.dark
+              ? (isUploaded ? Theme.of(context).cardColor : const Color(0xFF242424))
+              : (isUploaded ? Colors.white : AppColors.mist.withValues(alpha: 0.35)),
           border: Border.all(
             color: isUploaded
                 ? AppColors.border
@@ -3619,7 +3637,9 @@ class _MediaUploadBox extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: isUploading ? null : onTap,
       child: Material(
-        color: AppColors.mist.withValues(alpha: 0.5),
+        color: Theme.of(context).brightness == Brightness.dark
+            ? Theme.of(context).colorScheme.surfaceContainerHighest
+            : AppColors.mist.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(10),
         child: Container(
           height: 100,
@@ -3692,24 +3712,31 @@ Widget _buildTextField(
   bool readOnly = false,
   String? hint,
 }) {
-  return Padding(
-    padding: const EdgeInsets.only(bottom: 16.0),
-    child: TextFormField(
-      controller: controller,
-      readOnly: readOnly,
-      keyboardType: isNumber ? TextInputType.number : TextInputType.text,
-      decoration: InputDecoration(
-        labelText: required ? '$label *' : label,
-        hintText: hint,
-        filled: readOnly,
-        fillColor: readOnly ? Colors.grey.shade100 : null,
-      ),
-      validator: required
-          ? (v) {
-              if (v == null || v.trim().isEmpty) return '$label is required';
-              return null;
-            }
-          : null,
-    ),
+  return Builder(
+    builder: (context) {
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 16.0),
+        child: TextFormField(
+          controller: controller,
+          readOnly: readOnly,
+          keyboardType: isNumber ? TextInputType.number : TextInputType.text,
+          decoration: InputDecoration(
+            labelText: required ? '$label *' : label,
+            hintText: hint,
+            filled: readOnly,
+            fillColor: readOnly
+                ? (isDark ? Theme.of(context).colorScheme.surfaceContainerHighest : Colors.grey.shade100)
+                : null,
+          ),
+          validator: required
+              ? (v) {
+                  if (v == null || v.trim().isEmpty) return '$label is required';
+                  return null;
+                }
+              : null,
+        ),
+      );
+    },
   );
 }

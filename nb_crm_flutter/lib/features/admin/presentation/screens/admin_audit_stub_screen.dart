@@ -35,7 +35,7 @@ class AdminAuditStubScreen extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
-                      color: AppColors.midnight,
+                      color: Theme.of(context).colorScheme.onSurface,
                     ),
                   ),
                   SizedBox(height: 8),
@@ -44,7 +44,9 @@ class AdminAuditStubScreen extends StatelessWidget {
                     'There is no REST audit page on the web app either. '
                     'This stub keeps the destination discoverable until a REST endpoint ships.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: AppColors.textSecondary),
+                    style: TextStyle(
+                      color: Theme.of(context).textTheme.bodySmall?.color,
+                    ),
                   ),
                 ],
               ),

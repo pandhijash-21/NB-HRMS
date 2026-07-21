@@ -329,6 +329,7 @@ class _MonthPicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -354,8 +355,18 @@ class _MonthPicker extends StatelessWidget {
             final selected = m == month;
             final isFuture = year > now.year || (year == now.year && m > now.month);
             return ChoiceChip(
-              label: Text(_monthLabels[i]),
+              label: Text(
+                _monthLabels[i],
+                style: TextStyle(
+                  color: selected
+                      ? Colors.white
+                      : (isDark ? Colors.white70 : Colors.black87),
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                ),
+              ),
               selected: selected,
+              selectedColor: isDark ? const Color(0xFFC5A059) : Colors.black,
+              checkmarkColor: Colors.white,
               onSelected: isFuture ? null : (_) => onMonthChanged(m),
             );
           }),

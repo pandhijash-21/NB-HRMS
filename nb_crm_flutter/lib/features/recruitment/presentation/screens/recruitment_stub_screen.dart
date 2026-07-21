@@ -15,7 +15,6 @@ class RecruitmentStubScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Recruitment / Vacancy'),
-        backgroundColor: AppColors.bronze,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.go('/home'),

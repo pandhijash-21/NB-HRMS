@@ -1,4 +1,4 @@
-import type { ConnectionPool } from 'mssql';
+export type ConnectionPool = any;
 
 /**
  * Placeholder connector for eSSL eTimeTrackLite MSSQL.

@@ -1091,6 +1091,7 @@ class _AddEmployeeDialogState extends ConsumerState<_AddEmployeeDialog> {
   }
 
   Widget _buildReadOnlyDialogField(String label, String value, {String? helper}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Column(
@@ -1101,9 +1102,15 @@ class _AddEmployeeDialogState extends ConsumerState<_AddEmployeeDialog> {
               labelText: label,
               border: const OutlineInputBorder(),
               filled: true,
-              fillColor: Colors.grey.shade100,
+              fillColor: isDark ? Theme.of(context).colorScheme.surfaceContainerHighest : Colors.grey.shade100,
             ),
-            child: Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
+            child: Text(
+              value,
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: isDark ? Colors.white70 : Colors.black87,
+              ),
+            ),
           ),
           if (helper != null)
             Padding(

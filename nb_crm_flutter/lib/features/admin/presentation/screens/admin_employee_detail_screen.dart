@@ -514,9 +514,9 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
       child: TabBar(
         controller: _tabController,
         isScrollable: true,
-        indicatorColor: const Color(0xFFC5A059),
+        indicatorColor: isDark ? const Color(0xFFC5A059) : Colors.black,
         indicatorSize: TabBarIndicatorSize.tab,
-        labelColor: const Color(0xFFC5A059),
+        labelColor: isDark ? const Color(0xFFC5A059) : Colors.black,
         unselectedLabelColor: isDark ? Colors.white30 : const Color(0xFF607D8B),
         labelStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
         unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),

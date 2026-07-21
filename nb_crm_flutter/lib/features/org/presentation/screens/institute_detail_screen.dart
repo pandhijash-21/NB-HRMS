@@ -86,7 +86,7 @@ class InstituteDetailScreen extends ConsumerWidget {
           data.institute.name,
           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.w700,
-                color: AppColors.midnight,
+                color: Theme.of(context).colorScheme.onSurface,
               ),
         ),
         Text(
@@ -104,6 +104,7 @@ class InstituteDetailScreen extends ConsumerWidget {
         ),
         SizedBox(height: 16),
         _sectionCard(
+          context,
           title: 'Employees',
           child: data.employees.isEmpty
               ? Text(
@@ -131,10 +132,10 @@ class InstituteDetailScreen extends ConsumerWidget {
           children: [
             Text(
               value,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.w700,
-                color: AppColors.midnight,
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
             SizedBox(height: 4),
@@ -153,7 +154,8 @@ class InstituteDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _sectionCard({
+  Widget _sectionCard(
+    BuildContext context, {
     required String title,
     String? subtitle,
     required Widget child,
@@ -171,7 +173,7 @@ class InstituteDetailScreen extends ConsumerWidget {
           children: [
             Text(
               title,
-              style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.midnight),
+              style: TextStyle(fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface),
             ),
             if (subtitle != null) ...[
               SizedBox(height: 4),
@@ -202,9 +204,9 @@ class InstituteDetailScreen extends ConsumerWidget {
                 children: [
                   Text(
                     name,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.w600,
-                      color: AppColors.midnight,
+                      color: Theme.of(context).colorScheme.onSurface,
                     ),
                   ),
                   if (emp.generalInfo?.employeeCode != null)

@@ -116,7 +116,7 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                                       .headlineSmall
                                       ?.copyWith(
                                         fontWeight: FontWeight.w700,
-                                        color: AppColors.midnight,
+                                        color: Theme.of(context).colorScheme.onSurface,
                                       ),
                                 ),
                                 SizedBox(height: 6),

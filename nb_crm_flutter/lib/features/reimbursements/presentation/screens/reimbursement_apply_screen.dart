@@ -103,7 +103,6 @@ class _ReimbursementApplyScreenState extends ConsumerState<ReimbursementApplyScr
     return Scaffold(
       appBar: AppBar(
         title: const Text('Apply Reimbursement'),
-        backgroundColor: AppColors.bronze,
       ),
       body: Form(
         key: _formKey,

@@ -224,7 +224,15 @@ class _AdminLettersConfigScreenState
   double _paperHeightPx() => _paperWidthPx() * 1.414; // ~sqrt(2) ratio
 
   String _stripHtmlTags(String html) {
-    return html.replaceAll(RegExp(r'<[^>]*>'), ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+    return html
+        .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
+        .replaceAll(RegExp(r'</p>|</div>|</tr>|</h1>|</h2>|</h3>', caseSensitive: false), '\n')
+        .replaceAll(RegExp(r'<[^>]*>'), '')
+        .split('\n')
+        .map((line) => line.trim())
+        .join('\n')
+        .replaceAll(RegExp(r'\n{3,}'), '\n\n')
+        .trim();
   }
 
   String _escapeHtmlForTemplate(String input) {
@@ -629,13 +637,13 @@ class _AdminLettersConfigScreenState
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final templatesAsync = ref.watch(letterTemplatesProvider);
     final repo = ref.read(lettersRepositoryProvider);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Letters Configuration'),
-        backgroundColor: AppColors.bronze,
       ),
       body: templatesAsync.when(
         loading: () =>
@@ -938,9 +946,11 @@ class _AdminLettersConfigScreenState
                               width: _paperWidthPx(),
                               height: _paperHeightPx(),
                               decoration: BoxDecoration(
-                                color: Colors.white,
+                                color: isDark ? Colors.black : Colors.white,
                                 borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: AppColors.border.withOpacity(0.8)),
+                                border: Border.all(
+                                  color: isDark ? AppColors.bronze.withOpacity(0.3) : AppColors.border.withOpacity(0.8),
+                                ),
                               ),
                               child: Stack(
                                 children: [
@@ -1030,6 +1040,7 @@ class _AdminLettersConfigScreenState
   }
 
   Widget _buildElementPreview(_CanvasElement el) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     if (el.type == _CanvasElementType.image) {
       return SizedBox(
         width: el.size.width,
@@ -1037,7 +1048,7 @@ class _AdminLettersConfigScreenState
         child: el.imageUrl != null && el.imageUrl!.isNotEmpty
             ? _buildImageWidget(el.imageUrl!, width: el.size.width, height: el.size.height)
             : Container(
-                color: Colors.grey.shade100,
+                color: isDark ? const Color(0xFF1E1E1E) : Colors.grey.shade100,
                 child: const Center(child: Icon(Icons.image_outlined, size: 32)),
               ),
       );
@@ -1051,6 +1062,7 @@ class _AdminLettersConfigScreenState
           child: Text(
             el.text,
             style: TextStyle(
+              color: isDark ? Colors.white : const Color(0xFF1E293B),
               fontFamily: el.fontFamily,
               fontSize: el.fontSize,
               fontWeight: el.bold ? FontWeight.w800 : FontWeight.w400,

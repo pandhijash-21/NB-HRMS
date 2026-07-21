@@ -53,7 +53,7 @@ class _EmployeeLeaveTabState extends ConsumerState<EmployeeLeaveTab> {
                     'Leave Summary',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w700,
-                          color: AppColors.midnight,
+                          color: Theme.of(context).colorScheme.onSurface,
                         ),
                   ),
                   Text(
@@ -140,7 +140,7 @@ class _EmployeeLeaveTabState extends ConsumerState<EmployeeLeaveTab> {
                           style: TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.w800,
-                            color: AppColors.midnight,
+                            color: Theme.of(context).colorScheme.onSurface,
                           ),
                         ),
                         Text(
@@ -176,7 +176,7 @@ class _EmployeeLeaveTabState extends ConsumerState<EmployeeLeaveTab> {
           'Applications',
           style: Theme.of(context).textTheme.titleSmall?.copyWith(
                 fontWeight: FontWeight.w700,
-                color: AppColors.midnight,
+                color: Theme.of(context).colorScheme.onSurface,
               ),
         ),
         SizedBox(height: 8),

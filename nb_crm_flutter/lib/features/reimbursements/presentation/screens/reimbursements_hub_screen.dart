@@ -23,7 +23,6 @@ class ReimbursementsHubScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Reimbursements'),
-        backgroundColor: AppColors.bronze,
         actions: [
           IconButton(
             tooltip: 'Refresh',
@@ -166,7 +165,6 @@ class ReimbursementsAdminScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('All Reimbursements'),
-        backgroundColor: AppColors.bronze,
         actions: [
           IconButton(
             onPressed: () => ref.invalidate(adminReimbursementsProvider),

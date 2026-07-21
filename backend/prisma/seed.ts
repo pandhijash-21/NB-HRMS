@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { seedSalaryCatalog } from './seeds/designationSalary.seed';
 import { seedSystemLookups } from './seeds/lookups.seed';
+import { seedInstitutes } from './seeds/institutes.seed';
 
 const prisma = new PrismaClient();
 
@@ -117,6 +118,7 @@ async function main() {
   }
 
   await seedSystemLookups(prisma);
+  await seedInstitutes(prisma);
   // Pay commissions / salary column catalog only (no institutes, no designations)
   await seedSalaryCatalog(prisma);
 

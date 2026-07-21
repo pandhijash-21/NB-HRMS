@@ -211,7 +211,7 @@ export const authService = {
       (user.employee as any)?.generalInfo?.instituteEmail ??
       (user.employee as any)?.addresses?.[0]?.personalEmail ??
       '';
-    if (toEmail) {
+    if (toEmail && user.employeeId) {
       sendPasswordResetEmail(toEmail, user.employeeId, defaultPassword).catch(console.error);
     }
 

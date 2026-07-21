@@ -37,8 +37,8 @@ class AppColors {
   static const Color textSecondary = textSecondaryLight;
   static const Color border = borderLight;
   
-  static const Color bronze = primaryBlue;
-  static const Color bronzeDark = primaryBlueDark;
+  static const Color bronze = Color(0xFFC5A059);
+  static const Color bronzeDark = Color(0xFFA37F3E);
   static const Color sand = backgroundLight;
   static const Color mist = borderLight;
   static const Color midnight = backgroundDark;

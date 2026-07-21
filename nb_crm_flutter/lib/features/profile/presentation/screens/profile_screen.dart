@@ -393,9 +393,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> with SingleTicker
       child: TabBar(
         controller: _tabController,
         isScrollable: true,
-        indicatorColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+        indicatorColor: isDark ? const Color(0xFFC5A059) : Colors.black,
         indicatorWeight: 3,
-        labelColor: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
+        labelColor: isDark ? const Color(0xFFE2D6BE) : Colors.black,
         labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, letterSpacing: 0.3),
         unselectedLabelColor: isDark ? Colors.white38 : const Color(0xFF607D8B),
         unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),

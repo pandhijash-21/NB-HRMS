@@ -34,11 +34,14 @@ abstract final class AppTheme {
     required Color secondaryTextColor,
     required Color borderColor,
   }) {
+    final isDark = brightness == Brightness.dark;
+    final primaryColor = isDark ? AppColors.bronze : AppColors.primaryBlue;
+
     final colorScheme = ColorScheme(
       brightness: brightness,
-      primary: AppColors.primaryBlue,
-      onPrimary: Colors.white,
-      secondary: AppColors.primaryBlueDark,
+      primary: primaryColor,
+      onPrimary: isDark ? const Color(0xFF161616) : Colors.white,
+      secondary: isDark ? AppColors.bronzeDark : AppColors.primaryBlueDark,
       onSecondary: Colors.white,
       error: AppColors.error,
       onError: Colors.white,
@@ -117,7 +120,7 @@ abstract final class AppTheme {
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: colorScheme.primary,
-          foregroundColor: Colors.white,
+          foregroundColor: colorScheme.onPrimary,
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -127,7 +130,7 @@ abstract final class AppTheme {
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           backgroundColor: colorScheme.primary,
-          foregroundColor: Colors.white,
+          foregroundColor: colorScheme.onPrimary,
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -157,13 +160,20 @@ abstract final class AppTheme {
         thickness: 1,
       ),
       tabBarTheme: TabBarThemeData(
-        labelColor: colorScheme.primary,
+        labelColor: isDark ? colorScheme.primary : Colors.black,
         unselectedLabelColor: secondaryTextColor,
-        indicatorColor: colorScheme.primary,
+        indicatorColor: isDark ? colorScheme.primary : Colors.black,
         indicatorSize: TabBarIndicatorSize.tab,
         labelStyle: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 14),
         unselectedLabelStyle: GoogleFonts.inter(fontWeight: FontWeight.w500, fontSize: 14),
         dividerColor: borderColor,
+      ),
+      chipTheme: ChipThemeData(
+        selectedColor: isDark ? colorScheme.primary : Colors.black,
+        secondarySelectedColor: isDark ? colorScheme.primary : Colors.black,
+        labelStyle: GoogleFonts.inter(fontWeight: FontWeight.w500, fontSize: 13),
+        secondaryLabelStyle: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 13, color: Colors.white),
+        checkmarkColor: Colors.white,
       ),
       floatingActionButtonTheme: FloatingActionButtonThemeData(
         backgroundColor: colorScheme.primary,

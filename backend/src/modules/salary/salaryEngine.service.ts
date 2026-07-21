@@ -193,7 +193,7 @@ export function columnRuleInputToEvalRule(
       sortOrder: c.sort_order,
       isElseFallback: c.is_else_fallback,
     })),
-  };
+  } as any;
 }
 
 export function mergeEmployeeRules(

@@ -12,6 +12,7 @@ const prisma = new PrismaClient();
 const MODULES = [
   { key: 'PERSONAL_INFO', name: 'Personal Information' },
   { key: 'EDUCATION',     name: 'Education & Qualifications' },
+  { key: 'EXPERIENCE',    name: 'Work Experience' },
   { key: 'LEAVE',         name: 'Leave Management' },
   { key: 'PAYROLL',       name: 'Payroll' },
   { key: 'SALARY',        name: 'Salary Management' },
@@ -48,6 +49,7 @@ const PERMISSION_MATRIX: PermissionMatrix = {
   EMPLOYEE: {
     PERSONAL_INFO: RW,
     EDUCATION:     RW,
+    EXPERIENCE:    RW,
     LEAVE:         { canRead: true, canWrite: true, canApprove: false, canDelete: false, canExport: false },
     REIMBURSEMENTS:{ canRead: true, canWrite: true, canApprove: false, canDelete: false, canExport: false },
     ATTENDANCE:    RO,

@@ -151,9 +151,17 @@ class DioClient {
       throw ApiException('Empty response from server', statusCode: statusCode);
     }
     final envelope = ApiEnvelope.fromJson(body, parse);
-    if (!envelope.success || envelope.data == null) {
+    if (!envelope.success) {
       throw ApiException(
         envelope.error ?? 'Request failed',
+        statusCode: statusCode,
+      );
+    }
+    // Successful APIs may legitimately return `data: null` for nullable T
+    // (for example, no pending profile change request).
+    if (envelope.data == null && null is! T) {
+      throw ApiException(
+        envelope.error ?? 'Request returned no data',
         statusCode: statusCode,
       );
     }

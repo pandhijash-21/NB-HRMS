@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import '../../../core/network/dio_client.dart';
 import '../domain/profile_models.dart';
+import '../domain/experience_models.dart';
 
 class ProfileRepository {
   final DioClient _dio;
@@ -33,7 +34,9 @@ class ProfileRepository {
         },
       );
       if (salaryData != null && salaryData['profile'] != null) {
-        final profileMap = Map<String, dynamic>.from(salaryData['profile'] as Map);
+        final profileMap = Map<String, dynamic>.from(
+          salaryData['profile'] as Map,
+        );
         final salaryInfo = SalaryInfo.fromJson(profileMap);
         return EmployeeProfile(
           id: emp.id,
@@ -66,10 +69,7 @@ class ProfileRepository {
   }) async {
     await _dio.postEnvelope<dynamic>(
       'approvals',
-      data: {
-        'module': module,
-        'newData': newData,
-      },
+      data: {'module': module, 'newData': newData},
       parse: (raw) => raw,
     );
   }
@@ -87,6 +87,55 @@ class ProfileRepository {
     );
   }
 
+  Future<List<EmployeeExperience>> listExperiences(int employeeId) {
+    return _dio.getEnvelope<List<EmployeeExperience>>(
+      'employees/$employeeId/experience',
+      parse: (raw) {
+        if (raw is! List)
+          throw const FormatException('Invalid experience list');
+        return raw
+            .map(
+              (e) => EmployeeExperience.fromJson(
+                Map<String, dynamic>.from(e as Map),
+              ),
+            )
+            .toList();
+      },
+    );
+  }
+
+  Future<EmployeeExperience> addExperience(
+    int employeeId,
+    Map<String, dynamic> data,
+  ) {
+    return _dio.postEnvelope<EmployeeExperience>(
+      'employees/$employeeId/experience',
+      data: data,
+      parse: (raw) =>
+          EmployeeExperience.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
+  Future<EmployeeExperience> updateExperience(
+    int employeeId,
+    String experienceId,
+    Map<String, dynamic> data,
+  ) {
+    return _dio.patchEnvelope<EmployeeExperience>(
+      'employees/$employeeId/experience/$experienceId',
+      data: data,
+      parse: (raw) =>
+          EmployeeExperience.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
+  Future<void> deleteExperience(int employeeId, String experienceId) {
+    return _dio.deleteEnvelope<void>(
+      'employees/$employeeId/experience/$experienceId',
+      parse: (_) {},
+    );
+  }
+
   /// Direct write (admin/privileged update) update employee bank info via `PATCH employees/{id}/bank`.
   Future<void> updateBankInfo(int employeeId, Map<String, dynamic> data) async {
     try {
@@ -101,7 +150,10 @@ class ProfileRepository {
   }
 
   /// Direct write (admin/privileged update) update employee other info via `PATCH employees/{id}/other`.
-  Future<void> updateOtherInfo(int employeeId, Map<String, dynamic> data) async {
+  Future<void> updateOtherInfo(
+    int employeeId,
+    Map<String, dynamic> data,
+  ) async {
     try {
       final response = await _dio.dio.patch<Map<String, dynamic>>(
         'employees/$employeeId/other',
@@ -114,7 +166,10 @@ class ProfileRepository {
   }
 
   /// Save employee general info directly via `PATCH employees/{id}/general`.
-  Future<void> updateGeneralInfo(int employeeId, Map<String, dynamic> data) async {
+  Future<void> updateGeneralInfo(
+    int employeeId,
+    Map<String, dynamic> data,
+  ) async {
     try {
       final response = await _dio.dio.patch<Map<String, dynamic>>(
         'employees/$employeeId/general',
@@ -127,7 +182,10 @@ class ProfileRepository {
   }
 
   /// Update core employee row (abbreviation, photo, signature) via `PATCH employees/{id}`.
-  Future<void> updateEmployeeCore(int employeeId, Map<String, dynamic> data) async {
+  Future<void> updateEmployeeCore(
+    int employeeId,
+    Map<String, dynamic> data,
+  ) async {
     try {
       final response = await _dio.dio.patch<Map<String, dynamic>>(
         'employees/$employeeId',
@@ -140,7 +198,10 @@ class ProfileRepository {
   }
 
   /// Direct update employee personal info directly via `PATCH employees/{id}/personal`.
-  Future<void> updatePersonalInfoDirect(int employeeId, Map<String, dynamic> data) async {
+  Future<void> updatePersonalInfoDirect(
+    int employeeId,
+    Map<String, dynamic> data,
+  ) async {
     try {
       final response = await _dio.dio.patch<Map<String, dynamic>>(
         'employees/$employeeId/personal',
@@ -153,7 +214,11 @@ class ProfileRepository {
   }
 
   /// Direct update employee address info directly via `PATCH employees/{id}/address/{type}`.
-  Future<void> updateAddressInfoDirect(int employeeId, String type, Map<String, dynamic> data) async {
+  Future<void> updateAddressInfoDirect(
+    int employeeId,
+    String type,
+    Map<String, dynamic> data,
+  ) async {
     try {
       final response = await _dio.dio.patch<Map<String, dynamic>>(
         'employees/$employeeId/address/$type',
@@ -167,7 +232,10 @@ class ProfileRepository {
 
   /// Add family member info via `POST employees/{id}/family`.
   /// Returns the created member id when present.
-  Future<String?> addFamilyMember(int employeeId, Map<String, dynamic> data) async {
+  Future<String?> addFamilyMember(
+    int employeeId,
+    Map<String, dynamic> data,
+  ) async {
     final created = await _dio.postEnvelope<Map<String, dynamic>?>(
       'employees/$employeeId/family',
       data: data,
@@ -181,7 +249,11 @@ class ProfileRepository {
   }
 
   /// Update family member info via `PATCH employees/{id}/family/{memberId}`.
-  Future<void> updateFamilyMember(int employeeId, String memberId, Map<String, dynamic> data) async {
+  Future<void> updateFamilyMember(
+    int employeeId,
+    String memberId,
+    Map<String, dynamic> data,
+  ) async {
     try {
       final response = await _dio.dio.patch<Map<String, dynamic>>(
         'employees/$employeeId/family/$memberId',
@@ -206,7 +278,10 @@ class ProfileRepository {
   }
 
   /// Add academic qualification via `POST employees/{id}/academic`.
-  Future<void> addAcademicQualification(int employeeId, Map<String, dynamic> data) async {
+  Future<void> addAcademicQualification(
+    int employeeId,
+    Map<String, dynamic> data,
+  ) async {
     await _dio.postEnvelope<dynamic>(
       'employees/$employeeId/academic',
       data: data,
@@ -215,7 +290,11 @@ class ProfileRepository {
   }
 
   /// Update academic qualification via `PATCH employees/{id}/academic/{qualId}`.
-  Future<void> updateAcademicQualification(int employeeId, String qualId, Map<String, dynamic> data) async {
+  Future<void> updateAcademicQualification(
+    int employeeId,
+    String qualId,
+    Map<String, dynamic> data,
+  ) async {
     try {
       final response = await _dio.dio.patch<Map<String, dynamic>>(
         'employees/$employeeId/academic/$qualId',
@@ -228,7 +307,10 @@ class ProfileRepository {
   }
 
   /// Delete academic qualification via `DELETE employees/{id}/academic/{qualId}`.
-  Future<void> deleteAcademicQualification(int employeeId, String qualId) async {
+  Future<void> deleteAcademicQualification(
+    int employeeId,
+    String qualId,
+  ) async {
     try {
       final response = await _dio.dio.delete<Map<String, dynamic>>(
         'employees/$employeeId/academic/$qualId',

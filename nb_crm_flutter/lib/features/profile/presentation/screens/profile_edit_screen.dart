@@ -13,7 +13,9 @@ import '../../../salary/domain/salary_models.dart';
 import '../../../salary/presentation/salary_providers.dart';
 import '../../../salary/presentation/widgets/salary_rule_editor_sheet.dart';
 import '../../../auth/domain/permissions.dart';
-import '../widgets/edit_attendance_settings_tab.dart';
+import '../widgets/edit_experience_tab.dart';
+import '../widgets/employee_attendance_tab.dart';
+import '../widgets/profile_tabs.dart';
 import '../../../lookups/presentation/lookup_dropdown.dart';
 import '../../../lookups/domain/lookup_models.dart';
 import '../../domain/profile_models.dart';
@@ -28,15 +30,24 @@ class ProfileEditScreen extends ConsumerStatefulWidget {
   ConsumerState<ProfileEditScreen> createState() => _ProfileEditScreenState();
 }
 
-class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> with SingleTickerProviderStateMixin {
+class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen>
+    with SingleTickerProviderStateMixin {
   TabController? _tabController;
   int _tabCount = 0;
 
-  List<String> _tabsFor(bool showAttendance) {
-    final base = ['General', 'Personal', 'Address', 'Other', 'Family', 'Academic', 'Bank', 'Salary'];
-    if (showAttendance) return [...base, 'Attendance'];
-    return base;
-  }
+  List<String> get _tabs => const [
+    'General',
+    'Personal',
+    'Address',
+    'Other',
+    'Family',
+    'Academic',
+    'Experience',
+    'Documents',
+    'Bank',
+    'Salary',
+    'Attendance',
+  ];
 
   void _syncTabController(int count) {
     if (_tabController != null && _tabCount == count) return;
@@ -69,25 +80,33 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> with Sing
     final empId = widget.employeeId ?? authState.user?.employeeId;
 
     if (empId == null) {
-      return const Scaffold(body: Center(child: Text('Required employee ID is missing.')));
+      return const Scaffold(
+        body: Center(child: Text('Required employee ID is missing.')),
+      );
     }
 
     final profileAsyncVal = ref.watch(profileProvider);
 
     // Privilege detection
     final roleName = authState.user?.role ?? '';
-    final isPrivileged = ['ADMIN', 'HR', 'HR_MANAGER', 'HOI', 'REGISTRAR', 'VC']
-        .contains(roleName.toUpperCase());
+    final isPrivileged = [
+      'ADMIN',
+      'HR',
+      'HR_MANAGER',
+      'HOI',
+      'REGISTRAR',
+      'VC',
+    ].contains(roleName.toUpperCase());
     final sessionEmployeeId = authState.user?.employeeId;
     final targetEmployeeId = widget.employeeId ?? empId;
-    final isAdminEditingEmployee = widget.employeeId != null &&
+    final isAdminEditingEmployee =
+        widget.employeeId != null &&
         Permissions.canManageEmployeeAttendance(
           authState.permissions,
           authState.user?.role,
         ) &&
         (sessionEmployeeId == null || widget.employeeId != sessionEmployeeId);
-    final showAttendanceTab = isAdminEditingEmployee;
-    final tabs = _tabsFor(showAttendanceTab);
+    final tabs = _tabs;
     _syncTabController(tabs.length);
     final tabController = _tabController!;
 
@@ -100,9 +119,15 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> with Sing
         bottom: TabBar(
           controller: tabController,
           isScrollable: true,
-          indicatorColor: isDark ? Theme.of(context).colorScheme.primary : Colors.black,
-          labelColor: isDark ? Theme.of(context).colorScheme.primary : Colors.black,
-          unselectedLabelColor: isDark ? Colors.white70 : const Color(0xFF607D8B),
+          indicatorColor: isDark
+              ? Theme.of(context).colorScheme.primary
+              : Colors.black,
+          labelColor: isDark
+              ? Theme.of(context).colorScheme.primary
+              : Colors.black,
+          unselectedLabelColor: isDark
+              ? Colors.white70
+              : const Color(0xFF607D8B),
           tabs: tabs.map((tab) => Tab(text: tab)).toList(),
         ),
       ),
@@ -120,20 +145,37 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> with Sing
             EditOtherTab(profile: profile, isPrivileged: isPrivileged),
             EditFamilyTab(profile: profile),
             EditAcademicTab(profile: profile),
+            EditExperienceTab(employeeId: targetEmployeeId),
+            DocumentsViewTab(
+              profile: profile,
+              canManageLetters: Permissions.canManageLetters(
+                authState.permissions,
+                authState.user?.role,
+              ),
+            ),
             EditBankTab(profile: profile, isPrivileged: isPrivileged),
             EditSalaryTab(profile: profile, isPrivileged: isPrivileged),
-            if (showAttendanceTab)
-              EditAttendanceSettingsTab(employeeId: targetEmployeeId),
+            EmployeeAttendanceTab(
+              employeeId: targetEmployeeId,
+              canManageSettings: isAdminEditingEmployee,
+            ),
           ],
         ),
-        loading: () => Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary)),
+        loading: () => Center(
+          child: CircularProgressIndicator(
+            color: Theme.of(context).colorScheme.primary,
+          ),
+        ),
         error: (err, stack) => Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(Icons.error_outline, size: 48, color: AppColors.error),
               SizedBox(height: 12),
-              Text('Failed to load profile for editing\n$err', textAlign: TextAlign.center),
+              Text(
+                'Failed to load profile for editing\n$err',
+                textAlign: TextAlign.center,
+              ),
               SizedBox(height: 12),
               FilledButton(
                 onPressed: () => ref.read(profileProvider.notifier).refresh(),
@@ -155,14 +197,23 @@ class EditGeneralTab extends ConsumerStatefulWidget {
   final EmployeeProfile profile;
   final bool isPrivileged;
 
-  const EditGeneralTab({super.key, required this.profile, required this.isPrivileged});
+  const EditGeneralTab({
+    super.key,
+    required this.profile,
+    required this.isPrivileged,
+  });
 
   @override
   ConsumerState<EditGeneralTab> createState() => _EditGeneralTabState();
 }
 
 class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
-  static const _categories = ['TEACHING', 'NON_TEACHING', 'CONTRACT', 'VISITING'];
+  static const _categories = [
+    'TEACHING',
+    'NON_TEACHING',
+    'CONTRACT',
+    'VISITING',
+  ];
   static const _appointmentTypes = [
     'FULL_TIME_REGULAR',
     'FULL_TIME_CONTRACT',
@@ -195,14 +246,20 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
     final info = widget.profile.generalInfo;
     _fullNameCtrl = TextEditingController(text: info?.fullName ?? '');
     _abbreviationCtrl = TextEditingController(
-      text: widget.profile.abbreviation ?? generateAbbreviation(info?.fullName ?? ''),
+      text:
+          widget.profile.abbreviation ??
+          generateAbbreviation(info?.fullName ?? ''),
     );
     _fullNameCtrl.addListener(_syncAbbreviationFromName);
     _empCodeCtrl = TextEditingController(text: info?.employeeCode ?? '');
     final org = info?.organization?.trim();
-    _organization = (org != null && org.isNotEmpty) ? org : 'Gandhinagar University';
+    _organization = (org != null && org.isNotEmpty)
+        ? org
+        : 'Gandhinagar University';
     _departmentCtrl = TextEditingController(text: info?.department ?? '');
-    _functionalDeptCtrl = TextEditingController(text: info?.functionalDepartment ?? '');
+    _functionalDeptCtrl = TextEditingController(
+      text: info?.functionalDepartment ?? '',
+    );
     _designationCtrl = TextEditingController(text: info?.designation ?? '');
     _shift = info?.shift;
     _incrementMonth = parseIncrementMonth(info?.incrementMonth);
@@ -302,7 +359,11 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
       return ListView(
         padding: const EdgeInsets.all(24),
         children: [
-          const Icon(Icons.lock_outline, size: 48, color: AppColors.textSecondary),
+          const Icon(
+            Icons.lock_outline,
+            size: 48,
+            color: AppColors.textSecondary,
+          ),
           const SizedBox(height: 12),
           const Text(
             'Employment details are read-only.',
@@ -339,9 +400,17 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
           _buildInfoBanner(context),
           const SizedBox(height: 16),
           _buildTextField('Full Name', _fullNameCtrl, required: true),
-          _buildReadOnlyField('Abbreviation', _abbreviationCtrl.text.isEmpty ? '—' : _abbreviationCtrl.text),
+          _buildReadOnlyField(
+            'Abbreviation',
+            _abbreviationCtrl.text.isEmpty ? '—' : _abbreviationCtrl.text,
+          ),
           _buildTextField('Employee Code', _empCodeCtrl),
-          _buildTextField('Designation', _designationCtrl, required: true, readOnly: true),
+          _buildTextField(
+            'Designation',
+            _designationCtrl,
+            required: true,
+            readOnly: true,
+          ),
           _buildHelperChip('Managed via Designation Upgrade'),
           _buildTextField('Department', _departmentCtrl, required: true),
           _buildTextField('Functional Department', _functionalDeptCtrl),
@@ -351,7 +420,10 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
             label: 'Organization',
             value: _organization,
             required: true,
-            fallbackLabels: const ['Gandhinagar University', 'Platinum Foundation'],
+            fallbackLabels: const [
+              'Gandhinagar University',
+              'Platinum Foundation',
+            ],
             onChanged: (v) => setState(() => _organization = v),
           ),
           _buildReadOnlyField('Institute', _instituteLabel(institutes)),
@@ -397,8 +469,16 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
             fallbackLabels: const ['General', 'Morning', 'Evening'],
             onChanged: (v) => setState(() => _shift = v),
           ),
-          _buildDateRow('Joining Date *', _joiningDate, () => _pickDate(original: false)),
-          _buildDateRow('Original Joining Date *', _originalJoiningDate, () => _pickDate(original: true)),
+          _buildDateRow(
+            'Joining Date *',
+            _joiningDate,
+            () => _pickDate(original: false),
+          ),
+          _buildDateRow(
+            'Original Joining Date *',
+            _originalJoiningDate,
+            () => _pickDate(original: true),
+          ),
           _buildDateRow(
             'Increment Month',
             _incrementMonth ?? DateTime.now(),
@@ -414,15 +494,30 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
             style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
           ),
           const SizedBox(height: 12),
-          _buildApproverDropdown('First Reporting Manager', _firstApproverUserId, names, (v) {
-            setState(() => _firstApproverUserId = v);
-          }),
-          _buildApproverDropdown('Second Reporting Manager', _secondApproverUserId, names, (v) {
-            setState(() => _secondApproverUserId = v);
-          }),
-          _buildApproverDropdown('Third Reporting Manager', _thirdApproverUserId, names, (v) {
-            setState(() => _thirdApproverUserId = v);
-          }),
+          _buildApproverDropdown(
+            'First Reporting Manager',
+            _firstApproverUserId,
+            names,
+            (v) {
+              setState(() => _firstApproverUserId = v);
+            },
+          ),
+          _buildApproverDropdown(
+            'Second Reporting Manager',
+            _secondApproverUserId,
+            names,
+            (v) {
+              setState(() => _secondApproverUserId = v);
+            },
+          ),
+          _buildApproverDropdown(
+            'Third Reporting Manager',
+            _thirdApproverUserId,
+            names,
+            (v) {
+              setState(() => _thirdApproverUserId = v);
+            },
+          ),
           const SizedBox(height: 24),
           FilledButton(
             onPressed: _save,
@@ -440,12 +535,17 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF2E2415) : Colors.amber.shade50,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: isDark ? const Color(0xFF785B12) : Colors.amber.shade200),
+        border: Border.all(
+          color: isDark ? const Color(0xFF785B12) : Colors.amber.shade200,
+        ),
       ),
       child: Text(
         'Institute transfer & promotion history\n'
         'Designation/Sub-Organization changes are tracked via Institute Transfer and Designation Upgrade (effective-dated). They are read-only here to preserve history.',
-        style: TextStyle(fontSize: 12, color: isDark ? const Color(0xFFFDE68A) : const Color(0xFF92400E)),
+        style: TextStyle(
+          fontSize: 12,
+          color: isDark ? const Color(0xFFFDE68A) : const Color(0xFF92400E),
+        ),
       ),
     );
   }
@@ -471,7 +571,9 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
         decoration: InputDecoration(
           labelText: label,
           filled: true,
-          fillColor: isDark ? Theme.of(context).colorScheme.surfaceContainerHighest : Colors.grey.shade100,
+          fillColor: isDark
+              ? Theme.of(context).colorScheme.surfaceContainerHighest
+              : Colors.grey.shade100,
           border: const OutlineInputBorder(),
         ),
         child: Text(
@@ -492,7 +594,8 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
     bool placeholder = false,
     String? display,
   }) {
-    final text = display ??
+    final text =
+        display ??
         '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
@@ -527,7 +630,10 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
       padding: const EdgeInsets.only(bottom: 16),
       child: DropdownButtonFormField<String?>(
         initialValue: value,
-        decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
+        decoration: InputDecoration(
+          labelText: label,
+          border: const OutlineInputBorder(),
+        ),
         items: [
           const DropdownMenuItem<String?>(
             value: null,
@@ -568,7 +674,9 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
         'shift': _shift?.trim().isEmpty ?? true ? null : _shift!.trim(),
         'joiningDate': _joiningDate.toIso8601String(),
         'originalJoiningDate': _originalJoiningDate.toIso8601String(),
-        'incrementMonth': _incrementMonth == null ? null : formatIncrementMonth(_incrementMonth!),
+        'incrementMonth': _incrementMonth == null
+            ? null
+            : formatIncrementMonth(_incrementMonth!),
         'firstApproverUserId': _firstApproverUserId,
         'secondApproverUserId': _secondApproverUserId,
         'thirdApproverUserId': _thirdApproverUserId,
@@ -585,7 +693,10 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error),
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: AppColors.error,
+          ),
         );
       }
     }
@@ -596,7 +707,11 @@ class EditPersonalTab extends ConsumerStatefulWidget {
   final EmployeeProfile profile;
   final bool isPrivileged;
 
-  const EditPersonalTab({super.key, required this.profile, required this.isPrivileged});
+  const EditPersonalTab({
+    super.key,
+    required this.profile,
+    required this.isPrivileged,
+  });
 
   @override
   ConsumerState<EditPersonalTab> createState() => _EditPersonalTabState();
@@ -708,14 +823,20 @@ class _EditPersonalTabState extends ConsumerState<EditPersonalTab> {
   Future<void> _pickPassportExpiryDate() async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: _passportExpiryDate ?? DateTime.now().add(const Duration(days: 365 * 5)),
+      initialDate:
+          _passportExpiryDate ??
+          DateTime.now().add(const Duration(days: 365 * 5)),
       firstDate: DateTime(1980),
       lastDate: DateTime.now().add(const Duration(days: 365 * 30)),
     );
     if (picked != null) setState(() => _passportExpiryDate = picked);
   }
 
-  Widget _buildOptionalDateRow(String label, DateTime? date, VoidCallback onTap) {
+  Widget _buildOptionalDateRow(
+    String label,
+    DateTime? date,
+    VoidCallback onTap,
+  ) {
     final text = date == null
         ? 'dd-mm-yyyy'
         : '${date.day.toString().padLeft(2, '0')}-${date.month.toString().padLeft(2, '0')}-${date.year}';
@@ -770,15 +891,26 @@ class _EditPersonalTabState extends ConsumerState<EditPersonalTab> {
                     Expanded(
                       child: Text(
                         'You currently have a change request pending review. Saving now will overwrite it.',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.error),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.error,
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
-            Text('Personal Details', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            Text(
+              'Personal Details',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+            ),
             const SizedBox(height: 12),
-            _buildOptionalDateRow('Date of Birth *', _birthDate, _pickBirthDate),
+            _buildOptionalDateRow(
+              'Date of Birth *',
+              _birthDate,
+              _pickBirthDate,
+            ),
             _buildTextField('Birth Place', _birthPlaceCtrl),
             _buildTextField('Home Town', _homeTownCtrl),
             lookupDropdown(
@@ -788,9 +920,24 @@ class _EditPersonalTabState extends ConsumerState<EditPersonalTab> {
               value: _gender,
               required: true,
               fallback: const [
-                LookupOption(id: '1', category: 'GENDER', code: 'MALE', label: 'Male'),
-                LookupOption(id: '2', category: 'GENDER', code: 'FEMALE', label: 'Female'),
-                LookupOption(id: '3', category: 'GENDER', code: 'OTHER', label: 'Other'),
+                LookupOption(
+                  id: '1',
+                  category: 'GENDER',
+                  code: 'MALE',
+                  label: 'Male',
+                ),
+                LookupOption(
+                  id: '2',
+                  category: 'GENDER',
+                  code: 'FEMALE',
+                  label: 'Female',
+                ),
+                LookupOption(
+                  id: '3',
+                  category: 'GENDER',
+                  code: 'OTHER',
+                  label: 'Other',
+                ),
               ],
               onChanged: (v) => setState(() => _gender = v),
             ),
@@ -801,10 +948,30 @@ class _EditPersonalTabState extends ConsumerState<EditPersonalTab> {
               value: _maritalStatus,
               required: true,
               fallback: const [
-                LookupOption(id: '1', category: 'MARITAL_STATUS', code: 'SINGLE', label: 'Single'),
-                LookupOption(id: '2', category: 'MARITAL_STATUS', code: 'MARRIED', label: 'Married'),
-                LookupOption(id: '3', category: 'MARITAL_STATUS', code: 'DIVORCED', label: 'Divorced'),
-                LookupOption(id: '4', category: 'MARITAL_STATUS', code: 'WIDOWED', label: 'Widowed'),
+                LookupOption(
+                  id: '1',
+                  category: 'MARITAL_STATUS',
+                  code: 'SINGLE',
+                  label: 'Single',
+                ),
+                LookupOption(
+                  id: '2',
+                  category: 'MARITAL_STATUS',
+                  code: 'MARRIED',
+                  label: 'Married',
+                ),
+                LookupOption(
+                  id: '3',
+                  category: 'MARITAL_STATUS',
+                  code: 'DIVORCED',
+                  label: 'Divorced',
+                ),
+                LookupOption(
+                  id: '4',
+                  category: 'MARITAL_STATUS',
+                  code: 'WIDOWED',
+                  label: 'Widowed',
+                ),
               ],
               onChanged: (v) => setState(() => _maritalStatus = v),
             ),
@@ -815,7 +982,12 @@ class _EditPersonalTabState extends ConsumerState<EditPersonalTab> {
               value: _nationality,
               required: true,
               fallback: const [
-                LookupOption(id: '1', category: 'NATIONALITY', code: 'INDIAN', label: 'Indian'),
+                LookupOption(
+                  id: '1',
+                  category: 'NATIONALITY',
+                  code: 'INDIAN',
+                  label: 'Indian',
+                ),
               ],
               onChanged: (v) => setState(() => _nationality = v),
             ),
@@ -825,9 +997,24 @@ class _EditPersonalTabState extends ConsumerState<EditPersonalTab> {
               label: 'Mother Tongue',
               value: _motherTongue,
               fallback: const [
-                LookupOption(id: '1', category: 'MOTHER_TONGUE', code: 'GUJARATI', label: 'Gujarati'),
-                LookupOption(id: '2', category: 'MOTHER_TONGUE', code: 'HINDI', label: 'Hindi'),
-                LookupOption(id: '3', category: 'MOTHER_TONGUE', code: 'ENGLISH', label: 'English'),
+                LookupOption(
+                  id: '1',
+                  category: 'MOTHER_TONGUE',
+                  code: 'GUJARATI',
+                  label: 'Gujarati',
+                ),
+                LookupOption(
+                  id: '2',
+                  category: 'MOTHER_TONGUE',
+                  code: 'HINDI',
+                  label: 'Hindi',
+                ),
+                LookupOption(
+                  id: '3',
+                  category: 'MOTHER_TONGUE',
+                  code: 'ENGLISH',
+                  label: 'English',
+                ),
               ],
               onChanged: (v) => setState(() => _motherTongue = v),
             ),
@@ -853,11 +1040,36 @@ class _EditPersonalTabState extends ConsumerState<EditPersonalTab> {
               label: 'Cast Category',
               value: _castCategory,
               fallback: const [
-                LookupOption(id: '1', category: 'CASTE_CATEGORY', code: 'OPEN', label: 'Open / General'),
-                LookupOption(id: '2', category: 'CASTE_CATEGORY', code: 'OBC', label: 'OBC'),
-                LookupOption(id: '3', category: 'CASTE_CATEGORY', code: 'SC', label: 'SC'),
-                LookupOption(id: '4', category: 'CASTE_CATEGORY', code: 'ST', label: 'ST'),
-                LookupOption(id: '5', category: 'CASTE_CATEGORY', code: 'EWS', label: 'EWS'),
+                LookupOption(
+                  id: '1',
+                  category: 'CASTE_CATEGORY',
+                  code: 'OPEN',
+                  label: 'Open / General',
+                ),
+                LookupOption(
+                  id: '2',
+                  category: 'CASTE_CATEGORY',
+                  code: 'OBC',
+                  label: 'OBC',
+                ),
+                LookupOption(
+                  id: '3',
+                  category: 'CASTE_CATEGORY',
+                  code: 'SC',
+                  label: 'SC',
+                ),
+                LookupOption(
+                  id: '4',
+                  category: 'CASTE_CATEGORY',
+                  code: 'ST',
+                  label: 'ST',
+                ),
+                LookupOption(
+                  id: '5',
+                  category: 'CASTE_CATEGORY',
+                  code: 'EWS',
+                  label: 'EWS',
+                ),
               ],
               onChanged: (v) => setState(() => _castCategory = v),
             ),
@@ -869,12 +1081,42 @@ class _EditPersonalTabState extends ConsumerState<EditPersonalTab> {
               label: 'Nominee Relation',
               value: _nomineeRelation,
               fallback: const [
-                LookupOption(id: '1', category: 'FAMILY_RELATION', code: 'SPOUSE', label: 'Spouse'),
-                LookupOption(id: '2', category: 'FAMILY_RELATION', code: 'FATHER', label: 'Father'),
-                LookupOption(id: '3', category: 'FAMILY_RELATION', code: 'MOTHER', label: 'Mother'),
-                LookupOption(id: '4', category: 'FAMILY_RELATION', code: 'SON', label: 'Son'),
-                LookupOption(id: '5', category: 'FAMILY_RELATION', code: 'DAUGHTER', label: 'Daughter'),
-                LookupOption(id: '6', category: 'FAMILY_RELATION', code: 'OTHER', label: 'Other'),
+                LookupOption(
+                  id: '1',
+                  category: 'FAMILY_RELATION',
+                  code: 'SPOUSE',
+                  label: 'Spouse',
+                ),
+                LookupOption(
+                  id: '2',
+                  category: 'FAMILY_RELATION',
+                  code: 'FATHER',
+                  label: 'Father',
+                ),
+                LookupOption(
+                  id: '3',
+                  category: 'FAMILY_RELATION',
+                  code: 'MOTHER',
+                  label: 'Mother',
+                ),
+                LookupOption(
+                  id: '4',
+                  category: 'FAMILY_RELATION',
+                  code: 'SON',
+                  label: 'Son',
+                ),
+                LookupOption(
+                  id: '5',
+                  category: 'FAMILY_RELATION',
+                  code: 'DAUGHTER',
+                  label: 'Daughter',
+                ),
+                LookupOption(
+                  id: '6',
+                  category: 'FAMILY_RELATION',
+                  code: 'OTHER',
+                  label: 'Other',
+                ),
               ],
               onChanged: (v) => setState(() => _nomineeRelation = v),
             ),
@@ -882,10 +1124,21 @@ class _EditPersonalTabState extends ConsumerState<EditPersonalTab> {
             _buildTextField('PAN Number', _panNoCtrl),
             _buildTextField('Passport No', _passportNoCtrl),
             _buildTextField('Passport Issue Place', _passportIssuePlaceCtrl),
-            _buildOptionalDateRow('Passport Issue Date', _passportIssueDate, _pickPassportIssueDate),
-            _buildOptionalDateRow('Passport Expiry Date', _passportExpiryDate, _pickPassportExpiryDate),
+            _buildOptionalDateRow(
+              'Passport Issue Date',
+              _passportIssueDate,
+              _pickPassportIssueDate,
+            ),
+            _buildOptionalDateRow(
+              'Passport Expiry Date',
+              _passportExpiryDate,
+              _pickPassportExpiryDate,
+            ),
             const Divider(height: 32),
-            Text('Identity Documents', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            Text(
+              'Identity Documents',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+            ),
             const SizedBox(height: 8),
             Text(
               'Upload Aadhaar, PAN, passport scan, or any other supporting document.',
@@ -922,13 +1175,18 @@ class _EditPersonalTabState extends ConsumerState<EditPersonalTab> {
             const SizedBox(height: 24),
             FilledButton(
               onPressed: _save,
-              child: Text(widget.isPrivileged ? 'Save Personal Info Direct' : 'Submit Personal Change Request'),
+              child: Text(
+                widget.isPrivileged
+                    ? 'Save Personal Info Direct'
+                    : 'Submit Personal Change Request',
+              ),
             ),
           ],
         ),
       ),
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (_, __) => const Center(child: Text('Error loading pending request status')),
+      error: (_, __) =>
+          const Center(child: Text('Error loading pending request status')),
     );
   }
 
@@ -979,7 +1237,10 @@ class _EditPersonalTabState extends ConsumerState<EditPersonalTab> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error),
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: AppColors.error,
+          ),
         );
       }
     }
@@ -990,7 +1251,11 @@ class EditAddressTab extends ConsumerStatefulWidget {
   final EmployeeProfile profile;
   final bool isPrivileged;
 
-  const EditAddressTab({super.key, required this.profile, required this.isPrivileged});
+  const EditAddressTab({
+    super.key,
+    required this.profile,
+    required this.isPrivileged,
+  });
 
   @override
   ConsumerState<EditAddressTab> createState() => _EditAddressTabState();
@@ -998,6 +1263,7 @@ class EditAddressTab extends ConsumerStatefulWidget {
 
 class _EditAddressTabState extends ConsumerState<EditAddressTab> {
   final _formKey = GlobalKey<FormState>();
+
   /// Controllers live in a map so hot-reload on web never leaves fields undefined.
   final Map<String, TextEditingController> _ctrls = {};
   bool _sameAsLocal = false;
@@ -1054,8 +1320,12 @@ class _EditAddressTabState extends ConsumerState<EditAddressTab> {
 
   void _seedFromProfile() {
     if (_seeded) return;
-    final local = widget.profile.addresses.where((a) => a.addressType == 'LOCAL').firstOrNull;
-    final perm = widget.profile.addresses.where((a) => a.addressType == 'PERMANENT').firstOrNull;
+    final local = widget.profile.addresses
+        .where((a) => a.addressType == 'LOCAL')
+        .firstOrNull;
+    final perm = widget.profile.addresses
+        .where((a) => a.addressType == 'PERMANENT')
+        .firstOrNull;
 
     _c('l_flat').text = local?.flatBlockNo ?? '';
     _c('l_building').text = local?.buildingSociety ?? '';
@@ -1063,8 +1333,11 @@ class _EditAddressTabState extends ConsumerState<EditAddressTab> {
     _c('l_city').text = local?.city ?? '';
     _c('l_state').text = local?.state ?? '';
     _c('l_pincode').text = local?.zipPostalCode ?? '';
-    _c('l_country').text =
-        (local?.country != null && local!.country!.trim().isNotEmpty) ? local.country! : 'India';
+    _c(
+      'l_country',
+    ).text = (local?.country != null && local!.country!.trim().isNotEmpty)
+        ? local.country!
+        : 'India';
     _c('l_phone').text = local?.phoneNo ?? '';
     _c('l_mobile').text = local?.mobileNo ?? '';
     _c('l_email').text = local?.personalEmail ?? '';
@@ -1075,8 +1348,11 @@ class _EditAddressTabState extends ConsumerState<EditAddressTab> {
     _c('p_city').text = perm?.city ?? '';
     _c('p_state').text = perm?.state ?? '';
     _c('p_pincode').text = perm?.zipPostalCode ?? '';
-    _c('p_country').text =
-        (perm?.country != null && perm!.country!.trim().isNotEmpty) ? perm.country! : 'India';
+    _c(
+      'p_country',
+    ).text = (perm?.country != null && perm!.country!.trim().isNotEmpty)
+        ? perm.country!
+        : 'India';
     _c('p_phone').text = perm?.phoneNo ?? '';
     _c('p_mobile').text = perm?.mobileNo ?? '';
 
@@ -1134,17 +1410,17 @@ class _EditAddressTabState extends ConsumerState<EditAddressTab> {
   }
 
   Map<String, dynamic> _localPayload() => {
-        'flatBlockNo': _optional(_t('l_flat')),
-        'buildingSociety': _optional(_t('l_building')),
-        'area': _optional(_t('l_area')),
-        'city': _t('l_city').trim(),
-        'state': _t('l_state').trim(),
-        'zipPostalCode': _optional(_t('l_pincode')),
-        'country': _optional(_t('l_country')) ?? 'India',
-        'phoneNo': _optional(_t('l_phone')),
-        'mobileNo': _optional(_t('l_mobile')),
-        'personalEmail': _optional(_t('l_email')),
-      };
+    'flatBlockNo': _optional(_t('l_flat')),
+    'buildingSociety': _optional(_t('l_building')),
+    'area': _optional(_t('l_area')),
+    'city': _t('l_city').trim(),
+    'state': _t('l_state').trim(),
+    'zipPostalCode': _optional(_t('l_pincode')),
+    'country': _optional(_t('l_country')) ?? 'India',
+    'phoneNo': _optional(_t('l_phone')),
+    'mobileNo': _optional(_t('l_mobile')),
+    'personalEmail': _optional(_t('l_email')),
+  };
 
   Map<String, dynamic> _permanentPayload() {
     if (_sameAsLocal) _copyLocalToPermanent();
@@ -1218,7 +1494,8 @@ class _EditAddressTabState extends ConsumerState<EditAddressTab> {
         ? ref.watch(pendingRequestProvider('ADDRESS_PERMANENT'))
         : const AsyncValue<Map<String, dynamic>?>.data(null);
 
-    final hasPending = (pendingLocal.asData?.value != null) ||
+    final hasPending =
+        (pendingLocal.asData?.value != null) ||
         (pendingPermanent.asData?.value != null);
 
     if (pendingLocal.isLoading || pendingPermanent.isLoading) {
@@ -1259,56 +1536,58 @@ class _EditAddressTabState extends ConsumerState<EditAddressTab> {
                 ],
               ),
             ),
-            _sectionHeader('LOCAL / CURRENT ADDRESS'),
-            _buildTextField('Flat / Block No', _c('l_flat')),
-            _buildTextField('Building / Society', _c('l_building')),
-            _buildTextField('Area / Street', _c('l_area')),
-            _buildTextField('City', _c('l_city'), required: true),
-            _buildTextField('State', _c('l_state'), required: true),
-            _buildTextField('Pincode', _c('l_pincode')),
-            _buildTextField('Country', _c('l_country')),
-            _buildTextField('Phone', _c('l_phone')),
-            _buildTextField('Mobile', _c('l_mobile')),
-            _buildTextField('Personal Email', _c('l_email')),
-            const Divider(height: 28),
-            CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              controlAffinity: ListTileControlAffinity.leading,
-              tristate: false,
-              value: _sameAsLocal,
-              onChanged: _toggleSameAsLocal,
-              title: const Text(
-                'Permanent address same as local address',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          _sectionHeader('LOCAL / CURRENT ADDRESS'),
+          _buildTextField('Flat / Block No', _c('l_flat')),
+          _buildTextField('Building / Society', _c('l_building')),
+          _buildTextField('Area / Street', _c('l_area')),
+          _buildTextField('City', _c('l_city'), required: true),
+          _buildTextField('State', _c('l_state'), required: true),
+          _buildTextField('Pincode', _c('l_pincode')),
+          _buildTextField('Country', _c('l_country')),
+          _buildTextField('Phone', _c('l_phone')),
+          _buildTextField('Mobile', _c('l_mobile')),
+          _buildTextField('Personal Email', _c('l_email')),
+          const Divider(height: 28),
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.leading,
+            tristate: false,
+            value: _sameAsLocal,
+            onChanged: _toggleSameAsLocal,
+            title: const Text(
+              'Permanent address same as local address',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+            ),
+          ),
+          const SizedBox(height: 8),
+          _sectionHeader('PERMANENT ADDRESS'),
+          IgnorePointer(
+            ignoring: _sameAsLocal,
+            child: Opacity(
+              opacity: _sameAsLocal ? 0.55 : 1,
+              child: Column(
+                children: [
+                  for (final key in _permKeys)
+                    _buildTextField(
+                      _permLabel(key),
+                      _c(key),
+                      required: key == 'p_city' || key == 'p_state',
+                    ),
+                ],
               ),
             ),
-            const SizedBox(height: 8),
-            _sectionHeader('PERMANENT ADDRESS'),
-            IgnorePointer(
-              ignoring: _sameAsLocal,
-              child: Opacity(
-                opacity: _sameAsLocal ? 0.55 : 1,
-                child: Column(
-                  children: [
-                    for (final key in _permKeys)
-                      _buildTextField(
-                        _permLabel(key),
-                        _c(key),
-                        required: key == 'p_city' || key == 'p_state',
-                      ),
-                  ],
-                ),
-              ),
+          ),
+          const SizedBox(height: 16),
+          FilledButton(
+            onPressed: _save,
+            child: Text(
+              widget.isPrivileged
+                  ? 'Save Address Direct'
+                  : 'Submit Address Change Request',
             ),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: _save,
-              child: Text(
-                widget.isPrivileged ? 'Save Address Direct' : 'Submit Address Change Request',
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1347,7 +1626,10 @@ class _EditAddressTabState extends ConsumerState<EditAddressTab> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error),
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: AppColors.error,
+          ),
         );
       }
     }
@@ -1358,7 +1640,11 @@ class EditOtherTab extends ConsumerStatefulWidget {
   final EmployeeProfile profile;
   final bool isPrivileged;
 
-  const EditOtherTab({super.key, required this.profile, required this.isPrivileged});
+  const EditOtherTab({
+    super.key,
+    required this.profile,
+    required this.isPrivileged,
+  });
 
   @override
   ConsumerState<EditOtherTab> createState() => _EditOtherTabState();
@@ -1383,9 +1669,15 @@ class _EditOtherTabState extends ConsumerState<EditOtherTab> {
     _hobbiesCtrl = TextEditingController(text: other?.hobbies ?? '');
     _strengthCtrl = TextEditingController(text: other?.strength ?? '');
     _weaknessCtrl = TextEditingController(text: other?.weakness ?? '');
-    _handicapDetailsCtrl = TextEditingController(text: other?.handicapDetails ?? '');
-    _heightCtrl = TextEditingController(text: other?.heightInFeet?.toString() ?? '');
-    _weightCtrl = TextEditingController(text: other?.weightInKg?.toString() ?? '');
+    _handicapDetailsCtrl = TextEditingController(
+      text: other?.handicapDetails ?? '',
+    );
+    _heightCtrl = TextEditingController(
+      text: other?.heightInFeet?.toString() ?? '',
+    );
+    _weightCtrl = TextEditingController(
+      text: other?.weightInKg?.toString() ?? '',
+    );
     _isHandicapped = other?.isHandicapped ?? false;
   }
 
@@ -1418,7 +1710,8 @@ class _EditOtherTabState extends ConsumerState<EditOtherTab> {
             activeThumbColor: Theme.of(context).colorScheme.primary,
             onChanged: (v) => setState(() => _isHandicapped = v),
           ),
-          if (_isHandicapped) _buildTextField('Handicap Details', _handicapDetailsCtrl),
+          if (_isHandicapped)
+            _buildTextField('Handicap Details', _handicapDetailsCtrl),
           _buildTextField('Height (ft)', _heightCtrl, isNumber: true),
           _buildTextField('Weight (kg)', _weightCtrl, isNumber: true),
           SizedBox(height: 24),
@@ -1443,7 +1736,9 @@ class _EditOtherTabState extends ConsumerState<EditOtherTab> {
       'strength': _strengthCtrl.text.trim(),
       'weakness': _weaknessCtrl.text.trim(),
       'isHandicapped': _isHandicapped,
-      'handicapDetails': _isHandicapped ? _handicapDetailsCtrl.text.trim() : null,
+      'handicapDetails': _isHandicapped
+          ? _handicapDetailsCtrl.text.trim()
+          : null,
       'heightInFeet': double.tryParse(_heightCtrl.text),
       'weightInKg': double.tryParse(_weightCtrl.text),
     };
@@ -1471,7 +1766,10 @@ class _EditOtherTabState extends ConsumerState<EditOtherTab> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error),
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: AppColors.error,
+          ),
         );
       }
     }
@@ -1505,16 +1803,24 @@ class _EditFamilyTabState extends ConsumerState<EditFamilyTab> {
                   margin: EdgeInsets.only(bottom: 12),
                   child: ListTile(
                     title: Text(member.name),
-                    subtitle: Text('${member.relation}  |  ${member.mobileNo ?? "No Contact"}'),
+                    subtitle: Text(
+                      '${member.relation}  |  ${member.mobileNo ?? "No Contact"}',
+                    ),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
-                          icon: Icon(Icons.edit_outlined, color: Theme.of(context).colorScheme.primary),
+                          icon: Icon(
+                            Icons.edit_outlined,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
                           onPressed: () => _showDialog(member: member),
                         ),
                         IconButton(
-                          icon: Icon(Icons.delete_outline, color: AppColors.error),
+                          icon: Icon(
+                            Icons.delete_outline,
+                            color: AppColors.error,
+                          ),
                           onPressed: () => _delete(member.id),
                         ),
                       ],
@@ -1535,10 +1841,8 @@ class _EditFamilyTabState extends ConsumerState<EditFamilyTab> {
   void _showDialog({FamilyMember? member}) {
     showDialog(
       context: context,
-      builder: (_) => FamilyMemberDialog(
-        employeeId: widget.profile.id,
-        member: member,
-      ),
+      builder: (_) =>
+          FamilyMemberDialog(employeeId: widget.profile.id, member: member),
     );
   }
 
@@ -1546,12 +1850,17 @@ class _EditFamilyTabState extends ConsumerState<EditFamilyTab> {
     try {
       await ref.read(profileProvider.notifier).deleteFamilyMember(id);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Family member deleted')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Family member deleted')));
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error),
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: AppColors.error,
+          ),
         );
       }
     }
@@ -1585,16 +1894,24 @@ class _EditAcademicTabState extends ConsumerState<EditAcademicTab> {
                   margin: EdgeInsets.only(bottom: 12),
                   child: ListTile(
                     title: Text(qual.degreeName ?? qual.degreeType),
-                    subtitle: Text('${qual.schoolCollege}  |  ${qual.passingYear}'),
+                    subtitle: Text(
+                      '${qual.schoolCollege}  |  ${qual.passingYear}',
+                    ),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
-                          icon: Icon(Icons.edit_outlined, color: Theme.of(context).colorScheme.primary),
+                          icon: Icon(
+                            Icons.edit_outlined,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
                           onPressed: () => _showDialog(qual: qual),
                         ),
                         IconButton(
-                          icon: Icon(Icons.delete_outline, color: AppColors.error),
+                          icon: Icon(
+                            Icons.delete_outline,
+                            color: AppColors.error,
+                          ),
                           onPressed: () => _delete(qual.id),
                         ),
                       ],
@@ -1615,10 +1932,8 @@ class _EditAcademicTabState extends ConsumerState<EditAcademicTab> {
   void _showDialog({AcademicQualification? qual}) {
     showDialog(
       context: context,
-      builder: (_) => AcademicQualDialog(
-        employeeId: widget.profile.id,
-        qual: qual,
-      ),
+      builder: (_) =>
+          AcademicQualDialog(employeeId: widget.profile.id, qual: qual),
     );
   }
 
@@ -1626,12 +1941,17 @@ class _EditAcademicTabState extends ConsumerState<EditAcademicTab> {
     try {
       await ref.read(profileProvider.notifier).deleteAcademicQualification(id);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Academic record removed')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Academic record removed')),
+        );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error),
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: AppColors.error,
+          ),
         );
       }
     }
@@ -1642,7 +1962,11 @@ class EditBankTab extends ConsumerStatefulWidget {
   final EmployeeProfile profile;
   final bool isPrivileged;
 
-  const EditBankTab({super.key, required this.profile, required this.isPrivileged});
+  const EditBankTab({
+    super.key,
+    required this.profile,
+    required this.isPrivileged,
+  });
 
   @override
   ConsumerState<EditBankTab> createState() => _EditBankTabState();
@@ -1675,7 +1999,9 @@ class _EditBankTabState extends ConsumerState<EditBankTab> {
 
   @override
   Widget build(BuildContext context) {
-    final bank = ref.watch(profileProvider).asData?.value.bankInfo ?? widget.profile.bankInfo;
+    final bank =
+        ref.watch(profileProvider).asData?.value.bankInfo ??
+        widget.profile.bankInfo;
 
     return Form(
       key: _formKey,
@@ -1710,7 +2036,9 @@ class _EditBankTabState extends ConsumerState<EditBankTab> {
           FilledButton(
             onPressed: _save,
             child: Text(
-              widget.isPrivileged ? 'Save Bank Info' : 'Submit Bank Info for Approval',
+              widget.isPrivileged
+                  ? 'Save Bank Info'
+                  : 'Submit Bank Info for Approval',
             ),
           ),
         ],
@@ -1731,9 +2059,9 @@ class _EditBankTabState extends ConsumerState<EditBankTab> {
       if (widget.isPrivileged) {
         await notifier.updateBankInfo(payload);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Bank Info saved')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Bank Info saved')));
         }
       } else {
         await notifier.submitBankChangeRequest(payload);
@@ -1750,7 +2078,10 @@ class _EditBankTabState extends ConsumerState<EditBankTab> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error saving bank: $e'), backgroundColor: AppColors.error),
+          SnackBar(
+            content: Text('Error saving bank: $e'),
+            backgroundColor: AppColors.error,
+          ),
         );
       }
     }
@@ -1786,8 +2117,12 @@ class _EditSalaryTabState extends ConsumerState<EditSalaryTab> {
   @override
   Widget build(BuildContext context) {
     final commissionsAsync = ref.watch(payCommissionsProvider);
-    final previewAsync = ref.watch(employeeSalaryPreviewProvider(widget.profile.id));
-    final name = widget.profile.generalInfo?.fullName ?? 'Employee #${widget.profile.id}';
+    final previewAsync = ref.watch(
+      employeeSalaryPreviewProvider(widget.profile.id),
+    );
+    final name =
+        widget.profile.generalInfo?.fullName ??
+        'Employee #${widget.profile.id}';
 
     return previewAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
@@ -1796,14 +2131,18 @@ class _EditSalaryTabState extends ConsumerState<EditSalaryTab> {
         children: [
           Text('Could not load salary preview: $e'),
           TextButton(
-            onPressed: () => ref.invalidate(employeeSalaryPreviewProvider(widget.profile.id)),
+            onPressed: () => ref.invalidate(
+              employeeSalaryPreviewProvider(widget.profile.id),
+            ),
             child: const Text('Retry'),
           ),
         ],
       ),
       data: (preview) {
         final overrides = _dirty ? _overrides : preview.columnOverrides;
-        final employeeRules = _dirty ? _employeeRules : preview.employeeColumnRules;
+        final employeeRules = _dirty
+            ? _employeeRules
+            : preview.employeeColumnRules;
         final computed = _liveComputed ?? preview.computed;
 
         return ListView(
@@ -1890,7 +2229,9 @@ class _EditSalaryTabState extends ConsumerState<EditSalaryTab> {
                 data: (list) {
                   final active = list.where((c) => c.isActive).toList();
                   final value = _selectedCommissionCode ?? currentCode;
-                  final safeValue = active.any((c) => c.code == value) ? value : null;
+                  final safeValue = active.any((c) => c.code == value)
+                      ? value
+                      : null;
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -1909,13 +2250,18 @@ class _EditSalaryTabState extends ConsumerState<EditSalaryTab> {
                               ),
                             )
                             .toList(),
-                        onChanged: (v) => setState(() => _selectedCommissionCode = v),
+                        onChanged: (v) =>
+                            setState(() => _selectedCommissionCode = v),
                       ),
                       const SizedBox(height: 10),
                       FilledButton(
-                        onPressed: _saving || (_selectedCommissionCode ?? currentCode) == null
+                        onPressed:
+                            _saving ||
+                                (_selectedCommissionCode ?? currentCode) == null
                             ? null
-                            : () => _saveCommission(_selectedCommissionCode ?? currentCode!),
+                            : () => _saveCommission(
+                                _selectedCommissionCode ?? currentCode!,
+                              ),
                         child: const Text('Apply commission & load structure'),
                       ),
                     ],
@@ -1928,13 +2274,17 @@ class _EditSalaryTabState extends ConsumerState<EditSalaryTab> {
     );
   }
 
-  Widget _buildStatusBanner(BuildContext context, EmployeeSalaryPreview preview) {
+  Widget _buildStatusBanner(
+    BuildContext context,
+    EmployeeSalaryPreview preview,
+  ) {
     String? message;
     Color? bg;
     Color? fg;
     switch (preview.reason) {
       case 'NO_DESIGNATION':
-        message = 'Set employee designation in General Info before assigning pay commission.';
+        message =
+            'Set employee designation in General Info before assigning pay commission.';
         bg = Colors.amber.shade50;
         fg = Colors.amber.shade900;
       case 'NO_COMMISSION':
@@ -1955,7 +2305,8 @@ class _EditSalaryTabState extends ConsumerState<EditSalaryTab> {
         fg = Colors.orange.shade900;
       default:
         if (preview.configured) {
-          message = 'Salary structure loaded from designation template. Amounts can be edited per employee.';
+          message =
+              'Salary structure loaded from designation template. Amounts can be edited per employee.';
           bg = Colors.green.shade50;
           fg = Colors.green.shade900;
         }
@@ -1989,7 +2340,11 @@ class _EditSalaryTabState extends ConsumerState<EditSalaryTab> {
               const SizedBox(height: 4),
               Text(
                 '₹${value.toStringAsFixed(0)}',
-                style: TextStyle(fontWeight: FontWeight.w800, color: color, fontSize: 16),
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  color: color,
+                  fontSize: 16,
+                ),
               ),
             ],
           ),
@@ -2017,7 +2372,9 @@ class _EditSalaryTabState extends ConsumerState<EditSalaryTab> {
     required ComputedSalaryResult computed,
   }) {
     final computedByKey = {for (final c in computed.columns) c.key: c};
-    final templateRuleMap = {for (final r in preview.templateRules) r.mapKey: r};
+    final templateRuleMap = {
+      for (final r in preview.templateRules) r.mapKey: r,
+    };
 
     final cols = preview.columnDefinitions.where((c) {
       if (widget.isPrivileged) return true;
@@ -2036,7 +2393,10 @@ class _EditSalaryTabState extends ConsumerState<EditSalaryTab> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Salary columns', style: TextStyle(fontWeight: FontWeight.w700)),
+            const Text(
+              'Salary columns',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
             const SizedBox(height: 8),
             for (final col in cols) ...[
               _buildColumnRow(
@@ -2081,12 +2441,14 @@ class _EditSalaryTabState extends ConsumerState<EditSalaryTab> {
     final isTotal = _totalRows.contains(col.columnIdentifier);
     final hasOverride = overrides.containsKey(key);
     final hasCustomRule = employeeRules.containsKey(key);
-    final displayAmount = hasOverride ? overrides[key]! : (row?.effectiveValue ?? 0);
+    final displayAmount = hasOverride
+        ? overrides[key]!
+        : (row?.effectiveValue ?? 0);
     final formula = hasCustomRule
         ? 'Custom for this employee'
         : (row?.formulaPreview.isNotEmpty == true
-            ? row!.formulaPreview
-            : (templateRuleMap[key]?.formulaPreview ?? ''));
+              ? row!.formulaPreview
+              : (templateRuleMap[key]?.formulaPreview ?? ''));
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
@@ -2110,7 +2472,10 @@ class _EditSalaryTabState extends ConsumerState<EditSalaryTab> {
                     formula,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 10, color: AppColors.textSecondary),
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: AppColors.textSecondary,
+                    ),
                   ),
                 if (hasCustomRule)
                   Text(
@@ -2130,14 +2495,18 @@ class _EditSalaryTabState extends ConsumerState<EditSalaryTab> {
               child: TextFormField(
                 key: ValueKey('ov-$key-$displayAmount'),
                 initialValue: displayAmount.toString(),
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 decoration: InputDecoration(
                   isDense: true,
                   prefixText: '₹ ',
                   border: const OutlineInputBorder(),
                   filled: hasOverride,
                   fillColor: hasOverride
-                      ? (Theme.of(context).brightness == Brightness.dark ? const Color(0xFF2E2415) : Colors.amber.shade50)
+                      ? (Theme.of(context).brightness == Brightness.dark
+                            ? const Color(0xFF2E2415)
+                            : Colors.amber.shade50)
                       : null,
                 ),
                 onChanged: (v) {
@@ -2200,12 +2569,18 @@ class _EditSalaryTabState extends ConsumerState<EditSalaryTab> {
                     _employeeRules.remove(key);
                     _dirty = true;
                   });
-                  await ref.read(salaryRepositoryProvider).updateEmployeeProfile(
+                  await ref
+                      .read(salaryRepositoryProvider)
+                      .updateEmployeeProfile(
                         widget.profile.id,
-                        columnRules: _employeeRules.isEmpty ? null : _employeeRules,
+                        columnRules: _employeeRules.isEmpty
+                            ? null
+                            : _employeeRules,
                         clearRules: _employeeRules.isEmpty,
                       );
-                  ref.invalidate(employeeSalaryPreviewProvider(widget.profile.id));
+                  ref.invalidate(
+                    employeeSalaryPreviewProvider(widget.profile.id),
+                  );
                   setState(() {
                     _dirty = false;
                     _liveComputed = null;
@@ -2247,10 +2622,9 @@ class _EditSalaryTabState extends ConsumerState<EditSalaryTab> {
           _employeeRules = next;
           _dirty = true;
         });
-        await ref.read(salaryRepositoryProvider).updateEmployeeProfile(
-              widget.profile.id,
-              columnRules: next,
-            );
+        await ref
+            .read(salaryRepositoryProvider)
+            .updateEmployeeProfile(widget.profile.id, columnRules: next);
         ref.invalidate(employeeSalaryPreviewProvider(widget.profile.id));
         setState(() {
           _dirty = false;
@@ -2264,7 +2638,9 @@ class _EditSalaryTabState extends ConsumerState<EditSalaryTab> {
     final templateId = preview.templateId;
     if (templateId == null) return;
     try {
-      final result = await ref.read(salaryRepositoryProvider).computeSalary(
+      final result = await ref
+          .read(salaryRepositoryProvider)
+          .computeSalary(
             templateId: templateId,
             employeeId: widget.profile.id,
             overrides: _overrides,
@@ -2279,7 +2655,9 @@ class _EditSalaryTabState extends ConsumerState<EditSalaryTab> {
   Future<void> _saveCommission(String code) async {
     setState(() => _saving = true);
     try {
-      await ref.read(salaryRepositoryProvider).updateEmployeeProfile(
+      await ref
+          .read(salaryRepositoryProvider)
+          .updateEmployeeProfile(
             widget.profile.id,
             payCommissionCode: code,
             clearOverrides: true,
@@ -2297,13 +2675,18 @@ class _EditSalaryTabState extends ConsumerState<EditSalaryTab> {
       await ref.read(profileProvider.notifier).refresh();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Pay commission applied — structure loaded')),
+          const SnackBar(
+            content: Text('Pay commission applied — structure loaded'),
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error),
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: AppColors.error,
+          ),
         );
       }
     } finally {
@@ -2314,7 +2697,9 @@ class _EditSalaryTabState extends ConsumerState<EditSalaryTab> {
   Future<void> _saveOverrides() async {
     setState(() => _saving = true);
     try {
-      await ref.read(salaryRepositoryProvider).updateEmployeeProfile(
+      await ref
+          .read(salaryRepositoryProvider)
+          .updateEmployeeProfile(
             widget.profile.id,
             columnOverrides: _overrides.isEmpty ? null : _overrides,
             columnRules: _employeeRules.isEmpty ? null : _employeeRules,
@@ -2334,7 +2719,10 @@ class _EditSalaryTabState extends ConsumerState<EditSalaryTab> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error),
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: AppColors.error,
+          ),
         );
       }
     } finally {
@@ -2351,11 +2739,7 @@ class FamilyMemberDialog extends ConsumerStatefulWidget {
   final int employeeId;
   final FamilyMember? member;
 
-  const FamilyMemberDialog({
-    super.key,
-    required this.employeeId,
-    this.member,
-  });
+  const FamilyMemberDialog({super.key, required this.employeeId, this.member});
 
   @override
   ConsumerState<FamilyMemberDialog> createState() => _FamilyMemberDialogState();
@@ -2454,7 +2838,10 @@ class _FamilyMemberDialogState extends ConsumerState<FamilyMemberDialog> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not open file picker: $e'), backgroundColor: AppColors.error),
+        SnackBar(
+          content: Text('Could not open file picker: $e'),
+          backgroundColor: AppColors.error,
+        ),
       );
     }
   }
@@ -2465,7 +2852,9 @@ class _FamilyMemberDialogState extends ConsumerState<FamilyMemberDialog> {
     final dobText = _dateOfBirth == null
         ? 'dd-mm-yyyy'
         : '${_dateOfBirth!.day.toString().padLeft(2, '0')}-${_dateOfBirth!.month.toString().padLeft(2, '0')}-${_dateOfBirth!.year}';
-    final aadhaarReady = (_aadhaarUrl != null && _aadhaarUrl!.isNotEmpty) || _pendingAadhaar != null;
+    final aadhaarReady =
+        (_aadhaarUrl != null && _aadhaarUrl!.isNotEmpty) ||
+        _pendingAadhaar != null;
 
     return AlertDialog(
       title: Row(
@@ -2493,14 +2882,54 @@ class _FamilyMemberDialogState extends ConsumerState<FamilyMemberDialog> {
                 value: _relation,
                 required: true,
                 fallback: const [
-                  LookupOption(id: '1', category: 'FAMILY_RELATION', code: 'FATHER', label: 'Father'),
-                  LookupOption(id: '2', category: 'FAMILY_RELATION', code: 'MOTHER', label: 'Mother'),
-                  LookupOption(id: '3', category: 'FAMILY_RELATION', code: 'SPOUSE', label: 'Spouse'),
-                  LookupOption(id: '4', category: 'FAMILY_RELATION', code: 'SON', label: 'Son'),
-                  LookupOption(id: '5', category: 'FAMILY_RELATION', code: 'DAUGHTER', label: 'Daughter'),
-                  LookupOption(id: '6', category: 'FAMILY_RELATION', code: 'BROTHER', label: 'Brother'),
-                  LookupOption(id: '7', category: 'FAMILY_RELATION', code: 'SISTER', label: 'Sister'),
-                  LookupOption(id: '8', category: 'FAMILY_RELATION', code: 'OTHER', label: 'Other'),
+                  LookupOption(
+                    id: '1',
+                    category: 'FAMILY_RELATION',
+                    code: 'FATHER',
+                    label: 'Father',
+                  ),
+                  LookupOption(
+                    id: '2',
+                    category: 'FAMILY_RELATION',
+                    code: 'MOTHER',
+                    label: 'Mother',
+                  ),
+                  LookupOption(
+                    id: '3',
+                    category: 'FAMILY_RELATION',
+                    code: 'SPOUSE',
+                    label: 'Spouse',
+                  ),
+                  LookupOption(
+                    id: '4',
+                    category: 'FAMILY_RELATION',
+                    code: 'SON',
+                    label: 'Son',
+                  ),
+                  LookupOption(
+                    id: '5',
+                    category: 'FAMILY_RELATION',
+                    code: 'DAUGHTER',
+                    label: 'Daughter',
+                  ),
+                  LookupOption(
+                    id: '6',
+                    category: 'FAMILY_RELATION',
+                    code: 'BROTHER',
+                    label: 'Brother',
+                  ),
+                  LookupOption(
+                    id: '7',
+                    category: 'FAMILY_RELATION',
+                    code: 'SISTER',
+                    label: 'Sister',
+                  ),
+                  LookupOption(
+                    id: '8',
+                    category: 'FAMILY_RELATION',
+                    code: 'OTHER',
+                    label: 'Other',
+                  ),
                 ],
                 onChanged: (v) {
                   WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -2522,16 +2951,38 @@ class _FamilyMemberDialogState extends ConsumerState<FamilyMemberDialog> {
                     child: Text(
                       dobText,
                       style: TextStyle(
-                        color: _dateOfBirth == null ? AppColors.textSecondary : null,
+                        color: _dateOfBirth == null
+                            ? AppColors.textSecondary
+                            : null,
                       ),
                     ),
                   ),
                 ),
               ),
-              _buildTextField('City', _cityCtrl, required: true, hint: 'e.g., Gandhinagar'),
-              _buildTextField('Phone Number', _mobileCtrl, required: true, hint: '10-digit phone'),
-              _buildTextField('Personal Email', _emailCtrl, required: true, hint: 'email@example.com'),
-              _buildTextField('Aadhaar No', _aadhaarNoCtrl, required: true, hint: '12-digit'),
+              _buildTextField(
+                'City',
+                _cityCtrl,
+                required: true,
+                hint: 'e.g., Gandhinagar',
+              ),
+              _buildTextField(
+                'Phone Number',
+                _mobileCtrl,
+                required: true,
+                hint: '10-digit phone',
+              ),
+              _buildTextField(
+                'Personal Email',
+                _emailCtrl,
+                required: true,
+                hint: 'email@example.com',
+              ),
+              _buildTextField(
+                'Aadhaar No',
+                _aadhaarNoCtrl,
+                required: true,
+                hint: '12-digit',
+              ),
               Padding(
                 padding: const EdgeInsets.only(bottom: 16),
                 child: InkWell(
@@ -2539,23 +2990,34 @@ class _FamilyMemberDialogState extends ConsumerState<FamilyMemberDialog> {
                   borderRadius: BorderRadius.circular(10),
                   child: Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 20,
+                      horizontal: 16,
+                    ),
                     decoration: BoxDecoration(
                       color: Theme.of(context).brightness == Brightness.dark
-                          ? (aadhaarReady ? Theme.of(context).cardColor : const Color(0xFF242424))
-                          : (aadhaarReady ? Colors.white : AppColors.mist.withValues(alpha: 0.35)),
+                          ? (aadhaarReady
+                                ? Theme.of(context).cardColor
+                                : const Color(0xFF242424))
+                          : (aadhaarReady
+                                ? Colors.white
+                                : AppColors.mist.withValues(alpha: 0.35)),
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
                         color: aadhaarReady
                             ? AppColors.border
-                            : Theme.of(context).colorScheme.primary.withValues(alpha: 0.55),
+                            : Theme.of(
+                                context,
+                              ).colorScheme.primary.withValues(alpha: 0.55),
                         style: BorderStyle.solid,
                       ),
                     ),
                     child: Column(
                       children: [
                         Icon(
-                          aadhaarReady ? Icons.check_circle : Icons.upload_file_outlined,
+                          aadhaarReady
+                              ? Icons.check_circle
+                              : Icons.upload_file_outlined,
                           color: aadhaarReady
                               ? Colors.green
                               : Theme.of(context).colorScheme.primary,
@@ -2563,10 +3025,14 @@ class _FamilyMemberDialogState extends ConsumerState<FamilyMemberDialog> {
                         const SizedBox(height: 8),
                         Text(
                           aadhaarReady
-                              ? (_pendingAadhaar?.name ?? 'Aadhaar uploaded — tap to replace')
+                              ? (_pendingAadhaar?.name ??
+                                    'Aadhaar uploaded — tap to replace')
                               : 'Click to upload Aadhaar (PDF/Image) *',
                           textAlign: TextAlign.center,
-                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
                         ),
                       ],
                     ),
@@ -2620,7 +3086,8 @@ class _FamilyMemberDialogState extends ConsumerState<FamilyMemberDialog> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
-    if ((_aadhaarUrl == null || _aadhaarUrl!.isEmpty) && _pendingAadhaar == null) {
+    if ((_aadhaarUrl == null || _aadhaarUrl!.isEmpty) &&
+        _pendingAadhaar == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please upload Aadhaar document')),
       );
@@ -2667,7 +3134,10 @@ class _FamilyMemberDialogState extends ConsumerState<FamilyMemberDialog> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error),
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: AppColors.error,
+          ),
         );
       }
     } finally {
@@ -2680,11 +3150,7 @@ class AcademicQualDialog extends ConsumerStatefulWidget {
   final int employeeId;
   final AcademicQualification? qual;
 
-  const AcademicQualDialog({
-    super.key,
-    required this.employeeId,
-    this.qual,
-  });
+  const AcademicQualDialog({super.key, required this.employeeId, this.qual});
 
   @override
   ConsumerState<AcademicQualDialog> createState() => _AcademicQualDialogState();
@@ -2772,8 +3238,7 @@ class _AcademicQualDialogState extends ConsumerState<AcademicQualDialog> {
     }
   }
 
-  String get _effectiveLevel =>
-      _uiLevel == 'HSC_DIPLOMA' ? _program : _uiLevel;
+  String get _effectiveLevel => _uiLevel == 'HSC_DIPLOMA' ? _program : _uiLevel;
 
   String get _apiDegreeType {
     switch (_effectiveLevel) {
@@ -2816,7 +3281,9 @@ class _AcademicQualDialogState extends ConsumerState<AcademicQualDialog> {
       _effectiveLevel == 'SSC' || _effectiveLevel == 'HSC';
 
   bool get _showSemGrid =>
-      _effectiveLevel == 'DIPLOMA' || _effectiveLevel == 'UG' || _effectiveLevel == 'PG';
+      _effectiveLevel == 'DIPLOMA' ||
+      _effectiveLevel == 'UG' ||
+      _effectiveLevel == 'PG';
 
   bool get _showCertificate =>
       const {'DIPLOMA', 'UG', 'PG', 'PHD', 'OTHER'}.contains(_effectiveLevel);
@@ -2907,9 +3374,15 @@ class _AcademicQualDialogState extends ConsumerState<AcademicQualDialog> {
       child: DropdownButtonFormField<String>(
         key: ValueKey('$label-$safeValue-${options.join()}'),
         initialValue: safeValue,
-        decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
+        decoration: InputDecoration(
+          labelText: label,
+          border: const OutlineInputBorder(),
+        ),
         items: options
-            .map((o) => DropdownMenuItem<String>(value: o, child: Text(display(o))))
+            .map(
+              (o) =>
+                  DropdownMenuItem<String>(value: o, child: Text(display(o))),
+            )
             .toList(),
         onChanged: (v) {
           if (v == null) return;
@@ -2935,25 +3408,42 @@ class _AcademicQualDialogState extends ConsumerState<AcademicQualDialog> {
           padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 12),
           decoration: BoxDecoration(
             color: Theme.of(context).brightness == Brightness.dark
-                ? (filled ? Theme.of(context).cardColor : const Color(0xFF242424))
-                : (filled ? Colors.white : AppColors.mist.withValues(alpha: 0.35)),
+                ? (filled
+                      ? Theme.of(context).cardColor
+                      : const Color(0xFF242424))
+                : (filled
+                      ? Colors.white
+                      : AppColors.mist.withValues(alpha: 0.35)),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: filled
                   ? AppColors.border
-                  : Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
+                  : Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: 0.5),
             ),
           ),
           child: Column(
             children: [
               Icon(
                 filled ? Icons.check_circle : Icons.cloud_upload_outlined,
-                color: filled ? Colors.green : Theme.of(context).colorScheme.primary,
+                color: filled
+                    ? Colors.green
+                    : Theme.of(context).colorScheme.primary,
               ),
               const SizedBox(height: 6),
-              Text(label, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
               Text(
-                filled ? (subtitle ?? 'Uploaded — tap to replace') : 'Click to upload (PDF/Image)',
+                label,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12,
+                ),
+              ),
+              Text(
+                filled
+                    ? (subtitle ?? 'Uploaded — tap to replace')
+                    : 'Click to upload (PDF/Image)',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
               ),
@@ -3000,7 +3490,10 @@ class _AcademicQualDialogState extends ConsumerState<AcademicQualDialog> {
       title: Row(
         children: [
           Expanded(child: Text('$modeText Qualification')),
-          IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+          IconButton(
+            onPressed: () => Navigator.pop(context),
+            icon: const Icon(Icons.close),
+          ),
         ],
       ),
       scrollable: true,
@@ -3019,7 +3512,8 @@ class _AcademicQualDialogState extends ConsumerState<AcademicQualDialog> {
                 onChanged: (v) {
                   _uiLevel = v;
                   if (v == 'HSC_DIPLOMA') {
-                    if (_program != 'HSC' && _program != 'DIPLOMA') _program = 'HSC';
+                    if (_program != 'HSC' && _program != 'DIPLOMA')
+                      _program = 'HSC';
                   }
                 },
               ),
@@ -3028,7 +3522,8 @@ class _AcademicQualDialogState extends ConsumerState<AcademicQualDialog> {
                   label: 'Program *',
                   value: _program,
                   options: const ['HSC', 'DIPLOMA'],
-                  display: (v) => v == 'HSC' ? 'HSC (Higher Secondary)' : 'Diploma',
+                  display: (v) =>
+                      v == 'HSC' ? 'HSC (Higher Secondary)' : 'Diploma',
                   onChanged: (v) => _program = v,
                 ),
               lookupDropdown(
@@ -3048,7 +3543,12 @@ class _AcademicQualDialogState extends ConsumerState<AcademicQualDialog> {
                 ],
                 onChanged: (v) => _safeSetState(() => _medium = v),
               ),
-              _field('Degree / Certificate Name', _degreeNameCtrl, required: true, hint: 'e.g., Bachelor of Science'),
+              _field(
+                'Degree / Certificate Name',
+                _degreeNameCtrl,
+                required: true,
+                hint: 'e.g., Bachelor of Science',
+              ),
               if (_showStream)
                 lookupDropdown(
                   ref: ref,
@@ -3074,14 +3574,31 @@ class _AcademicQualDialogState extends ConsumerState<AcademicQualDialog> {
                 hint: 'e.g., Gujarat Secondary Board',
               ),
               if (_showSchoolCollege)
-                _field('School / College Name', _schoolCollegeCtrl, hint: 'e.g., XYZ College'),
-              _field('Board / University', _boardCtrl, hint: 'e.g., Gujarat University'),
-              _field('Passing Year', _passingYearCtrl, required: true, isNumber: true, hint: '2026'),
+                _field(
+                  'School / College Name',
+                  _schoolCollegeCtrl,
+                  hint: 'e.g., XYZ College',
+                ),
+              _field(
+                'Board / University',
+                _boardCtrl,
+                hint: 'e.g., Gujarat University',
+              ),
+              _field(
+                'Passing Year',
+                _passingYearCtrl,
+                required: true,
+                isNumber: true,
+                hint: '2026',
+              ),
               _field('Percentage', _percentCtrl, isNumber: true, hint: '0-100'),
               _field('CGPA', _cgpaCtrl, isNumber: true, hint: '0-10'),
               if (_showSingleMarksheet) ...[
                 const SizedBox(height: 4),
-                const Text('Marksheet Upload *', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                const Text(
+                  'Marksheet Upload *',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                ),
                 const SizedBox(height: 8),
                 _uploadBox(
                   label: 'Click to upload marksheet (PDF/Image)',
@@ -3095,9 +3612,21 @@ class _AcademicQualDialogState extends ConsumerState<AcademicQualDialog> {
                 Row(
                   children: [
                     const Expanded(
-                      child: Text('Semester Marksheets', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                      child: Text(
+                        'Semester Marksheets',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
+                      ),
                     ),
-                    Text('$semCount semesters', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                    Text(
+                      '$semCount semesters',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -3105,7 +3634,8 @@ class _AcademicQualDialogState extends ConsumerState<AcademicQualDialog> {
                   spacing: 10,
                   runSpacing: 10,
                   children: List.generate(semCount, (i) {
-                    final filled = _semUrls[i] != null && _semUrls[i]!.isNotEmpty;
+                    final filled =
+                        _semUrls[i] != null && _semUrls[i]!.isNotEmpty;
                     return SizedBox(
                       width: 150,
                       child: _uploadBox(
@@ -3119,11 +3649,18 @@ class _AcademicQualDialogState extends ConsumerState<AcademicQualDialog> {
               ],
               if (_showCertificate) ...[
                 const SizedBox(height: 12),
-                Text('$_certificateLabel *', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                Text(
+                  '$_certificateLabel *',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
                 const SizedBox(height: 8),
                 _uploadBox(
                   label: 'Click to upload certificate (PDF/Image)',
-                  filled: _certificateUrl != null && _certificateUrl!.isNotEmpty,
+                  filled:
+                      _certificateUrl != null && _certificateUrl!.isNotEmpty,
                   onTap: _uploadCertificate,
                   subtitle: 'Certificate uploaded — tap to replace',
                 ),
@@ -3140,7 +3677,11 @@ class _AcademicQualDialogState extends ConsumerState<AcademicQualDialog> {
         FilledButton(
           onPressed: _saving ? null : _save,
           child: _saving
-              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
               : const Text('Save'),
         ),
       ],
@@ -3151,11 +3692,16 @@ class _AcademicQualDialogState extends ConsumerState<AcademicQualDialog> {
     if (!_formKey.currentState!.validate()) return;
 
     if (_showSingleMarksheet && (_semUrls[0] == null || _semUrls[0]!.isEmpty)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please upload marksheet')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please upload marksheet')));
       return;
     }
-    if (_showCertificate && (_certificateUrl == null || _certificateUrl!.isEmpty)) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Please upload $_certificateLabel')));
+    if (_showCertificate &&
+        (_certificateUrl == null || _certificateUrl!.isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Please upload $_certificateLabel')),
+      );
       return;
     }
 
@@ -3173,10 +3719,14 @@ class _AcademicQualDialogState extends ConsumerState<AcademicQualDialog> {
       'percentage': double.tryParse(_percentCtrl.text.trim()),
       'grade': _cgpaCtrl.text.trim().isEmpty ? null : _cgpaCtrl.text.trim(),
       'specialization': _showStream ? _hscStream : null,
-      'totalSemesters': _showSemGrid ? _semCount : (_showSingleMarksheet ? 1 : null),
-      if (_certificateUrl != null && _certificateUrl!.isNotEmpty) 'certificateUrl': _certificateUrl,
+      'totalSemesters': _showSemGrid
+          ? _semCount
+          : (_showSingleMarksheet ? 1 : null),
+      if (_certificateUrl != null && _certificateUrl!.isNotEmpty)
+        'certificateUrl': _certificateUrl,
       for (var i = 0; i < 8; i++)
-        if (_semUrls[i] != null && _semUrls[i]!.isNotEmpty) 'sem${i + 1}MarksheetUrl': _semUrls[i],
+        if (_semUrls[i] != null && _semUrls[i]!.isNotEmpty)
+          'sem${i + 1}MarksheetUrl': _semUrls[i],
     };
 
     setState(() => _saving = true);
@@ -3191,7 +3741,10 @@ class _AcademicQualDialogState extends ConsumerState<AcademicQualDialog> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error),
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: AppColors.error,
+          ),
         );
       }
     } finally {
@@ -3260,7 +3813,10 @@ Future<void> _pickAndUploadFile({
   } catch (e) {
     if (context.mounted) {
       messenger.showSnackBar(
-        SnackBar(content: Text('Upload failed: $e'), backgroundColor: AppColors.error),
+        SnackBar(
+          content: Text('Upload failed: $e'),
+          backgroundColor: AppColors.error,
+        ),
       );
     }
   } finally {
@@ -3311,8 +3867,12 @@ class _DocumentUploadTile extends ConsumerWidget {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: Theme.of(context).brightness == Brightness.dark
-              ? (isUploaded ? Theme.of(context).cardColor : const Color(0xFF242424))
-              : (isUploaded ? Colors.white : AppColors.mist.withValues(alpha: 0.35)),
+              ? (isUploaded
+                    ? Theme.of(context).cardColor
+                    : const Color(0xFF242424))
+              : (isUploaded
+                    ? Colors.white
+                    : AppColors.mist.withValues(alpha: 0.35)),
           border: Border.all(
             color: isUploaded
                 ? AppColors.border
@@ -3324,7 +3884,9 @@ class _DocumentUploadTile extends ConsumerWidget {
           children: [
             Icon(
               isUploaded ? Icons.check_circle : Icons.upload_file,
-              color: isUploaded ? Colors.green : Theme.of(context).colorScheme.primary,
+              color: isUploaded
+                  ? Colors.green
+                  : Theme.of(context).colorScheme.primary,
               size: 20,
             ),
             const SizedBox(width: 10),
@@ -3332,10 +3894,21 @@ class _DocumentUploadTile extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                   Text(
-                    isUploaded ? 'Tap to replace file' : 'Tap to upload from device',
-                    style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                    label,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
+                  Text(
+                    isUploaded
+                        ? 'Tap to replace file'
+                        : 'Tap to upload from device',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textSecondary,
+                    ),
                   ),
                 ],
               ),
@@ -3360,10 +3933,12 @@ class BankDocumentUploadZone extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<BankDocumentUploadZone> createState() => _BankDocumentUploadZoneState();
+  ConsumerState<BankDocumentUploadZone> createState() =>
+      _BankDocumentUploadZoneState();
 }
 
-class _BankDocumentUploadZoneState extends ConsumerState<BankDocumentUploadZone> {
+class _BankDocumentUploadZoneState
+    extends ConsumerState<BankDocumentUploadZone> {
   bool _uploadingCheque = false;
   bool _uploadingPassbook = false;
   String? _chequeUrl;
@@ -3441,7 +4016,10 @@ class _BankDocumentUploadZoneState extends ConsumerState<BankDocumentUploadZone>
           children: [
             Row(
               children: [
-                Icon(Icons.account_balance_wallet_outlined, color: Theme.of(context).colorScheme.primary),
+                Icon(
+                  Icons.account_balance_wallet_outlined,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
                 const SizedBox(width: 8),
                 const Expanded(
                   child: Text(
@@ -3518,7 +4096,8 @@ class _BonusUploadZoneState extends ConsumerState<BonusUploadZone> {
   void didUpdateWidget(covariant BonusUploadZone oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.photoUrl != widget.photoUrl) _photoUrl = widget.photoUrl;
-    if (oldWidget.signatureUrl != widget.signatureUrl) _signatureUrl = widget.signatureUrl;
+    if (oldWidget.signatureUrl != widget.signatureUrl)
+      _signatureUrl = widget.signatureUrl;
   }
 
   Future<void> _upload(String kebabType) async {
@@ -3574,7 +4153,10 @@ class _BonusUploadZoneState extends ConsumerState<BonusUploadZone> {
           children: [
             Row(
               children: [
-                Icon(Icons.photo_camera_back, color: Theme.of(context).colorScheme.primary),
+                Icon(
+                  Icons.photo_camera_back,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
                 const SizedBox(width: 8),
                 const Text(
                   'Profile Photo & Signature',
@@ -3654,50 +4236,60 @@ class _MediaUploadBox extends StatelessWidget {
           child: isUploading
               ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
               : has
-                  ? Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(9),
-                          child: Image.network(url!, fit: BoxFit.cover),
-                        ),
-                        Positioned(
-                          right: 6,
-                          bottom: 6,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.black54,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: const Text(
-                              'Replace',
-                              style: TextStyle(color: Colors.white, fontSize: 10),
-                            ),
-                          ),
-                        ),
-                      ],
-                    )
-                  : Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(icon, color: Theme.of(context).textTheme.bodySmall?.color, size: 28),
-                        const SizedBox(height: 6),
-                        Text(
-                          'No $label uploaded',
-                          style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Tap to upload',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                        ),
-                      ],
+              ? Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(9),
+                      child: Image.network(url!, fit: BoxFit.cover),
                     ),
+                    Positioned(
+                      right: 6,
+                      bottom: 6,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Text(
+                          'Replace',
+                          style: TextStyle(color: Colors.white, fontSize: 10),
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              : Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      icon,
+                      color: Theme.of(context).textTheme.bodySmall?.color,
+                      size: 28,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'No $label uploaded',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Tap to upload',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                  ],
+                ),
         ),
       ),
     );
@@ -3726,12 +4318,15 @@ Widget _buildTextField(
             hintText: hint,
             filled: readOnly,
             fillColor: readOnly
-                ? (isDark ? Theme.of(context).colorScheme.surfaceContainerHighest : Colors.grey.shade100)
+                ? (isDark
+                      ? Theme.of(context).colorScheme.surfaceContainerHighest
+                      : Colors.grey.shade100)
                 : null,
           ),
           validator: required
               ? (v) {
-                  if (v == null || v.trim().isEmpty) return '$label is required';
+                  if (v == null || v.trim().isEmpty)
+                    return '$label is required';
                   return null;
                 }
               : null,

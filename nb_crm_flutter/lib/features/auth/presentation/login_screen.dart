@@ -180,9 +180,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                       autofillHints: const [AutofillHints.username],
                                       style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
                                       decoration: InputDecoration(
-                                        labelText: 'Employee ID / Username',
+                                        labelText: 'Employee Code / Username',
                                         labelStyle: TextStyle(color: Colors.white.withOpacity(0.5), fontWeight: FontWeight.w600),
-                                        hintText: 'e.g. 1 or HOD_OPS',
+                                        hintText: 'e.g. TEST1234 or HOD_OPS',
                                         hintStyle: TextStyle(color: Colors.white.withOpacity(0.2)),
                                         prefixIcon: const Icon(Icons.person_rounded, color: Color(0xFFC5A059)),
                                         filled: true,

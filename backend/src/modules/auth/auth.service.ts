@@ -59,22 +59,42 @@ async function deleteSession(userId: string, roleId?: string) {
 export const authService = {
   async login(input: LoginInput) {
     const identifier = String(input.identifier).trim();
-    const isEmployeeId = /^\d+$/.test(identifier);
+    const isNumericEmployeeId = /^\d+$/.test(identifier);
 
-    // 1. Find user (either employeeId login or username login for position accounts)
-    const user = await prisma.user.findUnique({
-      where: isEmployeeId
-        ? { employeeId: Number(identifier) }
-        : { username: identifier },
-      include: {
-        role: {
-          include: { permissions: true },
-        },
-        employee: {
-          include: { generalInfo: true },
-        },
+    const userInclude = {
+      role: {
+        include: { permissions: true },
       },
-    });
+      employee: {
+        include: { generalInfo: true },
+      },
+    } as const;
+
+    // 1. Resolve user:
+    //    - digits only → Employee.id (numeric PK)
+    //    - else → User.username (position accounts) OR generalInfo.employeeCode (normal employees)
+    let user = isNumericEmployeeId
+      ? await prisma.user.findUnique({
+          where: { employeeId: Number(identifier) },
+          include: userInclude,
+        })
+      : await prisma.user.findUnique({
+          where: { username: identifier },
+          include: userInclude,
+        });
+
+    if (!user && !isNumericEmployeeId) {
+      const byCode = await prisma.employeeGeneralInfo.findFirst({
+        where: { employeeCode: { equals: identifier, mode: 'insensitive' } },
+        select: { employeeId: true },
+      });
+      if (byCode?.employeeId != null) {
+        user = await prisma.user.findUnique({
+          where: { employeeId: byCode.employeeId },
+          include: userInclude,
+        });
+      }
+    }
 
     if (!user) return { error: 'Invalid credentials', status: 401 } as const;
     if (!user.isActive) return { error: 'Account disabled', status: 403 } as const;

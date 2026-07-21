@@ -9,6 +9,7 @@ import { familyRouter } from './family.routes';
 import { academicRouter } from './academic.routes';
 import { uploadRouter } from './upload.routes';
 import { auditRouter } from './audit.routes';
+import { experienceRouter } from './experience.routes';
 
 export const personalEducationRouter = Router();
 personalEducationRouter.use('/employees', employeeRouter);
@@ -19,6 +20,7 @@ personalEducationRouter.use('/employees', otherRouter);
 personalEducationRouter.use('/employees', bankRouter);
 personalEducationRouter.use('/employees', familyRouter);
 personalEducationRouter.use('/employees', academicRouter);
+personalEducationRouter.use('/employees', experienceRouter);
 personalEducationRouter.use('/upload', uploadRouter);
 personalEducationRouter.use('/employees', auditRouter);
 

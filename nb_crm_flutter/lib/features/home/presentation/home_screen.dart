@@ -148,6 +148,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         color: const Color(0xFF7c3aed),
       ),
       _ModuleCardData(
+        title: 'Repository',
+        subtitle: 'Company policies & documents',
+        icon: Icons.folder_shared_rounded,
+        route: '/repository',
+        enabled: true,
+        category: ModuleCategory.mySpace,
+        color: const Color(0xFF0369a1),
+      ),
+      _ModuleCardData(
         title: 'Payroll',
         subtitle: Permissions.canReadSalary(auth.permissions)
             ? 'Commissions, structures, entry & records'

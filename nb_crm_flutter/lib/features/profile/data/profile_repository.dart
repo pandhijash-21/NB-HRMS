@@ -321,6 +321,24 @@ class ProfileRepository {
     }
   }
 
+  Future<String> resolveViewableUrl(String url) async {
+    final trimmed = url.trim();
+    if (trimmed.isEmpty) return trimmed;
+    if (!trimmed.contains('res.cloudinary.com')) return trimmed;
+    try {
+      return await _dio.getEnvelope<String>(
+        'upload/view-url',
+        queryParameters: {'url': trimmed},
+        parse: (raw) {
+          if (raw is Map && raw['url'] is String) return raw['url'] as String;
+          throw const FormatException('Invalid view-url response');
+        },
+      );
+    } catch (_) {
+      return trimmed;
+    }
+  }
+
   /// Upload file multipart helper: `POST upload/{kebab-type}`.
   /// kebabType: photo, signature, aadhaar-card, pan-card, passport, other-document, aadhaar-family, marksheet, certificate
   Future<String> uploadFile({

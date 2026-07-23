@@ -21,6 +21,8 @@ import { connectRedis } from './config/redis';
 import { fail, ok } from './utils/response';
 import { lettersRouter } from './modules/letters';
 import { reimbursementsRouter } from './modules/reimbursements';
+import { recruitmentRouter } from './modules/recruitment';
+import { repositoryRouter } from './modules/repository';
 
 configureCloudinary();
 
@@ -86,6 +88,8 @@ app.use('/api/leave', leaveRouter);
 app.use('/api/attendance', attendanceRouter);
 app.use('/api/letters', lettersRouter);
 app.use('/api/reimbursements', reimbursementsRouter);
+app.use('/api/recruitment', recruitmentRouter);
+app.use('/api/repository', repositoryRouter);
 app.use('/api/admin', designationRouter);
 app.use('/api', instituteRouter);
 app.use('/api/salary', salaryRouter);

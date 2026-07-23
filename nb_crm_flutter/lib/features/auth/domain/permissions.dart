@@ -171,6 +171,24 @@ class Permissions {
         hasPermission(perms, 'REIMBURSEMENTS', 'WRITE');
   }
 
+  static bool canReadRecruitment(PermissionMap? perms) {
+    return hasPermission(perms, 'RECRUITMENT', 'READ') ||
+        hasPermission(perms, 'RECRUITMENT', 'WRITE');
+  }
+
+  static bool canWriteRecruitment(PermissionMap? perms, [String? role]) {
+    final r = (role ?? '').toUpperCase();
+    if (const ['ADMIN', 'HR', 'HR_MANAGER'].contains(r)) return true;
+    return hasPermission(perms, 'RECRUITMENT', 'WRITE');
+  }
+
+  /// Company repository: Admin/HR can upload & remove; everyone can view.
+  static bool canManageRepository(PermissionMap? perms, [String? role]) {
+    final r = (role ?? '').toUpperCase();
+    if (const ['ADMIN', 'HR', 'HR_MANAGER', 'SUPER_ADMIN'].contains(r)) return true;
+    return canWriteDocuments(perms);
+  }
+
   static String resolvePostLoginPath(
     PermissionMap? perms,
     String role,

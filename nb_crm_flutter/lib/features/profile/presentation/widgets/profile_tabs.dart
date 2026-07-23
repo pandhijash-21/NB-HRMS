@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/name_utils.dart';
+import '../../../../core/utils/open_stored_document.dart';
 import '../../domain/profile_models.dart';
+import '../profile_notifier.dart';
 import '../../../admin/presentation/admin_notifier.dart';
 import '../../../admin/domain/admin_models.dart';
 import '../../../org/domain/org_models.dart';
@@ -2018,23 +2020,14 @@ Widget _buildDocItem(BuildContext context, String label, String? url) {
   );
 }
 
-void _handleDocClick(BuildContext context, String title, String url) {
-  // Show clean Dialog with url detail and copy action
-  showDialog(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: Text(title),
-      content: Text(
-        'Document URL:\n$url\n\n(In production, this opens in browser/viewer)',
-        style: TextStyle(fontSize: 13),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(ctx),
-          child: Text('Close'),
-        ),
-      ],
-    ),
+Future<void> _handleDocClick(BuildContext context, String title, String url) async {
+  // Same authenticated /upload/inline proxy as resumes — avoids Cloudinary 401
+  // when opening restricted marksheets / certificates in a new tab.
+  await openStoredDocument(
+    context,
+    url: url,
+    title: title,
+    fileName: url.split('/').last.split('?').first,
   );
 }
 

@@ -291,13 +291,13 @@ class _StatsCard extends StatelessWidget {
                 _chip('Present', '${summary.presentDays} days'),
                 _chip('Working hours', '${summary.totalWorkingHours}h'),
                 _chip('Late', '${summary.lateDays}'),
-                _chip('Leave days', '${summary.leaveDaysInMonth}'),
+                _chip('Approved leave', '${summary.leaveDays > 0 ? summary.leaveDays : summary.leaveDaysInMonth}'),
                 _chip('Absent*', '${summary.absentDays}'),
               ],
             ),
             const SizedBox(height: 6),
             Text(
-              '* Days in month with no punch recorded',
+              '* Absent = no punch and not on approved leave',
               style: TextStyle(fontSize: 11, color: Theme.of(context).textTheme.bodySmall?.color),
             ),
           ],
@@ -396,19 +396,25 @@ class _DailyLogList extends StatelessWidget {
           const Divider(height: 1),
           ...days.map((day) {
             final hasPunch = day.firstIn != null;
+            final status = (day.dayStatus ?? (hasPunch ? 'PRESENT' : 'ABSENT')).toUpperCase();
+            final isLeave = status == 'LEAVE';
             return ListTile(
               dense: true,
               title: Text(day.date, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
               subtitle: Text(
                 hasPunch
                     ? '${_formatIstTime(day.firstIn)} → ${_formatIstTime(day.lastOut)} · ${_formatHours(day.totalMinutes)}'
-                    : 'No punch',
+                    : isLeave
+                        ? 'On approved leave'
+                        : 'Absent (no punch)',
               ),
               trailing: hasPunch
                   ? (day.isLate == true
                       ? const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 18)
                       : const Icon(Icons.check_circle_outline, color: Colors.green, size: 18))
-                  : const Icon(Icons.remove_circle_outline, color: Colors.grey, size: 18),
+                  : isLeave
+                      ? const Icon(Icons.beach_access, color: Colors.blue, size: 18)
+                      : const Icon(Icons.remove_circle_outline, color: Colors.grey, size: 18),
             );
           }),
         ],

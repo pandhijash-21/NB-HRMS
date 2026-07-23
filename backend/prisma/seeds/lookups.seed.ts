@@ -100,6 +100,30 @@ const SEED: SeedOpt[] = [
   { category: 'BANK_NAME', code: 'ICICI', label: 'ICICI Bank', sortOrder: 3 },
   { category: 'BANK_NAME', code: 'AXIS', label: 'Axis Bank', sortOrder: 4 },
   { category: 'BANK_NAME', code: 'BOB', label: 'Bank of Baroda', sortOrder: 5 },
+
+  // Recruitment
+  { category: 'INTERVIEW_TYPE', code: 'HR_SCREEN', label: 'HR Screen', sortOrder: 1 },
+  { category: 'INTERVIEW_TYPE', code: 'TECHNICAL', label: 'Technical', sortOrder: 2 },
+  { category: 'INTERVIEW_TYPE', code: 'DIRECTOR', label: 'Director', sortOrder: 3 },
+  { category: 'INTERVIEW_TYPE', code: 'FINAL', label: 'Final Round', sortOrder: 4 },
+
+  { category: 'INTERVIEW_STATUS', code: 'INTERVIEW_SCHEDULED', label: 'Interview Scheduled', sortOrder: 1 },
+  { category: 'INTERVIEW_STATUS', code: 'INTERVIEW_ATTENDED', label: 'Interview Attended', sortOrder: 2 },
+  { category: 'INTERVIEW_STATUS', code: 'NOT_CAME', label: 'Not came for Interview', sortOrder: 3 },
+  { category: 'INTERVIEW_STATUS', code: 'RESCHEDULED', label: 'Rescheduled', sortOrder: 4 },
+  { category: 'INTERVIEW_STATUS', code: 'SELECTED_FOR_NEXT_ROUND', label: 'Selected for Next Round', sortOrder: 5 },
+  { category: 'INTERVIEW_STATUS', code: 'FINAL_ROUND', label: 'Final Round', sortOrder: 6 },
+  { category: 'INTERVIEW_STATUS', code: 'SELECTED', label: 'Selected', sortOrder: 7 },
+  { category: 'INTERVIEW_STATUS', code: 'ON_HOLD', label: 'On Hold', sortOrder: 8 },
+  { category: 'INTERVIEW_STATUS', code: 'REJECTED', label: 'Rejected', sortOrder: 9 },
+  { category: 'INTERVIEW_STATUS', code: 'DROPOUT', label: 'Dropout / Backout', sortOrder: 10 },
+
+  { category: 'CANDIDATE_SOURCE', code: 'REFERRAL', label: 'Referral', sortOrder: 1 },
+  { category: 'CANDIDATE_SOURCE', code: 'NAUKRI', label: 'Naukri', sortOrder: 2 },
+  { category: 'CANDIDATE_SOURCE', code: 'WALK_IN', label: 'Walk-in', sortOrder: 3 },
+  { category: 'CANDIDATE_SOURCE', code: 'LINKEDIN', label: 'LinkedIn', sortOrder: 4 },
+  { category: 'CANDIDATE_SOURCE', code: 'WEBSITE', label: 'Website', sortOrder: 5 },
+  { category: 'CANDIDATE_SOURCE', code: 'OTHER', label: 'Other', sortOrder: 6 },
 ];
 
 export async function seedSystemLookups(prisma: PrismaClient) {

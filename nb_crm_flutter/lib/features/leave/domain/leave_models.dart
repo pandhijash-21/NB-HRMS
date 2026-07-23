@@ -22,6 +22,15 @@ int _asInt(Object? value) {
   return int.tryParse(value.toString()) ?? 0;
 }
 
+bool _asBool(Object? value, {bool fallback = false}) {
+  if (value is bool) return value;
+  if (value == null) return fallback;
+  final s = value.toString().toLowerCase();
+  if (s == 'true' || s == '1') return true;
+  if (s == 'false' || s == '0') return false;
+  return fallback;
+}
+
 String? _dateOnly(Object? value) {
   if (value == null) return null;
   final s = value.toString();
@@ -164,30 +173,67 @@ class LeaveEmployeeInfo {
 }
 
 class LeaveApprovalStep {
-  const LeaveApprovalStep({
+  LeaveApprovalStep({
     required this.id,
     required this.stepNumber,
     this.approverRole,
+    this.approverUserId,
+    this.approverName,
     this.action,
     this.remarks,
     this.actionAt,
-  });
+    bool? isSuperseded,
+  }) : _isSuperseded = isSuperseded;
 
   final String id;
   final int stepNumber;
   final String? approverRole;
+  final String? approverUserId;
+  final String? approverName;
   final String? action;
   final String? remarks;
   final String? actionAt;
+  final bool? _isSuperseded;
+
+  /// Safe on web when legacy/cached JSON omitted this field (null at runtime).
+  bool get isSuperseded => _isSuperseded == true;
+
+  bool get isDone => action == 'RECOMMENDED' || action == 'APPROVED';
+  bool get isRejected => action == 'REJECTED';
+  bool get isPending => action == null && !isSuperseded;
+
+  String get roleLabel {
+    switch (approverRole) {
+      case 'FIRST_REPORTING':
+        return '1st Reporting';
+      case 'SECOND_REPORTING':
+        return '2nd Reporting';
+      case 'THIRD_REPORTING':
+        return '3rd Reporting';
+      default:
+        return approverRole?.replaceAll('_', ' ') ?? 'Approver';
+    }
+  }
+
+  String get statusLabel {
+    if (isSuperseded && action == null) return 'Skipped';
+    if (action == 'RECOMMENDED') return 'Approved';
+    if (action == 'APPROVED') return 'Approved';
+    if (action == 'REJECTED') return 'Rejected';
+    return 'Pending';
+  }
 
   factory LeaveApprovalStep.fromJson(Map<String, dynamic> json) {
     return LeaveApprovalStep(
       id: json['id']?.toString() ?? '',
       stepNumber: _asInt(json['stepNumber']),
       approverRole: json['approverRole'] as String?,
+      approverUserId: json['approverUserId']?.toString(),
+      approverName: json['approverName'] as String?,
       action: json['action'] as String?,
       remarks: json['remarks'] as String?,
       actionAt: json['actionAt']?.toString(),
+      isSuperseded: _asBool(json['isSuperseded']),
     );
   }
 }
@@ -241,14 +287,14 @@ class LeaveApplication {
       leaveTypeId: json['leaveTypeId']?.toString() ?? '',
       fromDate: _dateOnly(json['fromDate']) ?? '',
       toDate: _dateOnly(json['toDate']) ?? '',
-      isHalfDay: json['isHalfDay'] as bool? ?? false,
+      isHalfDay: _asBool(json['isHalfDay']),
       halfDaySession: json['halfDaySession'] as String?,
       totalDays: _asDouble(json['totalDays']),
       reason: json['reason'] as String? ?? '',
       documentUrl: json['documentUrl'] as String?,
       status: json['status'] as String? ?? 'PENDING',
       appliedAt: json['appliedAt']?.toString(),
-      isAppliedByAdmin: json['isAppliedByAdmin'] as bool? ?? false,
+      isAppliedByAdmin: _asBool(json['isAppliedByAdmin']),
       leaveType: lt != null ? LeaveType.fromJson(lt) : null,
       employee: emp != null ? LeaveEmployeeInfo.fromJson(emp) : null,
       approvalSteps: _asMapList(json['approvalSteps'])

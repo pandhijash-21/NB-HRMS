@@ -23,6 +23,19 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminEmployeesScreen> {
   final _searchController = TextEditingController();
 
   @override
+  void initState() {
+    super.initState();
+    // Keep the search box in sync with the shared filter (e.g. after hire navigation).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final search = ref.read(workforceFilterProvider).search;
+      if (search.isNotEmpty && _searchController.text != search) {
+        _searchController.text = search;
+      }
+    });
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
     super.dispose();

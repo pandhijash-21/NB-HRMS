@@ -12,7 +12,7 @@ void main() {
 
 class NbCrmApp extends ConsumerWidget {
   const NbCrmApp({super.key});
-
+  
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     // Always use MaterialApp.router so the browser hash (#/login) is owned by

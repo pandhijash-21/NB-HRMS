@@ -35,7 +35,7 @@ export const otherController = {
     if (!Number.isFinite(employeeId)) return res.status(400).json(fail('Invalid employee id'));
     assertSelfAccess(req, employeeId);
     try {
-      assertMayDirectWriteProfile(req, employeeId);
+      await assertMayDirectWriteProfile(req, employeeId, 'OTHER');
     } catch (err: any) {
       return res.status(err.status ?? 403).json(fail(err.message));
     }
@@ -57,7 +57,7 @@ export const otherController = {
     if (!Number.isFinite(employeeId)) return res.status(400).json(fail('Invalid employee id'));
     assertSelfAccess(req, employeeId);
     try {
-      assertMayDirectWriteProfile(req, employeeId);
+      await assertMayDirectWriteProfile(req, employeeId, 'OTHER');
     } catch (err: any) {
       return res.status(err.status ?? 403).json(fail(err.message));
     }

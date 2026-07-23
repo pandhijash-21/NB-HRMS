@@ -84,7 +84,7 @@ export const personalController = {
     if (!(await assertCanAccessEmployeePersonal(req, employeeId, res))) return;
 
     try {
-      assertMayDirectWriteProfile(req, employeeId);
+      await assertMayDirectWriteProfile(req, employeeId, 'PERSONAL');
     } catch (err: any) {
       return res.status(err.status ?? 403).json(fail(err.message));
     }
@@ -108,7 +108,7 @@ export const personalController = {
     if (!(await assertCanAccessEmployeePersonal(req, employeeId, res))) return;
 
     try {
-      assertMayDirectWriteProfile(req, employeeId);
+      await assertMayDirectWriteProfile(req, employeeId, 'PERSONAL');
     } catch (err: any) {
       return res.status(err.status ?? 403).json(fail(err.message));
     }

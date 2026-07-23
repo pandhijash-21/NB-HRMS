@@ -748,6 +748,26 @@ class _EditPersonalTabState extends ConsumerState<EditPersonalTab> {
   String? _castCategory;
   String? _nomineeRelation;
   String? _bloodGroup;
+  String? _pendingAadhaarCardUrl;
+  String? _pendingPanCardUrl;
+  String? _pendingOtherDocUrl;
+  String? _pendingPassportUrl;
+
+  bool get _isBootstrapIncomplete {
+    final info = widget.profile.personalInfo;
+    if (info == null) return true;
+    bool has(String? v) => v != null && v.trim().isNotEmpty;
+    return !(
+      has(info.aadhaarNo) ||
+      has(info.panNo) ||
+      has(info.aadhaarCardUrl) ||
+      has(info.panCardUrl) ||
+      has(info.birthPlace) ||
+      has(info.homeTown)
+    );
+  }
+
+  bool get _canSaveDirect => widget.isPrivileged || _isBootstrapIncomplete;
 
   @override
   void initState() {
@@ -1141,7 +1161,9 @@ class _EditPersonalTabState extends ConsumerState<EditPersonalTab> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Upload Aadhaar, PAN, passport scan, or any other supporting document.',
+              _canSaveDirect
+                  ? 'Upload Aadhaar, PAN, passport scan, or any other supporting document.'
+                  : 'Replacing documents after first fill needs Admin/HR approval. Upload, then submit the change request.',
               style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
             ),
             const SizedBox(height: 12),
@@ -1149,28 +1171,33 @@ class _EditPersonalTabState extends ConsumerState<EditPersonalTab> {
               label: 'Upload Aadhaar Card',
               kebabType: 'aadhaar-card',
               employeeId: widget.profile.id,
-              currentUrl: personal?.aadhaarCardUrl,
+              currentUrl: _pendingAadhaarCardUrl ?? personal?.aadhaarCardUrl,
+              onUploaded: (url) => setState(() => _pendingAadhaarCardUrl = url),
             ),
             const SizedBox(height: 12),
             _DocumentUploadTile(
               label: 'Upload PAN Card',
               kebabType: 'pan-card',
               employeeId: widget.profile.id,
-              currentUrl: personal?.panCardUrl,
+              currentUrl: _pendingPanCardUrl ?? personal?.panCardUrl,
+              onUploaded: (url) => setState(() => _pendingPanCardUrl = url),
             ),
             const SizedBox(height: 12),
             _DocumentUploadTile(
               label: 'Upload Passport Document',
               kebabType: 'passport',
               employeeId: widget.profile.id,
-              currentUrl: widget.profile.otherInfo?.passportUrl,
+              currentUrl:
+                  _pendingPassportUrl ?? widget.profile.otherInfo?.passportUrl,
+              onUploaded: (url) => setState(() => _pendingPassportUrl = url),
             ),
             const SizedBox(height: 12),
             _DocumentUploadTile(
               label: 'Upload Other Document',
               kebabType: 'other-document',
               employeeId: widget.profile.id,
-              currentUrl: personal?.otherDocumentUrl,
+              currentUrl: _pendingOtherDocUrl ?? personal?.otherDocumentUrl,
+              onUploaded: (url) => setState(() => _pendingOtherDocUrl = url),
             ),
             const SizedBox(height: 24),
             FilledButton(
@@ -1178,7 +1205,9 @@ class _EditPersonalTabState extends ConsumerState<EditPersonalTab> {
               child: Text(
                 widget.isPrivileged
                     ? 'Save Personal Info Direct'
-                    : 'Submit Personal Change Request',
+                    : (_canSaveDirect
+                        ? 'Save Personal Info'
+                        : 'Submit Personal Change Request'),
               ),
             ),
           ],
@@ -1192,6 +1221,7 @@ class _EditPersonalTabState extends ConsumerState<EditPersonalTab> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+    final personal = widget.profile.personalInfo;
     final payload = {
       'birthDate': _birthDate.toUtc().toIso8601String(),
       'birthPlace': _optionalText(_birthPlaceCtrl.text),
@@ -1211,15 +1241,28 @@ class _EditPersonalTabState extends ConsumerState<EditPersonalTab> {
       'passportIssuePlace': _optionalText(_passportIssuePlaceCtrl.text),
       'passportIssueDate': _passportIssueDate?.toUtc().toIso8601String(),
       'passportExpiryDate': _passportExpiryDate?.toUtc().toIso8601String(),
+      'aadhaarCardUrl': _pendingAadhaarCardUrl ?? personal?.aadhaarCardUrl,
+      'panCardUrl': _pendingPanCardUrl ?? personal?.panCardUrl,
+      'otherDocumentUrl': _pendingOtherDocUrl ?? personal?.otherDocumentUrl,
+      if (_pendingPassportUrl != null) 'passportUrl': _pendingPassportUrl,
     };
 
     try {
       final notifier = ref.read(profileProvider.notifier);
-      if (widget.isPrivileged) {
+      if (_canSaveDirect) {
         await notifier.updatePersonalInfoDirect(payload);
+        if (_pendingPassportUrl != null) {
+          await notifier.updateOtherInfo({'passportUrl': _pendingPassportUrl});
+        }
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Personal Info updated directly')),
+            SnackBar(
+              content: Text(
+                widget.isPrivileged
+                    ? 'Personal Info updated directly'
+                    : 'Personal info saved. Later edits will need Admin/HR approval.',
+              ),
+            ),
           );
         }
       } else {
@@ -1228,7 +1271,7 @@ class _EditPersonalTabState extends ConsumerState<EditPersonalTab> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
-                'Personal change request submitted for HR approval. Changes apply only after approval.',
+                'Personal change request submitted for Admin/HR approval. Changes apply only after approval.',
               ),
             ),
           );
@@ -1583,7 +1626,7 @@ class _EditAddressTabState extends ConsumerState<EditAddressTab> {
             child: Text(
               widget.isPrivileged
                   ? 'Save Address Direct'
-                  : 'Submit Address Change Request',
+                  : 'Save / Submit Address',
             ),
           ),
         ],
@@ -1597,15 +1640,34 @@ class _EditAddressTabState extends ConsumerState<EditAddressTab> {
 
     final local = _localPayload();
     final permanent = _permanentPayload();
+    bool hasAddr(AddressInfo? a) =>
+        a != null &&
+        ((a.city?.trim().isNotEmpty ?? false) ||
+            (a.mobileNo?.trim().isNotEmpty ?? false) ||
+            (a.area?.trim().isNotEmpty ?? false));
+    final localExisting = widget.profile.addresses
+        .where((a) => a.addressType.toUpperCase() == 'LOCAL')
+        .firstOrNull;
+    final permExisting = widget.profile.addresses
+        .where((a) => a.addressType.toUpperCase() == 'PERMANENT')
+        .firstOrNull;
+    final bootstrapIncomplete = !hasAddr(localExisting) && !hasAddr(permExisting);
+    final canDirect = widget.isPrivileged || bootstrapIncomplete;
 
     try {
       final notifier = ref.read(profileProvider.notifier);
-      if (widget.isPrivileged) {
+      if (canDirect) {
         await notifier.updateAddressInfoDirect('LOCAL', local);
         await notifier.updateAddressInfoDirect('PERMANENT', permanent);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Address details updated directly')),
+            SnackBar(
+              content: Text(
+                widget.isPrivileged
+                    ? 'Address details updated directly'
+                    : 'Address saved. Later edits will need Admin/HR approval.',
+              ),
+            ),
           );
         }
       } else {
@@ -1617,7 +1679,7 @@ class _EditAddressTabState extends ConsumerState<EditAddressTab> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
-                'Address change request submitted for HR approval. Changes apply only after approval.',
+                'Address change request submitted for Admin/HR approval. Changes apply only after approval.',
               ),
             ),
           );
@@ -3807,7 +3869,11 @@ Future<void> _pickAndUploadFile({
     onUploaded?.call(url);
     if (context.mounted) {
       messenger.showSnackBar(
-        const SnackBar(content: Text('File uploaded successfully')),
+        const SnackBar(
+          content: Text(
+            'File uploaded. If this replaces an existing document, submit the change request so Admin/HR can verify it.',
+          ),
+        ),
       );
     }
   } catch (e) {

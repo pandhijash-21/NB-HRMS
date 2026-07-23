@@ -204,6 +204,10 @@ class LeaveApplicationCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
               ],
+              if (application.approvalSteps.isNotEmpty) ...[
+                LeaveApprovalPipeline(steps: application.approvalSteps),
+                const SizedBox(height: 10),
+              ],
               Text(
                 '${application.fromDate} → ${application.toDate}'
                 '${application.isHalfDay ? ' (Half day${application.halfDaySession != null ? ': ${application.halfDaySession}' : ''})' : ''}',
@@ -262,3 +266,84 @@ String formatIsoTime(String? iso) {
 
 String formatDateYmd(DateTime d) =>
     '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+class LeaveApprovalPipeline extends StatelessWidget {
+  const LeaveApprovalPipeline({super.key, required this.steps});
+
+  final List<LeaveApprovalStep> steps;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = steps
+        .where((s) => !s.isSuperseded)
+        .toList()
+      ..sort((a, b) => a.stepNumber.compareTo(b.stepNumber));
+    if (active.isEmpty) return const SizedBox.shrink();
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Approval status',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+            color: isDark ? Colors.white60 : const Color(0xFF607D8B),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: active.map((step) => _StepChip(step: step, isDark: isDark)).toList(),
+        ),
+      ],
+    );
+  }
+}
+
+class _StepChip extends StatelessWidget {
+  const _StepChip({required this.step, required this.isDark});
+
+  final LeaveApprovalStep step;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    final who = (step.approverName?.trim().isNotEmpty == true)
+        ? step.approverName!.trim()
+        : step.roleLabel;
+
+    Color bg;
+    Color border;
+    Color text;
+    if (step.isDone) {
+      bg = Colors.green.withValues(alpha: 0.12);
+      border = Colors.green;
+      text = Colors.green.shade700;
+    } else if (step.isRejected) {
+      bg = Colors.red.withValues(alpha: 0.12);
+      border = Colors.red;
+      text = Colors.red.shade700;
+    } else {
+      bg = Colors.orange.withValues(alpha: 0.12);
+      border = Colors.orange;
+      text = Colors.orange.shade800;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: bg,
+        border: Border.all(color: border, width: 1.1),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        '$who · ${step.statusLabel}',
+        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: text),
+      ),
+    );
+  }
+}

@@ -309,6 +309,7 @@ class _CalendarGrid extends StatelessWidget {
       final summary = calendar[key];
       final selected = key == selectedDate;
       final hasPunches = summary != null && summary.count > 0;
+      final isLeave = summary?.isLeave ?? false;
 
       Widget cellContent = Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -363,6 +364,15 @@ class _CalendarGrid extends StatelessWidget {
                 ],
               ),
             ),
+          ] else if (isLeave) ...[
+            const SizedBox(height: 4),
+            Icon(
+              Icons.beach_access_rounded,
+              size: 12,
+              color: selected
+                  ? (isDark ? const Color(0xFF1A1816) : Colors.white)
+                  : Colors.blue.shade400,
+            ),
           ],
         ],
       );
@@ -380,14 +390,18 @@ class _CalendarGrid extends StatelessWidget {
                     ? (isDark ? const Color(0xFFC5A059) : const Color(0xFF263238))
                     : (hasPunches
                         ? (isDark ? const Color(0xFF1E1B18) : Colors.white)
-                        : (isDark ? const Color(0xFF151311) : const Color(0xFFF1F5F9))),
+                        : isLeave
+                            ? (isDark ? const Color(0xFF1A2233) : const Color(0xFFE3F2FD))
+                            : (isDark ? const Color(0xFF151311) : const Color(0xFFF1F5F9))),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
                   color: selected
                       ? (isDark ? const Color(0xFFC5A059) : const Color(0xFF263238))
                       : (hasPunches
                           ? (isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC))
-                          : (isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.03))),
+                          : isLeave
+                              ? (isDark ? Colors.blue.withOpacity(0.25) : Colors.blue.shade200)
+                              : (isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.03))),
                   width: selected ? 2.0 : 1.2,
                 ),
                 boxShadow: selected
@@ -437,16 +451,19 @@ class _DayDetail extends StatelessWidget {
   Widget build(BuildContext context) {
     final summary = day.summary;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isLeave = summary.isLeave;
+    final isAbsent = summary.isAbsent && !isLeave;
 
     // Convert total minutes to hours & minutes format
     final int hours = summary.totalMinutes ~/ 60;
     final int minutes = summary.totalMinutes % 60;
     final durationStr = hours > 0 ? '${hours}h ${minutes}m' : '${minutes}m';
 
-    // Compliance evaluation status flags
+    // Compliance evaluation status flags (only meaningful when punched in)
     final isLate = summary.evaluation?.isLate ?? false;
     final isHalfDay = summary.evaluation?.isHalfDay ?? false;
     final meetsPunchOut = summary.evaluation?.meetsPunchOut ?? false;
+    final leave = summary.leave;
 
     return Card(
       elevation: 0,
@@ -570,6 +587,78 @@ class _DayDetail extends StatelessWidget {
             const SizedBox(height: 16),
             const Divider(height: 1, thickness: 1),
             const SizedBox(height: 16),
+            if (isLeave) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(isDark ? 0.12 : 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.blue.shade400, width: 1.2),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.beach_access_rounded, size: 18, color: Colors.blue.shade400),
+                        const SizedBox(width: 8),
+                        Text(
+                          'ON APPROVED LEAVE',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.blue.shade400,
+                            letterSpacing: 0.6,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (leave?.leaveTypeName != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        leave!.leaveTypeName!,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: isDark ? Colors.white : const Color(0xFF212F3D),
+                        ),
+                      ),
+                    ],
+                    if (leave?.applicationNo != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Application ${leave!.applicationNo}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark ? Colors.white54 : const Color(0xFF607D8B),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ] else if (isAbsent) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.grey.withOpacity(0.12),
+                  border: Border.all(color: Colors.grey, width: 1.2),
+                  borderRadius: BorderRadius.circular(30),
+                ),
+                child: Text(
+                  'ABSENT (NO PUNCH)',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: isDark ? Colors.white54 : Colors.grey.shade700,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+            ] else ...[
             // Evaluation Status Pill tags
             Wrap(
               spacing: 8,
@@ -631,6 +720,7 @@ class _DayDetail extends StatelessWidget {
                 ),
               ],
             ),
+            ],
             const SizedBox(height: 24),
             Text(
               'PUNCH HISTORY',
@@ -646,7 +736,9 @@ class _DayDetail extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 child: Text(
-                  'No punches recorded for this day.',
+                  isLeave
+                      ? 'No punches — marked as approved leave.'
+                      : 'No punches recorded for this day.',
                   style: TextStyle(
                     fontSize: 13,
                     color: isDark ? Colors.white30 : const Color(0xFF607D8B).withOpacity(0.6),

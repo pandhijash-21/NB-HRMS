@@ -18,6 +18,9 @@ export const LOOKUP_CATEGORIES = [
   { key: 'EXPERIENCE_TYPE', label: 'Experience Type', description: 'Teaching, Industry, …' },
   { key: 'BANK_NAME', label: 'Bank Name', description: 'Banks for salary accounts' },
   { key: 'RELIGION', label: 'Religion', description: 'Religion options' },
+  { key: 'INTERVIEW_TYPE', label: 'Interview Type', description: 'HR Screen, Technical, Director, …' },
+  { key: 'INTERVIEW_STATUS', label: 'Interview Status', description: 'Scheduled, Selected, Rejected, …' },
+  { key: 'CANDIDATE_SOURCE', label: 'Candidate Source', description: 'Referral, Naukri, Walk-in, …' },
 ] as const;
 
 export type LookupCategoryKey = (typeof LOOKUP_CATEGORIES)[number]['key'];

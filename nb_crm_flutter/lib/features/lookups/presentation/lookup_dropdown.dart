@@ -16,6 +16,10 @@ List<LookupOption> resolveLookupOptions(
   return fallback;
 }
 
+bool lookupsLoading(WidgetRef ref, String category) {
+  return ref.watch(activeLookupsByCategoryProvider(category)).isLoading;
+}
+
 void _defer(VoidCallback fn) {
   WidgetsBinding.instance.addPostFrameCallback((_) => fn());
 }
@@ -30,6 +34,29 @@ Widget lookupDropdown({
   List<LookupOption> fallback = const [],
   bool required = false,
 }) {
+  if (lookupsLoading(ref, category) &&
+      resolveLookupOptions(ref, category, fallback: fallback).isEmpty) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: required ? '$label *' : label,
+          border: const OutlineInputBorder(),
+        ),
+        child: const SizedBox(
+          height: 24,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
   return _LookupCodeDropdown(
     category: category,
     label: label,
@@ -166,7 +193,14 @@ class _LookupCodeDropdownState extends State<_LookupCodeDropdown> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.value != widget.value ||
         oldWidget.options.length != widget.options.length) {
-      _syncFromWidget(notifyParentIfDefaulted: false);
+      // Options often arrive after first frame (async lookups). If we only
+      // default visually and skip onChanged, required forms keep a null value.
+      final optionsJustLoaded =
+          oldWidget.options.isEmpty && widget.options.isNotEmpty;
+      final parentStillEmpty = widget.value == null || widget.value!.isEmpty;
+      _syncFromWidget(
+        notifyParentIfDefaulted: optionsJustLoaded && parentStillEmpty,
+      );
     }
   }
 

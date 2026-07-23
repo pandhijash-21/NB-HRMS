@@ -4,6 +4,7 @@ import { ok, fail } from '../../utils/response';
 import { addressService } from './address.service';
 import { parseAddressType } from './types';
 import { assertMayDirectWriteProfile } from './profileWriteGuard';
+
 const addressSchema = z.object({
   addressType: z.enum(['LOCAL', 'PERMANENT']).optional(),
   flatBlockNo: z.string().min(1).nullable().optional(),
@@ -49,14 +50,19 @@ export const addressController = {
     if (req.user?.role === 'EMPLOYEE' && req.user.employeeId && req.user.employeeId !== employeeId) {
       return res.status(403).json(fail('Forbidden'));
     }
-    try {
-      assertMayDirectWriteProfile(req, employeeId);
-    } catch (err: any) {
-      return res.status(err.status ?? 403).json(fail(err.message));
-    }
 
     const body = addressSchema.extend({ addressType: z.enum(['LOCAL', 'PERMANENT']) }).safeParse(req.body);
     if (!body.success) return res.status(400).json(fail(body.error.message));
+
+    try {
+      await assertMayDirectWriteProfile(
+        req,
+        employeeId,
+        body.data.addressType === 'PERMANENT' ? 'ADDRESS_PERMANENT' : 'ADDRESS_LOCAL',
+      );
+    } catch (err: any) {
+      return res.status(err.status ?? 403).json(fail(err.message));
+    }
 
     const result = await addressService.upsert(employeeId, body.data, req);
     return res.status(result.created ? 201 : 200).json(ok(result.address));
@@ -68,17 +74,22 @@ export const addressController = {
     if (req.user?.role === 'EMPLOYEE' && req.user.employeeId && req.user.employeeId !== employeeId) {
       return res.status(403).json(fail('Forbidden'));
     }
-    try {
-      assertMayDirectWriteProfile(req, employeeId);
-    } catch (err: any) {
-      return res.status(err.status ?? 403).json(fail(err.message));
-    }
 
     let addressType;
     try {
       addressType = parseAddressType(String(req.params.type));
     } catch {
       return res.status(400).json(fail('Invalid address type'));
+    }
+
+    try {
+      await assertMayDirectWriteProfile(
+        req,
+        employeeId,
+        addressType === 'PERMANENT' ? 'ADDRESS_PERMANENT' : 'ADDRESS_LOCAL',
+      );
+    } catch (err: any) {
+      return res.status(err.status ?? 403).json(fail(err.message));
     }
 
     const body = addressSchema.safeParse(req.body);
@@ -89,4 +100,3 @@ export const addressController = {
     return res.json(ok(updated));
   },
 };
-

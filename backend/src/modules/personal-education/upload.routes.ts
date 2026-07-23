@@ -24,3 +24,12 @@ uploadRouter.post('/cancelled-cheque', requireAuth, uploadController.cancelledCh
 uploadRouter.post('/passbook', requireAuth, uploadController.passbook);
 uploadRouter.post('/leave-document', requireAuth, uploadController.leaveDocument);
 uploadRouter.post('/reimbursement-proof', requireAuth, uploadController.reimbursementProof);
+uploadRouter.post('/resume', requireAuth, uploadController.resume);
+
+/** Signed/public view URL for Cloudinary docs (fixes HTTP 401 on restricted assets). */
+uploadRouter.get('/view-url', requireAuth, uploadController.viewUrl);
+
+/** Stream a document inline (Content-Disposition: inline) so browsers preview instead of download. */
+uploadRouter.get('/inline', requireAuth, uploadController.inline);
+
+

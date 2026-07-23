@@ -100,6 +100,48 @@ class ConfigurationsHubScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 24),
           Text(
+            'Recruitment',
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 15,
+              color: isDark ? Colors.white : const Color(0xFF212F3D),
+            ),
+          ),
+          const SizedBox(height: 10),
+          groupsAsync.when(
+            loading: () => const SizedBox.shrink(),
+            error: (_, __) => const SizedBox.shrink(),
+            data: (groups) {
+              const recruitmentKeys = {
+                'INTERVIEW_TYPE',
+                'INTERVIEW_STATUS',
+                'CANDIDATE_SOURCE',
+              };
+              final recruitment = groups.where((g) => recruitmentKeys.contains(g.key)).toList();
+              if (recruitment.isEmpty) {
+                return const Text(
+                  'Recruitment lookups not seeded yet. Run backend seed.',
+                );
+              }
+              return Column(
+                children: [
+                  for (final g in recruitment) ...[
+                    _HubTile(
+                      icon: Icons.work_outline_rounded,
+                      title: g.label,
+                      subtitle: g.description ??
+                          '${g.options.where((o) => o.isActive).length} active options',
+                      color: const Color(0xFF2563eb),
+                      onTap: () => context.go('/admin/configurations/lookups/${g.key}'),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 24),
+          Text(
             'Dropdown options',
             style: TextStyle(
               fontWeight: FontWeight.w800,
@@ -115,12 +157,18 @@ class ConfigurationsHubScreen extends ConsumerWidget {
             ),
             error: (e, _) => Text('Failed to load lookups: $e'),
             data: (groups) {
-              if (groups.isEmpty) {
+              const recruitmentKeys = {
+                'INTERVIEW_TYPE',
+                'INTERVIEW_STATUS',
+                'CANDIDATE_SOURCE',
+              };
+              final other = groups.where((g) => !recruitmentKeys.contains(g.key)).toList();
+              if (other.isEmpty) {
                 return const Text('No lookup categories found. Run backend seed.');
               }
               return Column(
                 children: [
-                  for (final g in groups) ...[
+                  for (final g in other) ...[
                     _HubTile(
                       icon: Icons.list_alt_rounded,
                       title: g.label,

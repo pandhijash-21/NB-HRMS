@@ -40,7 +40,7 @@ export const bankController = {
 
     try {
       assertSelfAccess(req, employeeId);
-      assertMayDirectWriteProfile(req, employeeId);
+      await assertMayDirectWriteProfile(req, employeeId, 'BANK');
       const updated = await bankService.upsert(employeeId, body.data, req.user!.id, req);
       return res.json(ok(updated));
     } catch (err: any) {

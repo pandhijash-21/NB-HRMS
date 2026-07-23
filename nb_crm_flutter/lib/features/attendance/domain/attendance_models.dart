@@ -21,19 +21,24 @@ class AttendanceCalendarDay {
     required this.count,
     this.firstIn,
     this.lastOut,
+    this.dayStatus,
   });
 
   final int count;
   final String? firstIn;
   final String? lastOut;
+  final String? dayStatus;
 
   factory AttendanceCalendarDay.fromJson(Map<String, dynamic> json) {
     return AttendanceCalendarDay(
       count: _asInt(json['count']),
       firstIn: json['firstIn'] as String?,
       lastOut: json['lastOut'] as String?,
+      dayStatus: json['dayStatus'] as String?,
     );
   }
+
+  bool get isLeave => (dayStatus ?? '').toUpperCase() == 'LEAVE';
 }
 
 class AttendancePunch {
@@ -124,6 +129,35 @@ class AttendanceDayEvaluation {
   }
 }
 
+class AttendanceDayLeaveInfo {
+  const AttendanceDayLeaveInfo({
+    this.applicationNo,
+    this.leaveTypeName,
+    this.leaveTypeCode,
+    this.fromDate,
+    this.toDate,
+    this.isHalfDay,
+  });
+
+  final String? applicationNo;
+  final String? leaveTypeName;
+  final String? leaveTypeCode;
+  final String? fromDate;
+  final String? toDate;
+  final bool? isHalfDay;
+
+  factory AttendanceDayLeaveInfo.fromJson(Map<String, dynamic> json) {
+    return AttendanceDayLeaveInfo(
+      applicationNo: json['applicationNo'] as String?,
+      leaveTypeName: json['leaveTypeName'] as String?,
+      leaveTypeCode: json['leaveTypeCode'] as String?,
+      fromDate: json['fromDate']?.toString(),
+      toDate: json['toDate']?.toString(),
+      isHalfDay: json['isHalfDay'] as bool?,
+    );
+  }
+}
+
 class AttendanceMyDaySummary {
   const AttendanceMyDaySummary({
     this.firstIn,
@@ -131,6 +165,8 @@ class AttendanceMyDaySummary {
     this.totalMinutes = 0,
     this.policy,
     this.evaluation,
+    this.dayStatus,
+    this.leave,
   });
 
   final String? firstIn;
@@ -138,10 +174,16 @@ class AttendanceMyDaySummary {
   final int totalMinutes;
   final AttendancePolicy? policy;
   final AttendanceDayEvaluation? evaluation;
+  final String? dayStatus;
+  final AttendanceDayLeaveInfo? leave;
+
+  bool get isLeave => (dayStatus ?? '').toUpperCase() == 'LEAVE';
+  bool get isAbsent => (dayStatus ?? '').toUpperCase() == 'ABSENT';
 
   factory AttendanceMyDaySummary.fromJson(Map<String, dynamic> json) {
     final policy = _asMap(json['policy']);
     final evaluation = _asMap(json['evaluation']);
+    final leave = _asMap(json['leave']);
     return AttendanceMyDaySummary(
       firstIn: json['firstIn'] as String?,
       lastOut: json['lastOut'] as String?,
@@ -149,6 +191,8 @@ class AttendanceMyDaySummary {
       policy: policy != null ? AttendancePolicy.fromJson(policy) : null,
       evaluation:
           evaluation != null ? AttendanceDayEvaluation.fromJson(evaluation) : null,
+      dayStatus: json['dayStatus'] as String?,
+      leave: leave != null ? AttendanceDayLeaveInfo.fromJson(leave) : null,
     );
   }
 }
@@ -215,6 +259,7 @@ class AdminAttendanceHistoryDay {
     this.isLate,
     this.isHalfDay,
     this.meetsPunchOut,
+    this.dayStatus,
   });
 
   final String date;
@@ -225,6 +270,7 @@ class AdminAttendanceHistoryDay {
   final bool? isLate;
   final bool? isHalfDay;
   final bool? meetsPunchOut;
+  final String? dayStatus;
 
   factory AdminAttendanceHistoryDay.fromJson(Map<String, dynamic> json) {
     return AdminAttendanceHistoryDay(
@@ -236,6 +282,7 @@ class AdminAttendanceHistoryDay {
       isLate: json['isLate'] as bool?,
       isHalfDay: json['isHalfDay'] as bool?,
       meetsPunchOut: json['meetsPunchOut'] as bool?,
+      dayStatus: json['dayStatus'] as String?,
     );
   }
 }
@@ -327,6 +374,7 @@ class AttendanceMonthlyStats {
     required this.totalWorkingHours,
     required this.leaveApplications,
     required this.leaveDaysInMonth,
+    this.leaveDays = 0,
   });
 
   final int presentDays;
@@ -337,6 +385,7 @@ class AttendanceMonthlyStats {
   final double totalWorkingHours;
   final int leaveApplications;
   final double leaveDaysInMonth;
+  final int leaveDays;
 
   factory AttendanceMonthlyStats.fromJson(Map<String, dynamic> json) {
     return AttendanceMonthlyStats(
@@ -348,6 +397,7 @@ class AttendanceMonthlyStats {
       totalWorkingHours: (json['totalWorkingHours'] as num?)?.toDouble() ?? 0,
       leaveApplications: _asInt(json['leaveApplications']),
       leaveDaysInMonth: (json['leaveDaysInMonth'] as num?)?.toDouble() ?? 0,
+      leaveDays: _asInt(json['leaveDays']),
     );
   }
 }

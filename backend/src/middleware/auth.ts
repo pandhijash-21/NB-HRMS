@@ -6,7 +6,9 @@ import { fail } from '../utils/response';
 
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
   const header = req.headers.authorization;
-  const token = header?.startsWith('Bearer ') ? header.slice(7) : undefined;
+  const bearer = header?.startsWith('Bearer ') ? header.slice(7) : undefined;
+  const queryToken = typeof req.query.token === 'string' ? req.query.token : undefined;
+  const token = bearer || queryToken;
   if (!token) return res.status(401).json(fail('Missing bearer token'));
 
   try {

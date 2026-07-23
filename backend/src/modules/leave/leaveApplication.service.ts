@@ -4,6 +4,7 @@ import { leaveBalanceService } from './leaveBalance.service';
 import { leaveApprovalWorkflowService } from './leaveApprovalWorkflow.service';
 import { leaveNotificationService } from './leaveNotification.service';
 import { employmentChangeService } from '../personal-education/employmentChange.service';
+import { enrichApplicationsWithApproverNames } from './leaveApprovalStep.util';
 
 function toUtcDateOnly(d: Date | string) {
   const src = new Date(d);
@@ -264,7 +265,7 @@ export const leaveApplicationService = {
    *  Privileged admins (ADMIN/HR) see all PENDING apps so they can act from Leave Approvals. */
   async getPendingForApprover(approverUserId: string, opts?: { privilegedAdmin?: boolean }) {
     if (opts?.privilegedAdmin) {
-      return prisma.leaveApplication.findMany({
+      const rows = await prisma.leaveApplication.findMany({
         where: { status: 'PENDING' },
         include: {
           leaveType: { select: { name: true, code: true } },
@@ -278,6 +279,7 @@ export const leaveApplicationService = {
         },
         orderBy: { appliedAt: 'asc' },
       });
+      return enrichApplicationsWithApproverNames(rows);
     }
 
     const apps = await prisma.leaveApplication.findMany({
@@ -305,11 +307,12 @@ export const leaveApplicationService = {
     });
 
     // Only return apps where this user is on the *current* (lowest pending) tier
-    return apps.filter((app) => {
+    const filtered = apps.filter((app) => {
       const pending = app.approvalSteps.filter((s) => s.action == null && !s.isSuperseded);
       if (pending.length === 0) return false;
       const minTier = Math.min(...pending.map((s) => s.stepNumber));
       return pending.some((s) => s.stepNumber === minTier && s.approverUserId === approverUserId);
     });
+    return enrichApplicationsWithApproverNames(filtered);
   },
 };

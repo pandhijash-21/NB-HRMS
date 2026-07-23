@@ -32,7 +32,9 @@ import '../../features/leave/presentation/screens/admin_leaves_settings_screen.d
 import '../../features/leave/presentation/screens/admin_leaves_holidays_screen.dart';
 import '../../features/reimbursements/presentation/screens/reimbursements_hub_screen.dart';
 import '../../features/reimbursements/presentation/screens/reimbursement_apply_screen.dart';
-import '../../features/recruitment/presentation/screens/recruitment_stub_screen.dart';
+import '../../features/recruitment/presentation/screens/recruitment_hub_screen.dart';
+import '../../features/recruitment/presentation/screens/candidate_detail_screen.dart';
+import '../../features/repository/presentation/screens/repository_hub_screen.dart';
 import '../../features/attendance/presentation/screens/attendance_screen.dart';
 import '../../features/attendance/presentation/screens/admin_attendance_screen.dart';
 import '../../features/attendance/presentation/screens/admin_employee_attendance_history_screen.dart';
@@ -150,12 +152,17 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/recruitment',
-        builder: (context, state) {
-          final auth = ref.read(authNotifierProvider);
-          final role = (auth.user?.role ?? '').toUpperCase();
-          final isAdmin = ['ADMIN', 'HR', 'HR_MANAGER'].contains(role);
-          return RecruitmentStubScreen(isAdmin: isAdmin);
-        },
+        builder: (context, state) => const RecruitmentHubScreen(),
+      ),
+      GoRoute(
+        path: '/repository',
+        builder: (context, state) => const RepositoryHubScreen(),
+      ),
+      GoRoute(
+        path: '/recruitment/candidates/:id',
+        builder: (context, state) => CandidateDetailScreen(
+          candidateId: state.pathParameters['id'] ?? '',
+        ),
       ),
       GoRoute(
         path: '/approvals',

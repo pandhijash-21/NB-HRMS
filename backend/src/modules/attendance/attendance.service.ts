@@ -156,6 +156,79 @@ function monthRangeYmd(year: number, month: number) {
   return { from, to };
 }
 
+/** Build a set of YYYY-MM-DD (IST) covered by APPROVED leave applications. */
+function approvedLeaveDateSet(
+  apps: Array<{ status: string; fromDate: Date; toDate: Date }>,
+  rangeFromYmd: string,
+  rangeToYmd: string,
+): Set<string> {
+  const out = new Set<string>();
+  const rangeStart = istDayStartUtc(rangeFromYmd).getTime();
+  const rangeEnd = istDayStartUtc(rangeToYmd).getTime();
+
+  for (const app of apps) {
+    if (app.status !== 'APPROVED') continue;
+    let cursor = istDayStartUtc(istKeyFromUtcDate(app.fromDate));
+    const end = istDayStartUtc(istKeyFromUtcDate(app.toDate));
+    while (cursor.getTime() <= end.getTime()) {
+      if (cursor.getTime() >= rangeStart && cursor.getTime() <= rangeEnd) {
+        out.add(istKeyFromUtcDate(cursor));
+      }
+      cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
+    }
+  }
+  return out;
+}
+
+function resolveDayStatus(
+  hasPunch: boolean,
+  dateYmd: string,
+  approvedLeaveDates: Set<string>,
+): 'PRESENT' | 'LEAVE' | 'ABSENT' {
+  if (hasPunch) return 'PRESENT';
+  if (approvedLeaveDates.has(dateYmd)) return 'LEAVE';
+  return 'ABSENT';
+}
+
+async function fetchApprovedLeaveDates(
+  employeeId: number,
+  fromYmd: string,
+  toYmd: string,
+): Promise<Set<string>> {
+  const fromDate = parseYmd(fromYmd);
+  const toDate = parseYmd(toYmd);
+  const approvedLeaves = await prisma.leaveApplication.findMany({
+    where: {
+      employeeId,
+      status: 'APPROVED',
+      fromDate: { lte: toDate },
+      toDate: { gte: fromDate },
+    },
+    select: { status: true, fromDate: true, toDate: true },
+  });
+  return approvedLeaveDateSet(approvedLeaves, fromYmd, toYmd);
+}
+
+async function fetchApprovedLeaveOnDate(employeeId: number, dateYmd: string) {
+  const dayDate = parseYmd(dateYmd);
+  return prisma.leaveApplication.findFirst({
+    where: {
+      employeeId,
+      status: 'APPROVED',
+      fromDate: { lte: dayDate },
+      toDate: { gte: dayDate },
+    },
+    select: {
+      id: true,
+      applicationNo: true,
+      fromDate: true,
+      toDate: true,
+      isHalfDay: true,
+      leaveType: { select: { name: true, code: true } },
+    },
+  });
+}
+
 export const attendanceService = {
   async getAdminPolicy() {
     // Ensure row exists so admin UI always has something to edit
@@ -236,16 +309,34 @@ export const attendanceService = {
       select: { punchAt: true },
     });
 
+    const approvedLeaveDates = await fetchApprovedLeaveDates(
+      params.employeeId,
+      params.from,
+      params.to,
+    );
+
     // Group by YYYY-MM-DD (IST)
-    const byDay: Record<string, { count: number; firstIn?: string; lastOut?: string }> = {};
+    const byDay: Record<
+      string,
+      { count: number; firstIn?: string; lastOut?: string; dayStatus: 'PRESENT' | 'LEAVE' | 'ABSENT' }
+    > = {};
     for (const p of punches) {
       const d = new Date(p.punchAt);
       const key = istKeyFromUtcDate(d);
       const iso = d.toISOString(); // stored/transported as UTC ISO; UI formats as IST
-      if (!byDay[key]) byDay[key] = { count: 0, firstIn: iso, lastOut: iso };
+      if (!byDay[key]) byDay[key] = { count: 0, firstIn: iso, lastOut: iso, dayStatus: 'PRESENT' };
       byDay[key].count += 1;
       byDay[key].firstIn = byDay[key].firstIn ? (byDay[key].firstIn < iso ? byDay[key].firstIn : iso) : iso;
       byDay[key].lastOut = byDay[key].lastOut ? (byDay[key].lastOut > iso ? byDay[key].lastOut : iso) : iso;
+      byDay[key].dayStatus = 'PRESENT';
+    }
+
+    for (const dateKey of approvedLeaveDates) {
+      if (!byDay[dateKey]) {
+        byDay[dateKey] = { count: 0, dayStatus: 'LEAVE' };
+      } else {
+        byDay[dateKey].dayStatus = resolveDayStatus(byDay[dateKey].count > 0, dateKey, approvedLeaveDates);
+      }
     }
 
     return byDay;
@@ -273,12 +364,27 @@ export const attendanceService = {
       lastOut,
     );
 
+    const hasPunch = punches.length > 0;
+    const leaveApp = hasPunch ? null : await fetchApprovedLeaveOnDate(params.employeeId, params.date);
+    const dayStatus = hasPunch ? 'PRESENT' : leaveApp ? 'LEAVE' : 'ABSENT';
+
     return {
       punches,
       summary: {
         firstIn,
         lastOut,
         totalMinutes,
+        dayStatus,
+        leave: leaveApp
+          ? {
+              applicationNo: leaveApp.applicationNo,
+              leaveTypeName: leaveApp.leaveType.name,
+              leaveTypeCode: leaveApp.leaveType.code,
+              fromDate: leaveApp.fromDate.toISOString(),
+              toDate: leaveApp.toDate.toISOString(),
+              isHalfDay: leaveApp.isHalfDay,
+            }
+          : null,
         policy: {
           source: policy.source,
           punchInTime: policy.punchInTime,
@@ -288,17 +394,19 @@ export const attendanceService = {
           globalPolicy: policy.globalPolicy,
           employeeSettings: policy.employeeSettings,
         },
-        evaluation: {
-          isLate,
-          isHalfDay,
-          meetsPunchOut,
-          thresholds: {
-            lateAfter: policy.punchInTime,
-            lateBufferMinutes: policy.punchInBufferMinutes,
-            punchOutEligibleAfter: policy.punchOutTime,
-            punchOutBufferMinutes: policy.punchOutBufferMinutes,
-          },
-        },
+        evaluation: hasPunch
+          ? {
+              isLate,
+              isHalfDay,
+              meetsPunchOut,
+              thresholds: {
+                lateAfter: policy.punchInTime,
+                lateBufferMinutes: policy.punchInBufferMinutes,
+                punchOutEligibleAfter: policy.punchOutTime,
+                punchOutBufferMinutes: policy.punchOutBufferMinutes,
+              },
+            }
+          : null,
       },
     };
   },
@@ -382,6 +490,12 @@ export const attendanceService = {
 
     const policy = await resolveEffectivePolicy(params.employeeId);
 
+    const approvedLeaveDates = await fetchApprovedLeaveDates(
+      params.employeeId,
+      params.from,
+      params.to,
+    );
+
     type PunchRow = {
       id: string;
       punchAt: string;
@@ -413,6 +527,8 @@ export const attendanceService = {
       isLate: boolean | null;
       isHalfDay: boolean | null;
       meetsPunchOut: boolean | null;
+      dayStatus: 'PRESENT' | 'LEAVE' | 'ABSENT';
+      leaveTypeName?: string | null;
     }> = [];
 
     let cursor = istDayStartUtc(params.from);
@@ -428,6 +544,9 @@ export const attendanceService = {
         lastOut,
       );
 
+      const hasPunch = Boolean(firstIn);
+      const dayStatus = resolveDayStatus(hasPunch, date, approvedLeaveDates);
+
       days.push({
         date,
         firstIn,
@@ -437,6 +556,7 @@ export const attendanceService = {
         isLate,
         isHalfDay,
         meetsPunchOut,
+        dayStatus,
       });
 
       cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
@@ -553,14 +673,21 @@ export const attendanceService = {
       orderBy: { fromDate: 'asc' },
     });
 
-    const leaveDaysInMonth = leaveApps.reduce((sum, app) => sum + Number(app.totalDays), 0);
+    const approvedOnly = leaveApps.filter((a) => a.status === 'APPROVED');
+    const approvedLeaveDates = approvedLeaveDateSet(approvedOnly, from, to);
+
+    const leaveDaysInMonth = approvedOnly.reduce((sum, app) => sum + Number(app.totalDays), 0);
 
     let presentDays = 0;
+    let leaveDays = 0;
     let lateDays = 0;
     let halfDays = 0;
     let totalWorkingMinutes = 0;
     for (const day of history.days) {
-      if (day.firstIn) presentDays += 1;
+      const status = (day as { dayStatus?: string }).dayStatus
+        ?? resolveDayStatus(Boolean(day.firstIn), day.date, approvedLeaveDates);
+      if (status === 'PRESENT') presentDays += 1;
+      if (status === 'LEAVE') leaveDays += 1;
       if (day.isLate === true) lateDays += 1;
       if (day.isHalfDay === true) halfDays += 1;
       totalWorkingMinutes += day.totalMinutes;
@@ -576,7 +703,8 @@ export const attendanceService = {
         presentDays,
         lateDays,
         halfDays,
-        absentDays: Math.max(0, history.days.length - presentDays),
+        absentDays: Math.max(0, history.days.length - presentDays - leaveDays),
+        leaveDays,
         totalWorkingMinutes,
         totalWorkingHours: Math.round((totalWorkingMinutes / 60) * 100) / 100,
         leaveApplications: leaveApps.length,

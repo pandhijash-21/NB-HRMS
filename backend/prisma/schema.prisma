@@ -212,6 +212,7 @@ model Employee {
 
   letterDocuments   EmployeeLetterDocument[]
   reimbursements    ReimbursementClaim[]
+  hiredFromCandidates RecruitmentCandidate[] @relation("HiredEmployee")
 
   hodDepartments      DepartmentApprover[] @relation("DepartmentHod")
   hoiInstitutes       InstituteApprover[]  @relation("InstituteHoi")
@@ -1076,6 +1077,7 @@ model Institute {
   generalInfoRecords EmployeeGeneralInfo[]
   positionSlots      PositionSlot[]
   assignments        EmployeeAssignment[]
+  jobRequirements    JobRequirement[]
 
   @@map("institutes")
 }
@@ -1101,6 +1103,7 @@ model Designation {
   salaryInfoRecords       EmployeeSalaryInfo[]
   positionSlots           PositionSlot[]
   salaryStructureTemplates SalaryStructureTemplate[]
+  jobRequirements         JobRequirement[]
 
   @@map("designations")
 }
@@ -1438,5 +1441,111 @@ model SystemLookup {
   @@unique([category, code])
   @@index([category, isActive, sortOrder])
   @@map("system_lookups")
+}
+
+// =============================================================================
+// RECRUITMENT — job requirements, candidates, interview rounds
+// =============================================================================
+
+model JobRequirement {
+  id                      String   @id @default(uuid())
+  instituteId             String   @map("institute_id")
+  department              String
+  designationId           String   @map("designation_id")
+  employmentTypeCode      String   @map("employment_type_code")
+  jobLocation             String   @map("job_location")
+  branchLocation          String   @map("branch_location")
+  vacancies               Int      @default(1)
+  reportingManagerUserId  String?  @map("reporting_manager_user_id")
+  ctc                     Decimal? @db.Decimal(14, 2)
+  requiredEducation       String?  @map("required_education") @db.Text
+  requiredExperience      String?  @map("required_experience") @db.Text
+  requiredSkills          String?  @map("required_skills") @db.Text
+  isActive                Boolean  @default(true) @map("is_active")
+  createdBy               String?  @map("created_by")
+  updatedBy               String?  @map("updated_by")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  institute   Institute @relation(fields: [instituteId], references: [id])
+  designation Designation @relation(fields: [designationId], references: [id])
+  candidates  RecruitmentCandidate[]
+
+  @@index([isActive, createdAt])
+  @@map("job_requirements")
+}
+
+model RecruitmentCandidate {
+  id                  String    @id @default(uuid())
+  requirementId       String    @map("requirement_id")
+  fullName            String    @map("full_name")
+  contactNumber       String    @map("contact_number")
+  sourceCode          String    @map("source_code")
+  resumeReceivedDate  DateTime? @map("resume_received_date") @db.Date
+  resumeUrl           String?   @map("resume_url")
+  resumeFileName      String?   @map("resume_file_name")
+  currentStatusCode   String    @map("current_status_code")
+  offeredSalary       Decimal?  @map("offered_salary") @db.Decimal(14, 2)
+  expectedJoiningDate DateTime? @map("expected_joining_date") @db.Date
+  actualJoiningDate   DateTime? @map("actual_joining_date") @db.Date
+  hireRemarks         String?   @map("hire_remarks") @db.Text
+  hiredEmployeeId     Int?      @map("hired_employee_id")
+  createdBy           String?   @map("created_by")
+  updatedBy           String?   @map("updated_by")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  requirement   JobRequirement @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  hiredEmployee Employee?      @relation("HiredEmployee", fields: [hiredEmployeeId], references: [id])
+  rounds        InterviewRound[]
+
+  @@index([requirementId, currentStatusCode])
+  @@index([hiredEmployeeId])
+  @@map("recruitment_candidates")
+}
+
+model InterviewRound {
+  id                String    @id @default(uuid())
+  candidateId       String    @map("candidate_id")
+  roundNumber       Int       @map("round_number")
+  interviewTypeCode String    @map("interview_type_code")
+  interviewerUserId String    @map("interviewer_user_id")
+  scheduledAt       DateTime? @map("scheduled_at")
+  statusCode        String    @map("status_code")
+  remarks           String?   @db.Text
+  completedAt       DateTime? @map("completed_at")
+  /// When set, interviewer can view this round but cannot change status/remarks.
+  adminConfirmedAt  DateTime? @map("admin_confirmed_at")
+  adminConfirmedBy  String?   @map("admin_confirmed_by")
+  createdBy         String?   @map("created_by")
+  updatedBy         String?   @map("updated_by")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  candidate RecruitmentCandidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@unique([candidateId, roundNumber])
+  @@index([interviewerUserId, statusCode])
+  @@index([interviewerUserId, adminConfirmedAt])
+  @@map("interview_rounds")
+}
+
+/// Company-wide policies & documents visible to all employees.
+model CompanyRepositoryDocument {
+  id          String   @id @default(uuid())
+  title       String
+  description String?  @db.Text
+  category    String?  // POLICY, HANDBOOK, FORM, OTHER
+  fileUrl     String   @map("file_url")
+  fileName    String?  @map("file_name")
+  mimeType    String?  @map("mime_type")
+  fileSize    Int?     @map("file_size")
+  isActive    Boolean  @default(true) @map("is_active")
+  uploadedBy  String?  @map("uploaded_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([isActive, createdAt])
+  @@map("company_repository_documents")
 }
 

@@ -263,6 +263,14 @@ export const approvalService = {
         if (Object.keys(mediaUpdate).length > 0) {
           await prisma.employee.update({ where: { id: employeeId }, data: mediaUpdate });
         }
+
+        if (Object.prototype.hasOwnProperty.call(dataToUpdate, 'passportUrl')) {
+          await prisma.employeeOtherInfo.upsert({
+            where: { employeeId },
+            update: { passportUrl: dataToUpdate.passportUrl ?? null },
+            create: { employeeId, passportUrl: dataToUpdate.passportUrl ?? null },
+          });
+        }
       } else if (req.module === 'ADDRESS_LOCAL') {
         await applyAddress(employeeId, 'LOCAL', dataToUpdate);
       } else if (req.module === 'ADDRESS_PERMANENT') {
@@ -314,13 +322,13 @@ export const approvalService = {
     });
   },
 
-  /** Check if there's a pending or recently rejected request for a given module */
+  /** Active pending request for a module (rejected ones are not treated as blocking). */
   async getPending(employeeId: number, module: string) {
     return prisma.changeRequest.findFirst({
       where: {
         employeeId,
         module,
-        status: { in: ['PENDING', 'REJECTED'] as any },
+        status: 'PENDING',
       },
       orderBy: { requestedAt: 'desc' },
     });

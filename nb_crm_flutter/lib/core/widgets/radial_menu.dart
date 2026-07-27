@@ -113,7 +113,7 @@ class _RadialMenuState extends State<RadialMenu> with SingleTickerProviderStateM
 
         return Positioned(
           right: 20 - x,
-          bottom: 20 - y,
+          bottom: 95 - y,
           child: Stack(
             clipBehavior: Clip.none,
             alignment: Alignment.center,
@@ -252,7 +252,7 @@ class _RadialMenuState extends State<RadialMenu> with SingleTickerProviderStateM
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeOutCubic,
           right: _isStickyHidden ? 0 : -60,
-          bottom: 25,
+          bottom: 100,
           child: GestureDetector(
             onTap: () {
               setState(() {
@@ -295,7 +295,7 @@ class _RadialMenuState extends State<RadialMenu> with SingleTickerProviderStateM
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeOutCubic,
           right: _isStickyHidden ? -80 : 20,
-          bottom: 20,
+          bottom: 95,
           child: MouseRegion(
             onHover: (_) => _resetHideTimer(),
             child: GestureDetector(

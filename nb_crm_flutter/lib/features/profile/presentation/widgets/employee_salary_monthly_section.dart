@@ -89,11 +89,11 @@ class _MonthlyOverviewCard extends StatelessWidget {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  _chip('Present', '${attendance['presentDays'] ?? 0} days'),
-                  _chip('Working hours', '${attendance['totalWorkingHours'] ?? 0}h'),
-                  _chip('Late', '${attendance['lateDays'] ?? 0}'),
-                  _chip('Leave', '${attendance['leaveDaysInMonth'] ?? 0}'),
-                  _chip('Absent*', '${attendance['absentDays'] ?? 0}'),
+                  _chip(context, 'Present', '${attendance['presentDays'] ?? 0} days'),
+                  _chip(context, 'Working hours', '${attendance['totalWorkingHours'] ?? 0}h'),
+                  _chip(context, 'Late', '${attendance['lateDays'] ?? 0}'),
+                  _chip(context, 'Leave', '${attendance['leaveDaysInMonth'] ?? 0}'),
+                  _chip(context, 'Absent*', '${attendance['absentDays'] ?? 0}'),
                 ],
               ),
               const SizedBox(height: 12),
@@ -155,9 +155,27 @@ class _MonthlyOverviewCard extends StatelessWidget {
     return Theme.of(context).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700);
   }
 
-  Widget _chip(String label, String value) {
+  Widget _chip(BuildContext context, String label, String value) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Chip(
-      label: Text('$label: $value', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+      label: Text(
+        '$label: $value',
+        style: TextStyle(
+          fontWeight: FontWeight.w600,
+          fontSize: 12,
+          color: isDark ? Colors.white.withOpacity(0.9) : const Color(0xFF374151),
+        ),
+      ),
+      backgroundColor: isDark 
+          ? const Color(0xFF2E2E2E)
+          : const Color(0xFFF3F4F6),
+      side: BorderSide(
+        color: isDark 
+            ? const Color(0xFF3E3E3E)
+            : const Color(0xFFE5E7EB),
+        width: 1,
+      ),
+      visualDensity: VisualDensity.compact,
     );
   }
 

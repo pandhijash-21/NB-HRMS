@@ -458,7 +458,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           fontSize: 13,
           letterSpacing: 0.3,
         ),
-        unselectedLabelColor: isDark ? Colors.white38 : const Color(0xFF607D8B),
+        unselectedLabelColor: isDark ? Colors.white70 : const Color(0xFF607D8B),
         unselectedLabelStyle: const TextStyle(
           fontWeight: FontWeight.w500,
           fontSize: 13,

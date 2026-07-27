@@ -128,6 +128,15 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen>
           unselectedLabelColor: isDark
               ? Colors.white70
               : const Color(0xFF607D8B),
+          labelStyle: const TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: 13,
+            letterSpacing: 0.3,
+          ),
+          unselectedLabelStyle: const TextStyle(
+            fontWeight: FontWeight.w500,
+            fontSize: 13,
+          ),
           tabs: tabs.map((tab) => Tab(text: tab)).toList(),
         ),
       ),
@@ -551,12 +560,29 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
   }
 
   Widget _buildHelperChip(String text) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Align(
         alignment: Alignment.centerLeft,
         child: Chip(
-          label: Text(text, style: const TextStyle(fontSize: 11)),
+          label: Text(
+            text, 
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: isDark ? const Color(0xFFFDE68A) : const Color(0xFF92400E),
+            ),
+          ),
+          backgroundColor: isDark 
+              ? const Color(0xFFC5A059).withOpacity(0.12)
+              : const Color(0xFFFEF3C7),
+          side: BorderSide(
+            color: isDark 
+                ? const Color(0xFFC5A059).withOpacity(0.3)
+                : const Color(0xFFFDE68A),
+            width: 1,
+          ),
           visualDensity: VisualDensity.compact,
         ),
       ),

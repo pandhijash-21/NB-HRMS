@@ -340,23 +340,34 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ),
             ),
           ),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: categoryModules.length,
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: wide ? 3 : (medium ? 2 : 1),
-              mainAxisSpacing: 16,
-              crossAxisSpacing: 16,
-              childAspectRatio: medium ? 1.85 : 2.5,
-            ),
-            itemBuilder: (context, index) {
-              final item = categoryModules[index];
-              return _ModernModuleCard(
-                data: item,
-                onTap: item.enabled && item.route != null
-                    ? () => context.go(item.route!)
-                    : null,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final double gridWidth = constraints.maxWidth;
+              final int crossAxisCount = wide ? 3 : (medium ? 2 : 1);
+              final double cellWidth = (gridWidth - (crossAxisCount - 1) * 16.0) / crossAxisCount;
+              // Target a fixed, compact height of 96.0 pixels for all module cards to prevent text overflow
+              const double targetHeight = 96.0;
+              final double dynamicAspectRatio = cellWidth / targetHeight;
+
+              return GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: categoryModules.length,
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: crossAxisCount,
+                  mainAxisSpacing: 16,
+                  crossAxisSpacing: 16,
+                  childAspectRatio: dynamicAspectRatio,
+                ),
+                itemBuilder: (context, index) {
+                  final item = categoryModules[index];
+                  return _ModernModuleCard(
+                    data: item,
+                    onTap: item.enabled && item.route != null
+                        ? () => context.go(item.route!)
+                        : null,
+                  );
+                },
               );
             },
           ),
@@ -591,7 +602,7 @@ class _ModernModuleCardState extends State<_ModernModuleCard> {
             child: Opacity(
               opacity: enabled ? 1 : 0.5,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
                 child: Row(
                   children: [
                     AnimatedContainer(

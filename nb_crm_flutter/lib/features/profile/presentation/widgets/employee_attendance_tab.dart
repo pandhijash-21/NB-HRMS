@@ -288,11 +288,11 @@ class _StatsCard extends StatelessWidget {
               spacing: 12,
               runSpacing: 8,
               children: [
-                _chip('Present', '${summary.presentDays} days'),
-                _chip('Working hours', '${summary.totalWorkingHours}h'),
-                _chip('Late', '${summary.lateDays}'),
-                _chip('Approved leave', '${summary.leaveDays > 0 ? summary.leaveDays : summary.leaveDaysInMonth}'),
-                _chip('Absent*', '${summary.absentDays}'),
+                _chip(context, 'Present', '${summary.presentDays} days'),
+                _chip(context, 'Working hours', '${summary.totalWorkingHours}h'),
+                _chip(context, 'Late', '${summary.lateDays}'),
+                _chip(context, 'Approved leave', '${summary.leaveDays > 0 ? summary.leaveDays : summary.leaveDaysInMonth}'),
+                _chip(context, 'Absent*', '${summary.absentDays}'),
               ],
             ),
             const SizedBox(height: 6),
@@ -306,9 +306,27 @@ class _StatsCard extends StatelessWidget {
     );
   }
 
-  Widget _chip(String label, String value) {
+  Widget _chip(BuildContext context, String label, String value) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Chip(
-      label: Text('$label: $value', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+      label: Text(
+        '$label: $value',
+        style: TextStyle(
+          fontWeight: FontWeight.w600,
+          fontSize: 12,
+          color: isDark ? Colors.white.withOpacity(0.9) : const Color(0xFF374151),
+        ),
+      ),
+      backgroundColor: isDark 
+          ? const Color(0xFF2E2E2E)
+          : const Color(0xFFF3F4F6),
+      side: BorderSide(
+        color: isDark 
+            ? const Color(0xFF3E3E3E)
+            : const Color(0xFFE5E7EB),
+        width: 1,
+      ),
+      visualDensity: VisualDensity.compact,
     );
   }
 }

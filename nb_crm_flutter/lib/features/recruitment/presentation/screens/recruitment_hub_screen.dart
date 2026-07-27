@@ -67,6 +67,16 @@ class _RecruitmentHubScreenState extends ConsumerState<RecruitmentHubScreen>
     return Scaffold(
       appBar: AppBar(
         title: const Text('Recruitment'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () {
+            if (Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+            } else {
+              context.go('/home');
+            }
+          },
+        ),
         bottom: TabBar(
           controller: _tabs,
           isScrollable: true,
@@ -106,9 +116,17 @@ class _RecruitmentHubScreenState extends ConsumerState<RecruitmentHubScreen>
                   _openRequirementForm();
                 }
               },
-              backgroundColor: AppColors.bronze,
-              icon: const Icon(Icons.add),
-              label: Text(_tabs.index == 3 ? 'Add candidate' : 'Add requirement'),
+              backgroundColor: Theme.of(context).brightness == Brightness.dark 
+                  ? const Color(0xFFC5A059) 
+                  : const Color(0xFF263238),
+              foregroundColor: Theme.of(context).brightness == Brightness.dark 
+                  ? const Color(0xFF1A1816) 
+                  : Colors.white,
+              icon: const Icon(Icons.add_rounded),
+              label: Text(
+                _tabs.index == 3 ? 'Add candidate' : 'Add requirement',
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
             )
           : null,
     );
@@ -152,10 +170,9 @@ class _RecruitmentHubScreenState extends ConsumerState<RecruitmentHubScreen>
   }
 
   Future<void> _openCandidateForm() async {
-    final ok = await showModalBottomSheet<bool>(
+    final ok = await showDialog<bool>(
       context: context,
-      isScrollControlled: true,
-      builder: (ctx) => const _CandidateFormSheet(),
+      builder: (ctx) => const _CandidateFormDialog(),
     );
     if (ok == true) _refresh();
   }
@@ -624,9 +641,45 @@ class _CandidatesTabState extends ConsumerState<_CandidatesTab>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('No candidates yet.'),
-                const SizedBox(height: 8),
-                TextButton(onPressed: widget.onAdd, child: const Text('Add candidate')),
+                Icon(
+                  Icons.people_outline_rounded,
+                  size: 64,
+                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.2),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'No candidates yet',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.8),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Start building your talent pool by adding candidates.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                FilledButton.icon(
+                  onPressed: widget.onAdd,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFFC5A059),
+                    foregroundColor: const Color(0xFF1A1816),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  icon: const Icon(Icons.person_add_rounded, size: 18),
+                  label: const Text(
+                    'Add candidate',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ),
               ],
             ),
           );
@@ -914,14 +967,14 @@ class _RequirementFormSheetState extends ConsumerState<_RequirementFormSheet> {
   }
 }
 
-class _CandidateFormSheet extends ConsumerStatefulWidget {
-  const _CandidateFormSheet();
+class _CandidateFormDialog extends ConsumerStatefulWidget {
+  const _CandidateFormDialog();
 
   @override
-  ConsumerState<_CandidateFormSheet> createState() => _CandidateFormSheetState();
+  ConsumerState<_CandidateFormDialog> createState() => _CandidateFormDialogState();
 }
 
-class _CandidateFormSheetState extends ConsumerState<_CandidateFormSheet> {
+class _CandidateFormDialogState extends ConsumerState<_CandidateFormDialog> {
   final _name = TextEditingController();
   final _contact = TextEditingController();
   final _remarks = TextEditingController();
@@ -944,151 +997,206 @@ class _CandidateFormSheetState extends ConsumerState<_CandidateFormSheet> {
     super.dispose();
   }
 
+  InputDecoration _styledInput(String label, bool isDark) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: BorderSide(
+          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+        ),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: const BorderSide(color: Color(0xFFC5A059), width: 1.5),
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final openJobs = (ref.watch(adminRequirementsProvider).asData?.value ?? const <JobRequirement>[])
         .where((r) => r.isActive)
         .toList();
     final names = ref.watch(employeeNamesProvider).asData?.value ?? const <EmployeeNameOption>[];
-    final bottom = MediaQuery.of(context).viewInsets.bottom;
 
-    return Padding(
-      padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + bottom),
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text('Add candidate', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              value: _requirementId,
-              decoration: const InputDecoration(
-                labelText: 'Open job requirement',
-                border: OutlineInputBorder(),
-              ),
-              items: openJobs
-                  .map(
-                    (j) => DropdownMenuItem(
-                      value: j.id,
-                      child: Text('${j.title} · ${j.instituteName ?? ''}'),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (v) => setState(() => _requirementId = v),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _name,
-              decoration: const InputDecoration(labelText: 'Full name', border: OutlineInputBorder()),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _contact,
-              decoration: const InputDecoration(labelText: 'Contact number', border: OutlineInputBorder()),
-            ),
-            const SizedBox(height: 10),
-            lookupDropdown(
-              ref: ref,
-              category: 'CANDIDATE_SOURCE',
-              label: 'Source',
-              value: _source,
-              required: true,
-              onChanged: (v) => setState(() => _source = v),
-            ),
-            const SizedBox(height: 10),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text(
-                'Resume received: ${_resumeDate != null ? _fmtDate(_resumeDate!) : 'Not set'}',
-              ),
-              trailing: const Icon(Icons.calendar_today),
-              onTap: () async {
-                final d = await showDatePicker(
-                  context: context,
-                  initialDate: _resumeDate ?? DateTime.now(),
-                  firstDate: DateTime(2020),
-                  lastDate: DateTime.now().add(const Duration(days: 365)),
-                );
-                if (d != null) setState(() => _resumeDate = d);
-              },
-            ),
-            OutlinedButton.icon(
-              onPressed: _uploading ? null : _pickResume,
-              icon: const Icon(Icons.upload_file),
-              label: Text(_uploading
-                  ? 'Uploading…'
-                  : (_resumeFileName?.isNotEmpty == true
-                      ? _resumeFileName!
-                      : 'Upload resume (optional)')),
-            ),
-            if (_resumeFileName != null && _resumeUrl != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                'Attached: $_resumeFileName',
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-              ),
-            ],
-            const SizedBox(height: 10),
-            lookupDropdown(
-              ref: ref,
-              category: 'INTERVIEW_TYPE',
-              label: 'Interview type',
-              value: _interviewType,
-              required: true,
-              onChanged: (v) => setState(() => _interviewType = v),
-            ),
-            const SizedBox(height: 10),
-            DropdownButtonFormField<String>(
-              value: _interviewerUserId,
-              decoration: const InputDecoration(
-                labelText: 'Interviewer',
-                border: OutlineInputBorder(),
-              ),
-              items: names
-                  .where((n) => n.userId.isNotEmpty)
-                  .map((n) => DropdownMenuItem(value: n.userId, child: Text(n.displayLabel)))
-                  .toList(),
-              onChanged: (v) => setState(() => _interviewerUserId = v),
-            ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text(
-                'Scheduled: ${_scheduledAt != null ? _fmtPickedDateTime(_scheduledAt!) : 'Not set'}',
-              ),
-              trailing: const Icon(Icons.event),
-              onTap: () async {
-                final d = await showDatePicker(
-                  context: context,
-                  initialDate: _scheduledAt ?? DateTime.now(),
-                  firstDate: DateTime.now().subtract(const Duration(days: 1)),
-                  lastDate: DateTime.now().add(const Duration(days: 365)),
-                );
-                if (d == null || !context.mounted) return;
-                final t = await showTimePicker(
-                  context: context,
-                  initialTime: TimeOfDay.fromDateTime(_scheduledAt ?? DateTime.now()),
-                );
-                if (t == null) return;
-                setState(() {
-                  _scheduledAt = DateTime(d.year, d.month, d.day, t.hour, t.minute);
-                });
-              },
-            ),
-            TextField(
-              controller: _remarks,
-              maxLines: 2,
-              decoration: const InputDecoration(labelText: 'Remarks', border: OutlineInputBorder()),
-            ),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: _saving ? null : _save,
-              child: Text(_saving ? 'Saving…' : 'Add candidate'),
-            ),
-          ],
+    return AlertDialog(
+      backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Text(
+        'Add Candidate',
+        style: TextStyle(
+          fontWeight: FontWeight.w800,
+          color: isDark ? Colors.white : const Color(0xFF212F3D),
         ),
       ),
+      content: SizedBox(
+        width: 480,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              DropdownButtonFormField<String>(
+                value: _requirementId,
+                decoration: _styledInput('Open job requirement *', isDark),
+                dropdownColor: isDark ? const Color(0xFF2B2722) : Colors.white,
+                items: openJobs
+                    .map(
+                      (j) => DropdownMenuItem(
+                        value: j.id,
+                        child: Text('${j.title} · ${j.instituteName ?? ''}'),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (v) => setState(() => _requirementId = v),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _name,
+                decoration: _styledInput('Full name *', isDark),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _contact,
+                decoration: _styledInput('Contact number *', isDark),
+              ),
+              const SizedBox(height: 12),
+              lookupDropdown(
+                ref: ref,
+                category: 'CANDIDATE_SOURCE',
+                label: 'Source *',
+                value: _source,
+                required: true,
+                onChanged: (v) => setState(() => _source = v),
+              ),
+              const SizedBox(height: 8),
+              ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                title: Text(
+                  'Resume received: ${_resumeDate != null ? _fmtDate(_resumeDate!) : 'Not set'}',
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+                trailing: Icon(Icons.calendar_today_rounded, size: 18, color: isDark ? const Color(0xFFC5A059) : Colors.grey),
+                onTap: () async {
+                  final d = await showDatePicker(
+                    context: context,
+                    initialDate: _resumeDate ?? DateTime.now(),
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime.now().add(const Duration(days: 365)),
+                  );
+                  if (d != null) setState(() => _resumeDate = d);
+                },
+              ),
+              const SizedBox(height: 4),
+              OutlinedButton.icon(
+                onPressed: _uploading ? null : _pickResume,
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  side: BorderSide(
+                    color: isDark ? const Color(0xFFC5A059).withOpacity(0.3) : const Color(0xFFCFD8DC),
+                  ),
+                ),
+                icon: const Icon(Icons.upload_file_rounded, size: 18),
+                label: Text(_uploading
+                    ? 'Uploading…'
+                    : (_resumeFileName?.isNotEmpty == true
+                        ? _resumeFileName!
+                        : 'Upload resume (optional)')),
+              ),
+              if (_resumeFileName != null && _resumeUrl != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Attached: $_resumeFileName',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFFC5A059)),
+                ),
+              ],
+              const SizedBox(height: 12),
+              lookupDropdown(
+                ref: ref,
+                category: 'INTERVIEW_TYPE',
+                label: 'Interview type *',
+                value: _interviewType,
+                required: true,
+                onChanged: (v) => setState(() => _interviewType = v),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: _interviewerUserId,
+                decoration: _styledInput('Interviewer *', isDark),
+                dropdownColor: isDark ? const Color(0xFF2B2722) : Colors.white,
+                items: names
+                    .where((n) => n.userId.isNotEmpty)
+                    .map((n) => DropdownMenuItem(value: n.userId, child: Text(n.displayLabel)))
+                    .toList(),
+                onChanged: (v) => setState(() => _interviewerUserId = v),
+              ),
+              const SizedBox(height: 8),
+              ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                title: Text(
+                  'Scheduled: ${_scheduledAt != null ? _fmtPickedDateTime(_scheduledAt!) : 'Not set'}',
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+                trailing: Icon(Icons.event_rounded, size: 18, color: isDark ? const Color(0xFFC5A059) : Colors.grey),
+                onTap: () async {
+                  final d = await showDatePicker(
+                    context: context,
+                    initialDate: _scheduledAt ?? DateTime.now(),
+                    firstDate: DateTime.now().subtract(const Duration(days: 1)),
+                    lastDate: DateTime.now().add(const Duration(days: 365)),
+                  );
+                  if (d == null || !context.mounted) return;
+                  final t = await showTimePicker(
+                    context: context,
+                    initialTime: TimeOfDay.fromDateTime(_scheduledAt ?? DateTime.now()),
+                  );
+                  if (t == null) return;
+                  setState(() {
+                    _scheduledAt = DateTime(d.year, d.month, d.day, t.hour, t.minute);
+                  });
+                },
+              ),
+              const SizedBox(height: 4),
+              TextField(
+                controller: _remarks,
+                maxLines: 2,
+                decoration: _styledInput('Remarks', isDark),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          style: TextButton.styleFrom(
+            foregroundColor: isDark ? Colors.white70 : Colors.grey.shade600,
+          ),
+          child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.w600)),
+        ),
+        FilledButton(
+          onPressed: _saving ? null : _save,
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xFFC5A059),
+            foregroundColor: const Color(0xFF1A1816),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          ),
+          child: Text(
+            _saving ? 'Saving…' : 'Add candidate',
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+        ),
+      ],
     );
   }
+
 
   Future<void> _pickResume() async {
     final result = await FilePicker.pickFiles(

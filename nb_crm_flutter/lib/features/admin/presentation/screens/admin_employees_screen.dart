@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/utils/name_utils.dart';
+import '../../../../core/widgets/header_action_button.dart';
 import '../../../auth/presentation/auth_providers.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../presentation/admin_notifier.dart';
@@ -102,10 +103,12 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminEmployeesScreen> {
           ),
         ),
         actions: [
-          IconButton(
+          HeaderActionButton(
             tooltip: 'Refresh list',
+            label: 'Refresh',
             icon: Icon(
               Icons.refresh_rounded,
+              size: 18,
               color: isDark ? Colors.white.withOpacity(0.8) : const Color(0xFF212F3D),
             ),
             onPressed: () => ref.read(workforceListProvider.notifier).refresh(),

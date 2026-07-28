@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/widgets/header_action_button.dart';
+
 import '../../domain/leave_models.dart';
 import '../leave_providers.dart';
 
@@ -37,14 +39,16 @@ class AdminLeavesSettingsScreen extends ConsumerWidget {
           onPressed: () => context.go('/admin/leaves'),
         ),
         actions: [
-          IconButton(
+          HeaderActionButton(
             tooltip: 'Add leave type',
-            icon: const Icon(Icons.add_rounded, color: Color(0xFFC5A059)),
+            label: 'Add leave type',
+            icon: const Icon(Icons.add_rounded, size: 18, color: Color(0xFFC5A059)),
             onPressed: () => _showTypeDialog(context, ref, isDark),
           ),
-          IconButton(
+          HeaderActionButton(
             tooltip: 'Run year-end',
-            icon: const Icon(Icons.calendar_month_rounded, color: Color(0xFFC5A059)),
+            label: 'Run year-end',
+            icon: const Icon(Icons.calendar_month_rounded, size: 18, color: Color(0xFFC5A059)),
             onPressed: () => _runYearEnd(context, ref, isDark),
           ),
           const SizedBox(width: 8),

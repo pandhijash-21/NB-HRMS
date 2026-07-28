@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/widgets/header_action_button.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/auth_providers.dart';
 import '../../domain/org_models.dart';
@@ -62,9 +63,10 @@ class _DesignationsScreenState extends ConsumerState<DesignationsScreen> {
               : context.go('/admin/configurations'),
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded, color: Color(0xFFC5A059)),
+          HeaderActionButton(
             tooltip: 'Refresh',
+            label: 'Refresh',
+            icon: const Icon(Icons.refresh_rounded, size: 18, color: Color(0xFFC5A059)),
             onPressed: _refreshAll,
           ),
           const SizedBox(width: 8),

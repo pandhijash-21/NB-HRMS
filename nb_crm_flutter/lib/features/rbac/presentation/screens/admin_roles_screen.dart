@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/widgets/header_action_button.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/auth_providers.dart';
 import '../../domain/rbac_models.dart';
@@ -98,10 +99,12 @@ class _AdminRolesScreenState extends ConsumerState<AdminRolesScreen> {
           onPressed: () => context.pop(),
         ),
         actions: [
-          IconButton(
+          HeaderActionButton(
             tooltip: 'Refresh list',
+            label: 'Refresh',
             icon: Icon(
               Icons.refresh_rounded,
+              size: 18,
               color: isDark ? Colors.white.withValues(alpha: 0.8) : const Color(0xFF212F3D),
             ),
             onPressed: () => ref.read(rolesListProvider.notifier).refresh(),

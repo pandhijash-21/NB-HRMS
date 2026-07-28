@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/widgets/header_action_button.dart';
 import '../../domain/attendance_models.dart';
 import '../../../leave/presentation/widgets/leave_shared_widgets.dart';
 import '../attendance_providers.dart';
@@ -618,10 +619,11 @@ class _EmployeeDayTile extends StatelessWidget {
                   ),
                 ],
               ),
-              IconButton(
+              HeaderActionButton(
                 tooltip: 'Add punch',
+                label: 'Add punch',
+                icon: const Icon(Icons.add_rounded, size: 18, color: Color(0xFFC5A059)),
                 onPressed: onAddPunch,
-                icon: const Icon(Icons.add_rounded, color: Color(0xFFC5A059)),
               ),
               Icon(
                 Icons.chevron_right_rounded,

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/header_action_button.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/auth_providers.dart';
 import '../../domain/reimbursement_models.dart';
@@ -24,15 +25,17 @@ class ReimbursementsHubScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Reimbursements'),
         actions: [
-          IconButton(
+          HeaderActionButton(
             tooltip: 'Refresh',
+            label: 'Refresh',
+            icon: const Icon(Icons.refresh, size: 18),
             onPressed: () {
               ref.invalidate(myReimbursementsProvider);
               ref.invalidate(pendingReimbursementsProvider);
               if (canAdmin) ref.invalidate(adminReimbursementsProvider);
             },
-            icon: const Icon(Icons.refresh),
           ),
+          const SizedBox(width: 8),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/widgets/header_action_button.dart';
 import '../../domain/attendance_models.dart';
 import '../../../leave/presentation/widgets/leave_shared_widgets.dart';
 import '../attendance_providers.dart';
@@ -58,15 +59,17 @@ class AdminEmployeeAttendanceHistoryScreen extends ConsumerWidget {
           onPressed: () => context.go('/admin/attendance'),
         ),
         actions: [
-          IconButton(
+          HeaderActionButton(
             tooltip: 'Add punch',
-            icon: const Icon(Icons.add_rounded, color: Color(0xFFC5A059)),
+            label: 'Add punch',
+            icon: const Icon(Icons.add_rounded, size: 18, color: Color(0xFFC5A059)),
             onPressed: () => showAdminPunchDialog(
               context,
               ref,
               employeeId: employeeId,
             ),
           ),
+          const SizedBox(width: 8),
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1.5),

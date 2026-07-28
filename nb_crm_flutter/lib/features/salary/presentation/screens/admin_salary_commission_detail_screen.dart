@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/widgets/header_action_button.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/auth_providers.dart';
 import '../../domain/salary_models.dart';
@@ -46,9 +47,10 @@ class AdminSalaryCommissionDetailScreen extends ConsumerWidget {
           if (canWrite)
             Padding(
               padding: const EdgeInsets.only(right: 8.0),
-              child: IconButton(
+              child: HeaderActionButton(
                 tooltip: 'Add Column',
-                icon: const Icon(Icons.add_rounded, color: Color(0xFFC5A059)),
+                label: 'Add Column',
+                icon: const Icon(Icons.add_rounded, size: 18, color: Color(0xFFC5A059)),
                 onPressed: () => _showAddColumnDialog(context, ref, pcAsync.value),
               ),
             ),

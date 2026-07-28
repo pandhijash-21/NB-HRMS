@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/platform_file_picker.dart';
+import '../../../../core/widgets/header_action_button.dart';
 import '../../domain/leave_models.dart';
 import '../leave_providers.dart';
 import '../widgets/leave_shared_widgets.dart';
@@ -54,24 +55,28 @@ class _AdminLeavesScreenState extends ConsumerState<AdminLeavesScreen> {
           onPressed: () => context.go('/leave'),
         ),
         actions: [
-          IconButton(
+          HeaderActionButton(
             tooltip: 'Leave Approvals',
-            icon: const Icon(Icons.rule_rounded, color: Color(0xFFC5A059)),
+            label: 'Approvals',
+            icon: const Icon(Icons.rule_rounded, size: 18, color: Color(0xFFC5A059)),
             onPressed: () => context.go('/approvals'),
           ),
-          IconButton(
+          HeaderActionButton(
             tooltip: 'Settings',
-            icon: const Icon(Icons.settings_rounded, color: Color(0xFFC5A059)),
+            label: 'Settings',
+            icon: const Icon(Icons.settings_rounded, size: 18, color: Color(0xFFC5A059)),
             onPressed: () => context.go('/admin/leaves/settings'),
           ),
-          IconButton(
+          HeaderActionButton(
             tooltip: 'Holidays',
-            icon: const Icon(Icons.event_rounded, color: Color(0xFFC5A059)),
+            label: 'Holidays',
+            icon: const Icon(Icons.event_rounded, size: 18, color: Color(0xFFC5A059)),
             onPressed: () => context.go('/admin/leaves/holidays'),
           ),
-          IconButton(
+          HeaderActionButton(
             tooltip: 'Apply on behalf',
-            icon: const Icon(Icons.person_add_alt_1_rounded, color: Color(0xFFC5A059)),
+            label: 'Apply on behalf',
+            icon: const Icon(Icons.person_add_alt_1_rounded, size: 18, color: Color(0xFFC5A059)),
             onPressed: () => showAdminApplyOnBehalfDialog(context, ref),
           ),
           const SizedBox(width: 8),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/widgets/header_action_button.dart';
 import '../../domain/salary_models.dart';
 import '../salary_providers.dart';
 import '../widgets/salary_shared_widgets.dart';
@@ -22,7 +23,7 @@ class AdminSalaryRecordsScreen extends ConsumerWidget {
         elevation: 0,
         scrolledUnderElevation: 0,
         title: Text(
-          'Salary Records',
+          'Payroll Records',
           style: TextStyle(
             fontWeight: FontWeight.w700,
             fontSize: 20,
@@ -38,26 +39,32 @@ class AdminSalaryRecordsScreen extends ConsumerWidget {
           onPressed: () => context.go('/home'),
         ),
         actions: [
-          IconButton(
+          HeaderActionButton(
             tooltip: 'Salary Entry',
+            label: 'Salary Entry',
             icon: Icon(
               Icons.edit_document,
+              size: 18,
               color: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
             ),
             onPressed: () => context.go('/admin/salary/entry'),
           ),
-          IconButton(
+          HeaderActionButton(
             tooltip: 'Salary Structures',
+            label: 'Structures',
             icon: Icon(
               Icons.account_tree_outlined,
+              size: 18,
               color: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
             ),
             onPressed: () => context.go('/admin/salary/structures'),
           ),
-          IconButton(
+          HeaderActionButton(
             tooltip: 'Commissions Config',
+            label: 'Commissions',
             icon: Icon(
               Icons.layers_outlined,
+              size: 18,
               color: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
             ),
             onPressed: () => context.go('/admin/salary/commissions'),

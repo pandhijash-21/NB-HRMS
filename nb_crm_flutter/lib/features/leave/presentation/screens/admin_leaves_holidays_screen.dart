@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/widgets/header_action_button.dart';
 import '../../domain/leave_models.dart';
 import '../leave_providers.dart';
 import '../widgets/leave_shared_widgets.dart';
@@ -38,9 +39,10 @@ class AdminLeavesHolidaysScreen extends ConsumerWidget {
           onPressed: () => context.go('/admin/leaves'),
         ),
         actions: [
-          IconButton(
+          HeaderActionButton(
             tooltip: 'Add holiday',
-            icon: const Icon(Icons.add_rounded, color: Color(0xFFC5A059)),
+            label: 'Add holiday',
+            icon: const Icon(Icons.add_rounded, size: 18, color: Color(0xFFC5A059)),
             onPressed: () => _showAddDialog(context, ref, year, isDark),
           ),
           const SizedBox(width: 8),

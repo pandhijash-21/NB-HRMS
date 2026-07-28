@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 
+import '../../../../core/widgets/header_action_button.dart';
 import '../../../admin/presentation/admin_notifier.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/auth_providers.dart';
@@ -86,26 +87,22 @@ class AdminDashboardScreen extends ConsumerWidget {
           onPressed: () => context.canPop() ? context.pop() : context.go('/home'),
         ),
         actions: [
-          Container(
-            margin: const EdgeInsets.only(right: 12),
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFFC5A059).withOpacity(0.08) : const Color(0xFFE5ECF0),
-              shape: BoxShape.circle,
+          HeaderActionButton(
+            tooltip: 'Refresh Dashboard',
+            label: 'Refresh',
+            icon: Icon(
+              Icons.refresh_rounded,
+              size: 18,
+              color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
             ),
-            child: IconButton(
-              icon: Icon(
-                Icons.refresh_rounded,
-                color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
-              ),
-              onPressed: () {
-                ref.invalidate(_dashboardEmployeesProvider);
-                ref.invalidate(_recentEmployeesProvider);
-                ref.invalidate(_pendingApprovalsCountProvider);
-                ref.invalidate(_pendingLeaveCountProvider);
-              },
-              tooltip: 'Refresh Dashboard',
-            ),
+            onPressed: () {
+              ref.invalidate(_dashboardEmployeesProvider);
+              ref.invalidate(_recentEmployeesProvider);
+              ref.invalidate(_pendingApprovalsCountProvider);
+              ref.invalidate(_pendingLeaveCountProvider);
+            },
           ),
+          const SizedBox(width: 8),
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1.5),

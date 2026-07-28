@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/platform_file_picker.dart';
+import '../../../../core/widgets/header_action_button.dart';
 import '../../domain/letter_models.dart';
 import '../letters_providers.dart';
 
@@ -673,9 +674,10 @@ class _AdminLettersConfigScreenState
                             ),
                           ),
                           // + New template button
-                          IconButton(
-                            icon: const Icon(Icons.add_rounded),
+                          HeaderActionButton(
                             tooltip: 'New template',
+                            label: 'New template',
+                            icon: const Icon(Icons.add_rounded, size: 18),
                             onPressed: () {
                               setState(() {
                                 _selected = null;

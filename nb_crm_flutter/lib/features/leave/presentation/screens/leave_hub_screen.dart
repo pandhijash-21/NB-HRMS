@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 
+import '../../../../core/widgets/header_action_button.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/auth_providers.dart';
 import '../../domain/leave_models.dart';
@@ -50,10 +51,12 @@ class LeaveHubScreen extends ConsumerWidget {
           onPressed: () => context.go('/home'),
         ),
         actions: [
-          IconButton(
+          HeaderActionButton(
             tooltip: 'Refresh',
+            label: 'Refresh',
             icon: Icon(
               Icons.refresh_rounded,
+              size: 18,
               color: isDark ? Colors.white.withOpacity(0.8) : const Color(0xFF212F3D),
             ),
             onPressed: () {
@@ -61,6 +64,7 @@ class LeaveHubScreen extends ConsumerWidget {
               ref.invalidate(myApplicationsProvider);
             },
           ),
+          const SizedBox(width: 8),
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1.5),

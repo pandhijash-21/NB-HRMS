@@ -59,7 +59,7 @@ class ConfigurationsHubScreen extends ConsumerWidget {
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
         children: [
           Text(
-            'Manage institutes, designations, and every dropdown used across the app.',
+            'Manage organizations, institutes, designations, and every dropdown used across the app.',
             style: TextStyle(
               fontSize: 13,
               color: isDark ? Colors.white54 : const Color(0xFF607D8B),
@@ -76,9 +76,17 @@ class ConfigurationsHubScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 10),
           _HubTile(
+            icon: Icons.account_balance_rounded,
+            title: 'Organizations',
+            subtitle: 'Companies with contact, tax, address & bank details',
+            color: const Color(0xFF0369a1),
+            onTap: () => context.go('/admin/configurations/organizations'),
+          ),
+          const SizedBox(height: 10),
+          _HubTile(
             icon: Icons.business_rounded,
             title: 'Institutes',
-            subtitle: 'Campuses / sub-organizations (active, inactive, delete)',
+            subtitle: 'Campuses / sub-organizations (child company optional)',
             color: const Color(0xFFc2410c),
             onTap: () => context.go('/admin/institutes'),
           ),
@@ -162,7 +170,11 @@ class ConfigurationsHubScreen extends ConsumerWidget {
                 'INTERVIEW_STATUS',
                 'CANDIDATE_SOURCE',
               };
-              final other = groups.where((g) => !recruitmentKeys.contains(g.key)).toList();
+              // ORGANIZATION is managed under Organization masters now — hide legacy lookup.
+              final other = groups
+                  .where((g) =>
+                      !recruitmentKeys.contains(g.key) && g.key != 'ORGANIZATION')
+                  .toList();
               if (other.isEmpty) {
                 return const Text('No lookup categories found. Run backend seed.');
               }

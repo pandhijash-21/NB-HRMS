@@ -7,28 +7,13 @@ import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/auth_providers.dart';
 import '../../domain/org_models.dart';
 import '../org_providers.dart';
+import '../widgets/company_details_form.dart';
 
-class InstitutesScreen extends ConsumerStatefulWidget {
+class InstitutesScreen extends ConsumerWidget {
   const InstitutesScreen({super.key});
 
   @override
-  ConsumerState<InstitutesScreen> createState() => _InstitutesScreenState();
-}
-
-class _InstitutesScreenState extends ConsumerState<InstitutesScreen> {
-  final _codeCtrl = TextEditingController();
-  final _nameCtrl = TextEditingController();
-  bool _creating = false;
-
-  @override
-  void dispose() {
-    _codeCtrl.dispose();
-    _nameCtrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(authNotifierProvider);
     final role = auth.user?.role ?? '';
     final hasAccess = Permissions.canManageUsers(auth.permissions, role) ||
@@ -36,7 +21,14 @@ class _InstitutesScreenState extends ConsumerState<InstitutesScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     if (!hasAccess) {
-      return _accessDenied(isDark);
+      return Scaffold(
+        body: Center(
+          child: Text(
+            'You do not have access to Institutes.',
+            style: TextStyle(color: isDark ? Colors.white70 : Colors.black54),
+          ),
+        ),
+      );
     }
 
     final institutesAsync = ref.watch(institutesListProvider);
@@ -59,7 +51,7 @@ class _InstitutesScreenState extends ConsumerState<InstitutesScreen> {
         leading: IconButton(
           icon: Icon(
             Icons.arrow_back_rounded,
-            color: isDark ? Colors.white.withOpacity(0.8) : const Color(0xFF212F3D),
+            color: isDark ? Colors.white.withValues(alpha: 0.8) : const Color(0xFF212F3D),
           ),
           onPressed: () => context.canPop()
               ? context.pop()
@@ -77,248 +69,59 @@ class _InstitutesScreenState extends ConsumerState<InstitutesScreen> {
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1.5),
           child: Container(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+            color: isDark
+                ? const Color(0xFFC5A059).withValues(alpha: 0.15)
+                : const Color(0xFFCFD8DC),
             height: 1.5,
           ),
         ),
       ),
-      body: TweenAnimationBuilder<double>(
-        duration: const Duration(milliseconds: 500),
-        curve: Curves.easeOutCubic,
-        tween: Tween(begin: 0.0, end: 1.0),
-        builder: (context, value, child) {
-          return Transform.translate(
-            offset: Offset(0.0, 30.0 * (1.0 - value)),
-            child: Opacity(opacity: value, child: child),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _openEditor(context, ref),
+        icon: const Icon(Icons.add_business_rounded),
+        label: const Text('Add institute'),
+        backgroundColor: const Color(0xFFc2410c),
+        foregroundColor: Colors.white,
+      ),
+      body: institutesAsync.when(
+        data: (institutes) {
+          if (institutes.isEmpty) {
+            return const Center(child: Text('No institutes configured yet.'));
+          }
+          return ListView.builder(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 88),
+            itemCount: institutes.length,
+            itemBuilder: (context, index) =>
+                _instituteRow(context, ref, institutes[index], isDark),
           );
         },
-        child: ListView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-          children: [
-            Text(
-              'Configure campuses / sub-organizations.',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: isDark ? Colors.white54 : const Color(0xFF607D8B),
-              ),
-            ),
-            const SizedBox(height: 20),
-            _buildCreateCard(context, isDark),
-            const SizedBox(height: 20),
-            institutesAsync.when(
-              data: (institutes) => _buildListSection(context, institutes, isDark),
-              loading: () => const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(40),
-                  child: CircularProgressIndicator(color: Color(0xFFC5A059)),
-                ),
-              ),
-              error: (err, _) => _errorCard(
-                isDark: isDark,
-                message: 'Failed to load institutes',
-                detail: '$err',
-                onRetry: () => ref.invalidate(institutesListProvider),
-              ),
-            ),
-          ],
+        loading: () => const Center(
+          child: CircularProgressIndicator(color: Color(0xFFC5A059)),
         ),
-      ),
-    );
-  }
-
-  Widget _buildCreateCard(BuildContext context, bool isDark) {
-    return Card(
-      elevation: 0,
-      color: isDark ? const Color(0xFF1E1B18) : Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
-          width: 1.5,
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.add_business_rounded, color: Color(0xFFC5A059), size: 20),
-                const SizedBox(width: 10),
-                Text(
-                  'Add New Institute',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 14,
-                    color: isDark ? Colors.white : const Color(0xFF212F3D),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _codeCtrl,
-              decoration: InputDecoration(
-                labelText: 'Code',
-                labelStyle: const TextStyle(fontWeight: FontWeight.w600),
-                prefixIcon: const Icon(Icons.tag_rounded, color: Color(0xFFC5A059), size: 18),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide(
-                    color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
-                  ),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: Color(0xFFC5A059), width: 1.5),
-                ),
-              ),
-              style: const TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1),
-              textCapitalization: TextCapitalization.characters,
-              onChanged: (v) {
-                final upper = v.toUpperCase();
-                if (upper != v) {
-                  _codeCtrl.value = _codeCtrl.value.copyWith(
-                    text: upper,
-                    selection: TextSelection.collapsed(offset: upper.length),
-                  );
-                }
-                setState(() {});
-              },
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _nameCtrl,
-              decoration: InputDecoration(
-                labelText: 'Full name',
-                labelStyle: const TextStyle(fontWeight: FontWeight.w600),
-                prefixIcon: const Icon(Icons.domain_rounded, color: Color(0xFFC5A059), size: 18),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide(
-                    color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
-                  ),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: Color(0xFFC5A059), width: 1.5),
-                ),
-              ),
-              style: const TextStyle(fontWeight: FontWeight.w600),
-              onChanged: (_) => setState(() {}),
-            ),
-            const SizedBox(height: 16),
-            Align(
-              alignment: Alignment.centerRight,
-              child: SizedBox(
-                height: 40,
-                child: FilledButton.icon(
-                  onPressed: _creating ||
-                          _codeCtrl.text.trim().isEmpty ||
-                          _nameCtrl.text.trim().isEmpty
-                      ? null
-                      : _createInstitute,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
-                    foregroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
-                    disabledBackgroundColor: isDark ? const Color(0xFFC5A059).withOpacity(0.3) : const Color(0xFFCFD8DC),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                  icon: _creating
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                        )
-                      : const Icon(Icons.add_rounded, size: 16),
-                  label: Text(
-                    _creating ? 'Adding…' : 'Add Institute',
-                    style: const TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildListSection(BuildContext context, List<Institute> institutes, bool isDark) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: Row(
+        error: (err, _) => Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.apartment_rounded, color: Color(0xFFC5A059), size: 20),
-              const SizedBox(width: 10),
-              Text(
-                'All Institutes',
-                style: TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 14,
-                  color: isDark ? Colors.white : const Color(0xFF212F3D),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF2B2722) : const Color(0xFFF1F5F9),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(
-                    color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
-                  ),
-                ),
-                child: Text(
-                  '${institutes.length}',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                    color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
-                  ),
-                ),
+              Text('Failed to load institutes\n$err', textAlign: TextAlign.center),
+              const SizedBox(height: 12),
+              FilledButton(
+                onPressed: () => ref.invalidate(institutesListProvider),
+                child: const Text('Retry'),
               ),
             ],
           ),
         ),
-        if (institutes.isEmpty)
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.all(40),
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.domain_disabled_rounded,
-                    size: 64,
-                    color: isDark ? Colors.white10 : Colors.black12,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'No institutes configured yet.',
-                    style: TextStyle(
-                      color: isDark ? Colors.white30 : const Color(0xFF607D8B).withOpacity(0.6),
-                      fontWeight: FontWeight.w600,
-                      fontSize: 15,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          )
-        else
-          ...institutes.map((inst) => _instituteRow(context, inst, isDark)),
-      ],
+      ),
     );
   }
 
-  Widget _instituteRow(BuildContext context, Institute inst, bool isDark) {
+  Widget _instituteRow(
+    BuildContext context,
+    WidgetRef ref,
+    Institute inst,
+    bool isDark,
+  ) {
+    final parentLabel = inst.parentOrganization?.name;
     return Opacity(
       opacity: inst.isActive ? 1 : 0.5,
       child: Card(
@@ -328,7 +131,9 @@ class _InstitutesScreenState extends ConsumerState<InstitutesScreen> {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
           side: BorderSide(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+            color: isDark
+                ? const Color(0xFFC5A059).withValues(alpha: 0.15)
+                : const Color(0xFFCFD8DC),
             width: 1.5,
           ),
         ),
@@ -345,9 +150,6 @@ class _InstitutesScreenState extends ConsumerState<InstitutesScreen> {
                   decoration: BoxDecoration(
                     color: isDark ? const Color(0xFF2B2722) : const Color(0xFFF1F5F9),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
-                    ),
                   ),
                   child: Icon(
                     Icons.business_rounded,
@@ -368,53 +170,35 @@ class _InstitutesScreenState extends ConsumerState<InstitutesScreen> {
                           color: isDark ? Colors.white : const Color(0xFF212F3D),
                         ),
                       ),
-                      const SizedBox(height: 3),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                        decoration: BoxDecoration(
-                          color: isDark ? const Color(0xFF2B2722) : const Color(0xFFF1F5F9),
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(
-                            color: isDark ? const Color(0xFFC5A059).withOpacity(0.1) : const Color(0xFFCFD8DC),
-                          ),
-                        ),
-                        child: Text(
+                      const SizedBox(height: 4),
+                      Text(
+                        [
                           inst.code,
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontFamily: 'monospace',
-                            fontWeight: FontWeight.w800,
-                            color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF607D8B),
-                          ),
+                          if (inst.isChildCompany && parentLabel != null)
+                            'Child of $parentLabel',
+                          if (inst.profile.city != null) inst.profile.city!,
+                        ].join(' · '),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark ? Colors.white54 : Colors.black54,
                         ),
                       ),
                     ],
                   ),
                 ),
-                if (!inst.isActive) ...[
-                  Container(
-                    margin: const EdgeInsets.only(right: 8),
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.withOpacity(0.12),
-                      border: Border.all(color: Colors.grey, width: 1.2),
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                    child: const Text(
-                      'INACTIVE',
-                      style: TextStyle(fontSize: 8, fontWeight: FontWeight.w800, color: Colors.grey, letterSpacing: 0.5),
-                    ),
-                  ),
-                ],
+                IconButton(
+                  tooltip: 'Edit',
+                  icon: const Icon(Icons.edit_outlined, size: 20),
+                  onPressed: () => _openEditor(context, ref, existing: inst),
+                ),
                 Switch(
                   value: inst.isActive,
-                  activeColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
-                  onChanged: (checked) => _toggleActive(inst.id, checked),
+                  onChanged: (checked) => _toggleActive(context, ref, inst.id, checked),
                 ),
                 IconButton(
                   tooltip: 'Delete',
                   icon: Icon(Icons.delete_outline, color: Colors.red.shade400, size: 20),
-                  onPressed: () => _confirmDelete(inst),
+                  onPressed: () => _confirmDelete(context, ref, inst),
                 ),
                 Icon(
                   Icons.chevron_right_rounded,
@@ -429,58 +213,34 @@ class _InstitutesScreenState extends ConsumerState<InstitutesScreen> {
     );
   }
 
-  Future<void> _createInstitute() async {
-    setState(() => _creating = true);
-    final messenger = ScaffoldMessenger.of(context);
+  Future<void> _toggleActive(
+    BuildContext context,
+    WidgetRef ref,
+    String id,
+    bool isActive,
+  ) async {
     try {
-      await ref.read(orgRepositoryProvider).createInstitute(
-            code: _codeCtrl.text.trim(),
-            name: _nameCtrl.text.trim(),
-          );
-      _codeCtrl.clear();
-      _nameCtrl.clear();
-      ref.invalidate(institutesListProvider);
-      ref.invalidate(activeInstitutesProvider);
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Institute added successfully')),
-      );
-    } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('Failed to add institute: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _creating = false);
-    }
-  }
-
-  Future<void> _toggleActive(String id, bool isActive) async {
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      await ref.read(orgRepositoryProvider).updateInstitute(id, isActive: isActive);
+      await ref.read(orgRepositoryProvider).updateInstitute(id, {'isActive': isActive});
       ref.invalidate(institutesListProvider);
       ref.invalidate(activeInstitutesProvider);
     } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('Failed to update institute: $e'),
-          backgroundColor: Colors.red,
-        ),
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to update institute: $e'), backgroundColor: Colors.red),
       );
     }
   }
 
-  Future<void> _confirmDelete(Institute inst) async {
+  Future<void> _confirmDelete(
+    BuildContext context,
+    WidgetRef ref,
+    Institute inst,
+  ) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete institute?'),
-        content: Text(
-          'Delete "${inst.name}"?\n\n'
-          'If employees or alias accounts still use it, it will be deactivated instead of permanently removed.',
-        ),
+        content: Text('Delete “${inst.name}”? If in use it will be deactivated.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           FilledButton(
@@ -491,86 +251,73 @@ class _InstitutesScreenState extends ConsumerState<InstitutesScreen> {
         ],
       ),
     );
-    if (ok != true || !mounted) return;
-    final messenger = ScaffoldMessenger.of(context);
+    if (ok != true || !context.mounted) return;
     try {
       await ref.read(orgRepositoryProvider).deleteInstitute(inst.id);
       ref.invalidate(institutesListProvider);
       ref.invalidate(activeInstitutesProvider);
-      messenger.showSnackBar(const SnackBar(content: Text('Institute deleted / deactivated')));
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Institute removed')),
+        );
+      }
     } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.red),
-      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$e'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
-  Widget _accessDenied(bool isDark) {
-    return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.gpp_bad_rounded, size: 64, color: Colors.red),
-            const SizedBox(height: 16),
-            Text(
-              'Access Denied',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-                color: isDark ? Colors.white : const Color(0xFF212F3D),
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'You do not have permission to manage institutes.',
-              style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w500),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Future<void> _openEditor(
+    BuildContext context,
+    WidgetRef ref, {
+    Institute? existing,
+  }) async {
+    List<Organization> orgs = const [];
+    String? orgsError;
+    try {
+      orgs = await ref.read(activeOrganizationsProvider.future);
+    } catch (e) {
+      try {
+        final all = await ref.read(organizationsListProvider.future);
+        orgs = all.where((o) => o.isActive).toList();
+      } catch (e2) {
+        orgsError = '$e2';
+      }
+    }
+    if (!context.mounted) return;
 
-  Widget _errorCard({
-    required bool isDark,
-    required String message,
-    required String detail,
-    required VoidCallback onRetry,
-  }) {
-    return Card(
-      elevation: 0,
-      color: isDark ? const Color(0xFF1E1B18) : Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
-          width: 1.5,
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
-            const Icon(Icons.error_outline_rounded, size: 48, color: Colors.red),
-            const SizedBox(height: 12),
-            Text(message, style: TextStyle(fontWeight: FontWeight.w800, color: isDark ? Colors.white : const Color(0xFF212F3D))),
-            const SizedBox(height: 8),
-            Text(detail, textAlign: TextAlign.center, style: TextStyle(color: isDark ? Colors.white54 : const Color(0xFF607D8B))),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: onRetry,
-              style: FilledButton.styleFrom(
-                backgroundColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
-                foregroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              child: const Text('Retry', style: TextStyle(fontWeight: FontWeight.w800)),
-            ),
-          ],
-        ),
-      ),
+    final result = await showInstituteEditorDialog(
+      context,
+      existing: existing,
+      organizations: orgs,
+      organizationsError: orgsError,
     );
+    if (result == null || !context.mounted) return;
+
+    try {
+      if (existing == null) {
+        await ref.read(orgRepositoryProvider).createInstitute(result.body);
+      } else {
+        await ref.read(orgRepositoryProvider).updateInstitute(existing.id, result.body);
+      }
+      ref.invalidate(institutesListProvider);
+      ref.invalidate(activeInstitutesProvider);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(existing == null ? 'Institute created' : 'Institute updated'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 }

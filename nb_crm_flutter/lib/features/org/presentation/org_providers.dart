@@ -13,6 +13,16 @@ final institutesListProvider =
   return ref.watch(orgRepositoryProvider).listInstitutes(includeInactive: true);
 });
 
+final organizationsListProvider =
+    FutureProvider.autoDispose<List<Organization>>((ref) async {
+  return ref.watch(orgRepositoryProvider).listOrganizations(includeInactive: true);
+});
+
+final activeOrganizationsProvider =
+    FutureProvider.autoDispose<List<Organization>>((ref) async {
+  return ref.watch(orgRepositoryProvider).listActiveOrganizations();
+});
+
 final instituteMembersProvider = FutureProvider.autoDispose
     .family<InstituteMembersPayload, String>((ref, instituteId) async {
   return ref.watch(orgRepositoryProvider).getInstituteMembers(instituteId);

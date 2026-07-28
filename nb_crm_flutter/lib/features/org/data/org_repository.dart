@@ -6,6 +6,67 @@ class OrgRepository {
 
   final DioClient _dio;
 
+  Future<List<Organization>> listOrganizations({bool includeInactive = true}) async {
+    return _dio.getEnvelope<List<Organization>>(
+      'admin/organizations',
+      parse: (raw) {
+        if (raw is! List) {
+          throw const FormatException('Invalid organizations response');
+        }
+        return raw
+            .map((e) => Organization.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList();
+      },
+    );
+  }
+
+  Future<List<Organization>> listActiveOrganizations() async {
+    return _dio.getEnvelope<List<Organization>>(
+      'organizations',
+      parse: (raw) {
+        if (raw is! List) {
+          throw const FormatException('Invalid organizations response');
+        }
+        return raw
+            .map((e) => Organization.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList();
+      },
+    );
+  }
+
+  Future<Organization> createOrganization(Map<String, dynamic> body) async {
+    return _dio.postEnvelope<Organization>(
+      'admin/organizations',
+      data: body,
+      parse: (raw) {
+        if (raw is! Map) {
+          throw const FormatException('Invalid organization create response');
+        }
+        return Organization.fromJson(Map<String, dynamic>.from(raw));
+      },
+    );
+  }
+
+  Future<Organization> updateOrganization(String id, Map<String, dynamic> body) async {
+    return _dio.patchEnvelope<Organization>(
+      'admin/organizations/$id',
+      data: body,
+      parse: (raw) {
+        if (raw is! Map) {
+          throw const FormatException('Invalid organization update response');
+        }
+        return Organization.fromJson(Map<String, dynamic>.from(raw));
+      },
+    );
+  }
+
+  Future<void> deleteOrganization(String id) async {
+    await _dio.deleteEnvelope<void>(
+      'admin/organizations/$id',
+      parse: (_) {},
+    );
+  }
+
   Future<List<Institute>> listInstitutes({bool includeInactive = true}) async {
     return _dio.getEnvelope<List<Institute>>(
       'admin/institutes',
@@ -21,18 +82,10 @@ class OrgRepository {
     );
   }
 
-  Future<Institute> createInstitute({
-    required String code,
-    required String name,
-    int? sortOrder,
-  }) async {
+  Future<Institute> createInstitute(Map<String, dynamic> body) async {
     return _dio.postEnvelope<Institute>(
       'admin/institutes',
-      data: {
-        'code': code,
-        'name': name,
-        if (sortOrder != null) 'sortOrder': sortOrder,
-      },
+      data: body,
       parse: (raw) {
         if (raw is! Map) {
           throw const FormatException('Invalid institute create response');
@@ -42,21 +95,10 @@ class OrgRepository {
     );
   }
 
-  Future<Institute> updateInstitute(
-    String id, {
-    String? code,
-    String? name,
-    bool? isActive,
-    int? sortOrder,
-  }) async {
+  Future<Institute> updateInstitute(String id, Map<String, dynamic> body) async {
     return _dio.patchEnvelope<Institute>(
       'admin/institutes/$id',
-      data: {
-        if (code != null) 'code': code,
-        if (name != null) 'name': name,
-        if (isActive != null) 'isActive': isActive,
-        if (sortOrder != null) 'sortOrder': sortOrder,
-      },
+      data: body,
       parse: (raw) {
         if (raw is! Map) {
           throw const FormatException('Invalid institute update response');

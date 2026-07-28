@@ -1062,23 +1062,99 @@ model EmployeeSalaryInfo {
 }
 
 // =============================================================================
+// ORGANIZATIONS (top-level companies)
+// =============================================================================
+
+model Organization {
+  id                 String   @id @default(uuid())
+  code               String   @unique
+  name               String   @unique
+  registrationNo     String?  @map("registration_no")
+  establishmentYear  Int?     @map("establishment_year")
+  contactPerson      String?  @map("contact_person")
+  mobileNo           String?  @map("mobile_no")
+  contactNo          String?  @map("contact_no")
+  email              String?
+  webAddress         String?  @map("web_address")
+  panNo              String?  @map("pan_no")
+  gstNo              String?  @map("gst_no")
+  cinNo              String?  @map("cin_no")
+  country            String?
+  state              String?
+  city               String?
+  address1           String?
+  address2           String?
+  pinCode            String?  @map("pin_code")
+  tagLine            String?  @map("tag_line")
+  hostingUrl         String?  @map("hosting_url")
+  pageSize           String?  @map("page_size")
+  dateFormat         String?  @map("date_format")
+  timeZone           String?  @map("time_zone")
+  socialPostUrl      String?  @map("social_post_url")
+  bankName           String?  @map("bank_name")
+  accountHolderName  String?  @map("account_holder_name")
+  bankAccountNo      String?  @map("bank_account_no")
+  ifscCode           String?  @map("ifsc_code")
+  bankBranch         String?  @map("bank_branch")
+  isActive           Boolean  @default(true) @map("is_active")
+  sortOrder          Int      @default(0) @map("sort_order")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  childInstitutes Institute[]
+
+  @@map("organizations")
+}
+
+// =============================================================================
 // INSTITUTES (sub-organizations)
 // =============================================================================
 
 model Institute {
-  id        String   @id @default(uuid())
-  code      String   @unique
-  name      String   @unique
-  isActive  Boolean  @default(true) @map("is_active")
-  sortOrder Int      @default(0) @map("sort_order")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id                   String   @id @default(uuid())
+  code                 String   @unique
+  name                 String   @unique
+  registrationNo       String?  @map("registration_no")
+  establishmentYear    Int?     @map("establishment_year")
+  contactPerson        String?  @map("contact_person")
+  mobileNo             String?  @map("mobile_no")
+  contactNo            String?  @map("contact_no")
+  email                String?
+  webAddress           String?  @map("web_address")
+  panNo                String?  @map("pan_no")
+  gstNo                String?  @map("gst_no")
+  cinNo                String?  @map("cin_no")
+  country              String?
+  state                String?
+  city                 String?
+  address1             String?
+  address2             String?
+  pinCode              String?  @map("pin_code")
+  tagLine              String?  @map("tag_line")
+  hostingUrl           String?  @map("hosting_url")
+  pageSize             String?  @map("page_size")
+  dateFormat           String?  @map("date_format")
+  timeZone             String?  @map("time_zone")
+  socialPostUrl        String?  @map("social_post_url")
+  bankName             String?  @map("bank_name")
+  accountHolderName    String?  @map("account_holder_name")
+  bankAccountNo        String?  @map("bank_account_no")
+  ifscCode             String?  @map("ifsc_code")
+  bankBranch           String?  @map("bank_branch")
+  isChildCompany       Boolean  @default(false) @map("is_child_company")
+  parentOrganizationId String?  @map("parent_organization_id")
+  isActive             Boolean  @default(true) @map("is_active")
+  sortOrder            Int      @default(0) @map("sort_order")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
 
+  parentOrganization Organization? @relation(fields: [parentOrganizationId], references: [id])
   generalInfoRecords EmployeeGeneralInfo[]
   positionSlots      PositionSlot[]
   assignments        EmployeeAssignment[]
   jobRequirements    JobRequirement[]
 
+  @@index([parentOrganizationId])
   @@map("institutes")
 }
 

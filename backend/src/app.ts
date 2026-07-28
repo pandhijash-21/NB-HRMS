@@ -23,6 +23,7 @@ import { lettersRouter } from './modules/letters';
 import { reimbursementsRouter } from './modules/reimbursements';
 import { recruitmentRouter } from './modules/recruitment';
 import { repositoryRouter } from './modules/repository';
+import { organizationRouter } from './modules/organization';
 
 configureCloudinary();
 
@@ -90,6 +91,7 @@ app.use('/api/letters', lettersRouter);
 app.use('/api/reimbursements', reimbursementsRouter);
 app.use('/api/recruitment', recruitmentRouter);
 app.use('/api/repository', repositoryRouter);
+app.use('/api', organizationRouter);
 app.use('/api/admin', designationRouter);
 app.use('/api', instituteRouter);
 app.use('/api/salary', salaryRouter);

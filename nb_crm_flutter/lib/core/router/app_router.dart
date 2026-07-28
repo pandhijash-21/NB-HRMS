@@ -17,6 +17,7 @@ import '../../features/admin/presentation/screens/admin_dashboard_screen.dart';
 import '../../features/admin/presentation/screens/admin_audit_stub_screen.dart';
 import '../../features/org/presentation/screens/institutes_screen.dart';
 import '../../features/org/presentation/screens/institute_detail_screen.dart';
+import '../../features/org/presentation/screens/organizations_screen.dart';
 import '../../features/org/presentation/screens/designations_screen.dart';
 import '../../features/lookups/presentation/screens/configurations_hub_screen.dart';
 import '../../features/lookups/presentation/screens/lookup_category_screen.dart';
@@ -72,11 +73,16 @@ final goRouterProvider = Provider<GoRouter>((ref) {
   final refresh = GoRouterAuthRefresh(ref);
   ref.onDispose(refresh.dispose);
 
+  // Bump when route table changes so hot-restart rebuilds GoRouter cleanly.
+  const routerRevision = 2;
+
   return GoRouter(
     initialLocation: '/login',
     refreshListenable: refresh,
     debugLogDiagnostics: kDebugMode,
     redirect: (context, state) {
+      // Touch revision so analyzer/tree-shaking keep the constant.
+      assert(routerRevision >= 1);
       final auth = ref.read(authNotifierProvider);
       final loc = state.matchedLocation;
 
@@ -239,6 +245,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const ConfigurationsHubScreen(),
       ),
       GoRoute(
+        path: '/admin/configurations/organizations',
+        builder: (context, state) => const OrganizationsScreen(),
+      ),
+      GoRoute(
         path: '/admin/configurations/letters',
         builder: (context, state) => const AdminLettersConfigScreen(),
       ),
@@ -248,6 +258,11 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           final category = state.pathParameters['category'] ?? '';
           return LookupCategoryScreen(category: category);
         },
+      ),
+      // Keep legacy path working (redirect-style alias)
+      GoRoute(
+        path: '/admin/organizations',
+        redirect: (context, state) => '/admin/configurations/organizations',
       ),
       GoRoute(
         path: '/admin/institutes',

@@ -1,3 +1,7 @@
+import 'company_profile.dart';
+
+export 'company_profile.dart';
+
 Map<String, dynamic>? _asMap(Object? value) {
   if (value is Map<String, dynamic>) return value;
   if (value is Map) return Map<String, dynamic>.from(value);
@@ -31,13 +35,14 @@ class LinkedRole {
   }
 }
 
-class Institute {
-  const Institute({
+class Organization {
+  const Organization({
     required this.id,
     required this.code,
     required this.name,
     required this.isActive,
     required this.sortOrder,
+    required this.profile,
   });
 
   final String id;
@@ -45,14 +50,56 @@ class Institute {
   final String name;
   final bool isActive;
   final int sortOrder;
+  final CompanyProfileFields profile;
+
+  factory Organization.fromJson(Map<String, dynamic> json) {
+    return Organization(
+      id: json['id']?.toString() ?? '',
+      code: json['code'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      isActive: _asBool(json['isActive'], true),
+      sortOrder: _asInt(json['sortOrder']),
+      profile: CompanyProfileFields.fromJson(json),
+    );
+  }
+}
+
+class Institute {
+  const Institute({
+    required this.id,
+    required this.code,
+    required this.name,
+    required this.isActive,
+    required this.sortOrder,
+    this.isChildCompany = false,
+    this.parentOrganizationId,
+    this.parentOrganization,
+    this.profile = const CompanyProfileFields(),
+  });
+
+  final String id;
+  final String code;
+  final String name;
+  final bool isActive;
+  final int sortOrder;
+  final bool isChildCompany;
+  final String? parentOrganizationId;
+  final ParentOrganizationRef? parentOrganization;
+  final CompanyProfileFields profile;
 
   factory Institute.fromJson(Map<String, dynamic> json) {
+    final parentMap = _asMap(json['parentOrganization']);
     return Institute(
       id: json['id']?.toString() ?? '',
       code: json['code'] as String? ?? '',
       name: json['name'] as String? ?? '',
       isActive: _asBool(json['isActive'], true),
       sortOrder: _asInt(json['sortOrder']),
+      isChildCompany: _asBool(json['isChildCompany']),
+      parentOrganizationId: json['parentOrganizationId']?.toString(),
+      parentOrganization:
+          parentMap != null ? ParentOrganizationRef.fromJson(parentMap) : null,
+      profile: CompanyProfileFields.fromJson(json),
     );
   }
 }

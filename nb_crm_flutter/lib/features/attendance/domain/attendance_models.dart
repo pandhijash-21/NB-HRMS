@@ -435,3 +435,110 @@ class AttendanceMonthlySummary {
     );
   }
 }
+
+class DeviceSyncSourceStatus {
+  const DeviceSyncSourceStatus({
+    required this.configured,
+    this.lastSyncedAt,
+    this.cursor,
+    this.note,
+  });
+
+  final bool configured;
+  final String? lastSyncedAt;
+  final String? cursor;
+  final String? note;
+
+  factory DeviceSyncSourceStatus.fromJson(Map<String, dynamic> json) {
+    return DeviceSyncSourceStatus(
+      configured: json['configured'] == true,
+      lastSyncedAt: json['lastSyncedAt'] as String?,
+      cursor: json['cursor'] as String?,
+      note: json['note'] as String?,
+    );
+  }
+}
+
+class DeviceAttendanceStatus {
+  const DeviceAttendanceStatus({
+    required this.etimeoffice,
+    required this.esslMssql,
+    required this.employeesWithPunchId,
+  });
+
+  final DeviceSyncSourceStatus etimeoffice;
+  final DeviceSyncSourceStatus esslMssql;
+  final int employeesWithPunchId;
+
+  factory DeviceAttendanceStatus.fromJson(Map<String, dynamic> json) {
+    return DeviceAttendanceStatus(
+      etimeoffice: DeviceSyncSourceStatus.fromJson(
+        Map<String, dynamic>.from(json['etimeoffice'] as Map? ?? const {}),
+      ),
+      esslMssql: DeviceSyncSourceStatus.fromJson(
+        Map<String, dynamic>.from(json['esslMssql'] as Map? ?? const {}),
+      ),
+      employeesWithPunchId: (json['employeesWithPunchId'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+class DevicePunchPreviewRow {
+  const DevicePunchPreviewRow({
+    this.name,
+    required this.empcode,
+    required this.punchDate,
+    this.mcid,
+    this.mFlag,
+    this.matchedEmployeeId,
+  });
+
+  final String? name;
+  final String empcode;
+  final String punchDate;
+  final String? mcid;
+  final String? mFlag;
+  final int? matchedEmployeeId;
+
+  factory DevicePunchPreviewRow.fromJson(Map<String, dynamic> json) {
+    return DevicePunchPreviewRow(
+      name: json['name'] as String? ?? json['Name'] as String?,
+      empcode: (json['empcode'] ?? json['Empcode'] ?? '').toString(),
+      punchDate: (json['punchDate'] ?? json['PunchDate'] ?? '').toString(),
+      mcid: json['mcid']?.toString() ?? json['MCID']?.toString(),
+      mFlag: json['mFlag']?.toString() ?? json['M_Flag']?.toString(),
+      matchedEmployeeId: json['matchedEmployeeId'] is int
+          ? json['matchedEmployeeId'] as int
+          : int.tryParse('${json['matchedEmployeeId'] ?? ''}'),
+    );
+  }
+}
+
+class DeviceSyncResult {
+  const DeviceSyncResult({
+    required this.source,
+    required this.fetched,
+    required this.inserted,
+    required this.skippedUnmatched,
+    required this.unmatchedCodes,
+  });
+
+  final String source;
+  final int fetched;
+  final int inserted;
+  final int skippedUnmatched;
+  final List<String> unmatchedCodes;
+
+  factory DeviceSyncResult.fromJson(Map<String, dynamic> json) {
+    final codes = json['unmatchedCodes'];
+    return DeviceSyncResult(
+      source: (json['source'] ?? '').toString(),
+      fetched: (json['fetched'] as num?)?.toInt() ?? 0,
+      inserted: (json['inserted'] as num?)?.toInt() ?? 0,
+      skippedUnmatched: (json['skippedUnmatched'] as num?)?.toInt() ?? 0,
+      unmatchedCodes: codes is List
+          ? codes.map((e) => e.toString()).toList()
+          : const [],
+    );
+  }
+}

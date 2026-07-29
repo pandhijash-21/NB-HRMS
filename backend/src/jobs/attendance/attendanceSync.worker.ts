@@ -9,10 +9,10 @@ export function startAttendanceSyncWorker() {
   new Worker(
     ATTENDANCE_QUEUE_NAMES.SYNC_ESSL,
     async () => {
-      const res = await attendanceSyncService.syncEsslPunches();
-      return res;
+      const etime = await attendanceSyncService.syncEtimeofficePunches();
+      const essl = await attendanceSyncService.syncEsslPunches();
+      return { etime, essl };
     },
-    { connection }
+    { connection },
   );
 }
-

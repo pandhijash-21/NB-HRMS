@@ -221,6 +221,8 @@ class GeneralInfo {
   final String? shift;
   final String? appointmentType;
   final String? employeeCode;
+  /// Biometric machine Empcode — used only for eTimeOffice punch matching.
+  final String? punchId;
 
   const GeneralInfo({
     required this.id,
@@ -247,6 +249,7 @@ class GeneralInfo {
     this.shift,
     this.appointmentType,
     this.employeeCode,
+    this.punchId,
   });
 
   factory GeneralInfo.fromJson(Map<String, dynamic> json) {
@@ -280,6 +283,7 @@ class GeneralInfo {
       shift: json['shift'] as String?,
       appointmentType: json['appointmentType'] as String?,
       employeeCode: json['employeeCode'] as String?,
+      punchId: json['punchId'] as String?,
     );
   }
 
@@ -308,6 +312,7 @@ class GeneralInfo {
         'shift': shift,
         'appointmentType': appointmentType,
         'employeeCode': employeeCode,
+        'punchId': punchId,
       };
 }
 

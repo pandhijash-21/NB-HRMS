@@ -39,6 +39,7 @@ import '../../features/repository/presentation/screens/repository_hub_screen.dar
 import '../../features/attendance/presentation/screens/attendance_screen.dart';
 import '../../features/attendance/presentation/screens/admin_attendance_screen.dart';
 import '../../features/attendance/presentation/screens/admin_employee_attendance_history_screen.dart';
+import '../../features/attendance/presentation/screens/device_attendance_screen.dart';
 import '../../features/salary/presentation/screens/admin_salary_commissions_screen.dart';
 import '../../features/salary/presentation/screens/admin_salary_commission_detail_screen.dart';
 import '../../features/salary/presentation/screens/admin_salary_structures_screen.dart';
@@ -201,6 +202,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/admin/attendance',
         builder: (context, state) => const AdminAttendanceScreen(),
+      ),
+      GoRoute(
+        path: '/admin/attendance/device',
+        builder: (context, state) => const DeviceAttendanceScreen(),
       ),
       GoRoute(
         path: '/admin/attendance/employee/:employeeId',

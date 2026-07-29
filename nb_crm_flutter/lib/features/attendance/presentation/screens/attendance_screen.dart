@@ -106,6 +106,14 @@ class AttendanceScreen extends ConsumerWidget {
                 color: const Color(0xFF16a34a),
                 onTap: () => context.go('/admin/attendance'),
               ),
+              const SizedBox(height: 10),
+              _AttendanceWorkspaceTile(
+                icon: Icons.fingerprint_rounded,
+                title: 'Device Attendance',
+                subtitle: 'Raw biometric data & sync into calendar',
+                color: const Color(0xFF2563eb),
+                onTap: () => context.go('/admin/attendance/device'),
+              ),
               const SizedBox(height: 28),
               Row(
                 children: [

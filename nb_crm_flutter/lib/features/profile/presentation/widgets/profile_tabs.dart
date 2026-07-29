@@ -116,6 +116,7 @@ class GeneralViewTab extends ConsumerWidget {
             children: [
               _buildField(context, 'Full Name', info?.fullName ?? '—'),
               _buildField(context, 'Employee Code', info?.employeeCode ?? '—'),
+              _buildField(context, 'Punch ID (biometric)', info?.punchId ?? '—'),
               _buildField(context, 'Organization', info?.organization ?? '—'),
               _buildField(context, 'Institute', _instituteLabel(institutes)),
               _buildField(context, 'Department', info?.department ?? '—'),

@@ -173,4 +173,79 @@ class AttendanceRepository {
       },
     );
   }
+
+  Future<DeviceAttendanceStatus> getDeviceStatus() async {
+    return _dio.getEnvelope<DeviceAttendanceStatus>(
+      'attendance/admin/device/status',
+      parse: (raw) {
+        if (raw is! Map) {
+          throw const FormatException('Invalid device status response');
+        }
+        return DeviceAttendanceStatus.fromJson(Map<String, dynamic>.from(raw));
+      },
+    );
+  }
+
+  Future<List<DevicePunchPreviewRow>> getDevicePreview({
+    required String from,
+    required String to,
+    String? empcode,
+    String mode = 'raw',
+  }) async {
+    return _dio.getEnvelope<List<DevicePunchPreviewRow>>(
+      'attendance/admin/device/preview',
+      queryParameters: {
+        'from': from,
+        'to': to,
+        'mode': mode,
+        if (empcode != null && empcode.isNotEmpty) 'empcode': empcode,
+      },
+      parse: (raw) {
+        if (raw is! List) {
+          throw const FormatException('Invalid device preview response');
+        }
+        return raw
+            .map(
+              (e) => DevicePunchPreviewRow.fromJson(
+                Map<String, dynamic>.from(e as Map),
+              ),
+            )
+            .toList();
+      },
+    );
+  }
+
+  Future<DeviceSyncResult> syncDeviceNow() async {
+    return _dio.postEnvelope<DeviceSyncResult>(
+      'attendance/admin/device/sync',
+      data: const {},
+      parse: (raw) {
+        if (raw is! Map) {
+          throw const FormatException('Invalid device sync response');
+        }
+        return DeviceSyncResult.fromJson(Map<String, dynamic>.from(raw));
+      },
+    );
+  }
+
+  Future<DeviceSyncResult> backfillDevice({
+    required String from,
+    required String to,
+    String? empcode,
+  }) async {
+    return _dio.postEnvelope<DeviceSyncResult>(
+      'attendance/admin/device/backfill',
+      data: {
+        'from': from,
+        'to': to,
+        if (empcode != null && empcode.isNotEmpty) 'empcode': empcode,
+      },
+      parse: (raw) {
+        if (raw is! Map) {
+          throw const FormatException('Invalid device backfill response');
+        }
+        return DeviceSyncResult.fromJson(Map<String, dynamic>.from(raw));
+      },
+    );
+  }
 }

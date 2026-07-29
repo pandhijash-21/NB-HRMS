@@ -23,6 +23,7 @@ const GeneralInfoSchema = z.object({
   shift:                z.string().optional().nullable(),
   appointmentType:      z.string().optional().nullable(),
   employeeCode:         z.string().min(1).optional().nullable(),
+  punchId:              z.string().min(1).optional().nullable(),
   instituteId:          z.string().uuid().optional().nullable(),
 });
 

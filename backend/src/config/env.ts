@@ -34,6 +34,12 @@ const envSchema = z.object({
   SMTP_USER:   z.string().optional(),
   SMTP_PASS:   z.string().optional(),
   SMTP_FROM:   z.string().optional(),
+
+  /** eTimeOffice HTTP attendance API (this site's biometric cloud). */
+  ETIMEOFFICE_BASE_URL: z.string().default('https://api.etimeoffice.com'),
+  ETIMEOFFICE_CORPORATE_ID: z.string().default('support'),
+  ETIMEOFFICE_USERNAME: z.string().default('support'),
+  ETIMEOFFICE_PASSWORD: z.string().default('support'),
 });
 
 export type Env = z.infer<typeof envSchema>;

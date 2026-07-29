@@ -238,3 +238,95 @@ attendanceRouter.get(
   },
 );
 
+function requireAttendanceAdmin(req: Request, res: Response): boolean {
+  const role = String((req.user as { role?: string } | undefined)?.role ?? '');
+  if (!['ADMIN', 'HR', 'HR_MANAGER'].includes(role)) {
+    res.status(403).json(fail('Forbidden'));
+    return false;
+  }
+  return true;
+}
+
+/** Device / biometric sync status (eTimeOffice + MSSQL stub). */
+attendanceRouter.get('/admin/device/status', requireAuth, requirePermission('ATTENDANCE', 'READ'), async (req, res) => {
+  try {
+    if (!requireAttendanceAdmin(req, res)) return;
+    const { attendanceSyncService } = await import('./attendanceSync.service');
+    return res.json(ok(await attendanceSyncService.getDeviceStatus()));
+  } catch (e: unknown) {
+    return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+  }
+});
+
+attendanceRouter.post('/admin/device/sync', requireAuth, requirePermission('ATTENDANCE', 'WRITE'), async (req, res) => {
+  try {
+    if (!requireAttendanceAdmin(req, res)) return;
+    const { attendanceSyncService } = await import('./attendanceSync.service');
+    const data = await attendanceSyncService.syncEtimeofficePunches();
+    return res.json(ok(data));
+  } catch (e: unknown) {
+    return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+  }
+});
+
+attendanceRouter.get('/admin/device/preview', requireAuth, requirePermission('ATTENDANCE', 'READ'), async (req, res) => {
+  try {
+    if (!requireAttendanceAdmin(req, res)) return;
+    const from = String(req.query.from ?? '');
+    const to = String(req.query.to ?? '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+      return res.status(400).json(fail('from and to must be YYYY-MM-DD'));
+    }
+    const empcode = req.query.empcode ? String(req.query.empcode) : undefined;
+    const mode = String(req.query.mode ?? 'raw'); // raw | inout
+    const { fetchPunchDataMcid, fetchInOutPunchData } = await import('./etimeoffice.client');
+    const { loadPunchIdMap, lookupPunchIdMap } = await import('./punchId.mapper');
+    const punchMap = await loadPunchIdMap();
+
+    if (mode === 'inout') {
+      const rows = await fetchInOutPunchData({ empcode, fromYmd: from, toYmd: to });
+      return res.json(
+        ok(
+          rows.map((r) => ({
+            ...r,
+            matchedEmployeeId: lookupPunchIdMap(punchMap, r.Empcode),
+          })),
+        ),
+      );
+    }
+
+    const rows = await fetchPunchDataMcid({ empcode, fromYmd: from, toYmd: to });
+    return res.json(
+      ok(
+        rows.map((r) => ({
+          name: r.Name ?? null,
+          empcode: r.Empcode,
+          punchDate: r.PunchDate,
+          mcid: r.mcid ?? null,
+          mFlag: r.M_Flag ?? null,
+          matchedEmployeeId: lookupPunchIdMap(punchMap, r.Empcode),
+        })),
+      ),
+    );
+  } catch (e: unknown) {
+    return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+  }
+});
+
+attendanceRouter.post('/admin/device/backfill', requireAuth, requirePermission('ATTENDANCE', 'WRITE'), async (req, res) => {
+  try {
+    if (!requireAttendanceAdmin(req, res)) return;
+    const from = String(req.body?.from ?? '');
+    const to = String(req.body?.to ?? '');
+    const empcode = req.body?.empcode ? String(req.body.empcode) : undefined;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+      return res.status(400).json(fail('from and to must be YYYY-MM-DD'));
+    }
+    const { attendanceSyncService } = await import('./attendanceSync.service');
+    const data = await attendanceSyncService.backfillEtimeoffice({ fromYmd: from, toYmd: to, empcode });
+    return res.json(ok(data));
+  } catch (e: unknown) {
+    return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+  }
+});
+

@@ -195,3 +195,8 @@ final employeeMonthlyAttendanceProvider = FutureProvider.autoDispose
         month: params.month,
       );
 });
+
+final deviceAttendanceStatusProvider =
+    FutureProvider.autoDispose<DeviceAttendanceStatus>((ref) async {
+  return ref.watch(attendanceRepositoryProvider).getDeviceStatus();
+});

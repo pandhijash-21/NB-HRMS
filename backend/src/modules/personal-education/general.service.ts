@@ -22,6 +22,7 @@ type GeneralInfoInput = {
   shift?: string | null;
   appointmentType?: string | null;
   employeeCode?: string | null;
+  punchId?: string | null;
   instituteId?: string | null;
 };
 
@@ -52,6 +53,9 @@ export const generalService = {
         designation:          input.designation!,
         shift:                input.shift ?? null,
         appointmentType:      input.appointmentType ?? null,
+        employeeCode:         input.employeeCode ?? null,
+        punchId:              input.punchId ?? null,
+        instituteId:          input.instituteId ?? null,
         updatedBy:            createdBy,
       },
     });
@@ -61,9 +65,21 @@ export const generalService = {
     const existing = await prisma.employeeGeneralInfo.findUnique({ where: { employeeId } });
     if (!existing) throw { status: 404, message: 'General info not found' };
 
+    // Normalize empty punchId to null for unique constraint
+    const data = {
+      ...input,
+      punchId:
+        input.punchId !== undefined
+          ? input.punchId && String(input.punchId).trim()
+            ? String(input.punchId).trim()
+            : null
+          : undefined,
+      updatedBy,
+    };
+
     const updated = await prisma.employeeGeneralInfo.update({
       where: { employeeId },
-      data: { ...input, updatedBy },
+      data,
     });
 
     diffAndAudit(req, {

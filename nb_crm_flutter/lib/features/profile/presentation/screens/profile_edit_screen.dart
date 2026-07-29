@@ -235,6 +235,7 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
   late TextEditingController _fullNameCtrl;
   late TextEditingController _abbreviationCtrl;
   late TextEditingController _empCodeCtrl;
+  late TextEditingController _punchIdCtrl;
   late TextEditingController _departmentCtrl;
   late TextEditingController _functionalDeptCtrl;
   late TextEditingController _designationCtrl;
@@ -261,6 +262,7 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
     );
     _fullNameCtrl.addListener(_syncAbbreviationFromName);
     _empCodeCtrl = TextEditingController(text: info?.employeeCode ?? '');
+    _punchIdCtrl = TextEditingController(text: info?.punchId ?? '');
     final org = info?.organization?.trim();
     _organization = (org != null && org.isNotEmpty)
         ? org
@@ -300,6 +302,7 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
     _fullNameCtrl.dispose();
     _abbreviationCtrl.dispose();
     _empCodeCtrl.dispose();
+    _punchIdCtrl.dispose();
     _departmentCtrl.dispose();
     _functionalDeptCtrl.dispose();
     _designationCtrl.dispose();
@@ -414,6 +417,8 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
             _abbreviationCtrl.text.isEmpty ? '—' : _abbreviationCtrl.text,
           ),
           _buildTextField('Employee Code', _empCodeCtrl),
+          _buildTextField('Punch ID (biometric Empcode)', _punchIdCtrl),
+          _buildHelperChip('Must match the biometric machine Empcode — not employee code'),
           _buildTextField(
             'Designation',
             _designationCtrl,
@@ -686,9 +691,11 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
     try {
       final notifier = ref.read(profileProvider.notifier);
       final empCode = _empCodeCtrl.text.trim();
+      final punchId = _punchIdCtrl.text.trim();
       await notifier.updateGeneralInfoDirect({
         'fullName': _fullNameCtrl.text.trim(),
         if (empCode.isNotEmpty) 'employeeCode': empCode,
+        'punchId': punchId.isEmpty ? null : punchId,
         'organization': _organization.trim(),
         'department': _departmentCtrl.text.trim(),
         'functionalDepartment': _functionalDeptCtrl.text.trim().isEmpty

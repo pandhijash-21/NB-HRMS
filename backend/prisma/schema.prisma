@@ -286,6 +286,8 @@ model EmployeeGeneralInfo {
   shift                String?                                          // GENERAL (lookup)
   appointmentType      String?          @map("appointment_type")        // FULL_TIME_REGULAR (lookup)
   employeeCode         String?          @unique @map("employee_code")   // GU1234
+  /// Biometric / attendance machine punch ID (maps to eTimeOffice Empcode). Not the HRMS employee code.
+  punchId              String?          @unique @map("punch_id")
 
   updatedAt            DateTime         @updatedAt @map("updated_at")
   updatedBy            String?          @map("updated_by")
@@ -829,6 +831,7 @@ model MonthlyLWPRecord {
 
 enum AttendanceSource {
   ESSL
+  ETIMEOFFICE
 }
 
 model AttendancePunch {

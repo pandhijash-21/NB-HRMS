@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/auth_providers.dart';
 import '../../domain/attendance_models.dart';
 import '../../../leave/presentation/widgets/leave_shared_widgets.dart';
 import '../attendance_providers.dart';
+import 'package:local_auth/local_auth.dart';
+import '../geofenced_punch_service.dart';
+import '../../../../core/network/dio_client.dart';
 
 class AttendanceScreen extends ConsumerWidget {
   const AttendanceScreen({super.key});
@@ -57,6 +62,49 @@ class AttendanceScreen extends ConsumerWidget {
             color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
             height: 1.5,
           ),
+        ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () async {
+          if (kIsWeb) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Please use the mobile app to punch in using biometrics.'), backgroundColor: Colors.red),
+            );
+            return;
+          }
+
+          final currentDayData = ref.read(myAttendanceDayProvider).value;
+          if (currentDayData != null) {
+            if (currentDayData.punches.length >= 2) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Maximum 2 punches allowed per day (1 In, 1 Out).'), backgroundColor: Colors.orange),
+              );
+              return;
+            }
+
+            if (currentDayData.punches.isNotEmpty) {
+              final lastPunch = currentDayData.punches.last;
+              final lastPunchTime = DateTime.parse(lastPunch.punchAt);
+              final diff = DateTime.now().difference(lastPunchTime);
+              if (diff.inMinutes < 20) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Please wait ${20 - diff.inMinutes} minutes before punching again.'), backgroundColor: Colors.orange),
+                );
+                return;
+              }
+            }
+          }
+
+          final dio = ref.read(dioClientProvider);
+          final svc = GeofencedPunchService(dio);
+          await svc.executePunch(context);
+          invalidateAttendanceSelfData(ref); // refresh calendar
+        },
+        backgroundColor: const Color(0xFFC5A059),
+        icon: const Icon(Icons.fingerprint_rounded, color: Colors.white),
+        label: const Text(
+          'Punch In/Out',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
       ),
       body: TweenAnimationBuilder<double>(
@@ -113,6 +161,14 @@ class AttendanceScreen extends ConsumerWidget {
                 subtitle: 'Raw biometric data & sync into calendar',
                 color: const Color(0xFF2563eb),
                 onTap: () => context.go('/admin/attendance/device'),
+              ),
+              const SizedBox(height: 10),
+              _AttendanceWorkspaceTile(
+                icon: Icons.map_rounded,
+                title: 'Manage Geofenced Zones',
+                subtitle: 'Set attendance areas on the map',
+                color: const Color(0xFFC5A059),
+                onTap: () => context.go('/admin/attendance/locations'),
               ),
               const SizedBox(height: 28),
               Row(
@@ -799,14 +855,23 @@ class _DayDetail extends StatelessWidget {
                                     .where((s) => s.isNotEmpty)
                                     .join(' · '),
                                 style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: isDark ? Colors.white30 : const Color(0xFF607D8B).withOpacity(0.7),
+                                  fontSize: 12,
+                                  color: isDark ? Colors.white54 : const Color(0xFF607D8B),
                                 ),
                               ),
                             ],
                           ),
                         ),
+                        if (p.latitude != null && p.longitude != null)
+                          IconButton(
+                            icon: const Icon(Icons.map_rounded, color: Colors.blue),
+                            onPressed: () {
+                              showDialog(
+                                context: context,
+                                builder: (ctx) => _PunchMapDialog(punch: p, employeeName: 'Me'),
+                              );
+                            },
+                          ),
                       ],
                     ),
                   );
@@ -897,6 +962,76 @@ class _AttendanceWorkspaceTile extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _PunchMapDialog extends StatelessWidget {
+  final AttendancePunch punch;
+  final String employeeName;
+
+  const _PunchMapDialog({required this.punch, required this.employeeName});
+
+  @override
+  Widget build(BuildContext context) {
+    final lat = punch.latitude!;
+    final lng = punch.longitude!;
+    final locRadius = punch.location != null ? (punch.location!['radiusKm'] * 1000).toDouble() : 100.0;
+    final locLat = punch.location != null ? punch.location!['latitude'] : lat;
+    final locLng = punch.location != null ? punch.location!['longitude'] : lng;
+
+    return AlertDialog(
+      title: Text('Punch Location: $employeeName'),
+      content: SizedBox(
+        width: 400,
+        height: 300,
+        child: FlutterMap(
+          options: MapOptions(
+            initialCenter: LatLng(lat, lng),
+            initialZoom: 15.0,
+            minZoom: 3.0,
+          ),
+          children: [
+            TileLayer(
+              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              userAgentPackageName: 'com.nbdeveloper.hrms',
+            ),
+            if (punch.location != null)
+              CircleLayer(
+                circles: [
+                  CircleMarker(
+                    point: LatLng(locLat, locLng),
+                    color: Colors.blue.withOpacity(0.3),
+                    borderColor: Colors.blue,
+                    borderStrokeWidth: 2,
+                    useRadiusInMeter: true,
+                    radius: locRadius,
+                  )
+                ],
+              ),
+            MarkerLayer(
+              markers: [
+                Marker(
+                  point: LatLng(lat, lng),
+                  width: 60,
+                  height: 60,
+                  child: const Column(
+                    children: [
+                      Icon(Icons.person_pin_circle_rounded, color: Colors.red, size: 40),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+      ],
     );
   }
 }

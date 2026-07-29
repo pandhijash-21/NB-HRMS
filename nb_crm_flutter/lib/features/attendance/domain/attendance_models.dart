@@ -49,6 +49,11 @@ class AttendancePunch {
     this.punchType,
     this.source,
     this.employeeId,
+    this.latitude,
+    this.longitude,
+    this.locationId,
+    this.location,
+    this.deviceInfo,
   });
 
   final String id;
@@ -57,6 +62,11 @@ class AttendancePunch {
   final String? punchType;
   final String? source;
   final int? employeeId;
+  final double? latitude;
+  final double? longitude;
+  final String? locationId;
+  final Map<String, dynamic>? location;
+  final Map<String, dynamic>? deviceInfo;
 
   factory AttendancePunch.fromJson(Map<String, dynamic> json) {
     return AttendancePunch(
@@ -65,7 +75,12 @@ class AttendancePunch {
       terminalId: json['terminalId'] as String?,
       punchType: json['punchType'] as String?,
       source: json['source'] as String?,
-      employeeId: json['employeeId'] != null ? _asInt(json['employeeId']) : null,
+      employeeId: json['employeeId'] as int?,
+      latitude: json['latitude'] is num ? (json['latitude'] as num).toDouble() : null,
+      longitude: json['longitude'] is num ? (json['longitude'] as num).toDouble() : null,
+      locationId: json['locationId'] as String?,
+      location: json['location'] != null ? Map<String, dynamic>.from(json['location'] as Map) : null,
+      deviceInfo: json['deviceInfo'] != null ? Map<String, dynamic>.from(json['deviceInfo'] as Map) : null,
     );
   }
 }

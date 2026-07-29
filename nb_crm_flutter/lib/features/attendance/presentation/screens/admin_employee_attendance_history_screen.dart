@@ -288,11 +288,34 @@ class _HistoryDayCard extends StatelessWidget {
                   formatIsoTime(p.punchAt),
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
-                subtitle: Text('${p.punchType ?? '—'} · ${p.terminalId ?? '—'} · ${p.source ?? '—'}'),
-                trailing: IconButton(
-                  icon: const Icon(Icons.edit_outlined, size: 18),
-                  onPressed: () => onEdit(p),
+                subtitle: Builder(
+                  builder: (context) {
+                    String? deviceName;
+                    if (p.deviceInfo != null) {
+                      deviceName = p.deviceInfo!['model'] ?? p.deviceInfo!['browserName'] ?? p.deviceInfo!['computerName'] ?? p.deviceInfo!['name'];
+                      final platform = p.deviceInfo!['platform'] ?? p.deviceInfo!['systemName'];
+                      if (platform != null && deviceName != null && !deviceName.contains(platform)) {
+                        deviceName = '$deviceName ($platform)';
+                      }
+                    }
+                    
+                    return Text([
+                      p.punchType,
+                      p.location?['name'] != null ? 'Zone: ${p.location!['name']}' : p.terminalId,
+                      deviceName != null ? 'Device: $deviceName' : p.source,
+                    ].where((s) => s != null && s.toString().isNotEmpty).join(' · '));
+                  }
                 ),
+                trailing: p.source == 'MOBILE_APP' 
+                  ? const IconButton(
+                      icon: Icon(Icons.verified_outlined, size: 18, color: Colors.green),
+                      onPressed: null,
+                      tooltip: 'Geofenced App Punch',
+                    )
+                  : IconButton(
+                      icon: const Icon(Icons.edit_outlined, size: 18),
+                      onPressed: () => onEdit(p),
+                    ),
               ),
             ),
             Align(

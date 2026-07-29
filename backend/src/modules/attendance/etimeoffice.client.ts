@@ -121,8 +121,8 @@ export async function fetchLastPunchData(lastRecord: string | null): Promise<{
   const next =
     (typeof data.MaxRecord === 'string' && data.MaxRecord) ||
     (typeof data.LastRecord === 'string' && data.LastRecord) ||
-    (typeof (data as { maxRecord?: string }).maxRecord === 'string'
-      ? (data as { maxRecord: string }).maxRecord
+    (typeof (data as unknown as { maxRecord?: string }).maxRecord === 'string'
+      ? (data as unknown as { maxRecord: string }).maxRecord
       : null) ||
     null;
   return { punches, nextCursor: next, msg: data.Msg, error: false };

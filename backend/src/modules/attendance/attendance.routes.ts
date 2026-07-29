@@ -330,3 +330,101 @@ attendanceRouter.post('/admin/device/backfill', requireAuth, requirePermission('
   }
 });
 
+// --- Attendance Location Management ---
+
+attendanceRouter.get('/admin/locations', requireAuth, requirePermission('ATTENDANCE', 'READ'), async (req, res) => {
+  try {
+    if (!requireAttendanceAdmin(req, res)) return;
+    const data = await attendanceService.getLocations();
+    return res.json(ok(data));
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});
+
+attendanceRouter.post('/admin/locations', requireAuth, requirePermission('ATTENDANCE', 'WRITE'), async (req, res) => {
+  try {
+    if (!requireAttendanceAdmin(req, res)) return;
+    const { name, latitude, longitude, radiusKm, isUnique, isActive } = req.body;
+    const data = await attendanceService.createLocation({
+      name: String(name),
+      latitude: Number(latitude),
+      longitude: Number(longitude),
+      radiusKm: Number(radiusKm),
+      isUnique: isUnique !== undefined ? Boolean(isUnique) : false,
+      isActive: Boolean(isActive ?? true),
+    });
+    return res.json(ok(data));
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});
+
+attendanceRouter.patch('/admin/locations/:id', requireAuth, requirePermission('ATTENDANCE', 'WRITE'), async (req, res) => {
+  try {
+    if (!requireAttendanceAdmin(req, res)) return;
+    const { name, latitude, longitude, radiusKm, isUnique, isActive } = req.body;
+    const data = await attendanceService.updateLocation(req.params.id as string, {
+      name: name !== undefined ? String(name) : undefined,
+      latitude: latitude !== undefined ? Number(latitude) : undefined,
+      longitude: longitude !== undefined ? Number(longitude) : undefined,
+      radiusKm: radiusKm !== undefined ? Number(radiusKm) : undefined,
+      isUnique: isUnique !== undefined ? Boolean(isUnique) : undefined,
+      isActive: isActive !== undefined ? Boolean(isActive) : undefined,
+    });
+    return res.json(ok(data));
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});
+
+attendanceRouter.delete('/admin/locations/:id', requireAuth, requirePermission('ATTENDANCE', 'WRITE'), async (req, res) => {
+  try {
+    if (!requireAttendanceAdmin(req, res)) return;
+    await attendanceService.deleteLocation(req.params.id as string);
+    return res.json(ok({ deleted: true }));
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});
+
+// --- Geofenced App Punch ---
+
+attendanceRouter.post('/my/verify-location', requireAuth, requirePermission('ATTENDANCE', 'WRITE'), async (req, res) => {
+  try {
+    const { latitude, longitude } = req.body;
+    if (latitude == null || longitude == null) {
+      return res.status(400).json(fail('Latitude and longitude are required.'));
+    }
+    const data = await attendanceService.verifyLocation(Number(latitude), Number(longitude));
+    return res.json(ok(data));
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});
+
+attendanceRouter.post('/my/punch', requireAuth, requirePermission('ATTENDANCE', 'WRITE'), async (req, res) => {
+  try {
+    const employeeId = Number(req.user!.employeeId);
+    if (!employeeId) return res.status(400).json(fail('Employee ID not found in token'));
+    
+    const { latitude, longitude, deviceInfo, biometricVerified } = req.body;
+    
+    if (latitude == null || longitude == null) {
+      return res.status(400).json(fail('Latitude and longitude are required.'));
+    }
+
+    const data = await attendanceService.createGeofencedPunch({
+      employeeId,
+      latitude: Number(latitude),
+      longitude: Number(longitude),
+      deviceInfo: deviceInfo ?? null,
+      biometricVerified: Boolean(biometricVerified),
+    });
+    return res.json(ok(data));
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});
+
+

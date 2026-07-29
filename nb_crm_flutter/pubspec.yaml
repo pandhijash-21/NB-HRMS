@@ -20,6 +20,11 @@ dependencies:
   syncfusion_flutter_charts: ^34.1.31
   file_picker: ^11.0.2
   web: ^1.1.1
+  local_auth: ^3.0.2
+  geolocator: ^14.0.2
+  device_info_plus: ^12.4.0
+  flutter_map: ^8.3.1
+  latlong2: ^0.10.1
 dev_dependencies:
   flutter_test:
     sdk: flutter

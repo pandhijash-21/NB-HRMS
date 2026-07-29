@@ -1,4 +1,5 @@
 import { prisma } from '../../config/prisma';
+import { AttendanceSource } from '@prisma/client';
 import { fetchEsslPunchRows } from './esslMssql.client';
 import {
   buildExternalKey,
@@ -20,7 +21,7 @@ async function insertMappedPunches(
   const rows: Array<{
     employeeId: number;
     punchAt: Date;
-    source: 'ETIMEOFFICE';
+    source: AttendanceSource;
     externalKey: string;
     terminalId: string | null;
     punchType: string | null;
@@ -43,7 +44,7 @@ async function insertMappedPunches(
     rows.push({
       employeeId,
       punchAt,
-      source: 'ETIMEOFFICE',
+      source: AttendanceSource.ETIMEOFFICE,
       externalKey: buildExternalKey(p),
       terminalId: p.mcid != null ? String(p.mcid) : null,
       punchType: p.M_Flag != null ? String(p.M_Flag) : null,
@@ -73,9 +74,9 @@ export const attendanceSyncService = {
    */
   async syncEsslPunches() {
     const state = await prisma.attendanceSyncState.upsert({
-      where: { source: 'ESSL' },
+      where: { source: AttendanceSource.ESSL },
       update: {},
-      create: { source: 'ESSL', cursor: null, lastSyncedAt: null },
+      create: { source: AttendanceSource.ESSL, cursor: null, lastSyncedAt: null },
     });
 
     let cursor: string | null = state.cursor ?? null;
@@ -89,7 +90,7 @@ export const attendanceSyncService = {
         data: rows.map((r) => ({
           employeeId: r.employeeId,
           punchAt: r.punchAt,
-          source: 'ESSL' as const,
+          source: AttendanceSource.ESSL,
           externalKey: r.externalKey,
           terminalId: r.terminalId ?? null,
           punchType: r.punchType ?? null,
@@ -103,18 +104,18 @@ export const attendanceSyncService = {
     }
 
     await prisma.attendanceSyncState.update({
-      where: { source: 'ESSL' },
+      where: { source: AttendanceSource.ESSL },
       data: { cursor, lastSyncedAt: new Date() },
     });
 
-    return { source: 'ESSL' as const, inserted: totalInserted, cursor };
+    return { source: AttendanceSource.ESSL, inserted: totalInserted, cursor };
   },
 
   /** Incremental sync from eTimeOffice DownloadLastPunchData. */
   async syncEtimeofficePunches() {
     if (!isEtimeofficeConfigured()) {
       return {
-        source: 'ETIMEOFFICE' as const,
+        source: AttendanceSource.ETIMEOFFICE,
         inserted: 0,
         skippedUnmatched: 0,
         unmatchedCodes: [] as string[],
@@ -125,9 +126,9 @@ export const attendanceSyncService = {
     }
 
     const state = await prisma.attendanceSyncState.upsert({
-      where: { source: 'ETIMEOFFICE' },
+      where: { source: AttendanceSource.ETIMEOFFICE },
       update: {},
-      create: { source: 'ETIMEOFFICE', cursor: null, lastSyncedAt: null },
+      create: { source: AttendanceSource.ETIMEOFFICE, cursor: null, lastSyncedAt: null },
     });
 
     const punchMap = await loadPunchIdMap();
@@ -136,7 +137,7 @@ export const attendanceSyncService = {
 
     const cursor = nextCursor ?? state.cursor;
     await prisma.attendanceSyncState.update({
-      where: { source: 'ETIMEOFFICE' },
+      where: { source: AttendanceSource.ETIMEOFFICE },
       data: {
         cursor,
         lastSyncedAt: new Date(),
@@ -144,7 +145,7 @@ export const attendanceSyncService = {
     });
 
     return {
-      source: 'ETIMEOFFICE' as const,
+      source: AttendanceSource.ETIMEOFFICE,
       inserted: result.inserted,
       skippedUnmatched: result.skippedUnmatched,
       unmatchedCodes: result.unmatchedCodes,
@@ -167,7 +168,7 @@ export const attendanceSyncService = {
     });
     const result = await insertMappedPunches(punches, punchMap);
     return {
-      source: 'ETIMEOFFICE' as const,
+      source: AttendanceSource.ETIMEOFFICE,
       fetched: punches.length,
       ...result,
     };
@@ -175,8 +176,8 @@ export const attendanceSyncService = {
 
   async getDeviceStatus() {
     const [etime, essl] = await Promise.all([
-      prisma.attendanceSyncState.findUnique({ where: { source: 'ETIMEOFFICE' } }),
-      prisma.attendanceSyncState.findUnique({ where: { source: 'ESSL' } }),
+      prisma.attendanceSyncState.findUnique({ where: { source: AttendanceSource.ETIMEOFFICE } }),
+      prisma.attendanceSyncState.findUnique({ where: { source: AttendanceSource.ESSL } }),
     ]);
     const punchIds = await prisma.employeeGeneralInfo.count({
       where: { punchId: { not: null } },

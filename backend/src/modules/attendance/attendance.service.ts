@@ -351,7 +351,7 @@ export const attendanceService = {
         punchAt: { gte: fromUtc, lt: toExclusive },
       },
       orderBy: { punchAt: 'asc' },
-      select: { id: true, punchAt: true, terminalId: true, punchType: true, source: true },
+      select: { id: true, punchAt: true, terminalId: true, punchType: true, source: true, latitude: true, longitude: true, locationId: true, location: true, deviceInfo: true },
     });
 
     const firstIn = punches[0]?.punchAt ? new Date(punches[0].punchAt).toISOString() : null;
@@ -424,6 +424,11 @@ export const attendanceService = {
         terminalId: true,
         punchType: true,
         source: true,
+        latitude: true,
+        longitude: true,
+        locationId: true,
+        location: true,
+        deviceInfo: true,
       },
     });
 
@@ -433,7 +438,7 @@ export const attendanceService = {
       orderBy: { id: 'asc' },
     });
 
-    const byEmployee: Record<number, Array<{ id: string; punchAt: string; terminalId: string | null; punchType: string | null; source: string }>> = {};
+    const byEmployee: Record<number, Array<{ id: string; punchAt: string; terminalId: string | null; punchType: string | null; source: string; location?: any; deviceInfo?: any; latitude?: number | null; longitude?: number | null; locationId?: string | null; }>> = {};
     for (const p of punches) {
       const arr = byEmployee[p.employeeId] ?? (byEmployee[p.employeeId] = []);
       arr.push({
@@ -441,7 +446,7 @@ export const attendanceService = {
         punchAt: new Date(p.punchAt).toISOString(),
         terminalId: p.terminalId ?? null,
         punchType: p.punchType ?? null,
-        source: String(p.source),
+        source: String(p.source), location: p.location, deviceInfo: p.deviceInfo, latitude: p.latitude, longitude: p.longitude, locationId: p.locationId,
       });
     }
 
@@ -485,7 +490,7 @@ export const attendanceService = {
         punchAt: { gte: fromUtc, lt: toExclusive },
       },
       orderBy: { punchAt: 'asc' },
-      select: { id: true, punchAt: true, terminalId: true, punchType: true, source: true },
+      select: { id: true, punchAt: true, terminalId: true, punchType: true, source: true, latitude: true, longitude: true, locationId: true, location: true, deviceInfo: true },
     });
 
     const policy = await resolveEffectivePolicy(params.employeeId);
@@ -496,7 +501,7 @@ export const attendanceService = {
       params.to,
     );
 
-    type PunchRow = {
+    type PunchRow = { location?: any; deviceInfo?: any; latitude?: number | null; longitude?: number | null; locationId?: string | null;
       id: string;
       punchAt: string;
       terminalId: string | null;
@@ -513,7 +518,7 @@ export const attendanceService = {
         punchAt: iso,
         terminalId: p.terminalId ?? null,
         punchType: p.punchType ?? null,
-        source: String(p.source),
+        source: String(p.source), location: p.location, deviceInfo: p.deviceInfo, latitude: p.latitude, longitude: p.longitude, locationId: p.locationId,
       });
     }
 
@@ -741,7 +746,7 @@ export const attendanceService = {
         punchType: params.punchType ?? 'MANUAL',
         externalKey: `MANUAL-${params.employeeId}-${dt.getTime()}-${randomUUID()}`,
       },
-      select: { id: true, employeeId: true, punchAt: true, terminalId: true, punchType: true, source: true },
+      select: { id: true, employeeId: true, punchAt: true, terminalId: true, punchType: true, source: true, latitude: true, longitude: true, locationId: true, location: true, deviceInfo: true },
     });
 
     return {
@@ -762,7 +767,7 @@ export const attendanceService = {
         punchType: params.punchType ?? undefined,
         terminalId: params.terminalId ?? undefined,
       },
-      select: { id: true, employeeId: true, punchAt: true, terminalId: true, punchType: true, source: true },
+      select: { id: true, employeeId: true, punchAt: true, terminalId: true, punchType: true, source: true, latitude: true, longitude: true, locationId: true, location: true, deviceInfo: true },
     });
 
     return {
@@ -771,5 +776,121 @@ export const attendanceService = {
       source: String(row.source),
     };
   },
+
+  // --- Attendance Location Management ---
+
+  async getLocations() {
+    return prisma.attendanceLocation.findMany({ orderBy: { createdAt: 'desc' } });
+  },
+
+  async createLocation(params: { name: string; latitude: number; longitude: number; radiusKm: number; isUnique?: boolean; isActive: boolean }) {
+    return prisma.attendanceLocation.create({ data: params });
+  },
+
+  async updateLocation(id: string, params: { name?: string; latitude?: number; longitude?: number; radiusKm?: number; isUnique?: boolean; isActive?: boolean }) {
+    return prisma.attendanceLocation.update({ where: { id }, data: params });
+  },
+
+  async deleteLocation(id: string) {
+    return prisma.attendanceLocation.delete({ where: { id } });
+  },
+
+  // --- Geofenced App Punch ---
+
+  async verifyLocation(latitude: number, longitude: number) {
+    const locations = await prisma.attendanceLocation.findMany({ where: { isActive: true } });
+    if (locations.length === 0) {
+      throw new Error('No attendance zones configured by Admin. Cannot punch in via app.');
+    }
+
+    const getDistanceFromLatLonInKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+      const R = 6371;
+      const dLat = (lat2 - lat1) * (Math.PI / 180);
+      const dLon = (lon2 - lon1) * (Math.PI / 180);
+      const a = 
+        Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * 
+        Math.sin(dLon/2) * Math.sin(dLon/2); 
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+      return R * c;
+    };
+
+    for (const loc of locations) {
+      const dist = getDistanceFromLatLonInKm(latitude, longitude, loc.latitude, loc.longitude);
+      if (dist <= loc.radiusKm) {
+        return { success: true, locationId: loc.id };
+      }
+    }
+    
+    throw new Error('You are outside of the allowed attendance zones.');
+  },
+
+  async createGeofencedPunch(params: {
+    employeeId: number;
+    latitude: number;
+    longitude: number;
+    deviceInfo: any;
+    biometricVerified: boolean;
+  }) {
+    if (!params.biometricVerified && !params.deviceInfo) {
+      throw new Error('Punch must be authenticated with biometrics or a trusted device fingerprint.');
+    }
+
+    const locations = await prisma.attendanceLocation.findMany({ where: { isActive: true } });
+    
+    if (locations.length === 0) {
+      throw new Error('No attendance zones configured by Admin. Cannot punch in via app.');
+    }
+
+    let matchedLocationId: string | null = null;
+    
+    // Haversine formula
+    const getDistanceFromLatLonInKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+      const R = 6371;
+      const dLat = (lat2 - lat1) * (Math.PI / 180);
+      const dLon = (lon2 - lon1) * (Math.PI / 180);
+      const a = 
+        Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * 
+        Math.sin(dLon/2) * Math.sin(dLon/2); 
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+      return R * c;
+    };
+
+    for (const loc of locations) {
+      const dist = getDistanceFromLatLonInKm(params.latitude, params.longitude, loc.latitude, loc.longitude);
+      if (dist <= loc.radiusKm) {
+        matchedLocationId = loc.id;
+        break;
+      }
+    }
+    
+    if (!matchedLocationId) {
+      throw new Error('You are outside of the allowed attendance zones.');
+    }
+
+    const dt = new Date();
+    const row = await prisma.attendancePunch.create({
+      data: {
+        employeeId: params.employeeId,
+        punchAt: dt,
+        source: 'MOBILE_APP',
+        terminalId: 'APP',
+        punchType: 'APP_PUNCH',
+        externalKey: `APP-${params.employeeId}-${dt.getTime()}-${randomUUID()}`,
+        latitude: params.latitude,
+        longitude: params.longitude,
+        locationId: matchedLocationId,
+        deviceInfo: params.deviceInfo ? params.deviceInfo : undefined,
+      },
+      select: { id: true, employeeId: true, punchAt: true, terminalId: true, punchType: true, source: true, latitude: true, longitude: true, locationId: true, location: true },
+    });
+
+    return {
+      ...row,
+      punchAt: row.punchAt.toISOString(),
+      source: String(row.source),
+    };
+  }
 };
 

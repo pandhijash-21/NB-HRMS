@@ -832,6 +832,23 @@ model MonthlyLWPRecord {
 enum AttendanceSource {
   ESSL
   ETIMEOFFICE
+  MOBILE_APP
+}
+
+model AttendanceLocation {
+  id          String   @id @default(uuid())
+  name        String
+  latitude    Float
+  longitude   Float
+  radiusKm    Float
+  isUnique    Boolean  @default(false)
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  punches     AttendancePunch[]
+
+  @@map("attendance_locations")
 }
 
 model AttendancePunch {
@@ -845,9 +862,16 @@ model AttendancePunch {
   terminalId  String?          @map("terminal_id")
   punchType   String?          @map("punch_type")
 
+  // Geofenced Biometric App Punch Data
+  latitude    Float?
+  longitude   Float?
+  locationId  String?          @map("location_id")
+  deviceInfo  Json?            @map("device_info")
+
   createdAt   DateTime         @default(now()) @map("created_at")
 
   employee    Employee         @relation(fields: [employeeId], references: [id])
+  location    AttendanceLocation? @relation(fields: [locationId], references: [id])
 
   @@index([employeeId, punchAt])
   @@map("attendance_punches")

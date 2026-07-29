@@ -81,10 +81,8 @@ class GeofencedPunchService {
       // 4. Authenticate using Biometrics ONLY
       bool biometricVerified = await auth.authenticate(
         localizedReason: 'Please authenticate with Fingerprint or Face ID to mark your attendance',
-        options: const AuthenticationOptions(
-          biometricOnly: true, // No PIN allowed
-          stickyAuth: true,
-        ),
+        biometricOnly: true, // No PIN allowed
+        persistAcrossBackgrounding: true,
       );
 
       if (!biometricVerified) {

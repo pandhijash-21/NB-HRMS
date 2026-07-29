@@ -12,6 +12,7 @@ import '../attendance_providers.dart';
 import 'package:local_auth/local_auth.dart';
 import '../geofenced_punch_service.dart';
 import '../../../../core/network/dio_client.dart';
+import 'package:flutter/foundation.dart';
 
 class AttendanceScreen extends ConsumerWidget {
   const AttendanceScreen({super.key});

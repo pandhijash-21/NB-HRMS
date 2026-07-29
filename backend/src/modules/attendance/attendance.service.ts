@@ -355,7 +355,7 @@ export const attendanceService = {
     });
 
     const firstIn = punches[0]?.punchAt ? new Date(punches[0].punchAt).toISOString() : null;
-    const lastOut = punches.length ? new Date(punches[punches.length - 1].punchAt).toISOString() : null;
+    const lastOut = punches.length > 1 ? new Date(punches[punches.length - 1].punchAt).toISOString() : null;
 
     const policy = await resolveEffectivePolicy(params.employeeId);
     const { totalMinutes, isLate, isHalfDay, meetsPunchOut } = evaluateDayPunches(
@@ -542,7 +542,7 @@ export const attendanceService = {
       const date = istKeyFromUtcDate(cursor);
       const dayPunches = byDay[date] ?? [];
       const firstIn = dayPunches[0]?.punchAt ?? null;
-      const lastOut = dayPunches.length ? dayPunches[dayPunches.length - 1].punchAt : null;
+      const lastOut = dayPunches.length > 1 ? dayPunches[dayPunches.length - 1].punchAt : null;
       const { totalMinutes, isLate, isHalfDay, meetsPunchOut } = evaluateDayPunches(
         policy,
         firstIn,
@@ -602,6 +602,7 @@ export const attendanceService = {
       punchOutTime: row?.punchOutTime ?? null,
       punchInBufferMinutes: row?.punchInBufferMinutes ?? null,
       punchOutBufferMinutes: row?.punchOutBufferMinutes ?? null,
+      biometricToken: row?.biometricToken ?? null,
       effective: {
         source: effective.source,
         punchInTime: effective.punchInTime,
@@ -831,9 +832,24 @@ export const attendanceService = {
     longitude: number;
     deviceInfo: any;
     biometricVerified: boolean;
+    biometricToken?: string | null;
   }) {
     if (!params.biometricVerified && !params.deviceInfo) {
       throw new Error('Punch must be authenticated with biometrics or a trusted device fingerprint.');
+    }
+
+    // Biometric/Fingerprint Pinning Check
+    const settings = await prisma.employeeAttendanceSettings.findUnique({
+      where: { employeeId: params.employeeId },
+      select: { biometricToken: true },
+    });
+
+    if (settings && settings.biometricToken) {
+      if (!params.biometricToken || params.biometricToken !== settings.biometricToken) {
+        throw new Error('Fingerprint mismatch. You can only punch using your registered fingerprint/device.');
+      }
+    } else {
+      throw new Error('Fingerprint is not set. Please register your fingerprint in the app settings first.');
     }
 
     const locations = await prisma.attendanceLocation.findMany({ where: { isActive: true } });
@@ -891,6 +907,57 @@ export const attendanceService = {
       punchAt: row.punchAt.toISOString(),
       source: String(row.source),
     };
+  },
+
+  async registerBiometricToken(employeeId: number, biometricToken: string, updatedBy: string) {
+    const employee = await prisma.employee.findUnique({ where: { id: employeeId }, select: { id: true } });
+    if (!employee) throw new Error('Employee not found');
+
+    const existing = await prisma.employeeAttendanceSettings.findUnique({
+      where: { employeeId },
+      select: { biometricToken: true },
+    });
+
+    if (existing?.biometricToken) {
+      throw new Error('Fingerprint already registered. Contact admin/HR to reset it.');
+    }
+
+    await prisma.employeeAttendanceSettings.upsert({
+      where: { employeeId },
+      update: {
+        biometricToken,
+        updatedBy,
+      },
+      create: {
+        employeeId,
+        useGlobalPolicy: true,
+        biometricToken,
+        updatedBy,
+      },
+    });
+
+    return { success: true };
+  },
+
+  async resetBiometricToken(employeeId: number, updatedBy: string) {
+    const employee = await prisma.employee.findUnique({ where: { id: employeeId }, select: { id: true } });
+    if (!employee) throw new Error('Employee not found');
+
+    await prisma.employeeAttendanceSettings.upsert({
+      where: { employeeId },
+      update: {
+        biometricToken: null,
+        updatedBy,
+      },
+      create: {
+        employeeId,
+        useGlobalPolicy: true,
+        biometricToken: null,
+        updatedBy,
+      },
+    });
+
+    return { success: true };
   }
 };
 

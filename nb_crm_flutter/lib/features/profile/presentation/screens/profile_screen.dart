@@ -93,8 +93,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         Permissions.canManageEmployeeAttendance(
           authState.permissions,
           authState.user?.role,
-        ) &&
-        (widget.employeeId != null || !isOwnProfile);
+        );
 
     return Scaffold(
       backgroundColor: isDark

@@ -14,6 +14,12 @@ import '../geofenced_punch_service.dart';
 import '../../../../core/network/dio_client.dart';
 import 'package:flutter/foundation.dart';
 
+final hasLocalBiometricTokenProvider = FutureProvider.autoDispose.family<bool, int>((ref, employeeId) async {
+  final dio = ref.watch(dioClientProvider);
+  final svc = GeofencedPunchService(dio);
+  return svc.hasLocalToken(employeeId);
+});
+
 class AttendanceScreen extends ConsumerWidget {
   const AttendanceScreen({super.key});
 
@@ -25,6 +31,8 @@ class AttendanceScreen extends ConsumerWidget {
     final dayAsync = ref.watch(myAttendanceDayProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final auth = ref.watch(authNotifierProvider);
+    final settingsAsync = ref.watch(employeeAttendanceSettingsProvider(auth.user?.employeeId ?? 0));
+    final hasLocalTokenAsync = ref.watch(hasLocalBiometricTokenProvider(auth.user?.employeeId ?? 0));
     final canAdmin = Permissions.canAdminAttendance(
       auth.permissions,
       auth.user?.role ?? '',
@@ -74,6 +82,24 @@ class AttendanceScreen extends ConsumerWidget {
             return;
           }
 
+          final auth = ref.read(authNotifierProvider);
+          final empId = auth.user?.employeeId;
+          if (empId == null) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Employee ID not found in session.'), backgroundColor: Colors.red),
+            );
+            return;
+          }
+
+          // Check if biometrics is registered
+          final settings = ref.read(employeeAttendanceSettingsProvider(empId)).value;
+          if (settings == null || settings.biometricToken == null || settings.biometricToken!.isEmpty) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Fingerprint/Face ID not registered. Please register it first.'), backgroundColor: Colors.orange),
+            );
+            return;
+          }
+
           final currentDayData = ref.read(myAttendanceDayProvider).value;
           if (currentDayData != null) {
             if (currentDayData.punches.length >= 2) {
@@ -98,7 +124,7 @@ class AttendanceScreen extends ConsumerWidget {
 
           final dio = ref.read(dioClientProvider);
           final svc = GeofencedPunchService(dio);
-          await svc.executePunch(context);
+          await svc.executePunch(context, empId);
           invalidateAttendanceSelfData(ref); // refresh calendar
         },
         backgroundColor: const Color(0xFFC5A059),
@@ -124,6 +150,168 @@ class AttendanceScreen extends ConsumerWidget {
         child: ListView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
           children: [
+            // Biometric Registration Card
+            if (auth.user?.employeeId != null)
+              settingsAsync.when(
+                loading: () => const SizedBox.shrink(),
+                error: (_, __) => const SizedBox.shrink(),
+                data: (settings) {
+                  final isRegisteredOnServer = settings.biometricToken != null && settings.biometricToken!.isNotEmpty;
+                  final hasLocalToken = hasLocalTokenAsync.value ?? false;
+
+                  // Case C: Registered on server AND found locally on device
+                  if (isRegisteredOnServer && hasLocalToken) {
+                    return const SizedBox.shrink();
+                  }
+
+                  // Case B: Registered on server BUT NOT found locally on this device (reinstall/device change)
+                  if (isRegisteredOnServer && !hasLocalToken) {
+                    return Card(
+                      color: isDark ? const Color(0xFF2A2318) : Colors.orange.shade50,
+                      margin: const EdgeInsets.only(bottom: 20),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        side: BorderSide(
+                          color: isDark ? const Color(0xFFC5A059).withOpacity(0.3) : Colors.orange.shade300,
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.warning_amber_rounded, color: isDark ? const Color(0xFFC5A059) : Colors.orange.shade800, size: 28),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    'Biometric Verification Mismatch',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w800,
+                                      color: isDark ? Colors.white : const Color(0xFF212F3D),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              'Your fingerprint/Face ID is registered on the server, but not found on this device. '
+                              'If you reinstalled the app or switched phones, please ask your Admin or HR manager to reset your registration.',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: isDark ? Colors.white.withOpacity(0.7) : const Color(0xFF4A5568),
+                                height: 1.4,
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                onPressed: () {
+                                  final empId = auth.user?.employeeId;
+                                  if (empId != null) {
+                                    ref.invalidate(employeeAttendanceSettingsProvider(empId));
+                                    ref.invalidate(hasLocalBiometricTokenProvider(empId));
+                                  }
+                                },
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: const Color(0xFFC5A059),
+                                  side: const BorderSide(color: Color(0xFFC5A059)),
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                icon: const Icon(Icons.refresh_rounded),
+                                label: const Text('Refresh Status', style: TextStyle(fontWeight: FontWeight.bold)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+
+                  // Case A: Not registered on server at all
+                  return Card(
+                    color: isDark ? const Color(0xFF2A2318) : Colors.amber.shade50,
+                    margin: const EdgeInsets.only(bottom: 20),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      side: BorderSide(
+                        color: isDark ? const Color(0xFFC5A059).withOpacity(0.3) : Colors.amber.shade200,
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.warning_amber_rounded, color: isDark ? const Color(0xFFC5A059) : Colors.amber.shade800, size: 28),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  'Fingerprint/Face ID Setup Required',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w800,
+                                    color: isDark ? Colors.white : const Color(0xFF212F3D),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            'To mark your attendance using the mobile app, you must first register your fingerprint or Face ID.',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: isDark ? Colors.white.withOpacity(0.7) : const Color(0xFF4A5568),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: () async {
+                                final dio = ref.read(dioClientProvider);
+                                final svc = GeofencedPunchService(dio);
+                                final empId = auth.user?.employeeId;
+                                if (empId != null) {
+                                  try {
+                                    await svc.registerBiometrics(context, empId);
+                                    ref.invalidate(employeeAttendanceSettingsProvider(empId));
+                                    ref.invalidate(hasLocalBiometricTokenProvider(empId));
+                                  } catch (e) {
+                                    // Handled inside registerBiometrics
+                                  }
+                                }
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFC5A059),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              icon: const Icon(Icons.fingerprint_rounded),
+                              label: const Text('Set Fingerprint/Face ID Now', style: TextStyle(fontWeight: FontWeight.bold)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
             if (canAdmin) ...[
               Row(
                 children: [
@@ -390,7 +578,7 @@ class _CalendarGrid extends StatelessWidget {
             ),
           ),
           if (hasPunches) ...[
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
               decoration: BoxDecoration(
@@ -430,7 +618,7 @@ class _CalendarGrid extends StatelessWidget {
               ),
             ),
           ] else if (isLeave) ...[
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             Icon(
               Icons.beach_access_rounded,
               size: 12,
@@ -444,7 +632,7 @@ class _CalendarGrid extends StatelessWidget {
 
       cells.add(
         Padding(
-          padding: const EdgeInsets.all(3),
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 3),
           child: InkWell(
             onTap: () => onSelect(key),
             borderRadius: BorderRadius.circular(12),
@@ -489,7 +677,7 @@ class _CalendarGrid extends StatelessWidget {
     final screenWidth = MediaQuery.of(context).size.width;
     final gridWidth = screenWidth > 800 ? 800.0 : (screenWidth - 48).clamp(0.0, double.infinity);
     final cellWidth = gridWidth / 7;
-    final targetHeight = cellWidth < 65.0 ? cellWidth : 65.0;
+    final targetHeight = cellWidth < 58.0 ? 58.0 : (cellWidth < 65.0 ? cellWidth : 65.0);
     final aspectRatio = cellWidth > 0 && targetHeight > 0 ? (cellWidth / targetHeight) : 1.0;
 
     return Center(

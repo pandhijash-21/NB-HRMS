@@ -403,12 +403,12 @@ attendanceRouter.post('/my/verify-location', requireAuth, requirePermission('ATT
   }
 });
 
-attendanceRouter.post('/my/punch', requireAuth, requirePermission('ATTENDANCE', 'WRITE'), async (req, res) => {
+attendanceRouter.post('/my/punch', requireAuth, requirePermission('ATTENDANCE', 'WRITE'), async (req: Request, res: Response) => {
   try {
     const employeeId = Number(req.user!.employeeId);
     if (!employeeId) return res.status(400).json(fail('Employee ID not found in token'));
     
-    const { latitude, longitude, deviceInfo, biometricVerified } = req.body;
+    const { latitude, longitude, deviceInfo, biometricVerified, biometricToken } = req.body;
     
     if (latitude == null || longitude == null) {
       return res.status(400).json(fail('Latitude and longitude are required.'));
@@ -420,6 +420,7 @@ attendanceRouter.post('/my/punch', requireAuth, requirePermission('ATTENDANCE', 
       longitude: Number(longitude),
       deviceInfo: deviceInfo ?? null,
       biometricVerified: Boolean(biometricVerified),
+      biometricToken: biometricToken ? String(biometricToken) : null,
     });
     return res.json(ok(data));
   } catch (e: any) {
@@ -427,4 +428,30 @@ attendanceRouter.post('/my/punch', requireAuth, requirePermission('ATTENDANCE', 
   }
 });
 
+attendanceRouter.post('/my/register-biometrics', requireAuth, requirePermission('ATTENDANCE', 'WRITE'), async (req: Request, res: Response) => {
+  try {
+    const employeeId = Number(req.user!.employeeId);
+    if (!employeeId) return res.status(400).json(fail('Employee ID not found in token'));
+    const { biometricToken } = req.body;
+    if (!biometricToken) return res.status(400).json(fail('biometricToken is required'));
+    const updatedBy = String(req.user!.id ?? req.user!.userId ?? 'unknown');
+    const data = await attendanceService.registerBiometricToken(employeeId, String(biometricToken), updatedBy);
+    return res.json(ok(data));
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});
+
+attendanceRouter.post('/admin/reset-biometrics/:employeeId', requireAuth, requirePermission('ATTENDANCE', 'WRITE'), async (req: Request, res: Response) => {
+  try {
+    if (!requireAttendanceAdmin(req, res)) return;
+    const employeeId = Number(req.params.employeeId);
+    if (!employeeId) return res.status(400).json(fail('Invalid employeeId'));
+    const updatedBy = String(req.user!.id ?? req.user!.userId ?? 'unknown');
+    const data = await attendanceService.resetBiometricToken(employeeId, updatedBy);
+    return res.json(ok(data));
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});
 

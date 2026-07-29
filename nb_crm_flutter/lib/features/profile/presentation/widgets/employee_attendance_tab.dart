@@ -68,6 +68,7 @@ class _EmployeeAttendanceTabState extends ConsumerState<EmployeeAttendanceTab> {
             settings: settings,
             canEdit: widget.canManageSettings,
             onEdit: () => _showEditSettings(context, settings),
+            onResetBiometrics: () => _showResetBiometrics(context),
           ),
         ),
         const SizedBox(height: 16),
@@ -203,6 +204,45 @@ class _EmployeeAttendanceTabState extends ConsumerState<EmployeeAttendanceTab> {
       }
     }
   }
+
+  Future<void> _showResetBiometrics(BuildContext context) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reset Biometric Registration'),
+        content: const Text(
+          'Are you sure you want to reset this employee\'s registered fingerprint/Face ID? '
+          'Once reset, they will need to register it again from their mobile app to punch.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    try {
+      await ref.read(attendanceRepositoryProvider).resetEmployeeBiometrics(widget.employeeId);
+      ref.invalidate(employeeAttendanceSettingsProvider(widget.employeeId));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Fingerprint registration reset successfully.'), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
 }
 
 class _PolicyCard extends StatelessWidget {
@@ -210,11 +250,13 @@ class _PolicyCard extends StatelessWidget {
     required this.settings,
     required this.canEdit,
     required this.onEdit,
+    required this.onResetBiometrics,
   });
 
   final EmployeeAttendanceSettings settings;
   final bool canEdit;
   final VoidCallback onEdit;
+  final VoidCallback onResetBiometrics;
 
   @override
   Widget build(BuildContext context) {
@@ -247,6 +289,45 @@ class _PolicyCard extends StatelessWidget {
             const SizedBox(height: 12),
             _timingRow('Punch in', effective['punchInTime']?.toString() ?? '—', effective['punchInBufferMinutes']),
             _timingRow('Punch out', effective['punchOutTime']?.toString() ?? '—', effective['punchOutBufferMinutes']),
+            const Divider(height: 24),
+            Row(
+              children: [
+                const Icon(Icons.fingerprint_rounded, color: Color(0xFFC5A059), size: 20),
+                const SizedBox(width: 8),
+                const Text('Biometrics (Fingerprint/Face ID)', style: TextStyle(fontWeight: FontWeight.w600)),
+                const Spacer(),
+                Text(
+                  settings.biometricToken != null && settings.biometricToken!.isNotEmpty
+                      ? 'Registered'
+                      : 'Not Registered',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: settings.biometricToken != null && settings.biometricToken!.isNotEmpty
+                        ? Colors.green
+                        : Colors.orange,
+                  ),
+                ),
+              ],
+            ),
+            if (canEdit && settings.biometricToken != null && settings.biometricToken!.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: onResetBiometrics,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.red,
+                    side: const BorderSide(color: Colors.red),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  icon: const Icon(Icons.refresh_rounded, size: 18),
+                  label: const Text('Reset Fingerprint/Face ID Registration'),
+                ),
+              ),
+            ],
           ],
         ),
       ),

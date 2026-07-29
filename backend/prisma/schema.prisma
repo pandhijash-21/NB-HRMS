@@ -911,6 +911,7 @@ model EmployeeAttendanceSettings {
   punchOutTime          String?  @map("punch_out_time")
   punchInBufferMinutes  Int?     @map("punch_in_buffer_minutes")
   punchOutBufferMinutes Int?     @map("punch_out_buffer_minutes")
+  biometricToken        String?  @map("biometric_token")
   updatedBy             String?  @map("updated_by")
   updatedAt             DateTime @updatedAt @map("updated_at")
 

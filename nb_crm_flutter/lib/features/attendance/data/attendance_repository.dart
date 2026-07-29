@@ -248,4 +248,12 @@ class AttendanceRepository {
       },
     );
   }
+
+  Future<void> resetEmployeeBiometrics(int employeeId) async {
+    await _dio.postEnvelope<void>(
+      'attendance/admin/reset-biometrics/$employeeId',
+      data: const {},
+      parse: (raw) => null,
+    );
+  }
 }

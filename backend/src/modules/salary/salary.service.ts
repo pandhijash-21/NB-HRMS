@@ -5,7 +5,7 @@ import {
 } from '@prisma/client';
 import { prisma } from '../../config/prisma';
 import { assignmentService } from '../personal-education/assignment.service';
-import { buildFormulaPreview, computeFullSalary, mergeEmployeeRules } from './salaryEngine.service';
+import { buildFormulaPreview, computeFullSalary, mergeEmployeeRules, applyAttendanceProration } from './salaryEngine.service';
 import { getPayCommissionByCode } from './payCommission.service';
 import { columnKey, type ColumnRuleInput } from './salary.types';
 import { columnRuleSchema, validateConditionalConditions } from './salary.validation';
@@ -293,7 +293,7 @@ export const salaryService = {
           payCommissionCode: payCommission.code,
           salaryMonth,
           salaryYear,
-          status: SalaryRecordStatus.DRAFT,
+          status: SalaryRecordStatus.UNPAID,
           grossPay: computed.gross_pay,
           totalDeductions: computed.total_deductions,
           netPay: computed.net_pay,
@@ -330,8 +330,8 @@ export const salaryService = {
       include: { columnValues: true, template: true },
     });
     if (!record) throw new Error('Salary record not found');
-    if (record.status === SalaryRecordStatus.FINALIZED) {
-      throw new Error('Cannot edit finalized salary record');
+    if (record.status === SalaryRecordStatus.PAID) {
+      throw new Error('Cannot edit paid salary record');
     }
 
     const mergedOverrides = overrides ?? (await prisma.employeeSalaryInfo.findUnique({
@@ -388,19 +388,46 @@ export const salaryService = {
     });
   },
 
-  async finalizeRecord(recordId: string, finalizedBy: string) {
+  async markRecordPaid(recordId: string, paidBy: string) {
     const record = await prisma.employeeSalaryRecord.findUnique({ where: { id: recordId } });
     if (!record) throw new Error('Salary record not found');
-    if (record.status === SalaryRecordStatus.FINALIZED) {
-      throw new Error('Record is already finalized');
+    if (record.status === SalaryRecordStatus.PAID) {
+      throw new Error('Record is already marked paid');
     }
 
     return prisma.employeeSalaryRecord.update({
       where: { id: recordId },
       data: {
-        status: SalaryRecordStatus.FINALIZED,
+        status: SalaryRecordStatus.PAID,
         finalizedAt: new Date(),
-        finalizedBy,
+        finalizedBy: paidBy,
+      },
+      include: {
+        columnValues: true,
+        employee: { include: { generalInfo: true } },
+        template: { include: { designation: true, payCommission: true } },
+      },
+    });
+  },
+
+  /** @deprecated use markRecordPaid */
+  async finalizeRecord(recordId: string, finalizedBy: string) {
+    return this.markRecordPaid(recordId, finalizedBy);
+  },
+
+  async markRecordUnpaid(recordId: string) {
+    const record = await prisma.employeeSalaryRecord.findUnique({ where: { id: recordId } });
+    if (!record) throw new Error('Salary record not found');
+    if (record.status === SalaryRecordStatus.UNPAID) {
+      throw new Error('Record is already unpaid');
+    }
+
+    return prisma.employeeSalaryRecord.update({
+      where: { id: recordId },
+      data: {
+        status: SalaryRecordStatus.UNPAID,
+        finalizedAt: null,
+        finalizedBy: null,
       },
       include: {
         columnValues: true,
@@ -645,7 +672,7 @@ export const salaryService = {
 
   async getLatestFinalizedRecord(employeeId: number) {
     return prisma.employeeSalaryRecord.findFirst({
-      where: { employeeId, status: SalaryRecordStatus.FINALIZED },
+      where: { employeeId, status: SalaryRecordStatus.PAID },
       orderBy: [{ salaryYear: 'desc' }, { salaryMonth: 'desc' }],
       include: { template: { include: { designation: true } } },
     });
@@ -696,6 +723,7 @@ export const salaryService = {
         where: { employeeId, salaryYear: year, salaryMonth: month },
         include: {
           template: { include: { designation: true, payCommission: true } },
+          columnValues: true,
         },
       }),
       prisma.leaveBalance.findMany({
@@ -729,9 +757,374 @@ export const salaryService = {
             netPay: Number(record.netPay),
             payCommissionCode: record.payCommissionCode,
             designation: record.template.designation.name,
-            canDownloadSlip: record.status === 'FINALIZED',
+            canDownloadSlip: record.status === 'PAID',
+            columns: record.columnValues.map((c) => ({
+              columnIdentifier: c.columnIdentifier,
+              category: c.category,
+              ruleComputedValue: Number(c.ruleComputedValue),
+              overrideValue: c.overrideValue != null ? Number(c.overrideValue) : null,
+              effectiveValue: Number(c.effectiveValue),
+              formulaPreview: c.formulaPreview,
+            })),
           }
         : null,
+    };
+  },
+
+  /**
+   * Calculate (and optionally persist) monthly salary using employee profile amounts,
+   * attendance proration (cut-on-leave / cut-on-absent), and any existing reimbursement overrides.
+   */
+  async calculateMonthlySalary(params: {
+    employeeId: number;
+    year: number;
+    month: number;
+    persist: boolean;
+    createdBy?: string;
+  }) {
+    const { employeeId, year, month, persist, createdBy } = params;
+    if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) {
+      throw new Error('Invalid year/month');
+    }
+
+    const { attendanceService } = await import('../attendance/attendance.service');
+    const attendance = await attendanceService.getEmployeeMonthlySummary({ employeeId, year, month });
+    const stats = attendance.stats as {
+      absentDays: number;
+      unpaidLeaveDays: number;
+      salaryAbsentDays: number;
+      daysInMonth: number;
+      holidayDays: number;
+      leaveDays: number;
+    };
+
+    const existing = await prisma.employeeSalaryRecord.findUnique({
+      where: {
+        employeeId_salaryMonth_salaryYear: {
+          employeeId,
+          salaryMonth: month,
+          salaryYear: year,
+        },
+      },
+      include: { columnValues: true },
+    });
+    if (existing?.status === SalaryRecordStatus.PAID) {
+      throw new Error('Salary for this month is paid and cannot be recalculated');
+    }
+
+    const salaryInfo = await prisma.employeeSalaryInfo.findUnique({ where: { employeeId } });
+    if (!salaryInfo?.payCommissionId) {
+      throw new Error('Employee pay commission not configured in salary profile');
+    }
+
+    const lastDay = new Date(Date.UTC(year, month, 0));
+    const assignment = await assignmentService.resolveForDate(employeeId, lastDay);
+    const designationId =
+      assignment?.designationId ??
+      (await prisma.employeeGeneralInfo.findUnique({ where: { employeeId } }))?.designationId;
+    if (!designationId) throw new Error('Employee designation not found');
+
+    const payCommission = await prisma.payCommission.findUnique({
+      where: { id: salaryInfo.payCommissionId },
+    });
+    if (!payCommission) throw new Error('Employee pay commission not found');
+
+    const { template } = await this.getTemplateByDesignationAndCommission(
+      designationId,
+      payCommission.code,
+    );
+    if (!template) {
+      throw new Error('No salary structure template configured for this designation and pay commission');
+    }
+
+    const profileOverrides = (salaryInfo.columnOverrides as Record<string, number> | null) ?? {};
+    const mergedOverrides: Record<string, number> = { ...profileOverrides };
+
+    // Preserve non-reimbursement monthly overrides already on the record.
+    if (existing?.columnValues?.length) {
+      for (const cv of existing.columnValues) {
+        if (cv.overrideValue == null) continue;
+        const id = cv.columnIdentifier;
+        if (id === 'reimbursement' || id === 'other_allowance') continue;
+        mergedOverrides[columnKey(id, cv.category)] = Number(cv.overrideValue);
+        mergedOverrides[id] = Number(cv.overrideValue);
+      }
+    }
+
+    const { columnDefinitions } = await loadTemplateContext(template.id);
+
+    // Fold all approved reimbursements for this month into salary.
+    const monthStart = new Date(Date.UTC(year, month - 1, 1));
+    const monthEndExclusive = new Date(Date.UTC(year, month, 1));
+    const approvedClaims = await prisma.reimbursementClaim.findMany({
+      where: {
+        employeeId,
+        status: 'APPROVED',
+        OR: [
+          { salaryMonth: month, salaryYear: year },
+          {
+            salaryMonth: null,
+            appliedAt: { gte: monthStart, lt: monthEndExclusive },
+          },
+        ],
+      },
+      select: { id: true, amount: true },
+    });
+    const reimbursementTotal = approvedClaims.reduce((sum, c) => sum + Number(c.amount), 0);
+    const hasReimbursementCol = columnDefinitions.some(
+      (d) => d.columnIdentifier === 'reimbursement' && d.category === 'EARNING',
+    );
+    const reimbColId = hasReimbursementCol ? 'reimbursement' : 'other_allowance';
+    if (reimbursementTotal > 0 || hasReimbursementCol) {
+      if (hasReimbursementCol) {
+        mergedOverrides[columnKey(reimbColId, 'EARNING')] = reimbursementTotal;
+        mergedOverrides[reimbColId] = reimbursementTotal;
+      } else if (reimbursementTotal > 0) {
+        const profileBase = Number(
+          profileOverrides[columnKey(reimbColId, 'EARNING')] ?? profileOverrides[reimbColId] ?? 0,
+        );
+        mergedOverrides[columnKey(reimbColId, 'EARNING')] = profileBase + reimbursementTotal;
+        mergedOverrides[reimbColId] = profileBase + reimbursementTotal;
+      }
+    }
+
+    let computed = await this.computePreview(template.id, mergedOverrides, { employeeId });
+    computed = applyAttendanceProration(computed, columnDefinitions, {
+      daysInMonth: stats.daysInMonth,
+      absentDays: stats.absentDays,
+      unpaidLeaveDays: stats.unpaidLeaveDays,
+    });
+
+    const breakdown = {
+      daysInMonth: stats.daysInMonth,
+      trueAbsentDays: stats.absentDays,
+      unpaidLeaveDays: stats.unpaidLeaveDays,
+      salaryAbsentDays: stats.salaryAbsentDays,
+      holidayDays: stats.holidayDays,
+      leaveDays: stats.leaveDays,
+      reimbursementTotal,
+      reimbursementClaims: approvedClaims.length,
+    };
+
+    if (!persist) {
+      return {
+        persisted: false,
+        breakdown,
+        computed: {
+          grossPay: computed.gross_pay,
+          totalDeductions: computed.total_deductions,
+          netPay: computed.net_pay,
+          columns: computed.columns,
+        },
+        salaryRecord: existing
+          ? { id: existing.id, status: existing.status, salaryMonth: month, salaryYear: year }
+          : null,
+      };
+    }
+
+    const saved = await prisma.$transaction(async (tx) => {
+      let recordId = existing?.id;
+      if (!recordId) {
+        const created = await tx.employeeSalaryRecord.create({
+          data: {
+            employeeId,
+            assignmentId: assignment?.id ?? null,
+            templateId: template.id,
+            payCommissionCode: payCommission.code,
+            salaryMonth: month,
+            salaryYear: year,
+            status: SalaryRecordStatus.UNPAID,
+            grossPay: computed.gross_pay,
+            totalDeductions: computed.total_deductions,
+            netPay: computed.net_pay,
+            createdBy,
+          },
+        });
+        recordId = created.id;
+      } else {
+        await tx.employeeSalaryRecord.update({
+          where: { id: recordId },
+          data: {
+            grossPay: computed.gross_pay,
+            totalDeductions: computed.total_deductions,
+            netPay: computed.net_pay,
+          },
+        });
+      }
+
+      for (const col of computed.columns) {
+        const key = columnKey(col.column_identifier, col.category);
+        const overrideVal = mergedOverrides[key] ?? mergedOverrides[col.column_identifier];
+        await tx.employeeSalaryColumnValue.upsert({
+          where: {
+            salaryRecordId_columnIdentifier_category: {
+              salaryRecordId: recordId,
+              columnIdentifier: col.column_identifier,
+              category: col.category,
+            },
+          },
+          create: {
+            salaryRecordId: recordId,
+            columnIdentifier: col.column_identifier,
+            category: col.category,
+            ruleComputedValue: col.rule_computed_value,
+            overrideValue: overrideVal ?? null,
+            effectiveValue: col.effective_value,
+            formulaPreview: col.formula_preview,
+          },
+          update: {
+            ruleComputedValue: col.rule_computed_value,
+            overrideValue: overrideVal ?? null,
+            effectiveValue: col.effective_value,
+            formulaPreview: col.formula_preview,
+          },
+        });
+      }
+
+      if (approvedClaims.length) {
+        await tx.reimbursementClaim.updateMany({
+          where: { id: { in: approvedClaims.map((c) => c.id) } },
+          data: {
+            salaryMonth: month,
+            salaryYear: year,
+            salaryRecordId: recordId,
+          },
+        });
+      }
+
+      return tx.employeeSalaryRecord.findUnique({
+        where: { id: recordId },
+        include: {
+          columnValues: { orderBy: [{ category: 'asc' }, { columnIdentifier: 'asc' }] },
+          template: { include: { designation: true, payCommission: true } },
+        },
+      });
+    });
+
+    return {
+      persisted: true,
+      breakdown,
+      computed: {
+        grossPay: computed.gross_pay,
+        totalDeductions: computed.total_deductions,
+        netPay: computed.net_pay,
+        columns: computed.columns,
+      },
+      salaryRecord: saved
+        ? {
+            id: saved.id,
+            status: saved.status,
+            salaryMonth: saved.salaryMonth,
+            salaryYear: saved.salaryYear,
+            grossPay: Number(saved.grossPay),
+            totalDeductions: Number(saved.totalDeductions),
+            netPay: Number(saved.netPay),
+            designation: saved.template.designation.name,
+            payCommissionCode: saved.payCommissionCode,
+            columns: saved.columnValues.map((c) => ({
+              columnIdentifier: c.columnIdentifier,
+              category: c.category,
+              ruleComputedValue: Number(c.ruleComputedValue),
+              overrideValue: c.overrideValue != null ? Number(c.overrideValue) : null,
+              effectiveValue: Number(c.effectiveValue),
+              formulaPreview: c.formulaPreview,
+            })),
+          }
+        : null,
+    };
+  },
+
+  async getMonthPayrollOverview(year: number, month: number) {
+    if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) {
+      throw new Error('Invalid year/month');
+    }
+
+    const [employees, records] = await Promise.all([
+      prisma.employee.findMany({
+        where: { status: 'ACTIVE' },
+        select: {
+          id: true,
+          generalInfo: {
+            select: {
+              fullName: true,
+              employeeCode: true,
+              department: true,
+              designation: true,
+            },
+          },
+          salaryInfo: { select: { payCommissionId: true } },
+        },
+        orderBy: { id: 'asc' },
+      }),
+      prisma.employeeSalaryRecord.findMany({
+        where: { salaryYear: year, salaryMonth: month },
+        select: {
+          id: true,
+          employeeId: true,
+          status: true,
+          grossPay: true,
+          totalDeductions: true,
+          netPay: true,
+          payCommissionCode: true,
+        },
+      }),
+    ]);
+
+    const byEmployee = new Map(records.map((r) => [r.employeeId, r]));
+    const rows = employees.map((e) => {
+      const rec = byEmployee.get(e.id);
+      const status = !rec
+        ? 'NOT_CALCULATED'
+        : rec.status === SalaryRecordStatus.PAID
+          ? 'PAID'
+          : 'UNPAID';
+      return {
+        employeeId: e.id,
+        fullName: e.generalInfo?.fullName ?? `Employee #${e.id}`,
+        employeeCode: e.generalInfo?.employeeCode ?? null,
+        department: e.generalInfo?.department ?? null,
+        designation: e.generalInfo?.designation ?? null,
+        hasPayCommission: Boolean(e.salaryInfo?.payCommissionId),
+        status,
+        recordId: rec?.id ?? null,
+        grossPay: rec ? Number(rec.grossPay) : null,
+        totalDeductions: rec ? Number(rec.totalDeductions) : null,
+        netPay: rec ? Number(rec.netPay) : null,
+        payCommissionCode: rec?.payCommissionCode ?? null,
+      };
+    });
+
+    let paidAmount = 0;
+    let unpaidAmount = 0;
+    let paidCount = 0;
+    let unpaidCount = 0;
+    let notCalculatedCount = 0;
+    for (const row of rows) {
+      if (row.status === 'PAID') {
+        paidCount += 1;
+        paidAmount += row.netPay ?? 0;
+      } else if (row.status === 'UNPAID') {
+        unpaidCount += 1;
+        unpaidAmount += row.netPay ?? 0;
+      } else {
+        notCalculatedCount += 1;
+      }
+    }
+
+    return {
+      year,
+      month,
+      kpis: {
+        totalEmployees: rows.length,
+        calculatedCount: paidCount + unpaidCount,
+        notCalculatedCount,
+        unpaidCount,
+        paidCount,
+        totalNetPay: paidAmount + unpaidAmount,
+        paidAmount,
+        remainingAmount: unpaidAmount,
+      },
+      employees: rows,
     };
   },
 };

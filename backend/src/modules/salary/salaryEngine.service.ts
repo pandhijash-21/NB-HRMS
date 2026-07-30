@@ -446,3 +446,98 @@ export function computeFullSalary(
 
   return { columns, gross_pay, total_deductions: round2(total_deductions), net_pay };
 }
+
+const AGGREGATE_COLUMNS = new Set(['gross_pay', 'total_deductions', 'net_pay']);
+
+/**
+ * Prorate leaf columns by attendance cut flags, then rebuild gross / deductions / net.
+ * payable = A * (D - cutDays) / D
+ * cutDays = (cutOnAbsent ? absentDays : 0) + (cutOnLeave ? unpaidLeaveDays : 0)
+ */
+export function applyAttendanceProration(
+  result: ComputeResult,
+  columnDefinitions: SalaryColumnDefinition[],
+  opts: { daysInMonth: number; absentDays: number; unpaidLeaveDays: number },
+): ComputeResult {
+  const D = Math.max(1, Math.floor(opts.daysInMonth));
+  const X = Math.max(0, opts.absentDays);
+  const L = Math.max(0, opts.unpaidLeaveDays);
+  const defByKey = new Map(
+    columnDefinitions.map((d) => [columnKey(d.columnIdentifier, d.category), d]),
+  );
+
+  const values: ColumnValueMap = {};
+  const columns: ComputedColumn[] = result.columns.map((c) => {
+    const key = columnKey(c.column_identifier, c.category);
+    const def = defByKey.get(key);
+    if (!def || AGGREGATE_COLUMNS.has(c.column_identifier)) {
+      values[key] = c.effective_value;
+      return c;
+    }
+    const cutOnLeave = Boolean((def as { cutOnLeave?: boolean }).cutOnLeave);
+    const cutOnAbsent = Boolean((def as { cutOnAbsent?: boolean }).cutOnAbsent);
+    const cutDays = (cutOnAbsent ? X : 0) + (cutOnLeave ? L : 0);
+    if (cutDays <= 0) {
+      values[key] = c.effective_value;
+      return c;
+    }
+    const payable = round2((c.effective_value * (D - cutDays)) / D);
+    values[key] = payable;
+    return {
+      ...c,
+      effective_value: payable,
+      formula_preview: `${c.formula_preview || c.column_identifier} × (${D}−${cutDays})/${D} (attendance cut)`,
+    };
+  });
+
+  const sorted = [...columnDefinitions].sort((a, b) => a.evaluationOrder - b.evaluationOrder);
+
+  // Rebuild aggregates from prorated leaf values.
+  for (let i = 0; i < columns.length; i++) {
+    const c = columns[i]!;
+    if (c.column_identifier === 'gross_pay' && c.category === 'EARNING') {
+      const gross = round2(defaultGrossPay(sorted, values));
+      columns[i] = {
+        ...c,
+        rule_computed_value: gross,
+        effective_value: gross,
+        formula_preview: 'Sum of earnings after attendance cut',
+      };
+      values[columnKey('gross_pay', 'EARNING')] = gross;
+    } else if (c.column_identifier === 'total_deductions' && c.category === 'DEDUCTION') {
+      const total = round2(defaultTotalDeductions(sorted, values));
+      columns[i] = {
+        ...c,
+        rule_computed_value: total,
+        effective_value: total,
+        formula_preview: 'Sum of deductions after attendance cut',
+      };
+      values[columnKey('total_deductions', 'DEDUCTION')] = total;
+    } else if (c.column_identifier === 'net_pay') {
+      const gross = values[columnKey('gross_pay', 'EARNING')] ?? 0;
+      const total = values[columnKey('total_deductions', 'DEDUCTION')] ?? 0;
+      const net = round2(gross - total);
+      columns[i] = {
+        ...c,
+        rule_computed_value: net,
+        effective_value: net,
+        formula_preview: 'Gross − Total Deductions after attendance cut',
+      };
+      values[columnKey('net_pay', c.category)] = net;
+    }
+  }
+
+  const gross_pay = values[columnKey('gross_pay', 'EARNING')] ?? 0;
+  const total_deductions = values[columnKey('total_deductions', 'DEDUCTION')] ?? 0;
+  const net_pay =
+    values[columnKey('net_pay', 'DEDUCTION')] ??
+    values[columnKey('net_pay', 'EARNING')] ??
+    round2(gross_pay - total_deductions);
+
+  return {
+    columns,
+    gross_pay: round2(gross_pay),
+    total_deductions: round2(total_deductions),
+    net_pay: round2(net_pay),
+  };
+}

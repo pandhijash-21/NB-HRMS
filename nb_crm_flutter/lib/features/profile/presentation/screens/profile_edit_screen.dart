@@ -217,6 +217,7 @@ class EditGeneralTab extends ConsumerStatefulWidget {
 }
 
 class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
+  static const _weekdayOptions = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
   static const _categories = [
     'TEACHING',
     'NON_TEACHING',
@@ -249,6 +250,7 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
   String? _firstApproverUserId;
   String? _secondApproverUserId;
   String? _thirdApproverUserId;
+  late Set<String> _weeklyOffDays;
 
   @override
   void initState() {
@@ -263,7 +265,7 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
     _fullNameCtrl.addListener(_syncAbbreviationFromName);
     _empCodeCtrl = TextEditingController(text: info?.employeeCode ?? '');
     _punchIdCtrl = TextEditingController(text: info?.punchId ?? '');
-    final org = info?.organization?.trim();
+    final org = info?.organization.trim();
     _organization = (org != null && org.isNotEmpty)
         ? org
         : 'Gandhinagar University';
@@ -281,6 +283,7 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
     _firstApproverUserId = info?.firstApproverUserId;
     _secondApproverUserId = info?.secondApproverUserId;
     _thirdApproverUserId = info?.thirdApproverUserId;
+    _weeklyOffDays = {...(info?.weeklyOffDays ?? const ['SUN'])};
   }
 
   void _syncAbbreviationFromName() {
@@ -419,6 +422,42 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
           _buildTextField('Employee Code', _empCodeCtrl),
           _buildTextField('Punch ID (biometric Empcode)', _punchIdCtrl),
           _buildHelperChip('Must match the biometric machine Empcode — not employee code'),
+          const SizedBox(height: 8),
+          Text(
+            'Weekly Holidays',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _weekdayOptions.map((day) {
+              final selected = _weeklyOffDays.contains(day);
+              return FilterChip(
+                label: Text(day),
+                selected: selected,
+                showCheckmark: false,
+                selectedColor: Theme.of(context).brightness == Brightness.dark
+                    ? const Color(0xFFC5A059)
+                    : Colors.black,
+                checkmarkColor: Colors.white,
+                labelStyle: TextStyle(
+                  color: selected ? Colors.white : null,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                ),
+                onSelected: (value) {
+                  setState(() {
+                    if (value) {
+                      _weeklyOffDays.add(day);
+                    } else if (_weeklyOffDays.length > 1) {
+                      _weeklyOffDays.remove(day);
+                    }
+                  });
+                },
+              );
+            }).toList(),
+          ),
+          _buildHelperChip('Admins can mark employee-specific weekly holidays like only Sunday or Saturday+Sunday'),
           _buildTextField(
             'Designation',
             _designationCtrl,
@@ -692,7 +731,7 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
       final notifier = ref.read(profileProvider.notifier);
       final empCode = _empCodeCtrl.text.trim();
       final punchId = _punchIdCtrl.text.trim();
-      await notifier.updateGeneralInfoDirect({
+      final rematch = await notifier.updateGeneralInfoDirect({
         'fullName': _fullNameCtrl.text.trim(),
         if (empCode.isNotEmpty) 'employeeCode': empCode,
         'punchId': punchId.isEmpty ? null : punchId,
@@ -713,14 +752,21 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
         'firstApproverUserId': _firstApproverUserId,
         'secondApproverUserId': _secondApproverUserId,
         'thirdApproverUserId': _thirdApproverUserId,
+        'weeklyOffDays': _weeklyOffDays.toList()..sort(),
       });
       final abbr = generateAbbreviation(_fullNameCtrl.text.trim());
       if (abbr.isNotEmpty && abbr != (widget.profile.abbreviation ?? '')) {
         await notifier.updateEmployeeAbbreviation(abbr);
       }
       if (mounted) {
+        final inserted = rematch?['inserted'];
+        final fetched = rematch?['fetched'];
+        final msg = inserted is num
+            ? 'Saved. Imported $inserted machine punches'
+                '${fetched is num ? ' (from $fetched rows)' : ''} for Punch ID.'
+            : 'General Info updated successfully';
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('General Info updated successfully')),
+          SnackBar(content: Text(msg)),
         );
       }
     } catch (e) {

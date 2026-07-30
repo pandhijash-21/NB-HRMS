@@ -269,8 +269,8 @@ class AdminSalaryRecordsScreen extends ConsumerWidget {
                   icon: const Icon(Icons.arrow_drop_down_rounded, color: Color(0xFFC5A059)),
                   items: const [
                     DropdownMenuItem(value: '', child: Text('All statuses')),
-                    DropdownMenuItem(value: 'DRAFT', child: Text('Draft')),
-                    DropdownMenuItem(value: 'FINALIZED', child: Text('Finalized')),
+                    DropdownMenuItem(value: 'UNPAID', child: Text('Unpaid')),
+                    DropdownMenuItem(value: 'PAID', child: Text('Paid')),
                   ],
                   onChanged: (v) => ref
                       .read(salaryRecordsFilterProvider.notifier)

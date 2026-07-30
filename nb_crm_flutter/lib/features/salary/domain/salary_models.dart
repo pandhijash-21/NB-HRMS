@@ -28,16 +28,27 @@ SalaryRuleType parseSalaryRuleType(String? raw) {
   }
 }
 
-enum SalaryRecordStatus { draft, finalized }
+enum SalaryRecordStatus { unpaid, paid }
 
 SalaryRecordStatus parseSalaryRecordStatus(String? raw) {
-  return raw?.toUpperCase() == 'FINALIZED'
-      ? SalaryRecordStatus.finalized
-      : SalaryRecordStatus.draft;
+  final v = raw?.toUpperCase();
+  if (v == 'PAID' || v == 'FINALIZED') return SalaryRecordStatus.paid;
+  return SalaryRecordStatus.unpaid;
 }
 
 String salaryRecordStatusApi(SalaryRecordStatus s) =>
-    s == SalaryRecordStatus.finalized ? 'FINALIZED' : 'DRAFT';
+    s == SalaryRecordStatus.paid ? 'PAID' : 'UNPAID';
+
+String salaryRecordStatusLabel(SalaryRecordStatus s) =>
+    s == SalaryRecordStatus.paid ? 'Paid' : 'Unpaid';
+
+String payrollRowStatusLabel(String? raw) {
+  final v = (raw ?? '').toUpperCase();
+  if (v == 'PAID' || v == 'FINALIZED') return 'Paid';
+  if (v == 'UNPAID' || v == 'DRAFT') return 'Unpaid';
+  if (v == 'NOT_CALCULATED') return 'Not calculated';
+  return raw?.isNotEmpty == true ? raw! : 'Not calculated';
+}
 
 class PayCommissionCounts {
   const PayCommissionCounts({
@@ -122,6 +133,8 @@ class PayCommissionColumn {
     required this.category,
     required this.evaluationOrder,
     this.isRuleConfigurable = true,
+    this.cutOnLeave = false,
+    this.cutOnAbsent = false,
   });
 
   final String id;
@@ -130,6 +143,8 @@ class PayCommissionColumn {
   final SalaryColumnCategory category;
   final int evaluationOrder;
   final bool isRuleConfigurable;
+  final bool cutOnLeave;
+  final bool cutOnAbsent;
 
   String get categoryKey => salaryColumnCategoryApi(category);
 
@@ -151,6 +166,8 @@ class PayCommissionColumn {
       isRuleConfigurable: json['isRuleConfigurable'] ??
           json['is_rule_configurable'] ??
           true,
+      cutOnLeave: json['cutOnLeave'] ?? json['cut_on_leave'] ?? false,
+      cutOnAbsent: json['cutOnAbsent'] ?? json['cut_on_absent'] ?? false,
     );
   }
 }

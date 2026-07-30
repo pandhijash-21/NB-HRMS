@@ -48,6 +48,7 @@ import '../../features/salary/presentation/screens/admin_salary_structure_detail
 import '../../features/salary/presentation/screens/admin_salary_entry_screen.dart';
 import '../../features/salary/presentation/screens/admin_salary_records_screen.dart';
 import '../../features/salary/presentation/screens/admin_salary_slip_screen.dart';
+import '../../features/salary/presentation/screens/admin_payroll_month_screen.dart';
 import '../../features/salary/presentation/screens/employee_salary_slip_screen.dart';
 import '../../features/rbac/presentation/screens/admin_users_screen.dart';
 import '../../features/rbac/presentation/screens/admin_roles_screen.dart';
@@ -76,7 +77,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
   ref.onDispose(refresh.dispose);
 
   // Bump when route table changes so hot-restart rebuilds GoRouter cleanly.
-  const routerRevision = 2;
+  const routerRevision = 3;
 
   return GoRouter(
     initialLocation: '/login',
@@ -365,6 +366,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             templateId: state.uri.queryParameters['templateId'],
           );
         },
+      ),
+      GoRoute(
+        path: '/admin/salary/payroll',
+        builder: (context, state) => const AdminPayrollMonthScreen(),
       ),
       GoRoute(
         path: '/admin/salary/entry',

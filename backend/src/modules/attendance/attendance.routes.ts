@@ -247,7 +247,7 @@ function requireAttendanceAdmin(req: Request, res: Response): boolean {
   return true;
 }
 
-/** Device / biometric sync status (eTimeOffice + MSSQL stub). */
+/** Device / biometric sync status (PayTime MSSQL + optional eTimeOffice). */
 attendanceRouter.get('/admin/device/status', requireAuth, requirePermission('ATTENDANCE', 'READ'), async (req, res) => {
   try {
     if (!requireAttendanceAdmin(req, res)) return;
@@ -258,11 +258,21 @@ attendanceRouter.get('/admin/device/status', requireAuth, requirePermission('ATT
   }
 });
 
+attendanceRouter.get('/admin/device/meta', requireAuth, requirePermission('ATTENDANCE', 'READ'), async (req, res) => {
+  try {
+    if (!requireAttendanceAdmin(req, res)) return;
+    const { fetchPaytimeMeta } = await import('./esslMssql.client');
+    return res.json(ok(await fetchPaytimeMeta()));
+  } catch (e: unknown) {
+    return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+  }
+});
+
 attendanceRouter.post('/admin/device/sync', requireAuth, requirePermission('ATTENDANCE', 'WRITE'), async (req, res) => {
   try {
     if (!requireAttendanceAdmin(req, res)) return;
     const { attendanceSyncService } = await import('./attendanceSync.service');
-    const data = await attendanceSyncService.syncEtimeofficePunches();
+    const data = await attendanceSyncService.syncDeviceNow();
     return res.json(ok(data));
   } catch (e: unknown) {
     return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
@@ -278,34 +288,69 @@ attendanceRouter.get('/admin/device/preview', requireAuth, requirePermission('AT
       return res.status(400).json(fail('from and to must be YYYY-MM-DD'));
     }
     const empcode = req.query.empcode ? String(req.query.empcode) : undefined;
-    const mode = String(req.query.mode ?? 'raw'); // raw | inout
-    const { fetchPunchDataMcid, fetchInOutPunchData } = await import('./etimeoffice.client');
-    const { loadPunchIdMap, lookupPunchIdMap } = await import('./punchId.mapper');
-    const punchMap = await loadPunchIdMap();
+    const source = String(req.query.source ?? 'paytime'); // paytime | etimeoffice
+    const { loadPunchIdEmployeeMap, lookupPunchIdEmployee } = await import('./punchId.mapper');
 
-    if (mode === 'inout') {
-      const rows = await fetchInOutPunchData({ empcode, fromYmd: from, toYmd: to });
+    if (source === 'etimeoffice') {
+      const mode = String(req.query.mode ?? 'raw');
+      const { fetchPunchDataMcid, fetchInOutPunchData } = await import('./etimeoffice.client');
+      const punchMap = await loadPunchIdEmployeeMap();
+      if (mode === 'inout') {
+        const rows = await fetchInOutPunchData({ empcode, fromYmd: from, toYmd: to });
+        return res.json(
+          ok(
+            rows.map((r) => {
+              const m = lookupPunchIdEmployee(punchMap, r.Empcode);
+              return {
+                ...r,
+                name: m?.fullName ?? null,
+                matchedEmployeeId: m?.employeeId ?? null,
+              };
+            }),
+          ),
+        );
+      }
+      const rows = await fetchPunchDataMcid({ empcode, fromYmd: from, toYmd: to });
       return res.json(
         ok(
-          rows.map((r) => ({
-            ...r,
-            matchedEmployeeId: lookupPunchIdMap(punchMap, r.Empcode),
-          })),
+          rows.map((r) => {
+            const m = lookupPunchIdEmployee(punchMap, r.Empcode);
+            return {
+              name: m?.fullName ?? null,
+              empcode: r.Empcode,
+              punchDate: r.PunchDate,
+              mcid: r.mcid ?? null,
+              mFlag: r.M_Flag ?? null,
+              matchedEmployeeId: m?.employeeId ?? null,
+            };
+          }),
         ),
       );
     }
 
-    const rows = await fetchPunchDataMcid({ empcode, fromYmd: from, toYmd: to });
+    const { fetchPaytimePunchesInRange, isPaytimeMssqlConfigured } = await import('./esslMssql.client');
+    if (!isPaytimeMssqlConfigured()) {
+      return res.status(400).json(fail('PayTime MSSQL is not configured'));
+    }
+    const punchMap = await loadPunchIdEmployeeMap();
+    const rows = await fetchPaytimePunchesInRange({
+      fromYmd: from,
+      toYmd: to,
+      punchId: empcode,
+    });
     return res.json(
       ok(
-        rows.map((r) => ({
-          name: r.Name ?? null,
-          empcode: r.Empcode,
-          punchDate: r.PunchDate,
-          mcid: r.mcid ?? null,
-          mFlag: r.M_Flag ?? null,
-          matchedEmployeeId: lookupPunchIdMap(punchMap, r.Empcode),
-        })),
+        rows.map((r) => {
+          const m = lookupPunchIdEmployee(punchMap, r.punchId);
+          return {
+            name: m?.fullName ?? null,
+            empcode: r.punchId,
+            punchDate: r.punchAt.toISOString(),
+            mcid: r.terminalId ?? null,
+            mFlag: r.punchType ?? null,
+            matchedEmployeeId: m?.employeeId ?? null,
+          };
+        }),
       ),
     );
   } catch (e: unknown) {
@@ -323,7 +368,11 @@ attendanceRouter.post('/admin/device/backfill', requireAuth, requirePermission('
       return res.status(400).json(fail('from and to must be YYYY-MM-DD'));
     }
     const { attendanceSyncService } = await import('./attendanceSync.service');
-    const data = await attendanceSyncService.backfillEtimeoffice({ fromYmd: from, toYmd: to, empcode });
+    // Prefer PayTime when configured
+    const { isPaytimeMssqlConfigured } = await import('./esslMssql.client');
+    const data = isPaytimeMssqlConfigured()
+      ? await attendanceSyncService.backfillPaytime({ fromYmd: from, toYmd: to, punchId: empcode })
+      : await attendanceSyncService.backfillEtimeoffice({ fromYmd: from, toYmd: to, empcode });
     return res.json(ok(data));
   } catch (e: unknown) {
     return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
@@ -434,7 +483,7 @@ attendanceRouter.post('/my/register-biometrics', requireAuth, requirePermission(
     if (!employeeId) return res.status(400).json(fail('Employee ID not found in token'));
     const { biometricToken } = req.body;
     if (!biometricToken) return res.status(400).json(fail('biometricToken is required'));
-    const updatedBy = String(req.user!.id ?? req.user!.userId ?? 'unknown');
+    const updatedBy = String((req.user as any)?.id ?? (req.user as any)?.userId ?? 'unknown');
     const data = await attendanceService.registerBiometricToken(employeeId, String(biometricToken), updatedBy);
     return res.json(ok(data));
   } catch (e: any) {
@@ -447,7 +496,7 @@ attendanceRouter.post('/admin/reset-biometrics/:employeeId', requireAuth, requir
     if (!requireAttendanceAdmin(req, res)) return;
     const employeeId = Number(req.params.employeeId);
     if (!employeeId) return res.status(400).json(fail('Invalid employeeId'));
-    const updatedBy = String(req.user!.id ?? req.user!.userId ?? 'unknown');
+    const updatedBy = String((req.user as any)?.id ?? (req.user as any)?.userId ?? 'unknown');
     const data = await attendanceService.resetBiometricToken(employeeId, updatedBy);
     return res.json(ok(data));
   } catch (e: any) {

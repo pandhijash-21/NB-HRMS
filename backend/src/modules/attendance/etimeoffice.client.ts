@@ -95,9 +95,9 @@ export function ymdToEtimeTo(ymd: string): string {
 
 export function isEtimeofficeConfigured(): boolean {
   return Boolean(
-    env.ETIMEOFFICE_CORPORATE_ID &&
-      env.ETIMEOFFICE_USERNAME &&
-      env.ETIMEOFFICE_PASSWORD,
+    env.ETIMEOFFICE_CORPORATE_ID?.trim() &&
+      env.ETIMEOFFICE_USERNAME?.trim() &&
+      env.ETIMEOFFICE_PASSWORD?.trim(),
   );
 }
 

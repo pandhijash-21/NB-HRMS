@@ -52,6 +52,7 @@ class LeaveType {
     this.requiresReason = true,
     this.isActive = true,
     this.employeeCanApply = true,
+    this.cutsSalary = false,
   });
 
   final String id;
@@ -67,6 +68,7 @@ class LeaveType {
   final bool requiresReason;
   final bool isActive;
   final bool employeeCanApply;
+  final bool cutsSalary;
 
   factory LeaveType.fromJson(Map<String, dynamic> json) {
     return LeaveType(
@@ -85,6 +87,7 @@ class LeaveType {
       requiresReason: json['requiresReason'] as bool? ?? true,
       isActive: json['isActive'] as bool? ?? true,
       employeeCanApply: json['employeeCanApply'] as bool? ?? true,
+      cutsSalary: json['cutsSalary'] as bool? ?? false,
     );
   }
 
@@ -101,6 +104,7 @@ class LeaveType {
         'requiresReason': requiresReason,
         'isActive': isActive,
         'employeeCanApply': employeeCanApply,
+        'cutsSalary': cutsSalary,
       };
 }
 

@@ -9,9 +9,9 @@ export function startAttendanceSyncWorker() {
   new Worker(
     ATTENDANCE_QUEUE_NAMES.SYNC_ESSL,
     async () => {
+      const paytime = await attendanceSyncService.syncEsslPunches();
       const etime = await attendanceSyncService.syncEtimeofficePunches();
-      const essl = await attendanceSyncService.syncEsslPunches();
-      return { etime, essl };
+      return { paytime, etime };
     },
     { connection },
   );

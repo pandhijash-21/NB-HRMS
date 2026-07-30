@@ -77,6 +77,7 @@ export const leaveAdminService = {
     creditSchedule?: unknown;
     isActive?: boolean;
     employeeCanApply?: boolean;
+    cutsSalary?: boolean;
   }) {
     const isCarryForward = data.isCarryForward ?? false;
     let creditSchedule = data.creditSchedule;
@@ -104,6 +105,7 @@ export const leaveAdminService = {
       creditSchedule:     (creditSchedule as any) ?? null,
       isActive:           data.isActive ?? true,
       employeeCanApply:   data.employeeCanApply ?? true,
+      cutsSalary:         data.cutsSalary ?? false,
     };
     return prisma.leaveType.upsert({
       where:  { code: data.code },

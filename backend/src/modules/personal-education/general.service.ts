@@ -23,8 +23,16 @@ type GeneralInfoInput = {
   appointmentType?: string | null;
   employeeCode?: string | null;
   punchId?: string | null;
+  weeklyOffDays?: string[] | null;
   instituteId?: string | null;
 };
+
+function normalizeWeeklyOffDays(input: string[] | null | undefined): string[] | undefined {
+  if (input === undefined) return undefined;
+  if (input === null) return ['SUN'];
+  const normalized = [...new Set(input.map((d) => String(d).trim().toUpperCase()).filter(Boolean))];
+  return normalized.length ? normalized : ['SUN'];
+}
 
 export const generalService = {
   get(employeeId: number) {
@@ -55,6 +63,7 @@ export const generalService = {
         appointmentType:      input.appointmentType ?? null,
         employeeCode:         input.employeeCode ?? null,
         punchId:              input.punchId ?? null,
+        weeklyOffDays:        normalizeWeeklyOffDays(input.weeklyOffDays) ?? ['SUN'],
         instituteId:          input.instituteId ?? null,
         updatedBy:            createdBy,
       },
@@ -68,6 +77,7 @@ export const generalService = {
     // Normalize empty punchId to null for unique constraint
     const data = {
       ...input,
+      weeklyOffDays: normalizeWeeklyOffDays(input.weeklyOffDays),
       punchId:
         input.punchId !== undefined
           ? input.punchId && String(input.punchId).trim()
@@ -90,6 +100,24 @@ export const generalService = {
       after:      updated  as Record<string, unknown>,
     });
 
-    return updated;
+    // Punch ID changed → auto-import that machine CardNO into this employee (for testing rematch)
+    const prevPunch = existing.punchId?.trim() || null;
+    const nextPunch = updated.punchId?.trim() || null;
+    let rematch: unknown = null;
+    if (nextPunch && nextPunch !== prevPunch) {
+      try {
+        const { attendanceSyncService } = await import('../attendance/attendanceSync.service');
+        rematch = await attendanceSyncService.rematchEmployeePunchId({
+          employeeId,
+          punchId: nextPunch,
+        });
+      } catch (e) {
+        rematch = {
+          error: e instanceof Error ? e.message : 'Rematch failed',
+        };
+      }
+    }
+
+    return { ...updated, rematch };
   },
 };

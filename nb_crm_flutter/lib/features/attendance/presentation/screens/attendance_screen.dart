@@ -9,7 +9,6 @@ import '../../../auth/presentation/auth_providers.dart';
 import '../../domain/attendance_models.dart';
 import '../../../leave/presentation/widgets/leave_shared_widgets.dart';
 import '../attendance_providers.dart';
-import 'package:local_auth/local_auth.dart';
 import '../geofenced_punch_service.dart';
 import '../../../../core/network/dio_client.dart';
 import 'package:flutter/foundation.dart';
@@ -563,6 +562,8 @@ class _CalendarGrid extends StatelessWidget {
       final selected = key == selectedDate;
       final hasPunches = summary != null && summary.count > 0;
       final isLeave = summary?.isLeave ?? false;
+      final isHoliday = summary?.isHoliday ?? false;
+      final isAbsent = summary?.isAbsent ?? false;
 
       Widget cellContent = Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -617,14 +618,21 @@ class _CalendarGrid extends StatelessWidget {
                 ],
               ),
             ),
-          ] else if (isLeave) ...[
+          ] else if (isLeave || isHoliday || isAbsent) ...[
             const SizedBox(height: 2),
-            Icon(
-              Icons.beach_access_rounded,
-              size: 12,
-              color: selected
-                  ? (isDark ? const Color(0xFF1A1816) : Colors.white)
-                  : Colors.blue.shade400,
+            Text(
+              isHoliday ? 'Holiday' : (isLeave ? 'Leave' : 'Absent'),
+              style: TextStyle(
+                fontSize: 8,
+                fontWeight: FontWeight.w800,
+                color: selected
+                    ? (isDark ? const Color(0xFF1A1816) : Colors.white)
+                    : (isHoliday
+                        ? Colors.purple.shade400
+                        : isLeave
+                            ? Colors.blue.shade400
+                            : Colors.grey.shade600),
+              ),
             ),
           ],
         ],
@@ -645,7 +653,11 @@ class _CalendarGrid extends StatelessWidget {
                         ? (isDark ? const Color(0xFF1E1B18) : Colors.white)
                         : isLeave
                             ? (isDark ? const Color(0xFF1A2233) : const Color(0xFFE3F2FD))
-                            : (isDark ? const Color(0xFF151311) : const Color(0xFFF1F5F9))),
+                            : isHoliday
+                                ? (isDark ? const Color(0xFF221A30) : const Color(0xFFF3E5F5))
+                                : isAbsent
+                                    ? (isDark ? const Color(0xFF1A1A1A) : const Color(0xFFF5F5F5))
+                                    : (isDark ? const Color(0xFF151311) : const Color(0xFFF1F5F9))),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
                   color: selected
@@ -654,7 +666,11 @@ class _CalendarGrid extends StatelessWidget {
                           ? (isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC))
                           : isLeave
                               ? (isDark ? Colors.blue.withOpacity(0.25) : Colors.blue.shade200)
-                              : (isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.03))),
+                              : isHoliday
+                                  ? (isDark ? Colors.purple.withOpacity(0.25) : Colors.purple.shade100)
+                                  : isAbsent
+                                      ? (isDark ? Colors.grey.withOpacity(0.25) : Colors.grey.shade300)
+                                      : (isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.03))),
                   width: selected ? 2.0 : 1.2,
                 ),
                 boxShadow: selected
@@ -705,6 +721,7 @@ class _DayDetail extends StatelessWidget {
     final summary = day.summary;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isLeave = summary.isLeave;
+    final isHoliday = summary.isHoliday;
     final isAbsent = summary.isAbsent && !isLeave;
 
     // Convert total minutes to hours & minutes format
@@ -763,7 +780,7 @@ class _DayDetail extends StatelessWidget {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          summary.firstIn != null ? formatIsoTime(summary.firstIn) : '—',
+                          summary.firstIn != null ? '${formatIsoTime(summary.firstIn)} IST' : '—',
                           style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w800,
@@ -801,7 +818,7 @@ class _DayDetail extends StatelessWidget {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          summary.lastOut != null ? formatIsoTime(summary.lastOut) : '—',
+                          summary.lastOut != null ? '${formatIsoTime(summary.lastOut)} IST' : '—',
                           style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w800,
@@ -840,7 +857,32 @@ class _DayDetail extends StatelessWidget {
             const SizedBox(height: 16),
             const Divider(height: 1, thickness: 1),
             const SizedBox(height: 16),
-            if (isLeave) ...[
+            if (isHoliday) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.purple.withOpacity(isDark ? 0.12 : 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.purple.shade300, width: 1.2),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.celebration_rounded, size: 18, color: Colors.purple.shade300),
+                    const SizedBox(width: 8),
+                    Text(
+                      'HOLIDAY',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.purple.shade300,
+                        letterSpacing: 0.6,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ] else if (isLeave) ...[
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(14),
@@ -1030,7 +1072,7 @@ class _DayDetail extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                formatIsoTime(p.punchAt),
+                                '${formatIsoTime(p.punchAt)} IST',
                                 style: TextStyle(
                                   fontWeight: FontWeight.w800,
                                   fontSize: 14,

@@ -1,15 +1,18 @@
 import { prisma } from '../../config/prisma';
 import { randomUUID } from 'crypto';
+import { deriveDayInOut } from './dayPunch.rules';
 
 const IST_OFFSET_MIN = 330;
 const IST_OFFSET_MS = IST_OFFSET_MIN * 60 * 1000;
 const DEFAULT_POLICY = {
   id: 'default' as const,
-  defaultPunchInTime: '09:00',
-  defaultPunchOutTime: '15:30',
+  defaultPunchInTime: '10:00',
+  defaultPunchOutTime: '19:00',
   punchInBufferMinutes: 10,
   punchOutBufferMinutes: 10,
 };
+const WEEKDAY_CODES = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'] as const;
+type DayStatus = 'PRESENT' | 'LEAVE' | 'ABSENT' | 'HOLIDAY';
 
 function istDayStartUtc(ymd: string) {
   // "YYYY-MM-DDT00:00:00+05:30" parsed into a UTC Date instance
@@ -53,6 +56,24 @@ function minutesInIstDayFromUtcDate(d: Date): number {
   // Convert instant to "local IST" clock time without relying on Intl timeZone math.
   const shifted = new Date(d.getTime() + IST_OFFSET_MS);
   return shifted.getUTCHours() * 60 + shifted.getUTCMinutes();
+}
+
+function normalizeWeeklyOffDays(input: unknown): Set<string> {
+  const raw = Array.isArray(input) ? input : [];
+  const normalized = raw
+    .map((d) => String(d).trim().toUpperCase())
+    .filter((d): d is string => WEEKDAY_CODES.includes(d as (typeof WEEKDAY_CODES)[number]));
+  return new Set(normalized.length ? normalized : ['SUN']);
+}
+
+function weekdayCodeFromYmd(dateYmd: string): string {
+  // Date-only weekday from calendar YMD (avoid IST-midnight → UTC day shift).
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateYmd);
+  if (!m) return 'SUN';
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const da = Number(m[3]);
+  return WEEKDAY_CODES[new Date(Date.UTC(y, mo - 1, da)).getUTCDay()] ?? 'SUN';
 }
 
 async function getAttendancePolicy() {
@@ -184,8 +205,10 @@ function resolveDayStatus(
   hasPunch: boolean,
   dateYmd: string,
   approvedLeaveDates: Set<string>,
-): 'PRESENT' | 'LEAVE' | 'ABSENT' {
+  holidayDates: Set<string>,
+): DayStatus {
   if (hasPunch) return 'PRESENT';
+  if (holidayDates.has(dateYmd)) return 'HOLIDAY';
   if (approvedLeaveDates.has(dateYmd)) return 'LEAVE';
   return 'ABSENT';
 }
@@ -227,6 +250,41 @@ async function fetchApprovedLeaveOnDate(employeeId: number, dateYmd: string) {
       leaveType: { select: { name: true, code: true } },
     },
   });
+}
+
+async function fetchHolidayDates(
+  employeeId: number,
+  fromYmd: string,
+  toYmd: string,
+): Promise<Set<string>> {
+  const [generalInfo, publicHolidays] = await Promise.all([
+    prisma.employeeGeneralInfo.findUnique({
+      where: { employeeId },
+      select: { weeklyOffDays: true },
+    }),
+    prisma.publicHoliday.findMany({
+      where: {
+        date: {
+          gte: istDayStartUtc(fromYmd),
+          lt: new Date(istDayStartUtc(toYmd).getTime() + 24 * 60 * 60 * 1000),
+        },
+      },
+      select: { date: true },
+    }),
+  ]);
+
+  const holidayDates = new Set<string>(
+    publicHolidays.map((h) => istKeyFromUtcDate(h.date)),
+  );
+  const weeklyOffDays = normalizeWeeklyOffDays(generalInfo?.weeklyOffDays);
+  let cursor = istDayStartUtc(fromYmd);
+  const end = istDayStartUtc(toYmd);
+  while (cursor.getTime() <= end.getTime()) {
+    const key = istKeyFromUtcDate(cursor);
+    if (weeklyOffDays.has(weekdayCodeFromYmd(key))) holidayDates.add(key);
+    cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
+  }
+  return holidayDates;
 }
 
 export const attendanceService = {
@@ -306,10 +364,15 @@ export const attendanceService = {
         punchAt: { gte: fromUtc, lt: toExclusive },
       },
       orderBy: { punchAt: 'asc' },
-      select: { punchAt: true },
+      select: { punchAt: true, source: true },
     });
 
     const approvedLeaveDates = await fetchApprovedLeaveDates(
+      params.employeeId,
+      params.from,
+      params.to,
+    );
+    const holidayDates = await fetchHolidayDates(
       params.employeeId,
       params.from,
       params.to,
@@ -318,25 +381,59 @@ export const attendanceService = {
     // Group by YYYY-MM-DD (IST)
     const byDay: Record<
       string,
-      { count: number; firstIn?: string; lastOut?: string; dayStatus: 'PRESENT' | 'LEAVE' | 'ABSENT' }
+      { count: number; firstIn?: string; lastOut?: string; dayStatus: DayStatus }
     > = {};
+    const punchesByDay: Record<string, Array<{ punchAt: Date; source: string }>> = {};
     for (const p of punches) {
       const d = new Date(p.punchAt);
       const key = istKeyFromUtcDate(d);
-      const iso = d.toISOString(); // stored/transported as UTC ISO; UI formats as IST
-      if (!byDay[key]) byDay[key] = { count: 0, firstIn: iso, lastOut: iso, dayStatus: 'PRESENT' };
-      byDay[key].count += 1;
-      byDay[key].firstIn = byDay[key].firstIn ? (byDay[key].firstIn < iso ? byDay[key].firstIn : iso) : iso;
-      byDay[key].lastOut = byDay[key].lastOut ? (byDay[key].lastOut > iso ? byDay[key].lastOut : iso) : iso;
-      byDay[key].dayStatus = 'PRESENT';
+      (punchesByDay[key] ??= []).push({ punchAt: d, source: String(p.source) });
+    }
+    for (const [key, dayPunches] of Object.entries(punchesByDay)) {
+      const { firstIn, lastOut } = deriveDayInOut(dayPunches);
+      byDay[key] = {
+        count: dayPunches.length,
+        firstIn: firstIn ?? undefined,
+        lastOut: lastOut ?? firstIn ?? undefined,
+        dayStatus: 'PRESENT',
+      };
     }
 
     for (const dateKey of approvedLeaveDates) {
       if (!byDay[dateKey]) {
         byDay[dateKey] = { count: 0, dayStatus: 'LEAVE' };
       } else {
-        byDay[dateKey].dayStatus = resolveDayStatus(byDay[dateKey].count > 0, dateKey, approvedLeaveDates);
+        byDay[dateKey].dayStatus = resolveDayStatus(byDay[dateKey].count > 0, dateKey, approvedLeaveDates, holidayDates);
       }
+    }
+
+    for (const dateKey of holidayDates) {
+      if (!byDay[dateKey]) {
+        byDay[dateKey] = { count: 0, dayStatus: 'HOLIDAY' };
+      } else {
+        byDay[dateKey].dayStatus = resolveDayStatus(byDay[dateKey].count > 0, dateKey, approvedLeaveDates, holidayDates);
+      }
+    }
+
+    // Fill every day in range so calendar can show Holiday / Leave / Absent.
+    let cursor = istDayStartUtc(params.from);
+    const end = istDayStartUtc(params.to);
+    while (cursor.getTime() <= end.getTime()) {
+      const dateKey = istKeyFromUtcDate(cursor);
+      if (!byDay[dateKey]) {
+        byDay[dateKey] = {
+          count: 0,
+          dayStatus: resolveDayStatus(false, dateKey, approvedLeaveDates, holidayDates),
+        };
+      } else {
+        byDay[dateKey].dayStatus = resolveDayStatus(
+          byDay[dateKey].count > 0,
+          dateKey,
+          approvedLeaveDates,
+          holidayDates,
+        );
+      }
+      cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
     }
 
     return byDay;
@@ -354,8 +451,9 @@ export const attendanceService = {
       select: { id: true, punchAt: true, terminalId: true, punchType: true, source: true, latitude: true, longitude: true, locationId: true, location: true, deviceInfo: true },
     });
 
-    const firstIn = punches[0]?.punchAt ? new Date(punches[0].punchAt).toISOString() : null;
-    const lastOut = punches.length > 1 ? new Date(punches[punches.length - 1].punchAt).toISOString() : null;
+    const { firstIn, lastOut } = deriveDayInOut(
+      punches.map((p) => ({ punchAt: p.punchAt, source: String(p.source) })),
+    );
 
     const policy = await resolveEffectivePolicy(params.employeeId);
     const { totalMinutes, isLate, isHalfDay, meetsPunchOut } = evaluateDayPunches(
@@ -365,8 +463,16 @@ export const attendanceService = {
     );
 
     const hasPunch = punches.length > 0;
-    const leaveApp = hasPunch ? null : await fetchApprovedLeaveOnDate(params.employeeId, params.date);
-    const dayStatus = hasPunch ? 'PRESENT' : leaveApp ? 'LEAVE' : 'ABSENT';
+    const [leaveApp, holidayDates] = await Promise.all([
+      hasPunch ? Promise.resolve(null) : fetchApprovedLeaveOnDate(params.employeeId, params.date),
+      fetchHolidayDates(params.employeeId, params.date, params.date),
+    ]);
+    const dayStatus = resolveDayStatus(
+      hasPunch,
+      params.date,
+      leaveApp ? new Set([params.date]) : new Set<string>(),
+      holidayDates,
+    );
 
     return {
       punches,
@@ -375,7 +481,7 @@ export const attendanceService = {
         lastOut,
         totalMinutes,
         dayStatus,
-        leave: leaveApp
+        leave: dayStatus === 'LEAVE' && leaveApp
           ? {
               applicationNo: leaveApp.applicationNo,
               leaveTypeName: leaveApp.leaveType.name,
@@ -500,6 +606,11 @@ export const attendanceService = {
       params.from,
       params.to,
     );
+    const holidayDates = await fetchHolidayDates(
+      params.employeeId,
+      params.from,
+      params.to,
+    );
 
     type PunchRow = { location?: any; deviceInfo?: any; latitude?: number | null; longitude?: number | null; locationId?: string | null;
       id: string;
@@ -532,7 +643,7 @@ export const attendanceService = {
       isLate: boolean | null;
       isHalfDay: boolean | null;
       meetsPunchOut: boolean | null;
-      dayStatus: 'PRESENT' | 'LEAVE' | 'ABSENT';
+      dayStatus: DayStatus;
       leaveTypeName?: string | null;
     }> = [];
 
@@ -541,8 +652,9 @@ export const attendanceService = {
     while (cursor.getTime() <= end.getTime()) {
       const date = istKeyFromUtcDate(cursor);
       const dayPunches = byDay[date] ?? [];
-      const firstIn = dayPunches[0]?.punchAt ?? null;
-      const lastOut = dayPunches.length > 1 ? dayPunches[dayPunches.length - 1].punchAt : null;
+      const { firstIn, lastOut } = deriveDayInOut(
+        dayPunches.map((p) => ({ punchAt: p.punchAt, source: p.source })),
+      );
       const { totalMinutes, isLate, isHalfDay, meetsPunchOut } = evaluateDayPunches(
         policy,
         firstIn,
@@ -550,7 +662,7 @@ export const attendanceService = {
       );
 
       const hasPunch = Boolean(firstIn);
-      const dayStatus = resolveDayStatus(hasPunch, date, approvedLeaveDates);
+      const dayStatus = resolveDayStatus(hasPunch, date, approvedLeaveDates, holidayDates);
 
       days.push({
         date,
@@ -675,29 +787,46 @@ export const attendanceService = {
         fromDate: { lt: monthEndExclusive },
         toDate: { gte: monthStart },
       },
-      include: { leaveType: { select: { code: true, name: true } } },
+      include: { leaveType: { select: { code: true, name: true, cutsSalary: true } } },
       orderBy: { fromDate: 'asc' },
     });
 
     const approvedOnly = leaveApps.filter((a) => a.status === 'APPROVED');
     const approvedLeaveDates = approvedLeaveDateSet(approvedOnly, from, to);
+    const unpaidLeaveApps = approvedOnly.filter((a) => a.leaveType.cutsSalary);
+    const unpaidLeaveDates = approvedLeaveDateSet(unpaidLeaveApps, from, to);
+    // Unpaid leave days that are not holidays (holiday wins over leave for day status).
+    const holidayDates = await fetchHolidayDates(params.employeeId, from, to);
+    let unpaidLeaveDays = 0;
+    for (const d of unpaidLeaveDates) {
+      if (!holidayDates.has(d)) unpaidLeaveDays += 1;
+    }
 
     const leaveDaysInMonth = approvedOnly.reduce((sum, app) => sum + Number(app.totalDays), 0);
 
     let presentDays = 0;
     let leaveDays = 0;
+    let holidayDays = 0;
     let lateDays = 0;
     let halfDays = 0;
     let totalWorkingMinutes = 0;
     for (const day of history.days) {
       const status = (day as { dayStatus?: string }).dayStatus
-        ?? resolveDayStatus(Boolean(day.firstIn), day.date, approvedLeaveDates);
+        ?? resolveDayStatus(Boolean(day.firstIn), day.date, approvedLeaveDates, holidayDates);
       if (status === 'PRESENT') presentDays += 1;
       if (status === 'LEAVE') leaveDays += 1;
+      if (status === 'HOLIDAY') holidayDays += 1;
       if (day.isLate === true) lateDays += 1;
       if (day.isHalfDay === true) halfDays += 1;
       totalWorkingMinutes += day.totalMinutes;
     }
+
+    const absentDays = Math.max(
+      0,
+      history.days.filter((d) => (d as { dayStatus?: string }).dayStatus === 'ABSENT').length,
+    );
+    const daysInMonth = history.days.length;
+    const salaryAbsentDays = absentDays + unpaidLeaveDays;
 
     return {
       year: params.year,
@@ -709,8 +838,12 @@ export const attendanceService = {
         presentDays,
         lateDays,
         halfDays,
-        absentDays: Math.max(0, history.days.length - presentDays - leaveDays),
+        absentDays,
         leaveDays,
+        holidayDays,
+        unpaidLeaveDays,
+        salaryAbsentDays,
+        daysInMonth,
         totalWorkingMinutes,
         totalWorkingHours: Math.round((totalWorkingMinutes / 60) * 100) / 100,
         leaveApplications: leaveApps.length,
@@ -727,6 +860,7 @@ export const attendanceService = {
         isHalfDay: a.isHalfDay,
         leaveType: a.leaveType,
         reason: a.reason,
+        cutsSalary: a.leaveType.cutsSalary,
       })),
     };
   },

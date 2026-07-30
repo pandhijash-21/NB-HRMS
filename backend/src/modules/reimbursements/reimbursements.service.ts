@@ -119,7 +119,7 @@ const claimInclude = {
   approvalSteps: { orderBy: { stepNumber: 'asc' as const } },
 };
 
-/** Post approved amount onto current calendar month DRAFT salary (other_allowance / reimbursement). */
+/** Post approved amount onto current calendar month UNPAID salary (other_allowance / reimbursement). */
 async function postAmountToCurrentMonthSalary(params: {
   employeeId: number;
   amount: number;
@@ -154,9 +154,9 @@ async function postAmountToCurrentMonthSalary(params: {
   }
 
   if (!record) throw new Error('Failed to create/load salary record');
-  if (record.status === SalaryRecordStatus.FINALIZED) {
+  if (record.status === SalaryRecordStatus.PAID) {
     throw new Error(
-      'Salary for this month is already finalized. Reopen the draft salary record before posting reimbursement.',
+      'Salary for this month is already paid. Mark it unpaid before posting reimbursement.',
     );
   }
 

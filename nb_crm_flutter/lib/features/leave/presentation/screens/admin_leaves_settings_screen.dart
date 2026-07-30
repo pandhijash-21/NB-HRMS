@@ -283,6 +283,7 @@ class AdminLeavesSettingsScreen extends ConsumerWidget {
     var employeeCanApply = existing?.employeeCanApply ?? true;
     var allowHalfDay = existing?.allowHalfDay ?? true;
     var isActive = existing?.isActive ?? true;
+    var cutsSalary = existing?.cutsSalary ?? false;
 
     await showDialog<void>(
       context: context,
@@ -397,6 +398,28 @@ class AdminLeavesSettingsScreen extends ConsumerWidget {
                         SwitchListTile(
                           contentPadding: const EdgeInsets.symmetric(horizontal: 12),
                           title: Text(
+                            'Cut salary for this leave',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                              color: isDark ? Colors.white : const Color(0xFF212F3D),
+                            ),
+                          ),
+                          subtitle: Text(
+                            'If enabled, approved days reduce pay when salary columns allow cut-on-leave',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: isDark ? Colors.white54 : const Color(0xFF607D8B),
+                            ),
+                          ),
+                          value: cutsSalary,
+                          activeColor: const Color(0xFFC5A059),
+                          onChanged: (v) => setLocal(() => cutsSalary = v),
+                        ),
+                        const Divider(height: 1),
+                        SwitchListTile(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                          title: Text(
                             'Active',
                             style: TextStyle(
                               fontWeight: FontWeight.w600,
@@ -434,6 +457,7 @@ class AdminLeavesSettingsScreen extends ConsumerWidget {
                     'requiresDocument': requiresDocument,
                     'employeeCanApply': employeeCanApply,
                     'allowHalfDay': allowHalfDay,
+                    'cutsSalary': cutsSalary,
                     'isActive': isActive,
                   });
                   invalidateLeaveAdminData(ref);

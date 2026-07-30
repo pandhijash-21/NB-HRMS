@@ -255,9 +255,11 @@ class LeaveApplicationCard extends StatelessWidget {
 String formatIsoTime(String? iso) {
   if (iso == null || iso.isEmpty) return '—';
   try {
-    final dt = DateTime.parse(iso).toLocal();
-    final h = dt.hour.toString().padLeft(2, '0');
-    final m = dt.minute.toString().padLeft(2, '0');
+    // Always show Asia/Kolkata wall clock (IST = UTC+05:30), independent of browser TZ.
+    final utc = DateTime.parse(iso).toUtc();
+    final ist = utc.add(const Duration(hours: 5, minutes: 30));
+    final h = ist.hour.toString().padLeft(2, '0');
+    final m = ist.minute.toString().padLeft(2, '0');
     return '$h:$m';
   } catch (_) {
     return iso;

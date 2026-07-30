@@ -24,6 +24,7 @@ const GeneralInfoSchema = z.object({
   appointmentType:      z.string().optional().nullable(),
   employeeCode:         z.string().min(1).optional().nullable(),
   punchId:              z.string().min(1).optional().nullable(),
+  weeklyOffDays:        z.array(z.enum(['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'])).optional().nullable(),
   instituteId:          z.string().uuid().optional().nullable(),
 });
 

@@ -435,6 +435,52 @@ salaryRouter.get(
   },
 );
 
+salaryRouter.post(
+  '/employees/:employeeId/monthly-calc',
+  requireAuth,
+  requirePermission('SALARY', 'WRITE'),
+  async (req: Request, res: Response) => {
+    try {
+      const employeeId = Number(req.params.employeeId);
+      const year = Number(req.body?.year ?? new Date().getFullYear());
+      const month = Number(req.body?.month ?? new Date().getMonth() + 1);
+      const data = await salaryService.calculateMonthlySalary({
+        employeeId,
+        year,
+        month,
+        persist: false,
+        createdBy: String((req.user as any)?.id ?? 'unknown'),
+      });
+      return res.json(ok(data));
+    } catch (e: unknown) {
+      return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+    }
+  },
+);
+
+salaryRouter.post(
+  '/employees/:employeeId/monthly-save',
+  requireAuth,
+  requirePermission('SALARY', 'WRITE'),
+  async (req: Request, res: Response) => {
+    try {
+      const employeeId = Number(req.params.employeeId);
+      const year = Number(req.body?.year ?? new Date().getFullYear());
+      const month = Number(req.body?.month ?? new Date().getMonth() + 1);
+      const data = await salaryService.calculateMonthlySalary({
+        employeeId,
+        year,
+        month,
+        persist: true,
+        createdBy: String((req.user as any)?.id ?? 'unknown'),
+      });
+      return res.json(ok(data));
+    } catch (e: unknown) {
+      return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+    }
+  },
+);
+
 salaryRouter.get(
   '/employees/:employeeId/records',
   requireAuth,
@@ -464,8 +510,8 @@ salaryRouter.get(
       if (record.employeeId !== employeeId) {
         return res.status(403).json(fail('Record does not belong to this employee'));
       }
-      if (record.status !== 'FINALIZED') {
-        return res.status(400).json(fail('Salary slip is available only for finalized records'));
+      if (record.status !== 'PAID') {
+        return res.status(400).json(fail('Salary slip is available only for paid records'));
       }
       const data = await salaryService.getSlipData(recordId);
       return res.json(ok(data));
@@ -510,7 +556,51 @@ salaryRouter.post(
   requirePermission('SALARY', 'WRITE'),
   async (req: Request, res: Response) => {
     try {
-      const data = await salaryService.finalizeRecord(p(req.params.id), req.user!.id);
+      const data = await salaryService.markRecordPaid(p(req.params.id), req.user!.id);
+      return res.json(ok(data));
+    } catch (e: unknown) {
+      return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+    }
+  },
+);
+
+salaryRouter.post(
+  '/records/:id/mark-paid',
+  requireAuth,
+  requirePermission('SALARY', 'WRITE'),
+  async (req: Request, res: Response) => {
+    try {
+      const data = await salaryService.markRecordPaid(p(req.params.id), req.user!.id);
+      return res.json(ok(data));
+    } catch (e: unknown) {
+      return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+    }
+  },
+);
+
+salaryRouter.post(
+  '/records/:id/mark-unpaid',
+  requireAuth,
+  requirePermission('SALARY', 'WRITE'),
+  async (req: Request, res: Response) => {
+    try {
+      const data = await salaryService.markRecordUnpaid(p(req.params.id));
+      return res.json(ok(data));
+    } catch (e: unknown) {
+      return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+    }
+  },
+);
+
+salaryRouter.get(
+  '/payroll/month',
+  requireAuth,
+  requirePermission('SALARY', 'READ'),
+  async (req: Request, res: Response) => {
+    try {
+      const year = Number(req.query.year ?? new Date().getFullYear());
+      const month = Number(req.query.month ?? new Date().getMonth() + 1);
+      const data = await salaryService.getMonthPayrollOverview(year, month);
       return res.json(ok(data));
     } catch (e: unknown) {
       return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));

@@ -104,21 +104,54 @@ class _RawMachineTabState extends ConsumerState<_RawMachineTab> {
   late String _to;
   final _empcodeCtrl = TextEditingController();
   bool _loading = false;
+  bool _bootstrapping = true;
   String? _error;
+  String? _metaHint;
   List<DevicePunchPreviewRow> _rows = const [];
 
   @override
   void initState() {
     super.initState();
     final now = DateTime.now();
-    _from = formatDateYmd(now.subtract(const Duration(days: 1)));
+    _from = formatDateYmd(now);
     _to = formatDateYmd(now);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrap());
   }
 
   @override
   void dispose() {
     _empcodeCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _bootstrap() async {
+    try {
+      final meta = await ref.read(attendanceRepositoryProvider).getDeviceMeta();
+      if (!mounted) return;
+      final maxYmd = meta.maxYmd;
+      if (maxYmd != null) {
+        setState(() {
+          _from = maxYmd;
+          _to = maxYmd;
+          _metaHint =
+              'PayTime has ${meta.totalRows} rows · latest machine day $maxYmd';
+        });
+      } else {
+        setState(() {
+          _metaHint = meta.configured
+              ? 'PayTime connected but table is empty'
+              : 'PayTime MSSQL not configured';
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _metaHint = 'Could not read PayTime meta: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _bootstrapping = false);
+        await _load();
+      }
+    }
   }
 
   Future<void> _pickFrom() async {
@@ -191,12 +224,24 @@ class _RawMachineTabState extends ConsumerState<_RawMachineTab> {
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
       children: [
         Text(
-          'Live punches from eTimeOffice. Matching uses Punch ID only (machine Empcode).',
+          'All machine punches from PayTime for the selected day(s). '
+          'Matching uses profile Punch ID = machine CardNO.',
           style: TextStyle(
             fontSize: 12,
             color: isDark ? Colors.white54 : const Color(0xFF607D8B),
           ),
         ),
+        if (_metaHint != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            _metaHint!,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: isDark ? const Color(0xFFC5A059) : const Color(0xFF8D6E3B),
+            ),
+          ),
+        ],
         const SizedBox(height: 16),
         Wrap(
           spacing: 10,
@@ -214,23 +259,27 @@ class _RawMachineTabState extends ConsumerState<_RawMachineTab> {
               label: Text('To $_to'),
             ),
             SizedBox(
-              width: 160,
+              width: 180,
               child: TextField(
                 controller: _empcodeCtrl,
+                keyboardType: TextInputType.number,
+                textInputAction: TextInputAction.search,
+                onSubmitted: (_) => _load(),
                 decoration: const InputDecoration(
-                  labelText: 'Empcode (optional)',
+                  labelText: 'Card / Punch ID',
+                  hintText: 'e.g. 82 or leave blank',
                   isDense: true,
                   border: OutlineInputBorder(),
                 ),
               ),
             ),
             FilledButton.icon(
-              onPressed: _loading ? null : _load,
+              onPressed: (_loading || _bootstrapping) ? null : _load,
               style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFFC5A059),
                 foregroundColor: Colors.white,
               ),
-              icon: _loading
+              icon: _loading || _bootstrapping
                   ? const SizedBox(
                       width: 16,
                       height: 16,
@@ -239,8 +288,8 @@ class _RawMachineTabState extends ConsumerState<_RawMachineTab> {
                         color: Colors.white,
                       ),
                     )
-                  : const Icon(Icons.download_rounded, size: 18),
-              label: const Text('Load preview'),
+                  : const Icon(Icons.search_rounded, size: 18),
+              label: Text(_bootstrapping ? 'Loading…' : 'Load / Search'),
             ),
           ],
         ),
@@ -259,11 +308,14 @@ class _RawMachineTabState extends ConsumerState<_RawMachineTab> {
           ),
         ],
         const SizedBox(height: 12),
-        if (!_loading && _rows.isEmpty && _error == null)
+        if (!_loading && !_bootstrapping && _rows.isEmpty && _error == null)
           Text(
-            'Pick a range and load preview to inspect raw machine punches.',
+            'No machine punches in $_from → $_to'
+            '${_empcodeCtrl.text.trim().isEmpty ? '' : ' for Card ${_empcodeCtrl.text.trim()}'}.'
+            '\nTip: PayTime latest data may be older than today. Use Integrate → Sync/Backfill to import matched punches into My Attendance.',
             style: TextStyle(
               color: isDark ? Colors.white38 : const Color(0xFF90A4AE),
+              height: 1.4,
             ),
           ),
         for (final row in _rows)
@@ -278,6 +330,24 @@ class _PreviewCard extends StatelessWidget {
 
   final DevicePunchPreviewRow row;
   final bool isDark;
+
+  /// Format PayTime/API punch times in IST (Asia/Kolkata).
+  String _formatPunchAt(String iso) {
+    final d = DateTime.tryParse(iso);
+    if (d == null) return iso;
+    // Convert to IST explicitly (+05:30) so web/device agree.
+    final ist = d.toUtc().add(const Duration(hours: 5, minutes: 30));
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    final dd = ist.day.toString().padLeft(2, '0');
+    final mon = months[ist.month - 1];
+    final yyyy = ist.year;
+    final hh = ist.hour.toString().padLeft(2, '0');
+    final mm = ist.minute.toString().padLeft(2, '0');
+    return '$dd $mon $yyyy · $hh:$mm IST';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -307,7 +377,9 @@ class _PreviewCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Empcode ${row.empcode}${row.name != null && row.name!.isNotEmpty ? ' · ${row.name}' : ''}',
+                  row.name != null && row.name!.isNotEmpty
+                      ? row.name!
+                      : 'Unmapped card',
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
                     color: isDark ? Colors.white : const Color(0xFF212F3D),
@@ -315,17 +387,25 @@ class _PreviewCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  row.punchDate,
+                  'Card ${row.empcode}',
                   style: TextStyle(
                     fontSize: 12,
                     color: isDark ? Colors.white54 : const Color(0xFF607D8B),
                   ),
                 ),
+                Text(
+                  _formatPunchAt(row.punchDate),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white70 : const Color(0xFF455A64),
+                  ),
+                ),
                 if (row.mcid != null || row.mFlag != null)
                   Text(
                     [
-                      if (row.mcid != null) 'MC ${row.mcid}',
-                      if (row.mFlag != null) 'Flag ${row.mFlag}',
+                      if (row.mFlag != null) row.mFlag!,
+                      if (row.mcid != null) 'Device ${row.mcid}',
                     ].join(' · '),
                     style: TextStyle(
                       fontSize: 11,
@@ -359,22 +439,43 @@ class _IntegrateTab extends ConsumerStatefulWidget {
 class _IntegrateTabState extends ConsumerState<_IntegrateTab> {
   late String _from;
   late String _to;
-  final _empcodeCtrl = TextEditingController();
+  late final TextEditingController _punchIdCtrl;
   bool _busy = false;
   String? _message;
+  String? _metaHint;
 
   @override
   void initState() {
     super.initState();
+    _punchIdCtrl = TextEditingController();
     final now = DateTime.now();
     _from = formatDateYmd(now.subtract(const Duration(days: 7)));
     _to = formatDateYmd(now);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrapDates());
   }
 
   @override
   void dispose() {
-    _empcodeCtrl.dispose();
+    _punchIdCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _bootstrapDates() async {
+    try {
+      final meta = await ref.read(attendanceRepositoryProvider).getDeviceMeta();
+      final maxYmd = meta.maxYmd;
+      if (!mounted || maxYmd == null) return;
+      final max = DateTime.parse(maxYmd);
+      final from = max.subtract(const Duration(days: 7));
+      setState(() {
+        _to = maxYmd;
+        _from = formatDateYmd(from);
+        _metaHint =
+            'Defaults to latest PayTime days (latest $maxYmd). Leave Punch ID empty to import all mapped cards.';
+      });
+    } catch (_) {
+      // keep calendar defaults
+    }
   }
 
   Future<void> _pickFrom() async {
@@ -388,7 +489,7 @@ class _IntegrateTabState extends ConsumerState<_IntegrateTab> {
       context: context,
       initialDate: initial,
       firstDate: DateTime.now().subtract(const Duration(days: 730)),
-      lastDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 1)),
     );
     if (picked != null) setState(() => _from = formatDateYmd(picked));
   }
@@ -404,15 +505,18 @@ class _IntegrateTabState extends ConsumerState<_IntegrateTab> {
       context: context,
       initialDate: initial,
       firstDate: DateTime.now().subtract(const Duration(days: 730)),
-      lastDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 1)),
     );
     if (picked != null) setState(() => _to = formatDateYmd(picked));
   }
 
   String _formatResult(DeviceSyncResult r) {
+    if (r.skipped) {
+      return r.reason ?? 'Sync skipped (not configured)';
+    }
     final unmatched = r.unmatchedCodes.isEmpty
         ? ''
-        : ' Unmatched codes: ${r.unmatchedCodes.take(12).join(', ')}'
+        : ' Unmatched Punch IDs: ${r.unmatchedCodes.take(12).join(', ')}'
             '${r.unmatchedCodes.length > 12 ? '…' : ''}';
     return 'Fetched ${r.fetched} · inserted ${r.inserted} · '
         'skipped unmatched ${r.skippedUnmatched}.$unmatched';
@@ -450,9 +554,9 @@ class _IntegrateTabState extends ConsumerState<_IntegrateTab> {
       final result = await ref.read(attendanceRepositoryProvider).backfillDevice(
             from: _from,
             to: _to,
-            empcode: _empcodeCtrl.text.trim().isEmpty
+            empcode: _punchIdCtrl.text.trim().isEmpty
                 ? null
-                : _empcodeCtrl.text.trim(),
+                : _punchIdCtrl.text.trim(),
           );
       ref.invalidate(deviceAttendanceStatusProvider);
       invalidateAttendanceAdminData(ref);
@@ -479,13 +583,28 @@ class _IntegrateTabState extends ConsumerState<_IntegrateTab> {
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
       children: [
         Text(
-          'Pull punches into HRMS attendance (calendar & admin day view). '
-          'Employees need Punch ID set to the machine Empcode.',
+          'Import PayTime machine punches into My Attendance.\n'
+          'Profile Punch ID = machine CardNO. '
+          'Changing Punch ID on a profile auto-imports that card’s history.\n'
+          'Backfill with empty Punch ID = all cards that are mapped; '
+          'with a Punch ID = only that card (good for testing on one employee).',
           style: TextStyle(
             fontSize: 12,
+            height: 1.35,
             color: isDark ? Colors.white54 : const Color(0xFF607D8B),
           ),
         ),
+        if (_metaHint != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            _metaHint!,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: isDark ? const Color(0xFFC5A059) : const Color(0xFF8D6E3B),
+            ),
+          ),
+        ],
         const SizedBox(height: 16),
         statusAsync.when(
           loading: () => const Padding(
@@ -508,7 +627,7 @@ class _IntegrateTabState extends ConsumerState<_IntegrateTab> {
         ),
         const SizedBox(height: 8),
         Text(
-          'Uses DownloadLastPunchData from the last cursor.',
+          'Fetches new PayTime rows after the last sync cursor (mapped cards only).',
           style: TextStyle(
             fontSize: 12,
             color: isDark ? Colors.white54 : const Color(0xFF607D8B),
@@ -550,12 +669,14 @@ class _IntegrateTabState extends ConsumerState<_IntegrateTab> {
               label: Text('To $_to'),
             ),
             SizedBox(
-              width: 160,
+              width: 180,
               child: TextField(
-                controller: _empcodeCtrl,
+                controller: _punchIdCtrl,
                 enabled: !_busy,
+                keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
-                  labelText: 'Empcode (optional)',
+                  labelText: 'Punch ID (optional)',
+                  hintText: 'Blank = all mapped cards',
                   isDense: true,
                   border: OutlineInputBorder(),
                 ),
@@ -608,6 +729,7 @@ class _StatusCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final m = status.esslMssql;
     final e = status.etimeoffice;
     return Container(
       padding: const EdgeInsets.all(16),
@@ -626,31 +748,33 @@ class _StatusCard extends StatelessWidget {
           Row(
             children: [
               Icon(
-                e.configured ? Icons.cloud_done_rounded : Icons.cloud_off_rounded,
-                color: e.configured
+                m.configured ? Icons.storage_rounded : Icons.cloud_off_rounded,
+                color: m.configured
                     ? const Color(0xFF16a34a)
                     : const Color(0xFFdc2626),
               ),
               const SizedBox(width: 10),
-              Text(
-                'eTimeOffice ${e.configured ? 'configured' : 'not configured'}',
-                style: TextStyle(
-                  fontWeight: FontWeight.w800,
-                  color: isDark ? Colors.white : const Color(0xFF212F3D),
+              Expanded(
+                child: Text(
+                  'PayTime MSSQL ${m.configured ? 'configured' : 'not configured'}',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: isDark ? Colors.white : const Color(0xFF212F3D),
+                  ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 10),
           Text(
-            'Last sync: ${e.lastSyncedAt ?? 'never'}',
+            'Last sync: ${m.lastSyncedAt ?? 'never'}',
             style: TextStyle(
               fontSize: 12,
               color: isDark ? Colors.white54 : const Color(0xFF607D8B),
             ),
           ),
           Text(
-            'Cursor: ${e.cursor ?? '—'}',
+            'Cursor: ${m.cursor ?? '—'}',
             style: TextStyle(
               fontSize: 12,
               color: isDark ? Colors.white54 : const Color(0xFF607D8B),
@@ -663,16 +787,24 @@ class _StatusCard extends StatelessWidget {
               color: isDark ? Colors.white54 : const Color(0xFF607D8B),
             ),
           ),
-          if (status.esslMssql.note != null) ...[
+          if (m.note != null) ...[
             const SizedBox(height: 8),
             Text(
-              'MSSQL stub: ${status.esslMssql.note}',
+              m.note!,
               style: TextStyle(
                 fontSize: 11,
                 color: isDark ? Colors.white38 : const Color(0xFF90A4AE),
               ),
             ),
           ],
+          const SizedBox(height: 8),
+          Text(
+            'eTimeOffice (optional): ${e.configured ? 'configured' : 'off'}',
+            style: TextStyle(
+              fontSize: 11,
+              color: isDark ? Colors.white38 : const Color(0xFF90A4AE),
+            ),
+          ),
         ],
       ),
     );

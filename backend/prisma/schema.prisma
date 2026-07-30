@@ -165,8 +165,8 @@ enum SalaryColumnCategory {
 }
 
 enum SalaryRecordStatus {
-  DRAFT
-  FINALIZED
+  UNPAID
+  PAID
 }
 
 // =============================================================================
@@ -288,6 +288,8 @@ model EmployeeGeneralInfo {
   employeeCode         String?          @unique @map("employee_code")   // GU1234
   /// Biometric / attendance machine punch ID (maps to eTimeOffice Empcode). Not the HRMS employee code.
   punchId              String?          @unique @map("punch_id")
+  /// Weekly off / employee-specific holiday days, e.g. ["SUN"] or ["SAT","SUN"].
+  weeklyOffDays        String[]         @default(["SUN"]) @map("weekly_off_days")
 
   updatedAt            DateTime         @updatedAt @map("updated_at")
   updatedBy            String?          @map("updated_by")
@@ -668,6 +670,8 @@ model LeaveType {
   requiresReason     Boolean           @default(true)  @map("requires_reason")
   isActive           Boolean           @default(true)  @map("is_active")
   employeeCanApply   Boolean           @default(true)  @map("employee_can_apply")
+  /// When true, approved leave days of this type reduce salary (if column cutOnLeave is on).
+  cutsSalary         Boolean           @default(false) @map("cuts_salary")
   creditSchedule     Json?             @map("credit_schedule")
   createdAt          DateTime          @default(now()) @map("created_at")
   updatedAt          DateTime          @updatedAt      @map("updated_at")
@@ -893,8 +897,8 @@ model AttendancePolicy {
    * Times are stored as "HH:MM" in Asia/Kolkata local time.
    */
   id                    String   @id @default("default")
-  defaultPunchInTime    String   @default("09:00") @map("default_punch_in_time")  // "HH:MM" IST
-  defaultPunchOutTime   String   @default("15:30") @map("default_punch_out_time") // "HH:MM" IST
+  defaultPunchInTime    String   @default("10:00") @map("default_punch_in_time")  // "HH:MM" IST
+  defaultPunchOutTime   String   @default("19:00") @map("default_punch_out_time") // "HH:MM" IST
   punchInBufferMinutes  Int      @default(10)      @map("punch_in_buffer_minutes")
   punchOutBufferMinutes Int      @default(10)      @map("punch_out_buffer_minutes")
   updatedBy             String?  @map("updated_by")
@@ -1280,6 +1284,10 @@ model SalaryColumnDefinition {
   category           SalaryColumnCategory
   evaluationOrder    Int                  @map("evaluation_order")
   isRuleConfigurable Boolean              @default(true) @map("is_rule_configurable")
+  /// Prorate this column when employee has unpaid leave days.
+  cutOnLeave         Boolean              @default(false) @map("cut_on_leave")
+  /// Prorate this column when employee has true absent days.
+  cutOnAbsent        Boolean              @default(false) @map("cut_on_absent")
 
   payCommission PayCommission @relation(fields: [payCommissionId], references: [id], onDelete: Cascade)
 
@@ -1354,7 +1362,7 @@ model EmployeeSalaryRecord {
   payCommissionCode String             @map("pay_commission_code")
   salaryMonth       Int                @map("salary_month")
   salaryYear        Int                @map("salary_year")
-  status            SalaryRecordStatus @default(DRAFT)
+  status            SalaryRecordStatus @default(UNPAID)
   grossPay          Decimal            @default(0) @map("gross_pay") @db.Decimal(14, 2)
   totalDeductions   Decimal            @default(0) @map("total_deductions") @db.Decimal(14, 2)
   netPay            Decimal            @default(0) @map("net_pay") @db.Decimal(14, 2)

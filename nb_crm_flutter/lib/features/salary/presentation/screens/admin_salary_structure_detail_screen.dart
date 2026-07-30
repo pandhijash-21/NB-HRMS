@@ -197,7 +197,7 @@ class _AdminSalaryStructureDetailScreenState
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: Text(
-                                      'Employee view toggles show/hide columns on the employee salary tab. Hidden columns are still included in gross and net pay calculations.',
+                                      'Employee view toggles show/hide columns on the employee salary tab. Cut on leave / absent toggles control attendance-based salary proration for that column.',
                                       style: TextStyle(
                                         fontSize: 12,
                                         fontWeight: FontWeight.w600,
@@ -226,6 +226,8 @@ class _AdminSalaryStructureDetailScreenState
                     canWrite: canWrite,
                     onToggleVisibility: (key, visible) =>
                         _toggleVisibility(templateId, key, visible),
+                    onToggleCut: (col, {required bool? cutOnLeave, required bool? cutOnAbsent}) =>
+                        _toggleCutFlags(col, cutOnLeave: cutOnLeave, cutOnAbsent: cutOnAbsent),
                     onEdit: (col) => _editRule(
                       col,
                       ruleMap[col.visibilityKey],
@@ -246,6 +248,8 @@ class _AdminSalaryStructureDetailScreenState
                     canWrite: canWrite,
                     onToggleVisibility: (key, visible) =>
                         _toggleVisibility(templateId, key, visible),
+                    onToggleCut: (col, {required bool? cutOnLeave, required bool? cutOnAbsent}) =>
+                        _toggleCutFlags(col, cutOnLeave: cutOnLeave, cutOnAbsent: cutOnAbsent),
                     onEdit: (col) => _editRule(
                       col,
                       ruleMap[col.visibilityKey],
@@ -360,6 +364,23 @@ class _AdminSalaryStructureDetailScreenState
     }
   }
 
+  Future<void> _toggleCutFlags(
+    PayCommissionColumn col, {
+    bool? cutOnLeave,
+    bool? cutOnAbsent,
+  }) async {
+    try {
+      await ref.read(salaryRepositoryProvider).updatePayCommissionColumn(col.id, {
+        if (cutOnLeave != null) 'cutOnLeave': cutOnLeave,
+        if (cutOnAbsent != null) 'cutOnAbsent': cutOnAbsent,
+      });
+      ref.invalidate(salaryTemplateProvider(_key));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+
   Future<void> _editRule(
     PayCommissionColumn column,
     SalaryRule? existing,
@@ -404,6 +425,7 @@ class _RulesTable extends StatelessWidget {
     required this.columnVisibility,
     required this.canWrite,
     required this.onToggleVisibility,
+    required this.onToggleCut,
     required this.onEdit,
   });
 
@@ -416,6 +438,11 @@ class _RulesTable extends StatelessWidget {
   final Map<String, bool> columnVisibility;
   final bool canWrite;
   final void Function(String key, bool visible) onToggleVisibility;
+  final void Function(
+    PayCommissionColumn col, {
+    required bool? cutOnLeave,
+    required bool? cutOnAbsent,
+  }) onToggleCut;
   final void Function(PayCommissionColumn col) onEdit;
 
   @override
@@ -444,31 +471,43 @@ class _RulesTable extends StatelessWidget {
             columns: [
               DataColumn(
                 label: Text(
-                  'Column', 
+                  'Column',
                   style: TextStyle(fontWeight: FontWeight.w800, color: isDark ? Colors.white : const Color(0xFF212F3D)),
                 ),
               ),
               DataColumn(
                 label: Text(
-                  'Rule', 
+                  'Rule',
                   style: TextStyle(fontWeight: FontWeight.w800, color: isDark ? Colors.white : const Color(0xFF212F3D)),
                 ),
               ),
               DataColumn(
                 label: Text(
-                  'Formula', 
+                  'Formula',
                   style: TextStyle(fontWeight: FontWeight.w800, color: isDark ? Colors.white : const Color(0xFF212F3D)),
                 ),
               ),
               DataColumn(
                 label: Text(
-                  'Amount', 
+                  'Amount',
                   style: TextStyle(fontWeight: FontWeight.w800, color: isDark ? Colors.white : const Color(0xFF212F3D)),
                 ),
               ),
               DataColumn(
                 label: Text(
-                  'Employee View', 
+                  'Employee View',
+                  style: TextStyle(fontWeight: FontWeight.w800, color: isDark ? Colors.white : const Color(0xFF212F3D)),
+                ),
+              ),
+              DataColumn(
+                label: Text(
+                  'Cut Leave',
+                  style: TextStyle(fontWeight: FontWeight.w800, color: isDark ? Colors.white : const Color(0xFF212F3D)),
+                ),
+              ),
+              DataColumn(
+                label: Text(
+                  'Cut Absent',
                   style: TextStyle(fontWeight: FontWeight.w800, color: isDark ? Colors.white : const Color(0xFF212F3D)),
                 ),
               ),
@@ -518,7 +557,7 @@ class _RulesTable extends StatelessWidget {
                                   ? 'NOT SET'
                                   : 'COMPUTED',
                       style: TextStyle(
-                        fontSize: 9, 
+                        fontSize: 9,
                         fontWeight: FontWeight.w800,
                         color: rule != null
                             ? Colors.green
@@ -533,7 +572,7 @@ class _RulesTable extends StatelessWidget {
                   Text(
                     rule?.formulaPreview ?? computed?.formulaPreview ?? '—',
                     style: TextStyle(
-                      fontSize: 11, 
+                      fontSize: 11,
                       fontWeight: FontWeight.w600,
                       color: isDark ? Colors.white54 : const Color(0xFF607D8B),
                     ),
@@ -553,6 +592,24 @@ class _RulesTable extends StatelessWidget {
                     value: visible,
                     activeColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
                     onChanged: canWrite ? (v) => onToggleVisibility(key, v) : null,
+                  ),
+                ),
+                DataCell(
+                  Switch(
+                    value: col.cutOnLeave,
+                    activeColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+                    onChanged: canWrite && !isTotal
+                        ? (v) => onToggleCut(col, cutOnLeave: v, cutOnAbsent: null)
+                        : null,
+                  ),
+                ),
+                DataCell(
+                  Switch(
+                    value: col.cutOnAbsent,
+                    activeColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+                    onChanged: canWrite && !isTotal
+                        ? (v) => onToggleCut(col, cutOnLeave: null, cutOnAbsent: v)
+                        : null,
                   ),
                 ),
                 DataCell(

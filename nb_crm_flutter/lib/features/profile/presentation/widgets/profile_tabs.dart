@@ -4,7 +4,6 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/name_utils.dart';
 import '../../../../core/utils/open_stored_document.dart';
 import '../../domain/profile_models.dart';
-import '../profile_notifier.dart';
 import '../../../admin/presentation/admin_notifier.dart';
 import '../../../admin/domain/admin_models.dart';
 import '../../../org/domain/org_models.dart';
@@ -117,6 +116,11 @@ class GeneralViewTab extends ConsumerWidget {
               _buildField(context, 'Full Name', info?.fullName ?? '—'),
               _buildField(context, 'Employee Code', info?.employeeCode ?? '—'),
               _buildField(context, 'Punch ID (biometric)', info?.punchId ?? '—'),
+              _buildField(
+                context,
+                'Weekly Holidays',
+                info == null || info.weeklyOffDays.isEmpty ? 'SUN' : info.weeklyOffDays.join(', '),
+              ),
               _buildField(context, 'Organization', info?.organization ?? '—'),
               _buildField(context, 'Institute', _instituteLabel(institutes)),
               _buildField(context, 'Department', info?.department ?? '—'),

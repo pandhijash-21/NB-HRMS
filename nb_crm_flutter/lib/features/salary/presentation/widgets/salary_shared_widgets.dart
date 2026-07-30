@@ -1,3 +1,4 @@
+import '../../domain/salary_models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -118,8 +119,15 @@ String columnDisplayLabel(String identifier) {
 }
 
 Widget salaryStatusChip(BuildContext context, String status) {
-  final finalized = status.toUpperCase() == 'FINALIZED';
-  final color = finalized ? Colors.green : Colors.orange;
+  final v = status.toUpperCase();
+  final paid = v == 'PAID' || v == 'FINALIZED';
+  final notCalc = v == 'NOT_CALCULATED';
+  final color = paid
+      ? Colors.green
+      : notCalc
+          ? Colors.grey
+          : Colors.orange;
+  final label = payrollRowStatusLabel(status);
   return Container(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
     decoration: BoxDecoration(
@@ -128,7 +136,7 @@ Widget salaryStatusChip(BuildContext context, String status) {
       borderRadius: BorderRadius.circular(30),
     ),
     child: Text(
-      status.toUpperCase(),
+      label.toUpperCase(),
       style: TextStyle(
         color: color,
         fontSize: 10,

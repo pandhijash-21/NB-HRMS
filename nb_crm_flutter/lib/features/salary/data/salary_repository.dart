@@ -51,6 +51,18 @@ class SalaryRepository {
     );
   }
 
+  Future<PayCommissionColumn> updatePayCommissionColumn(
+    String columnId,
+    Map<String, dynamic> body,
+  ) async {
+    return _dio.patchEnvelope<PayCommissionColumn>(
+      'salary/pay-commissions/columns/$columnId',
+      data: body,
+      parse: (raw) =>
+          PayCommissionColumn.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
   Future<void> deletePayCommissionColumn(String columnId) async {
     await _dio.deleteEnvelope<void>(
       'salary/pay-commissions/columns/$columnId',
@@ -259,10 +271,34 @@ class SalaryRepository {
     );
   }
 
-  Future<SalaryRecord> finalizeRecord(String id) async {
+  Future<SalaryRecord> markRecordPaid(String id) async {
     return _dio.postEnvelope<SalaryRecord>(
-      'salary/records/$id/finalize',
+      'salary/records/$id/mark-paid',
       parse: (raw) => SalaryRecord.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
+  Future<SalaryRecord> markRecordUnpaid(String id) async {
+    return _dio.postEnvelope<SalaryRecord>(
+      'salary/records/$id/mark-unpaid',
+      parse: (raw) => SalaryRecord.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
+  /// Legacy alias — marks salary as paid.
+  Future<SalaryRecord> finalizeRecord(String id) => markRecordPaid(id);
+
+  Future<Map<String, dynamic>> getMonthPayroll({
+    required int year,
+    required int month,
+  }) async {
+    return _dio.getEnvelope<Map<String, dynamic>>(
+      'salary/payroll/month',
+      queryParameters: {'year': year, 'month': month},
+      parse: (raw) {
+        if (raw is! Map) throw const FormatException('Invalid payroll month response');
+        return Map<String, dynamic>.from(raw);
+      },
     );
   }
 
@@ -283,6 +319,36 @@ class SalaryRepository {
       queryParameters: {'year': year, 'month': month},
       parse: (raw) {
         if (raw is! Map) throw const FormatException('Invalid monthly overview');
+        return Map<String, dynamic>.from(raw);
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> calculateEmployeeMonthlySalary({
+    required int employeeId,
+    required int year,
+    required int month,
+  }) async {
+    return _dio.postEnvelope<Map<String, dynamic>>(
+      'salary/employees/$employeeId/monthly-calc',
+      data: {'year': year, 'month': month},
+      parse: (raw) {
+        if (raw is! Map) throw const FormatException('Invalid monthly calc');
+        return Map<String, dynamic>.from(raw);
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> saveEmployeeMonthlySalary({
+    required int employeeId,
+    required int year,
+    required int month,
+  }) async {
+    return _dio.postEnvelope<Map<String, dynamic>>(
+      'salary/employees/$employeeId/monthly-save',
+      data: {'year': year, 'month': month},
+      parse: (raw) {
+        if (raw is! Map) throw const FormatException('Invalid monthly save');
         return Map<String, dynamic>.from(raw);
       },
     );

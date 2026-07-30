@@ -68,10 +68,17 @@ class DioClient {
   Future<T> postEnvelope<T>(
     String path, {
     Object? data,
+    Duration? receiveTimeout,
     required T Function(Object? raw) parse,
   }) async {
     try {
-      final response = await dio.post<Map<String, dynamic>>(path, data: data);
+      final response = await dio.post<Map<String, dynamic>>(
+        path,
+        data: data,
+        options: receiveTimeout == null
+            ? null
+            : Options(receiveTimeout: receiveTimeout),
+      );
       return _unwrap(response.data, response.statusCode, parse);
     } on DioException catch (e) {
       throw _mapDio(e);

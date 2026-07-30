@@ -64,7 +64,7 @@ class _AdminSalaryEntryScreenState extends ConsumerState<AdminSalaryEntryScreen>
       ref.listen(salaryEntryRecordsProvider(entryPeriod), (prev, next) {
         next.whenData((records) {
           final rec = records
-                  .where((r) => r.status == SalaryRecordStatus.draft)
+                  .where((r) => r.status == SalaryRecordStatus.unpaid)
                   .firstOrNull ??
               records.firstOrNull;
           if (rec != null && rec.id != _recordId) {
@@ -305,7 +305,7 @@ class _AdminSalaryEntryScreenState extends ConsumerState<AdminSalaryEntryScreen>
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          'Editing existing draft record.',
+                          'Editing existing unpaid record.',
                           style: TextStyle(
                             color: isDark ? Colors.white70 : const Color(0xFF607D8B),
                             fontSize: 13,
@@ -393,7 +393,7 @@ class _AdminSalaryEntryScreenState extends ConsumerState<AdminSalaryEntryScreen>
                               child: SizedBox(
                                 height: 44,
                                 child: OutlinedButton.icon(
-                                  onPressed: _saving ? null : () => _saveDraft(),
+                                  onPressed: _saving ? null : () => _saveUnpaid(),
                                   style: OutlinedButton.styleFrom(
                                     foregroundColor: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
                                     side: BorderSide(
@@ -405,7 +405,7 @@ class _AdminSalaryEntryScreenState extends ConsumerState<AdminSalaryEntryScreen>
                                   icon: _saving
                                       ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
                                       : const Icon(Icons.save_rounded, size: 16),
-                                  label: Text(_saving ? 'Saving…' : 'Save Draft', style: const TextStyle(fontWeight: FontWeight.w800)),
+                                  label: Text(_saving ? 'Saving…' : 'Save (Unpaid)', style: const TextStyle(fontWeight: FontWeight.w800)),
                                 ),
                               ),
                             ),
@@ -414,14 +414,14 @@ class _AdminSalaryEntryScreenState extends ConsumerState<AdminSalaryEntryScreen>
                               child: SizedBox(
                                 height: 44,
                                 child: FilledButton.icon(
-                                  onPressed: _saving ? null : () => _finalize(),
+                                  onPressed: _saving ? null : () => _markPaid(),
                                   style: FilledButton.styleFrom(
                                     backgroundColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
                                     foregroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                   ),
                                   icon: const Icon(Icons.check_circle_rounded, size: 16),
-                                  label: const Text('Finalize', style: TextStyle(fontWeight: FontWeight.w800)),
+                                  label: const Text('Mark Paid', style: TextStyle(fontWeight: FontWeight.w800)),
                                 ),
                               ),
                             ),
@@ -457,7 +457,7 @@ class _AdminSalaryEntryScreenState extends ConsumerState<AdminSalaryEntryScreen>
     }
   }
 
-  Future<void> _saveDraft() async {
+  Future<void> _saveUnpaid() async {
     if (_employeeId == null) return;
     setState(() => _saving = true);
     try {
@@ -478,7 +478,7 @@ class _AdminSalaryEntryScreenState extends ConsumerState<AdminSalaryEntryScreen>
       invalidateSalaryRecords(ref);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Draft saved')),
+          const SnackBar(content: Text('Salary saved as unpaid')),
         );
       }
     } finally {
@@ -486,19 +486,19 @@ class _AdminSalaryEntryScreenState extends ConsumerState<AdminSalaryEntryScreen>
     }
   }
 
-  Future<void> _finalize() async {
-    await _saveDraft();
+  Future<void> _markPaid() async {
+    await _saveUnpaid();
     final id = _recordId;
     if (id == null) return;
     setState(() => _saving = true);
     try {
-      await ref.read(salaryRepositoryProvider).finalizeRecord(id);
+      await ref.read(salaryRepositoryProvider).markRecordPaid(id);
       invalidateSalaryRecords(ref);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Salary finalized')),
+          const SnackBar(content: Text('Salary marked as paid')),
         );
-        context.go('/admin/salary/records');
+        context.go('/admin/salary/payroll');
       }
     } finally {
       if (mounted) setState(() => _saving = false);

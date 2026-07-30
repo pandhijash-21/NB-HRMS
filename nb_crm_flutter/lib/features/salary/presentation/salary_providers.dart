@@ -195,8 +195,45 @@ void invalidateSalaryRecords(WidgetRef ref) {
   ref.invalidate(salaryRecordsProvider);
 }
 
+class PayrollMonthFilter {
+  const PayrollMonthFilter({required this.year, required this.month});
+  final int year;
+  final int month;
+
+  @override
+  bool operator ==(Object other) =>
+      other is PayrollMonthFilter && other.year == year && other.month == month;
+
+  @override
+  int get hashCode => Object.hash(year, month);
+}
+
+class PayrollMonthFilterNotifier extends Notifier<PayrollMonthFilter> {
+  @override
+  PayrollMonthFilter build() {
+    final now = DateTime.now();
+    return PayrollMonthFilter(year: now.year, month: now.month);
+  }
+
+  void setMonth(int year, int month) => state = PayrollMonthFilter(year: year, month: month);
+}
+
+final payrollMonthFilterProvider =
+    NotifierProvider<PayrollMonthFilterNotifier, PayrollMonthFilter>(
+  PayrollMonthFilterNotifier.new,
+);
+
+final payrollMonthProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>, PayrollMonthFilter>((ref, filter) async {
+  return ref.watch(salaryRepositoryProvider).getMonthPayroll(
+        year: filter.year,
+        month: filter.month,
+      );
+});
+
 void invalidateSalaryAll(WidgetRef ref) {
   invalidateSalaryCommissions(ref);
   invalidateSalaryStructures(ref);
   invalidateSalaryRecords(ref);
+  ref.invalidate(payrollMonthProvider);
 }

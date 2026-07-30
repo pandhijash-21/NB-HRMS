@@ -159,10 +159,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       _ModuleCardData(
         title: 'Payroll',
         subtitle: Permissions.canReadSalary(auth.permissions)
-            ? 'Commissions, structures, entry & records'
+            ? 'Monthwise salaries, paid vs remaining'
             : 'No salary access',
         icon: Icons.payments_rounded,
-        route: '/admin/salary/structures',
+        route: '/admin/salary/payroll',
         enabled: Permissions.canReadSalary(auth.permissions),
         category: ModuleCategory.mySpace,
         color: const Color(0xFFea580c), // Orange

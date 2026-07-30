@@ -237,8 +237,8 @@ class _HistoryDayCard extends StatelessWidget {
             ),
           ),
           subtitle: Text(
-            'In ${day.firstIn != null ? formatIsoTime(day.firstIn) : '—'}  ·  '
-            'Out ${day.lastOut != null ? formatIsoTime(day.lastOut) : '—'}',
+            'In ${day.firstIn != null ? '${formatIsoTime(day.firstIn)} IST' : '—'}  ·  '
+            'Out ${day.lastOut != null ? '${formatIsoTime(day.lastOut)} IST' : '—'}',
             style: TextStyle(
               fontSize: 12,
               color: isDark ? Colors.white54 : const Color(0xFF607D8B),
@@ -285,7 +285,7 @@ class _HistoryDayCard extends StatelessWidget {
                       : Colors.green,
                 ),
                 title: Text(
-                  formatIsoTime(p.punchAt),
+                  '${formatIsoTime(p.punchAt)} IST',
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
                 subtitle: Builder(

@@ -201,6 +201,7 @@ class AdminSalaryCommissionDetailScreen extends ConsumerWidget {
                   columns: earnings,
                   canWrite: canWrite,
                   onDelete: (col) => _deleteColumn(context, ref, col),
+                  onEdit: (col) => _editColumn(context, ref, col),
                 ),
                 const SizedBox(height: 20),
                 _ColumnTable(
@@ -209,10 +210,70 @@ class AdminSalaryCommissionDetailScreen extends ConsumerWidget {
                   columns: deductions,
                   canWrite: canWrite,
                   onDelete: (col) => _deleteColumn(context, ref, col),
+                  onEdit: (col) => _editColumn(context, ref, col),
                 ),
               ],
             );
           },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _editColumn(
+    BuildContext context,
+    WidgetRef ref,
+    PayCommissionColumn col,
+  ) async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    var cutOnLeave = col.cutOnLeave;
+    var cutOnAbsent = col.cutOnAbsent;
+    var configurable = col.isRuleConfigurable;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+          title: Text('Edit ${col.displayName}', style: const TextStyle(fontWeight: FontWeight.w800)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Allow rule configuration', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                value: configurable,
+                onChanged: (v) => setLocal(() => configurable = v),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Cut this on leave', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                value: cutOnLeave,
+                onChanged: (v) => setLocal(() => cutOnLeave = v),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Cut this on absent', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                value: cutOnAbsent,
+                onChanged: (v) => setLocal(() => cutOnAbsent = v),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () async {
+                await ref.read(salaryRepositoryProvider).updatePayCommissionColumn(col.id, {
+                  'isRuleConfigurable': configurable,
+                  'cutOnLeave': cutOnLeave,
+                  'cutOnAbsent': cutOnAbsent,
+                });
+                ref.invalidate(payCommissionProvider(commissionId));
+                if (ctx.mounted) Navigator.pop(ctx);
+              },
+              child: const Text('Save'),
+            ),
+          ],
         ),
       ),
     );
@@ -289,6 +350,8 @@ class AdminSalaryCommissionDetailScreen extends ConsumerWidget {
     );
     var category = SalaryColumnCategory.earning;
     var configurable = true;
+    var cutOnLeave = false;
+    var cutOnAbsent = false;
 
     await showDialog<void>(
       context: context,
@@ -362,6 +425,22 @@ class AdminSalaryCommissionDetailScreen extends ConsumerWidget {
                     activeColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
                     onChanged: (v) => setLocal(() => configurable = v),
                   ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Cut this on leave', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    subtitle: const Text('Prorate when unpaid leave days apply', style: TextStyle(fontSize: 11)),
+                    value: cutOnLeave,
+                    activeColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+                    onChanged: (v) => setLocal(() => cutOnLeave = v),
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Cut this on absent', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    subtitle: const Text('Prorate when true absent days apply', style: TextStyle(fontSize: 11)),
+                    value: cutOnAbsent,
+                    activeColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+                    onChanged: (v) => setLocal(() => cutOnAbsent = v),
+                  ),
                 ],
               ),
             ),
@@ -390,6 +469,8 @@ class AdminSalaryCommissionDetailScreen extends ConsumerWidget {
                     'category': salaryColumnCategoryApi(category),
                     'evaluationOrder': int.tryParse(orderCtrl.text) ?? 100,
                     'isRuleConfigurable': configurable,
+                    'cutOnLeave': cutOnLeave,
+                    'cutOnAbsent': cutOnAbsent,
                   },
                 );
                 ref.invalidate(payCommissionProvider(commissionId));
@@ -416,6 +497,7 @@ class _ColumnTable extends StatelessWidget {
     required this.columns,
     required this.canWrite,
     required this.onDelete,
+    required this.onEdit,
   });
 
   final String title;
@@ -423,6 +505,7 @@ class _ColumnTable extends StatelessWidget {
   final List<PayCommissionColumn> columns;
   final bool canWrite;
   final void Function(PayCommissionColumn col) onDelete;
+  final void Function(PayCommissionColumn col) onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -452,25 +535,37 @@ class _ColumnTable extends StatelessWidget {
                   columns: [
                     DataColumn(
                       label: Text(
-                        'Order', 
+                        'Order',
                         style: TextStyle(fontWeight: FontWeight.w800, color: isDark ? Colors.white : const Color(0xFF212F3D)),
                       ),
                     ),
                     DataColumn(
                       label: Text(
-                        'Display Name', 
+                        'Display Name',
                         style: TextStyle(fontWeight: FontWeight.w800, color: isDark ? Colors.white : const Color(0xFF212F3D)),
                       ),
                     ),
                     DataColumn(
                       label: Text(
-                        'Identifier', 
+                        'Identifier',
                         style: TextStyle(fontWeight: FontWeight.w800, color: isDark ? Colors.white : const Color(0xFF212F3D)),
                       ),
                     ),
                     DataColumn(
                       label: Text(
-                        'Configurable', 
+                        'Configurable',
+                        style: TextStyle(fontWeight: FontWeight.w800, color: isDark ? Colors.white : const Color(0xFF212F3D)),
+                      ),
+                    ),
+                    DataColumn(
+                      label: Text(
+                        'Cut Leave',
+                        style: TextStyle(fontWeight: FontWeight.w800, color: isDark ? Colors.white : const Color(0xFF212F3D)),
+                      ),
+                    ),
+                    DataColumn(
+                      label: Text(
+                        'Cut Absent',
                         style: TextStyle(fontWeight: FontWeight.w800, color: isDark ? Colors.white : const Color(0xFF212F3D)),
                       ),
                     ),
@@ -499,39 +594,59 @@ class _ColumnTable extends StatelessWidget {
                           ),
                           DataCell(
                             Text(
-                              col.columnIdentifier, 
+                              col.columnIdentifier,
                               style: const TextStyle(fontFamily: 'monospace', fontSize: 12, fontWeight: FontWeight.bold),
                             ),
                           ),
                           DataCell(
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
-                              decoration: BoxDecoration(
-                                color: col.isRuleConfigurable
-                                    ? Colors.blue.withOpacity(0.1)
-                                    : Colors.grey.withOpacity(0.12),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
-                                  color: col.isRuleConfigurable ? Colors.blue.withOpacity(0.2) : Colors.grey.withOpacity(0.2),
-                                ),
+                            Text(
+                              col.isRuleConfigurable ? 'YES' : 'AUTO',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                color: col.isRuleConfigurable ? Colors.blue : Colors.grey,
                               ),
-                              child: Text(
-                                col.isRuleConfigurable ? 'YES' : 'AUTO',
-                                style: TextStyle(
-                                  fontSize: 9, 
-                                  fontWeight: FontWeight.w800,
-                                  color: col.isRuleConfigurable ? Colors.blue : Colors.grey,
-                                ),
+                            ),
+                          ),
+                          DataCell(
+                            Text(
+                              col.cutOnLeave ? 'ON' : 'OFF',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                color: col.cutOnLeave ? Colors.orange : Colors.grey,
+                              ),
+                            ),
+                          ),
+                          DataCell(
+                            Text(
+                              col.cutOnAbsent ? 'ON' : 'OFF',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                color: col.cutOnAbsent ? Colors.red : Colors.grey,
                               ),
                             ),
                           ),
                           DataCell(
                             canWrite
-                                ? IconButton(
-                                    icon: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
-                                    onPressed: () => onDelete(col),
-                                    padding: EdgeInsets.zero,
-                                    constraints: const BoxConstraints(),
+                                ? Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        icon: const Icon(Icons.edit_outlined, size: 18),
+                                        onPressed: () => onEdit(col),
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      IconButton(
+                                        icon: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
+                                        onPressed: () => onDelete(col),
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
+                                      ),
+                                    ],
                                   )
                                 : const SizedBox.shrink(),
                           ),

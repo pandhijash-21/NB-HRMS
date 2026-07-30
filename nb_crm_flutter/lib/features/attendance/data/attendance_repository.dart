@@ -186,6 +186,18 @@ class AttendanceRepository {
     );
   }
 
+  Future<DevicePaytimeMeta> getDeviceMeta() async {
+    return _dio.getEnvelope<DevicePaytimeMeta>(
+      'attendance/admin/device/meta',
+      parse: (raw) {
+        if (raw is! Map) {
+          throw const FormatException('Invalid device meta response');
+        }
+        return DevicePaytimeMeta.fromJson(Map<String, dynamic>.from(raw));
+      },
+    );
+  }
+
   Future<List<DevicePunchPreviewRow>> getDevicePreview({
     required String from,
     required String to,
@@ -197,6 +209,7 @@ class AttendanceRepository {
       queryParameters: {
         'from': from,
         'to': to,
+        'source': 'paytime',
         'mode': mode,
         if (empcode != null && empcode.isNotEmpty) 'empcode': empcode,
       },
@@ -219,6 +232,7 @@ class AttendanceRepository {
     return _dio.postEnvelope<DeviceSyncResult>(
       'attendance/admin/device/sync',
       data: const {},
+      receiveTimeout: const Duration(minutes: 2),
       parse: (raw) {
         if (raw is! Map) {
           throw const FormatException('Invalid device sync response');
@@ -240,6 +254,7 @@ class AttendanceRepository {
         'to': to,
         if (empcode != null && empcode.isNotEmpty) 'empcode': empcode,
       },
+      receiveTimeout: const Duration(minutes: 3),
       parse: (raw) {
         if (raw is! Map) {
           throw const FormatException('Invalid device backfill response');

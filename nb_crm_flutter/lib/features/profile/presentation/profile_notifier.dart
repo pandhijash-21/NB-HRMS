@@ -48,12 +48,15 @@ class ProfileNotifier extends AsyncNotifier<EmployeeProfile> {
   }
 
   /// Update general info direct (admin write).
-  Future<void> updateGeneralInfoDirect(Map<String, dynamic> data) async {
+  /// Returns rematch summary when Punch ID changed (machine punches imported).
+  Future<Map<String, dynamic>?> updateGeneralInfoDirect(Map<String, dynamic> data) async {
+    Map<String, dynamic>? rematch;
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() async {
-      await _repo.updateGeneralInfo(employeeId, data);
+      rematch = await _repo.updateGeneralInfo(employeeId, data);
       return _repo.getProfile(employeeId);
     });
+    return rematch;
   }
 
   /// Update abbreviation on core employee row.

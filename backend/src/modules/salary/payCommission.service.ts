@@ -39,6 +39,8 @@ type ColumnInput = {
   category: SalaryColumnCategory;
   evaluationOrder: number;
   isRuleConfigurable?: boolean;
+  cutOnLeave?: boolean;
+  cutOnAbsent?: boolean;
 };
 
 export const payCommissionService = {
@@ -107,6 +109,8 @@ export const payCommissionService = {
               category: c.category,
               evaluationOrder: c.evaluationOrder,
               isRuleConfigurable: c.isRuleConfigurable,
+              cutOnLeave: c.cutOnLeave,
+              cutOnAbsent: c.cutOnAbsent,
             })),
           });
         }
@@ -178,6 +182,8 @@ export const payCommissionService = {
         category: input.category,
         evaluationOrder: input.evaluationOrder,
         isRuleConfigurable: input.isRuleConfigurable ?? true,
+        cutOnLeave: input.cutOnLeave ?? false,
+        cutOnAbsent: input.cutOnAbsent ?? false,
       },
     });
   },
@@ -192,6 +198,8 @@ export const payCommissionService = {
         ...(input.displayName !== undefined ? { displayName: input.displayName.trim() } : {}),
         ...(input.evaluationOrder !== undefined ? { evaluationOrder: input.evaluationOrder } : {}),
         ...(input.isRuleConfigurable !== undefined ? { isRuleConfigurable: input.isRuleConfigurable } : {}),
+        ...(input.cutOnLeave !== undefined ? { cutOnLeave: input.cutOnLeave } : {}),
+        ...(input.cutOnAbsent !== undefined ? { cutOnAbsent: input.cutOnAbsent } : {}),
       },
     });
   },

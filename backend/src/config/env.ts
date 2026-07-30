@@ -35,11 +35,29 @@ const envSchema = z.object({
   SMTP_PASS:   z.string().optional(),
   SMTP_FROM:   z.string().optional(),
 
-  /** eTimeOffice HTTP attendance API (this site's biometric cloud). */
+  /** eTimeOffice HTTP attendance API (optional / other sites). */
   ETIMEOFFICE_BASE_URL: z.string().default('https://api.etimeoffice.com'),
-  ETIMEOFFICE_CORPORATE_ID: z.string().default('support'),
-  ETIMEOFFICE_USERNAME: z.string().default('support'),
-  ETIMEOFFICE_PASSWORD: z.string().default('support'),
+  ETIMEOFFICE_CORPORATE_ID: optionalNonEmptyString,
+  ETIMEOFFICE_USERNAME: optionalNonEmptyString,
+  ETIMEOFFICE_PASSWORD: optionalNonEmptyString,
+
+  /** PayTime / Mantra MSSQL dump (primary machine source for this site). */
+  MSSQL_HOST: optionalNonEmptyString,
+  MSSQL_INSTANCE: optionalNonEmptyString,
+  MSSQL_PORT: z.coerce.number().int().positive().default(1433),
+  MSSQL_DB: optionalNonEmptyString,
+  MSSQL_USER: optionalNonEmptyString,
+  MSSQL_PASSWORD: optionalNonEmptyString,
+  MSSQL_TABLE: z.string().default('tmpDmpTerminalData'),
+  MSSQL_ENCRYPT: z.preprocess((v) => v === 'true' || v === true, z.boolean()).default(false),
+  MSSQL_TRUST_SERVER_CERT: z
+    .preprocess((v) => v === undefined || v === '' || v === 'true' || v === true, z.boolean())
+    .default(true),
+  /** Optional overrides if auto column detect fails */
+  MSSQL_PUNCH_ID_COLUMN: optionalNonEmptyString,
+  MSSQL_PUNCH_AT_COLUMN: optionalNonEmptyString,
+  MSSQL_TERMINAL_COLUMN: optionalNonEmptyString,
+  MSSQL_MODE_COLUMN: optionalNonEmptyString,
 });
 
 export type Env = z.infer<typeof envSchema>;

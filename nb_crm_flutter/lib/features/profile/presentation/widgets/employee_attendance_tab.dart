@@ -136,10 +136,22 @@ class _EmployeeAttendanceTabState extends ConsumerState<EmployeeAttendanceTab> {
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Use global policy'),
+                    subtitle: const Text(
+                      'Off = this employee’s punch in/out and buffers override global policy for late / half-day.',
+                    ),
                     value: useGlobal,
                     onChanged: (v) => setLocal(() => useGlobal = v),
                   ),
                   if (!useGlobal) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Personal timings apply only to this employee.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(ctx).textTheme.bodySmall?.color,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
                     TextField(
                       controller: inCtrl,
                       decoration: const InputDecoration(labelText: 'Punch in (HH:MM)', border: OutlineInputBorder()),
@@ -289,6 +301,17 @@ class _PolicyCard extends StatelessWidget {
             const SizedBox(height: 12),
             _timingRow('Punch in', effective['punchInTime']?.toString() ?? '—', effective['punchInBufferMinutes']),
             _timingRow('Punch out', effective['punchOutTime']?.toString() ?? '—', effective['punchOutBufferMinutes']),
+            if (_lateAfterLabel(effective) != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Late only after ${_lateAfterLabel(effective)} (punch-in + buffer)',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+            ],
             const Divider(height: 24),
             Row(
               children: [
@@ -345,6 +368,23 @@ class _PolicyCard extends StatelessWidget {
       ),
     );
   }
+
+  static String? _lateAfterLabel(Map<String, dynamic> effective) {
+    final punchIn = effective['punchInTime']?.toString();
+    if (punchIn == null || punchIn.isEmpty) return null;
+    final parts = punchIn.split(':');
+    if (parts.length < 2) return null;
+    final hh = int.tryParse(parts[0]);
+    final mm = int.tryParse(parts[1]);
+    if (hh == null || mm == null) return null;
+    final buf = int.tryParse('${effective['punchInBufferMinutes'] ?? 0}') ?? 0;
+    final total = hh * 60 + mm + buf;
+    final h24 = (total ~/ 60) % 24;
+    final m = total % 60;
+    final h12 = h24 % 12 == 0 ? 12 : h24 % 12;
+    final ampm = h24 >= 12 ? 'PM' : 'AM';
+    return '$h12:${m.toString().padLeft(2, '0')} $ampm';
+  }
 }
 
 class _StatsCard extends StatelessWidget {
@@ -373,12 +413,13 @@ class _StatsCard extends StatelessWidget {
                 _chip(context, 'Working hours', '${summary.totalWorkingHours}h'),
                 _chip(context, 'Late', '${summary.lateDays}'),
                 _chip(context, 'Approved leave', '${summary.leaveDays > 0 ? summary.leaveDays : summary.leaveDaysInMonth}'),
+                _chip(context, 'Holiday', '${summary.holidayDays}'),
                 _chip(context, 'Absent*', '${summary.absentDays}'),
               ],
             ),
             const SizedBox(height: 6),
             Text(
-              '* Absent = no punch and not on approved leave',
+              '* Absent = no punch, and not holiday / approved leave',
               style: TextStyle(fontSize: 11, color: Theme.of(context).textTheme.bodySmall?.color),
             ),
           ],
@@ -497,23 +538,39 @@ class _DailyLogList extends StatelessWidget {
             final hasPunch = day.firstIn != null;
             final status = (day.dayStatus ?? (hasPunch ? 'PRESENT' : 'ABSENT')).toUpperCase();
             final isLeave = status == 'LEAVE';
+            final isHoliday = status == 'HOLIDAY';
+            final isAbsent = !hasPunch && !isHoliday && !isLeave;
+            final subtitle = hasPunch
+                ? '${_formatIstTime(day.firstIn)} → ${_formatIstTime(day.lastOut)} · ${_formatHours(day.totalMinutes)}'
+                : isHoliday
+                    ? 'Holiday (weekly off / public holiday)'
+                    : isLeave
+                        ? 'On approved leave'
+                        : 'Absent (no punch)';
+            final trailing = hasPunch
+                ? (day.isLate == true
+                    ? const Tooltip(
+                        message: 'Late (after punch-in + buffer)',
+                        child: Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 18),
+                      )
+                    : const Icon(Icons.check_circle_outline, color: Colors.green, size: 18))
+                : isHoliday
+                    ? const Tooltip(
+                        message: 'Holiday',
+                        child: Icon(Icons.celebration_rounded, color: Colors.purple, size: 18),
+                      )
+                    : isLeave
+                        ? const Icon(Icons.beach_access, color: Colors.blue, size: 18)
+                        : Icon(
+                            Icons.remove_circle_outline,
+                            color: isAbsent ? Colors.grey : Colors.grey,
+                            size: 18,
+                          );
             return ListTile(
               dense: true,
               title: Text(day.date, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-              subtitle: Text(
-                hasPunch
-                    ? '${_formatIstTime(day.firstIn)} → ${_formatIstTime(day.lastOut)} · ${_formatHours(day.totalMinutes)}'
-                    : isLeave
-                        ? 'On approved leave'
-                        : 'Absent (no punch)',
-              ),
-              trailing: hasPunch
-                  ? (day.isLate == true
-                      ? const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 18)
-                      : const Icon(Icons.check_circle_outline, color: Colors.green, size: 18))
-                  : isLeave
-                      ? const Icon(Icons.beach_access, color: Colors.blue, size: 18)
-                      : const Icon(Icons.remove_circle_outline, color: Colors.grey, size: 18),
+              subtitle: Text(subtitle),
+              trailing: trailing,
             );
           }),
         ],

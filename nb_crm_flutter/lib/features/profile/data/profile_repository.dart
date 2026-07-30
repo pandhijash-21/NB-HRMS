@@ -166,7 +166,8 @@ class ProfileRepository {
   }
 
   /// Save employee general info directly via `PATCH employees/{id}/general`.
-  Future<void> updateGeneralInfo(
+  /// Returns optional rematch summary when Punch ID changed.
+  Future<Map<String, dynamic>?> updateGeneralInfo(
     int employeeId,
     Map<String, dynamic> data,
   ) async {
@@ -174,8 +175,14 @@ class ProfileRepository {
       final response = await _dio.dio.patch<Map<String, dynamic>>(
         'employees/$employeeId/general',
         data: data,
+        options: Options(receiveTimeout: const Duration(minutes: 3)),
       );
-      _unwrapResponse(response);
+      final body = _unwrapResponseData(response);
+      final rematch = body['data'];
+      if (rematch is Map && rematch['rematch'] is Map) {
+        return Map<String, dynamic>.from(rematch['rematch'] as Map);
+      }
+      return null;
     } on DioException catch (e) {
       throw _mapDioException(e);
     }
@@ -401,6 +408,17 @@ class ProfileRepository {
     if (body['success'] != true) {
       throw Exception(body['error'] ?? 'Request failed');
     }
+  }
+
+  Map<String, dynamic> _unwrapResponseData(Response<Map<String, dynamic>> response) {
+    final body = response.data;
+    if (body == null) {
+      throw Exception('Empty response from server');
+    }
+    if (body['success'] != true) {
+      throw Exception(body['error'] ?? 'Request failed');
+    }
+    return body;
   }
 
   Exception _mapDioException(DioException e) {

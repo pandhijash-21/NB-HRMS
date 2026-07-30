@@ -23,10 +23,14 @@ export const createColumnSchema = z.object({
   category: z.enum(['EARNING', 'DEDUCTION']),
   evaluationOrder: z.number().int(),
   isRuleConfigurable: z.boolean().optional(),
+  cutOnLeave: z.boolean().optional(),
+  cutOnAbsent: z.boolean().optional(),
 });
 
 export const updateColumnSchema = z.object({
   displayName: z.string().min(1).max(120).optional(),
   evaluationOrder: z.number().int().optional(),
   isRuleConfigurable: z.boolean().optional(),
+  cutOnLeave: z.boolean().optional(),
+  cutOnAbsent: z.boolean().optional(),
 });

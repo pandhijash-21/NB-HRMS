@@ -39,6 +39,8 @@ class AttendanceCalendarDay {
   }
 
   bool get isLeave => (dayStatus ?? '').toUpperCase() == 'LEAVE';
+  bool get isHoliday => (dayStatus ?? '').toUpperCase() == 'HOLIDAY';
+  bool get isAbsent => (dayStatus ?? '').toUpperCase() == 'ABSENT';
 }
 
 class AttendancePunch {
@@ -193,6 +195,7 @@ class AttendanceMyDaySummary {
   final AttendanceDayLeaveInfo? leave;
 
   bool get isLeave => (dayStatus ?? '').toUpperCase() == 'LEAVE';
+  bool get isHoliday => (dayStatus ?? '').toUpperCase() == 'HOLIDAY';
   bool get isAbsent => (dayStatus ?? '').toUpperCase() == 'ABSENT';
 
   factory AttendanceMyDaySummary.fromJson(Map<String, dynamic> json) {
@@ -249,8 +252,35 @@ class AdminAttendanceEmployeeRow {
   final String? department;
   final List<AttendancePunch> punches;
 
-  String? get firstIn => punches.isEmpty ? null : punches.first.punchAt;
-  String? get lastOut => punches.isEmpty ? null : punches.last.punchAt;
+  String? get firstIn {
+    if (punches.isEmpty) return null;
+    final sorted = [...punches]
+      ..sort((a, b) => a.punchAt.compareTo(b.punchAt));
+    return sorted.first.punchAt;
+  }
+
+  String? get lastOut {
+    if (punches.isEmpty) return null;
+    final sorted = [...punches]
+      ..sort((a, b) => a.punchAt.compareTo(b.punchAt));
+    final first = sorted.first.punchAt;
+    final mobile = sorted.where((p) => p.source == 'MOBILE_APP').toList();
+    if (mobile.length >= 2) return mobile[1].punchAt;
+    final machine = sorted
+        .where((p) => p.source == 'ESSL' || p.source == 'ETIMEOFFICE')
+        .toList();
+    if (machine.length >= 2) return machine.last.punchAt;
+    final afterIn = sorted.where((p) => p.punchAt != first).toList();
+    if (afterIn.isEmpty) return null;
+    final machineAfter = afterIn
+        .where((p) => p.source == 'ESSL' || p.source == 'ETIMEOFFICE')
+        .toList();
+    if (machineAfter.isNotEmpty) return machineAfter.last.punchAt;
+    final mobileAfter =
+        afterIn.where((p) => p.source == 'MOBILE_APP').toList();
+    if (mobileAfter.isNotEmpty) return mobileAfter.last.punchAt;
+    return afterIn.last.punchAt;
+  }
 
   factory AdminAttendanceEmployeeRow.fromJson(Map<String, dynamic> json) {
     return AdminAttendanceEmployeeRow(
@@ -393,6 +423,10 @@ class AttendanceMonthlyStats {
     required this.leaveApplications,
     required this.leaveDaysInMonth,
     this.leaveDays = 0,
+    this.holidayDays = 0,
+    this.unpaidLeaveDays = 0,
+    this.salaryAbsentDays = 0,
+    this.daysInMonth = 0,
   });
 
   final int presentDays;
@@ -404,6 +438,10 @@ class AttendanceMonthlyStats {
   final int leaveApplications;
   final double leaveDaysInMonth;
   final int leaveDays;
+  final int holidayDays;
+  final int unpaidLeaveDays;
+  final int salaryAbsentDays;
+  final int daysInMonth;
 
   factory AttendanceMonthlyStats.fromJson(Map<String, dynamic> json) {
     return AttendanceMonthlyStats(
@@ -416,6 +454,10 @@ class AttendanceMonthlyStats {
       leaveApplications: _asInt(json['leaveApplications']),
       leaveDaysInMonth: (json['leaveDaysInMonth'] as num?)?.toDouble() ?? 0,
       leaveDays: _asInt(json['leaveDays']),
+      holidayDays: _asInt(json['holidayDays']),
+      unpaidLeaveDays: _asInt(json['unpaidLeaveDays']),
+      salaryAbsentDays: _asInt(json['salaryAbsentDays']),
+      daysInMonth: _asInt(json['daysInMonth']),
     );
   }
 }
@@ -532,6 +574,43 @@ class DevicePunchPreviewRow {
   }
 }
 
+class DevicePaytimeMeta {
+  const DevicePaytimeMeta({
+    required this.configured,
+    this.minPunchAt,
+    this.maxPunchAt,
+    required this.totalRows,
+    this.table,
+  });
+
+  final bool configured;
+  final String? minPunchAt;
+  final String? maxPunchAt;
+  final int totalRows;
+  final String? table;
+
+  factory DevicePaytimeMeta.fromJson(Map<String, dynamic> json) {
+    return DevicePaytimeMeta(
+      configured: json['configured'] == true,
+      minPunchAt: json['minPunchAt'] as String?,
+      maxPunchAt: json['maxPunchAt'] as String?,
+      totalRows: (json['totalRows'] as num?)?.toInt() ?? 0,
+      table: json['table'] as String?,
+    );
+  }
+
+  /// YYYY-MM-DD of max punch (UTC date from ISO — good enough for PayTime wall clock).
+  String? get maxYmd {
+    if (maxPunchAt == null || maxPunchAt!.isEmpty) return null;
+    final d = DateTime.tryParse(maxPunchAt!);
+    if (d == null) return maxPunchAt!.length >= 10 ? maxPunchAt!.substring(0, 10) : null;
+    // PayTime times come through as UTC-looking but are wall-clock; use UTC parts.
+    return '${d.toUtc().year.toString().padLeft(4, '0')}-'
+        '${d.toUtc().month.toString().padLeft(2, '0')}-'
+        '${d.toUtc().day.toString().padLeft(2, '0')}';
+  }
+}
+
 class DeviceSyncResult {
   const DeviceSyncResult({
     required this.source,
@@ -539,6 +618,8 @@ class DeviceSyncResult {
     required this.inserted,
     required this.skippedUnmatched,
     required this.unmatchedCodes,
+    this.skipped = false,
+    this.reason,
   });
 
   final String source;
@@ -546,17 +627,26 @@ class DeviceSyncResult {
   final int inserted;
   final int skippedUnmatched;
   final List<String> unmatchedCodes;
+  final bool skipped;
+  final String? reason;
 
   factory DeviceSyncResult.fromJson(Map<String, dynamic> json) {
-    final codes = json['unmatchedCodes'];
+    // Prefer PayTime nested payload from syncDeviceNow: { paytime, etime }
+    final nested = json['paytime'];
+    final map = nested is Map
+        ? Map<String, dynamic>.from(nested)
+        : json;
+    final codes = map['unmatchedCodes'];
     return DeviceSyncResult(
-      source: (json['source'] ?? '').toString(),
-      fetched: (json['fetched'] as num?)?.toInt() ?? 0,
-      inserted: (json['inserted'] as num?)?.toInt() ?? 0,
-      skippedUnmatched: (json['skippedUnmatched'] as num?)?.toInt() ?? 0,
+      source: (map['source'] ?? 'ESSL').toString(),
+      fetched: (map['fetched'] as num?)?.toInt() ?? 0,
+      inserted: (map['inserted'] as num?)?.toInt() ?? 0,
+      skippedUnmatched: (map['skippedUnmatched'] as num?)?.toInt() ?? 0,
       unmatchedCodes: codes is List
           ? codes.map((e) => e.toString()).toList()
           : const [],
+      skipped: map['skipped'] == true,
+      reason: map['reason'] as String?,
     );
   }
 }

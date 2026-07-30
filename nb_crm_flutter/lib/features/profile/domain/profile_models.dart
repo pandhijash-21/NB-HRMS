@@ -223,6 +223,10 @@ class GeneralInfo {
   final String? employeeCode;
   /// Biometric machine Empcode — used only for eTimeOffice punch matching.
   final String? punchId;
+  final List<String>? _weeklyOffDays;
+  List<String> get weeklyOffDays => _weeklyOffDays == null || _weeklyOffDays!.isEmpty
+      ? const ['SUN']
+      : _weeklyOffDays!;
 
   const GeneralInfo({
     required this.id,
@@ -250,7 +254,8 @@ class GeneralInfo {
     this.appointmentType,
     this.employeeCode,
     this.punchId,
-  });
+    List<String>? weeklyOffDays,
+  }) : _weeklyOffDays = weeklyOffDays;
 
   factory GeneralInfo.fromJson(Map<String, dynamic> json) {
     final institute = _asMap(json['institute']);
@@ -284,6 +289,10 @@ class GeneralInfo {
       appointmentType: json['appointmentType'] as String?,
       employeeCode: json['employeeCode'] as String?,
       punchId: json['punchId'] as String?,
+      weeklyOffDays: (json['weeklyOffDays'] as List?)
+              ?.map((e) => e.toString().toUpperCase())
+              .toList() ??
+          const ['SUN'],
     );
   }
 
@@ -313,6 +322,7 @@ class GeneralInfo {
         'appointmentType': appointmentType,
         'employeeCode': employeeCode,
         'punchId': punchId,
+        'weeklyOffDays': weeklyOffDays,
       };
 }
 

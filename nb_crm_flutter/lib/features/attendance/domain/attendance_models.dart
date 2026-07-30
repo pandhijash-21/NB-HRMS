@@ -54,6 +54,7 @@ class AttendancePunch {
     this.locationId,
     this.location,
     this.deviceInfo,
+    this.reason,
   });
 
   final String id;
@@ -67,6 +68,7 @@ class AttendancePunch {
   final String? locationId;
   final Map<String, dynamic>? location;
   final Map<String, dynamic>? deviceInfo;
+  final String? reason;
 
   factory AttendancePunch.fromJson(Map<String, dynamic> json) {
     return AttendancePunch(
@@ -81,6 +83,7 @@ class AttendancePunch {
       locationId: json['locationId'] as String?,
       location: json['location'] != null ? Map<String, dynamic>.from(json['location'] as Map) : null,
       deviceInfo: json['deviceInfo'] != null ? Map<String, dynamic>.from(json['deviceInfo'] as Map) : null,
+      reason: json['reason'] as String?,
     );
   }
 }

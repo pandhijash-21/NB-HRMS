@@ -52,8 +52,46 @@ async function insertMappedPunches(
   }
 
   let inserted = 0;
-  for (let i = 0; i < rows.length; i += BATCH_INSERT) {
-    const chunk = rows.slice(i, i + BATCH_INSERT);
+
+  // Group by employee and date
+  const punchGroups: Record<string, typeof rows> = {};
+  for (const r of rows) {
+    const ymd = `${r.punchAt.getFullYear()}-${String(r.punchAt.getMonth() + 1).padStart(2, '0')}-${String(r.punchAt.getDate()).padStart(2, '0')}`;
+    const key = `${r.employeeId}_${ymd}`;
+    if (!punchGroups[key]) punchGroups[key] = [];
+    punchGroups[key].push(r);
+  }
+
+  const finalRows: typeof rows = [];
+  
+  // Filter rows based on daily limit of 2
+  for (const [key, groupRows] of Object.entries(punchGroups)) {
+    const employeeId = groupRows[0].employeeId;
+    const ymd = key.split('_')[1];
+    
+    // Sort incoming punches chronologically
+    groupRows.sort((a, b) => a.punchAt.getTime() - b.punchAt.getTime());
+    
+    // Check DB for existing punches on this day
+    const m = ymd.split('-');
+    const startOfDay = new Date(Number(m[0]), Number(m[1]) - 1, Number(m[2]));
+    const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
+    
+    const dbCount = await prisma.attendancePunch.count({
+      where: {
+        employeeId,
+        punchAt: { gte: startOfDay, lt: endOfDay }
+      }
+    });
+    
+    const allowedNew = Math.max(0, 2 - dbCount);
+    if (allowedNew > 0) {
+      finalRows.push(...groupRows.slice(0, allowedNew));
+    }
+  }
+
+  for (let i = 0; i < finalRows.length; i += BATCH_INSERT) {
+    const chunk = finalRows.slice(i, i + BATCH_INSERT);
     const res = await prisma.attendancePunch.createMany({
       data: chunk,
       skipDuplicates: true,
@@ -86,19 +124,58 @@ export const attendanceSyncService = {
       const { rows, nextCursor } = await fetchEsslPunchRows({ cursor, limit: 2000 });
       if (!rows.length) break;
 
-      await prisma.attendancePunch.createMany({
-        data: rows.map((r) => ({
-          employeeId: r.employeeId,
-          punchAt: r.punchAt,
-          source: AttendanceSource.ESSL,
-          externalKey: r.externalKey,
-          terminalId: r.terminalId ?? null,
-          punchType: r.punchType ?? null,
-        })),
-        skipDuplicates: true,
-      });
+      const mappedRows = rows.map((r) => ({
+        employeeId: r.employeeId,
+        punchAt: r.punchAt,
+        source: AttendanceSource.ESSL,
+        externalKey: r.externalKey,
+        terminalId: r.terminalId ?? null,
+        punchType: r.punchType ?? null,
+      }));
 
-      totalInserted += rows.length;
+      // Group by employee and date
+      const punchGroups: Record<string, typeof mappedRows> = {};
+      for (const r of mappedRows) {
+        const ymd = `${r.punchAt.getFullYear()}-${String(r.punchAt.getMonth() + 1).padStart(2, '0')}-${String(r.punchAt.getDate()).padStart(2, '0')}`;
+        const key = `${r.employeeId}_${ymd}`;
+        if (!punchGroups[key]) punchGroups[key] = [];
+        punchGroups[key].push(r);
+      }
+
+      const finalRows: typeof mappedRows = [];
+      
+      // Filter rows based on daily limit of 2
+      for (const [key, groupRows] of Object.entries(punchGroups)) {
+        const employeeId = groupRows[0].employeeId;
+        const ymd = key.split('_')[1];
+        
+        groupRows.sort((a, b) => a.punchAt.getTime() - b.punchAt.getTime());
+        
+        const m = ymd.split('-');
+        const startOfDay = new Date(Number(m[0]), Number(m[1]) - 1, Number(m[2]));
+        const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
+        
+        const dbCount = await prisma.attendancePunch.count({
+          where: {
+            employeeId,
+            punchAt: { gte: startOfDay, lt: endOfDay }
+          }
+        });
+        
+        const allowedNew = Math.max(0, 2 - dbCount);
+        if (allowedNew > 0) {
+          finalRows.push(...groupRows.slice(0, allowedNew));
+        }
+      }
+
+      if (finalRows.length > 0) {
+        await prisma.attendancePunch.createMany({
+          data: finalRows,
+          skipDuplicates: true,
+        });
+      }
+
+      totalInserted += finalRows.length;
       cursor = nextCursor;
       if (!cursor) break;
     }

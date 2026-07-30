@@ -160,6 +160,13 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
           Icons.assignment_turned_in,
           'Profile Approvals',
         ),
+      if (isHR)
+        const _Destination(
+          '/admin/live-tracking',
+          Icons.location_on_outlined,
+          Icons.location_on,
+          'Live Tracking',
+        ),
     ];
 
     final currentPath = GoRouterState.of(context).matchedLocation;

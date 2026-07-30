@@ -168,10 +168,10 @@ class GeofencedPunchService {
         parse: (r) => r,
       );
 
-      // 5. Authenticate using Biometrics ONLY
+      // 4. Authenticate using Biometrics or PIN
       bool biometricVerified = await auth.authenticate(
-        localizedReason: 'Please authenticate with Fingerprint or Face ID to mark your attendance',
-        biometricOnly: true, // No PIN allowed
+        localizedReason: 'Please authenticate with Fingerprint, Face ID, or PIN to mark your attendance',
+        biometricOnly: false, // PIN allowed
         persistAcrossBackgrounding: true,
       );
 
@@ -197,28 +197,103 @@ class GeofencedPunchService {
         );
       }
 
-      await dio.postEnvelope(
-        'attendance/my/punch',
-        data: {
-          'latitude': position.latitude,
-          'longitude': position.longitude,
-          'deviceInfo': deviceInfoMap,
-          'biometricVerified': biometricVerified,
-          'biometricToken': token,
-        },
-        parse: (r) => r,
-      );
-
-      // Success message
-      if (context.mounted) {
-        messenger.showSnackBar(
-          const SnackBar(content: Text('Punch registered successfully!'), backgroundColor: Colors.green),
+      Future<void> sendPunchRequest([String? reason]) async {
+        await dio.postEnvelope(
+          'attendance/my/punch',
+          data: {
+            'latitude': position.latitude,
+            'longitude': position.longitude,
+            'deviceInfo': deviceInfoMap,
+            'biometricVerified': biometricVerified,
+            'biometricToken': token,
+            if (reason != null && reason.isNotEmpty) 'reason': reason,
+          },
+          parse: (r) => r,
         );
+      }
+
+      try {
+        await sendPunchRequest();
+        if (context.mounted) {
+          messenger.showSnackBar(
+            const SnackBar(content: Text('Punch registered successfully!'), backgroundColor: Colors.green),
+          );
+        }
+      } catch (e) {
+        if (e.toString().contains('REASON_REQUIRED')) {
+          if (!context.mounted) return;
+          final reason = await _promptForReason(context);
+          if (reason != null && reason.trim().isNotEmpty) {
+            if (context.mounted) {
+              messenger.showSnackBar(
+                const SnackBar(content: Text('Submitting punch with reason...'), duration: Duration(seconds: 2)),
+              );
+            }
+            await sendPunchRequest(reason);
+            if (context.mounted) {
+              messenger.showSnackBar(
+                const SnackBar(content: Text('Punch with reason registered successfully!'), backgroundColor: Colors.green),
+              );
+            }
+          } else {
+            throw Exception('Punch cancelled. Reason is required after 2 punches.');
+          }
+        } else {
+          rethrow;
+        }
       }
 
     } catch (e) {
       _showErrorDialog(context, 'Punch Failed', e.toString().replaceAll('Exception: ', ''));
     }
+  }
+
+  Future<String?> _promptForReason(BuildContext context) async {
+    final ctrl = TextEditingController();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          'Reason Required',
+          style: TextStyle(fontWeight: FontWeight.w800, color: isDark ? Colors.white : const Color(0xFF212F3D)),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'You have already reached the limit of 2 device punches today. Please provide a valid reason to punch again.',
+              style: TextStyle(fontSize: 13, color: isDark ? Colors.white70 : Colors.black87),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: ctrl,
+              decoration: const InputDecoration(
+                labelText: 'Reason',
+                border: OutlineInputBorder(),
+                hintText: 'e.g. Returned for evening shift',
+              ),
+              maxLines: 2,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, null),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text),
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFC5A059), foregroundColor: Colors.white),
+            child: const Text('Submit'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showErrorDialog(BuildContext context, String title, String message) {

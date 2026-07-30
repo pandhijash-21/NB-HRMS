@@ -4,9 +4,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_provider.dart';
+import 'features/auth/presentation/permission_guard.dart';
+import 'core/services/background_tracking_service.dart';
 
-void main() {
+import 'package:flutter/foundation.dart';
+
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (!kIsWeb) {
+    await initializeBackgroundService();
+  }
   runApp(const ProviderScope(child: NbCrmApp()));
 }
 
@@ -15,9 +22,6 @@ class NbCrmApp extends ConsumerWidget {
   
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Always use MaterialApp.router so the browser hash (#/login) is owned by
-    // GoRouter. Switching to a plain MaterialApp during bootstrap made Flutter
-    // web try "/login" as a named route that did not exist.
     final router = ref.watch(goRouterProvider);
     final themeMode = ref.watch(themeModeProvider);
 
@@ -28,6 +32,9 @@ class NbCrmApp extends ConsumerWidget {
       darkTheme: AppTheme.dark(),
       themeMode: themeMode,
       routerConfig: router,
+      builder: (context, child) {
+        return PermissionGuard(child: child!);
+      },
     );
   }
 }

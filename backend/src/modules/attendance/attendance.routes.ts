@@ -75,40 +75,6 @@ attendanceRouter.get('/admin/employee/:employeeId/history', requireAuth, require
   }
 });
 
-attendanceRouter.post('/admin/punch', requireAuth, requirePermission('ATTENDANCE', 'WRITE'), async (req: Request, res: Response) => {
-  try {
-    const role = String((req.user as any)?.role ?? '');
-    if (!['ADMIN', 'HR', 'HR_MANAGER'].includes(role)) {
-      return res.status(403).json(fail('Forbidden'));
-    }
-    const employeeId = Number(req.body?.employeeId);
-    const punchAt = String(req.body?.punchAt ?? '');
-    const punchType = req.body?.punchType != null ? String(req.body.punchType) : null;
-    const terminalId = req.body?.terminalId != null ? String(req.body.terminalId) : null;
-    const data = await attendanceService.createAdminPunch({ employeeId, punchAt, punchType, terminalId });
-    return res.json(ok(data));
-  } catch (e: any) {
-    return res.status(400).json(fail(e.message));
-  }
-});
-
-attendanceRouter.patch('/admin/punch/:id', requireAuth, requirePermission('ATTENDANCE', 'WRITE'), async (req: Request, res: Response) => {
-  try {
-    const role = String((req.user as any)?.role ?? '');
-    if (!['ADMIN', 'HR', 'HR_MANAGER'].includes(role)) {
-      return res.status(403).json(fail('Forbidden'));
-    }
-    const punchId = String(req.params.id ?? '');
-    const punchAt = String(req.body?.punchAt ?? '');
-    const punchType = req.body?.punchType != null ? String(req.body.punchType) : null;
-    const terminalId = req.body?.terminalId != null ? String(req.body.terminalId) : null;
-    const data = await attendanceService.updateAdminPunch({ punchId, punchAt, punchType, terminalId });
-    return res.json(ok(data));
-  } catch (e: any) {
-    return res.status(400).json(fail(e.message));
-  }
-});
-
 // Admin/HR: attendance policy (default punch in/out + buffers)
 attendanceRouter.get('/admin/policy', requireAuth, requirePermission('ATTENDANCE', 'READ'), async (req: Request, res: Response) => {
   try {
@@ -408,7 +374,7 @@ attendanceRouter.post('/my/punch', requireAuth, requirePermission('ATTENDANCE', 
     const employeeId = Number(req.user!.employeeId);
     if (!employeeId) return res.status(400).json(fail('Employee ID not found in token'));
     
-    const { latitude, longitude, deviceInfo, biometricVerified, biometricToken } = req.body;
+    const { latitude, longitude, deviceInfo, biometricVerified, biometricToken, reason } = req.body;
     
     if (latitude == null || longitude == null) {
       return res.status(400).json(fail('Latitude and longitude are required.'));
@@ -421,6 +387,7 @@ attendanceRouter.post('/my/punch', requireAuth, requirePermission('ATTENDANCE', 
       deviceInfo: deviceInfo ?? null,
       biometricVerified: Boolean(biometricVerified),
       biometricToken: biometricToken ? String(biometricToken) : null,
+      reason: reason ? String(reason) : undefined,
     });
     return res.json(ok(data));
   } catch (e: any) {
@@ -434,7 +401,7 @@ attendanceRouter.post('/my/register-biometrics', requireAuth, requirePermission(
     if (!employeeId) return res.status(400).json(fail('Employee ID not found in token'));
     const { biometricToken } = req.body;
     if (!biometricToken) return res.status(400).json(fail('biometricToken is required'));
-    const updatedBy = String(req.user!.id ?? req.user!.userId ?? 'unknown');
+    const updatedBy = String(req.user!.id ?? (req.user as any)?.userId ?? 'unknown');
     const data = await attendanceService.registerBiometricToken(employeeId, String(biometricToken), updatedBy);
     return res.json(ok(data));
   } catch (e: any) {
@@ -447,11 +414,14 @@ attendanceRouter.post('/admin/reset-biometrics/:employeeId', requireAuth, requir
     if (!requireAttendanceAdmin(req, res)) return;
     const employeeId = Number(req.params.employeeId);
     if (!employeeId) return res.status(400).json(fail('Invalid employeeId'));
-    const updatedBy = String(req.user!.id ?? req.user!.userId ?? 'unknown');
+    const updatedBy = String(req.user!.id ?? (req.user as any)?.userId ?? 'unknown');
     const data = await attendanceService.resetBiometricToken(employeeId, updatedBy);
     return res.json(ok(data));
   } catch (e: any) {
     return res.status(400).json(fail(e.message));
   }
 });
+
+
+
 

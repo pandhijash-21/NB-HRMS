@@ -71,13 +71,13 @@ enum FamilyRelation {
 }
 
 enum DegreeType {
-  SSC          // Standard 10  — compulsory
-  HSC          // Standard 12  — compulsory OR Diploma
-  DIPLOMA      // Diploma       — compulsory OR HSC
-  BACHELOR     // UG degree     — compulsory
-  MASTER       // PG degree     — compulsory
-  PHD          // Doctorate     — optional
-  OTHER        // Other qualifications
+  SSC // Standard 10  — compulsory
+  HSC // Standard 12  — compulsory OR Diploma
+  DIPLOMA // Diploma       — compulsory OR HSC
+  BACHELOR // UG degree     — compulsory
+  MASTER // PG degree     — compulsory
+  PHD // Doctorate     — optional
+  OTHER // Other qualifications
 }
 
 enum AcademicMedium {
@@ -176,31 +176,31 @@ enum SalaryRecordStatus {
 // =============================================================================
 
 model Employee {
-  id             Int            @id @default(autoincrement())   // Card ID: 29
-  abbreviation   String?        @db.VarChar(10)                 // DSP
-  userId         String         @unique @map("user_id")         // FK → auth user table
-  status         EmployeeStatus @default(ACTIVE)
+  id           Int            @id @default(autoincrement()) // Card ID: 29
+  abbreviation String?        @db.VarChar(10) // DSP
+  userId       String         @unique @map("user_id") // FK → auth user table
+  status       EmployeeStatus @default(ACTIVE)
 
   // Photo & signature — Cloudinary URLs
-  photoUrl       String?        @map("photo_url")
-  signatureUrl   String?        @map("signature_url")
+  photoUrl     String? @map("photo_url")
+  signatureUrl String? @map("signature_url")
 
-  lastUpdatedAt  DateTime       @updatedAt @map("last_updated_at")
-  createdAt      DateTime       @default(now()) @map("created_at")
-  createdBy      String?        @map("created_by")
+  lastUpdatedAt DateTime @updatedAt @map("last_updated_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  createdBy     String?  @map("created_by")
 
   // Relations — only the 8 sections you specified
-  generalInfo      EmployeeGeneralInfo?
-  personalInfo     EmployeePersonalInfo?
-  addresses        EmployeeAddress[]
-  otherInfo        EmployeeOtherInfo?
-  familyMembers    FamilyMember[]
-  academicQuals    AcademicQualification[]
-  experiences      EmployeeExperience[]
-  salaryInfo       EmployeeSalaryInfo?
-  bankInfo         EmployeeBankInfo?
-  user             User?
-  changeRequests   ChangeRequest[]
+  generalInfo    EmployeeGeneralInfo?
+  personalInfo   EmployeePersonalInfo?
+  addresses      EmployeeAddress[]
+  otherInfo      EmployeeOtherInfo?
+  familyMembers  FamilyMember[]
+  academicQuals  AcademicQualification[]
+  experiences    EmployeeExperience[]
+  salaryInfo     EmployeeSalaryInfo?
+  bankInfo       EmployeeBankInfo?
+  user           User?
+  changeRequests ChangeRequest[]
 
   leaveBalances      LeaveBalance[]
   leaveApplications  LeaveApplication[]
@@ -210,22 +210,23 @@ model Employee {
   attendancePunches  AttendancePunch[]
   attendanceSettings EmployeeAttendanceSettings?
 
-  letterDocuments   EmployeeLetterDocument[]
-  reimbursements    ReimbursementClaim[]
-  hiredFromCandidates RecruitmentCandidate[] @relation("HiredEmployee")
+  letterDocuments     EmployeeLetterDocument[]
+  reimbursements      ReimbursementClaim[]
+  hiredFromCandidates RecruitmentCandidate[]   @relation("HiredEmployee")
 
-  hodDepartments      DepartmentApprover[] @relation("DepartmentHod")
-  hoiInstitutes       InstituteApprover[]  @relation("InstituteHoi")
-  vcGlobalApprover    GlobalApprover[]     @relation("GlobalApproverVC")
-  registrarGlobalApprover GlobalApprover[] @relation("GlobalApproverRegistrar")
+  hodDepartments          DepartmentApprover[] @relation("DepartmentHod")
+  hoiInstitutes           InstituteApprover[]  @relation("InstituteHoi")
+  vcGlobalApprover        GlobalApprover[]     @relation("GlobalApproverVC")
+  registrarGlobalApprover GlobalApprover[]     @relation("GlobalApproverRegistrar")
 
-  firstReportingFor   EmployeeGeneralInfo[] @relation("FirstReporting")
-  secondReportingFor  EmployeeGeneralInfo[] @relation("SecondReporting")
-  thirdReportingFor   EmployeeGeneralInfo[] @relation("ThirdReporting")
+  firstReportingFor  EmployeeGeneralInfo[] @relation("FirstReporting")
+  secondReportingFor EmployeeGeneralInfo[] @relation("SecondReporting")
+  thirdReportingFor  EmployeeGeneralInfo[] @relation("ThirdReporting")
 
-  assignments        EmployeeAssignment[]
-  salaryRecords      EmployeeSalaryRecord[]
+  assignments         EmployeeAssignment[]
+  salaryRecords       EmployeeSalaryRecord[]
   positionAssignments PositionAssignment[]
+  locationHistories   LocationHistory[]
 
   @@map("employees")
 }
@@ -239,60 +240,60 @@ model Employee {
 // =============================================================================
 
 model EmployeeGeneralInfo {
-  id                   String           @id @default(uuid())
-  employeeId           Int              @unique @map("employee_id")
+  id         String @id @default(uuid())
+  employeeId Int    @unique @map("employee_id")
 
-  fullName             String           @map("full_name")               // DINESH SHANKARBHAI PATEL
+  fullName String @map("full_name") // DINESH SHANKARBHAI PATEL
 
   // Joining
-  originalJoiningDate  DateTime         @map("original_joining_date")   // 11/06/2014
-  joiningDate          DateTime         @map("joining_date")            // 11/06/2014
-  incrementMonth       String?          @map("increment_month")         // July
+  originalJoiningDate DateTime @map("original_joining_date") // 11/06/2014
+  joiningDate         DateTime @map("joining_date") // 11/06/2014
+  incrementMonth      String?  @map("increment_month") // July
 
   // Organization
-  organization         String                                           // GANDHINAGAR UNIVERSITY
-  instituteId          String?          @map("institute_id")
-  institute            Institute?       @relation(fields: [instituteId], references: [id])
-  subOrganization      String?          @map("sub_organization")        // institute code (e.g. GIT), synced from institute
+  organization    String // GANDHINAGAR UNIVERSITY
+  instituteId     String?    @map("institute_id")
+  institute       Institute? @relation(fields: [instituteId], references: [id])
+  subOrganization String?    @map("sub_organization") // institute code (e.g. GIT), synced from institute
 
   // Department
-  department           String                                           // ADMIN DEPARTMENT
-  functionalDepartment String?          @map("functional_department")   // ADMIN DEPARTMENT
+  department           String // ADMIN DEPARTMENT
+  functionalDepartment String? @map("functional_department") // ADMIN DEPARTMENT
 
   // Reporting hierarchy (FK to Employee.id)
-  firstReportingId     Int?             @map("first_reporting_id")
-  secondReportingId    Int?             @map("second_reporting_id")
-  thirdReportingId     Int?             @map("third_reporting_id")
+  firstReportingId  Int? @map("first_reporting_id")
+  secondReportingId Int? @map("second_reporting_id")
+  thirdReportingId  Int? @map("third_reporting_id")
 
-  firstReportingEmployee  Employee? @relation("FirstReporting",  fields: [firstReportingId],  references: [id])
+  firstReportingEmployee  Employee? @relation("FirstReporting", fields: [firstReportingId], references: [id])
   secondReportingEmployee Employee? @relation("SecondReporting", fields: [secondReportingId], references: [id])
-  thirdReportingEmployee  Employee? @relation("ThirdReporting",  fields: [thirdReportingId],  references: [id])
+  thirdReportingEmployee  Employee? @relation("ThirdReporting", fields: [thirdReportingId], references: [id])
 
   // Approver slots (polymorphic: can point to employee-users or position-users)
   // Preferred for leave workflow; NULL bypasses that layer.
-  firstApproverUserId   String? @map("first_approver_user_id")
-  secondApproverUserId  String? @map("second_approver_user_id")
-  thirdApproverUserId   String? @map("third_approver_user_id")
+  firstApproverUserId  String? @map("first_approver_user_id")
+  secondApproverUserId String? @map("second_approver_user_id")
+  thirdApproverUserId  String? @map("third_approver_user_id")
 
-  firstApproverUser   User? @relation("FirstApproverUser",  fields: [firstApproverUserId],  references: [id])
-  secondApproverUser  User? @relation("SecondApproverUser", fields: [secondApproverUserId], references: [id])
-  thirdApproverUser   User? @relation("ThirdApproverUser",  fields: [thirdApproverUserId],  references: [id])
+  firstApproverUser  User? @relation("FirstApproverUser", fields: [firstApproverUserId], references: [id])
+  secondApproverUser User? @relation("SecondApproverUser", fields: [secondApproverUserId], references: [id])
+  thirdApproverUser  User? @relation("ThirdApproverUser", fields: [thirdApproverUserId], references: [id])
 
   // Employment classification
-  employeeCategory     String           @map("employee_category")       // NON_TEACHING (lookup)
-  designation          String                                           // O.S. ESTABLISHMENT (legacy, synced from designationRef)
-  designationId        String?          @map("designation_id")
-  designationRef       Designation?     @relation(fields: [designationId], references: [id])
-  shift                String?                                          // GENERAL (lookup)
-  appointmentType      String?          @map("appointment_type")        // FULL_TIME_REGULAR (lookup)
-  employeeCode         String?          @unique @map("employee_code")   // GU1234
+  employeeCategory String       @map("employee_category") // NON_TEACHING (lookup)
+  designation      String // O.S. ESTABLISHMENT (legacy, synced from designationRef)
+  designationId    String?      @map("designation_id")
+  designationRef   Designation? @relation(fields: [designationId], references: [id])
+  shift            String? // GENERAL (lookup)
+  appointmentType  String?      @map("appointment_type") // FULL_TIME_REGULAR (lookup)
+  employeeCode     String?      @unique @map("employee_code") // GU1234
   /// Biometric / attendance machine punch ID (maps to eTimeOffice Empcode). Not the HRMS employee code.
-  punchId              String?          @unique @map("punch_id")
+  punchId          String?      @unique @map("punch_id")
 
-  updatedAt            DateTime         @updatedAt @map("updated_at")
-  updatedBy            String?          @map("updated_by")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
 
-  employee             Employee         @relation(fields: [employeeId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id])
 
   @@map("employee_general_info")
 }
@@ -302,26 +303,26 @@ model EmployeeGeneralInfo {
 // =============================================================================
 
 model EmployeeAssignment {
-  id             String   @id @default(uuid())
-  employeeId     Int      @map("employee_id")
+  id         String @id @default(uuid())
+  employeeId Int    @map("employee_id")
 
-  effectiveFrom  DateTime @map("effective_from") @db.Date
-  effectiveTo    DateTime? @map("effective_to") @db.Date
+  effectiveFrom DateTime  @map("effective_from") @db.Date
+  effectiveTo   DateTime? @map("effective_to") @db.Date
 
-  organization    String?  // optional snapshot; current system uses a single org mostly
-  instituteId     String?  @map("institute_id")
-  institute       Institute? @relation(fields: [instituteId], references: [id])
-  subOrganization String?  @map("sub_organization")
+  organization    String? // optional snapshot; current system uses a single org mostly
+  instituteId     String?      @map("institute_id")
+  institute       Institute?   @relation(fields: [instituteId], references: [id])
+  subOrganization String?      @map("sub_organization")
   department      String?
   designation     String
-  designationId   String?  @map("designation_id")
+  designationId   String?      @map("designation_id")
   designationRef  Designation? @relation(fields: [designationId], references: [id])
   shift           String?
-  appointmentType String? @map("appointment_type")
+  appointmentType String?      @map("appointment_type")
 
-  reason         String?
-  changedBy      String   @map("changed_by")
-  createdAt      DateTime @default(now()) @map("created_at")
+  reason    String?
+  changedBy String   @map("changed_by")
+  createdAt DateTime @default(now()) @map("created_at")
 
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
@@ -345,46 +346,46 @@ model EmployeeAssignment {
 // =============================================================================
 
 model EmployeePersonalInfo {
-  id               String        @id @default(uuid())
-  employeeId       Int           @unique @map("employee_id")
+  id         String @id @default(uuid())
+  employeeId Int    @unique @map("employee_id")
 
   // PDF — Personal Information section
-  birthDate        DateTime      @map("birth_date")                     // 27/05/1974
-  birthPlace       String?       @map("birth_place")                    // RUPAL
-  homeTown         String?       @map("home_town")                      // RUPAL
-  gender           String                                               // MALE (lookup)
-  maritalStatus    String        @map("marital_status")                 // MARRIED (lookup)
-  nationality      String        @default("INDIAN")                     // lookup
-  motherTongue     String?       @map("mother_tongue")                  // GUJARATI (lookup)
-  bloodGroup       String?       @map("blood_group")                    // A_POS (lookup)
+  birthDate     DateTime @map("birth_date") // 27/05/1974
+  birthPlace    String?  @map("birth_place") // RUPAL
+  homeTown      String?  @map("home_town") // RUPAL
+  gender        String // MALE (lookup)
+  maritalStatus String   @map("marital_status") // MARRIED (lookup)
+  nationality   String   @default("INDIAN") // lookup
+  motherTongue  String?  @map("mother_tongue") // GUJARATI (lookup)
+  bloodGroup    String?  @map("blood_group") // A_POS (lookup)
 
   // Caste — Indian govt. requirement
-  castCategory     String?       @map("cast_category")                  // OPEN
-  subCaste         String?       @map("sub_caste")                      // KADVA PATEL
+  castCategory String? @map("cast_category") // OPEN
+  subCaste     String? @map("sub_caste") // KADVA PATEL
 
   // Nominee — kept in personal info as shown in PDF
-  nomineeName      String?       @map("nominee_name")                   // KAILASH
-  nomineeRelation  String?       @map("nominee_relation")               // WIFE
+  nomineeName     String? @map("nominee_name") // KAILASH
+  nomineeRelation String? @map("nominee_relation") // WIFE
 
   // Identity numbers — ENCRYPTED at rest via Express/AES-256, never via Hasura
-  aadhaarNo        String?       @map("aadhaar_no")                     // encrypted
-  panNo            String?       @map("pan_no")                         // encrypted
+  aadhaarNo String? @map("aadhaar_no") // encrypted
+  panNo     String? @map("pan_no") // encrypted
 
   // Identity document scans — Cloudinary
-  aadhaarCardUrl   String?       @map("aadhaar_card_url")
-  panCardUrl       String?       @map("pan_card_url")
-  otherDocumentUrl String?       @map("other_document_url")
+  aadhaarCardUrl   String? @map("aadhaar_card_url")
+  panCardUrl       String? @map("pan_card_url")
+  otherDocumentUrl String? @map("other_document_url")
 
   // Passport — from PDF
-  passportNo         String?     @map("passport_no")
-  passportIssuePlace String?     @map("passport_issue_place")
-  passportIssueDate  DateTime?   @map("passport_issue_date")
-  passportExpiryDate DateTime?   @map("passport_expiry_date")
+  passportNo         String?   @map("passport_no")
+  passportIssuePlace String?   @map("passport_issue_place")
+  passportIssueDate  DateTime? @map("passport_issue_date")
+  passportExpiryDate DateTime? @map("passport_expiry_date")
 
-  updatedAt        DateTime      @updatedAt @map("updated_at")
-  updatedBy        String?       @map("updated_by")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
 
-  employee         Employee      @relation(fields: [employeeId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id])
 
   @@map("employee_personal_info")
 }
@@ -404,31 +405,31 @@ enum AddressType {
 }
 
 model EmployeeAddress {
-  id              String      @id @default(uuid())
-  employeeId      Int         @map("employee_id")
-  addressType     AddressType @map("address_type")
+  id          String      @id @default(uuid())
+  employeeId  Int         @map("employee_id")
+  addressType AddressType @map("address_type")
 
   // Both address types
-  flatBlockNo     String?     @map("flat_block_no")                     // 407 / 279
-  buildingSociety String?     @map("building_society")                  // DEVBHUMI PLAZA / TIMBAVAS
-  area            String?                                               // OPP. SANKALP... / MOTO MADH
-  city            String?                                               // BORISNA / RUPAL
-  state           String?                                               // GUJARAT
-  country         String?     @default("INDIA")
-  zipPostalCode   String?     @map("zip_postal_code")                   // 382721
-  phoneNo         String?     @map("phone_no")
-  mobileNo        String?     @map("mobile_no")                         // 9904405950
+  flatBlockNo     String? @map("flat_block_no") // 407 / 279
+  buildingSociety String? @map("building_society") // DEVBHUMI PLAZA / TIMBAVAS
+  area            String? // OPP. SANKALP... / MOTO MADH
+  city            String? // BORISNA / RUPAL
+  state           String? // GUJARAT
+  country         String? @default("INDIA")
+  zipPostalCode   String? @map("zip_postal_code") // 382721
+  phoneNo         String? @map("phone_no")
+  mobileNo        String? @map("mobile_no") // 9904405950
 
   // Local address only — present in PDF's local address block
-  intercomNo      String?     @map("intercom_no")                       // 203
-  personalEmail   String?     @map("personal_email")                    // dspatel2011@gmail.com
-  instituteEmail  String?     @map("institute_email")                   // dinesh.patel@gandhinagaruni.ac.in
-  url             String?                                               // personal website
+  intercomNo     String? @map("intercom_no") // 203
+  personalEmail  String? @map("personal_email") // dspatel2011@gmail.com
+  instituteEmail String? @map("institute_email") // dinesh.patel@gandhinagaruni.ac.in
+  url            String? // personal website
 
-  updatedAt       DateTime    @updatedAt @map("updated_at")
-  updatedBy       String?     @map("updated_by")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
 
-  employee        Employee    @relation(fields: [employeeId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id])
 
   @@unique([employeeId, addressType])
   @@map("employee_addresses")
@@ -443,26 +444,26 @@ model EmployeeAddress {
 // =============================================================================
 
 model EmployeeOtherInfo {
-  id              String    @id @default(uuid())
-  employeeId      Int       @unique @map("employee_id")
+  id         String @id @default(uuid())
+  employeeId Int    @unique @map("employee_id")
 
-  skillSet        String?   @map("skill_set")                           // HR
-  hobbies         String?                                               // MUSIC
-  strength        String?                                               // FAMILY
-  weakness        String?                                               // FAMILY
-  isHandicapped   Boolean   @default(false) @map("is_handicapped")      // No
-  handicapDetails String?   @map("handicap_details")
+  skillSet        String? @map("skill_set") // HR
+  hobbies         String? // MUSIC
+  strength        String? // FAMILY
+  weakness        String? // FAMILY
+  isHandicapped   Boolean @default(false) @map("is_handicapped") // No
+  handicapDetails String? @map("handicap_details")
 
-  passportUrl     String?   @map("passport_url")
+  passportUrl String? @map("passport_url")
 
   // Physical — from PDF
-  heightInFeet    Decimal?  @map("height_in_feet") @db.Decimal(5,2)    // 157.00
-  weightInKg      Decimal?  @map("weight_in_kg")   @db.Decimal(5,2)    // 79
+  heightInFeet Decimal? @map("height_in_feet") @db.Decimal(5, 2) // 157.00
+  weightInKg   Decimal? @map("weight_in_kg") @db.Decimal(5, 2) // 79
 
-  updatedAt       DateTime  @updatedAt @map("updated_at")
-  updatedBy       String?   @map("updated_by")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
 
-  employee        Employee  @relation(fields: [employeeId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id])
 
   @@map("employee_other_info")
 }
@@ -474,32 +475,32 @@ model EmployeeOtherInfo {
 // =============================================================================
 
 model FamilyMember {
-  id             String         @id @default(uuid())
-  employeeId     Int            @map("employee_id")
+  id         String @id @default(uuid())
+  employeeId Int    @map("employee_id")
 
   // PDF fields
-  relation       String                                                 // FATHER (lookup)
-  name           String
-  city           String?
-  mobileNo       String?        @map("mobile_no")                       // 9998414432
-  personalEmail  String?        @map("personal_email")
+  relation      String // FATHER (lookup)
+  name          String
+  city          String?
+  mobileNo      String? @map("mobile_no") // 9998414432
+  personalEmail String? @map("personal_email")
 
   // Extended (as requested)
-  dateOfBirth    DateTime?      @map("date_of_birth")
-  aadhaarNo      String?        @map("aadhaar_no")                      // encrypted AES-256
-  aadhaarUrl     String?        @map("aadhaar_url")                     // Cloudinary scan
-  isNominee      Boolean        @default(false) @map("is_nominee")
-  isDependent    Boolean        @default(false) @map("is_dependent")
-  isEmployed     Boolean        @default(false) @map("is_employed")
-  employerName   String?        @map("employer_name")
+  dateOfBirth  DateTime? @map("date_of_birth")
+  aadhaarNo    String?   @map("aadhaar_no") // encrypted AES-256
+  aadhaarUrl   String?   @map("aadhaar_url") // Cloudinary scan
+  isNominee    Boolean   @default(false) @map("is_nominee")
+  isDependent  Boolean   @default(false) @map("is_dependent")
+  isEmployed   Boolean   @default(false) @map("is_employed")
+  employerName String?   @map("employer_name")
 
-  isActive       Boolean        @default(true) @map("is_active")
-  deletedAt      DateTime?      @map("deleted_at")
-  createdAt      DateTime       @default(now()) @map("created_at")
-  updatedAt      DateTime       @updatedAt @map("updated_at")
-  updatedBy      String?        @map("updated_by")
+  isActive  Boolean   @default(true) @map("is_active")
+  deletedAt DateTime? @map("deleted_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedBy String?   @map("updated_by")
 
-  employee       Employee       @relation(fields: [employeeId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id])
 
   @@map("family_members")
 }
@@ -522,51 +523,51 @@ model FamilyMember {
 // =============================================================================
 
 model AcademicQualification {
-  id               String          @id @default(uuid())
-  employeeId       Int             @map("employee_id")
+  id         String @id @default(uuid())
+  employeeId Int    @map("employee_id")
 
   // PDF fields
-  degreeType       String          @map("degree_type")                  // SSC (lookup)
-  degreeName       String?         @map("degree_name")                  // B.E. Computer Engineering
-  medium           String?                                              // ENGLISH (lookup)
-  boardUniversity  String          @map("board_university")             // GSEB / GUJARAT UNIVERSITY
-  schoolCollege    String          @map("school_college")               // Shree Vardayini High School, Rupal
-  passingYear      Int             @map("passing_year")                 // 1990
-  percentage       Decimal?        @db.Decimal(5,2)                     // 50.00
-  grade            String?                                              // A / B+ / Distinction
-  specialization   String?                                              // Commerce / Hindi / CS
+  degreeType      String   @map("degree_type") // SSC (lookup)
+  degreeName      String?  @map("degree_name") // B.E. Computer Engineering
+  medium          String? // ENGLISH (lookup)
+  boardUniversity String   @map("board_university") // GSEB / GUJARAT UNIVERSITY
+  schoolCollege   String   @map("school_college") // Shree Vardayini High School, Rupal
+  passingYear     Int      @map("passing_year") // 1990
+  percentage      Decimal? @db.Decimal(5, 2) // 50.00
+  grade           String? // A / B+ / Distinction
+  specialization  String? // Commerce / Hindi / CS
 
   // Extra useful fields
-  durationYears    Int?            @map("duration_years")
-  totalSemesters   Int?            @map("total_semesters")              // actual sems for this degree
+  durationYears  Int? @map("duration_years")
+  totalSemesters Int? @map("total_semesters") // actual sems for this degree
 
   // Consolidated certificate / degree scan
-  certificateUrl   String?         @map("certificate_url")
+  certificateUrl String? @map("certificate_url")
 
   // Sem-wise marksheet uploads — max 8 sems
-  sem1MarksheetUrl String?         @map("sem1_marksheet_url")
-  sem2MarksheetUrl String?         @map("sem2_marksheet_url")
-  sem3MarksheetUrl String?         @map("sem3_marksheet_url")
-  sem4MarksheetUrl String?         @map("sem4_marksheet_url")
-  sem5MarksheetUrl String?         @map("sem5_marksheet_url")
-  sem6MarksheetUrl String?         @map("sem6_marksheet_url")
-  sem7MarksheetUrl String?         @map("sem7_marksheet_url")
-  sem8MarksheetUrl String?         @map("sem8_marksheet_url")
+  sem1MarksheetUrl String? @map("sem1_marksheet_url")
+  sem2MarksheetUrl String? @map("sem2_marksheet_url")
+  sem3MarksheetUrl String? @map("sem3_marksheet_url")
+  sem4MarksheetUrl String? @map("sem4_marksheet_url")
+  sem5MarksheetUrl String? @map("sem5_marksheet_url")
+  sem6MarksheetUrl String? @map("sem6_marksheet_url")
+  sem7MarksheetUrl String? @map("sem7_marksheet_url")
+  sem8MarksheetUrl String? @map("sem8_marksheet_url")
 
   // HR verification status
-  isVerified       Boolean         @default(false) @map("is_verified")
-  verifiedBy       String?         @map("verified_by")
-  verifiedAt       DateTime?       @map("verified_at")
+  isVerified Boolean   @default(false) @map("is_verified")
+  verifiedBy String?   @map("verified_by")
+  verifiedAt DateTime? @map("verified_at")
 
-  displayOrder     Int             @default(0) @map("display_order")
-  isActive         Boolean         @default(true) @map("is_active")
-  deletedAt        DateTime?       @map("deleted_at")
+  displayOrder Int       @default(0) @map("display_order")
+  isActive     Boolean   @default(true) @map("is_active")
+  deletedAt    DateTime? @map("deleted_at")
 
-  createdAt        DateTime        @default(now()) @map("created_at")
-  updatedAt        DateTime        @updatedAt @map("updated_at")
-  updatedBy        String?         @map("updated_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
 
-  employee         Employee        @relation(fields: [employeeId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id])
 
   @@unique([employeeId, degreeType])
   @@map("academic_qualifications")
@@ -586,18 +587,18 @@ enum ExperienceType {
 }
 
 model EmployeeExperience {
-  id                    String         @id @default(uuid())
-  employeeId            Int            @map("employee_id")
-  type                  String                                          // TEACHING (lookup)
+  id                    String   @id @default(uuid())
+  employeeId            Int      @map("employee_id")
+  type                  String // TEACHING (lookup)
   designation           String
-  organizationName      String         @map("organization_name")
-  fromDate              DateTime       @map("from_date") @db.Date
-  toDate                DateTime       @map("to_date") @db.Date
-  jobDescription        String?        @map("job_description")
-  lastSalary            Decimal?       @map("last_salary") @db.Decimal(12, 2)
-  experienceLetterUrl   String?        @map("experience_letter_url")
-  lastPaycheckUrl       String?        @map("last_paycheck_url")
-  recommendationLetters Json           @default("[]") @map("recommendation_letters")
+  organizationName      String   @map("organization_name")
+  fromDate              DateTime @map("from_date") @db.Date
+  toDate                DateTime @map("to_date") @db.Date
+  jobDescription        String?  @map("job_description")
+  lastSalary            Decimal? @map("last_salary") @db.Decimal(12, 2)
+  experienceLetterUrl   String?  @map("experience_letter_url")
+  lastPaycheckUrl       String?  @map("last_paycheck_url")
+  recommendationLetters Json     @default("[]") @map("recommendation_letters")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -616,13 +617,13 @@ model EmployeeExperience {
 
 model AuditLog {
   id           String   @id @default(uuid())
-  tableName    String   @map("table_name")        // e.g. "employee_personal_info"
-  recordId     String   @map("record_id")         // PK of the changed row
-  employeeId   Int?     @map("employee_id")       // which employee this data belongs to
-  fieldName    String   @map("field_name")        // which column changed
-  oldValue     String?  @map("old_value")         // previous value (masked if sensitive)
-  newValue     String?  @map("new_value")         // new value (masked if sensitive)
-  changedBy    String   @map("changed_by")        // userId who made the change
+  tableName    String   @map("table_name") // e.g. "employee_personal_info"
+  recordId     String   @map("record_id") // PK of the changed row
+  employeeId   Int?     @map("employee_id") // which employee this data belongs to
+  fieldName    String   @map("field_name") // which column changed
+  oldValue     String?  @map("old_value") // previous value (masked if sensitive)
+  newValue     String?  @map("new_value") // new value (masked if sensitive)
+  changedBy    String   @map("changed_by") // userId who made the change
   changedAt    DateTime @default(now()) @map("changed_at")
   changeReason String?  @map("change_reason")
   ipAddress    String?  @map("ip_address")
@@ -635,17 +636,17 @@ model AuditLog {
 }
 
 model ChangeRequest {
-  id          String   @id @default(uuid())
-  employeeId  Int      @map("employee_id")
-  module      String   // "PERSONAL", "ADDRESS", "OTHER", "BANK"
-  oldData     Json?    @map("old_data")
-  newData     Json     @map("new_data")
+  id          String        @id @default(uuid())
+  employeeId  Int           @map("employee_id")
+  module      String // "PERSONAL", "ADDRESS", "OTHER", "BANK"
+  oldData     Json?         @map("old_data")
+  newData     Json          @map("new_data")
   status      RequestStatus @default(PENDING)
-  requestedAt DateTime @default(now()) @map("requested_at")
-  reviewedBy  String?  @map("reviewed_by")
-  reviewedAt  DateTime? @map("reviewed_at")
-  
-  employee    Employee @relation(fields: [employeeId], references: [id])
+  requestedAt DateTime      @default(now()) @map("requested_at")
+  reviewedBy  String?       @map("reviewed_by")
+  reviewedAt  DateTime?     @map("reviewed_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id])
 
   @@map("change_requests")
 }
@@ -661,36 +662,36 @@ model LeaveType {
   applicableTo       LeaveApplicableTo @map("applicable_to")
   defaultDaysPerYear Float?            @map("default_days_per_year")
   isCarryForward     Boolean           @default(false) @map("is_carry_forward")
-  allowHalfDay       Boolean           @default(true)  @map("allow_half_day")
-  skipPublicHolidays Boolean           @default(true)  @map("skip_public_holidays")
-  skipWeekends       Boolean           @default(true)  @map("skip_weekends")
+  allowHalfDay       Boolean           @default(true) @map("allow_half_day")
+  skipPublicHolidays Boolean           @default(true) @map("skip_public_holidays")
+  skipWeekends       Boolean           @default(true) @map("skip_weekends")
   requiresDocument   Boolean           @default(false) @map("requires_document")
-  requiresReason     Boolean           @default(true)  @map("requires_reason")
-  isActive           Boolean           @default(true)  @map("is_active")
-  employeeCanApply   Boolean           @default(true)  @map("employee_can_apply")
+  requiresReason     Boolean           @default(true) @map("requires_reason")
+  isActive           Boolean           @default(true) @map("is_active")
+  employeeCanApply   Boolean           @default(true) @map("employee_can_apply")
   creditSchedule     Json?             @map("credit_schedule")
   createdAt          DateTime          @default(now()) @map("created_at")
-  updatedAt          DateTime          @updatedAt      @map("updated_at")
+  updatedAt          DateTime          @updatedAt @map("updated_at")
 
-  balances      LeaveBalance[]
-  applications  LeaveApplication[]
+  balances     LeaveBalance[]
+  applications LeaveApplication[]
 
   @@map("leave_types")
 }
 
 model LeaveBalance {
-  id             String      @id @default(uuid())
-  employeeId     Int         @map("employee_id")
-  leaveTypeId    String      @map("leave_type_id")
+  id             String    @id @default(uuid())
+  employeeId     Int       @map("employee_id")
+  leaveTypeId    String    @map("leave_type_id")
   year           Int
-  totalCredited  Float       @default(0) @map("total_credited")
-  carryForward   Float       @default(0) @map("carry_forward")
-  used           Float       @default(0)
-  pending        Float       @default(0)
-  available      Float       @default(0)
-  lastCreditedAt DateTime?   @map("last_credited_at")
-  createdAt      DateTime    @default(now()) @map("created_at")
-  updatedAt      DateTime    @updatedAt      @map("updated_at")
+  totalCredited  Float     @default(0) @map("total_credited")
+  carryForward   Float     @default(0) @map("carry_forward")
+  used           Float     @default(0)
+  pending        Float     @default(0)
+  available      Float     @default(0)
+  lastCreditedAt DateTime? @map("last_credited_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
 
   employee  Employee  @relation(fields: [employeeId], references: [id])
   leaveType LeaveType @relation(fields: [leaveTypeId], references: [id])
@@ -700,52 +701,52 @@ model LeaveBalance {
 }
 
 model LeaveApplication {
-  id                      String                 @id @default(uuid())
-  applicationNo           String                 @unique @map("application_no")
-  employeeId              Int                    @map("employee_id")
-  assignmentId            String?                @map("assignment_id")
-  leaveTypeId             String                 @map("leave_type_id")
-  fromDate                DateTime               @map("from_date")
-  toDate                  DateTime               @map("to_date")
-  isHalfDay               Boolean                @default(false) @map("is_half_day")
-  halfDaySession          HalfDaySession?        @map("half_day_session")
-  totalDays               Float                  @map("total_days")
-  reason                  String
-  documentUrl             String?                @map("document_url")
-  status                  LeaveApplicationStatus @default(PENDING)
-  appliedAt               DateTime               @default(now()) @map("applied_at")
-  isAbsenceLinked         Boolean                @default(false) @map("is_absence_linked")
-  absenceDate             DateTime?              @map("absence_date")
-  absenceWindowExpiresAt  DateTime?              @map("absence_window_expires_at")
-  appliedBy               String                 @map("applied_by")
-  isAppliedByAdmin        Boolean                @default(false) @map("is_applied_by_admin")
-  createdAt               DateTime               @default(now()) @map("created_at")
-  updatedAt               DateTime               @updatedAt      @map("updated_at")
+  id                     String                 @id @default(uuid())
+  applicationNo          String                 @unique @map("application_no")
+  employeeId             Int                    @map("employee_id")
+  assignmentId           String?                @map("assignment_id")
+  leaveTypeId            String                 @map("leave_type_id")
+  fromDate               DateTime               @map("from_date")
+  toDate                 DateTime               @map("to_date")
+  isHalfDay              Boolean                @default(false) @map("is_half_day")
+  halfDaySession         HalfDaySession?        @map("half_day_session")
+  totalDays              Float                  @map("total_days")
+  reason                 String
+  documentUrl            String?                @map("document_url")
+  status                 LeaveApplicationStatus @default(PENDING)
+  appliedAt              DateTime               @default(now()) @map("applied_at")
+  isAbsenceLinked        Boolean                @default(false) @map("is_absence_linked")
+  absenceDate            DateTime?              @map("absence_date")
+  absenceWindowExpiresAt DateTime?              @map("absence_window_expires_at")
+  appliedBy              String                 @map("applied_by")
+  isAppliedByAdmin       Boolean                @default(false) @map("is_applied_by_admin")
+  createdAt              DateTime               @default(now()) @map("created_at")
+  updatedAt              DateTime               @updatedAt @map("updated_at")
 
-  employee        Employee           @relation(fields: [employeeId], references: [id])
-  assignment      EmployeeAssignment? @relation(fields: [assignmentId], references: [id])
-  leaveType       LeaveType          @relation(fields: [leaveTypeId], references: [id])
-  approvalSteps   LeaveApprovalStep[]
-  absenceRecords  AbsenceRecord[]    @relation("AbsenceApplication")
+  employee       Employee            @relation(fields: [employeeId], references: [id])
+  assignment     EmployeeAssignment? @relation(fields: [assignmentId], references: [id])
+  leaveType      LeaveType           @relation(fields: [leaveTypeId], references: [id])
+  approvalSteps  LeaveApprovalStep[]
+  absenceRecords AbsenceRecord[]     @relation("AbsenceApplication")
 
   @@index([employeeId, fromDate])
   @@map("leave_applications")
 }
 
 model LeaveApprovalStep {
-  id              String         @id @default(uuid())
-  applicationId   String         @map("application_id")
-  stepNumber      Int            @map("step_number")
-  approverRole    ApproverRole   @map("approver_role")
-  approverId      Int?           @map("approver_id") // legacy (employee id)
-  approverUserId  String?        @map("approver_user_id")
-  action          ApprovalAction? 
+  id              String          @id @default(uuid())
+  applicationId   String          @map("application_id")
+  stepNumber      Int             @map("step_number")
+  approverRole    ApproverRole    @map("approver_role")
+  approverId      Int?            @map("approver_id") // legacy (employee id)
+  approverUserId  String?         @map("approver_user_id")
+  action          ApprovalAction?
   remarks         String?
-  actionAt        DateTime?      @map("action_at")
-  windowExpiresAt DateTime?      @map("window_expires_at")
-  notifiedAt      DateTime?      @map("notified_at")
-  isSuperseded    Boolean        @default(false) @map("is_superseded")
-  createdAt       DateTime       @default(now()) @map("created_at")
+  actionAt        DateTime?       @map("action_at")
+  windowExpiresAt DateTime?       @map("window_expires_at")
+  notifiedAt      DateTime?       @map("notified_at")
+  isSuperseded    Boolean         @default(false) @map("is_superseded")
+  createdAt       DateTime        @default(now()) @map("created_at")
 
   application LeaveApplication @relation(fields: [applicationId], references: [id])
 
@@ -753,20 +754,20 @@ model LeaveApprovalStep {
 }
 
 model AbsenceRecord {
-  id                 String    @id @default(uuid())
-  employeeId         Int       @map("employee_id")
+  id                 String   @id @default(uuid())
+  employeeId         Int      @map("employee_id")
   date               DateTime
-  markedAt           DateTime  @map("marked_at")
-  windowExpiresAt    DateTime  @map("window_expires_at")
-  leaveApplicationId String?   @map("leave_application_id")
-  assignmentId       String?   @map("assignment_id")
-  convertedToLwp     Boolean   @default(false) @map("converted_to_lwp")
-  bullmqJobId        String?   @map("bullmq_job_id")
-  createdAt          DateTime  @default(now()) @map("created_at")
+  markedAt           DateTime @map("marked_at")
+  windowExpiresAt    DateTime @map("window_expires_at")
+  leaveApplicationId String?  @map("leave_application_id")
+  assignmentId       String?  @map("assignment_id")
+  convertedToLwp     Boolean  @default(false) @map("converted_to_lwp")
+  bullmqJobId        String?  @map("bullmq_job_id")
+  createdAt          DateTime @default(now()) @map("created_at")
 
-  employee      Employee         @relation(fields: [employeeId], references: [id])
-  application   LeaveApplication? @relation(fields: [leaveApplicationId], references: [id], name: "AbsenceApplication")
-  assignment    EmployeeAssignment? @relation(fields: [assignmentId], references: [id])
+  employee    Employee            @relation(fields: [employeeId], references: [id])
+  application LeaveApplication?   @relation(fields: [leaveApplicationId], references: [id], name: "AbsenceApplication")
+  assignment  EmployeeAssignment? @relation(fields: [assignmentId], references: [id])
 
   @@index([employeeId, date])
   @@map("absence_records")
@@ -804,7 +805,7 @@ model LeaveAuditLog {
   newValue   Json?
   createdAt  DateTime @default(now()) @map("created_at")
 
-  employee   Employee? @relation(fields: [employeeId], references: [id])
+  employee Employee? @relation(fields: [employeeId], references: [id])
 
   @@index([employeeId])
   @@map("leave_audit_log")
@@ -814,12 +815,12 @@ model MonthlyLWPRecord {
   id         String   @id @default(uuid())
   employeeId Int      @map("employee_id")
   year       Int
-  month      Int      // 1-12
+  month      Int // 1-12
   days       Float    @default(0)
   createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt      @map("updated_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
-  employee   Employee @relation(fields: [employeeId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id])
 
   @@unique([employeeId, year, month])
   @@map("monthly_lwp_records")
@@ -836,17 +837,17 @@ enum AttendanceSource {
 }
 
 model AttendanceLocation {
-  id          String   @id @default(uuid())
-  name        String
-  latitude    Float
-  longitude   Float
-  radiusKm    Float
-  isUnique    Boolean  @default(false)
-  isActive    Boolean  @default(true) @map("is_active")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id        String   @id @default(uuid())
+  name      String
+  latitude  Float
+  longitude Float
+  radiusKm  Float
+  isUnique  Boolean  @default(false)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  punches     AttendancePunch[]
+  punches AttendancePunch[]
 
   @@map("attendance_locations")
 }
@@ -859,30 +860,31 @@ model AttendancePunch {
   externalKey String           @unique @map("external_key") // idempotency key from MSSQL
 
   // Optional metadata (depends on MSSQL schema)
-  terminalId  String?          @map("terminal_id")
-  punchType   String?          @map("punch_type")
+  terminalId String? @map("terminal_id")
+  punchType  String? @map("punch_type")
 
   // Geofenced Biometric App Punch Data
-  latitude    Float?
-  longitude   Float?
-  locationId  String?          @map("location_id")
-  deviceInfo  Json?            @map("device_info")
+  latitude   Float?
+  longitude  Float?
+  locationId String? @map("location_id")
+  deviceInfo Json?   @map("device_info")
+  reason     String? @db.Text
 
-  createdAt   DateTime         @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
-  employee    Employee         @relation(fields: [employeeId], references: [id])
-  location    AttendanceLocation? @relation(fields: [locationId], references: [id])
+  employee Employee            @relation(fields: [employeeId], references: [id])
+  location AttendanceLocation? @relation(fields: [locationId], references: [id])
 
   @@index([employeeId, punchAt])
   @@map("attendance_punches")
 }
 
 model AttendanceSyncState {
-  id            String   @id @default(uuid())
-  source        AttendanceSource @unique
-  lastSyncedAt  DateTime? @map("last_synced_at")
-  cursor        String?   @map("cursor") // generic incremental cursor (e.g., last PK or timestamp)
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+  id           String           @id @default(uuid())
+  source       AttendanceSource @unique
+  lastSyncedAt DateTime?        @map("last_synced_at")
+  cursor       String?          @map("cursor") // generic incremental cursor (e.g., last PK or timestamp)
+  updatedAt    DateTime         @updatedAt @map("updated_at")
 
   @@map("attendance_sync_state")
 }
@@ -893,10 +895,10 @@ model AttendancePolicy {
    * Times are stored as "HH:MM" in Asia/Kolkata local time.
    */
   id                    String   @id @default("default")
-  defaultPunchInTime    String   @default("09:00") @map("default_punch_in_time")  // "HH:MM" IST
+  defaultPunchInTime    String   @default("09:00") @map("default_punch_in_time") // "HH:MM" IST
   defaultPunchOutTime   String   @default("15:30") @map("default_punch_out_time") // "HH:MM" IST
-  punchInBufferMinutes  Int      @default(10)      @map("punch_in_buffer_minutes")
-  punchOutBufferMinutes Int      @default(10)      @map("punch_out_buffer_minutes")
+  punchInBufferMinutes  Int      @default(10) @map("punch_in_buffer_minutes")
+  punchOutBufferMinutes Int      @default(10) @map("punch_out_buffer_minutes")
   updatedBy             String?  @map("updated_by")
   updatedAt             DateTime @updatedAt @map("updated_at")
 
@@ -921,10 +923,10 @@ model EmployeeAttendanceSettings {
 }
 
 model DepartmentApprover {
-  id            String @id @default(uuid())
-  department    String @unique
-  hodEmployeeId Int    @map("hod_employee_id")
-  isActive      Boolean @default(true) @map("is_active")
+  id            String   @id @default(uuid())
+  department    String   @unique
+  hodEmployeeId Int      @map("hod_employee_id")
+  isActive      Boolean  @default(true) @map("is_active")
   updatedAt     DateTime @updatedAt @map("updated_at")
   updatedBy     String?  @map("updated_by")
 
@@ -934,12 +936,12 @@ model DepartmentApprover {
 }
 
 model InstituteApprover {
-  id           String @id @default(uuid())
-  institute    String @unique
-  hoiEmployeeId Int   @map("hoi_employee_id")
-  isActive     Boolean @default(true) @map("is_active")
-  updatedAt    DateTime @updatedAt @map("updated_at")
-  updatedBy    String?  @map("updated_by")
+  id            String   @id @default(uuid())
+  institute     String   @unique
+  hoiEmployeeId Int      @map("hoi_employee_id")
+  isActive      Boolean  @default(true) @map("is_active")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  updatedBy     String?  @map("updated_by")
 
   hoi Employee @relation("InstituteHoi", fields: [hoiEmployeeId], references: [id])
 
@@ -947,12 +949,12 @@ model InstituteApprover {
 }
 
 model GlobalApprover {
-  id              String @id @default(uuid())
-  vcEmployeeId    Int?   @map("vc_employee_id")
-  registrarEmployeeId Int? @map("registrar_employee_id")
-  isActive        Boolean @default(true) @map("is_active")
-  updatedAt       DateTime @updatedAt @map("updated_at")
-  updatedBy       String?  @map("updated_by")
+  id                  String   @id @default(uuid())
+  vcEmployeeId        Int?     @map("vc_employee_id")
+  registrarEmployeeId Int?     @map("registrar_employee_id")
+  isActive            Boolean  @default(true) @map("is_active")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+  updatedBy           String?  @map("updated_by")
 
   vc        Employee? @relation("GlobalApproverVC", fields: [vcEmployeeId], references: [id])
   registrar Employee? @relation("GlobalApproverRegistrar", fields: [registrarEmployeeId], references: [id])
@@ -1011,11 +1013,11 @@ model RolePermission {
   roleId    String @map("role_id")
   moduleKey String @map("module_key")
 
-  canRead    Boolean @default(false) @map("can_read")
-  canWrite   Boolean @default(false) @map("can_write")
-  canApprove Boolean @default(false) @map("can_approve")
-  canDelete  Boolean @default(false) @map("can_delete")
-  canExport  Boolean @default(false) @map("can_export")
+  canRead           Boolean           @default(false) @map("can_read")
+  canWrite          Boolean           @default(false) @map("can_write")
+  canApprove        Boolean           @default(false) @map("can_approve")
+  canDelete         Boolean           @default(false) @map("can_delete")
+  canExport         Boolean           @default(false) @map("can_export")
   /// Workforce directory visibility (PERSONAL_INFO module). Edit scope follows this.
   employeeViewScope EmployeeViewScope @default(NONE) @map("employee_view_scope")
 
@@ -1066,25 +1068,25 @@ model User {
 // =============================================================================
 
 model EmployeeSalaryInfo {
-  id              String    @id @default(uuid())
-  employeeId      Int       @unique @map("employee_id")
+  id         String @id @default(uuid())
+  employeeId Int    @unique @map("employee_id")
 
-  payCommission      String?            @map("pay_commission")
-  payCommissionId    String?            @map("pay_commission_id")
-  designationId      String?            @map("designation_id")
-  payGrade           String?            @map("pay_grade")
-  basicSalary        Decimal?           @map("basic_salary") @db.Decimal(12, 2)
-  agp                Decimal?           @db.Decimal(12, 2)
-  grossSalary        Decimal?           @map("gross_salary") @db.Decimal(12, 2)
-  columnOverrides    Json?              @map("column_overrides")
-  columnRules        Json?              @map("column_rules")
+  payCommission   String?  @map("pay_commission")
+  payCommissionId String?  @map("pay_commission_id")
+  designationId   String?  @map("designation_id")
+  payGrade        String?  @map("pay_grade")
+  basicSalary     Decimal? @map("basic_salary") @db.Decimal(12, 2)
+  agp             Decimal? @db.Decimal(12, 2)
+  grossSalary     Decimal? @map("gross_salary") @db.Decimal(12, 2)
+  columnOverrides Json?    @map("column_overrides")
+  columnRules     Json?    @map("column_rules")
 
-  updatedAt       DateTime  @updatedAt @map("updated_at")
-  updatedBy       String?   @map("updated_by")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
 
-  employee        Employee       @relation(fields: [employeeId], references: [id])
-  designationRef  Designation?   @relation(fields: [designationId], references: [id])
-  payCommissionRef PayCommission?  @relation(fields: [payCommissionId], references: [id])
+  employee         Employee       @relation(fields: [employeeId], references: [id])
+  designationRef   Designation?   @relation(fields: [designationId], references: [id])
+  payCommissionRef PayCommission? @relation(fields: [payCommissionId], references: [id])
 
   @@map("employee_salary_info")
 }
@@ -1094,40 +1096,40 @@ model EmployeeSalaryInfo {
 // =============================================================================
 
 model Organization {
-  id                 String   @id @default(uuid())
-  code               String   @unique
-  name               String   @unique
-  registrationNo     String?  @map("registration_no")
-  establishmentYear  Int?     @map("establishment_year")
-  contactPerson      String?  @map("contact_person")
-  mobileNo           String?  @map("mobile_no")
-  contactNo          String?  @map("contact_no")
-  email              String?
-  webAddress         String?  @map("web_address")
-  panNo              String?  @map("pan_no")
-  gstNo              String?  @map("gst_no")
-  cinNo              String?  @map("cin_no")
-  country            String?
-  state              String?
-  city               String?
-  address1           String?
-  address2           String?
-  pinCode            String?  @map("pin_code")
-  tagLine            String?  @map("tag_line")
-  hostingUrl         String?  @map("hosting_url")
-  pageSize           String?  @map("page_size")
-  dateFormat         String?  @map("date_format")
-  timeZone           String?  @map("time_zone")
-  socialPostUrl      String?  @map("social_post_url")
-  bankName           String?  @map("bank_name")
-  accountHolderName  String?  @map("account_holder_name")
-  bankAccountNo      String?  @map("bank_account_no")
-  ifscCode           String?  @map("ifsc_code")
-  bankBranch         String?  @map("bank_branch")
-  isActive           Boolean  @default(true) @map("is_active")
-  sortOrder          Int      @default(0) @map("sort_order")
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
+  id                String   @id @default(uuid())
+  code              String   @unique
+  name              String   @unique
+  registrationNo    String?  @map("registration_no")
+  establishmentYear Int?     @map("establishment_year")
+  contactPerson     String?  @map("contact_person")
+  mobileNo          String?  @map("mobile_no")
+  contactNo         String?  @map("contact_no")
+  email             String?
+  webAddress        String?  @map("web_address")
+  panNo             String?  @map("pan_no")
+  gstNo             String?  @map("gst_no")
+  cinNo             String?  @map("cin_no")
+  country           String?
+  state             String?
+  city              String?
+  address1          String?
+  address2          String?
+  pinCode           String?  @map("pin_code")
+  tagLine           String?  @map("tag_line")
+  hostingUrl        String?  @map("hosting_url")
+  pageSize          String?  @map("page_size")
+  dateFormat        String?  @map("date_format")
+  timeZone          String?  @map("time_zone")
+  socialPostUrl     String?  @map("social_post_url")
+  bankName          String?  @map("bank_name")
+  accountHolderName String?  @map("account_holder_name")
+  bankAccountNo     String?  @map("bank_account_no")
+  ifscCode          String?  @map("ifsc_code")
+  bankBranch        String?  @map("bank_branch")
+  isActive          Boolean  @default(true) @map("is_active")
+  sortOrder         Int      @default(0) @map("sort_order")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
 
   childInstitutes Institute[]
 
@@ -1176,7 +1178,7 @@ model Institute {
   createdAt            DateTime @default(now()) @map("created_at")
   updatedAt            DateTime @updatedAt @map("updated_at")
 
-  parentOrganization Organization? @relation(fields: [parentOrganizationId], references: [id])
+  parentOrganization Organization?         @relation(fields: [parentOrganizationId], references: [id])
   generalInfoRecords EmployeeGeneralInfo[]
   positionSlots      PositionSlot[]
   assignments        EmployeeAssignment[]
@@ -1191,45 +1193,45 @@ model Institute {
 // =============================================================================
 
 model Designation {
-  id            String   @id @default(uuid())
-  name          String   @unique
-  slug          String   @unique
-  isAlias       Boolean  @default(false) @map("is_alias")
-  linkedRoleId  String?  @map("linked_role_id")
-  isActive      Boolean  @default(true) @map("is_active")
-  sortOrder     Int      @default(0) @map("sort_order")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  id           String   @id @default(uuid())
+  name         String   @unique
+  slug         String   @unique
+  isAlias      Boolean  @default(false) @map("is_alias")
+  linkedRoleId String?  @map("linked_role_id")
+  isActive     Boolean  @default(true) @map("is_active")
+  sortOrder    Int      @default(0) @map("sort_order")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
-  linkedRole              Role?                    @relation(fields: [linkedRoleId], references: [id])
-  generalInfoRecords      EmployeeGeneralInfo[]
-  assignments             EmployeeAssignment[]
-  salaryInfoRecords       EmployeeSalaryInfo[]
-  positionSlots           PositionSlot[]
+  linkedRole               Role?                     @relation(fields: [linkedRoleId], references: [id])
+  generalInfoRecords       EmployeeGeneralInfo[]
+  assignments              EmployeeAssignment[]
+  salaryInfoRecords        EmployeeSalaryInfo[]
+  positionSlots            PositionSlot[]
   salaryStructureTemplates SalaryStructureTemplate[]
-  jobRequirements         JobRequirement[]
+  jobRequirements          JobRequirement[]
 
   @@map("designations")
 }
 
 model PositionSlot {
-  id              String   @id @default(uuid())
-  code            String   @unique
+  id              String     @id @default(uuid())
+  code            String     @unique
   name            String
-  designationId   String   @map("designation_id")
-  linkedRoleId    String   @map("linked_role_id")
-  instituteId     String?  @map("institute_id")
+  designationId   String     @map("designation_id")
+  linkedRoleId    String     @map("linked_role_id")
+  instituteId     String?    @map("institute_id")
   institute       Institute? @relation(fields: [instituteId], references: [id])
-  subOrganization String?  @map("sub_organization")
-  userId          String?  @unique @map("user_id")
-  isActive        Boolean  @default(true) @map("is_active")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  subOrganization String?    @map("sub_organization")
+  userId          String?    @unique @map("user_id")
+  isActive        Boolean    @default(true) @map("is_active")
+  createdAt       DateTime   @default(now()) @map("created_at")
+  updatedAt       DateTime   @updatedAt @map("updated_at")
 
-  designation  Designation          @relation(fields: [designationId], references: [id])
-  linkedRole   Role                 @relation(fields: [linkedRoleId], references: [id])
-  user         User?                @relation(fields: [userId], references: [id])
-  assignments  PositionAssignment[]
+  designation Designation          @relation(fields: [designationId], references: [id])
+  linkedRole  Role                 @relation(fields: [linkedRoleId], references: [id])
+  user        User?                @relation(fields: [userId], references: [id])
+  assignments PositionAssignment[]
 
   @@map("position_slots")
 }
@@ -1288,18 +1290,20 @@ model SalaryColumnDefinition {
 }
 
 model SalaryStructureTemplate {
-  id                String   @id @default(uuid())
-  designationId     String   @map("designation_id")
-  payCommissionId   String   @map("pay_commission_id")
-  isActive          Boolean  @default(true) @map("is_active")
-  /** Per-column employee visibility: { "EARNING::basic": true }. Omitted keys default to visible. */
-  columnVisibility  Json?    @map("column_visibility")
-  createdBy         String?  @map("created_by")
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
+  id               String   @id @default(uuid())
+  designationId    String   @map("designation_id")
+  payCommissionId  String   @map("pay_commission_id")
+  isActive         Boolean  @default(true) @map("is_active")
+  /**
+   * Per-column employee visibility: { "EARNING::basic": true }. Omitted keys default to visible.
+   */
+  columnVisibility Json?    @map("column_visibility")
+  createdBy        String?  @map("created_by")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
 
-  designation   Designation        @relation(fields: [designationId], references: [id])
-  payCommission PayCommission      @relation(fields: [payCommissionId], references: [id])
+  designation   Designation            @relation(fields: [designationId], references: [id])
+  payCommission PayCommission          @relation(fields: [payCommissionId], references: [id])
   columnRules   SalaryColumnRule[]
   salaryRecords EmployeeSalaryRecord[]
 
@@ -1308,19 +1312,19 @@ model SalaryStructureTemplate {
 }
 
 model SalaryColumnRule {
-  id                           String               @id @default(uuid())
-  templateId                   String               @map("template_id")
-  columnIdentifier             String               @map("column_identifier")
-  category                     SalaryColumnCategory
-  ruleType                     RuleType             @map("rule_type")
-  formulaPreview               String               @default("") @map("formula_preview")
-  fixedDefaultValue            Decimal?             @map("fixed_default_value") @db.Decimal(14, 4)
-  percentageValue              Decimal?             @map("percentage_value") @db.Decimal(10, 4)
-  percentageReferenceColumns   Json?                @map("percentage_reference_columns")
-  createdAt                    DateTime             @default(now()) @map("created_at")
-  updatedAt                    DateTime             @updatedAt @map("updated_at")
+  id                         String               @id @default(uuid())
+  templateId                 String               @map("template_id")
+  columnIdentifier           String               @map("column_identifier")
+  category                   SalaryColumnCategory
+  ruleType                   RuleType             @map("rule_type")
+  formulaPreview             String               @default("") @map("formula_preview")
+  fixedDefaultValue          Decimal?             @map("fixed_default_value") @db.Decimal(14, 4)
+  percentageValue            Decimal?             @map("percentage_value") @db.Decimal(10, 4)
+  percentageReferenceColumns Json?                @map("percentage_reference_columns")
+  createdAt                  DateTime             @default(now()) @map("created_at")
+  updatedAt                  DateTime             @updatedAt @map("updated_at")
 
-  template   SalaryStructureTemplate   @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  template   SalaryStructureTemplate    @relation(fields: [templateId], references: [id], onDelete: Cascade)
   conditions ConditionalRuleCondition[]
 
   @@unique([templateId, columnIdentifier, category])
@@ -1328,17 +1332,17 @@ model SalaryColumnRule {
 }
 
 model ConditionalRuleCondition {
-  id                                String              @id @default(uuid())
-  columnRuleId                      String              @map("column_rule_id")
-  comparator                        ConditionComparator
-  referenceColumnIdentifier         String              @map("reference_column_identifier")
-  thresholdValue                    Decimal             @map("threshold_value") @db.Decimal(14, 4)
-  resultType                        ConditionResultType @map("result_type")
-  resultValue                       Decimal             @map("result_value") @db.Decimal(14, 4)
-  resultReferenceColumnIdentifier   String?             @map("result_reference_column_identifier")
-  resultReferenceColumns            Json?               @map("result_reference_columns")
-  sortOrder                         Int                 @map("sort_order")
-  isElseFallback                    Boolean             @default(false) @map("is_else_fallback")
+  id                              String              @id @default(uuid())
+  columnRuleId                    String              @map("column_rule_id")
+  comparator                      ConditionComparator
+  referenceColumnIdentifier       String              @map("reference_column_identifier")
+  thresholdValue                  Decimal             @map("threshold_value") @db.Decimal(14, 4)
+  resultType                      ConditionResultType @map("result_type")
+  resultValue                     Decimal             @map("result_value") @db.Decimal(14, 4)
+  resultReferenceColumnIdentifier String?             @map("result_reference_column_identifier")
+  resultReferenceColumns          Json?               @map("result_reference_columns")
+  sortOrder                       Int                 @map("sort_order")
+  isElseFallback                  Boolean             @default(false) @map("is_else_fallback")
 
   columnRule SalaryColumnRule @relation(fields: [columnRuleId], references: [id], onDelete: Cascade)
 
@@ -1364,9 +1368,9 @@ model EmployeeSalaryRecord {
   createdAt         DateTime           @default(now()) @map("created_at")
   updatedAt         DateTime           @updatedAt @map("updated_at")
 
-  employee   Employee                  @relation(fields: [employeeId], references: [id])
-  assignment EmployeeAssignment?       @relation(fields: [assignmentId], references: [id])
-  template   SalaryStructureTemplate   @relation(fields: [templateId], references: [id])
+  employee     Employee                    @relation(fields: [employeeId], references: [id])
+  assignment   EmployeeAssignment?         @relation(fields: [assignmentId], references: [id])
+  template     SalaryStructureTemplate     @relation(fields: [templateId], references: [id])
   columnValues EmployeeSalaryColumnValue[]
 
   @@unique([employeeId, salaryMonth, salaryYear])
@@ -1375,14 +1379,14 @@ model EmployeeSalaryRecord {
 }
 
 model EmployeeSalaryColumnValue {
-  id                 String               @id @default(uuid())
-  salaryRecordId     String               @map("salary_record_id")
-  columnIdentifier   String               @map("column_identifier")
-  category           SalaryColumnCategory
-  ruleComputedValue  Decimal              @map("rule_computed_value") @db.Decimal(14, 2)
-  overrideValue      Decimal?             @map("override_value") @db.Decimal(14, 2)
-  effectiveValue     Decimal              @map("effective_value") @db.Decimal(14, 2)
-  formulaPreview     String               @default("") @map("formula_preview")
+  id                String               @id @default(uuid())
+  salaryRecordId    String               @map("salary_record_id")
+  columnIdentifier  String               @map("column_identifier")
+  category          SalaryColumnCategory
+  ruleComputedValue Decimal              @map("rule_computed_value") @db.Decimal(14, 2)
+  overrideValue     Decimal?             @map("override_value") @db.Decimal(14, 2)
+  effectiveValue    Decimal              @map("effective_value") @db.Decimal(14, 2)
+  formulaPreview    String               @default("") @map("formula_preview")
 
   salaryRecord EmployeeSalaryRecord @relation(fields: [salaryRecordId], references: [id], onDelete: Cascade)
 
@@ -1396,20 +1400,20 @@ model EmployeeSalaryColumnValue {
 // =============================================================================
 
 model EmployeeBankInfo {
-  id              String    @id @default(uuid())
-  employeeId      Int       @unique @map("employee_id")
+  id         String @id @default(uuid())
+  employeeId Int    @unique @map("employee_id")
 
-  bankName        String?   @map("bank_name")
-  bankAccountNo   String?   @map("bank_account_no")
-  bankBranchCode  String?   @map("bank_branch_code")
-  ifscCode        String?   @map("ifsc_code")
+  bankName           String? @map("bank_name")
+  bankAccountNo      String? @map("bank_account_no")
+  bankBranchCode     String? @map("bank_branch_code")
+  ifscCode           String? @map("ifsc_code")
   cancelledChequeUrl String? @map("cancelled_cheque_url")
-  passbookUrl     String?   @map("passbook_url")
+  passbookUrl        String? @map("passbook_url")
 
-  updatedAt       DateTime  @updatedAt @map("updated_at")
-  updatedBy       String?   @map("updated_by")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
 
-  employee        Employee  @relation(fields: [employeeId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id])
 
   @@map("employee_bank_info")
 }
@@ -1419,47 +1423,55 @@ model EmployeeBankInfo {
 // =============================================================================
 
 model LetterTemplate {
-  id          String   @id @default(uuid())
-  key         String   @unique @map("template_key")
+  id          String  @id @default(uuid())
+  key         String  @unique @map("template_key")
   name        String
-  description String?  @map("description")
+  description String? @map("description")
 
-  /** HTML body with placeholders like {{fullName}} */
+  /**
+   * HTML body with placeholders like {{fullName}}
+   */
   templateHtml String  @map("template_html") @db.Text
-  /** Optional logo URL to be placed at top of the template */
+  /**
+   * Optional logo URL to be placed at top of the template
+   */
   logoUrl      String? @map("logo_url")
 
-  /** JSON list of placeholder keys supported by this template */
-  placeholders  Json?   @map("placeholders")
+  /**
+   * JSON list of placeholder keys supported by this template
+   */
+  placeholders Json? @map("placeholders")
 
-  isActive     Boolean  @default(true) @map("is_active")
+  isActive Boolean @default(true) @map("is_active")
 
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
-  updatedBy    String?  @map("updated_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
 
-  documents    EmployeeLetterDocument[]
+  documents EmployeeLetterDocument[]
 
   @@map("letter_templates")
 }
 
 model EmployeeLetterDocument {
-  id          String   @id @default(uuid())
-  employeeId  Int      @map("employee_id")
-  templateId  String   @map("template_id")
+  id         String @id @default(uuid())
+  employeeId Int    @map("employee_id")
+  templateId String @map("template_id")
 
   status      LetterDocumentStatus @default(DRAFT) @map("status") // DRAFT or FINAL
-  /** Rendered HTML (after placeholder substitution). Admin can edit draft content. */
-  contentHtml String  @map("content_html") @db.Text
+  /**
+   * Rendered HTML (after placeholder substitution). Admin can edit draft content.
+   */
+  contentHtml String               @map("content_html") @db.Text
 
-  createdBy   String?  @map("created_by")
-  updatedBy   String?  @map("updated_by")
+  createdBy String? @map("created_by")
+  updatedBy String? @map("updated_by")
 
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  template    LetterTemplate @relation(fields: [templateId], references: [id])
+  employee Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  template LetterTemplate @relation(fields: [templateId], references: [id])
 
   @@unique([employeeId, templateId, status])
   @@index([employeeId, templateId])
@@ -1479,31 +1491,33 @@ enum ReimbursementStatus {
 }
 
 model ReimbursementClaim {
-  id              String               @id @default(uuid())
-  claimNo         String               @unique @map("claim_no")
-  employeeId      Int                  @map("employee_id")
+  id         String @id @default(uuid())
+  claimNo    String @unique @map("claim_no")
+  employeeId Int    @map("employee_id")
 
-  title           String
-  description     String               @db.Text
-  amount          Decimal              @db.Decimal(12, 2)
-  openingKm       Float?               @map("opening_km")
-  closingKm       Float?               @map("closing_km")
-  proofUrl        String?              @map("proof_url")
+  title       String
+  description String  @db.Text
+  amount      Decimal @db.Decimal(12, 2)
+  openingKm   Float?  @map("opening_km")
+  closingKm   Float?  @map("closing_km")
+  proofUrl    String? @map("proof_url")
 
-  status          ReimbursementStatus  @default(PENDING)
+  status ReimbursementStatus @default(PENDING)
 
-  /** Set when finally approved — which salary month received the amount */
-  salaryMonth     Int?                 @map("salary_month")
-  salaryYear      Int?                 @map("salary_year")
-  salaryRecordId  String?              @map("salary_record_id")
+  /**
+   * Set when finally approved — which salary month received the amount
+   */
+  salaryMonth    Int?    @map("salary_month")
+  salaryYear     Int?    @map("salary_year")
+  salaryRecordId String? @map("salary_record_id")
 
-  appliedBy       String               @map("applied_by")
-  appliedAt       DateTime             @default(now()) @map("applied_at")
-  createdAt       DateTime             @default(now()) @map("created_at")
-  updatedAt       DateTime             @updatedAt @map("updated_at")
+  appliedBy String   @map("applied_by")
+  appliedAt DateTime @default(now()) @map("applied_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  employee        Employee             @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  approvalSteps   ReimbursementApprovalStep[]
+  employee      Employee                    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  approvalSteps ReimbursementApprovalStep[]
 
   @@index([employeeId, status])
   @@index([status, appliedAt])
@@ -1511,18 +1525,18 @@ model ReimbursementClaim {
 }
 
 model ReimbursementApprovalStep {
-  id              String          @id @default(uuid())
-  claimId         String          @map("claim_id")
-  stepNumber      Int             @map("step_number")
-  approverRole    ApproverRole    @map("approver_role")
-  approverUserId  String?         @map("approver_user_id")
-  action          ApprovalAction?
-  remarks         String?
-  actionAt        DateTime?       @map("action_at")
-  isSuperseded    Boolean         @default(false) @map("is_superseded")
-  createdAt       DateTime        @default(now()) @map("created_at")
+  id             String          @id @default(uuid())
+  claimId        String          @map("claim_id")
+  stepNumber     Int             @map("step_number")
+  approverRole   ApproverRole    @map("approver_role")
+  approverUserId String?         @map("approver_user_id")
+  action         ApprovalAction?
+  remarks        String?
+  actionAt       DateTime?       @map("action_at")
+  isSuperseded   Boolean         @default(false) @map("is_superseded")
+  createdAt      DateTime        @default(now()) @map("created_at")
 
-  claim           ReimbursementClaim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  claim ReimbursementClaim @relation(fields: [claimId], references: [id], onDelete: Cascade)
 
   @@index([approverUserId, action])
   @@map("reimbursement_approval_steps")
@@ -1534,9 +1548,9 @@ model ReimbursementApprovalStep {
 
 model SystemLookup {
   id        String   @id @default(uuid())
-  category  String   // ORGANIZATION, BLOOD_GROUP, GENDER, ...
-  code      String   // stored value (e.g. A_POS, MALE)
-  label     String   // display label (e.g. A+, Male)
+  category  String // ORGANIZATION, BLOOD_GROUP, GENDER, ...
+  code      String // stored value (e.g. A_POS, MALE)
+  label     String // display label (e.g. A+, Male)
   isActive  Boolean  @default(true) @map("is_active")
   sortOrder Int      @default(0) @map("sort_order")
   createdAt DateTime @default(now()) @map("created_at")
@@ -1552,27 +1566,27 @@ model SystemLookup {
 // =============================================================================
 
 model JobRequirement {
-  id                      String   @id @default(uuid())
-  instituteId             String   @map("institute_id")
-  department              String
-  designationId           String   @map("designation_id")
-  employmentTypeCode      String   @map("employment_type_code")
-  jobLocation             String   @map("job_location")
-  branchLocation          String   @map("branch_location")
-  vacancies               Int      @default(1)
-  reportingManagerUserId  String?  @map("reporting_manager_user_id")
-  ctc                     Decimal? @db.Decimal(14, 2)
-  requiredEducation       String?  @map("required_education") @db.Text
-  requiredExperience      String?  @map("required_experience") @db.Text
-  requiredSkills          String?  @map("required_skills") @db.Text
-  isActive                Boolean  @default(true) @map("is_active")
-  createdBy               String?  @map("created_by")
-  updatedBy               String?  @map("updated_by")
-  createdAt               DateTime @default(now()) @map("created_at")
-  updatedAt               DateTime @updatedAt @map("updated_at")
+  id                     String   @id @default(uuid())
+  instituteId            String   @map("institute_id")
+  department             String
+  designationId          String   @map("designation_id")
+  employmentTypeCode     String   @map("employment_type_code")
+  jobLocation            String   @map("job_location")
+  branchLocation         String   @map("branch_location")
+  vacancies              Int      @default(1)
+  reportingManagerUserId String?  @map("reporting_manager_user_id")
+  ctc                    Decimal? @db.Decimal(14, 2)
+  requiredEducation      String?  @map("required_education") @db.Text
+  requiredExperience     String?  @map("required_experience") @db.Text
+  requiredSkills         String?  @map("required_skills") @db.Text
+  isActive               Boolean  @default(true) @map("is_active")
+  createdBy              String?  @map("created_by")
+  updatedBy              String?  @map("updated_by")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
 
-  institute   Institute @relation(fields: [instituteId], references: [id])
-  designation Designation @relation(fields: [designationId], references: [id])
+  institute   Institute              @relation(fields: [instituteId], references: [id])
+  designation Designation            @relation(fields: [designationId], references: [id])
   candidates  RecruitmentCandidate[]
 
   @@index([isActive, createdAt])
@@ -1599,8 +1613,8 @@ model RecruitmentCandidate {
   createdAt           DateTime  @default(now()) @map("created_at")
   updatedAt           DateTime  @updatedAt @map("updated_at")
 
-  requirement   JobRequirement @relation(fields: [requirementId], references: [id], onDelete: Cascade)
-  hiredEmployee Employee?      @relation("HiredEmployee", fields: [hiredEmployeeId], references: [id])
+  requirement   JobRequirement   @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  hiredEmployee Employee?        @relation("HiredEmployee", fields: [hiredEmployeeId], references: [id])
   rounds        InterviewRound[]
 
   @@index([requirementId, currentStatusCode])
@@ -1639,7 +1653,7 @@ model CompanyRepositoryDocument {
   id          String   @id @default(uuid())
   title       String
   description String?  @db.Text
-  category    String?  // POLICY, HANDBOOK, FORM, OTHER
+  category    String? // POLICY, HANDBOOK, FORM, OTHER
   fileUrl     String   @map("file_url")
   fileName    String?  @map("file_name")
   mimeType    String?  @map("mime_type")
@@ -1653,3 +1667,16 @@ model CompanyRepositoryDocument {
   @@map("company_repository_documents")
 }
 
+model LocationHistory {
+  id         String   @id @default(uuid())
+  employeeId Int      @map("employee_id")
+  latitude   Float
+  longitude  Float
+  heading    Float?
+  timestamp  DateTime @default(now())
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId, timestamp])
+  @@map("location_history")
+}

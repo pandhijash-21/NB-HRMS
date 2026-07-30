@@ -1042,12 +1042,24 @@ class _DayDetail extends StatelessWidget {
                                 [p.punchType, p.terminalId, p.source]
                                     .whereType<String>()
                                     .where((s) => s.isNotEmpty)
-                                    .join(' · '),
+                                    .join(' • '),
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: isDark ? Colors.white54 : const Color(0xFF607D8B),
                                 ),
                               ),
+                              if (p.reason != null && p.reason!.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: Text(
+                                    'Reason: ${p.reason}',
+                                    style: TextStyle(
+                                      color: isDark ? Colors.orange.shade300 : Colors.deepOrange.shade700,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
                             ],
                           ),
                         ),
@@ -1179,6 +1191,10 @@ class _PunchMapDialog extends StatelessWidget {
             initialCenter: LatLng(lat, lng),
             initialZoom: 15.0,
             minZoom: 3.0,
+            maxZoom: 18.0,
+            interactionOptions: const InteractionOptions(
+              flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+            ),
           ),
           children: [
             TileLayer(

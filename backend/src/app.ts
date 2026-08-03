@@ -77,6 +77,8 @@ app.get('/health', async (_req, res) => {
 app.use('/actions', actionsRouter);
 app.use('/events', eventsRouter);
 
+import { trackingRouter } from './modules/tracking/tracking.routes';
+
 // Generic /api prefix - personal-education module
 app.use('/api', personalEducationRouter);
 
@@ -96,6 +98,7 @@ app.use('/api/admin', designationRouter);
 app.use('/api', instituteRouter);
 app.use('/api/salary', salaryRouter);
 app.use('/api', lookupRouter);
+app.use('/api/tracking', trackingRouter);
 app.use('/api/events', sseEventsRouter);
 
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

@@ -38,9 +38,9 @@ function buildPermissionsMap(
   return map;
 }
 
-async function storeSession(userId: string, roleId: string) {
+async function storeSession(userId: string, roleId: string, token: string) {
   await connectRedis();
-  await redis.set(`session:${userId}`, '1', { EX: SESSION_TTL });
+  await redis.set(`session:${userId}`, token, { EX: SESSION_TTL });
   // Track user→role membership for bulk invalidation on permission changes
   await redis.sAdd(`role_users:${roleId}`, userId);
   await redis.expire(`role_users:${roleId}`, SESSION_TTL);
@@ -130,7 +130,7 @@ export const authService = {
     );
 
     // 5. Record session in Redis
-    await storeSession(user.id, user.roleId);
+    await storeSession(user.id, user.roleId, token);
 
     // 6. Update lastLoginAt
     await prisma.user.update({

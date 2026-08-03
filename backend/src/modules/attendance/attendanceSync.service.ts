@@ -57,8 +57,46 @@ async function insertMappedEtimePunches(
   }
 
   let inserted = 0;
-  for (let i = 0; i < rows.length; i += BATCH_INSERT) {
-    const chunk = rows.slice(i, i + BATCH_INSERT);
+
+  // Group by employee and date
+  const punchGroups: Record<string, typeof rows> = {};
+  for (const r of rows) {
+    const ymd = `${r.punchAt.getFullYear()}-${String(r.punchAt.getMonth() + 1).padStart(2, '0')}-${String(r.punchAt.getDate()).padStart(2, '0')}`;
+    const key = `${r.employeeId}_${ymd}`;
+    if (!punchGroups[key]) punchGroups[key] = [];
+    punchGroups[key].push(r);
+  }
+
+  const finalRows: typeof rows = [];
+  
+  // Filter rows based on daily limit of 2
+  for (const [key, groupRows] of Object.entries(punchGroups)) {
+    const employeeId = groupRows[0].employeeId;
+    const ymd = key.split('_')[1];
+    
+    // Sort incoming punches chronologically
+    groupRows.sort((a, b) => a.punchAt.getTime() - b.punchAt.getTime());
+    
+    // Check DB for existing punches on this day
+    const m = ymd.split('-');
+    const startOfDay = new Date(Number(m[0]), Number(m[1]) - 1, Number(m[2]));
+    const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
+    
+    const dbCount = await prisma.attendancePunch.count({
+      where: {
+        employeeId,
+        punchAt: { gte: startOfDay, lt: endOfDay }
+      }
+    });
+    
+    const allowedNew = Math.max(0, 2 - dbCount);
+    if (allowedNew > 0) {
+      finalRows.push(...groupRows.slice(0, allowedNew));
+    }
+  }
+
+  for (let i = 0; i < finalRows.length; i += BATCH_INSERT) {
+    const chunk = finalRows.slice(i, i + BATCH_INSERT);
     const res = await prisma.attendancePunch.createMany({
       data: chunk,
       skipDuplicates: true,

@@ -971,6 +971,7 @@ export const attendanceService = {
     deviceInfo: any;
     biometricVerified: boolean;
     biometricToken?: string | null;
+    reason?: string;
   }) {
     if (!params.biometricVerified && !params.deviceInfo) {
       throw new Error('Punch must be authenticated with biometrics or a trusted device fingerprint.');
@@ -1024,6 +1025,24 @@ export const attendanceService = {
     }
 
     const dt = new Date();
+    
+    // Enforce two-punch limit unless reason is provided
+    const startOfDay = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+    const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
+    
+    const todaysPunchesCount = await prisma.attendancePunch.count({
+      where: {
+        employeeId: params.employeeId,
+        punchAt: { gte: startOfDay, lt: endOfDay }
+      }
+    });
+
+    if (todaysPunchesCount >= 2) {
+      if (!params.reason || params.reason.trim().length === 0) {
+        throw new Error('REASON_REQUIRED');
+      }
+    }
+
     const row = await prisma.attendancePunch.create({
       data: {
         employeeId: params.employeeId,
@@ -1036,8 +1055,9 @@ export const attendanceService = {
         longitude: params.longitude,
         locationId: matchedLocationId,
         deviceInfo: params.deviceInfo ? params.deviceInfo : undefined,
+        reason: params.reason ? params.reason.trim() : undefined,
       },
-      select: { id: true, employeeId: true, punchAt: true, terminalId: true, punchType: true, source: true, latitude: true, longitude: true, locationId: true, location: true },
+      select: { id: true, employeeId: true, punchAt: true, terminalId: true, punchType: true, source: true, latitude: true, longitude: true, locationId: true, location: true, reason: true },
     });
 
     return {
@@ -1098,4 +1118,5 @@ export const attendanceService = {
     return { success: true };
   }
 };
+
 

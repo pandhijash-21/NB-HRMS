@@ -107,8 +107,6 @@ class AdminAttendanceScreen extends ConsumerWidget {
             ),
             data: (policy) => _PolicyCard(policy: policy),
           ),
-          const SizedBox(height: 16),
-          _ManualPunchCard(selectedDate: date),
           const SizedBox(height: 24),
           Text(
             'Employees',
@@ -384,149 +382,6 @@ class _PolicyCardState extends ConsumerState<_PolicyCard> {
   }
 }
 
-class _ManualPunchCard extends ConsumerStatefulWidget {
-  const _ManualPunchCard({required this.selectedDate});
-
-  final String selectedDate;
-
-  @override
-  ConsumerState<_ManualPunchCard> createState() => _ManualPunchCardState();
-}
-
-class _ManualPunchCardState extends ConsumerState<_ManualPunchCard> {
-  final _employeeCtrl = TextEditingController();
-  TimeOfDay _time = const TimeOfDay(hour: 9, minute: 0);
-  String _punchType = 'IN';
-  bool _submitting = false;
-
-  @override
-  void dispose() {
-    _employeeCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _submit() async {
-    final employeeId = int.tryParse(_employeeCtrl.text.trim());
-    if (employeeId == null || employeeId <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a valid employee ID.')),
-      );
-      return;
-    }
-    setState(() => _submitting = true);
-    try {
-      final hh = _time.hour.toString().padLeft(2, '0');
-      final mm = _time.minute.toString().padLeft(2, '0');
-      await ref.read(attendanceRepositoryProvider).createAdminPunch({
-        'employeeId': employeeId,
-        'punchAt': '${widget.selectedDate}T$hh:$mm:00+05:30',
-        'punchType': _punchType,
-        'terminalId': 'MANUAL',
-      });
-      invalidateAttendanceAdminData(ref);
-      _employeeCtrl.clear();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Punch added.')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
-      }
-    } finally {
-      if (mounted) setState(() => _submitting = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return _SectionCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Admin controls: add manual punch',
-            style: TextStyle(
-              fontWeight: FontWeight.w800,
-              fontSize: 14,
-              color: isDark ? Colors.white : const Color(0xFF212F3D),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              SizedBox(
-                width: 140,
-                child: TextField(
-                  controller: _employeeCtrl,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  decoration: const InputDecoration(
-                    labelText: 'Employee ID',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                ),
-              ),
-              OutlinedButton(
-                onPressed: () async {
-                  final picked = await showTimePicker(context: context, initialTime: _time);
-                  if (picked != null) setState(() => _time = picked);
-                },
-                child: Text(
-                  '${_time.hour.toString().padLeft(2, '0')}:${_time.minute.toString().padLeft(2, '0')}',
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-              ),
-              SizedBox(
-                width: 100,
-                child: DropdownButtonFormField<String>(
-                  initialValue: _punchType,
-                  decoration: const InputDecoration(
-                    labelText: 'Punch Type',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'IN', child: Text('IN')),
-                    DropdownMenuItem(value: 'OUT', child: Text('OUT')),
-                  ],
-                  onChanged: (v) {
-                    if (v != null) setState(() => _punchType = v);
-                  },
-                ),
-              ),
-              Chip(
-                label: const Text('MANUAL', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11)),
-                backgroundColor: isDark ? const Color(0xFF2B2722) : const Color(0xFFECEFF1),
-              ),
-              FilledButton(
-                onPressed: _submitting ? null : _submit,
-                style: FilledButton.styleFrom(
-                  backgroundColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
-                  foregroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
-                ),
-                child: _submitting
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Add Punch', style: TextStyle(fontWeight: FontWeight.w800)),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _EmployeeDayTile extends StatelessWidget {
   const _EmployeeDayTile({
     required this.row,
@@ -645,137 +500,28 @@ Future<void> showAdminPunchDialog(
   String? dateYmd,
 }) async {
   final isDark = Theme.of(context).brightness == Brightness.dark;
-  final employeeController = TextEditingController(
-    text: employeeId?.toString() ?? existing?.employeeId?.toString() ?? '',
-  );
-  final punchTypeController = TextEditingController(text: existing?.punchType ?? 'IN');
-  final terminalController = TextEditingController(text: existing?.terminalId ?? 'MANUAL');
-  DateTime punchAt = existing != null
-      ? DateTime.parse(existing.punchAt).toLocal()
-      : () {
-          if (dateYmd != null) {
-            final parts = dateYmd.split('-');
-            final now = DateTime.now();
-            return DateTime(
-              int.parse(parts[0]),
-              int.parse(parts[1]),
-              int.parse(parts[2]),
-              now.hour,
-              now.minute,
-            );
-          }
-          return DateTime.now();
-        }();
-
   await showDialog<void>(
     context: context,
-    builder: (ctx) => StatefulBuilder(
-      builder: (ctx, setLocal) => AlertDialog(
-        backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          existing == null ? 'Add Punch' : 'Edit Punch',
-          style: TextStyle(
-            fontWeight: FontWeight.w800,
-            color: isDark ? Colors.white : const Color(0xFF212F3D),
-          ),
+    builder: (ctx) => AlertDialog(
+      backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Text(
+        'Action Not Allowed',
+        style: TextStyle(
+          fontWeight: FontWeight.w800,
+          color: isDark ? Colors.white : const Color(0xFF212F3D),
         ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (existing == null)
-                TextField(
-                  controller: employeeController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Employee ID',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              if (existing == null) const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: () async {
-                  final t = await showTimePicker(
-                    context: ctx,
-                    initialTime: TimeOfDay.fromDateTime(punchAt),
-                  );
-                  if (t != null) {
-                    setLocal(() {
-                      punchAt = DateTime(
-                        punchAt.year,
-                        punchAt.month,
-                        punchAt.day,
-                        t.hour,
-                        t.minute,
-                      );
-                    });
-                  }
-                },
-                icon: const Icon(Icons.access_time_rounded, size: 16, color: Color(0xFFC5A059)),
-                label: Text('Time: ${formatIsoTime(punchAt.toIso8601String())}'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: punchTypeController,
-                decoration: const InputDecoration(
-                  labelText: 'Punch Type (IN/OUT)',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: terminalController,
-                decoration: const InputDecoration(
-                  labelText: 'Method / Terminal',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () async {
-              try {
-                final repo = ref.read(attendanceRepositoryProvider);
-                final ymd =
-                    '${punchAt.year}-${punchAt.month.toString().padLeft(2, '0')}-${punchAt.day.toString().padLeft(2, '0')}';
-                final hh = punchAt.hour.toString().padLeft(2, '0');
-                final mm = punchAt.minute.toString().padLeft(2, '0');
-                final body = {
-                  'punchAt': '${ymd}T$hh:$mm:00+05:30',
-                  'punchType': punchTypeController.text.trim().isEmpty
-                      ? 'MANUAL'
-                      : punchTypeController.text.trim(),
-                  'terminalId': terminalController.text.trim().isEmpty
-                      ? 'MANUAL'
-                      : terminalController.text.trim(),
-                };
-                if (existing != null) {
-                  await repo.updateAdminPunch(existing.id, body);
-                } else {
-                  await repo.createAdminPunch({
-                    ...body,
-                    'employeeId': int.parse(employeeController.text.trim()),
-                  });
-                }
-                invalidateAttendanceAdminData(ref);
-                if (ctx.mounted) Navigator.pop(ctx);
-              } catch (e) {
-                if (ctx.mounted) {
-                  ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('$e')));
-                }
-              }
-            },
-            child: Text(existing == null ? 'Add' : 'Save'),
-          ),
-        ],
       ),
+      content: const Text(
+        'Manual punches have been completely disabled as per company policy. No manual additions or edits are permitted for any roles.',
+      ),
+      actions: [
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Acknowledge'),
+        ),
+      ],
     ),
   );
-  employeeController.dispose();
-  punchTypeController.dispose();
-  terminalController.dispose();
 }
+

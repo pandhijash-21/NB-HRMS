@@ -298,12 +298,27 @@ class _HistoryDayCard extends StatelessWidget {
                         deviceName = '$deviceName ($platform)';
                       }
                     }
-                    
-                    return Text([
-                      p.punchType,
-                      p.location?['name'] != null ? 'Zone: ${p.location!['name']}' : p.terminalId,
-                      deviceName != null ? 'Device: $deviceName' : p.source,
-                    ].where((s) => s != null && s.toString().isNotEmpty).join(' · '));
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text([
+                          p.punchType,
+                          p.location?['name'] != null ? 'Zone: ${p.location!['name']}' : p.terminalId,
+                          deviceName != null ? 'Device: $deviceName' : p.source,
+                        ].where((s) => s != null && s.toString().isNotEmpty).join(' • ')),
+                        if (p.reason != null && p.reason!.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              'Reason: ${p.reason}',
+                              style: TextStyle(
+                                color: Theme.of(context).brightness == Brightness.dark ? Colors.orange.shade300 : Colors.deepOrange.shade700,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                      ],
+                    );
                   }
                 ),
                 trailing: p.source == 'MOBILE_APP' 

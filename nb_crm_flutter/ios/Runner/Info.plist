@@ -6,6 +6,13 @@
 	<string>This app needs access to location when open to verify geofenced attendance.</string>
 	<key>NSLocationAlwaysUsageDescription</key>
 	<string>This app needs access to location to verify geofenced attendance.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>This app needs background location to continuously track employees on duty.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+		<string>fetch</string>
+	</array>
 	<key>NSFaceIDUsageDescription</key>
 	<string>This app requires Face ID or Touch ID to verify your identity for attendance punching.</string>
 	<key>CFBundleDevelopmentRegion</key>

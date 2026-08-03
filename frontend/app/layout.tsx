@@ -16,6 +16,8 @@ export const metadata: Metadata = {
   description: "Human Resource Management System",
 };
 
+import { LocationGuard } from "@/components/auth/LocationGuard";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -27,7 +29,9 @@ export default function RootLayout({
         className={`${roboto.variable} antialiased`}
       >
         <AppProviders>
-          {children}
+          <LocationGuard>
+            {children}
+          </LocationGuard>
           <Toaster
             position="top-right"
             richColors

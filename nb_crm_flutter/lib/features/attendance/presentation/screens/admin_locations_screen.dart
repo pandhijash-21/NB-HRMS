@@ -236,6 +236,10 @@ class _AdminLocationsScreenState extends ConsumerState<AdminLocationsScreen> {
                           : const LatLng(23.0225, 72.5714), // Default Ahmedabad
                       initialZoom: 13.0,
                       minZoom: 3.0,
+                      maxZoom: 18.0,
+                      interactionOptions: const InteractionOptions(
+                        flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+                      ),
                       onTap: (tapPosition, point) {
                         _showAddLocationDialog({
                           'latitude': point.latitude,

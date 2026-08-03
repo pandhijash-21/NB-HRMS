@@ -18,9 +18,9 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     // Validate session still exists in Redis (honours logout / permission revocation)
     try {
       await connectRedis();
-      const sessionExists = await redis.get(`session:${userId}`);
-      if (!sessionExists) {
-        return res.status(401).json(fail('Session expired. Please log in again.'));
+      const sessionToken = await redis.get(`session:${userId}`);
+      if (!sessionToken || sessionToken !== token) {
+        return res.status(401).json(fail('Session expired or logged in from another device. Please log in again.'));
       }
     } catch {
       // Redis unavailable — fall through and accept the JWT as-is

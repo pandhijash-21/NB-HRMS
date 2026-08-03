@@ -97,6 +97,18 @@ class _MonthlyOverviewCardState extends ConsumerState<_MonthlyOverviewCard> {
     final salaryAbsent = attendance?['salaryAbsentDays'] ??
         ((trueAbsent is num ? trueAbsent.toInt() : 0) +
             (unpaidLeave is num ? unpaidLeave.toInt() : 0));
+    final absentDates = <String>[
+      ...((attendance?['absentDates'] as List?) ?? const []).map((e) => e.toString()),
+      ...((breakdown?['absentDates'] as List?) ?? const []).map((e) => e.toString()),
+      ...((widget.overview['days'] as List?) ?? const [])
+          .where((d) => d is Map && (d['dayStatus']?.toString().toUpperCase() == 'ABSENT'))
+          .map((d) => (d as Map)['date']?.toString() ?? '')
+          .where((d) => d.isNotEmpty),
+    ];
+    final absentDatesUnique = absentDates.toSet().toList()..sort();
+    final absentDatesLabel = absentDatesUnique.isEmpty
+        ? 'none'
+        : absentDatesUnique.join(', ');
 
     return Card(
       child: Padding(
@@ -186,7 +198,7 @@ class _MonthlyOverviewCardState extends ConsumerState<_MonthlyOverviewCard> {
               children: [
                 Tooltip(
                   message:
-                      'Absent = $trueAbsent · Leave (salary cut) = $unpaidLeave',
+                      'Absent = $trueAbsent ($absentDatesLabel)\nLeave (salary cut) = $unpaidLeave',
                   child: _chip(context, 'Absent*', '$salaryAbsent'),
                 ),
               ],
@@ -199,7 +211,9 @@ class _MonthlyOverviewCardState extends ConsumerState<_MonthlyOverviewCard> {
               if (breakdown != null) ...[
                 const SizedBox(height: 4),
                 Text(
-                  'Cut days: absent ${breakdown['trueAbsentDays'] ?? 0} + unpaid leave ${breakdown['unpaidLeaveDays'] ?? 0} '
+                  'Cut days: absent ${breakdown['trueAbsentDays'] ?? 0}'
+                  '${((breakdown['absentDates'] as List?)?.isNotEmpty ?? false) ? ' (${(breakdown['absentDates'] as List).join(', ')})' : ''}'
+                  ' + unpaid leave ${breakdown['unpaidLeaveDays'] ?? 0} '
                   '(of ${breakdown['daysInMonth'] ?? 0} days)'
                   '${breakdown['reimbursementTotal'] != null ? ' · Reimbursements ${formatInr(breakdown['reimbursementTotal'])}' : ''}',
                   style: TextStyle(

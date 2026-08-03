@@ -247,6 +247,7 @@ function defaultGrossPay(
         (d) =>
           d.category === 'EARNING' &&
           d.columnIdentifier !== 'gross_pay' &&
+          d.columnIdentifier !== 'gross_salary' &&
           d.columnIdentifier !== 'net_pay',
       )
       .reduce((sum, d) => sum + (values[columnKey(d.columnIdentifier, d.category)] ?? 0), 0),
@@ -447,18 +448,72 @@ export function computeFullSalary(
   return { columns, gross_pay, total_deductions: round2(total_deductions), net_pay };
 }
 
-const AGGREGATE_COLUMNS = new Set(['gross_pay', 'total_deductions', 'net_pay']);
+const AGGREGATE_COLUMNS = new Set(['gross_pay', 'total_deductions', 'net_pay', 'gross_salary']);
 
 /**
- * Prorate leaf columns by attendance cut flags, then rebuild gross / deductions / net.
+ * Build override amounts for columns with cutOnAbsent / cutOnLeave.
+ * Caller should recompute salary with these overrides so dependent formulas
+ * (gross_salary, gross_pay, deduction mirrors, etc.) stay consistent.
+ *
  * payable = A * (D - cutDays) / D
  * cutDays = (cutOnAbsent ? absentDays : 0) + (cutOnLeave ? unpaidLeaveDays : 0)
+ */
+export function buildAttendanceCutOverrides(
+  result: ComputeResult,
+  columnDefinitions: SalaryColumnDefinition[],
+  opts: { daysInMonth: number; absentDays: number; unpaidLeaveDays: number },
+): Record<string, number> {
+  const D = Math.max(1, Math.floor(opts.daysInMonth));
+  const X = Math.max(0, opts.absentDays);
+  const L = Math.max(0, opts.unpaidLeaveDays);
+  const defByKey = new Map(
+    columnDefinitions.map((d) => [columnKey(d.columnIdentifier, d.category), d]),
+  );
+
+  const overrides: Record<string, number> = {};
+  for (const c of result.columns) {
+    const key = columnKey(c.column_identifier, c.category);
+    const def = defByKey.get(key);
+    if (!def || AGGREGATE_COLUMNS.has(c.column_identifier)) continue;
+    const cutOnLeave = Boolean((def as { cutOnLeave?: boolean }).cutOnLeave);
+    const cutOnAbsent = Boolean((def as { cutOnAbsent?: boolean }).cutOnAbsent);
+    const cutDays = (cutOnAbsent ? X : 0) + (cutOnLeave ? L : 0);
+    if (cutDays <= 0) continue;
+    const payable = round2((c.effective_value * (D - cutDays)) / D);
+    overrides[key] = payable;
+    overrides[c.column_identifier] = payable;
+  }
+  return overrides;
+}
+
+/**
+ * Prorate leaf columns by attendance cut flags, then rebuild gross / deductions / net
+ * by re-evaluating formulas when rules are provided. Prefer
+ * buildAttendanceCutOverrides + computeFullSalary for full formula chains.
  */
 export function applyAttendanceProration(
   result: ComputeResult,
   columnDefinitions: SalaryColumnDefinition[],
   opts: { daysInMonth: number; absentDays: number; unpaidLeaveDays: number },
+  rules?: RuleWithConditions[],
 ): ComputeResult {
+  const cutOverrides = buildAttendanceCutOverrides(result, columnDefinitions, opts);
+  if (!Object.keys(cutOverrides).length) return result;
+
+  if (rules?.length) {
+    // Recompute entire sheet with cut amounts locked — keeps gross_salary / gross_pay / mirrors correct.
+    const baseOverrides: Record<string, number> = {};
+    for (const c of result.columns) {
+      // Preserve only explicit prior overrides is handled by caller; here lock cut leaves.
+      const key = columnKey(c.column_identifier, c.category);
+      if (cutOverrides[key] != null) baseOverrides[key] = cutOverrides[key]!;
+    }
+    // Merge: cut overrides win; use pre-cut effective for non-cut configurable leaves only if they were overrides?
+    // Safer: pass only cut overrides and let rules recompute the rest from template defaults + those cuts.
+    return computeFullSalary(columnDefinitions, rules, cutOverrides);
+  }
+
+  // Fallback (no rules): mutate leaves then rebuild aggregates without double-counting gross_salary.
   const D = Math.max(1, Math.floor(opts.daysInMonth));
   const X = Math.max(0, opts.absentDays);
   const L = Math.max(0, opts.unpaidLeaveDays);
@@ -492,7 +547,6 @@ export function applyAttendanceProration(
 
   const sorted = [...columnDefinitions].sort((a, b) => a.evaluationOrder - b.evaluationOrder);
 
-  // Rebuild aggregates from prorated leaf values.
   for (let i = 0; i < columns.length; i++) {
     const c = columns[i]!;
     if (c.column_identifier === 'gross_pay' && c.category === 'EARNING') {
@@ -515,7 +569,9 @@ export function applyAttendanceProration(
       values[columnKey('total_deductions', 'DEDUCTION')] = total;
     } else if (c.column_identifier === 'net_pay') {
       const gross = values[columnKey('gross_pay', 'EARNING')] ?? 0;
-      const total = values[columnKey('total_deductions', 'DEDUCTION')] ?? 0;
+      const total =
+        values[columnKey('total_deductions', 'DEDUCTION')] ??
+        defaultTotalDeductions(sorted, values);
       const net = round2(gross - total);
       columns[i] = {
         ...c,
@@ -528,7 +584,9 @@ export function applyAttendanceProration(
   }
 
   const gross_pay = values[columnKey('gross_pay', 'EARNING')] ?? 0;
-  const total_deductions = values[columnKey('total_deductions', 'DEDUCTION')] ?? 0;
+  const total_deductions =
+    values[columnKey('total_deductions', 'DEDUCTION')] ??
+    defaultTotalDeductions(sorted, values);
   const net_pay =
     values[columnKey('net_pay', 'DEDUCTION')] ??
     values[columnKey('net_pay', 'EARNING')] ??

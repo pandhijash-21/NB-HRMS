@@ -427,12 +427,14 @@ class AttendanceMonthlyStats {
     this.unpaidLeaveDays = 0,
     this.salaryAbsentDays = 0,
     this.daysInMonth = 0,
+    this.absentDates = const [],
   });
 
   final int presentDays;
   final int lateDays;
   final int halfDays;
   final int absentDays;
+  final List<String> absentDates;
   final int totalWorkingMinutes;
   final double totalWorkingHours;
   final int leaveApplications;
@@ -444,11 +446,15 @@ class AttendanceMonthlyStats {
   final int daysInMonth;
 
   factory AttendanceMonthlyStats.fromJson(Map<String, dynamic> json) {
+    final datesRaw = json['absentDates'] ?? json['absent_dates'];
     return AttendanceMonthlyStats(
       presentDays: _asInt(json['presentDays']),
       lateDays: _asInt(json['lateDays']),
       halfDays: _asInt(json['halfDays']),
       absentDays: _asInt(json['absentDays']),
+      absentDates: datesRaw is List
+          ? datesRaw.map((e) => e.toString()).where((e) => e.isNotEmpty).toList()
+          : const [],
       totalWorkingMinutes: _asInt(json['totalWorkingMinutes']),
       totalWorkingHours: (json['totalWorkingHours'] as num?)?.toDouble() ?? 0,
       leaveApplications: _asInt(json['leaveApplications']),

@@ -825,6 +825,9 @@ export const attendanceService = {
       0,
       history.days.filter((d) => (d as { dayStatus?: string }).dayStatus === 'ABSENT').length,
     );
+    const absentDates = history.days
+      .filter((d) => (d as { dayStatus?: string }).dayStatus === 'ABSENT')
+      .map((d) => d.date);
     const daysInMonth = history.days.length;
     const salaryAbsentDays = absentDays + unpaidLeaveDays;
 
@@ -839,6 +842,7 @@ export const attendanceService = {
         lateDays,
         halfDays,
         absentDays,
+        absentDates,
         leaveDays,
         holidayDays,
         unpaidLeaveDays,

@@ -414,12 +414,21 @@ class _StatsCard extends StatelessWidget {
                 _chip(context, 'Late', '${summary.lateDays}'),
                 _chip(context, 'Approved leave', '${summary.leaveDays > 0 ? summary.leaveDays : summary.leaveDaysInMonth}'),
                 _chip(context, 'Holiday', '${summary.holidayDays}'),
-                _chip(context, 'Absent*', '${summary.absentDays}'),
+                _chip(
+                  context,
+                  'Absent*',
+                  '${summary.absentDays}',
+                  tooltip: summary.absentDates.isEmpty
+                      ? 'No punch, and not holiday / approved leave'
+                      : 'Absent on: ${summary.absentDates.join(', ')}',
+                ),
               ],
             ),
             const SizedBox(height: 6),
             Text(
-              '* Absent = no punch, and not holiday / approved leave',
+              summary.absentDates.isEmpty
+                  ? '* Absent = no punch, and not holiday / approved leave'
+                  : '* Absent dates: ${summary.absentDates.join(', ')}',
               style: TextStyle(fontSize: 11, color: Theme.of(context).textTheme.bodySmall?.color),
             ),
           ],
@@ -428,9 +437,9 @@ class _StatsCard extends StatelessWidget {
     );
   }
 
-  Widget _chip(BuildContext context, String label, String value) {
+  Widget _chip(BuildContext context, String label, String value, {String? tooltip}) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Chip(
+    final chip = Chip(
       label: Text(
         '$label: $value',
         style: TextStyle(
@@ -450,6 +459,8 @@ class _StatsCard extends StatelessWidget {
       ),
       visualDensity: VisualDensity.compact,
     );
+    if (tooltip == null || tooltip.isEmpty) return chip;
+    return Tooltip(message: tooltip, child: chip);
   }
 }
 

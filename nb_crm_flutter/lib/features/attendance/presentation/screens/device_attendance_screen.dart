@@ -331,23 +331,7 @@ class _PreviewCard extends StatelessWidget {
   final DevicePunchPreviewRow row;
   final bool isDark;
 
-  /// Format PayTime/API punch times in IST (Asia/Kolkata).
-  String _formatPunchAt(String iso) {
-    final d = DateTime.tryParse(iso);
-    if (d == null) return iso;
-    // Convert to IST explicitly (+05:30) so web/device agree.
-    final ist = d.toUtc().add(const Duration(hours: 5, minutes: 30));
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-    ];
-    final dd = ist.day.toString().padLeft(2, '0');
-    final mon = months[ist.month - 1];
-    final yyyy = ist.year;
-    final hh = ist.hour.toString().padLeft(2, '0');
-    final mm = ist.minute.toString().padLeft(2, '0');
-    return '$dd $mon $yyyy · $hh:$mm IST';
-  }
+  String _formatPunchAt(String iso) => formatIstTimestamp(iso);
 
   @override
   Widget build(BuildContext context) {
@@ -721,6 +705,25 @@ class _IntegrateTabState extends ConsumerState<_IntegrateTab> {
   }
 }
 
+/// Format ISO timestamps in IST (Asia/Kolkata), matching Raw punch list.
+String formatIstTimestamp(String? iso, {String fallback = '—'}) {
+  if (iso == null || iso.isEmpty) return fallback;
+  final d = DateTime.tryParse(iso);
+  if (d == null) return iso;
+  final ist = d.toUtc().add(const Duration(hours: 5, minutes: 30));
+  const months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+  final dd = ist.day.toString().padLeft(2, '0');
+  final mon = months[ist.month - 1];
+  final yyyy = ist.year;
+  final hh = ist.hour.toString().padLeft(2, '0');
+  final mm = ist.minute.toString().padLeft(2, '0');
+  final ss = ist.second.toString().padLeft(2, '0');
+  return '$dd $mon $yyyy · $hh:$mm:$ss IST';
+}
+
 class _StatusCard extends StatelessWidget {
   const _StatusCard({required this.status, required this.isDark});
 
@@ -767,14 +770,14 @@ class _StatusCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            'Last sync: ${m.lastSyncedAt ?? 'never'}',
+            'Last sync: ${formatIstTimestamp(m.lastSyncedAt, fallback: 'never')}',
             style: TextStyle(
               fontSize: 12,
               color: isDark ? Colors.white54 : const Color(0xFF607D8B),
             ),
           ),
           Text(
-            'Cursor: ${m.cursor ?? '—'}',
+            'Cursor: ${formatIstTimestamp(m.cursor)}',
             style: TextStyle(
               fontSize: 12,
               color: isDark ? Colors.white54 : const Color(0xFF607D8B),

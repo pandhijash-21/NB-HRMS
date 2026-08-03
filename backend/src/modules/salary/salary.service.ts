@@ -5,7 +5,7 @@ import {
 } from '@prisma/client';
 import { prisma } from '../../config/prisma';
 import { assignmentService } from '../personal-education/assignment.service';
-import { buildFormulaPreview, computeFullSalary, mergeEmployeeRules, applyAttendanceProration } from './salaryEngine.service';
+import { buildFormulaPreview, computeFullSalary, mergeEmployeeRules, buildAttendanceCutOverrides } from './salaryEngine.service';
 import { getPayCommissionByCode } from './payCommission.service';
 import { columnKey, type ColumnRuleInput } from './salary.types';
 import { columnRuleSchema, validateConditionalConditions } from './salary.validation';
@@ -889,11 +889,23 @@ export const salaryService = {
     }
 
     let computed = await this.computePreview(template.id, mergedOverrides, { employeeId });
-    computed = applyAttendanceProration(computed, columnDefinitions, {
+    const cutOverrides = buildAttendanceCutOverrides(computed, columnDefinitions, {
       daysInMonth: stats.daysInMonth,
       absentDays: stats.absentDays,
       unpaidLeaveDays: stats.unpaidLeaveDays,
     });
+    if (Object.keys(cutOverrides).length) {
+      // Recompute full formula chain with cut amounts locked (avoids double-counting gross_salary).
+      computed = await this.computePreview(
+        template.id,
+        { ...mergedOverrides, ...cutOverrides },
+        { employeeId },
+      );
+    }
+
+    const cutDays = Object.keys(cutOverrides).length
+      ? stats.absentDays + stats.unpaidLeaveDays
+      : 0;
 
     const breakdown = {
       daysInMonth: stats.daysInMonth,
@@ -902,6 +914,10 @@ export const salaryService = {
       salaryAbsentDays: stats.salaryAbsentDays,
       holidayDays: stats.holidayDays,
       leaveDays: stats.leaveDays,
+      cutDaysApplied: cutDays,
+      absentDates: (attendance as { days?: Array<{ date: string; dayStatus?: string }> }).days
+        ?.filter((d) => (d.dayStatus ?? '').toUpperCase() === 'ABSENT')
+        .map((d) => d.date) ?? [],
       reimbursementTotal,
       reimbursementClaims: approvedClaims.length,
     };

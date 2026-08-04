@@ -36,12 +36,14 @@ const configuredCorsOrigins = env.CORS_ALLOWED_ORIGINS?.split(',')
   'http://localhost:9695',
 ];
 
-/** Allow configured origins, localhost (dev), and Vercel preview/prod hosts. */
+/** Allow configured origins, localhost (dev), Vercel, and Netlify hosts. */
 function isAllowedCorsOrigin(origin: string | undefined): boolean {
   if (!origin) return true;
   if (configuredCorsOrigins.includes(origin)) return true;
   if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return true;
   if (/^https:\/\/([a-z0-9-]+\.)*vercel\.app$/i.test(origin)) return true;
+  // Netlify prod + deploy-preview URLs (e.g. abc--site.netlify.app)
+  if (/^https:\/\/([a-z0-9-]+\.)*netlify\.app$/i.test(origin)) return true;
   return false;
 }
 

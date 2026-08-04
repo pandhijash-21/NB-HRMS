@@ -228,6 +228,7 @@ model Employee {
   salaryRecords       EmployeeSalaryRecord[]
   positionAssignments PositionAssignment[]
   locationHistories   LocationHistory[]
+  trips               Trip[]
 
   @@map("employees")
 }
@@ -1683,9 +1684,27 @@ model LocationHistory {
   longitude  Float
   heading    Float?
   timestamp  DateTime @default(now())
+  tripId     String?  @map("trip_id")
 
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  trip     Trip?    @relation(fields: [tripId], references: [id])
 
   @@index([employeeId, timestamp])
   @@map("location_history")
+}
+
+model Trip {
+  id              String   @id @default(uuid())
+  employeeId      Int      @map("employee_id")
+  startLocationId String?  @map("start_location_id")
+  endLocationId   String?  @map("end_location_id")
+  startTime       DateTime @default(now()) @map("start_time")
+  endTime         DateTime? @map("end_time")
+  distanceKm      Float    @default(0) @map("distance_km")
+
+  employee        Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  locationHistories LocationHistory[]
+
+  @@index([employeeId, startTime])
+  @@map("trips")
 }

@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -20,11 +21,23 @@ class _PermissionGuardState extends State<PermissionGuard> {
   bool _hasPermissions = false;
   bool _checking = true;
   String _errorMsg = "";
+  Timer? _timer;
 
   @override
   void initState() {
     super.initState();
     _checkPermissions();
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_hasPermissions && !_checking) {
+        _verifyPermissionsQuietly();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
   }
 
   Future<void> _checkPermissions() async {
@@ -62,7 +75,16 @@ class _PermissionGuardState extends State<PermissionGuard> {
     var locationAlwaysStatus = await Permission.locationAlways.status;
 
     if (locationStatus.isGranted && locationAlwaysStatus.isGranted) {
-      await startBackgroundTracking();
+      if (!kIsWeb && await Permission.notification.isDenied) {
+        await Permission.notification.request();
+      }
+      try {
+        // Wait for app to be fully resumed before starting foreground service
+        await Future.delayed(const Duration(milliseconds: 500));
+        await startBackgroundTracking();
+      } catch (e) {
+        debugPrint("Failed to start background tracking: $e");
+      }
       setState(() {
         _hasPermissions = true;
         _checking = false;
@@ -73,6 +95,44 @@ class _PermissionGuardState extends State<PermissionGuard> {
         _hasPermissions = false;
         _errorMsg = "This app strictly requires Always-On location permissions to function.";
       });
+    }
+  }
+
+  Future<void> _verifyPermissionsQuietly() async {
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      if (mounted) {
+        setState(() {
+          _hasPermissions = false;
+          _errorMsg = "Location services are disabled. Please enable them.";
+        });
+      }
+      return;
+    }
+
+    if (kIsWeb) {
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission != LocationPermission.always && permission != LocationPermission.whileInUse) {
+        if (mounted) {
+          setState(() {
+            _hasPermissions = false;
+            _errorMsg = "This app requires location permissions to function.";
+          });
+        }
+      }
+      return;
+    }
+
+    var locationStatus = await Permission.location.status;
+    var locationAlwaysStatus = await Permission.locationAlways.status;
+
+    if (!(locationStatus.isGranted && locationAlwaysStatus.isGranted)) {
+      if (mounted) {
+        setState(() {
+          _hasPermissions = false;
+          _errorMsg = "This app strictly requires Always-On location permissions to function.";
+        });
+      }
     }
   }
 
@@ -95,7 +155,15 @@ class _PermissionGuardState extends State<PermissionGuard> {
         // Then request background
         var alwaysStatus = await Permission.locationAlways.request();
         if (alwaysStatus.isGranted) {
-          await startBackgroundTracking();
+          if (await Permission.notification.isDenied) {
+            await Permission.notification.request();
+          }
+          try {
+            await Future.delayed(const Duration(milliseconds: 500));
+            await startBackgroundTracking();
+          } catch (e) {
+            debugPrint("Failed to start background tracking: $e");
+          }
           setState(() {
             _hasPermissions = true;
             _checking = false;

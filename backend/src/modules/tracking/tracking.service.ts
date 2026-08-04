@@ -11,6 +11,7 @@ export interface LiveLocation {
   designation?: string;
   isPunchedIn?: boolean;
   isOutsideGeofence?: boolean;
+  tripId?: string | null;
 }
 
 function getDistanceFromLatLonInKm(lat1: number, lon1: number, lat2: number, lon2: number) {
@@ -89,33 +90,95 @@ export const trackingService = {
     let isOutsideGeofence = false;
 
     if (isPunchedIn) {
-      // Store history
-      await prisma.locationHistory.create({
-        data: {
-          employeeId: params.employeeId,
-          latitude: params.latitude,
-          longitude: params.longitude,
-          heading: params.heading
-        }
-      });
-
-      // Check geofences
-      const activeLocs = await prisma.attendanceLocation.findMany({
-        where: { isActive: true }
-      });
-      
-      if (activeLocs.length > 0) {
-        let insideAny = false;
-        for (const loc of activeLocs) {
+        const activeLocs = await prisma.attendanceLocation.findMany({
+          where: { isActive: true }
+        });
+        
+        if (activeLocs.length > 0) {
+          let insideAny = false;
+          let enteredGeofenceId: string | null = null;
+          for (const loc of activeLocs) {
           if (loc) {
             const dist = getDistanceFromLatLonInKm(params.latitude, params.longitude, loc.latitude, loc.longitude);
             if (dist <= loc.radiusKm) {
               insideAny = true;
+              enteredGeofenceId = loc.id;
               break;
             }
           }
         }
         isOutsideGeofence = !insideAny;
+
+        // Trip Management
+        const activeTrip = await prisma.trip.findFirst({
+          where: { employeeId: params.employeeId, endTime: null },
+          orderBy: { startTime: 'desc' }
+        });
+
+        let currentTripId: string | null = activeTrip?.id || null;
+
+        if (isOutsideGeofence && !activeTrip) {
+          // Employee just left a geofence, start a new trip
+          const newTrip = await prisma.trip.create({
+            data: {
+              employeeId: params.employeeId,
+            }
+          });
+          currentTripId = newTrip.id;
+        } else if (!isOutsideGeofence && activeTrip) {
+          // Employee just entered a geofence, end the trip
+          const tripPoints = await prisma.locationHistory.findMany({
+            where: { tripId: activeTrip.id },
+            orderBy: { timestamp: 'asc' }
+          });
+          
+          let totalDistanceKm = 0;
+          for (let i = 1; i < tripPoints.length; i++) {
+            totalDistanceKm += getDistanceFromLatLonInKm(
+              tripPoints[i-1].latitude, tripPoints[i-1].longitude,
+              tripPoints[i].latitude, tripPoints[i].longitude
+            );
+          }
+
+          // Also add distance to the current ping
+          if (tripPoints.length > 0) {
+            const lastPoint = tripPoints[tripPoints.length - 1];
+            totalDistanceKm += getDistanceFromLatLonInKm(
+              lastPoint.latitude, lastPoint.longitude,
+              params.latitude, params.longitude
+            );
+          }
+
+          await prisma.trip.update({
+            where: { id: activeTrip.id },
+            data: {
+              endTime: new Date(),
+              distanceKm: totalDistanceKm,
+              endLocationId: enteredGeofenceId
+            }
+          });
+        }
+
+        // Store history with tripId
+        await prisma.locationHistory.create({
+          data: {
+            employeeId: params.employeeId,
+            latitude: params.latitude,
+            longitude: params.longitude,
+            heading: params.heading,
+            tripId: currentTripId
+          }
+        });
+      } else {
+        // No active geofences, just log it
+        await prisma.locationHistory.create({
+          data: {
+            employeeId: params.employeeId,
+            latitude: params.latitude,
+            longitude: params.longitude,
+            heading: params.heading
+          }
+        });
       }
     }
 
@@ -148,6 +211,41 @@ export const trackingService = {
     }
     
     return locations;
+  },
+
+  async getAllTrips(employeeId?: number) {
+    return prisma.trip.findMany({
+      where: employeeId ? { employeeId } : undefined,
+      include: {
+        employee: {
+          select: {
+            id: true,
+            generalInfo: { select: { fullName: true, employeeCode: true, designation: true } }
+          }
+        }
+      },
+      orderBy: { startTime: 'desc' }
+    });
+  },
+
+  async getTripRoute(tripId: string) {
+    const trip = await prisma.trip.findUnique({
+      where: { id: tripId },
+      include: {
+        employee: {
+          select: { generalInfo: { select: { fullName: true } } }
+        }
+      }
+    });
+    if (!trip) throw new Error('Trip not found');
+
+    const route = await prisma.locationHistory.findMany({
+      where: { tripId },
+      orderBy: { timestamp: 'asc' },
+      select: { latitude: true, longitude: true, heading: true, timestamp: true }
+    });
+
+    return { trip, route };
   }
 };
 

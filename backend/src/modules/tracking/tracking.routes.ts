@@ -44,3 +44,24 @@ trackingRouter.get('/live', requireAuth, async (req: Request, res: Response) => 
     return res.status(400).json(fail(e.message));
   }
 });
+
+// Admin/HR: Get all trips (optionally filtered by employee)
+trackingRouter.get('/trips', requireAuth, requirePermission('view_live_tracking'), async (req: Request, res: Response) => {
+  try {
+    const employeeId = req.query.employeeId ? Number(req.query.employeeId) : undefined;
+    const data = await trackingService.getAllTrips(employeeId);
+    return res.json(ok(data));
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});
+
+// Admin/HR: Get specific trip route
+trackingRouter.get('/trips/:id/route', requireAuth, requirePermission('view_live_tracking'), async (req: Request, res: Response) => {
+  try {
+    const data = await trackingService.getTripRoute(req.params.id);
+    return res.json(ok(data));
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});

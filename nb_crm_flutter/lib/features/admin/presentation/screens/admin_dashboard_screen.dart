@@ -161,6 +161,13 @@ class AdminDashboardScreen extends ConsumerWidget {
               color: const Color(0xFFea580c),
               onTap: () => context.push('/admin/approvals'),
             ),
+            _KpiItem(
+              label: 'Recorded Trips',
+              value: 'View',
+              icon: Icons.directions_car_rounded,
+              color: const Color(0xFFdb2777),
+              onTap: () => context.push('/admin/trips'),
+            ),
           ];
 
           return ListView(

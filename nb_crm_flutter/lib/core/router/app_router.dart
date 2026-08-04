@@ -15,6 +15,8 @@ import '../../features/admin/presentation/screens/admin_employee_detail_screen.d
 import '../../features/admin/presentation/screens/admin_approvals_screen.dart';
 import '../../features/admin/presentation/screens/admin_dashboard_screen.dart';
 import '../../features/admin/presentation/screens/admin_live_tracking_screen.dart';
+import '../../features/admin/presentation/screens/admin_trips_screen.dart';
+import '../../features/admin/presentation/screens/admin_trip_replay_screen.dart';
 import '../../features/admin/presentation/screens/admin_audit_stub_screen.dart';
 import '../../features/org/presentation/screens/institutes_screen.dart';
 import '../../features/org/presentation/screens/institute_detail_screen.dart';
@@ -322,6 +324,22 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/admin/live-tracking',
             builder: (context, state) => const AdminLiveTrackingScreen(),
+          ),
+          GoRoute(
+            path: '/admin/trips',
+            builder: (context, state) => const AdminTripsScreen(),
+          ),
+          GoRoute(
+            path: '/admin/trips/:id',
+            builder: (context, state) {
+              final id = state.pathParameters['id'];
+              if (id == null || id.isEmpty) {
+                return const Scaffold(
+                  body: Center(child: Text('Invalid Trip ID')),
+                );
+              }
+              return AdminTripReplayScreen(tripId: id);
+            },
           ),
           GoRoute(
             path: '/admin/audit',

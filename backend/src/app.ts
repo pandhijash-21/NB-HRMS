@@ -36,12 +36,16 @@ const configuredCorsOrigins = env.CORS_ALLOWED_ORIGINS?.split(',')
   'http://localhost:9695',
 ];
 
-/** Allow configured origins plus any localhost / 127.0.0.1 port (Flutter web). */
+/** Allow configured origins, localhost (dev), and Vercel preview/prod hosts. */
 function isAllowedCorsOrigin(origin: string | undefined): boolean {
   if (!origin) return true;
   if (configuredCorsOrigins.includes(origin)) return true;
-  return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return true;
+  if (/^https:\/\/([a-z0-9-]+\.)*vercel\.app$/i.test(origin)) return true;
+  return false;
 }
+
+app.set('trust proxy', 1);
 
 app.use(cors({
   origin: (origin, callback) => {
@@ -66,12 +70,20 @@ app.get('/', (_req, res) => {
 });
 
 app.get('/health', async (_req, res) => {
+  let redisOk = false;
   try {
     await connectRedis();
+    redisOk = true;
   } catch {
     // health should still return ok even if redis is temporarily unavailable
   }
-  res.json(ok({ status: 'ok', service: 'hrms-backend', port: env.PORT }));
+  res.json(ok({
+    status: 'ok',
+    service: 'hrms-backend',
+    port: env.PORT,
+    redis: redisOk ? 'up' : 'down',
+    env: env.NODE_ENV ?? 'development',
+  }));
 });
 
 app.use('/actions', actionsRouter);

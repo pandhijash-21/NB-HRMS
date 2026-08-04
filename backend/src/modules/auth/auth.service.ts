@@ -39,17 +39,25 @@ function buildPermissionsMap(
 }
 
 async function storeSession(userId: string, roleId: string, token: string) {
-  await connectRedis();
-  await redis.set(`session:${userId}`, token, { EX: SESSION_TTL });
-  // Track user→role membership for bulk invalidation on permission changes
-  await redis.sAdd(`role_users:${roleId}`, userId);
-  await redis.expire(`role_users:${roleId}`, SESSION_TTL);
+  try {
+    await connectRedis();
+    await redis.set(`session:${userId}`, token, { EX: SESSION_TTL });
+    // Track user→role membership for bulk invalidation on permission changes
+    await redis.sAdd(`role_users:${roleId}`, userId);
+    await redis.expire(`role_users:${roleId}`, SESSION_TTL);
+  } catch (err) {
+    console.warn('Redis session store skipped:', err);
+  }
 }
 
 async function deleteSession(userId: string, roleId?: string) {
-  await connectRedis();
-  await redis.del(`session:${userId}`);
-  if (roleId) await redis.sRem(`role_users:${roleId}`, userId);
+  try {
+    await connectRedis();
+    await redis.del(`session:${userId}`);
+    if (roleId) await redis.sRem(`role_users:${roleId}`, userId);
+  } catch (err) {
+    console.warn('Redis session delete skipped:', err);
+  }
 }
 
 // ---------------------------------------------------------------------------

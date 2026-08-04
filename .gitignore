@@ -45,7 +45,5 @@ docker-compose.override.yml
 *.swp
 *.swo
 
-# Prisma
-/backend/prisma/migrations/
-!/backend/prisma/migrations/migration.sql
+# Prisma — keep SQL migrations tracked for Render/Neon deploy
 /frontend/app/generated/prisma

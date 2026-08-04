@@ -58,8 +58,14 @@ app.use(cors({
     callback(null, false);
   },
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
 }));
-app.use(helmet());
+// Allow Flutter/web on Netlify/Vercel to read API responses (default helmet CORP is same-origin).
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
+}));
 app.use(express.json({ limit: '2mb' }));
 
 app.get('/', (_req, res) => {

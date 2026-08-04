@@ -1,6 +1,5 @@
 import { Router, Request, Response } from 'express';
 import { requireAuth } from '../../middleware/auth';
-import { requirePermission } from '../../middleware/rbac';
 import { ok, fail } from '../../utils/response';
 import { trackingService } from './tracking.service';
 
@@ -46,8 +45,12 @@ trackingRouter.get('/live', requireAuth, async (req: Request, res: Response) => 
 });
 
 // Admin/HR: Get all trips (optionally filtered by employee)
-trackingRouter.get('/trips', requireAuth, requirePermission('view_live_tracking'), async (req: Request, res: Response) => {
+trackingRouter.get('/trips', requireAuth, async (req: Request, res: Response) => {
   try {
+    const role = String((req.user as any)?.role ?? '').toUpperCase();
+    if (!['SUPERADMIN', 'ADMIN', 'HR'].includes(role)) {
+      return res.status(403).json(fail('Forbidden: Only SuperAdmin, Admin, and HR can view trips.'));
+    }
     const employeeId = req.query.employeeId ? Number(req.query.employeeId) : undefined;
     const data = await trackingService.getAllTrips(employeeId);
     return res.json(ok(data));
@@ -57,9 +60,14 @@ trackingRouter.get('/trips', requireAuth, requirePermission('view_live_tracking'
 });
 
 // Admin/HR: Get specific trip route
-trackingRouter.get('/trips/:id/route', requireAuth, requirePermission('view_live_tracking'), async (req: Request, res: Response) => {
+trackingRouter.get('/trips/:id/route', requireAuth, async (req: Request, res: Response) => {
   try {
-    const data = await trackingService.getTripRoute(req.params.id);
+    const role = String((req.user as any)?.role ?? '').toUpperCase();
+    if (!['SUPERADMIN', 'ADMIN', 'HR'].includes(role)) {
+      return res.status(403).json(fail('Forbidden: Only SuperAdmin, Admin, and HR can view trip routes.'));
+    }
+    const tripId = String(req.params.id);
+    const data = await trackingService.getTripRoute(tripId);
     return res.json(ok(data));
   } catch (e: any) {
     return res.status(400).json(fail(e.message));

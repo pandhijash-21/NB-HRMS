@@ -7,3 +7,9 @@
 
 [build.environment]
   NODE_VERSION = "20"
+
+# SPA fallback so deep links / refresh keep the Flutter app (path URLs).
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

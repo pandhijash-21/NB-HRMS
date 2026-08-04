@@ -93,7 +93,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       final loc = state.matchedLocation;
 
       if (auth.status == AuthStatus.unknown) {
-        return loc == '/login' ? null : '/login';
+        // Hold current location while restoring session — do not bounce to login.
+        return null;
       }
 
       final loggingIn = loc == '/login';

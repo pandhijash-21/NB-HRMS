@@ -88,6 +88,8 @@ class AuthNotifier extends Notifier<AuthState> {
   }
 
   Future<void> _handleUnauthorized() async {
+    // Ignore late 401s after user already signed out / while restoring.
+    if (state.status != AuthStatus.authenticated) return;
     final repo = ref.read(authRepositoryProvider);
     await repo.clearSession();
     state = const AuthState.unauthenticated();

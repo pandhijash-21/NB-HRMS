@@ -47,7 +47,10 @@ class DioClient {
           final status = error.response?.statusCode;
           final path = error.requestOptions.path;
           final isLogin = path.contains('auth/login');
-          if (status == 401 && !isLogin) {
+          final hadToken = error.requestOptions.headers['Authorization'] != null;
+          // Only wipe session when a request that actually carried a Bearer got 401.
+          // Missing-token 401s (storage glitch) must not force logout mid-navigation.
+          if (status == 401 && !isLogin && hadToken) {
             await unauthorizedGate.notify();
           }
           handler.next(error);

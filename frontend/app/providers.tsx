@@ -11,7 +11,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
   return (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
       <QueryProvider>
-        <SessionProvider>
+        <SessionProvider refetchOnWindowFocus={false}>
           <ApolloProvider client={apolloClient}>{children}</ApolloProvider>
         </SessionProvider>
       </QueryProvider>

@@ -93,7 +93,7 @@ void onStart(ServiceInstance service) async {
       
       if (token != null && token.isNotEmpty) {
         final dio = Dio(BaseOptions(
-          baseUrl: 'http://10.0.2.2:3000/api/', // Adjust for your backend URL
+          baseUrl: 'http://10.0.2.2:4000/api/', // Adjust for your backend URL
           headers: {'Authorization': 'Bearer $token'},
         ));
 

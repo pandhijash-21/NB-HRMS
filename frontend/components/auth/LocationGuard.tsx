@@ -59,9 +59,17 @@ export function LocationGuard({ children }: { children: ReactNode }) {
           try {
             // Note: Replace with your actual auth token logic if needed for API calls.
             // Using a simple fetch here. In Next.js with NextAuth, you might want to wrap this in an authenticated context.
-            await fetch("http://localhost:3000/api/tracking/live", { // Update URL to match backend port! Assuming 3000 or proxy.
+            const { getSession } = await import("next-auth/react");
+            const session = await getSession();
+            const token = (session?.user as any)?.token || "";
+            
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL ? 
+              (process.env.NEXT_PUBLIC_API_URL.endsWith('/') ? `${process.env.NEXT_PUBLIC_API_URL}tracking/live` : `${process.env.NEXT_PUBLIC_API_URL}/tracking/live`) : 
+              "http://localhost:4000/api/tracking/live";
+              
+            await fetch(apiUrl, {
               method: "POST",
-              headers: { "Content-Type": "application/json", "Authorization": `Bearer ${localStorage.getItem("token")}` }, // Ad-hoc token
+              headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` }, // Ad-hoc token
               body: JSON.stringify({
                 latitude: position.coords.latitude,
                 longitude: position.coords.longitude,

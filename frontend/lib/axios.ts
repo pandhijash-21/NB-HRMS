@@ -36,8 +36,7 @@ api.interceptors.response.use(
     const message = String(error.response?.data?.message ?? "");
     if (
       message.includes("Session expired") ||
-      message.includes("Invalid or expired") ||
-      message.includes("Missing bearer")
+      message.includes("Invalid or expired")
     ) {
       await signOut({ callbackUrl: "/login" });
     }

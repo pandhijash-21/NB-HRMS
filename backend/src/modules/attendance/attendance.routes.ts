@@ -213,6 +213,46 @@ function requireAttendanceAdmin(req: Request, res: Response): boolean {
   return true;
 }
 
+// Admin: add manual punch
+attendanceRouter.post('/admin/punch', requireAuth, requirePermission('ATTENDANCE', 'WRITE'), async (req: Request, res: Response) => {
+  try {
+    if (!requireAttendanceAdmin(req, res)) return;
+    const { employeeId, punchAt, punchType, terminalId } = req.body;
+    if (!employeeId || !punchAt) {
+      return res.status(400).json(fail('employeeId and punchAt are required'));
+    }
+    const data = await attendanceService.createAdminPunch({
+      employeeId: Number(employeeId),
+      punchAt: String(punchAt),
+      punchType: punchType ? String(punchType) : null,
+      terminalId: terminalId ? String(terminalId) : null,
+    });
+    return res.json(ok(data));
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});
+
+// Admin: edit existing punch
+attendanceRouter.patch('/admin/punch/:punchId', requireAuth, requirePermission('ATTENDANCE', 'WRITE'), async (req: Request, res: Response) => {
+  try {
+    if (!requireAttendanceAdmin(req, res)) return;
+    const { punchAt, punchType, terminalId } = req.body;
+    if (!punchAt) {
+      return res.status(400).json(fail('punchAt is required'));
+    }
+    const data = await attendanceService.updateAdminPunch({
+      punchId: req.params.punchId,
+      punchAt: String(punchAt),
+      punchType: punchType ? String(punchType) : null,
+      terminalId: terminalId ? String(terminalId) : null,
+    });
+    return res.json(ok(data));
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});
+
 /** Device / biometric sync status (PayTime MSSQL + optional eTimeOffice). */
 attendanceRouter.get('/admin/device/status', requireAuth, requirePermission('ATTENDANCE', 'READ'), async (req, res) => {
   try {

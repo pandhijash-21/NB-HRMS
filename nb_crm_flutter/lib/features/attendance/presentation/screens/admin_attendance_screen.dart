@@ -499,29 +499,107 @@ Future<void> showAdminPunchDialog(
   AttendancePunch? existing,
   String? dateYmd,
 }) async {
+  if (employeeId == null && existing == null) return;
   final isDark = Theme.of(context).brightness == Brightness.dark;
+  
+  String time = '09:00';
+  String type = 'IN';
+  String terminal = 'MANUAL';
+  
+  if (existing != null) {
+    final d = DateTime.parse(existing.punchAt).toLocal();
+    time = '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+    type = existing.punchType ?? 'IN';
+    terminal = existing.terminalId ?? 'MANUAL';
+  }
+
   await showDialog<void>(
     context: context,
-    builder: (ctx) => AlertDialog(
-      backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: Text(
-        'Action Not Allowed',
-        style: TextStyle(
-          fontWeight: FontWeight.w800,
-          color: isDark ? Colors.white : const Color(0xFF212F3D),
-        ),
-      ),
-      content: const Text(
-        'Manual punches have been completely disabled as per company policy. No manual additions or edits are permitted for any roles.',
-      ),
-      actions: [
-        FilledButton(
-          onPressed: () => Navigator.pop(ctx),
-          child: const Text('Acknowledge'),
-        ),
-      ],
-    ),
+    builder: (ctx) {
+      return StatefulBuilder(
+        builder: (ctx, setState) {
+          bool saving = false;
+          return AlertDialog(
+            backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Text(
+              existing == null ? 'Add Manual Punch' : 'Edit Manual Punch',
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                color: isDark ? Colors.white : const Color(0xFF212F3D),
+              ),
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    decoration: const InputDecoration(labelText: 'Time (HH:MM)'),
+                    initialValue: time,
+                    onChanged: (v) => time = v,
+                  ),
+                  const SizedBox(height: 10),
+                  TextFormField(
+                    decoration: const InputDecoration(labelText: 'Type (IN/OUT)'),
+                    initialValue: type,
+                    onChanged: (v) => type = v,
+                  ),
+                  const SizedBox(height: 10),
+                  TextFormField(
+                    decoration: const InputDecoration(labelText: 'Terminal'),
+                    initialValue: terminal,
+                    onChanged: (v) => terminal = v,
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: saving ? null : () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: saving ? null : () async {
+                  setState(() => saving = true);
+                  try {
+                    // Use the timezone from dateYmd if possible, here defaulting to +05:30.
+                    final punchAt = '${dateYmd}T$time:00+05:30';
+                    if (existing == null) {
+                      await ref.read(attendanceRepositoryProvider).adminAddPunch(
+                        employeeId: employeeId!,
+                        punchAt: punchAt,
+                        punchType: type,
+                        terminalId: terminal,
+                      );
+                    } else {
+                      await ref.read(attendanceRepositoryProvider).adminUpdatePunch(
+                        punchId: existing.id,
+                        punchAt: punchAt,
+                        punchType: type,
+                        terminalId: terminal,
+                      );
+                    }
+                    if (ctx.mounted) {
+                      Navigator.pop(ctx);
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Punch saved successfully.')));
+                    }
+                    invalidateAttendanceAdminData(ref);
+                  } catch (e) {
+                    if (ctx.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                      setState(() => saving = false);
+                    }
+                  }
+                },
+                child: saving 
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) 
+                  : const Text('Save'),
+              ),
+            ],
+          );
+        },
+      );
+    },
   );
 }
 

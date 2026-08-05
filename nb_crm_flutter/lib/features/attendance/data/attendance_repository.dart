@@ -271,4 +271,39 @@ class AttendanceRepository {
       parse: (raw) => null,
     );
   }
+
+  Future<void> adminAddPunch({
+    required int employeeId,
+    required String punchAt,
+    String? punchType,
+    String? terminalId,
+  }) async {
+    await _dio.postEnvelope<void>(
+      'attendance/admin/punch',
+      data: {
+        'employeeId': employeeId,
+        'punchAt': punchAt,
+        if (punchType != null) 'punchType': punchType,
+        if (terminalId != null) 'terminalId': terminalId,
+      },
+      parse: (raw) => null,
+    );
+  }
+
+  Future<void> adminUpdatePunch({
+    required String punchId,
+    required String punchAt,
+    String? punchType,
+    String? terminalId,
+  }) async {
+    await _dio.patchEnvelope<void>(
+      'attendance/admin/punch/$punchId',
+      data: {
+        'punchAt': punchAt,
+        if (punchType != null) 'punchType': punchType,
+        if (terminalId != null) 'terminalId': terminalId,
+      },
+      parse: (raw) => null,
+    );
+  }
 }

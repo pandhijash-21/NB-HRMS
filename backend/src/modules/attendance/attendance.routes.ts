@@ -242,7 +242,7 @@ attendanceRouter.patch('/admin/punch/:punchId', requireAuth, requirePermission('
       return res.status(400).json(fail('punchAt is required'));
     }
     const data = await attendanceService.updateAdminPunch({
-      punchId: req.params.punchId,
+      punchId: req.params.punchId as string,
       punchAt: String(punchAt),
       punchType: punchType ? String(punchType) : null,
       terminalId: terminalId ? String(terminalId) : null,

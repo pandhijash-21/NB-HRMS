@@ -196,7 +196,7 @@ export default function SalaryStructureDetailPage({
       <div className="flex items-center gap-3 flex-wrap">
         <Link href="/admin/salary/structures" className="text-sm text-slate-500 hover:text-slate-800">← Structures</Link>
         <h1 className="text-xl font-bold text-slate-800">
-          {commissionLabel} — {tpl.data?.designation?.name ?? tpl.data?.template?.designation?.name ?? "…"}
+          {commissionLabel} — {(tpl.data as any)?.designation?.name ?? (tpl.data as any)?.template?.designation?.name ?? "…"}
         </h1>
         {!ruleEditorEnabled && (
           <Badge variant="secondary">Fixed amounts only — rule editor disabled for this commission</Badge>

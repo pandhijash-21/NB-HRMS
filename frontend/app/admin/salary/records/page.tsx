@@ -80,7 +80,7 @@ export default function SalaryRecordsPage() {
               <tr key={r.id} className="border-b">
                 <td className="p-3">{r.employee?.generalInfo?.fullName ?? `#${r.employeeId}`}</td>
                 <td className="p-3">{r.template?.designation?.name ?? "—"}</td>
-                <td className="p-3">{r.payCommissionType}</td>
+                <td className="p-3">{r.payCommissionCode}</td>
                 <td className="p-3">{r.salaryMonth}/{r.salaryYear}</td>
                 <td className="p-3">{formatINR(r.grossPay)}</td>
                 <td className="p-3">{formatINR(r.netPay)}</td>

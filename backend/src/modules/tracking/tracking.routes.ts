@@ -33,8 +33,8 @@ trackingRouter.post('/live', requireAuth, async (req: Request, res: Response) =>
 trackingRouter.get('/live', requireAuth, async (req: Request, res: Response) => {
   try {
     const role = String((req.user as any)?.role ?? '').toUpperCase();
-    if (!['SUPERADMIN', 'ADMIN', 'HR'].includes(role)) {
-      return res.status(403).json(fail('Forbidden: Only SuperAdmin, Admin, and HR can view live tracking.'));
+    if (!['SUPERADMIN', 'ADMIN', 'SYSTEM_ADMIN', 'SYSTEM ADMIN', 'HR'].includes(role)) {
+      return res.status(403).json(fail('Forbidden: Only System Admin, Admin, and HR can view live tracking.'));
     }
     
     const data = await trackingService.getAllLiveLocations();
@@ -48,8 +48,8 @@ trackingRouter.get('/live', requireAuth, async (req: Request, res: Response) => 
 trackingRouter.get('/trips', requireAuth, async (req: Request, res: Response) => {
   try {
     const role = String((req.user as any)?.role ?? '').toUpperCase();
-    if (!['SUPERADMIN', 'ADMIN', 'HR'].includes(role)) {
-      return res.status(403).json(fail('Forbidden: Only SuperAdmin, Admin, and HR can view trips.'));
+    if (!['SUPERADMIN', 'ADMIN', 'SYSTEM_ADMIN', 'SYSTEM ADMIN', 'HR'].includes(role)) {
+      return res.status(403).json(fail('Forbidden: Only System Admin, Admin, and HR can view trips.'));
     }
     const employeeId = req.query.employeeId ? Number(req.query.employeeId) : undefined;
     const data = await trackingService.getAllTrips(employeeId);
@@ -63,8 +63,8 @@ trackingRouter.get('/trips', requireAuth, async (req: Request, res: Response) =>
 trackingRouter.get('/trips/:id/route', requireAuth, async (req: Request, res: Response) => {
   try {
     const role = String((req.user as any)?.role ?? '').toUpperCase();
-    if (!['SUPERADMIN', 'ADMIN', 'HR'].includes(role)) {
-      return res.status(403).json(fail('Forbidden: Only SuperAdmin, Admin, and HR can view trip routes.'));
+    if (!['SUPERADMIN', 'ADMIN', 'SYSTEM_ADMIN', 'SYSTEM ADMIN', 'HR'].includes(role)) {
+      return res.status(403).json(fail('Forbidden: Only System Admin, Admin, and HR can view trip routes.'));
     }
     const tripId = String(req.params.id);
     const data = await trackingService.getTripRoute(tripId);

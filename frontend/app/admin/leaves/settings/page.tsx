@@ -394,7 +394,7 @@ function AddLeaveTypeForm({
   newYearDate: string;
   midYearDate: string;
 }) {
-  const [form, setForm] = useState<NewFormState>({ ...EMPTY_NEW_WITH_CREDITS });
+  const [form, setForm] = useState<NewFormState>({ ...EMPTY_NEW });
 
   const janLabel = newYearDate ? `${fmtCreditDate(newYearDate)} Credit (days)` : "Jan 1 Credit (days)";
   const julLabel = midYearDate ? `${fmtCreditDate(midYearDate)} Credit (days)` : "Jul 1 Credit (days)";

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../domain/salary_models.dart';
 
@@ -366,7 +367,7 @@ class _SalaryRuleEditorSheetState extends State<SalaryRuleEditorSheet> {
     setState(() => _saving = true);
     try {
       await widget.onSave(_buildPayload());
-      if (mounted) Navigator.of(context).pop();
+      if (mounted) context.pop();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -440,7 +441,7 @@ class _SalaryRuleEditorSheetState extends State<SalaryRuleEditorSheet> {
                   ),
                 ),
                 IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
+                  onPressed: () => context.pop(),
                   icon: const Icon(Icons.close),
                 ),
               ],

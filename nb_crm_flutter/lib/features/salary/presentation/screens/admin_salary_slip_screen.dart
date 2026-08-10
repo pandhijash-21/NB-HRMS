@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/router/app_back_button.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../domain/salary_models.dart';
 import '../salary_providers.dart';
@@ -19,10 +20,7 @@ class AdminSalarySlipScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text('Salary Slip'),
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back),
-          onPressed: () => context.go('/admin/salary/records'),
-        ),
+        leading: const AppBackButton(fallbackLocation: '/admin/salary/records'),
       ),
       body: SalaryAsyncBody<SalarySlip>(
         value: slipAsync,

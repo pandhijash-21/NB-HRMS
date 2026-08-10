@@ -29,11 +29,34 @@ trackingRouter.post('/live', requireAuth, async (req: Request, res: Response) =>
   }
 });
 
+// Employee: Send device heartbeat for gap detection
+trackingRouter.post('/heartbeat', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const employeeId = Number(req.user!.employeeId);
+    if (!employeeId) return res.status(400).json(fail('Employee ID not found in token'));
+    
+    const { batteryLevel, networkStatus, permissionStatus, locationServiceEnabled, lastKnownGapReason } = req.body;
+
+    await trackingService.processHeartbeat({
+      employeeId,
+      batteryLevel: batteryLevel ? Number(batteryLevel) : null,
+      networkStatus: networkStatus ? String(networkStatus) : null,
+      permissionStatus: permissionStatus ? String(permissionStatus) : null,
+      locationServiceEnabled: locationServiceEnabled === true || locationServiceEnabled === 'true',
+      lastKnownGapReason: lastKnownGapReason ? String(lastKnownGapReason) : null,
+    });
+    
+    return res.json(ok({ success: true }));
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});
+
 // Admin/HR: Get all live locations
 trackingRouter.get('/live', requireAuth, async (req: Request, res: Response) => {
   try {
     const role = String((req.user as any)?.role ?? '').toUpperCase().replace(/[\s_]/g, '');
-    if (!['SUPERADMIN', 'ADMIN', 'SYSTEMADMIN', 'HR'].includes(role)) {
+    if (!['SUPERADMIN', 'ADMIN', 'SYSTEMADMIN', 'HR', 'DEVELOPER'].includes(role)) {
       return res.status(403).json(fail('Forbidden: Only System Admin, Admin, and HR can view live tracking.'));
     }
     
@@ -48,7 +71,7 @@ trackingRouter.get('/live', requireAuth, async (req: Request, res: Response) => 
 trackingRouter.get('/trips', requireAuth, async (req: Request, res: Response) => {
   try {
     const role = String((req.user as any)?.role ?? '').toUpperCase().replace(/[\s_]/g, '');
-    if (!['SUPERADMIN', 'ADMIN', 'SYSTEMADMIN', 'HR'].includes(role)) {
+    if (!['SUPERADMIN', 'ADMIN', 'SYSTEMADMIN', 'HR', 'DEVELOPER'].includes(role)) {
       return res.status(403).json(fail('Forbidden: Only System Admin, Admin, and HR can view trips.'));
     }
     const employeeId = req.query.employeeId ? Number(req.query.employeeId) : undefined;
@@ -63,11 +86,41 @@ trackingRouter.get('/trips', requireAuth, async (req: Request, res: Response) =>
 trackingRouter.get('/trips/:id/route', requireAuth, async (req: Request, res: Response) => {
   try {
     const role = String((req.user as any)?.role ?? '').toUpperCase().replace(/[\s_]/g, '');
-    if (!['SUPERADMIN', 'ADMIN', 'SYSTEMADMIN', 'HR'].includes(role)) {
+    if (!['SUPERADMIN', 'ADMIN', 'SYSTEMADMIN', 'HR', 'DEVELOPER'].includes(role)) {
       return res.status(403).json(fail('Forbidden: Only System Admin, Admin, and HR can view trip routes.'));
     }
     const tripId = String(req.params.id);
     const data = await trackingService.getTripRoute(tripId);
+    return res.json(ok(data));
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});
+
+// Admin/HR: Get Tracking Hub KPIs
+trackingRouter.get('/hub-kpis', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const role = String((req.user as any)?.role ?? '').toUpperCase().replace(/[\s_]/g, '');
+    if (!['SUPERADMIN', 'ADMIN', 'SYSTEMADMIN', 'HR', 'DEVELOPER'].includes(role)) {
+      return res.status(403).json(fail('Forbidden: Only System Admin, Admin, and HR can view KPIs.'));
+    }
+    const employeeId = req.query.employeeId ? Number(req.query.employeeId) : undefined;
+    const data = await trackingService.getHubKPIs(employeeId);
+    return res.json(ok(data));
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});
+
+// Admin/HR: Get tracking events for a trip (Timeline gaps)
+trackingRouter.get('/trips/:id/events', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const role = String((req.user as any)?.role ?? '').toUpperCase().replace(/[\s_]/g, '');
+    if (!['SUPERADMIN', 'ADMIN', 'SYSTEMADMIN', 'HR', 'DEVELOPER'].includes(role)) {
+      return res.status(403).json(fail('Forbidden: Only System Admin, Admin, and HR can view events.'));
+    }
+    const tripId = String(req.params.id);
+    const data = await trackingService.getTripEvents(tripId);
     return res.json(ok(data));
   } catch (e: any) {
     return res.status(400).json(fail(e.message));

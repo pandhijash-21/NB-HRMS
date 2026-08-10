@@ -6,8 +6,10 @@ import '../../../auth/presentation/auth_providers.dart';
 
 final adminTripsProvider = FutureProvider.autoDispose<List<dynamic>>((ref) async {
   final dioClient = ref.watch(dioClientProvider);
-  final res = await dioClient.dio.get('/tracking/trips');
-  return res.data['data'] ?? [];
+  return dioClient.getEnvelope<List<dynamic>>(
+    'tracking/trips',
+    parse: (raw) => List<dynamic>.from(raw as List),
+  );
 });
 
 class AdminTripsScreen extends ConsumerWidget {
@@ -16,7 +18,6 @@ class AdminTripsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tripsAsync = ref.watch(adminTripsProvider);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       appBar: AppBar(
@@ -40,7 +41,7 @@ class AdminTripsScreen extends ConsumerWidget {
               
               final start = DateTime.parse(trip['startTime']).toLocal();
               final end = trip['endTime'] != null ? DateTime.parse(trip['endTime']).toLocal() : null;
-              final distance = (trip['distanceKm'] as num).toDouble();
+              final distance = (trip['distanceKm'] as num?)?.toDouble() ?? 0.0;
 
               return Card(
                 elevation: 2,
@@ -133,7 +134,12 @@ class AdminTripsScreen extends ConsumerWidget {
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, st) => Center(child: Text('Error loading trips')),
+        error: (e, st) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text('Error loading trips: $e', textAlign: TextAlign.center),
+          ),
+        ),
       ),
     );
   }

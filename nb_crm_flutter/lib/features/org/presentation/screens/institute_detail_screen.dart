@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/router/app_back_button.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/auth_providers.dart';
@@ -33,10 +34,7 @@ class InstituteDetailScreen extends ConsumerWidget {
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text('Institute Detail'),
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back),
-          onPressed: () => context.pop(),
-        ),
+        leading: const AppBackButton(fallbackLocation: '/admin/institutes'),
         actions: [
           IconButton(
             icon: Icon(Icons.refresh),

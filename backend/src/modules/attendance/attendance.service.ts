@@ -1025,15 +1025,19 @@ export const attendanceService = {
     }
 
     const dt = new Date();
-    
-    // Enforce two-punch limit unless reason is provided
-    const startOfDay = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
-    const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
+    // Mobile punches are always "now" — never allow backdating via this endpoint.
+    // Day window in IST so late-night punches land on the correct Indian calendar day.
+    const istNow = new Date(dt.getTime() + 330 * 60 * 1000);
+    const y = istNow.getUTCFullYear();
+    const m = istNow.getUTCMonth();
+    const d = istNow.getUTCDate();
+    const startOfDay = new Date(Date.UTC(y, m, d, -5, -30, 0, 0));
+    const endOfDay = new Date(Date.UTC(y, m, d, 18, 29, 59, 999));
     
     const todaysPunchesCount = await prisma.attendancePunch.count({
       where: {
         employeeId: params.employeeId,
-        punchAt: { gte: startOfDay, lt: endOfDay }
+        punchAt: { gte: startOfDay, lte: endOfDay }
       }
     });
 

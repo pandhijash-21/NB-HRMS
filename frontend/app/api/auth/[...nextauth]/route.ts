@@ -67,7 +67,7 @@ export const authConfig = {
         token.backendToken = u.token;
         token.isFirstLogin = u.isFirstLogin;
         token.permissions = u.permissions ?? {};
-        token.employeeViewScope = u.employeeViewScope ?? "NONE";
+        token.employeeViewScope = (u.employeeViewScope as any) ?? "NONE";
       }
       return token;
     },

@@ -161,22 +161,22 @@ export function DocumentsTab({ profile, canManageLetters: canManageLettersProp }
   const [activeDraft, setActiveDraft] = useState<LetterDocument | null>(null);
 
   const identityMedia: DocEntry[] = [
-    { label: "Profile Photo", url: profile?.photoUrl },
-    { label: "Digital Signature", url: profile?.signatureUrl },
+    { label: "Profile Photo", url: profile?.photoUrl as string | undefined },
+    { label: "Digital Signature", url: profile?.signatureUrl as string | undefined },
   ];
 
   const statutoryDocs: DocEntry[] = [
-    { label: "Aadhaar Card", url: personal?.aadhaarCardUrl },
-    { label: "PAN Card", url: personal?.panCardUrl },
-    { label: "Passport Document", url: other?.passportUrl },
-    { label: "Other Personal Document", url: personal?.otherDocumentUrl },
+    { label: "Aadhaar Card", url: personal?.aadhaarCardUrl as string | undefined },
+    { label: "PAN Card", url: personal?.panCardUrl as string | undefined },
+    { label: "Passport Document", url: other?.passportUrl as string | undefined },
+    { label: "Other Personal Document", url: personal?.otherDocumentUrl as string | undefined },
   ];
 
   const academicDocs = academicQuals.flatMap(qualificationDocs);
 
   const bankDocs: DocEntry[] = [
-    { label: "Cancelled Cheque", url: bank?.cancelledChequeUrl },
-    { label: "Passbook", url: bank?.passbookUrl },
+    { label: "Cancelled Cheque", url: bank?.cancelledChequeUrl as string | undefined },
+    { label: "Passbook", url: bank?.passbookUrl as string | undefined },
   ];
 
   const finalLetters = useMemo(

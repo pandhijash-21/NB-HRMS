@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/router/app_back_button.dart';
 import '../../domain/leave_models.dart';
 import '../leave_providers.dart';
 import '../widgets/leave_shared_widgets.dart';
@@ -17,10 +18,7 @@ class AdminLeavesPendingScreen extends ConsumerWidget {
 
       appBar: AppBar(
         title: Text('Pending Leave Queue'),
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back),
-          onPressed: () => context.go('/admin/leaves'),
-        ),
+        leading: const AppBackButton(fallbackLocation: '/admin/leaves'),
       ),
       body: LeaveAsyncBody<List<LeaveApplication>>(
         value: queue,

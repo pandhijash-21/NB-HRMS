@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  osrm:
+    image: osrm/osrm-backend:latest
+    container_name: osrm-backend
+    restart: always
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./data:/data
+    command: >
+      /bin/bash -c "
+      cd /data &&
+      if [ ! -f gujarat-latest.osm.pbf ]; then
+        apt-get update && apt-get install -y wget &&
+        wget http://download.geofabrik.de/asia/india/gujarat-latest.osm.pbf;
+      fi &&
+      if [ ! -f gujarat-latest.osrm ]; then
+        osrm-extract -p /opt/car.lua gujarat-latest.osm.pbf &&
+        osrm-partition gujarat-latest.osrm &&
+        osrm-customize gujarat-latest.osrm;
+      fi &&
+      osrm-routed --algorithm mld gujarat-latest.osrm
+      "

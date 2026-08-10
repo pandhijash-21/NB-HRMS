@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../logging/app_logger.dart';
+import 'app_navigation.dart';
 import '../../features/auth/presentation/auth_notifier.dart';
 import '../../features/auth/presentation/auth_providers.dart';
 import '../../features/auth/presentation/change_password_screen.dart';
@@ -15,6 +17,10 @@ import '../../features/admin/presentation/screens/admin_employee_detail_screen.d
 import '../../features/admin/presentation/screens/admin_approvals_screen.dart';
 import '../../features/admin/presentation/screens/admin_dashboard_screen.dart';
 import '../../features/admin/presentation/screens/admin_live_tracking_screen.dart';
+import '../../features/tracking_hub/presentation/screens/tracking_hub_screen.dart';
+import '../../features/tracking/presentation/screens/autostart_onboarding_screen.dart';
+
+import '../../features/tracking_hub/presentation/screens/trip_detail_hub_screen.dart';
 import '../../features/admin/presentation/screens/admin_trips_screen.dart';
 import '../../features/admin/presentation/screens/admin_trip_replay_screen.dart';
 import '../../features/admin/presentation/screens/admin_audit_stub_screen.dart';
@@ -79,13 +85,20 @@ final goRouterProvider = Provider<GoRouter>((ref) {
   final refresh = GoRouterAuthRefresh(ref);
   ref.onDispose(refresh.dispose);
 
+  // Fresh per provider instance — avoids ShellRoute GlobalKey collisions on
+  // hot reload (go_router keys navigators with GlobalObjectKey(hashCode)).
+  final rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'rootNav');
+  final shellNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'shellNav');
+
   // Bump when route table changes so hot-restart rebuilds GoRouter cleanly.
-  const routerRevision = 3;
+  const routerRevision = 8;
 
   return GoRouter(
+    navigatorKey: rootNavigatorKey,
     initialLocation: '/login',
     refreshListenable: refresh,
     debugLogDiagnostics: kDebugMode,
+    observers: [AppGoRouterObserver()],
     redirect: (context, state) {
       // Touch revision so analyzer/tree-shaking keep the constant.
       assert(routerRevision >= 1);
@@ -101,23 +114,21 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       final changingPassword = loc == '/change-password';
       final authenticated = auth.isAuthenticated;
 
+      String? next;
       if (!authenticated) {
-        return loggingIn ? null : '/login';
+        next = loggingIn ? null : '/login';
+      } else if (auth.isFirstLogin) {
+        next = changingPassword ? null : '/change-password';
+      } else if (changingPassword) {
+        next = '/home';
+      } else if (loggingIn) {
+        next = '/home';
       }
 
-      if (auth.isFirstLogin) {
-        return changingPassword ? null : '/change-password';
+      if (next != null) {
+        AppLogger.router.i('redirect $loc → $next');
       }
-
-      if (changingPassword) {
-        return '/home';
-      }
-
-      if (loggingIn) {
-        return '/home';
-      }
-
-      return null;
+      return next;
     },
     routes: [
       GoRoute(path: '/', redirect: (context, state) => '/login'),
@@ -127,7 +138,14 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const ChangePasswordScreen(),
       ),
       ShellRoute(
-        builder: (context, state, child) => ResponsiveShell(child: child),
+        navigatorKey: shellNavigatorKey,
+        // pageBuilder (without state.pageKey) avoids Duplicate GlobalKey int
+        // assertions that ShellRoute.builder can trigger on hot reload/push.
+        pageBuilder: (context, state, child) {
+          return NoTransitionPage<void>(
+            child: ResponsiveShell(child: child),
+          );
+        },
         routes: [
           GoRoute(
             path: '/home',
@@ -325,6 +343,22 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/admin/live-tracking',
             builder: (context, state) => const AdminLiveTrackingScreen(),
+          ),
+          GoRoute(
+            path: '/admin/tracking-hub',
+            builder: (context, state) => const TrackingHubScreen(),
+          ),
+          GoRoute(
+            path: '/admin/tracking-hub/trip/:id',
+            builder: (context, state) {
+              final id = state.pathParameters['id'];
+              if (id == null || id.isEmpty) {
+                return const Scaffold(
+                  body: Center(child: Text('Invalid Trip ID')),
+                );
+              }
+              return TripDetailHubScreen(tripId: id);
+            },
           ),
           GoRoute(
             path: '/admin/trips',

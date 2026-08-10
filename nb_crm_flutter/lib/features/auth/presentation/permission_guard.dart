@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:disable_battery_optimization/disable_battery_optimization.dart';
+import '../../../core/logging/app_logger.dart';
 import '../../../core/services/background_tracking_service.dart';
 
 // RadarPainter removed, using map image
@@ -22,12 +24,13 @@ class _PermissionGuardState extends State<PermissionGuard> {
   bool _checking = true;
   String _errorMsg = "";
   Timer? _timer;
+  DateTime? _lastServiceEnsureAt;
 
   @override
   void initState() {
     super.initState();
     _checkPermissions();
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+    _timer = Timer.periodic(const Duration(seconds: 2), (timer) {
       if (_hasPermissions && !_checking) {
         _verifyPermissionsQuietly();
       }
@@ -38,6 +41,11 @@ class _PermissionGuardState extends State<PermissionGuard> {
   void dispose() {
     _timer?.cancel();
     super.dispose();
+  }
+
+  Future<bool> _needsBackgroundPermission() async {
+    if (kIsWeb) return false;
+    return true; // Always require background location for live tracking
   }
 
   Future<void> _checkPermissions() async {
@@ -72,9 +80,11 @@ class _PermissionGuardState extends State<PermissionGuard> {
     }
 
     var locationStatus = await Permission.location.status;
-    var locationAlwaysStatus = await Permission.locationAlways.status;
+    bool needsBg = await _needsBackgroundPermission();
+    var bgStatus = needsBg ? await Permission.locationAlways.status : PermissionStatus.granted;
+    var batteryStatus = await Permission.ignoreBatteryOptimizations.status;
 
-    if (locationStatus.isGranted && locationAlwaysStatus.isGranted) {
+    if (locationStatus.isGranted && bgStatus.isGranted && batteryStatus.isGranted) {
       if (!kIsWeb && await Permission.notification.isDenied) {
         await Permission.notification.request();
       }
@@ -83,7 +93,7 @@ class _PermissionGuardState extends State<PermissionGuard> {
         await Future.delayed(const Duration(milliseconds: 500));
         await startBackgroundTracking();
       } catch (e) {
-        debugPrint("Failed to start background tracking: $e");
+        AppLogger.tracking.e('Failed to start background tracking: $e');
       }
       setState(() {
         _hasPermissions = true;
@@ -93,7 +103,9 @@ class _PermissionGuardState extends State<PermissionGuard> {
       setState(() {
         _checking = false;
         _hasPermissions = false;
-        _errorMsg = "This app strictly requires Always-On location permissions to function.";
+        _errorMsg = needsBg 
+            ? "This app strictly requires Always-On location and Battery Optimization to function."
+            : "This app strictly requires location permissions (While using the app) to function.";
       });
     }
   }
@@ -124,14 +136,28 @@ class _PermissionGuardState extends State<PermissionGuard> {
     }
 
     var locationStatus = await Permission.location.status;
-    var locationAlwaysStatus = await Permission.locationAlways.status;
+    bool needsBg = await _needsBackgroundPermission();
+    var bgStatus = needsBg ? await Permission.locationAlways.status : PermissionStatus.granted;
+    var batteryStatus = await Permission.ignoreBatteryOptimizations.status;
 
-    if (!(locationStatus.isGranted && locationAlwaysStatus.isGranted)) {
+    if (!locationStatus.isGranted || !bgStatus.isGranted || !batteryStatus.isGranted) {
       if (mounted) {
         setState(() {
           _hasPermissions = false;
-          _errorMsg = "This app strictly requires Always-On location permissions to function.";
+          _errorMsg = needsBg 
+              ? "This app strictly requires Always-On location and Battery Optimization to function."
+              : "This app strictly requires location permissions (While using the app) to function.";
         });
+      }
+    } else {
+      // Permissions still OK — keep background tracking alive if OS killed it.
+      final now = DateTime.now();
+      if (_lastServiceEnsureAt == null ||
+          now.difference(_lastServiceEnsureAt!) > const Duration(seconds: 20)) {
+        _lastServiceEnsureAt = now;
+        try {
+          await startBackgroundTracking();
+        } catch (_) {}
       }
     }
   }
@@ -151,25 +177,43 @@ class _PermissionGuardState extends State<PermissionGuard> {
     } else {
       // Request foreground first
       var locStatus = await Permission.location.request();
+      bool needsBg = await _needsBackgroundPermission();
+      
       if (locStatus.isGranted) {
-        // Then request background
-        var alwaysStatus = await Permission.locationAlways.request();
-        if (alwaysStatus.isGranted) {
-          if (await Permission.notification.isDenied) {
-            await Permission.notification.request();
+        if (needsBg) {
+          var bgStatus = await Permission.locationAlways.request();
+          if (!bgStatus.isGranted) {
+            setState(() {
+              _checking = false;
+              _hasPermissions = false;
+              _errorMsg = "You must allow location 'All the time' for live tracking. Please tap 'Open App Settings' and grant it.";
+            });
+            return;
           }
-          try {
-            await Future.delayed(const Duration(milliseconds: 500));
-            await startBackgroundTracking();
-          } catch (e) {
-            debugPrint("Failed to start background tracking: $e");
-          }
-          setState(() {
-            _hasPermissions = true;
-            _checking = false;
-          });
-          return;
         }
+
+        if (await Permission.notification.isDenied) {
+          await Permission.notification.request();
+        }
+
+        if (await Permission.ignoreBatteryOptimizations.isDenied) {
+          await Permission.ignoreBatteryOptimizations.request();
+          try {
+            await DisableBatteryOptimization.showDisableBatteryOptimizationSettings();
+          } catch (_) {}
+        }
+
+        try {
+          await Future.delayed(const Duration(milliseconds: 500));
+          await startBackgroundTracking();
+        } catch (e) {
+          AppLogger.tracking.e('Failed to start background tracking: $e');
+        }
+        setState(() {
+          _hasPermissions = true;
+          _checking = false;
+        });
+        return;
       }
     }
 
@@ -179,7 +223,7 @@ class _PermissionGuardState extends State<PermissionGuard> {
       if (kIsWeb) {
         _errorMsg = "Location access was denied. Please click the padlock icon in your browser's URL bar, allow location, and refresh the page.";
       } else {
-        _errorMsg = "You must allow location 'All the time' for live tracking. Please tap 'Open App Settings' and grant it.";
+        _errorMsg = "You must allow location 'While using the app' for live tracking. Please tap 'Open App Settings' and grant it.";
       }
     });
   }
@@ -268,11 +312,23 @@ class _PermissionGuardState extends State<PermissionGuard> {
                             ),
                             const SizedBox(height: 16),
                             Text(
-                              _errorMsg,
+                              _errorMsg.isNotEmpty
+                                  ? _errorMsg
+                                  : "Allow location All the time + disable battery optimization so live tracking continues when the app is closed.",
                               style: TextStyle(
                                 fontSize: 16,
                                 height: 1.5,
                                 color: Colors.amber.shade50,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              "Required: Foreground · Background (Always) · Notifications · Battery unrestricted",
+                              style: TextStyle(
+                                fontSize: 12,
+                                height: 1.4,
+                                color: Colors.amber.shade200.withOpacity(0.85),
                               ),
                               textAlign: TextAlign.center,
                             ),

@@ -190,7 +190,7 @@ export function OtherTab({ employee, employeeId, isAdmin, onUpdate }: OtherTabPr
   const { upload } = useUpload(employeeId);
 
   const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<OtherFormData>({
-    resolver: zodResolver(otherInfoSchema),
+    resolver: zodResolver(otherInfoSchema) as any,
     defaultValues: {
       skillSet: (employee.skillSet as string) ?? "",
       strength: (employee.strength as string) ?? "",
@@ -327,7 +327,7 @@ export function OtherTab({ employee, employeeId, isAdmin, onUpdate }: OtherTabPr
 
                 <div className="sm:col-span-1">
                   <Field label="PAN No" value={employee.panNo as string} />
-                  {employee.panNo && (
+                  {!!employee.panNo && (
                     <p className="text-[10px] text-emerald-600 font-medium flex items-center gap-1 mt-1">
                       <CheckCircle2 className="w-3 h-3" /> Verified
                     </p>
@@ -336,7 +336,7 @@ export function OtherTab({ employee, employeeId, isAdmin, onUpdate }: OtherTabPr
                 
                 <div className="sm:col-span-1">
                   <Field label="Aadhaar No" value={employee.aadhaarNo ? `XXXX XXXX ${(employee.aadhaarNo as string).slice(-4)}` : undefined} />
-                  {employee.aadhaarNo && (
+                  {!!employee.aadhaarNo && (
                     <p className="text-[10px] text-emerald-600 font-medium flex items-center gap-1 mt-1">
                       <CheckCircle2 className="w-3 h-3" /> Verified
                     </p>

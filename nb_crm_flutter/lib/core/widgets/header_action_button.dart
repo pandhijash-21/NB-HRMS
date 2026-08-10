@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_breakpoints.dart';
+
 class HeaderActionButton extends StatelessWidget {
   final String tooltip;
   final String label;
@@ -19,12 +21,26 @@ class HeaderActionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fg =
+        color ?? (isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238));
+    // Icon-only on narrow phones to keep AppBar actions from overflowing.
+    final compact = AppBreakpoints.isPhone(context);
+
+    if (compact) {
+      return IconButton(
+        tooltip: tooltip,
+        onPressed: onPressed,
+        color: fg,
+        icon: icon,
+      );
+    }
+
     return Tooltip(
       message: tooltip,
       child: TextButton.icon(
         onPressed: onPressed,
         style: TextButton.styleFrom(
-          foregroundColor: color ?? (isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238)),
+          foregroundColor: fg,
           textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         ),

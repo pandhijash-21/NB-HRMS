@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/router/app_back_button.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/auth_providers.dart';
 import '../lookup_providers.dart';
@@ -44,10 +45,7 @@ class ConfigurationsHubScreen extends ConsumerWidget {
             color: isDark ? Colors.white : const Color(0xFF212F3D),
           ),
         ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => context.go('/home'),
-        ),
+        leading: const AppBackButton(),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded, color: Color(0xFFC5A059)),

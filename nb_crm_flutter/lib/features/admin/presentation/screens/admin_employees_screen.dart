@@ -577,7 +577,7 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminEmployeesScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx),
+            onPressed: () => ctx.pop(),
             child: Text(
               'Cancel',
               style: TextStyle(
@@ -589,7 +589,7 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminEmployeesScreen> {
           FilledButton(
             onPressed: () async {
               final messenger = ScaffoldMessenger.of(context);
-              Navigator.pop(ctx);
+              ctx.pop();
               try {
                 await ref.read(workforceListProvider.notifier).deleteEmployee(emp.id);
                 messenger.showSnackBar(
@@ -849,7 +849,7 @@ class _AddEmployeeDialogState extends ConsumerState<_AddEmployeeDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => context.pop(),
           child: Text(
             'Cancel',
             style: TextStyle(
@@ -1094,11 +1094,10 @@ class _AddEmployeeDialogState extends ConsumerState<_AddEmployeeDialog> {
       'thirdApproverUserId': _thirdApproverUserId,
     };
 
-    final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
     try {
       final created = await ref.read(workforceListProvider.notifier).createEmployee(data);
-      navigator.pop(created);
+      if (mounted) context.pop(created);
     } catch (e) {
       messenger.showSnackBar(
         SnackBar(content: Text('Onboarding failed: $e'), backgroundColor: Colors.red),

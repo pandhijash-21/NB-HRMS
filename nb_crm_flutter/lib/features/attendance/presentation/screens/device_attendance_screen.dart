@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/router/app_back_button.dart';
 import '../../../leave/presentation/widgets/leave_shared_widgets.dart';
 import '../../domain/attendance_models.dart';
 import '../attendance_providers.dart';
@@ -49,13 +50,7 @@ class _DeviceAttendanceScreenState extends ConsumerState<DeviceAttendanceScreen>
             letterSpacing: -0.5,
           ),
         ),
-        leading: IconButton(
-          icon: Icon(
-            Icons.arrow_back_rounded,
-            color: isDark ? Colors.white.withOpacity(0.8) : const Color(0xFF212F3D),
-          ),
-          onPressed: () => context.go('/attendance'),
-        ),
+        leading: const AppBackButton(fallbackLocation: '/attendance'),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(49.5),
           child: Column(

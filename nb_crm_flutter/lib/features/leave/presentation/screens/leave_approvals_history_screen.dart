@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/router/app_back_button.dart';
 import '../../domain/leave_models.dart';
 import '../leave_providers.dart';
 import '../widgets/leave_shared_widgets.dart';
@@ -55,13 +56,7 @@ class LeaveApprovalsHistoryScreen extends ConsumerWidget {
             letterSpacing: -0.5,
           ),
         ),
-        leading: IconButton(
-          icon: Icon(
-            Icons.arrow_back_rounded,
-            color: isDark ? Colors.white.withOpacity(0.8) : const Color(0xFF212F3D),
-          ),
-          onPressed: () => context.go('/approvals'),
-        ),
+        leading: const AppBackButton(fallbackLocation: '/approvals'),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1.5),
           child: Container(

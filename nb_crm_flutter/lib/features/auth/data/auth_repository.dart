@@ -117,4 +117,21 @@ class AuthRepository {
   }
 
   Future<void> clearSession() => _storage.clearAuth();
+
+  Future<bool> readRememberMe() => _storage.readRememberMe();
+
+  Future<({String identifier, String password})?>
+      readRememberedCredentials() => _storage.readRememberedCredentials();
+
+  Future<void> saveRememberedCredentials({
+    required String identifier,
+    required String password,
+  }) =>
+      _storage.writeRememberedCredentials(
+        identifier: identifier,
+        password: password,
+      );
+
+  Future<void> clearRememberedCredentials() =>
+      _storage.clearRememberedCredentials();
 }

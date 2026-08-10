@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/router/app_back_button.dart';
 import '../../domain/salary_models.dart';
 import '../salary_providers.dart';
 import '../widgets/salary_shared_widgets.dart';
@@ -29,13 +30,7 @@ class AdminSalaryStructuresScreen extends ConsumerWidget {
             letterSpacing: -0.5,
           ),
         ),
-        leading: IconButton(
-          icon: Icon(
-            Icons.arrow_back_rounded,
-            color: isDark ? Colors.white.withOpacity(0.8) : const Color(0xFF212F3D),
-          ),
-          onPressed: () => context.go('/admin/salary/records'),
-        ),
+        leading: const AppBackButton(fallbackLocation: '/admin/salary/records'),
         actions: [
           TextButton.icon(
             onPressed: () => context.go('/admin/salary/commissions'),

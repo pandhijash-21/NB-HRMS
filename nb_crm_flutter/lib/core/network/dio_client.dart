@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 
+import '../logging/app_logger.dart';
 import 'api_envelope.dart';
 import 'app_config.dart';
 
@@ -41,11 +42,20 @@ class DioClient {
           if (token != null && token.isNotEmpty) {
             options.headers['Authorization'] = 'Bearer $token';
           }
+          AppLogger.network.d('${options.method} ${options.path}');
           handler.next(options);
+        },
+        onResponse: (response, handler) {
+          AppLogger.network.d(
+            '${response.requestOptions.method} ${response.requestOptions.path} → ${response.statusCode}',
+          );
+          handler.next(response);
         },
         onError: (error, handler) async {
           final status = error.response?.statusCode;
           final path = error.requestOptions.path;
+          final method = error.requestOptions.method;
+          AppLogger.network.w('$method $path → ${status ?? error.type.name}');
           final isLogin = path.contains('auth/login');
           final hadToken = error.requestOptions.headers['Authorization'] != null;
           // Only wipe session when a request that actually carried a Bearer got 401.

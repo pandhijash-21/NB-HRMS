@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/router/app_back_button.dart';
 import '../../../admin/domain/admin_models.dart';
 import '../../../admin/presentation/admin_notifier.dart';
 import '../../../auth/domain/permissions.dart';
@@ -28,10 +29,7 @@ class CandidateDetailScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Candidate'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go('/recruitment'),
-        ),
+        leading: const AppBackButton(fallbackLocation: '/recruitment'),
         actions: [
           if (canAdmin)
             IconButton(

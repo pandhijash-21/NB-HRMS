@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/router/app_back_button.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../admin/domain/admin_models.dart';
 import '../../../admin/presentation/admin_notifier.dart';
@@ -67,16 +68,7 @@ class _RecruitmentHubScreenState extends ConsumerState<RecruitmentHubScreen>
     return Scaffold(
       appBar: AppBar(
         title: const Text('Recruitment'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () {
-            if (Navigator.of(context).canPop()) {
-              Navigator.of(context).pop();
-            } else {
-              context.go('/home');
-            }
-          },
-        ),
+        leading: const AppBackButton(),
         bottom: TabBar(
           controller: _tabs,
           isScrollable: true,
@@ -956,7 +948,7 @@ class _RequirementFormSheetState extends ConsumerState<_RequirementFormSheet> {
       } else {
         await repo.updateRequirement(widget.existing!.id, body);
       }
-      if (mounted) Navigator.pop(context, true);
+      if (mounted) context.pop(true);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
@@ -1174,7 +1166,7 @@ class _CandidateFormDialogState extends ConsumerState<_CandidateFormDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context, false),
+          onPressed: () => context.pop(false),
           style: TextButton.styleFrom(
             foregroundColor: isDark ? Colors.white70 : Colors.grey.shade600,
           ),
@@ -1254,7 +1246,7 @@ class _CandidateFormDialogState extends ConsumerState<_CandidateFormDialog> {
         'scheduledAt': _scheduledAt != null ? toApiDateTimeFromIst(_scheduledAt!) : null,
         'remarks': _remarks.text.trim(),
       });
-      if (mounted) Navigator.pop(context, true);
+      if (mounted) context.pop(true);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));

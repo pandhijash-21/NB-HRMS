@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../auth/presentation/auth_providers.dart';
@@ -64,7 +65,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final name = user?.name ?? 'there';
     final role = user?.role ?? '';
     final wide = MediaQuery.sizeOf(context).width >= 900;
-    final medium = MediaQuery.sizeOf(context).width >= 720;
+    final medium = MediaQuery.sizeOf(context).width >= 600;
+    final phone = MediaQuery.sizeOf(context).width < 600;
 
     final hasWorkforce = Permissions.canViewWorkforce(auth.permissions, auth.user?.employeeViewScope);
     final isHR = ['ADMIN', 'HR'].contains(role.toUpperCase());
@@ -344,9 +346,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             builder: (context, constraints) {
               final double gridWidth = constraints.maxWidth;
               final int crossAxisCount = wide ? 3 : (medium ? 2 : 1);
-              final double cellWidth = (gridWidth - (crossAxisCount - 1) * 16.0) / crossAxisCount;
-              // Target a fixed, compact height of 96.0 pixels for all module cards to prevent text overflow
-              const double targetHeight = 96.0;
+              final double cellWidth =
+                  (gridWidth - (crossAxisCount - 1) * 16.0) / crossAxisCount;
+              // Taller cards on phones so subtitle doesn't clip.
+              final double targetHeight = phone ? 108.0 : 96.0;
               final double dynamicAspectRatio = cellWidth / targetHeight;
 
               return GridView.builder(
@@ -381,7 +384,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final content = ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 1200),
       child: Padding(
-        padding: EdgeInsets.fromLTRB(medium ? 32 : 16, 24, medium ? 32 : 16, 48),
+        padding: EdgeInsets.fromLTRB(
+          medium ? 28 : 16,
+          phone ? 16 : 24,
+          medium ? 28 : 16,
+          phone ? 88 : 48, // room for radial menu on phones
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -464,7 +472,10 @@ class _GreetingsCardState extends State<_GreetingsCard> {
         curve: Curves.easeOutCubic,
         transform: Matrix4.identity()..translate(0.0, _isHovered ? -3.0 : 0.0),
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
+        padding: EdgeInsets.symmetric(
+          horizontal: MediaQuery.sizeOf(context).width < 600 ? 20 : 32,
+          vertical: MediaQuery.sizeOf(context).width < 600 ? 28 : 40,
+        ),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(28),
           gradient: const LinearGradient(
@@ -509,9 +520,9 @@ class _GreetingsCardState extends State<_GreetingsCard> {
             const SizedBox(height: 8),
             AnimatedDefaultTextStyle(
               duration: const Duration(milliseconds: 300),
-              style: const TextStyle(
+              style: TextStyle(
                 color: Colors.white,
-                fontSize: 34,
+                fontSize: MediaQuery.sizeOf(context).width < 600 ? 28 : 34,
                 fontWeight: FontWeight.w800,
                 letterSpacing: -0.5,
                 fontFamily: 'Inter',
@@ -602,13 +613,16 @@ class _ModernModuleCardState extends State<_ModernModuleCard> {
             child: Opacity(
               opacity: enabled ? 1 : 0.5,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                padding: EdgeInsets.symmetric(
+                  horizontal: MediaQuery.sizeOf(context).width < 600 ? 14 : 18,
+                  vertical: 10,
+                ),
                 child: Row(
                   children: [
                     AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
-                      width: 54,
-                      height: 54,
+                      width: MediaQuery.sizeOf(context).width < 600 ? 48 : 54,
+                      height: MediaQuery.sizeOf(context).width < 600 ? 48 : 54,
                       decoration: BoxDecoration(
                         color: _isHovered 
                             ? widget.data.color 

@@ -46,6 +46,14 @@ async function start() {
       await ensureLeaveRepeatableJobs();
       await ensureAttendanceRepeatableJobs();
       console.log('Leave & attendance jobs started');
+
+      // Tracking Hub Background Polling (Every 60s)
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { trackingService } = require('./modules/tracking/tracking.service') as typeof import('./modules/tracking/tracking.service');
+      setInterval(() => {
+        trackingService.checkMissingHeartbeats().catch(console.error);
+      }, 60000);
+      
     } catch (err) {
       console.warn('Leave jobs could not be started:', err);
     }

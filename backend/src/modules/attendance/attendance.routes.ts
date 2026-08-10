@@ -7,7 +7,7 @@ import { attendanceService } from './attendance.service';
 export const attendanceRouter = Router();
 
 // Employee: calendar view
-attendanceRouter.get('/my/calendar', requireAuth, requirePermission('ATTENDANCE', 'READ'), async (req: Request, res: Response) => {
+attendanceRouter.get('/my/calendar', requireAuth, async (req: Request, res: Response) => {
   try {
     const employeeId = Number(req.user!.employeeId);
     if (!employeeId) return res.status(400).json(fail('Employee ID not found in token'));
@@ -20,7 +20,7 @@ attendanceRouter.get('/my/calendar', requireAuth, requirePermission('ATTENDANCE'
   }
 });
 
-attendanceRouter.get('/my/day', requireAuth, requirePermission('ATTENDANCE', 'READ'), async (req: Request, res: Response) => {
+attendanceRouter.get('/my/day', requireAuth, async (req: Request, res: Response) => {
   try {
     const employeeId = Number(req.user!.employeeId);
     if (!employeeId) return res.status(400).json(fail('Employee ID not found in token'));
@@ -134,17 +134,9 @@ attendanceRouter.get(
 attendanceRouter.patch(
   '/employee/:employeeId/settings',
   requireAuth,
-  (req, res, next) => {
-    const role = String((req.user as { role?: string })?.role ?? '').toUpperCase();
-    if (['ADMIN', 'HR', 'HR_MANAGER'].includes(role)) return next();
-    return requirePermission('ATTENDANCE', 'WRITE')(req, res, next);
-  },
+  requireSelfEmployeeOrPermission('employeeId', 'ATTENDANCE', 'WRITE'),
   async (req: Request, res: Response) => {
     try {
-      const role = String((req.user as any)?.role ?? '');
-      if (!['ADMIN', 'HR', 'HR_MANAGER'].includes(role)) {
-        return res.status(403).json(fail('Forbidden'));
-      }
       const employeeId = Number(req.params.employeeId);
       const updatedBy = String((req.user as any)?.id ?? 'unknown');
       const data = await attendanceService.updateEmployeeAttendanceSettings(employeeId, {
@@ -445,7 +437,7 @@ attendanceRouter.delete('/admin/locations/:id', requireAuth, requirePermission('
 
 // --- Geofenced App Punch ---
 
-attendanceRouter.post('/my/verify-location', requireAuth, requirePermission('ATTENDANCE', 'WRITE'), async (req, res) => {
+attendanceRouter.post('/my/verify-location', requireAuth, async (req, res) => {
   try {
     const { latitude, longitude } = req.body;
     if (latitude == null || longitude == null) {
@@ -458,7 +450,7 @@ attendanceRouter.post('/my/verify-location', requireAuth, requirePermission('ATT
   }
 });
 
-attendanceRouter.post('/my/punch', requireAuth, requirePermission('ATTENDANCE', 'WRITE'), async (req: Request, res: Response) => {
+attendanceRouter.post('/my/punch', requireAuth, async (req: Request, res: Response) => {
   try {
     const employeeId = Number(req.user!.employeeId);
     if (!employeeId) return res.status(400).json(fail('Employee ID not found in token'));
@@ -484,7 +476,7 @@ attendanceRouter.post('/my/punch', requireAuth, requirePermission('ATTENDANCE', 
   }
 });
 
-attendanceRouter.post('/my/register-biometrics', requireAuth, requirePermission('ATTENDANCE', 'WRITE'), async (req: Request, res: Response) => {
+attendanceRouter.post('/my/register-biometrics', requireAuth, async (req: Request, res: Response) => {
   try {
     const employeeId = Number(req.user!.employeeId);
     if (!employeeId) return res.status(400).json(fail('Employee ID not found in token'));
@@ -498,9 +490,8 @@ attendanceRouter.post('/my/register-biometrics', requireAuth, requirePermission(
   }
 });
 
-attendanceRouter.post('/admin/reset-biometrics/:employeeId', requireAuth, requirePermission('ATTENDANCE', 'WRITE'), async (req: Request, res: Response) => {
+attendanceRouter.post('/admin/reset-biometrics/:employeeId', requireAuth, requireSelfEmployeeOrPermission('employeeId', 'ATTENDANCE', 'WRITE'), async (req: Request, res: Response) => {
   try {
-    if (!requireAttendanceAdmin(req, res)) return;
     const employeeId = Number(req.params.employeeId);
     if (!employeeId) return res.status(400).json(fail('Invalid employeeId'));
     const updatedBy = String(req.user!.id ?? (req.user as any)?.userId ?? 'unknown');

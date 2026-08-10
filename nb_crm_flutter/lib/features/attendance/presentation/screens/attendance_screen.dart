@@ -11,6 +11,7 @@ import '../../../leave/presentation/widgets/leave_shared_widgets.dart';
 import '../attendance_providers.dart';
 import '../geofenced_punch_service.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../../core/router/app_back_button.dart';
 import 'package:flutter/foundation.dart';
 
 final hasLocalBiometricTokenProvider = FutureProvider.autoDispose.family<bool, int>((ref, employeeId) async {
@@ -37,6 +38,10 @@ class AttendanceScreen extends ConsumerWidget {
       auth.user?.role ?? '',
     );
 
+    // Punch In/Out is only for the current calendar day (IST).
+    final todayYmd = _attendanceTodayYmdIst();
+    final canPunchSelectedDay = selectedDate == todayYmd;
+
     final daysInMonth =
         DateTime(monthFilter.year, monthFilter.month + 1, 0).day;
     final firstWeekday =
@@ -57,13 +62,7 @@ class AttendanceScreen extends ConsumerWidget {
             letterSpacing: -0.5,
           ),
         ),
-        leading: IconButton(
-          icon: Icon(
-            Icons.arrow_back_rounded,
-            color: isDark ? Colors.white.withOpacity(0.8) : const Color(0xFF212F3D),
-          ),
-          onPressed: () => context.go('/home'),
-        ),
+        leading: const AppBackButton(),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1.5),
           child: Container(
@@ -74,6 +73,20 @@ class AttendanceScreen extends ConsumerWidget {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
+          if (!canPunchSelectedDay) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  selectedDate == null
+                      ? 'Select today ($todayYmd) to punch in/out.'
+                      : 'Punch in/out is only allowed for today ($todayYmd). Past or future days are view-only.',
+                ),
+                backgroundColor: Colors.orange,
+              ),
+            );
+            return;
+          }
+
           if (kIsWeb) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Please use the mobile app to punch in using biometrics.'), backgroundColor: Colors.red),
@@ -119,6 +132,31 @@ class AttendanceScreen extends ConsumerWidget {
                 return;
               }
             }
+
+            if (currentDayData.punches.length == 1) {
+              final confirm = await showDialog<bool>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('Confirm Punch Out'),
+                  content: const Text('Are you sure you want to punch out for the day?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(false),
+                      child: const Text('Cancel'),
+                    ),
+                    ElevatedButton(
+                      onPressed: () => Navigator.of(context).pop(true),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFC5A059),
+                        foregroundColor: Colors.white,
+                      ),
+                      child: const Text('Punch Out'),
+                    ),
+                  ],
+                ),
+              );
+              if (confirm != true) return;
+            }
           }
 
           final dio = ref.read(dioClientProvider);
@@ -126,11 +164,12 @@ class AttendanceScreen extends ConsumerWidget {
           await svc.executePunch(context, empId);
           invalidateAttendanceSelfData(ref); // refresh calendar
         },
-        backgroundColor: const Color(0xFFC5A059),
+        backgroundColor:
+            canPunchSelectedDay ? const Color(0xFFC5A059) : Colors.grey.shade500,
         icon: const Icon(Icons.fingerprint_rounded, color: Colors.white),
-        label: const Text(
-          'Punch In/Out',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        label: Text(
+          canPunchSelectedDay ? 'Punch In/Out' : 'Today only',
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
       ),
       body: TweenAnimationBuilder<double>(
@@ -1281,4 +1320,10 @@ class _PunchMapDialog extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Today's date as `YYYY-MM-DD` in IST (Asia/Kolkata).
+String _attendanceTodayYmdIst() {
+  final ist = DateTime.now().toUtc().add(const Duration(hours: 5, minutes: 30));
+  return formatDateYmd(DateTime(ist.year, ist.month, ist.day));
 }

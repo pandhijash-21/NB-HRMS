@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/router/app_back_button.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/header_action_button.dart';
 import '../../../auth/domain/permissions.dart';
@@ -24,6 +25,7 @@ class ReimbursementsHubScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Reimbursements'),
+        leading: const AppBackButton(),
         actions: [
           HeaderActionButton(
             tooltip: 'Refresh',
@@ -168,6 +170,7 @@ class ReimbursementsAdminScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('All Reimbursements'),
+        leading: const AppBackButton(fallbackLocation: '/reimbursements'),
         actions: [
           IconButton(
             onPressed: () => ref.invalidate(adminReimbursementsProvider),

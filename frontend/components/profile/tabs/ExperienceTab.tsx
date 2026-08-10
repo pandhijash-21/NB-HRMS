@@ -144,7 +144,7 @@ export function ExperienceTab({ employeeId, isAdmin }: ExperienceTabProps) {
     watch,
     formState: { errors },
   } = useForm<ExperienceFormData>({
-    resolver: zodResolver(experienceSchema),
+    resolver: zodResolver(experienceSchema) as any,
     defaultValues: {
       id: undefined,
       type: "TEACHING",

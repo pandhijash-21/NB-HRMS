@@ -39,29 +39,14 @@ class GeofencedPunchService {
         throw Exception('Please use the mobile app to register biometrics.');
       }
 
-      // Enforce Biometrics Availability
-      bool canCheckBiometrics = false;
-      try {
-        canCheckBiometrics = await auth.canCheckBiometrics;
-      } catch (e) {
-        // Ignored
+      if (!(await auth.isDeviceSupported())) {
+        throw Exception('Device authentication is not supported on this device.');
       }
 
-      if (!canCheckBiometrics) {
-        throw Exception('Biometrics not supported on this device.');
-      }
-
-      final availableBiometrics = await auth.getAvailableBiometrics();
-      if (!availableBiometrics.contains(BiometricType.fingerprint) && 
-          !availableBiometrics.contains(BiometricType.face) &&
-          !availableBiometrics.contains(BiometricType.strong)) {
-        throw Exception('No fingerprint or Face ID enrolled on this device. Please add one in settings.');
-      }
-
-      // Authenticate using biometrics
+      // Authenticate using biometrics (allow PIN fallback to ensure success)
       bool verified = await auth.authenticate(
-        localizedReason: 'Please authenticate to set/register your Fingerprint or Face ID for this account',
-        biometricOnly: true,
+        localizedReason: 'Please authenticate to set/register your Fingerprint, Face ID, or PIN for this account',
+        biometricOnly: false,
         persistAcrossBackgrounding: true,
       );
 
@@ -111,23 +96,8 @@ class GeofencedPunchService {
         throw Exception('Fingerprint is not set. Please set/register your fingerprint first.');
       }
 
-      // 2. Enforce Biometrics Availability
-      bool canCheckBiometrics = false;
-      try {
-        canCheckBiometrics = await auth.canCheckBiometrics;
-      } catch (e) {
-        // Ignored
-      }
-      
-      if (!canCheckBiometrics) {
-        throw Exception('Biometrics not supported on this device.');
-      }
-
-      final availableBiometrics = await auth.getAvailableBiometrics();
-      if (!availableBiometrics.contains(BiometricType.fingerprint) && 
-          !availableBiometrics.contains(BiometricType.face) &&
-          !availableBiometrics.contains(BiometricType.strong)) {
-        throw Exception('Fingerprint or Face ID is not added. Please set up biometric security to punch in.');
+      if (!(await auth.isDeviceSupported())) {
+        throw Exception('Device authentication is not supported on this device.');
       }
 
       // 3. Fetch Location First

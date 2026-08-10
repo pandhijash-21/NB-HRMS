@@ -18,6 +18,30 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _identifierController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _rememberMe = false;
+  bool _loadingRemembered = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRememberedCredentials();
+  }
+
+  Future<void> _loadRememberedCredentials() async {
+    final repo = ref.read(authRepositoryProvider);
+    final remembered = await repo.readRememberedCredentials();
+    if (!mounted) return;
+    if (remembered != null) {
+      _identifierController.text = remembered.identifier;
+      _passwordController.text = remembered.password;
+      setState(() {
+        _rememberMe = true;
+        _loadingRemembered = false;
+      });
+    } else {
+      setState(() => _loadingRemembered = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -32,12 +56,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
+    final identifier = _identifierController.text;
+    final password = _passwordController.text;
+
     final ok = await auth.login(
-      identifier: _identifierController.text,
-      password: _passwordController.text,
+      identifier: identifier,
+      password: password,
     );
 
     if (!mounted || !ok) return;
+
+    final repo = ref.read(authRepositoryProvider);
+    if (_rememberMe) {
+      await repo.saveRememberedCredentials(
+        identifier: identifier,
+        password: password,
+      );
+    } else {
+      await repo.clearRememberedCredentials();
+    }
+
+    if (!mounted) return;
 
     final session = ref.read(authNotifierProvider);
     if (session.isFirstLogin) {
@@ -255,6 +294,56 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                       onChanged: (_) => auth.errorMessage != null
                                           ? ref.read(authNotifierProvider.notifier).clearError()
                                           : null,
+                                    ),
+                                    const SizedBox(height: 12),
+                                    InkWell(
+                                      onTap: submitting || _loadingRemembered
+                                          ? null
+                                          : () => setState(
+                                                () => _rememberMe = !_rememberMe,
+                                              ),
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: Row(
+                                        children: [
+                                          SizedBox(
+                                            height: 24,
+                                            width: 24,
+                                            child: Checkbox(
+                                              value: _rememberMe,
+                                              onChanged: submitting ||
+                                                      _loadingRemembered
+                                                  ? null
+                                                  : (v) => setState(
+                                                        () => _rememberMe =
+                                                            v ?? false,
+                                                      ),
+                                              activeColor:
+                                                  const Color(0xFFC5A059),
+                                              checkColor:
+                                                  const Color(0xFF1A1816),
+                                              side: BorderSide(
+                                                color: Colors.white
+                                                    .withOpacity(0.35),
+                                              ),
+                                              materialTapTargetSize:
+                                                  MaterialTapTargetSize
+                                                      .shrinkWrap,
+                                              visualDensity:
+                                                  VisualDensity.compact,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Text(
+                                            'Remember me',
+                                            style: TextStyle(
+                                              color: Colors.white
+                                                  .withOpacity(0.75),
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                     if (auth.errorMessage != null) ...[
                                       const SizedBox(height: 20),

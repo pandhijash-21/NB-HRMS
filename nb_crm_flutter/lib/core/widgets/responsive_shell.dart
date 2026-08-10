@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'radial_menu.dart';
 
 import '../../features/auth/domain/permissions.dart';
 import '../../features/auth/presentation/auth_providers.dart';
+import '../logging/app_logger.dart';
 import '../theme/theme_provider.dart';
 
 class ResponsiveShell extends ConsumerStatefulWidget {
@@ -71,7 +73,10 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authNotifierProvider);
-    final wide = MediaQuery.sizeOf(context).width >= 900;
+    final width = MediaQuery.sizeOf(context).width;
+    // Sidebar from tablet up; phones keep the drawer.
+    final useSidebar = width >= 720;
+    final allowExpandedSidebar = width >= 900;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final hasWorkforce = Permissions.canViewWorkforce(
@@ -167,6 +172,20 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
           Icons.location_on,
           'Live Tracking',
         ),
+      if (isHR)
+        const _Destination(
+          '/admin/trips',
+          Icons.route_outlined,
+          Icons.route,
+          'Trips',
+        ),
+      if (isHR)
+        const _Destination(
+          '/admin/tracking-hub',
+          Icons.insights_outlined,
+          Icons.insights,
+          'Tracking Hub',
+        ),
     ];
 
     final currentPath = GoRouterState.of(context).matchedLocation;
@@ -188,8 +207,10 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
       context.go(destinations[index].route);
     }
 
-    if (!wide) {
-      return Scaffold(
+    if (!useSidebar) {
+      return _wrapExitConfirm(
+        context,
+        Scaffold(
         appBar: AppBar(
           title: const Text('NB Developer'),
           actions: [
@@ -419,21 +440,66 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             _buildSpeedDial(context),
           ],
         ),
+      ),
       );
     }
 
-    return Scaffold(
+    return _wrapExitConfirm(
+      context,
+      Scaffold(
       body: Stack(
         children: [
           Row(
             children: [
-              _buildSidebarContent(context, safeSelectedIndex, destinations, isDark),
+              _buildSidebarContent(
+                context,
+                safeSelectedIndex,
+                destinations,
+                isDark,
+                allowExpanded: allowExpandedSidebar,
+              ),
               Expanded(child: widget.child),
             ],
           ),
           _buildSpeedDial(context),
         ],
       ),
+    ),
+    );
+  }
+
+  Widget _wrapExitConfirm(BuildContext context, Widget child) {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        if (context.canPop()) {
+          context.pop();
+          return;
+        }
+        final shouldExit = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Exit app?'),
+            content: const Text('Do you want to exit?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: const Text('Exit'),
+              ),
+            ],
+          ),
+        );
+        if (shouldExit == true) {
+          AppLogger.router.i('user confirmed exit');
+          SystemNavigator.pop();
+        }
+      },
+      child: child,
     );
   }
 
@@ -467,15 +533,17 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
   }
 
   Widget _buildSidebarContent(
-    BuildContext context, 
-    int safeSelectedIndex, 
-    List<_Destination> destinations, 
-    bool isDark
-  ) {
+    BuildContext context,
+    int safeSelectedIndex,
+    List<_Destination> destinations,
+    bool isDark, {
+    bool allowExpanded = true,
+  }) {
+    final expanded = allowExpanded && _isExpanded;
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeOutCubic,
-      width: _isExpanded ? 260 : 80,
+      width: expanded ? 260 : 80,
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1A1816) : const Color(0xFFECEFF1),
         border: Border(
@@ -494,21 +562,23 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
-                if (!_isExpanded)
+                if (!expanded)
                   Expanded(
                     child: Center(
-                      child: IconButton(
-                        icon: Icon(
-                          Icons.menu_rounded,
-                          color: isDark ? Colors.white.withOpacity(0.5) : const Color(0xFF607D8B).withOpacity(0.7),
-                        ),
-                        onPressed: () {
-                          setState(() {
-                            _isExpanded = true;
-                          });
-                        },
-                        tooltip: 'Expand sidebar',
-                      ),
+                      child: allowExpanded
+                          ? IconButton(
+                              icon: Icon(
+                                Icons.menu_rounded,
+                                color: isDark
+                                    ? Colors.white.withOpacity(0.5)
+                                    : const Color(0xFF607D8B).withOpacity(0.7),
+                              ),
+                              onPressed: () {
+                                setState(() => _isExpanded = true);
+                              },
+                              tooltip: 'Expand sidebar',
+                            )
+                          : _buildLogo(context),
                     ),
                   )
                 else ...[
@@ -531,12 +601,12 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                   IconButton(
                     icon: Icon(
                       Icons.menu_open_rounded,
-                      color: isDark ? Colors.white.withOpacity(0.5) : const Color(0xFF607D8B).withOpacity(0.7),
+                      color: isDark
+                          ? Colors.white.withOpacity(0.5)
+                          : const Color(0xFF607D8B).withOpacity(0.7),
                     ),
                     onPressed: () {
-                      setState(() {
-                        _isExpanded = false;
-                      });
+                      setState(() => _isExpanded = false);
                     },
                     tooltip: 'Collapse sidebar',
                   ),

@@ -80,7 +80,7 @@ export function AliasAccountDetailDialog({ slotId, open, onOpenChange }: Props) 
                 <dt className="text-slate-400">Current holder</dt>
                 <dd>
                   {holder?.generalInfo?.fullName
-                    ? `${holder.generalInfo.fullName} (${holder.generalInfo.employeeCode ?? holder.id})`
+                    ? `${holder.generalInfo.fullName} (${(holder.generalInfo as any).employeeCode ?? holder.id})`
                     : "—"}
                 </dd>
               </dl>

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/router/app_back_button.dart';
 import '../../domain/lookup_models.dart';
 import '../lookup_providers.dart';
 
@@ -47,10 +48,7 @@ class _LookupCategoryScreenState extends ConsumerState<LookupCategoryScreen> {
         backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
         elevation: 0,
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => context.go('/admin/configurations'),
-        ),
+        leading: const AppBackButton(fallbackLocation: '/admin/configurations'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded, color: Color(0xFFC5A059)),

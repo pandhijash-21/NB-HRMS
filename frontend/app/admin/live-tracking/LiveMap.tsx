@@ -36,6 +36,12 @@ export default function LiveMap({ locations }: { locations: LiveLocation[] }) {
               <div className="text-sm">
                 <p className="font-bold">{loc.fullName || `Employee #${loc.employeeId}`}</p>
                 {loc.designation && <p className="text-muted-foreground">{loc.designation}</p>}
+                {loc.isSimulated && (
+                  <p className="text-xs text-amber-600 font-medium mt-1">Demo simulation</p>
+                )}
+                {loc.tripId && (
+                  <p className="text-xs text-emerald-600 mt-0.5">On trip</p>
+                )}
                 <p className="text-xs text-slate-400 mt-1">Last seen: {new Date(loc.updatedAt).toLocaleTimeString()}</p>
               </div>
             </Popup>

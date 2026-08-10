@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/router/app_back_button.dart';
 import '../../../../core/theme/app_colors.dart';
 
 /// Audit logs were GraphQL-only in the Next.js app; `/admin/audit` was a nav orphan.
@@ -13,10 +14,7 @@ class AdminAuditStubScreen extends StatelessWidget {
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text('Audit log'),
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back),
-          onPressed: () => context.go('/home'),
-        ),
+        leading: const AppBackButton(),
       ),
       body: Center(
         child: ConstrainedBox(

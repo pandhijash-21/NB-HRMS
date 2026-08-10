@@ -46,7 +46,7 @@ export function FamilyTab({ employeeId }: FamilyTabProps) {
   const { addMutation, deleteMutation } = useFamilyActions(employeeId);
 
   const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm<FamilyFormData>({
-    resolver: zodResolver(familySchema),
+    resolver: zodResolver(familySchema) as any,
     defaultValues: {
       isNominee: false,
     }

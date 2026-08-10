@@ -3,11 +3,11 @@
 <plist version="1.0">
 <dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>This app needs access to location when open to verify geofenced attendance.</string>
+	<string>NB HRMS needs your location while using the app for attendance and live field tracking.</string>
 	<key>NSLocationAlwaysUsageDescription</key>
-	<string>This app needs access to location to verify geofenced attendance.</string>
+	<string>NB HRMS needs Always location so live tracking continues when the app is in the background or closed.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>This app needs background location to continuously track employees on duty.</string>
+	<string>NB HRMS needs Always location so live tracking continues when the app is in the background or closed.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 
+import '../../../../core/router/app_back_button.dart';
 import '../../../../core/widgets/header_action_button.dart';
 import '../../../admin/presentation/admin_notifier.dart';
 import '../../../auth/domain/permissions.dart';
@@ -79,13 +80,7 @@ class AdminDashboardScreen extends ConsumerWidget {
             letterSpacing: -0.5,
           ),
         ),
-        leading: IconButton(
-          icon: Icon(
-            Icons.arrow_back_rounded,
-            color: isDark ? Colors.white.withOpacity(0.8) : const Color(0xFF212F3D),
-          ),
-          onPressed: () => context.canPop() ? context.pop() : context.go('/home'),
-        ),
+        leading: const AppBackButton(),
         actions: [
           HeaderActionButton(
             tooltip: 'Refresh Dashboard',
@@ -161,13 +156,6 @@ class AdminDashboardScreen extends ConsumerWidget {
               color: const Color(0xFFea580c),
               onTap: () => context.push('/admin/approvals'),
             ),
-            _KpiItem(
-              label: 'Recorded Trips',
-              value: 'View',
-              icon: Icons.directions_car_rounded,
-              color: const Color(0xFFdb2777),
-              onTap: () => context.push('/admin/trips'),
-            ),
           ];
 
           return ListView(
@@ -207,6 +195,7 @@ class AdminDashboardScreen extends ConsumerWidget {
                     title: 'Department Allocation',
                     isDark: isDark,
                     child: SfCircularChart(
+                      key: const ValueKey('admin-dept-allocation-chart'),
                       palette: const [
                         Color(0xFF0284c7),
                         Color(0xFF16a34a),
@@ -244,6 +233,7 @@ class AdminDashboardScreen extends ConsumerWidget {
                     title: 'Workforce Growth Trend',
                     isDark: isDark,
                     child: SfCartesianChart(
+                      key: const ValueKey('admin-workforce-growth-chart'),
                       primaryXAxis: CategoryAxis(
                         labelStyle: TextStyle(color: isDark ? Colors.white60 : const Color(0xFF607D8B)),
                         majorGridLines: const MajorGridLines(width: 0),
@@ -285,6 +275,7 @@ class AdminDashboardScreen extends ConsumerWidget {
                     title: 'Category Split',
                     isDark: isDark,
                     child: SfCartesianChart(
+                      key: const ValueKey('admin-category-split-chart'),
                       primaryXAxis: CategoryAxis(
                         labelStyle: TextStyle(color: isDark ? Colors.white60 : const Color(0xFF607D8B)),
                         majorGridLines: const MajorGridLines(width: 0),

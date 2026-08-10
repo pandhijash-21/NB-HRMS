@@ -229,6 +229,7 @@ model Employee {
   positionAssignments PositionAssignment[]
   locationHistories   LocationHistory[]
   trips               Trip[]
+  trackingEvents      TrackingEvent[]
 
   @@map("employees")
 }
@@ -290,9 +291,9 @@ model EmployeeGeneralInfo {
   appointmentType  String?      @map("appointment_type") // FULL_TIME_REGULAR (lookup)
   employeeCode     String?      @unique @map("employee_code") // GU1234
   /// Biometric / attendance machine punch ID (maps to eTimeOffice Empcode). Not the HRMS employee code.
-  punchId              String?          @unique @map("punch_id")
+  punchId          String?      @unique @map("punch_id")
   /// Weekly off / employee-specific holiday days, e.g. ["SUN"] or ["SAT","SUN"].
-  weeklyOffDays        String[]         @default(["SUN"]) @map("weekly_off_days")
+  weeklyOffDays    String[]     @default(["SUN"]) @map("weekly_off_days")
 
   updatedAt DateTime @updatedAt @map("updated_at")
   updatedBy String?  @map("updated_by")
@@ -670,9 +671,9 @@ model LeaveType {
   skipPublicHolidays Boolean           @default(true) @map("skip_public_holidays")
   skipWeekends       Boolean           @default(true) @map("skip_weekends")
   requiresDocument   Boolean           @default(false) @map("requires_document")
-  requiresReason     Boolean           @default(true)  @map("requires_reason")
-  isActive           Boolean           @default(true)  @map("is_active")
-  employeeCanApply   Boolean           @default(true)  @map("employee_can_apply")
+  requiresReason     Boolean           @default(true) @map("requires_reason")
+  isActive           Boolean           @default(true) @map("is_active")
+  employeeCanApply   Boolean           @default(true) @map("employee_can_apply")
   /// When true, approved leave days of this type reduce salary (if column cutOnLeave is on).
   cutsSalary         Boolean           @default(false) @map("cuts_salary")
   creditSchedule     Json?             @map("credit_schedule")
@@ -901,10 +902,10 @@ model AttendancePolicy {
    * Times are stored as "HH:MM" in Asia/Kolkata local time.
    */
   id                    String   @id @default("default")
-  defaultPunchInTime    String   @default("10:00") @map("default_punch_in_time")  // "HH:MM" IST
+  defaultPunchInTime    String   @default("10:00") @map("default_punch_in_time") // "HH:MM" IST
   defaultPunchOutTime   String   @default("19:00") @map("default_punch_out_time") // "HH:MM" IST
-  punchInBufferMinutes  Int      @default(10)      @map("punch_in_buffer_minutes")
-  punchOutBufferMinutes Int      @default(10)      @map("punch_out_buffer_minutes")
+  punchInBufferMinutes  Int      @default(10) @map("punch_in_buffer_minutes")
+  punchOutBufferMinutes Int      @default(10) @map("punch_out_buffer_minutes")
   updatedBy             String?  @map("updated_by")
   updatedAt             DateTime @updatedAt @map("updated_at")
 
@@ -1694,17 +1695,73 @@ model LocationHistory {
 }
 
 model Trip {
-  id              String   @id @default(uuid())
-  employeeId      Int      @map("employee_id")
-  startLocationId String?  @map("start_location_id")
-  endLocationId   String?  @map("end_location_id")
-  startTime       DateTime @default(now()) @map("start_time")
+  id              String    @id @default(uuid())
+  employeeId      Int       @map("employee_id")
+  startLocationId String?   @map("start_location_id")
+  endLocationId   String?   @map("end_location_id")
+  startTime       DateTime  @default(now()) @map("start_time")
   endTime         DateTime? @map("end_time")
-  distanceKm      Float    @default(0) @map("distance_km")
+  distanceKm      Float     @default(0) @map("distance_km")
 
-  employee        Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  // Computed Tracking Hub fields
+  routeGeometry         String? @map("route_geometry") @db.Text // OSRM snapped polyline or GeoJSON
+  activeTime            Int     @default(0) @map("active_time") // seconds
+  idleTime              Int     @default(0) @map("idle_time") // seconds
+  trackingUptimePercent Float   @default(100.0) @map("tracking_uptime_percent")
+  gapCount              Int     @default(0) @map("gap_count")
+  totalGapDuration      Int     @default(0) @map("total_gap_duration") // seconds
+
+  employee          Employee          @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   locationHistories LocationHistory[]
+  trackingEvents    TrackingEvent[]
 
   @@index([employeeId, startTime])
   @@map("trips")
+}
+
+enum TrackingEventSource {
+  EXPLICIT_EVENT
+  INFERRED_FROM_HEARTBEAT_GAP
+}
+
+enum TrackingEventConfidence {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum TrackingEventType {
+  LOCATION_PERMISSION_REVOKED
+  LOCATION_SERVICE_DISABLED
+  BACKGROUND_SERVICE_KILLED
+  GPS_SIGNAL_LOST
+  NETWORK_UNAVAILABLE
+  APP_FORCE_CLOSED
+  DEVICE_RESTARTED
+  BATTERY_DIED
+  MANUAL_PAUSE
+}
+
+model TrackingEvent {
+  id            String                  @id @default(uuid())
+  employeeId    Int                     @map("employee_id")
+  tripId        String?                 @map("trip_id")
+  eventType     TrackingEventType       @map("event_type")
+  timestamp     DateTime                @default(now())
+  endTime       DateTime?               @map("end_time") // For inferred gaps, when it ended
+  latitude      Float?
+  longitude     Float?
+  accuracy      Float?
+  batteryLevel  Float?                  @map("battery_level")
+  networkStatus String?                 @map("network_status")
+  source        TrackingEventSource
+  confidence    TrackingEventConfidence
+  gapReasonId   String?                 @map("gap_reason_id") // Extra context from OS on resume
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  trip     Trip?    @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId, timestamp])
+  @@index([tripId, timestamp])
+  @@map("tracking_events")
 }

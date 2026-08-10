@@ -169,7 +169,7 @@ export function EditUserDialog({
 
         <AccountCredentialsDialog
           userId={user.id}
-          displayName={displayName}
+          title={displayName}
           open={showCreds}
           onOpenChange={setShowCreds}
         />

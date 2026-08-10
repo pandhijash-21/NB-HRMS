@@ -13,6 +13,9 @@ class SecureStorageService {
 
   static const _tokenKey = 'access_token';
   static const _sessionKey = 'auth_session_json';
+  static const _rememberMeKey = 'remember_me';
+  static const _rememberIdentifierKey = 'remember_identifier';
+  static const _rememberPasswordKey = 'remember_password';
 
   final FlutterSecureStorage _secure;
 
@@ -74,6 +77,53 @@ class SecureStorageService {
     } else {
       await _secure.delete(key: _tokenKey);
       await _secure.delete(key: _sessionKey);
+    }
+  }
+
+  /// Whether the user opted to remember login fields (survives logout).
+  Future<bool> readRememberMe() async {
+    final prefs = await _webPrefs();
+    return prefs.getBool(_rememberMeKey) ?? false;
+  }
+
+  Future<({String identifier, String password})?>
+      readRememberedCredentials() async {
+    final prefs = await _webPrefs();
+    if (prefs.getBool(_rememberMeKey) != true) return null;
+
+    final identifier = prefs.getString(_rememberIdentifierKey)?.trim() ?? '';
+    if (identifier.isEmpty) return null;
+
+    final password = kIsWeb
+        ? (prefs.getString(_rememberPasswordKey) ?? '')
+        : (await _secure.read(key: _rememberPasswordKey) ?? '');
+
+    return (identifier: identifier, password: password);
+  }
+
+  Future<void> writeRememberedCredentials({
+    required String identifier,
+    required String password,
+  }) async {
+    final prefs = await _webPrefs();
+    final trimmed = identifier.trim();
+    await prefs.setBool(_rememberMeKey, true);
+    await prefs.setString(_rememberIdentifierKey, trimmed);
+    if (kIsWeb) {
+      await prefs.setString(_rememberPasswordKey, password);
+    } else {
+      await _secure.write(key: _rememberPasswordKey, value: password);
+    }
+  }
+
+  Future<void> clearRememberedCredentials() async {
+    final prefs = await _webPrefs();
+    await prefs.remove(_rememberMeKey);
+    await prefs.remove(_rememberIdentifierKey);
+    if (kIsWeb) {
+      await prefs.remove(_rememberPasswordKey);
+    } else {
+      await _secure.delete(key: _rememberPasswordKey);
     }
   }
 }

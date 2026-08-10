@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/router/app_back_button.dart';
 import '../../../../core/widgets/header_action_button.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/auth_providers.dart';
@@ -45,12 +46,7 @@ class OrganizationsScreen extends ConsumerWidget {
             color: isDark ? Colors.white : const Color(0xFF212F3D),
           ),
         ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => context.canPop()
-              ? context.pop()
-              : context.go('/admin/configurations'),
-        ),
+        leading: const AppBackButton(fallbackLocation: '/admin/configurations'),
         actions: [
           HeaderActionButton(
             tooltip: 'Refresh',

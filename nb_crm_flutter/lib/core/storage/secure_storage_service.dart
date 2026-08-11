@@ -126,4 +126,32 @@ class SecureStorageService {
       await _secure.delete(key: _rememberPasswordKey);
     }
   }
+
+  String _biometricKey(int employeeId) => 'biometric_token_employee_$employeeId';
+
+  Future<String?> readBiometricToken(int employeeId) async {
+    final key = _biometricKey(employeeId);
+    if (kIsWeb) {
+      return (await _webPrefs()).getString(key);
+    }
+    return _secure.read(key: key);
+  }
+
+  Future<void> writeBiometricToken(int employeeId, String token) async {
+    final key = _biometricKey(employeeId);
+    if (kIsWeb) {
+      await (await _webPrefs()).setString(key, token);
+    } else {
+      await _secure.write(key: key, value: token);
+    }
+  }
+
+  Future<void> clearBiometricToken(int employeeId) async {
+    final key = _biometricKey(employeeId);
+    if (kIsWeb) {
+      await (await _webPrefs()).remove(key);
+    } else {
+      await _secure.delete(key: key);
+    }
+  }
 }

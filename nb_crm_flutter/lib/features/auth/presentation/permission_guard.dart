@@ -9,8 +9,9 @@ import '../../../core/logging/app_logger.dart';
 import '../../../core/services/background_tracking_service.dart';
 import '../../../core/services/web_live_tracking_service.dart';
 
-// RadarPainter removed, using map image
-
+/// On native: hard-gates the app until Always location + battery opt-out.
+/// On web (Netlify): never blocks login / HR features; location is best-effort
+/// for punch + live tracking while the tab is open.
 class PermissionGuard extends StatefulWidget {
   final Widget child;
 
@@ -32,6 +33,10 @@ class _PermissionGuardState extends State<PermissionGuard> {
     super.initState();
     _checkPermissions();
     _timer = Timer.periodic(const Duration(seconds: 2), (timer) {
+      if (kIsWeb) {
+        unawaited(WebLiveTrackingService.ensureRunning());
+        return;
+      }
       if (_hasPermissions && !_checking) {
         _verifyPermissionsQuietly();
       }
@@ -41,18 +46,31 @@ class _PermissionGuardState extends State<PermissionGuard> {
   @override
   void dispose() {
     _timer?.cancel();
-    WebLiveTrackingService.stop();
+    if (kIsWeb) {
+      WebLiveTrackingService.stop();
+    }
     super.dispose();
   }
 
   Future<bool> _needsBackgroundPermission() async {
     if (kIsWeb) return false;
-    return true; // Always require background location for live tracking
+    return true;
   }
 
   Future<void> _checkPermissions() async {
+    // Web: never lock the shell — leave/salary/admin must work without GPS.
+    if (kIsWeb) {
+      setState(() {
+        _hasPermissions = true;
+        _checking = false;
+        _errorMsg = '';
+      });
+      unawaited(WebLiveTrackingService.ensureRunning());
+      return;
+    }
+
     setState(() => _checking = true);
-    
+
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
       setState(() {
@@ -63,37 +81,16 @@ class _PermissionGuardState extends State<PermissionGuard> {
       return;
     }
 
-    if (kIsWeb) {
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
-        await WebLiveTrackingService.start();
-        setState(() {
-          _hasPermissions = true;
-          _checking = false;
-        });
-        return;
-      } else {
-        WebLiveTrackingService.stop();
-        setState(() {
-          _checking = false;
-          _hasPermissions = false;
-          _errorMsg = "This app requires location permissions to function.";
-        });
-        return;
-      }
-    }
-
     var locationStatus = await Permission.location.status;
     bool needsBg = await _needsBackgroundPermission();
     var bgStatus = needsBg ? await Permission.locationAlways.status : PermissionStatus.granted;
     var batteryStatus = await Permission.ignoreBatteryOptimizations.status;
 
     if (locationStatus.isGranted && bgStatus.isGranted && batteryStatus.isGranted) {
-      if (!kIsWeb && await Permission.notification.isDenied) {
+      if (await Permission.notification.isDenied) {
         await Permission.notification.request();
       }
       try {
-        // Wait for app to be fully resumed before starting foreground service
         await Future.delayed(const Duration(milliseconds: 500));
         await startBackgroundTracking();
       } catch (e) {
@@ -107,7 +104,7 @@ class _PermissionGuardState extends State<PermissionGuard> {
       setState(() {
         _checking = false;
         _hasPermissions = false;
-        _errorMsg = needsBg 
+        _errorMsg = needsBg
             ? "This app strictly requires Always-On location and Battery Optimization to function."
             : "This app strictly requires location permissions (While using the app) to function.";
       });
@@ -115,6 +112,11 @@ class _PermissionGuardState extends State<PermissionGuard> {
   }
 
   Future<void> _verifyPermissionsQuietly() async {
+    if (kIsWeb) {
+      await WebLiveTrackingService.ensureRunning();
+      return;
+    }
+
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
       if (mounted) {
@@ -122,22 +124,6 @@ class _PermissionGuardState extends State<PermissionGuard> {
           _hasPermissions = false;
           _errorMsg = "Location services are disabled. Please enable them.";
         });
-      }
-      return;
-    }
-
-    if (kIsWeb) {
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission != LocationPermission.always && permission != LocationPermission.whileInUse) {
-        WebLiveTrackingService.stop();
-        if (mounted) {
-          setState(() {
-            _hasPermissions = false;
-            _errorMsg = "This app requires location permissions to function.";
-          });
-        }
-      } else {
-        await WebLiveTrackingService.start();
       }
       return;
     }
@@ -151,13 +137,12 @@ class _PermissionGuardState extends State<PermissionGuard> {
       if (mounted) {
         setState(() {
           _hasPermissions = false;
-          _errorMsg = needsBg 
+          _errorMsg = needsBg
               ? "This app strictly requires Always-On location and Battery Optimization to function."
               : "This app strictly requires location permissions (While using the app) to function.";
         });
       }
     } else {
-      // Permissions still OK — keep background tracking alive if OS killed it.
       final now = DateTime.now();
       if (_lastServiceEnsureAt == null ||
           now.difference(_lastServiceEnsureAt!) > const Duration(seconds: 20)) {
@@ -172,72 +157,61 @@ class _PermissionGuardState extends State<PermissionGuard> {
   Future<void> _requestPermissions() async {
     setState(() => _checking = true);
 
-    if (kIsWeb) {
-      LocationPermission permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
-        await WebLiveTrackingService.start();
-        setState(() {
-          _hasPermissions = true;
-          _checking = false;
-        });
-        return;
+    var locStatus = await Permission.location.request();
+    bool needsBg = await _needsBackgroundPermission();
+
+    if (locStatus.isGranted) {
+      if (needsBg) {
+        var bgStatus = await Permission.locationAlways.request();
+        if (!bgStatus.isGranted) {
+          setState(() {
+            _checking = false;
+            _hasPermissions = false;
+            _errorMsg =
+                "You must allow location 'All the time' for live tracking. Please tap 'Open App Settings' and grant it.";
+          });
+          return;
+        }
       }
-    } else {
-      // Request foreground first
-      var locStatus = await Permission.location.request();
-      bool needsBg = await _needsBackgroundPermission();
-      
-      if (locStatus.isGranted) {
-        if (needsBg) {
-          var bgStatus = await Permission.locationAlways.request();
-          if (!bgStatus.isGranted) {
-            setState(() {
-              _checking = false;
-              _hasPermissions = false;
-              _errorMsg = "You must allow location 'All the time' for live tracking. Please tap 'Open App Settings' and grant it.";
-            });
-            return;
-          }
-        }
 
-        if (await Permission.notification.isDenied) {
-          await Permission.notification.request();
-        }
+      if (await Permission.notification.isDenied) {
+        await Permission.notification.request();
+      }
 
-        if (await Permission.ignoreBatteryOptimizations.isDenied) {
-          await Permission.ignoreBatteryOptimizations.request();
-          try {
-            await DisableBatteryOptimization.showDisableBatteryOptimizationSettings();
-          } catch (_) {}
-        }
-
+      if (await Permission.ignoreBatteryOptimizations.isDenied) {
+        await Permission.ignoreBatteryOptimizations.request();
         try {
-          await Future.delayed(const Duration(milliseconds: 500));
-          await startBackgroundTracking();
-        } catch (e) {
-          AppLogger.tracking.e('Failed to start background tracking: $e');
-        }
-        setState(() {
-          _hasPermissions = true;
-          _checking = false;
-        });
-        return;
+          await DisableBatteryOptimization.showDisableBatteryOptimizationSettings();
+        } catch (_) {}
       }
+
+      try {
+        await Future.delayed(const Duration(milliseconds: 500));
+        await startBackgroundTracking();
+      } catch (e) {
+        AppLogger.tracking.e('Failed to start background tracking: $e');
+      }
+      setState(() {
+        _hasPermissions = true;
+        _checking = false;
+      });
+      return;
     }
 
     setState(() {
       _checking = false;
       _hasPermissions = false;
-      if (kIsWeb) {
-        _errorMsg = "Location access was denied. Please click the padlock icon in your browser's URL bar, allow location, and refresh the page.";
-      } else {
-        _errorMsg = "You must allow location 'While using the app' for live tracking. Please tap 'Open App Settings' and grant it.";
-      }
+      _errorMsg =
+          "You must allow location 'While using the app' for live tracking. Please tap 'Open App Settings' and grant it.";
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    if (kIsWeb) {
+      return widget.child;
+    }
+
     if (_checking) {
       return const Scaffold(
         backgroundColor: Color(0xFF0F172A),
@@ -362,8 +336,8 @@ class _PermissionGuardState extends State<PermissionGuard> {
                                 label: const Text(
                                   "ENABLE PERMISSIONS",
                                   style: TextStyle(
-                                    fontSize: 16, 
-                                    fontWeight: FontWeight.bold, 
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
                                     letterSpacing: 1.5,
                                     color: Colors.black87,
                                   ),
@@ -379,25 +353,24 @@ class _PermissionGuardState extends State<PermissionGuard> {
                               ),
                             ),
                             const SizedBox(height: 16),
-                            if (!kIsWeb)
-                              SizedBox(
-                                width: double.infinity,
-                                child: TextButton(
-                                  onPressed: () => openAppSettings(),
-                                  style: TextButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(vertical: 16),
-                                    foregroundColor: Colors.amberAccent,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      side: BorderSide(color: Colors.amber.withOpacity(0.4)),
-                                    ),
-                                  ),
-                                  child: const Text(
-                                    "OPEN APP SETTINGS",
-                                    style: TextStyle(fontWeight: FontWeight.w600, letterSpacing: 1.2),
+                            SizedBox(
+                              width: double.infinity,
+                              child: TextButton(
+                                onPressed: () => openAppSettings(),
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                                  foregroundColor: Colors.amberAccent,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    side: BorderSide(color: Colors.amber.withOpacity(0.4)),
                                   ),
                                 ),
-                              )
+                                child: const Text(
+                                  "OPEN APP SETTINGS",
+                                  style: TextStyle(fontWeight: FontWeight.w600, letterSpacing: 1.2),
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       ),

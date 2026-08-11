@@ -86,6 +86,7 @@ class AuthNotifier extends Notifier<AuthState> {
       permissions: restored.permissions,
       isFirstLogin: restored.isFirstLogin,
     );
+    await WebLiveTrackingService.ensureRunning();
   }
 
   Future<void> _handleUnauthorized() async {
@@ -133,6 +134,7 @@ class AuthNotifier extends Notifier<AuthState> {
       );
       ref.invalidate(profileProvider);
       ref.invalidate(activeProfileEmployeeIdProvider);
+      await WebLiveTrackingService.ensureRunning();
       return true;
     } on ApiException catch (e) {
       state = state.copyWith(

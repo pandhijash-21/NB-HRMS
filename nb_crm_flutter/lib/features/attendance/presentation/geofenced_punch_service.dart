@@ -1,109 +1,97 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:local_auth/local_auth.dart';
-import 'package:geolocator/geolocator.dart';
-import 'package:device_info_plus/device_info_plus.dart';
-import 'package:flutter/foundation.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'dart:math';
 
+import 'package:device_info_plus/device_info_plus.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:local_auth/local_auth.dart';
+
 import '../../../core/network/dio_client.dart';
+import '../../../core/storage/secure_storage_service.dart';
 
 class GeofencedPunchService {
+  GeofencedPunchService(this.dio, {SecureStorageService? storage})
+      : storage = storage ?? SecureStorageService();
+
   final DioClient dio;
+  final SecureStorageService storage;
   final LocalAuthentication auth = LocalAuthentication();
-  final FlutterSecureStorage secureStorage = const FlutterSecureStorage(
-    aOptions: AndroidOptions(encryptedSharedPreferences: true),
-    iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
-  );
-
-  GeofencedPunchService(this.dio);
-
-  String _getBiometricTokenKey(int employeeId) {
-    return 'biometric_token_employee_$employeeId';
-  }
 
   Future<bool> hasLocalToken(int employeeId) async {
-    final token = await secureStorage.read(key: _getBiometricTokenKey(employeeId));
+    final token = await storage.readBiometricToken(employeeId);
     return token != null && token.isNotEmpty;
   }
 
   Future<void> clearLocalToken(int employeeId) async {
-    await secureStorage.delete(key: _getBiometricTokenKey(employeeId));
+    await storage.clearBiometricToken(employeeId);
   }
 
   Future<void> registerBiometrics(BuildContext context, int employeeId) async {
     final messenger = ScaffoldMessenger.of(context);
     try {
-      if (kIsWeb) {
-        throw Exception('Please use the mobile app to register biometrics.');
-      }
-
-      if (!(await auth.isDeviceSupported())) {
-        throw Exception('Device authentication is not supported on this device.');
-      }
-
-      // Authenticate using biometrics (allow PIN fallback to ensure success)
-      bool verified = await auth.authenticate(
-        localizedReason: 'Please authenticate to set/register your Fingerprint, Face ID, or PIN for this account',
-        biometricOnly: false,
-        persistAcrossBackgrounding: true,
+      final verified = await _confirmIdentity(
+        context,
+        title: kIsWeb ? 'Confirm device registration' : 'Authenticate',
+        message: kIsWeb
+            ? 'Register this browser for attendance punches. Continue only on a trusted device.'
+            : 'Please authenticate to set/register your Fingerprint, Face ID, or PIN for this account',
       );
-
       if (!verified) {
         throw Exception('Authentication failed or canceled.');
       }
 
-      // Generate a cryptographically secure random token (128-bit hex)
       final random = Random.secure();
       final values = List<int>.generate(16, (i) => random.nextInt(256));
       final token = values.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 
-      // Save locally
-      await secureStorage.write(key: _getBiometricTokenKey(employeeId), value: token);
+      await storage.writeBiometricToken(employeeId, token);
 
-      // Save on server
       await dio.postEnvelope(
         'attendance/my/register-biometrics',
-        data: {
-          'biometricToken': token,
-        },
+        data: {'biometricToken': token},
         parse: (r) => r,
       );
 
       if (context.mounted) {
         messenger.showSnackBar(
-          const SnackBar(content: Text('Fingerprint set and registered successfully!'), backgroundColor: Colors.green),
+          SnackBar(
+            content: Text(
+              kIsWeb
+                  ? 'Browser registered for attendance successfully!'
+                  : 'Fingerprint set and registered successfully!',
+            ),
+            backgroundColor: Colors.green,
+          ),
         );
       }
     } catch (e) {
-      _showErrorDialog(context, 'Registration Failed', e.toString().replaceAll('Exception: ', ''));
+      _showErrorDialog(
+        context,
+        'Registration Failed',
+        e.toString().replaceAll('Exception: ', ''),
+      );
       rethrow;
     }
   }
 
   Future<void> executePunch(BuildContext context, int employeeId) async {
     final messenger = ScaffoldMessenger.of(context);
-    
+
     try {
-      if (kIsWeb) {
-        throw Exception('Please use the mobile app to punch in using biometrics.');
-      }
-
-      // 1. Retrieve local biometric token
-      final token = await secureStorage.read(key: _getBiometricTokenKey(employeeId));
+      final token = await storage.readBiometricToken(employeeId);
       if (token == null || token.isEmpty) {
-        throw Exception('Fingerprint is not set. Please set/register your fingerprint first.');
+        throw Exception(
+          kIsWeb
+              ? 'This browser is not registered. Tap “Set Fingerprint / Register device” first.'
+              : 'Fingerprint is not set. Please set/register your fingerprint first.',
+        );
       }
 
-      if (!(await auth.isDeviceSupported())) {
-        throw Exception('Device authentication is not supported on this device.');
-      }
-
-      // 3. Fetch Location First
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
-        throw Exception('Location services are disabled. Please enable them in your device settings.');
+        throw Exception(
+          'Location services are disabled. Please enable them in your device settings.',
+        );
       }
 
       LocationPermission permission = await Geolocator.checkPermission();
@@ -115,20 +103,26 @@ class GeofencedPunchService {
       }
 
       if (permission == LocationPermission.deniedForever) {
-        throw Exception('Location permissions are permanently denied, we cannot request permissions.');
+        throw Exception(
+          'Location permissions are permanently denied, we cannot request permissions.',
+        );
       }
 
       if (context.mounted) {
         messenger.showSnackBar(
-          const SnackBar(content: Text('Verifying location...'), duration: Duration(seconds: 2)),
+          const SnackBar(
+            content: Text('Verifying location...'),
+            duration: Duration(seconds: 2),
+          ),
         );
       }
 
-      Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
       );
 
-      // 4. Verify Location with Backend
       await dio.postEnvelope(
         'attendance/my/verify-location',
         data: {
@@ -138,32 +132,26 @@ class GeofencedPunchService {
         parse: (r) => r,
       );
 
-      // 4. Authenticate using Biometrics or PIN
-      bool biometricVerified = await auth.authenticate(
-        localizedReason: 'Please authenticate with Fingerprint, Face ID, or PIN to mark your attendance',
-        biometricOnly: false, // PIN allowed
-        persistAcrossBackgrounding: true,
+      final biometricVerified = await _confirmIdentity(
+        context,
+        title: kIsWeb ? 'Confirm punch' : 'Authenticate',
+        message: kIsWeb
+            ? 'Confirm this attendance punch from your current browser location.'
+            : 'Please authenticate with Fingerprint, Face ID, or PIN to mark your attendance',
       );
 
       if (!biometricVerified) {
         throw Exception('Authentication failed or canceled.');
       }
 
-      // Capture basic device info for logging
-      Map<String, dynamic>? deviceInfoMap;
-      final deviceInfoPlugin = DeviceInfoPlugin();
-      if (defaultTargetPlatform == TargetPlatform.android) {
-        final androidInfo = await deviceInfoPlugin.androidInfo;
-        deviceInfoMap = { 'model': androidInfo.model, 'brand': androidInfo.brand };
-      } else if (defaultTargetPlatform == TargetPlatform.iOS) {
-        final iosInfo = await deviceInfoPlugin.iosInfo;
-        deviceInfoMap = { 'name': iosInfo.name, 'systemName': iosInfo.systemName, 'model': iosInfo.model };
-      }
+      final deviceInfoMap = await _deviceInfo();
 
-      // 6. Send Punch Request
       if (context.mounted) {
         messenger.showSnackBar(
-          const SnackBar(content: Text('Recording punch...'), duration: Duration(seconds: 2)),
+          const SnackBar(
+            content: Text('Recording punch...'),
+            duration: Duration(seconds: 2),
+          ),
         );
       }
 
@@ -186,7 +174,10 @@ class GeofencedPunchService {
         await sendPunchRequest();
         if (context.mounted) {
           messenger.showSnackBar(
-            const SnackBar(content: Text('Punch registered successfully!'), backgroundColor: Colors.green),
+            const SnackBar(
+              content: Text('Punch registered successfully!'),
+              backgroundColor: Colors.green,
+            ),
           );
         }
       } catch (e) {
@@ -196,13 +187,19 @@ class GeofencedPunchService {
           if (reason != null && reason.trim().isNotEmpty) {
             if (context.mounted) {
               messenger.showSnackBar(
-                const SnackBar(content: Text('Submitting punch with reason...'), duration: Duration(seconds: 2)),
+                const SnackBar(
+                  content: Text('Submitting punch with reason...'),
+                  duration: Duration(seconds: 2),
+                ),
               );
             }
             await sendPunchRequest(reason);
             if (context.mounted) {
               messenger.showSnackBar(
-                const SnackBar(content: Text('Punch with reason registered successfully!'), backgroundColor: Colors.green),
+                const SnackBar(
+                  content: Text('Punch with reason registered successfully!'),
+                  backgroundColor: Colors.green,
+                ),
               );
             }
           } else {
@@ -212,10 +209,94 @@ class GeofencedPunchService {
           rethrow;
         }
       }
-
     } catch (e) {
-      _showErrorDialog(context, 'Punch Failed', e.toString().replaceAll('Exception: ', ''));
+      _showErrorDialog(
+        context,
+        'Punch Failed',
+        e.toString().replaceAll('Exception: ', ''),
+      );
     }
+  }
+
+  Future<bool> _confirmIdentity(
+    BuildContext context, {
+    required String title,
+    required String message,
+  }) async {
+    if (kIsWeb) {
+      if (!context.mounted) return false;
+      final ok = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) {
+          final isDark = Theme.of(ctx).brightness == Brightness.dark;
+          return AlertDialog(
+            backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+            content: Text(message),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFFC5A059),
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Confirm'),
+              ),
+            ],
+          );
+        },
+      );
+      return ok == true;
+    }
+
+    if (!(await auth.isDeviceSupported())) {
+      throw Exception('Device authentication is not supported on this device.');
+    }
+
+    return auth.authenticate(
+      localizedReason: message,
+      biometricOnly: false,
+      persistAcrossBackgrounding: true,
+    );
+  }
+
+  Future<Map<String, dynamic>> _deviceInfo() async {
+    final deviceInfoPlugin = DeviceInfoPlugin();
+    try {
+      if (kIsWeb) {
+        final web = await deviceInfoPlugin.webBrowserInfo;
+        return {
+          'platform': 'web',
+          'browser': web.browserName.name,
+          'userAgent': web.userAgent,
+          'vendor': web.vendor,
+        };
+      }
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        final androidInfo = await deviceInfoPlugin.androidInfo;
+        return {
+          'platform': 'android',
+          'model': androidInfo.model,
+          'brand': androidInfo.brand,
+        };
+      }
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        final iosInfo = await deviceInfoPlugin.iosInfo;
+        return {
+          'platform': 'ios',
+          'name': iosInfo.name,
+          'systemName': iosInfo.systemName,
+          'model': iosInfo.model,
+        };
+      }
+    } catch (_) {}
+    return {'platform': defaultTargetPlatform.name};
   }
 
   Future<String?> _promptForReason(BuildContext context) async {
@@ -229,7 +310,10 @@ class GeofencedPunchService {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text(
           'Reason Required',
-          style: TextStyle(fontWeight: FontWeight.w800, color: isDark ? Colors.white : const Color(0xFF212F3D)),
+          style: TextStyle(
+            fontWeight: FontWeight.w800,
+            color: isDark ? Colors.white : const Color(0xFF212F3D),
+          ),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -237,7 +321,10 @@ class GeofencedPunchService {
           children: [
             Text(
               'You have already reached the limit of 2 device punches today. Please provide a valid reason to punch again.',
-              style: TextStyle(fontSize: 13, color: isDark ? Colors.white70 : Colors.black87),
+              style: TextStyle(
+                fontSize: 13,
+                color: isDark ? Colors.white70 : Colors.black87,
+              ),
             ),
             const SizedBox(height: 16),
             TextField(
@@ -258,7 +345,10 @@ class GeofencedPunchService {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, ctrl.text),
-            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFC5A059), foregroundColor: Colors.white),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFC5A059),
+              foregroundColor: Colors.white,
+            ),
             child: const Text('Submit'),
           ),
         ],
@@ -268,9 +358,9 @@ class GeofencedPunchService {
 
   void _showErrorDialog(BuildContext context, String title, String message) {
     if (!context.mounted) return;
-    
+
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     showDialog(
       context: context,
       barrierDismissible: true,

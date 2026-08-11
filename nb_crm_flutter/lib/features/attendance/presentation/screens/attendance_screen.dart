@@ -87,13 +87,6 @@ class AttendanceScreen extends ConsumerWidget {
             return;
           }
 
-          if (kIsWeb) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Please use the mobile app to punch in using biometrics.'), backgroundColor: Colors.red),
-            );
-            return;
-          }
-
           final auth = ref.read(authNotifierProvider);
           final empId = auth.user?.employeeId;
           if (empId == null) {
@@ -107,7 +100,29 @@ class AttendanceScreen extends ConsumerWidget {
           final settings = ref.read(employeeAttendanceSettingsProvider(empId)).value;
           if (settings == null || settings.biometricToken == null || settings.biometricToken!.isEmpty) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Fingerprint/Face ID not registered. Please register it first.'), backgroundColor: Colors.orange),
+              SnackBar(
+                content: Text(
+                  kIsWeb
+                      ? 'Register this browser first (Attendance → Register this browser).'
+                      : 'Fingerprint/Face ID not registered. Please register it first.',
+                ),
+                backgroundColor: Colors.orange,
+              ),
+            );
+            return;
+          }
+
+          final hasLocal = await ref.read(hasLocalBiometricTokenProvider(empId).future);
+          if (!hasLocal) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  kIsWeb
+                      ? 'This browser is not linked yet. Tap “Register this browser” first.'
+                      : 'Fingerprint not set on this device. Please register it first.',
+                ),
+                backgroundColor: Colors.orange,
+              ),
             );
             return;
           }
@@ -237,8 +252,10 @@ class AttendanceScreen extends ConsumerWidget {
                             ),
                             const SizedBox(height: 10),
                             Text(
-                              'Your fingerprint/Face ID is registered on the server, but not found on this device. '
-                              'If you reinstalled the app or switched phones, please ask your Admin or HR manager to reset your registration.',
+                              kIsWeb
+                                  ? 'Attendance is registered for another device/browser. Link this browser to punch from the web app (this replaces the previous device token).'
+                                  : 'Your fingerprint/Face ID is registered on the server, but not found on this device. '
+                                      'If you reinstalled the app or switched phones, re-register here or ask Admin/HR to reset.',
                               style: TextStyle(
                                 fontSize: 13,
                                 color: isDark ? Colors.white.withOpacity(0.7) : const Color(0xFF4A5568),
@@ -246,6 +263,37 @@ class AttendanceScreen extends ConsumerWidget {
                               ),
                             ),
                             const SizedBox(height: 14),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: () async {
+                                  final dio = ref.read(dioClientProvider);
+                                  final svc = GeofencedPunchService(dio);
+                                  final empId = auth.user?.employeeId;
+                                  if (empId != null) {
+                                    try {
+                                      await svc.registerBiometrics(context, empId);
+                                      ref.invalidate(employeeAttendanceSettingsProvider(empId));
+                                      ref.invalidate(hasLocalBiometricTokenProvider(empId));
+                                    } catch (_) {}
+                                  }
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFC5A059),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                icon: Icon(kIsWeb ? Icons.link_rounded : Icons.fingerprint_rounded),
+                                label: Text(
+                                  kIsWeb ? 'Link this browser' : 'Re-register on this device',
+                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
                             SizedBox(
                               width: double.infinity,
                               child: OutlinedButton.icon(
@@ -308,7 +356,9 @@ class AttendanceScreen extends ConsumerWidget {
                           ),
                           const SizedBox(height: 10),
                           Text(
-                            'To mark your attendance using the mobile app, you must first register your fingerprint or Face ID.',
+                            kIsWeb
+                                ? 'Register this browser once to enable geofenced punch in/out from the web app.'
+                                : 'To mark your attendance using the mobile app, you must first register your fingerprint or Face ID.',
                             style: TextStyle(
                               fontSize: 13,
                               color: isDark ? Colors.white.withOpacity(0.7) : const Color(0xFF4A5568),
@@ -340,8 +390,11 @@ class AttendanceScreen extends ConsumerWidget {
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                               ),
-                              icon: const Icon(Icons.fingerprint_rounded),
-                              label: const Text('Set Fingerprint/Face ID Now', style: TextStyle(fontWeight: FontWeight.bold)),
+                              icon: Icon(kIsWeb ? Icons.verified_user_rounded : Icons.fingerprint_rounded),
+                              label: Text(
+                                kIsWeb ? 'Register this browser' : 'Set Fingerprint/Face ID Now',
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
                             ),
                           ),
                         ],

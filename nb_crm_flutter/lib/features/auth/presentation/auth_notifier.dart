@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_envelope.dart';
+import '../../../core/services/web_live_tracking_service.dart';
 import '../domain/auth_user.dart';
 import 'auth_providers.dart';
 import '../../profile/presentation/profile_notifier.dart';
@@ -186,6 +187,7 @@ class AuthNotifier extends Notifier<AuthState> {
     final repo = ref.read(authRepositoryProvider);
     await repo.logoutRemote();
     await repo.clearSession();
+    WebLiveTrackingService.stop();
     ref.invalidate(profileProvider);
     ref.invalidate(activeProfileEmployeeIdProvider);
     state = const AuthState.unauthenticated();

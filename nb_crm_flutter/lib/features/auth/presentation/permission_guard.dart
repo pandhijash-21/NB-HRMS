@@ -7,6 +7,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:disable_battery_optimization/disable_battery_optimization.dart';
 import '../../../core/logging/app_logger.dart';
 import '../../../core/services/background_tracking_service.dart';
+import '../../../core/services/web_live_tracking_service.dart';
 
 // RadarPainter removed, using map image
 
@@ -40,6 +41,7 @@ class _PermissionGuardState extends State<PermissionGuard> {
   @override
   void dispose() {
     _timer?.cancel();
+    WebLiveTrackingService.stop();
     super.dispose();
   }
 
@@ -64,12 +66,14 @@ class _PermissionGuardState extends State<PermissionGuard> {
     if (kIsWeb) {
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
+        await WebLiveTrackingService.start();
         setState(() {
           _hasPermissions = true;
           _checking = false;
         });
         return;
       } else {
+        WebLiveTrackingService.stop();
         setState(() {
           _checking = false;
           _hasPermissions = false;
@@ -125,12 +129,15 @@ class _PermissionGuardState extends State<PermissionGuard> {
     if (kIsWeb) {
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission != LocationPermission.always && permission != LocationPermission.whileInUse) {
+        WebLiveTrackingService.stop();
         if (mounted) {
           setState(() {
             _hasPermissions = false;
             _errorMsg = "This app requires location permissions to function.";
           });
         }
+      } else {
+        await WebLiveTrackingService.start();
       }
       return;
     }
@@ -168,6 +175,7 @@ class _PermissionGuardState extends State<PermissionGuard> {
     if (kIsWeb) {
       LocationPermission permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
+        await WebLiveTrackingService.start();
         setState(() {
           _hasPermissions = true;
           _checking = false;

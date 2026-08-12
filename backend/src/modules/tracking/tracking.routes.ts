@@ -126,3 +126,38 @@ trackingRouter.get('/trips/:id/events', requireAuth, async (req: Request, res: R
     return res.status(400).json(fail(e.message));
   }
 });
+
+// Admin/HR: Employee-wise location availability for a day (punch-in → punch-out)
+trackingRouter.get('/hub-day', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const role = String((req.user as any)?.role ?? '').toUpperCase().replace(/[\s_]/g, '');
+    if (!['SUPERADMIN', 'ADMIN', 'SYSTEMADMIN', 'HR', 'DEVELOPER'].includes(role)) {
+      return res.status(403).json(fail('Forbidden: Only System Admin, Admin, and HR can view availability.'));
+    }
+    const date = String(req.query.date || '').trim();
+    if (!date) return res.status(400).json(fail('date query (YYYY-MM-DD) is required'));
+    const employeeId = req.query.employeeId ? Number(req.query.employeeId) : undefined;
+    const data = await trackingService.getHubDayAvailability({ date, employeeId });
+    return res.json(ok(data));
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});
+
+// Admin/HR: Single employee availability detail
+trackingRouter.get('/availability/:employeeId', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const role = String((req.user as any)?.role ?? '').toUpperCase().replace(/[\s_]/g, '');
+    if (!['SUPERADMIN', 'ADMIN', 'SYSTEMADMIN', 'HR', 'DEVELOPER'].includes(role)) {
+      return res.status(403).json(fail('Forbidden: Only System Admin, Admin, and HR can view availability.'));
+    }
+    const employeeId = Number(req.params.employeeId);
+    if (!Number.isFinite(employeeId)) return res.status(400).json(fail('Invalid employeeId'));
+    const date = String(req.query.date || '').trim();
+    if (!date) return res.status(400).json(fail('date query (YYYY-MM-DD) is required'));
+    const data = await trackingService.getEmployeeAvailability({ employeeId, date });
+    return res.json(ok(data));
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});

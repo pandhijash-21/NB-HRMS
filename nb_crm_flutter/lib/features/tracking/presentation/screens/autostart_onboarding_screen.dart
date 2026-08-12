@@ -60,7 +60,7 @@ class _AutostartOnboardingScreenState extends State<AutostartOnboardingScreen> {
     try {
       final intent = AndroidIntent(
         action: 'android.settings.APPLICATION_DETAILS_SETTINGS',
-        data: 'package:com.nb.hrms', // Ensure this matches Android applicationId
+        data: 'package:com.nbdeveloper.nb_crm_flutter',
         flags: <int>[Flag.FLAG_ACTIVITY_NEW_TASK],
       );
       await intent.launch();
@@ -131,7 +131,11 @@ class _AutostartOnboardingScreenState extends State<AutostartOnboardingScreen> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('hasSeenAutostartOnboarding', true);
     if (mounted) {
-      context.pop();
+      if (context.canPop()) {
+        context.pop();
+      } else {
+        context.go('/home');
+      }
     }
   }
 

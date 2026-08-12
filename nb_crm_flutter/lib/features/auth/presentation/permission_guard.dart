@@ -2,9 +2,11 @@ import 'dart:ui';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:disable_battery_optimization/disable_battery_optimization.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/logging/app_logger.dart';
 import '../../../core/services/background_tracking_service.dart';
 import '../../../core/services/web_live_tracking_service.dart';
@@ -96,10 +98,13 @@ class _PermissionGuardState extends State<PermissionGuard> {
       } catch (e) {
         AppLogger.tracking.e('Failed to start background tracking: $e');
       }
-      setState(() {
-        _hasPermissions = true;
-        _checking = false;
-      });
+      if (mounted) {
+        setState(() {
+          _hasPermissions = true;
+          _checking = false;
+        });
+        unawaited(_maybeOpenTrackingSetup());
+      }
     } else {
       setState(() {
         _checking = false;
@@ -109,6 +114,19 @@ class _PermissionGuardState extends State<PermissionGuard> {
             : "This app strictly requires location permissions (While using the app) to function.";
       });
     }
+  }
+
+  Future<void> _maybeOpenTrackingSetup() async {
+    if (kIsWeb || !mounted) return;
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    if (prefs.getBool('hasSeenAutostartOnboarding') == true) return;
+    final loc = GoRouterState.of(context).matchedLocation;
+    if (loc == '/tracking/setup' || loc == '/login' || loc == '/change-password') {
+      return;
+    }
+    if (!mounted) return;
+    context.go('/tracking/setup');
   }
 
   Future<void> _verifyPermissionsQuietly() async {

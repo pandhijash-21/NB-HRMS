@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -72,8 +73,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         identifier: identifier,
         password: password,
       );
+      TextInput.finishAutofillContext(shouldSave: true);
     } else {
       await repo.clearRememberedCredentials();
+      TextInput.finishAutofillContext(shouldSave: false);
     }
 
     if (!mounted) return;
@@ -181,7 +184,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 ],
                               ),
                               padding: const EdgeInsets.fromLTRB(32, 40, 32, 36),
-                              child: Form(
+                              child: AutofillGroup(
+                                child: Form(
                                 key: _formKey,
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -393,6 +397,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                     ),
                                   ],
                                 ),
+                              ),
                               ),
                             ),
                           ),

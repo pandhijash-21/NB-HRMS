@@ -94,9 +94,16 @@ class SecureStorageService {
     final identifier = prefs.getString(_rememberIdentifierKey)?.trim() ?? '';
     if (identifier.isEmpty) return null;
 
-    final password = kIsWeb
-        ? (prefs.getString(_rememberPasswordKey) ?? '')
-        : (await _secure.read(key: _rememberPasswordKey) ?? '');
+    var password = prefs.getString(_rememberPasswordKey) ?? '';
+
+    // Migrate legacy native installs that stored password in secure storage.
+    if (password.isEmpty && !kIsWeb) {
+      password = await _secure.read(key: _rememberPasswordKey) ?? '';
+      if (password.isNotEmpty) {
+        await prefs.setString(_rememberPasswordKey, password);
+        await _secure.delete(key: _rememberPasswordKey);
+      }
+    }
 
     return (identifier: identifier, password: password);
   }
@@ -109,10 +116,9 @@ class SecureStorageService {
     final trimmed = identifier.trim();
     await prefs.setBool(_rememberMeKey, true);
     await prefs.setString(_rememberIdentifierKey, trimmed);
-    if (kIsWeb) {
-      await prefs.setString(_rememberPasswordKey, password);
-    } else {
-      await _secure.write(key: _rememberPasswordKey, value: password);
+    await prefs.setString(_rememberPasswordKey, password);
+    if (!kIsWeb) {
+      await _secure.delete(key: _rememberPasswordKey);
     }
   }
 
@@ -120,9 +126,8 @@ class SecureStorageService {
     final prefs = await _webPrefs();
     await prefs.remove(_rememberMeKey);
     await prefs.remove(_rememberIdentifierKey);
-    if (kIsWeb) {
-      await prefs.remove(_rememberPasswordKey);
-    } else {
+    await prefs.remove(_rememberPasswordKey);
+    if (!kIsWeb) {
       await _secure.delete(key: _rememberPasswordKey);
     }
   }

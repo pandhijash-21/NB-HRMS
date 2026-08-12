@@ -21,6 +21,7 @@ import '../../features/tracking_hub/presentation/screens/tracking_hub_screen.dar
 import '../../features/tracking/presentation/screens/autostart_onboarding_screen.dart';
 
 import '../../features/tracking_hub/presentation/screens/trip_detail_hub_screen.dart';
+import '../../features/tracking_hub/presentation/screens/tracking_hub_employee_detail_screen.dart';
 import '../../features/admin/presentation/screens/admin_trips_screen.dart';
 import '../../features/admin/presentation/screens/admin_trip_replay_screen.dart';
 import '../../features/admin/presentation/screens/admin_audit_stub_screen.dart';
@@ -91,7 +92,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
   final shellNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'shellNav');
 
   // Bump when route table changes so hot-restart rebuilds GoRouter cleanly.
-  const routerRevision = 8;
+  const routerRevision = 9;
 
   return GoRouter(
     navigatorKey: rootNavigatorKey,
@@ -112,6 +113,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
 
       final loggingIn = loc == '/login';
       final changingPassword = loc == '/change-password';
+      final trackingSetup = loc == '/tracking/setup';
       final authenticated = auth.isAuthenticated;
 
       String? next;
@@ -123,6 +125,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         next = '/home';
       } else if (loggingIn) {
         next = '/home';
+      } else if (trackingSetup) {
+        next = null; // allow full-screen tracking setup
       }
 
       if (next != null) {
@@ -136,6 +140,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/change-password',
         builder: (context, state) => const ChangePasswordScreen(),
+      ),
+      GoRoute(
+        path: '/tracking/setup',
+        builder: (context, state) => const AutostartOnboardingScreen(),
       ),
       ShellRoute(
         navigatorKey: shellNavigatorKey,
@@ -346,7 +354,25 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/admin/tracking-hub',
-            builder: (context, state) => const TrackingHubScreen(),
+            builder: (context, state) => TrackingHubScreen(
+              initialDate: state.uri.queryParameters['date'],
+              initialEmployeeId: state.uri.queryParameters['employeeId'],
+            ),
+          ),
+          GoRoute(
+            path: '/admin/tracking-hub/employee/:employeeId',
+            builder: (context, state) {
+              final id = int.tryParse(state.pathParameters['employeeId'] ?? '');
+              if (id == null) {
+                return const Scaffold(
+                  body: Center(child: Text('Invalid Employee ID')),
+                );
+              }
+              return TrackingHubEmployeeDetailScreen(
+                employeeId: id,
+                date: state.uri.queryParameters['date'],
+              );
+            },
           ),
           GoRoute(
             path: '/admin/tracking-hub/trip/:id',

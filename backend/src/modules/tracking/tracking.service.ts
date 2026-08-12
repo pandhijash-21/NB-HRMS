@@ -634,6 +634,326 @@ export const trackingService = {
       orderBy: { timestamp: 'asc' }
     });
     return events;
-  }
+  },
+
+  /**
+   * Employee-wise location availability between punch-in and punch-out for a day.
+   * Uses location_history silence (>120s) + tracking_events for reasons.
+   */
+  async getHubDayAvailability(params: { date: string; employeeId?: number }) {
+    const ymd = String(params.date || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) {
+      throw new Error('Invalid date. Expected YYYY-MM-DD');
+    }
+
+    const fromUtc = new Date(`${ymd}T00:00:00+05:30`);
+    const toExclusive = new Date(fromUtc.getTime() + 24 * 60 * 60 * 1000);
+    const now = new Date();
+
+    const punchWhere: {
+      punchAt: { gte: Date; lt: Date };
+      employeeId?: number;
+    } = { punchAt: { gte: fromUtc, lt: toExclusive } };
+    if (params.employeeId) punchWhere.employeeId = params.employeeId;
+
+    const punches = await prisma.attendancePunch.findMany({
+      where: punchWhere,
+      orderBy: [{ employeeId: 'asc' }, { punchAt: 'asc' }],
+      select: { employeeId: true, punchAt: true, source: true },
+    });
+
+    const byEmployee = new Map<number, Array<{ punchAt: Date; source: string }>>();
+    for (const p of punches) {
+      const arr = byEmployee.get(p.employeeId) ?? [];
+      arr.push({ punchAt: p.punchAt, source: String(p.source) });
+      byEmployee.set(p.employeeId, arr);
+    }
+
+    const employeeIds = [...byEmployee.keys()];
+    if (employeeIds.length === 0) {
+      return { date: ymd, employees: [] };
+    }
+
+    const employees = await prisma.employee.findMany({
+      where: { id: { in: employeeIds } },
+      include: {
+        generalInfo: {
+          select: { fullName: true, employeeCode: true, designation: true, department: true },
+        },
+      },
+    });
+    const empMap = new Map(employees.map((e) => [e.id, e]));
+
+    const locationPoints = await prisma.locationHistory.findMany({
+      where: {
+        employeeId: { in: employeeIds },
+        timestamp: { gte: fromUtc, lt: toExclusive },
+      },
+      orderBy: { timestamp: 'asc' },
+      select: { employeeId: true, timestamp: true },
+    });
+
+    const events = await prisma.trackingEvent.findMany({
+      where: {
+        employeeId: { in: employeeIds },
+        timestamp: { gte: fromUtc, lt: toExclusive },
+        eventType: { not: 'MANUAL_PAUSE' },
+      },
+      orderBy: { timestamp: 'asc' },
+      select: {
+        employeeId: true,
+        eventType: true,
+        timestamp: true,
+        endTime: true,
+        confidence: true,
+        source: true,
+      },
+    });
+
+    const pointsByEmp = new Map<number, Date[]>();
+    for (const p of locationPoints) {
+      const arr = pointsByEmp.get(p.employeeId) ?? [];
+      arr.push(p.timestamp);
+      pointsByEmp.set(p.employeeId, arr);
+    }
+
+    const eventsByEmp = new Map<number, typeof events>();
+    for (const ev of events) {
+      const arr = eventsByEmp.get(ev.employeeId) ?? [];
+      arr.push(ev);
+      eventsByEmp.set(ev.employeeId, arr);
+    }
+
+    const rows = employeeIds
+      .map((id) => {
+        const emp = empMap.get(id);
+        const dayPunches = byEmployee.get(id) ?? [];
+        const { firstIn, lastOut } = deriveDayInOut(dayPunches);
+        if (!firstIn) return null;
+
+        const punchIn = new Date(firstIn);
+        const punchOut = lastOut ? new Date(lastOut) : (now < toExclusive ? now : new Date(toExclusive.getTime() - 1));
+        const windowEnd = punchOut.getTime() < punchIn.getTime() ? punchIn : punchOut;
+
+        return buildEmployeeAvailability({
+          employeeId: id,
+          fullName: emp?.generalInfo?.fullName ?? `Employee #${id}`,
+          employeeCode: emp?.generalInfo?.employeeCode ?? null,
+          designation: emp?.generalInfo?.designation ?? null,
+          department: emp?.generalInfo?.department ?? null,
+          punchIn,
+          punchOut: lastOut ? new Date(lastOut) : null,
+          stillOnDuty: !lastOut,
+          points: (pointsByEmp.get(id) ?? []).filter(
+            (t) => t.getTime() >= punchIn.getTime() && t.getTime() <= windowEnd.getTime(),
+          ),
+          events: eventsByEmp.get(id) ?? [],
+          windowEnd,
+        });
+      })
+      .filter((r): r is NonNullable<typeof r> => r != null)
+      .sort((a, b) => a.fullName.localeCompare(b.fullName));
+
+    return { date: ymd, employees: rows };
+  },
+
+  async getEmployeeAvailability(params: { employeeId: number; date: string }) {
+    const day = await this.getHubDayAvailability({
+      date: params.date,
+      employeeId: params.employeeId,
+    });
+    const row = day.employees.find((e) => e.employeeId === params.employeeId);
+    if (!row) {
+      return {
+        date: params.date,
+        employeeId: params.employeeId,
+        punchIn: null,
+        punchOut: null,
+        stillOnDuty: false,
+        availableSeconds: 0,
+        unavailableSeconds: 0,
+        dutySeconds: 0,
+        availablePercent: 0,
+        gapCount: 0,
+        segments: [],
+        fullName: `Employee #${params.employeeId}`,
+        employeeCode: null,
+        designation: null,
+        department: null,
+      };
+    }
+    return { date: params.date, ...row };
+  },
 };
+
+/** Gap threshold aligned with live Redis TTL (120s) + heartbeat (90s). */
+const AVAILABILITY_GAP_MS = 120_000;
+
+type AvailabilitySegment = {
+  start: string;
+  end: string;
+  status: 'AVAILABLE' | 'UNAVAILABLE';
+  durationSeconds: number;
+  reason: string | null;
+  confidence: string | null;
+};
+
+function buildEmployeeAvailability(input: {
+  employeeId: number;
+  fullName: string;
+  employeeCode: string | null;
+  designation: string | null;
+  department: string | null;
+  punchIn: Date;
+  punchOut: Date | null;
+  stillOnDuty: boolean;
+  points: Date[];
+  events: Array<{
+    eventType: string;
+    timestamp: Date;
+    endTime: Date | null;
+    confidence: string;
+    source: string;
+  }>;
+  windowEnd: Date;
+}) {
+  const segments = buildAvailabilitySegments(
+    input.punchIn,
+    input.windowEnd,
+    input.points,
+    input.events,
+  );
+
+  let availableSeconds = 0;
+  let unavailableSeconds = 0;
+  let gapCount = 0;
+  for (const s of segments) {
+    if (s.status === 'AVAILABLE') availableSeconds += s.durationSeconds;
+    else {
+      unavailableSeconds += s.durationSeconds;
+      gapCount += 1;
+    }
+  }
+  const dutySeconds = availableSeconds + unavailableSeconds;
+  const availablePercent =
+    dutySeconds > 0 ? Math.round((availableSeconds / dutySeconds) * 1000) / 10 : 0;
+
+  return {
+    employeeId: input.employeeId,
+    fullName: input.fullName,
+    employeeCode: input.employeeCode,
+    designation: input.designation,
+    department: input.department,
+    punchIn: input.punchIn.toISOString(),
+    punchOut: input.punchOut ? input.punchOut.toISOString() : null,
+    stillOnDuty: input.stillOnDuty,
+    availableSeconds,
+    unavailableSeconds,
+    dutySeconds,
+    availablePercent,
+    gapCount,
+    pingCount: input.points.length,
+    segments,
+  };
+}
+
+function buildAvailabilitySegments(
+  punchIn: Date,
+  windowEnd: Date,
+  points: Date[],
+  events: Array<{
+    eventType: string;
+    timestamp: Date;
+    endTime: Date | null;
+    confidence: string;
+    source: string;
+  }>,
+): AvailabilitySegment[] {
+  const startMs = punchIn.getTime();
+  const endMs = windowEnd.getTime();
+  if (endMs <= startMs) return [];
+
+  const sorted = [...points]
+    .map((d) => d.getTime())
+    .filter((t) => t >= startMs && t <= endMs)
+    .sort((a, b) => a - b);
+
+  const raw: Array<{ start: number; end: number; status: 'AVAILABLE' | 'UNAVAILABLE' }> = [];
+
+  const pushSeg = (a: number, b: number, status: 'AVAILABLE' | 'UNAVAILABLE') => {
+    const s = Math.max(a, startMs);
+    const e = Math.min(b, endMs);
+    if (e <= s) return;
+    const last = raw[raw.length - 1];
+    if (last && last.status === status && last.end === s) {
+      last.end = e;
+      return;
+    }
+    raw.push({ start: s, end: e, status });
+  };
+
+  if (sorted.length === 0) {
+    pushSeg(startMs, endMs, 'UNAVAILABLE');
+  } else {
+    const first = sorted[0]!;
+    if (first - startMs > AVAILABILITY_GAP_MS) {
+      pushSeg(startMs, first, 'UNAVAILABLE');
+    } else {
+      pushSeg(startMs, first, 'AVAILABLE');
+    }
+
+    for (let i = 0; i < sorted.length - 1; i++) {
+      const cur = sorted[i]!;
+      const next = sorted[i + 1]!;
+      const gap = next - cur;
+      if (gap > AVAILABILITY_GAP_MS) {
+        pushSeg(cur, next, 'UNAVAILABLE');
+      } else {
+        pushSeg(cur, next, 'AVAILABLE');
+      }
+    }
+
+    const last = sorted[sorted.length - 1]!;
+    if (endMs - last > AVAILABILITY_GAP_MS) {
+      pushSeg(last, endMs, 'UNAVAILABLE');
+    } else {
+      pushSeg(last, endMs, 'AVAILABLE');
+    }
+  }
+
+  return raw.map((seg) => {
+    const durationSeconds = Math.max(0, Math.round((seg.end - seg.start) / 1000));
+    let reason: string | null = null;
+    let confidence: string | null = null;
+
+    if (seg.status === 'UNAVAILABLE') {
+      const mid = (seg.start + seg.end) / 2;
+      const match = events.find((ev) => {
+        const evStart = ev.timestamp.getTime();
+        const evEnd = (ev.endTime ?? windowEnd).getTime();
+        return evStart <= mid && evEnd >= mid;
+      }) ?? events.find((ev) => {
+        const evStart = ev.timestamp.getTime();
+        return evStart >= seg.start && evStart <= seg.end;
+      });
+
+      if (match) {
+        reason = String(match.eventType);
+        confidence = String(match.confidence);
+      } else {
+        reason = 'NO_LOCATION_PING';
+        confidence = 'MEDIUM';
+      }
+    }
+
+    return {
+      start: new Date(seg.start).toISOString(),
+      end: new Date(seg.end).toISOString(),
+      status: seg.status,
+      durationSeconds,
+      reason,
+      confidence,
+    };
+  });
+}
 

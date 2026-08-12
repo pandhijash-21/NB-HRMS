@@ -4,6 +4,7 @@ import { env } from '../config/env';
 import { redis, connectRedis } from '../config/redis';
 import { fail } from '../utils/response';
 
+/** One active JWT per user id — newer login overwrites Redis and kicks older devices. */
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
   const header = req.headers.authorization;
   const bearer = header?.startsWith('Bearer ') ? header.slice(7) : undefined;
@@ -14,27 +15,40 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   try {
     const decoded = jwt.verify(token, env.JWT_SECRET) as jwt.JwtPayload;
     const userId = String(decoded.sub ?? '');
+    if (!userId) {
+      return res.status(401).json(fail('Invalid or expired token'));
+    }
 
-    // Validate session still exists in Redis (honours logout / permission revocation)
     try {
       await connectRedis();
       const sessionToken = await redis.get(`session:${userId}`);
       if (!sessionToken || sessionToken !== token) {
-        return res.status(401).json(fail('Session expired or logged in from another device. Please log in again.'));
+        return res.status(401).json(
+          fail('Session expired or logged in from another device. Please log in again.'),
+        );
       }
-    } catch {
-      // Redis unavailable — fall through and accept the JWT as-is
-      // (fail-open to avoid locking everyone out on Redis downtime)
+    } catch (err) {
+      // Fail closed: exclusive sessions require Redis. Do not accept bare JWTs.
+      console.error('Redis session validation failed:', err);
+      return res.status(503).json(
+        fail('Session service temporarily unavailable. Please try again shortly.'),
+      );
     }
 
     req.user = {
-      id:          userId,
-      employeeId:  decoded.employeeId as number | null | undefined,
-      roleId:      decoded.roleId as string,
-      roleName:    decoded.roleName as string,
-      role:        decoded.roleName as string,
+      id: userId,
+      employeeId: decoded.employeeId as number | null | undefined,
+      roleId: decoded.roleId as string,
+      roleName: decoded.roleName as string,
+      role: decoded.roleName as string,
       subOrganization: (decoded.subOrganization as string | null | undefined) ?? null,
-      employeeViewScope: (decoded.employeeViewScope as 'NONE' | 'SELF' | 'INSTITUTE' | 'UNIVERSITY' | undefined) ?? 'NONE',
+      employeeViewScope:
+        (decoded.employeeViewScope as
+          | 'NONE'
+          | 'SELF'
+          | 'INSTITUTE'
+          | 'UNIVERSITY'
+          | undefined) ?? 'NONE',
       permissions: (decoded.permissions as Record<string, string[]>) ?? {},
     };
 

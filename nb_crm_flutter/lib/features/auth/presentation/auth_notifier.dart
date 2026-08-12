@@ -94,7 +94,12 @@ class AuthNotifier extends Notifier<AuthState> {
     if (state.status != AuthStatus.authenticated) return;
     final repo = ref.read(authRepositoryProvider);
     await repo.clearSession();
-    state = const AuthState.unauthenticated();
+    WebLiveTrackingService.stop();
+    _stopSessionWatch();
+    state = const AuthState.unauthenticated(
+      infoMessage:
+          'You were signed out because this account signed in on another device or browser.',
+    );
   }
 
   Future<bool> login({

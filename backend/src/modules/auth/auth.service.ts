@@ -39,15 +39,11 @@ function buildPermissionsMap(
 }
 
 async function storeSession(userId: string, roleId: string, token: string) {
-  try {
-    await connectRedis();
-    await redis.set(`session:${userId}`, token, { EX: SESSION_TTL });
-    // Track user→role membership for bulk invalidation on permission changes
-    await redis.sAdd(`role_users:${roleId}`, userId);
-    await redis.expire(`role_users:${roleId}`, SESSION_TTL);
-  } catch (err) {
-    console.warn('Redis session store skipped:', err);
-  }
+  await connectRedis();
+  // Overwrite any previous session — only one active login per user (all roles).
+  await redis.set(`session:${userId}`, token, { EX: SESSION_TTL });
+  await redis.sAdd(`role_users:${roleId}`, userId);
+  await redis.expire(`role_users:${roleId}`, SESSION_TTL);
 }
 
 async function deleteSession(userId: string, roleId?: string) {
@@ -137,8 +133,16 @@ export const authService = {
       { expiresIn: '8h' }
     );
 
-    // 5. Record session in Redis
-    await storeSession(user.id, user.roleId, token);
+    // 5. Record exclusive session in Redis (replaces any previous device).
+    try {
+      await storeSession(user.id, user.roleId, token);
+    } catch (err) {
+      console.error('Failed to store login session in Redis:', err);
+      return {
+        error: 'Unable to create a secure session. Please try again shortly.',
+        status: 503,
+      } as const;
+    }
 
     // 6. Update lastLoginAt
     await prisma.user.update({
@@ -150,6 +154,7 @@ export const authService = {
       token,
       isFirstLogin: user.isFirstLogin,
       permissions,
+      exclusiveSession: true,
       user: {
         id:         user.id,
         employeeId: user.employeeId ?? null,

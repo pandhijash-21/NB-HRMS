@@ -36,9 +36,10 @@ api.interceptors.response.use(
     const message = String(error.response?.data?.message ?? "");
     if (
       message.includes("Session expired") ||
+      message.includes("logged in from another device") ||
       message.includes("Invalid or expired")
     ) {
-      await signOut({ callbackUrl: "/login" });
+      await signOut({ callbackUrl: "/login?reason=session" });
     }
     return Promise.reject(error);
   },

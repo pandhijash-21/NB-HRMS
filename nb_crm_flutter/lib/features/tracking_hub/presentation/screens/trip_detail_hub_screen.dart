@@ -7,6 +7,8 @@ import '../../../../core/router/app_back_button.dart';
 import '../../../../core/utils/route_pass_analyzer.dart';
 import '../providers.dart';
 import '../widgets/gap_timeline_widget.dart';
+import '../trip_recording_download.dart';
+import '../../../auth/presentation/auth_providers.dart';
 
 class TripDetailHubScreen extends ConsumerStatefulWidget {
   final String tripId;
@@ -29,6 +31,17 @@ class _TripDetailHubScreenState extends ConsumerState<TripDetailHubScreen> {
       appBar: AppBar(
         title: const Text('Trip Replay & Gaps'),
         leading: const AppBackButton(fallbackLocation: '/admin/tracking-hub'),
+        actions: [
+          IconButton(
+            tooltip: 'Download recording',
+            icon: const Icon(Icons.download_rounded),
+            onPressed: () => showTripDownloadMenu(
+              context: context,
+              dioClient: ref.read(dioClientProvider),
+              tripId: widget.tripId,
+            ),
+          ),
+        ],
       ),
       body: routeAsync.when(
         data: (routePoints) {

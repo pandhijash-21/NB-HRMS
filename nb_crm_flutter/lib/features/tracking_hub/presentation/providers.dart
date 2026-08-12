@@ -106,3 +106,34 @@ String hubDayKey({required DateTime date, String? employeeId}) {
   if (employeeId == null || employeeId.isEmpty) return base;
   return '$base|$employeeId';
 }
+
+final liveBoardProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+      final dioClient = ref.watch(dioClientProvider);
+      try {
+        return await dioClient.getEnvelope<Map<String, dynamic>>(
+          'tracking/live-board',
+          parse: (raw) => Map<String, dynamic>.from(raw as Map),
+        );
+      } catch (_) {
+        final res = await dioClient.dio.get('tracking/live');
+        return {
+          'locations': res.data['data'] ?? [],
+          'employees': const [],
+          'alerts': const [],
+        };
+      }
+    });
+
+final trackingAlertsProvider =
+    FutureProvider.autoDispose<List<dynamic>>((ref) async {
+      final dioClient = ref.watch(dioClientProvider);
+      try {
+        return await dioClient.getEnvelope<List<dynamic>>(
+          'tracking/alerts',
+          parse: (raw) => raw as List<dynamic>,
+        );
+      } catch (_) {
+        return const [];
+      }
+    });

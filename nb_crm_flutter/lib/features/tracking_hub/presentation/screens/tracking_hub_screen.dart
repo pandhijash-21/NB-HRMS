@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../auth/presentation/auth_providers.dart';
 import '../providers.dart';
+import '../trip_recording_download.dart';
 
 class TrackingHubScreen extends ConsumerStatefulWidget {
   const TrackingHubScreen({
@@ -107,6 +109,7 @@ class _TrackingHubScreenState extends ConsumerState<TrackingHubScreen> {
       body: CustomScrollView(
         slivers: [
           SliverToBoxAdapter(child: _buildFilterBar(theme)),
+          SliverToBoxAdapter(child: _buildAlertsBanner(theme)),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -220,7 +223,7 @@ class _TrackingHubScreenState extends ConsumerState<TrackingHubScreen> {
                 sliver: SliverGrid(
                   gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                     maxCrossAxisExtent: 400,
-                    mainAxisExtent: 130,
+                    mainAxisExtent: 148,
                     crossAxisSpacing: 16,
                     mainAxisSpacing: 16,
                   ),
@@ -243,6 +246,51 @@ class _TrackingHubScreenState extends ConsumerState<TrackingHubScreen> {
           const SliverToBoxAdapter(child: SizedBox(height: 32)),
         ],
       ),
+    );
+  }
+
+  Widget _buildAlertsBanner(ThemeData theme) {
+    final alertsAsync = ref.watch(trackingAlertsProvider);
+    return alertsAsync.maybeWhen(
+      data: (alerts) {
+        if (alerts.isEmpty) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Card(
+            color: theme.colorScheme.errorContainer,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Location unavailable alerts',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.onErrorContainer,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ...alerts.take(5).map((raw) {
+                    final a = Map<String, dynamic>.from(raw as Map);
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Text(
+                        '${a['fullName'] ?? 'Employee'} — off since ${_formatLocal(a['unavailableSince']?.toString())}'
+                        ' (${(a['reason']?.toString() ?? 'NO_LOCATION_PING').replaceAll('_', ' ')})',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onErrorContainer,
+                        ),
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+      orElse: () => const SizedBox.shrink(),
     );
   }
 
@@ -657,6 +705,20 @@ class _TrackingHubScreenState extends ConsumerState<TrackingHubScreen> {
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
+                  ),
+                  IconButton(
+                    tooltip: 'Download recording',
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(Icons.download_rounded, size: 20),
+                    onPressed: () {
+                      final id = trip['id']?.toString();
+                      if (id == null || id.isEmpty) return;
+                      showTripDownloadMenu(
+                        context: context,
+                        dioClient: ref.read(dioClientProvider),
+                        tripId: id,
+                      );
+                    },
                   ),
                   Container(
                     padding: const EdgeInsets.symmetric(

@@ -13,14 +13,9 @@ import '../../../../core/services/map_matching_service.dart';
 import '../../../../core/utils/heading_utils.dart';
 import '../../../../core/utils/route_pass_analyzer.dart';
 import '../../../auth/presentation/auth_providers.dart';
+import '../../../tracking_hub/presentation/providers.dart';
 import '../widgets/route_pass_legend.dart';
 import '../widgets/tracking_avatar_marker.dart';
-
-final _liveLocationsProvider = FutureProvider.autoDispose<List<dynamic>>((ref) async {
-  final dioClient = ref.watch(dioClientProvider);
-  final res = await dioClient.dio.get('tracking/live');
-  return res.data['data'] ?? [];
-});
 
 final _geofenceLocationsProvider = FutureProvider.autoDispose<List<dynamic>>((ref) async {
   final dioClient = ref.watch(dioClientProvider);
@@ -58,6 +53,8 @@ class _AdminLiveTrackingScreenState
   final Set<String> _hydratingTripIds = {};
   /// Forces rebuild so stop timers tick every second.
   int _tick = 0;
+  final Set<String> _seenAlertIds = {};
+  bool _alertsPrimed = false;
 
   static const _stopMoveMeters = 20.0;
   static const _stopBubbleAfter = Duration(seconds: 5);
@@ -225,7 +222,7 @@ class _AdminLiveTrackingScreenState
     super.initState();
     _fetchMyLocation();
     _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) {
-      ref.invalidate(_liveLocationsProvider);
+      ref.invalidate(liveBoardProvider);
     });
     // Keep "Stopped MM:SS" counting even when GPS point is unchanged.
     _uiTick = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -277,6 +274,226 @@ class _AdminLiveTrackingScreenState
     return colors[index];
   }
 
+  String _formatSeconds(int seconds) {
+    if (seconds <= 0) return '0m';
+    final h = seconds ~/ 3600;
+    final m = (seconds % 3600) ~/ 60;
+    if (h > 0) return '${h}h ${m}m';
+    return '${m}m';
+  }
+
+  String _formatClock(String? iso) {
+    if (iso == null || iso.isEmpty) return '—';
+    final dt = DateTime.tryParse(iso)?.toLocal();
+    if (dt == null) return '—';
+    return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+  }
+
+  Map<int, Map<String, dynamic>> _dutyById(List<dynamic> employees) {
+    final map = <int, Map<String, dynamic>>{};
+    for (final raw in employees) {
+      if (raw is! Map) continue;
+      final row = Map<String, dynamic>.from(raw);
+      final id = _asEmployeeId(row['employeeId']);
+      if (id == null) continue;
+      map[id] = row;
+    }
+    return map;
+  }
+
+  void _notifyNewAlerts(List<dynamic> alerts) {
+    if (!_alertsPrimed) {
+      for (final raw in alerts) {
+        if (raw is! Map) continue;
+        final id = raw['id']?.toString();
+        if (id != null && id.isNotEmpty) _seenAlertIds.add(id);
+      }
+      _alertsPrimed = true;
+      return;
+    }
+    for (final raw in alerts) {
+      if (raw is! Map) continue;
+      final id = raw['id']?.toString();
+      if (id == null || id.isEmpty || _seenAlertIds.contains(id)) continue;
+      _seenAlertIds.add(id);
+      if (!mounted) continue;
+      final name = raw['fullName']?.toString() ?? 'Employee';
+      final reason = (raw['reason']?.toString() ?? 'NO_LOCATION_PING')
+          .replaceAll('_', ' ');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.red.shade700,
+          duration: const Duration(seconds: 6),
+          content: Text(
+            '$name location unavailable since ${_formatClock(raw['unavailableSince']?.toString())} ($reason)',
+          ),
+          action: SnackBarAction(
+            label: 'Hub',
+            textColor: Colors.white,
+            onPressed: () => context.go('/admin/tracking-hub'),
+          ),
+        ),
+      );
+    }
+  }
+
+  void _showEmployeeAvailabilitySheet(
+    Map<String, dynamic>? duty,
+    int employeeId,
+    String name,
+  ) {
+    final segments = (duty?['segments'] as List?) ?? const [];
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  style: Theme.of(ctx).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Punch in ${_formatClock(duty?['punchIn']?.toString())}  ·  '
+                  'Punch out ${_formatClock(duty?['punchOut']?.toString())}',
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Available ${_formatSeconds((duty?['availableSeconds'] as num?)?.toInt() ?? 0)}'
+                  '  ·  Off ${_formatSeconds((duty?['unavailableSeconds'] as num?)?.toInt() ?? 0)}'
+                  '  ·  ${(duty?['availablePercent'] as num?)?.toStringAsFixed(1) ?? '0'}%',
+                ),
+                const SizedBox(height: 12),
+                if (segments.isEmpty)
+                  const Text('No punch-window slots yet.')
+                else
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 280),
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: segments.length,
+                      itemBuilder: (_, i) {
+                        final seg = Map<String, dynamic>.from(segments[i] as Map);
+                        final on = seg['status'] == 'AVAILABLE';
+                        return ListTile(
+                          dense: true,
+                          leading: Icon(
+                            on ? Icons.gps_fixed : Icons.gps_off,
+                            color: on ? const Color(0xFF2E7D32) : Colors.red,
+                          ),
+                          title: Text(on ? 'Location available' : 'Location off'),
+                          subtitle: Text(
+                            '${_formatClock(seg['start']?.toString())} → ${_formatClock(seg['end']?.toString())}'
+                            '  (${_formatSeconds((seg['durationSeconds'] as num?)?.toInt() ?? 0)})'
+                            '${on ? '' : '\n${(seg['reason']?.toString() ?? 'NO_LOCATION_PING').replaceAll('_', ' ')}'}',
+                          ),
+                          isThreeLine: !on,
+                        );
+                      },
+                    ),
+                  ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        context.go('/admin/employees/$employeeId');
+                      },
+                      child: const Text('Profile'),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        context.push(
+                          '/admin/tracking-hub/employee/$employeeId',
+                        );
+                      },
+                      child: const Text('Full timeline'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDutyAvailabilityPanel(List<dynamic> employees) {
+    return Material(
+      elevation: 10,
+      color: Theme.of(context).colorScheme.surface,
+      child: SizedBox(
+        height: 156,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+              child: Text(
+                'On-duty GPS (punch-in → punch-out)',
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            Expanded(
+              child: ListView.separated(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                itemCount: employees.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 6),
+                itemBuilder: (context, index) {
+                  final row = Map<String, dynamic>.from(employees[index] as Map);
+                  final id = _asEmployeeId(row['employeeId']) ?? 0;
+                  final name = row['fullName']?.toString() ?? 'Employee';
+                  final on = row['currentlyAvailable'] == true || row['isLive'] == true;
+                  final avail = (row['availableSeconds'] as num?)?.toInt() ?? 0;
+                  final off = (row['unavailableSeconds'] as num?)?.toInt() ?? 0;
+                  final segments = (row['segments'] as List?) ?? const [];
+                  return InkWell(
+                    onTap: () => _showEmployeeAvailabilitySheet(row, id, name),
+                    child: Row(
+                      children: [
+                        Icon(
+                          on ? Icons.gps_fixed : Icons.gps_off,
+                          size: 16,
+                          color: on ? const Color(0xFF2E7D32) : Colors.red,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            name,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                        Text(
+                          'On ${_formatSeconds(avail)} · Off ${_formatSeconds(off)}'
+                          '${segments.length > 1 ? ' · ${segments.length} slots' : ''}',
+                          style: Theme.of(context).textTheme.labelSmall,
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   static int? _asEmployeeId(dynamic value) {
     if (value == null) return null;
     if (value is int) return value;
@@ -312,13 +529,15 @@ class _AdminLiveTrackingScreenState
     }
 
     final myEmployeeId = auth.user?.employeeId;
-    final asyncLocations = ref.watch(_liveLocationsProvider);
+    final asyncBoard = ref.watch(liveBoardProvider);
     final asyncGeofences = ref.watch(_geofenceLocationsProvider);
 
-    ref.listen<AsyncValue<List<dynamic>>>(_liveLocationsProvider,
+    ref.listen<AsyncValue<Map<String, dynamic>>>(liveBoardProvider,
         (previous, next) {
       if (next is AsyncData) {
-        _processLiveLocations(next.value!);
+        final locations = (next.value!['locations'] as List?) ?? const [];
+        _processLiveLocations(locations);
+        _notifyNewAlerts((next.value!['alerts'] as List?) ?? const []);
       }
     });
 
@@ -368,10 +587,13 @@ class _AdminLiveTrackingScreenState
             ),
         ],
       ),
-      body: asyncLocations.when(
+      body: asyncBoard.when(
         skipLoadingOnReload: true,
         skipLoadingOnRefresh: true,
-        data: (allLocations) {
+        data: (board) {
+          final allLocations = (board['locations'] as List?) ?? const [];
+          final dutyEmployees = (board['employees'] as List?) ?? const [];
+          final dutyMap = _dutyById(dutyEmployees);
           final byEmployee = <int, Map<String, dynamic>>{};
           for (final raw in allLocations) {
             if (raw is! Map) continue;
@@ -447,7 +669,6 @@ class _AdminLiveTrackingScreenState
                   BoxShadow(
                     color: Colors.black26,
                     blurRadius: 4,
-                    offset: Offset(0, 2),
                   ),
                 ],
               ),
@@ -461,14 +682,40 @@ class _AdminLiveTrackingScreenState
               ),
             );
 
+            final duty = dutyMap[employeeId];
+            final gpsOn = duty == null
+                ? true
+                : duty['currentlyAvailable'] == true || duty['isLive'] == true;
+            final availSec = (duty?['availableSeconds'] as num?)?.toInt() ?? 0;
+            final offSec = (duty?['unavailableSeconds'] as num?)?.toInt() ?? 0;
+            final gpsChip = Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              margin: const EdgeInsets.only(bottom: 4),
+              decoration: BoxDecoration(
+                color: gpsOn ? const Color(0xFF2E7D32) : Colors.red.shade700,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                gpsOn
+                    ? 'GPS on ${_formatSeconds(availSec)}'
+                    : 'GPS off ${_formatSeconds(offSec)}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            );
+
             late final Widget markerChild;
             final photoUrl = loc['photoUrl']?.toString();
             markerChild = GestureDetector(
-              onTap: () => context.go('/admin/employees/$employeeId'),
+              onTap: () => _showEmployeeAvailabilitySheet(duty, employeeId, name),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (stopBubble != null) stopBubble,
+                  gpsChip,
                   nameChip,
                   TrackingAvatarMarker(
                     photoUrl: photoUrl,
@@ -489,7 +736,7 @@ class _AdminLiveTrackingScreenState
             return AnimatedMarker(
               point: snappedPosition,
               width: 140,
-              height: stopBubble != null ? 140 : 120,
+              height: stopBubble != null ? 168 : 148,
               duration: const Duration(milliseconds: 2200),
               curve: Curves.linear,
               builder: (context, animation) => markerChild,
@@ -632,8 +879,15 @@ class _AdminLiveTrackingScreenState
               if (legendAnalysis != null && legendAnalysis.passes.isNotEmpty)
                 Positioned(
                   left: 12,
-                  bottom: 12,
+                  bottom: dutyEmployees.isEmpty ? 12 : 168,
                   child: RoutePassLegend(analysis: legendAnalysis),
+                ),
+              if (dutyEmployees.isNotEmpty)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: _buildDutyAvailabilityPanel(dutyEmployees),
                 ),
             ],
           );

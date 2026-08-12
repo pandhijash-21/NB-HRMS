@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../auth/presentation/auth_providers.dart';
+import '../../../tracking_hub/presentation/trip_recording_download.dart';
 
 final adminTripsProvider = FutureProvider.autoDispose<List<dynamic>>((ref) async {
   final dioClient = ref.watch(dioClientProvider);
@@ -95,6 +96,19 @@ class AdminTripsScreen extends ConsumerWidget {
                                   fontSize: 10,
                                 ),
                               ),
+                            ),
+                            IconButton(
+                              tooltip: 'Download recording',
+                              icon: const Icon(Icons.download_rounded),
+                              onPressed: () {
+                                final id = trip['id']?.toString();
+                                if (id == null || id.isEmpty) return;
+                                showTripDownloadMenu(
+                                  context: context,
+                                  dioClient: ref.read(dioClientProvider),
+                                  tripId: id,
+                                );
+                              },
                             ),
                           ],
                         ),

@@ -11,6 +11,7 @@ import '../../../../core/router/app_back_button.dart';
 import '../../../../core/services/map_matching_service.dart';
 import '../../../../core/utils/heading_utils.dart';
 import '../../../../core/utils/route_pass_analyzer.dart';
+import '../../../tracking_hub/presentation/trip_recording_download.dart';
 
 final adminTripRouteProvider = FutureProvider.autoDispose.family<Map<String, dynamic>, String>((ref, tripId) async {
   final dioClient = ref.watch(dioClientProvider);
@@ -246,6 +247,17 @@ class _AdminTripReplayScreenState extends ConsumerState<AdminTripReplayScreen> w
       appBar: AppBar(
         title: const Text('Trip Replay'),
         leading: const AppBackButton(fallbackLocation: '/admin/trips'),
+        actions: [
+          IconButton(
+            tooltip: 'Download recording',
+            icon: const Icon(Icons.download_rounded),
+            onPressed: () => showTripDownloadMenu(
+              context: context,
+              dioClient: ref.read(dioClientProvider),
+              tripId: widget.tripId,
+            ),
+          ),
+        ],
       ),
       body: routeAsync.when(
         data: (data) {

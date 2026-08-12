@@ -161,3 +161,50 @@ trackingRouter.get('/availability/:employeeId', requireAuth, async (req: Request
     return res.status(400).json(fail(e.message));
   }
 });
+
+// Admin/HR: Live map + today's punch-window availability + recent alerts
+trackingRouter.get('/live-board', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const role = String((req.user as any)?.role ?? '').toUpperCase().replace(/[\s_]/g, '');
+    if (!['SUPERADMIN', 'ADMIN', 'SYSTEMADMIN', 'HR', 'DEVELOPER'].includes(role)) {
+      return res.status(403).json(fail('Forbidden: Only System Admin, Admin, and HR can view live tracking.'));
+    }
+    const data = await trackingService.getLiveBoard();
+    return res.json(ok(data));
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});
+
+// Admin/HR: Recent location-unavailable alerts
+trackingRouter.get('/alerts', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const role = String((req.user as any)?.role ?? '').toUpperCase().replace(/[\s_]/g, '');
+    if (!['SUPERADMIN', 'ADMIN', 'SYSTEMADMIN', 'HR', 'DEVELOPER'].includes(role)) {
+      return res.status(403).json(fail('Forbidden'));
+    }
+    const data = await trackingService.getRecentAlerts();
+    return res.json(ok(data));
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});
+
+// Admin/HR: Download trip recording (GPX / CSV / JSON)
+trackingRouter.get('/trips/:id/recording', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const role = String((req.user as any)?.role ?? '').toUpperCase().replace(/[\s_]/g, '');
+    if (!['SUPERADMIN', 'ADMIN', 'SYSTEMADMIN', 'HR', 'DEVELOPER'].includes(role)) {
+      return res.status(403).json(fail('Forbidden: Only System Admin, Admin, and HR can download trip recordings.'));
+    }
+    const tripId = String(req.params.id);
+    const raw = String(req.query.format || 'gpx').toLowerCase();
+    const format = raw === 'csv' || raw === 'json' ? raw : 'gpx';
+    const file = await trackingService.exportTripRecording(tripId, format);
+    res.setHeader('Content-Type', file.contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
+    return res.send(file.body);
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});

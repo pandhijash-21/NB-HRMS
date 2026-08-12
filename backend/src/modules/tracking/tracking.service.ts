@@ -2,6 +2,10 @@
 import { getRedisClient, connectRedis } from '../../config/redis';
 import { TrackingEventType } from '@prisma/client';
 import { deriveDayInOut } from '../attendance/dayPunch.rules';
+import {
+  getRecentLocationAlerts,
+  notifyAdminsLocationUnavailable,
+} from './tracking.alerts';
 
 export interface LiveLocation {
   employeeId: number;
@@ -421,6 +425,14 @@ export const trackingService = {
     // Store in Redis with TTL of 2 minutes (120 seconds)
     // If they don't ping within 2 minutes, they disappear from the live map
     await redis.setEx(key, 120, JSON.stringify(empInfo));
+
+    if (isPunchedIn) {
+      try {
+        await redis.del(`alert:loc_off:${params.employeeId}`);
+      } catch {
+        /* ignore */
+      }
+    }
     
     return { success: true };
   },
@@ -531,6 +543,8 @@ export const trackingService = {
         }
       }
     }
+
+    await this.checkPunchWindowLocationGaps();
   },
 
   async getAllLiveLocations(): Promise<LiveLocation[]> {
@@ -784,10 +798,182 @@ export const trackingService = {
     }
     return { date: params.date, ...row };
   },
+
+  async getRecentAlerts() {
+    return getRecentLocationAlerts();
+  },
+
+  async getLiveBoard() {
+    const locations = await this.getAllLiveLocations();
+    const ymd = todayIstYmd();
+    const day = await this.getHubDayAvailability({ date: ymd });
+    const alerts = await getRecentLocationAlerts();
+    const liveIds = new Set(locations.map((l) => l.employeeId));
+
+    const employees = day.employees.map((emp) => {
+      const lastSeg = emp.segments[emp.segments.length - 1];
+      const currentlyAvailable = lastSeg?.status === 'AVAILABLE';
+      return {
+        ...emp,
+        isLive: liveIds.has(emp.employeeId),
+        currentlyAvailable,
+      };
+    });
+
+    return { date: ymd, locations, employees, alerts };
+  },
+
+  async exportTripRecording(tripId: string, format: 'gpx' | 'csv' | 'json') {
+    const { trip, route } = await this.getTripRoute(tripId);
+    const name = trip.employee?.generalInfo?.fullName ?? `employee-${trip.employeeId}`;
+    const safe = name.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 40);
+    const start = new Date(trip.startTime).toISOString().slice(0, 10);
+    const base = `trip_${safe}_${start}_${tripId.slice(0, 8)}`;
+
+    if (format === 'json') {
+      return {
+        filename: `${base}.json`,
+        contentType: 'application/json; charset=utf-8',
+        body: JSON.stringify({ trip, route }, null, 2),
+      };
+    }
+
+    if (format === 'csv') {
+      const lines = ['timestamp,latitude,longitude,heading'];
+      for (const p of route) {
+        lines.push(
+          `${new Date(p.timestamp).toISOString()},${p.latitude},${p.longitude},${p.heading ?? ''}`,
+        );
+      }
+      return {
+        filename: `${base}.csv`,
+        contentType: 'text/csv; charset=utf-8',
+        body: lines.join('\n'),
+      };
+    }
+
+    const trkpts = route
+      .map((p) => {
+        const iso = new Date(p.timestamp).toISOString();
+        return `      <trkpt lat="${p.latitude}" lon="${p.longitude}"><time>${iso}</time></trkpt>`;
+      })
+      .join('\n');
+
+    const gpx = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="NB-HRMS" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata>
+    <name>${xmlEscape(name)} trip ${start}</name>
+    <time>${new Date(trip.startTime).toISOString()}</time>
+  </metadata>
+  <trk>
+    <name>${xmlEscape(name)}</name>
+    <trkseg>
+${trkpts}
+    </trkseg>
+  </trk>
+</gpx>
+`;
+    return {
+      filename: `${base}.gpx`,
+      contentType: 'application/gpx+xml; charset=utf-8',
+      body: gpx,
+    };
+  },
+
+  async checkPunchWindowLocationGaps() {
+    const ymd = todayIstYmd();
+    const day = await this.getHubDayAvailability({ date: ymd });
+    let redis: ReturnType<typeof getRedisClient> | null = null;
+    try {
+      redis = getRedisClient();
+    } catch {
+      redis = null;
+    }
+
+    for (const emp of day.employees) {
+      if (!emp.stillOnDuty) {
+        if (redis) {
+          try {
+            await redis.del(`alert:loc_off:${emp.employeeId}`);
+          } catch {
+            /* ignore */
+          }
+        }
+        continue;
+      }
+
+      const lastSeg = emp.segments[emp.segments.length - 1];
+      if (!lastSeg || lastSeg.status !== 'UNAVAILABLE') {
+        if (redis) {
+          try {
+            await redis.del(`alert:loc_off:${emp.employeeId}`);
+          } catch {
+            /* ignore */
+          }
+        }
+        continue;
+      }
+
+      const lockKey = `alert:loc_off:${emp.employeeId}`;
+      const gapStart = lastSeg.start;
+      if (redis) {
+        try {
+          const existing = await redis.get(lockKey);
+          if (existing === gapStart) continue;
+          await redis.set(lockKey, gapStart);
+        } catch {
+          /* still notify once this cycle */
+        }
+      }
+
+      const lastPing = await prisma.locationHistory.findFirst({
+        where: { employeeId: emp.employeeId },
+        orderBy: { timestamp: 'desc' },
+        select: { latitude: true, longitude: true, timestamp: true, tripId: true },
+      });
+
+      await notifyAdminsLocationUnavailable({
+        id: `${emp.employeeId}-${gapStart}`,
+        employeeId: emp.employeeId,
+        fullName: emp.fullName,
+        employeeCode: emp.employeeCode,
+        designation: emp.designation,
+        department: emp.department,
+        punchIn: emp.punchIn,
+        punchOut: emp.punchOut,
+        unavailableSince: gapStart,
+        durationSeconds: lastSeg.durationSeconds,
+        reason: lastSeg.reason,
+        confidence: lastSeg.confidence,
+        lastKnownLatitude: lastPing?.latitude ?? null,
+        lastKnownLongitude: lastPing?.longitude ?? null,
+        lastKnownAt: lastPing?.timestamp ? lastPing.timestamp.toISOString() : null,
+        tripId: lastPing?.tripId ?? null,
+        notifiedAt: new Date().toISOString(),
+      });
+    }
+  },
 };
 
 /** Gap threshold aligned with live Redis TTL (120s) + heartbeat (90s). */
 const AVAILABILITY_GAP_MS = 120_000;
+
+function todayIstYmd() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
+
+function xmlEscape(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
 
 type AvailabilitySegment = {
   start: string;

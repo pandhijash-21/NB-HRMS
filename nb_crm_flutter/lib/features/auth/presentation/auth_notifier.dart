@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_envelope.dart';
@@ -64,13 +66,35 @@ class AuthState {
 }
 
 class AuthNotifier extends Notifier<AuthState> {
+  Timer? _sessionWatch;
+
   @override
   AuthState build() {
     final gate = ref.read(unauthorizedGateProvider);
     gate.bind(_handleUnauthorized);
+    ref.onDispose(_stopSessionWatch);
 
     Future.microtask(_bootstrap);
     return const AuthState.unknown();
+  }
+
+  void _stopSessionWatch() {
+    _sessionWatch?.cancel();
+    _sessionWatch = null;
+  }
+
+  /// Polls auth/me so a displaced device is kicked even when idle.
+  void _startSessionWatch() {
+    _stopSessionWatch();
+    _sessionWatch = Timer.periodic(const Duration(seconds: 25), (_) async {
+      if (state.status != AuthStatus.authenticated) return;
+      try {
+        final dio = ref.read(dioClientProvider);
+        await dio.dio.get('auth/me');
+      } catch (_) {
+        // 401 is handled by UnauthorizedGate → _handleUnauthorized.
+      }
+    });
   }
 
   Future<void> _bootstrap() async {
@@ -86,6 +110,7 @@ class AuthNotifier extends Notifier<AuthState> {
       permissions: restored.permissions,
       isFirstLogin: restored.isFirstLogin,
     );
+    _startSessionWatch();
     await WebLiveTrackingService.ensureRunning();
   }
 
@@ -139,6 +164,7 @@ class AuthNotifier extends Notifier<AuthState> {
       );
       ref.invalidate(profileProvider);
       ref.invalidate(activeProfileEmployeeIdProvider);
+      _startSessionWatch();
       await WebLiveTrackingService.ensureRunning();
       return true;
     } on ApiException catch (e) {
@@ -172,6 +198,8 @@ class AuthNotifier extends Notifier<AuthState> {
         newPassword: newPassword,
       );
       await repo.clearSession();
+      WebLiveTrackingService.stop();
+      _stopSessionWatch();
       state = AuthState.unauthenticated(
         infoMessage: message.isNotEmpty
             ? message
@@ -195,6 +223,7 @@ class AuthNotifier extends Notifier<AuthState> {
     await repo.logoutRemote();
     await repo.clearSession();
     WebLiveTrackingService.stop();
+    _stopSessionWatch();
     ref.invalidate(profileProvider);
     ref.invalidate(activeProfileEmployeeIdProvider);
     state = const AuthState.unauthenticated();

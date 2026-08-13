@@ -9,7 +9,7 @@ export const redis = createClient({
   url: REDIS_URL,
   socket: {
     tls: useTls,
-    keepAlive: 5000,
+    keepAlive: true,
     reconnectStrategy: (retries) => Math.min(retries * 100, 3000),
   },
 });

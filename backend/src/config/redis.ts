@@ -1,15 +1,13 @@
 import { createClient } from 'redis';
 import { env } from './env';
-import { redisUrlWithTls, redisUsesTls } from './redisUrl';
+import { redisUrlWithTls } from './redisUrl';
 
 export const REDIS_URL = redisUrlWithTls(env.REDIS_URL);
-const useTls = redisUsesTls(REDIS_URL);
 
 export const redis = createClient({
   url: REDIS_URL,
+  pingInterval: 10_000,
   socket: {
-    tls: useTls,
-    keepAlive: true,
     reconnectStrategy: (retries) => Math.min(retries * 100, 3000),
   },
 });

@@ -98,7 +98,7 @@ class AdminTripsScreen extends ConsumerWidget {
                               ),
                             ),
                             IconButton(
-                              tooltip: 'Download recording',
+                              tooltip: 'Download trip video',
                               icon: const Icon(Icons.download_rounded),
                               onPressed: () {
                                 final id = trip['id']?.toString();

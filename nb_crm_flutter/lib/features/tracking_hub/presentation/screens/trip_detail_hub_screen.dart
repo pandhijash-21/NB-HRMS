@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-import '../../../admin/presentation/widgets/route_pass_legend.dart';
 import '../../../../core/router/app_back_button.dart';
-import '../../../../core/utils/route_pass_analyzer.dart';
 import '../providers.dart';
 import '../widgets/gap_timeline_widget.dart';
 import '../trip_recording_download.dart';
@@ -33,7 +31,7 @@ class _TripDetailHubScreenState extends ConsumerState<TripDetailHubScreen> {
         leading: const AppBackButton(fallbackLocation: '/admin/tracking-hub'),
         actions: [
           IconButton(
-            tooltip: 'Download recording',
+            tooltip: 'Download trip video',
             icon: const Icon(Icons.download_rounded),
             onPressed: () => showTripDownloadMenu(
               context: context,
@@ -57,7 +55,6 @@ class _TripDetailHubScreenState extends ConsumerState<TripDetailHubScreen> {
 
           final points =
               _routePoints.isNotEmpty ? _routePoints : routePoints;
-          final passAnalysis = analyzeRoutePasses(points);
 
           return LayoutBuilder(
             builder: (context, constraints) {
@@ -78,7 +75,15 @@ class _TripDetailHubScreenState extends ConsumerState<TripDetailHubScreen> {
                                   'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                               userAgentPackageName: 'com.nb.hrms',
                             ),
-                            PolylineLayer(polylines: passAnalysis.polylines),
+                            PolylineLayer(
+                              polylines: [
+                                Polyline(
+                                  points: points,
+                                  color: const Color(0xFFC5A059),
+                                  strokeWidth: 5,
+                                ),
+                              ],
+                            ),
                             MarkerLayer(
                               markers: [
                                 Marker(
@@ -128,11 +133,6 @@ class _TripDetailHubScreenState extends ConsumerState<TripDetailHubScreen> {
                               orElse: () => const SizedBox.shrink(),
                             ),
                           ],
-                        ),
-                        Positioned(
-                          top: 12,
-                          right: 12,
-                          child: RoutePassLegend(analysis: passAnalysis),
                         ),
                       ],
                     ),

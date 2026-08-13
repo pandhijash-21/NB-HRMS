@@ -1,11 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../providers.dart';
+import '../widgets/location_availability_widgets.dart';
 
-class TrackingHubEmployeeDetailScreen extends ConsumerWidget {
+class TrackingHubEmployeeDetailScreen extends ConsumerStatefulWidget {
   const TrackingHubEmployeeDetailScreen({
     super.key,
     required this.employeeId,
@@ -15,40 +18,43 @@ class TrackingHubEmployeeDetailScreen extends ConsumerWidget {
   final int employeeId;
   final String? date;
 
+  @override
+  ConsumerState<TrackingHubEmployeeDetailScreen> createState() =>
+      _TrackingHubEmployeeDetailScreenState();
+}
+
+class _TrackingHubEmployeeDetailScreenState
+    extends ConsumerState<TrackingHubEmployeeDetailScreen> {
+  Timer? _refreshTimer;
+
   String get _date {
-    if (date != null && date!.isNotEmpty) return date!;
+    if (widget.date != null && widget.date!.isNotEmpty) return widget.date!;
     final now = DateTime.now();
     return '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
   }
 
-  String _formatSeconds(int seconds) {
-    if (seconds <= 0) return '0m';
-    final h = seconds ~/ 3600;
-    final m = (seconds % 3600) ~/ 60;
-    final s = seconds % 60;
-    if (h > 0) return '${h}h ${m}m';
-    if (m > 0) return '${m}m ${s}s';
-    return '${s}s';
-  }
+  ({int employeeId, String date}) get _args =>
+      (employeeId: widget.employeeId, date: _date);
 
-  String _formatLocal(String? iso) {
-    if (iso == null || iso.isEmpty) return '—';
-    final dt = DateTime.tryParse(iso)?.toLocal();
-    if (dt == null) return iso;
-    return dt.toString().split('.').first;
-  }
-
-  String _reasonLabel(String? reason) {
-    if (reason == null || reason.isEmpty) return 'Unknown';
-    return reason.replaceAll('_', ' ');
+  @override
+  void initState() {
+    super.initState();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!mounted) return;
+      ref.invalidate(employeeAvailabilityProvider(_args));
+    });
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final async = ref.watch(
-      employeeAvailabilityProvider((employeeId: employeeId, date: _date)),
-    );
+    final async = ref.watch(employeeAvailabilityProvider(_args));
 
     return Scaffold(
       appBar: AppBar(
@@ -58,203 +64,115 @@ class TrackingHubEmployeeDetailScreen extends ConsumerWidget {
           IconButton(
             tooltip: 'Refresh',
             onPressed: () {
-              ref.invalidate(
-                employeeAvailabilityProvider((
-                  employeeId: employeeId,
-                  date: _date,
-                )),
-              );
+              ref.invalidate(employeeAvailabilityProvider(_args));
             },
             icon: const Icon(Icons.refresh),
           ),
         ],
       ),
       body: async.when(
+        skipLoadingOnReload: true,
+        skipLoadingOnRefresh: true,
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Error: $e')),
         data: (row) {
-          final available = (row['availableSeconds'] as num?)?.toInt() ?? 0;
-          final unavailable =
-              (row['unavailableSeconds'] as num?)?.toInt() ?? 0;
-          final percent = (row['availablePercent'] as num?)?.toDouble() ?? 0;
-          final segments = (row['segments'] as List<dynamic>? ?? const []);
-          final name = row['fullName']?.toString() ?? 'Employee #$employeeId';
+          final name =
+              row['fullName']?.toString() ?? 'Employee #${widget.employeeId}';
           final code = row['employeeCode']?.toString();
-          final stillOnDuty = row['stillOnDuty'] == true;
-          final total = available + unavailable;
-          final availRatio = total > 0 ? available / total : 0.0;
+          final designation = row['designation']?.toString();
+          final department = row['department']?.toString();
+          final on = isLocationCurrentlyOn(row);
+          final alert = isLocationAlertActive(row);
 
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              Text(
-                name,
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              if (code != null && code.isNotEmpty)
-                Text(code, style: theme.textTheme.bodyMedium),
-              const SizedBox(height: 4),
-              Text(
-                'Date $_date · ${stillOnDuty ? 'Still on duty' : 'Shift closed'}',
-                style: theme.textTheme.bodySmall,
-              ),
-              const SizedBox(height: 16),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Duty window',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+          return RefreshIndicator(
+            onRefresh: () async {
+              ref.invalidate(employeeAvailabilityProvider(_args));
+              await ref.read(employeeAvailabilityProvider(_args).future);
+            },
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                if (on)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1B5E20),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Text(
+                      'Location is available. The unavailable alert is cleared.',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
                       ),
-                      const SizedBox(height: 8),
-                      Text('Punch in:  ${_formatLocal(row['punchIn']?.toString())}'),
-                      Text('Punch out: ${_formatLocal(row['punchOut']?.toString())}'),
-                      const SizedBox(height: 12),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: SizedBox(
-                          height: 16,
-                          child: Row(
-                            children: [
-                              if (availRatio > 0)
-                                Expanded(
-                                  flex: (availRatio * 1000).round().clamp(
-                                    1,
-                                    1000,
-                                  ),
-                                  child: Container(
-                                    color: const Color(0xFF2E7D32),
-                                  ),
-                                ),
-                              if (1 - availRatio > 0)
-                                Expanded(
-                                  flex: ((1 - availRatio) * 1000)
-                                      .round()
-                                      .clamp(1, 1000),
-                                  child: Container(
-                                    color: theme.colorScheme.error,
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
+                    ),
+                  )
+                else if (alert)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFB71C1C),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Text(
+                      'Location is unavailable. This alert disappears automatically when GPS returns.',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
                       ),
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 16,
-                        runSpacing: 8,
-                        children: [
-                          _chip(
-                            theme,
-                            'Available ${_formatSeconds(available)}',
-                            const Color(0xFF2E7D32),
-                          ),
-                          _chip(
-                            theme,
-                            'Not available ${_formatSeconds(unavailable)}',
-                            theme.colorScheme.error,
-                          ),
-                          _chip(
-                            theme,
-                            '${percent.toStringAsFixed(1)}%',
-                            percent >= 90
-                                ? theme.colorScheme.primary
-                                : theme.colorScheme.error,
-                          ),
-                        ],
+                    ),
+                  )
+                else
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEF6C00),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Text(
+                      'GPS is quiet. Waiting to confirm before raising an alert.',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
                       ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Timeline between punch-in and punch-out',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-              if (segments.isEmpty)
-                const Card(
-                  child: Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Center(
-                      child: Text('No punch window / no segments for this day.'),
                     ),
                   ),
-                )
-              else
-                ...segments.map((raw) {
-                  final seg = Map<String, dynamic>.from(raw as Map);
-                  final availableSeg = seg['status'] == 'AVAILABLE';
-                  final color = availableSeg
-                      ? const Color(0xFF2E7D32)
-                      : theme.colorScheme.error;
-                  final duration =
-                      (seg['durationSeconds'] as num?)?.toInt() ?? 0;
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    child: ListTile(
-                      leading: Icon(
-                        availableSeg ? Icons.gps_fixed : Icons.gps_off,
-                        color: color,
-                      ),
-                      title: Text(
-                        availableSeg ? 'Location available' : 'Location not available',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: color,
-                        ),
-                      ),
-                      subtitle: Text(
-                        '${_formatLocal(seg['start']?.toString())} → ${_formatLocal(seg['end']?.toString())}\n'
-                        'Duration: ${_formatSeconds(duration)}'
-                        '${availableSeg ? '' : '\nReason: ${_reasonLabel(seg['reason']?.toString())}'
-                            '${seg['confidence'] != null ? ' (${seg['confidence']})' : ''}'}',
-                      ),
-                      isThreeLine: true,
-                    ),
-                  );
-                }),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: () {
-                  context.go(
-                    '/admin/tracking-hub?date=$_date&employeeId=$employeeId',
-                  );
-                },
-                icon: const Icon(Icons.arrow_back),
-                label: const Text('Back to Tracking Hub'),
-              ),
-            ],
+                Text(
+                  name,
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                if (code != null && code.isNotEmpty)
+                  Text(code, style: theme.textTheme.titleSmall),
+                if (designation != null || department != null)
+                  Text(
+                    [designation, department]
+                        .where((e) => e != null && e.isNotEmpty)
+                        .join(' · '),
+                    style: theme.textTheme.bodySmall,
+                  ),
+                const SizedBox(height: 4),
+                Text('Date $_date', style: theme.textTheme.bodySmall),
+                const SizedBox(height: 16),
+                AvailabilityDetailsView(row: row),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    context.go(
+                      '/admin/tracking-hub?date=$_date&employeeId=${widget.employeeId}',
+                    );
+                  },
+                  icon: const Icon(Icons.arrow_back),
+                  label: const Text('Back to Tracking Hub'),
+                ),
+              ],
+            ),
           );
         },
-      ),
-    );
-  }
-
-  Widget _chip(ThemeData theme, String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.35)),
-      ),
-      child: Text(
-        label,
-        style: theme.textTheme.labelMedium?.copyWith(
-          color: color,
-          fontWeight: FontWeight.w700,
-        ),
       ),
     );
   }

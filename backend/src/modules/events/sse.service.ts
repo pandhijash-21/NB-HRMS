@@ -23,7 +23,8 @@ export const sseService = {
   toAdmins(event: string, data: unknown) {
     const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
     for (const client of clients.values()) {
-      if (client.role === 'ADMIN' || client.role === 'SUPER_ADMIN' || client.role === 'HR') {
+      const role = String(client.role ?? '').toUpperCase().replace(/[\s_]/g, '');
+      if (['ADMIN', 'SUPERADMIN', 'SYSTEMADMIN', 'HR', 'DEVELOPER'].includes(role)) {
         try { client.res.write(payload); } catch { /* client disconnected */ }
       }
     }

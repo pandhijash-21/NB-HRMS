@@ -6,7 +6,9 @@ import 'radial_menu.dart';
 
 import '../../features/auth/domain/permissions.dart';
 import '../../features/auth/presentation/auth_providers.dart';
+import '../../features/tracking_hub/presentation/location_alert_watch.dart';
 import '../logging/app_logger.dart';
+import '../services/location_alert_sound.dart';
 import '../theme/theme_provider.dart';
 
 class ResponsiveShell extends ConsumerStatefulWidget {
@@ -87,6 +89,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
       'ADMIN',
       'HR',
     ].contains(auth.user?.role.toUpperCase() ?? '');
+    final canTrackField = canAccessFieldTracking(auth.user?.role);
     final canApproveLeave = Permissions.canApproveLeave(auth.permissions);
     final canAccessAdmin = Permissions.canAccessAdminPortal(
       auth.permissions,
@@ -165,30 +168,34 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
           Icons.assignment_turned_in,
           'Profile Approvals',
         ),
-      if (isHR)
+      if (canTrackField)
         const _Destination(
           '/admin/live-tracking',
           Icons.location_on_outlined,
           Icons.location_on,
           'Live Tracking',
         ),
-      if (isHR)
+      if (canTrackField)
         const _Destination(
           '/admin/trips',
           Icons.route_outlined,
           Icons.route,
           'Trips',
         ),
-      if (isHR)
+      if (canTrackField)
         const _Destination(
           '/admin/tracking-hub',
           Icons.insights_outlined,
           Icons.insights,
           'Tracking Hub',
+          alertBadge: true,
         ),
     ];
 
     final currentPath = GoRouterState.of(context).matchedLocation;
+    final alertCount = canTrackField
+        ? ref.watch(locationAlertWatchProvider).count
+        : 0;
     final selectedIndex = destinations
         .indexWhere((d) {
           if (d.route == '/leave') {
@@ -327,16 +334,21 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                                   size: 22,
                                 ),
                                 const SizedBox(width: 12),
-                                Text(
-                                  destinations[i].label,
-                                  style: TextStyle(
-                                    color: safeSelectedIndex == i
-                                        ? (isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238))
-                                        : (isDark ? Colors.white.withOpacity(0.5) : const Color(0xFF607D8B).withOpacity(0.8)),
-                                    fontWeight: safeSelectedIndex == i ? FontWeight.w700 : FontWeight.w500,
-                                    fontSize: 14,
+                                Expanded(
+                                  child: Text(
+                                    destinations[i].label,
+                                    style: TextStyle(
+                                      color: safeSelectedIndex == i
+                                          ? (isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238))
+                                          : (isDark ? Colors.white.withOpacity(0.5) : const Color(0xFF607D8B).withOpacity(0.8)),
+                                      fontWeight: safeSelectedIndex == i ? FontWeight.w700 : FontWeight.w500,
+                                      fontSize: 14,
+                                    ),
                                   ),
                                 ),
+                                if (destinations[i].alertBadge)
+                                  _alertCountBadge(alertCount),
+                                const SizedBox(width: 12),
                               ],
                             ),
                           ),
@@ -457,6 +469,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                 destinations,
                 isDark,
                 allowExpanded: allowExpandedSidebar,
+                alertCount: alertCount,
               ),
               Expanded(child: widget.child),
             ],
@@ -469,7 +482,12 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
   }
 
   Widget _wrapExitConfirm(BuildContext context, Widget child) {
-    return PopScope(
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) {
+        LocationAlertSound.unlock();
+      },
+      child: PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
@@ -500,6 +518,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
         }
       },
       child: child,
+    ),
     );
   }
 
@@ -532,12 +551,42 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     );
   }
 
+  Widget _alertCountBadge(int count, {bool compact = false}) {
+    if (count <= 0) return const SizedBox.shrink();
+    final label = count > 9 ? '9+' : '$count';
+    return Container(
+      constraints: BoxConstraints(minWidth: compact ? 16 : 20, minHeight: compact ? 16 : 20),
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 4 : 6,
+        vertical: compact ? 1 : 2,
+      ),
+      decoration: BoxDecoration(
+        color: const Color(0xFFB71C1C),
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: const [
+          BoxShadow(color: Colors.black26, blurRadius: 3, offset: Offset(0, 1)),
+        ],
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        label,
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: compact ? 9 : 11,
+          fontWeight: FontWeight.w900,
+          height: 1.1,
+        ),
+      ),
+    );
+  }
+
   Widget _buildSidebarContent(
     BuildContext context,
     int safeSelectedIndex,
     List<_Destination> destinations,
     bool isDark, {
     bool allowExpanded = true,
+    int alertCount = 0,
   }) {
     final expanded = allowExpanded && _isExpanded;
     return AnimatedContainer(
@@ -652,12 +701,23 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                       child: Row(
                         children: [
                           const SizedBox(width: 12),
-                          Icon(
-                            isSelected ? d.selectedIcon : d.icon,
-                            color: isSelected 
-                                ? (isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238))
-                                : (isDark ? Colors.white.withOpacity(0.4) : const Color(0xFF607D8B).withOpacity(0.7)),
-                            size: 24,
+                          Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              Icon(
+                                isSelected ? d.selectedIcon : d.icon,
+                                color: isSelected 
+                                    ? (isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238))
+                                    : (isDark ? Colors.white.withOpacity(0.4) : const Color(0xFF607D8B).withOpacity(0.7)),
+                                size: 24,
+                              ),
+                              if (d.alertBadge && !expanded)
+                                Positioned(
+                                  right: -8,
+                                  top: -6,
+                                  child: _alertCountBadge(alertCount, compact: true),
+                                ),
+                            ],
                           ),
                           const SizedBox(width: 12),
                           Expanded(
@@ -675,6 +735,8 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                               softWrap: false,
                             ),
                           ),
+                          if (d.alertBadge && expanded) _alertCountBadge(alertCount),
+                          const SizedBox(width: 12),
                         ],
                       ),
                     ),
@@ -794,9 +856,16 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
 }
 
 class _Destination {
-  const _Destination(this.route, this.icon, this.selectedIcon, this.label);
+  const _Destination(
+    this.route,
+    this.icon,
+    this.selectedIcon,
+    this.label, {
+    this.alertBadge = false,
+  });
   final String route;
   final IconData icon;
   final IconData selectedIcon;
   final String label;
+  final bool alertBadge;
 }

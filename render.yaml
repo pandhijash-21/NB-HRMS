@@ -12,6 +12,8 @@ services:
     startCommand: npx prisma migrate deploy; npx prisma db push --skip-generate; node dist/index.js
     healthCheckPath: /health
     envVars:
+      - key: NODE_VERSION
+        value: "20"
       - key: NODE_ENV
         value: production
       - key: PORT

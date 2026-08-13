@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../auth/presentation/auth_providers.dart';
 import '../providers.dart';
+import '../location_alert_watch.dart';
 import '../trip_recording_download.dart';
+import '../widgets/location_availability_widgets.dart';
 
 class TrackingHubScreen extends ConsumerStatefulWidget {
   const TrackingHubScreen({
@@ -24,6 +28,7 @@ class _TrackingHubScreenState extends ConsumerState<TrackingHubScreen> {
   String? _selectedEmployeeId;
   String _statusFilter = 'All';
   final _employeeController = TextEditingController();
+  Timer? _refreshTimer;
 
   @override
   void initState() {
@@ -35,10 +40,19 @@ class _TrackingHubScreenState extends ConsumerState<TrackingHubScreen> {
     if (_selectedEmployeeId != null) {
       _employeeController.text = _selectedEmployeeId!;
     }
+    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!mounted) return;
+      ref.invalidate(
+        hubDayAvailabilityProvider(
+          hubDayKey(date: _selectedDate, employeeId: _selectedEmployeeId),
+        ),
+      );
+    });
   }
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     _employeeController.dispose();
     super.dispose();
   }
@@ -57,15 +71,6 @@ class _TrackingHubScreenState extends ConsumerState<TrackingHubScreen> {
     final m = (seconds % 3600) ~/ 60;
     if (h == 0) return '${m}m';
     return '${h}h ${m}m';
-  }
-
-  String _formatLocal(String? iso) {
-    if (iso == null || iso.isEmpty) return '—';
-    final dt = DateTime.tryParse(iso)?.toLocal();
-    if (dt == null) return iso;
-    final hh = dt.hour.toString().padLeft(2, '0');
-    final mm = dt.minute.toString().padLeft(2, '0');
-    return '$hh:$mm';
   }
 
   Future<void> _pickDate() async {
@@ -101,6 +106,7 @@ class _TrackingHubScreenState extends ConsumerState<TrackingHubScreen> {
               ref.invalidate(hubDayAvailabilityProvider(dayKey));
               ref.invalidate(hubKpisProvider(_selectedEmployeeId));
               ref.invalidate(hubTripsProvider(_selectedEmployeeId));
+              ref.read(locationAlertWatchProvider.notifier).refresh();
             },
             icon: const Icon(Icons.refresh),
           ),
@@ -109,7 +115,7 @@ class _TrackingHubScreenState extends ConsumerState<TrackingHubScreen> {
       body: CustomScrollView(
         slivers: [
           SliverToBoxAdapter(child: _buildFilterBar(theme)),
-          SliverToBoxAdapter(child: _buildAlertsBanner(theme)),
+          SliverToBoxAdapter(child: _buildAlertsBanner()),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -140,12 +146,14 @@ class _TrackingHubScreenState extends ConsumerState<TrackingHubScreen> {
               child: Text(
                 'Shows how long each employee\'s GPS was reporting vs silent for ${_ymd(_selectedDate)}.',
                 style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurface.withOpacity(0.65),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
                 ),
               ),
             ),
           ),
           dayAsync.when(
+            skipLoadingOnReload: true,
+            skipLoadingOnRefresh: true,
             data: (payload) {
               final employees =
                   (payload['employees'] as List<dynamic>? ?? const []);
@@ -249,48 +257,20 @@ class _TrackingHubScreenState extends ConsumerState<TrackingHubScreen> {
     );
   }
 
-  Widget _buildAlertsBanner(ThemeData theme) {
-    final alertsAsync = ref.watch(trackingAlertsProvider);
-    return alertsAsync.maybeWhen(
-      data: (alerts) {
-        if (alerts.isEmpty) return const SizedBox.shrink();
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-          child: Card(
-            color: theme.colorScheme.errorContainer,
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Location unavailable alerts',
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.onErrorContainer,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  ...alerts.take(5).map((raw) {
-                    final a = Map<String, dynamic>.from(raw as Map);
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: Text(
-                        '${a['fullName'] ?? 'Employee'} — off since ${_formatLocal(a['unavailableSince']?.toString())}'
-                        ' (${(a['reason']?.toString() ?? 'NO_LOCATION_PING').replaceAll('_', ' ')})',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onErrorContainer,
-                        ),
-                      ),
-                    );
-                  }),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-      orElse: () => const SizedBox.shrink(),
+  Widget _buildAlertsBanner() {
+    final alerts = ref.watch(trackingAlertsProvider);
+    final active = activeLocationAlerts(alerts);
+    if (active.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: ActiveLocationAlertsBanner(
+        alerts: active,
+        onTapEmployee: (id) {
+          context.push(
+            '/admin/tracking-hub/employee/$id?date=${_ymd(_selectedDate)}',
+          );
+        },
+      ),
     );
   }
 
@@ -360,19 +340,22 @@ class _TrackingHubScreenState extends ConsumerState<TrackingHubScreen> {
   ) {
     final name = row['fullName']?.toString() ?? 'Employee';
     final code = row['employeeCode']?.toString();
-    final available = (row['availableSeconds'] as num?)?.toInt() ?? 0;
-    final unavailable = (row['unavailableSeconds'] as num?)?.toInt() ?? 0;
-    final percent = (row['availablePercent'] as num?)?.toDouble() ?? 0;
-    final gaps = (row['gapCount'] as num?)?.toInt() ?? 0;
-    final stillOnDuty = row['stillOnDuty'] == true;
     final employeeId = (row['employeeId'] as num?)?.toInt() ?? 0;
-    final total = available + unavailable;
-    final availRatio = total > 0 ? available / total : 0.0;
+    final live = row['isLive'] == true;
+    final on = isLocationCurrentlyOn(row);
+    final designation = row['designation']?.toString();
+    final department = row['department']?.toString();
+    final subtitle = [
+      if (code != null && code.isNotEmpty) code,
+      if (designation != null && designation.isNotEmpty) designation,
+      if (department != null && department.isNotEmpty) department,
+    ].join(' · ');
 
     return Card(
       elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         onTap: employeeId == 0
             ? null
             : () {
@@ -394,156 +377,34 @@ class _TrackingHubScreenState extends ConsumerState<TrackingHubScreen> {
                         Text(
                           name,
                           style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w800,
                           ),
                         ),
-                        if (code != null && code.isNotEmpty)
-                          Text(
-                            code,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurface.withOpacity(
-                                0.6,
-                              ),
-                            ),
-                          ),
+                        if (subtitle.isNotEmpty)
+                          Text(subtitle, style: theme.textTheme.bodySmall),
                       ],
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: stillOnDuty
-                          ? theme.colorScheme.primaryContainer
-                          : theme.colorScheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      stillOnDuty ? 'On duty' : 'Punched out',
-                      style: theme.textTheme.labelSmall,
-                    ),
-                  ),
+                  AvailabilityStatusPill(available: on, live: live),
                 ],
               ),
               const SizedBox(height: 12),
-              Row(
-                children: [
-                  Text(
-                    'In ${_formatLocal(row['punchIn']?.toString())}',
-                    style: theme.textTheme.bodySmall,
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    'Out ${_formatLocal(row['punchOut']?.toString())}',
-                    style: theme.textTheme.bodySmall,
-                  ),
-                  const Spacer(),
-                  Text(
-                    '${percent.toStringAsFixed(1)}% available',
-                    style: theme.textTheme.labelLarge?.copyWith(
-                      color: percent >= 90
-                          ? theme.colorScheme.primary
-                          : theme.colorScheme.error,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: SizedBox(
-                  height: 12,
-                  child: Row(
-                    children: [
-                      if (availRatio > 0)
-                        Expanded(
-                          flex: (availRatio * 1000).round().clamp(1, 1000),
-                          child: Container(color: const Color(0xFF2E7D32)),
-                        ),
-                      if (1 - availRatio > 0)
-                        Expanded(
-                          flex: ((1 - availRatio) * 1000).round().clamp(1, 1000),
-                          child: Container(color: theme.colorScheme.error),
-                        ),
-                    ],
+              AvailabilityDetailsView(row: row, compact: true),
+              const SizedBox(height: 4),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  'View full slot details',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: const Color(0xFFC5A059),
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  _miniStat(
-                    theme,
-                    Icons.gps_fixed,
-                    'Available',
-                    _formatSeconds(available),
-                    const Color(0xFF2E7D32),
-                  ),
-                  const SizedBox(width: 16),
-                  _miniStat(
-                    theme,
-                    Icons.gps_off,
-                    'Not available',
-                    _formatSeconds(unavailable),
-                    theme.colorScheme.error,
-                  ),
-                  const SizedBox(width: 16),
-                  _miniStat(
-                    theme,
-                    Icons.warning_amber,
-                    'Gaps',
-                    '$gaps',
-                    gaps == 0
-                        ? theme.colorScheme.primary
-                        : theme.colorScheme.error,
-                  ),
-                  const Spacer(),
-                  Icon(
-                    Icons.chevron_right,
-                    color: theme.colorScheme.onSurface.withOpacity(0.4),
-                  ),
-                ],
               ),
             ],
           ),
         ),
       ),
-    );
-  }
-
-  Widget _miniStat(
-    ThemeData theme,
-    IconData icon,
-    String label,
-    String value,
-    Color color,
-  ) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 16, color: color),
-        const SizedBox(width: 4),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: theme.colorScheme.onSurface.withOpacity(0.55),
-              ),
-            ),
-            Text(
-              value,
-              style: theme.textTheme.bodySmall?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
-        ),
-      ],
     );
   }
 
@@ -655,7 +516,7 @@ class _TrackingHubScreenState extends ConsumerState<TrackingHubScreen> {
             Text(
               title,
               style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.textTheme.bodySmall?.color?.withOpacity(0.7),
+                color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.7),
               ),
             ),
             const SizedBox(height: 4),
@@ -707,7 +568,7 @@ class _TrackingHubScreenState extends ConsumerState<TrackingHubScreen> {
                     ),
                   ),
                   IconButton(
-                    tooltip: 'Download recording',
+                    tooltip: 'Download trip video',
                     visualDensity: VisualDensity.compact,
                     icon: const Icon(Icons.download_rounded, size: 20),
                     onPressed: () {

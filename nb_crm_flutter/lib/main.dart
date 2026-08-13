@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/router/app_router.dart';
 import 'core/services/background_tracking_service.dart';
+import 'core/services/location_alert_sound.dart';
 import 'core/theme/app_breakpoints.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_provider.dart';
@@ -41,7 +42,13 @@ class NbCrmApp extends ConsumerWidget {
         );
         return MediaQuery(
           data: mq.copyWith(textScaler: capped),
-          child: PermissionGuard(child: child ?? const SizedBox.shrink()),
+          child: Listener(
+            behavior: HitTestBehavior.translucent,
+            onPointerDown: (_) {
+              LocationAlertSound.unlock();
+            },
+            child: PermissionGuard(child: child ?? const SizedBox.shrink()),
+          ),
         );
       },
     );

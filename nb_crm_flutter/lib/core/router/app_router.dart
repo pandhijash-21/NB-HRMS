@@ -17,6 +17,7 @@ import '../../features/admin/presentation/screens/admin_employee_detail_screen.d
 import '../../features/admin/presentation/screens/admin_approvals_screen.dart';
 import '../../features/admin/presentation/screens/admin_dashboard_screen.dart';
 import '../../features/admin/presentation/screens/admin_live_tracking_screen.dart';
+import '../../features/admin/presentation/screens/admin_employee_live_tracking_screen.dart';
 import '../../features/tracking_hub/presentation/screens/tracking_hub_screen.dart';
 import '../../features/tracking/presentation/screens/autostart_onboarding_screen.dart';
 
@@ -92,7 +93,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
   final shellNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'shellNav');
 
   // Bump when route table changes so hot-restart rebuilds GoRouter cleanly.
-  const routerRevision = 9;
+  const routerRevision = 10;
 
   return GoRouter(
     navigatorKey: rootNavigatorKey,
@@ -351,6 +352,18 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/admin/live-tracking',
             builder: (context, state) => const AdminLiveTrackingScreen(),
+          ),
+          GoRoute(
+            path: '/admin/live-tracking/employee/:employeeId',
+            builder: (context, state) {
+              final id = int.tryParse(state.pathParameters['employeeId'] ?? '');
+              if (id == null) {
+                return const Scaffold(
+                  body: Center(child: Text('Invalid Employee ID')),
+                );
+              }
+              return AdminEmployeeLiveTrackingScreen(employeeId: id);
+            },
           ),
           GoRoute(
             path: '/admin/tracking-hub',

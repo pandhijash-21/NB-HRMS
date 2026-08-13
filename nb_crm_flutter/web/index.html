@@ -34,6 +34,23 @@
   <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.3.0/model-viewer.min.js"></script>
 </head>
 <body>
+  <script>
+    (function () {
+      function unlock() {
+        try {
+          var AC = window.AudioContext || window.webkitAudioContext;
+          if (!AC) return;
+          if (!window.__nbAudioCtx) window.__nbAudioCtx = new AC();
+          if (window.__nbAudioCtx.state === 'suspended') {
+            window.__nbAudioCtx.resume();
+          }
+        } catch (e) {}
+      }
+      window.addEventListener('pointerdown', unlock, true);
+      window.addEventListener('keydown', unlock, true);
+      window.addEventListener('touchstart', unlock, true);
+    })();
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

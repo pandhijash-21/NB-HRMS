@@ -8,23 +8,11 @@ import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
 
-import '../../../../core/logging/app_logger.dart';
-import '../../../../core/services/map_matching_service.dart';
-import '../../../../core/utils/heading_utils.dart';
-import '../../../../core/utils/route_pass_analyzer.dart';
 import '../../../auth/presentation/auth_providers.dart';
 import '../../../tracking_hub/presentation/providers.dart';
-import '../widgets/route_pass_legend.dart';
+import '../../../tracking_hub/presentation/widgets/location_availability_widgets.dart';
 import '../widgets/tracking_avatar_marker.dart';
-
-final _geofenceLocationsProvider = FutureProvider.autoDispose<List<dynamic>>((ref) async {
-  final dioClient = ref.watch(dioClientProvider);
-  final res = await dioClient.getEnvelope<List<dynamic>>(
-    'attendance/admin/locations',
-    parse: (r) => r as List<dynamic>,
-  );
-  return res;
-});
+import 'admin_live_tracking_shared.dart';
 
 class AdminLiveTrackingScreen extends ConsumerStatefulWidget {
   const AdminLiveTrackingScreen({super.key});
@@ -42,179 +30,65 @@ class _AdminLiveTrackingScreenState
   String? _selectedGeofenceId;
   final MapController _mapController = MapController();
 
-  final Map<int, List<LatLng>> _rawTrails = {};
-  final Map<int, List<LatLng>> _snappedTrails = {};
-  final Map<int, bool> _isSnapping = {};
   final Map<int, LatLng> _lastPositions = {};
   final Map<int, DateTime> _stopStartTimes = {};
-  final Map<int, double> _smoothedHeadings = {};
-  /// Which tripId the current in-memory trail belongs to.
-  final Map<int, String?> _trailTripIds = {};
-  final Set<String> _hydratingTripIds = {};
   /// Forces rebuild so stop timers tick every second.
   int _tick = 0;
   final Set<String> _seenAlertIds = {};
+  final Set<int> _activeAlertEmployeeIds = {};
+  final Map<int, String> _alertEmployeeNames = {};
   bool _alertsPrimed = false;
 
   static const _stopMoveMeters = 20.0;
   static const _stopBubbleAfter = Duration(seconds: 5);
 
-  Future<void> _hydrateTripTrail(int employeeId, String tripId) async {
-    if (_hydratingTripIds.contains(tripId)) return;
-    if (_trailTripIds[employeeId] == tripId &&
-        (_snappedTrails[employeeId]?.length ?? 0) >= 2) {
-      return;
-    }
-
-    _hydratingTripIds.add(tripId);
-    try {
-      final dio = ref.read(dioClientProvider);
-      final data = await dio.getEnvelope<Map<String, dynamic>>(
-        'tracking/trips/$tripId/route',
-        parse: (r) => Map<String, dynamic>.from(r as Map),
-      );
-      final route = (data['route'] as List?) ?? const [];
-      final points = <LatLng>[];
-      for (final p in route) {
-        if (p is! Map) continue;
-        final lat = (p['latitude'] as num?)?.toDouble();
-        final lng = (p['longitude'] as num?)?.toDouble();
-        if (lat == null || lng == null) continue;
-        points.add(LatLng(lat, lng));
-      }
-      if (!mounted) return;
-      setState(() {
-        _rawTrails[employeeId] = List<LatLng>.from(points);
-        _snappedTrails[employeeId] = List<LatLng>.from(points);
-        _trailTripIds[employeeId] = tripId;
-        if (points.isNotEmpty) {
-          _lastPositions[employeeId] = points.last;
-        }
-      });
-    } catch (e) {
-      AppLogger.tracking.w('[LiveTracking] hydrate trip $tripId failed: $e');
-    } finally {
-      _hydratingTripIds.remove(tripId);
-    }
-  }
-
-  void _clearTrail(int employeeId) {
-    _rawTrails.remove(employeeId);
-    _snappedTrails.remove(employeeId);
-    _trailTripIds.remove(employeeId);
-    _stopStartTimes.remove(employeeId);
-  }
-
-  Future<void> _processLiveLocations(List<dynamic> locations) async {
+  void _processLiveLocations(List<dynamic> locations) {
     for (final loc in locations) {
       if (loc is! Map) continue;
-      final employeeId = _asEmployeeId(loc['employeeId']);
+      final employeeId = asEmployeeId(loc['employeeId']);
       if (employeeId == null) continue;
 
       final lat = (loc['latitude'] as num).toDouble();
       final lng = (loc['longitude'] as num).toDouble();
       final newPoint = LatLng(lat, lng);
-      final gpsHeading = (loc['heading'] as num?)?.toDouble();
-      final tripId = loc['tripId']?.toString();
-      final hasTrip = tripId != null && tripId.isNotEmpty && tripId != 'null';
+      final onTrip = hasOpenTrip(Map<String, dynamic>.from(loc));
 
-      // Path persistence: load saved trip points when re-entering live map.
-      // Clear path only when they re-enter geofence (trip ends).
-      if (!hasTrip) {
-        if (_trailTripIds.containsKey(employeeId)) {
-          if (mounted) setState(() => _clearTrail(employeeId));
-        }
-      } else {
-        final knownTrip = _trailTripIds[employeeId];
-        if (knownTrip != tripId ||
-            (_snappedTrails[employeeId]?.isEmpty ?? true)) {
-          await _hydrateTripTrail(employeeId, tripId);
-        }
-      }
-
-      // Stopped-since from backend (survives leaving the screen).
       final stoppedSinceRaw = loc['stoppedSince']?.toString();
-      if (hasTrip &&
+      if (onTrip &&
           stoppedSinceRaw != null &&
           stoppedSinceRaw.isNotEmpty &&
           stoppedSinceRaw != 'null') {
         final parsed = DateTime.tryParse(stoppedSinceRaw)?.toLocal();
-        if (parsed != null) {
-          _stopStartTimes[employeeId] = parsed;
-        }
+        if (parsed != null) _stopStartTimes[employeeId] = parsed;
+      } else if (!onTrip) {
+        _stopStartTimes.remove(employeeId);
       }
 
       final lastPos = _lastPositions[employeeId];
       if (lastPos == null) {
         _lastPositions[employeeId] = newPoint;
-        if (hasTrip && !_stopStartTimes.containsKey(employeeId)) {
+        if (onTrip && !_stopStartTimes.containsKey(employeeId)) {
           _stopStartTimes[employeeId] = DateTime.now();
         }
-      } else {
-        final dist =
-            const Distance().as(LengthUnit.Meter, lastPos, newPoint);
-        if (dist > _stopMoveMeters) {
-          _lastPositions[employeeId] = newPoint;
-          // Moving again — clear stop (backend will also clear stoppedSince)
-          if (stoppedSinceRaw == null ||
-              stoppedSinceRaw.isEmpty ||
-              stoppedSinceRaw == 'null') {
-            _stopStartTimes.remove(employeeId);
-          }
-        } else if (hasTrip && !_stopStartTimes.containsKey(employeeId)) {
-          // Local fallback if backend hasn't stamped stoppedSince yet
-          _stopStartTimes[employeeId] = DateTime.now();
-        }
+        continue;
       }
 
-      final travelHeading = resolveTravelHeading(
-        gpsHeading: gpsHeading,
-        previous: lastPos,
-        current: newPoint,
-        fallback: _smoothedHeadings[employeeId],
-      );
-      final prevSmooth = _smoothedHeadings[employeeId] ?? travelHeading;
-      // Softer blend → less heading jitter while still tracking turns.
-      _smoothedHeadings[employeeId] =
-          lerpHeading(prevSmooth, travelHeading, 0.28);
-
-      if (!hasTrip) continue;
-
-      final rawTrail = _rawTrails.putIfAbsent(employeeId, () => []);
-      final snappedTrail = _snappedTrails.putIfAbsent(employeeId, () => []);
-      _trailTripIds[employeeId] = tripId;
-
-      final shouldAppend = rawTrail.isEmpty ||
-          rawTrail.last.latitude != lat ||
-          rawTrail.last.longitude != lng;
-      if (!shouldAppend) continue;
-
-      final prevPoint = rawTrail.isNotEmpty ? rawTrail.last : null;
-      rawTrail.add(newPoint);
-
-      if (prevPoint == null) {
-        if (mounted) setState(() => snappedTrail.add(newPoint));
-      } else if (!(_isSnapping[employeeId] ?? false)) {
-        _isSnapping[employeeId] = true;
-        final matched =
-            await MapMatchingService.matchPoints([prevPoint, newPoint]);
-        if (mounted) {
-          setState(() {
-            if (matched.isNotEmpty) {
-              if (snappedTrail.isNotEmpty &&
-                  matched.first == snappedTrail.last) {
-                snappedTrail.addAll(matched.sublist(1));
-              } else {
-                snappedTrail.addAll(matched);
-              }
-            } else {
-              snappedTrail.add(newPoint);
-            }
-          });
+      final dist = const Distance().as(LengthUnit.Meter, lastPos, newPoint);
+      if (dist > _stopMoveMeters) {
+        _lastPositions[employeeId] = newPoint;
+        if (stoppedSinceRaw == null ||
+            stoppedSinceRaw.isEmpty ||
+            stoppedSinceRaw == 'null') {
+          _stopStartTimes.remove(employeeId);
         }
-        _isSnapping[employeeId] = false;
+      } else if (onTrip && !_stopStartTimes.containsKey(employeeId)) {
+        _stopStartTimes[employeeId] = DateTime.now();
       }
     }
+  }
+
+  void _openEmployeeLive(int employeeId) {
+    context.push('/admin/live-tracking/employee/$employeeId');
   }
 
   @override
@@ -256,192 +130,78 @@ class _AdminLiveTrackingScreenState
     } catch (_) {}
   }
 
-  Color _getColorForUser(String name) {
-    final colors = [
-      Colors.red.shade600,
-      Colors.green.shade600,
-      Colors.blue.shade600,
-      Colors.orange.shade600,
-      Colors.purple.shade600,
-      Colors.teal.shade600,
-      Colors.pink.shade600,
-      Colors.deepOrange.shade600,
-      Colors.indigo.shade600,
-      Colors.cyan.shade600,
-    ];
-    final index =
-        name.codeUnits.fold<int>(0, (prev, curr) => prev + curr) % colors.length;
-    return colors[index];
-  }
-
-  String _formatSeconds(int seconds) {
-    if (seconds <= 0) return '0m';
-    final h = seconds ~/ 3600;
-    final m = (seconds % 3600) ~/ 60;
-    if (h > 0) return '${h}h ${m}m';
-    return '${m}m';
-  }
-
-  String _formatClock(String? iso) {
-    if (iso == null || iso.isEmpty) return '—';
-    final dt = DateTime.tryParse(iso)?.toLocal();
-    if (dt == null) return '—';
-    return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-  }
-
-  Map<int, Map<String, dynamic>> _dutyById(List<dynamic> employees) {
-    final map = <int, Map<String, dynamic>>{};
-    for (final raw in employees) {
-      if (raw is! Map) continue;
-      final row = Map<String, dynamic>.from(raw);
-      final id = _asEmployeeId(row['employeeId']);
-      if (id == null) continue;
-      map[id] = row;
-    }
-    return map;
-  }
-
   void _notifyNewAlerts(List<dynamic> alerts) {
+    final active = activeLocationAlerts(alerts);
+    final currentIds = <int>{};
+    for (final a in active) {
+      final id = (a['employeeId'] as num?)?.toInt();
+      if (id == null) continue;
+      currentIds.add(id);
+      final name = a['fullName']?.toString();
+      if (name != null && name.isNotEmpty) _alertEmployeeNames[id] = name;
+    }
+
     if (!_alertsPrimed) {
-      for (final raw in alerts) {
-        if (raw is! Map) continue;
-        final id = raw['id']?.toString();
+      for (final a in active) {
+        final id = a['id']?.toString();
         if (id != null && id.isNotEmpty) _seenAlertIds.add(id);
       }
+      _activeAlertEmployeeIds
+        ..clear()
+        ..addAll(currentIds);
       _alertsPrimed = true;
       return;
     }
-    for (final raw in alerts) {
-      if (raw is! Map) continue;
-      final id = raw['id']?.toString();
+
+    for (final empId in _activeAlertEmployeeIds.difference(currentIds)) {
+      if (!mounted) continue;
+      final name = _alertEmployeeNames[empId] ?? 'Employee #$empId';
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: const Color(0xFF1B5E20),
+          duration: const Duration(seconds: 4),
+          content: Text('$name location is available again'),
+        ),
+      );
+    }
+
+    for (final a in active) {
+      final id = a['id']?.toString();
       if (id == null || id.isEmpty || _seenAlertIds.contains(id)) continue;
       _seenAlertIds.add(id);
       if (!mounted) continue;
-      final name = raw['fullName']?.toString() ?? 'Employee';
-      final reason = (raw['reason']?.toString() ?? 'NO_LOCATION_PING')
-          .replaceAll('_', ' ');
+      final name = a['fullName']?.toString() ?? 'Employee';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: Colors.red.shade700,
+          backgroundColor: const Color(0xFFB71C1C),
           duration: const Duration(seconds: 6),
           content: Text(
-            '$name location unavailable since ${_formatClock(raw['unavailableSince']?.toString())} ($reason)',
-          ),
-          action: SnackBarAction(
-            label: 'Hub',
-            textColor: Colors.white,
-            onPressed: () => context.go('/admin/tracking-hub'),
+            '$name GPS off since ${formatAvailabilityClock(a['unavailableSince']?.toString())}'
+            ' (${reasonLabel(a['reason']?.toString())})',
           ),
         ),
       );
     }
-  }
 
-  void _showEmployeeAvailabilitySheet(
-    Map<String, dynamic>? duty,
-    int employeeId,
-    String name,
-  ) {
-    final segments = (duty?['segments'] as List?) ?? const [];
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (ctx) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  style: Theme.of(ctx).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Punch in ${_formatClock(duty?['punchIn']?.toString())}  ·  '
-                  'Punch out ${_formatClock(duty?['punchOut']?.toString())}',
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Available ${_formatSeconds((duty?['availableSeconds'] as num?)?.toInt() ?? 0)}'
-                  '  ·  Off ${_formatSeconds((duty?['unavailableSeconds'] as num?)?.toInt() ?? 0)}'
-                  '  ·  ${(duty?['availablePercent'] as num?)?.toStringAsFixed(1) ?? '0'}%',
-                ),
-                const SizedBox(height: 12),
-                if (segments.isEmpty)
-                  const Text('No punch-window slots yet.')
-                else
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxHeight: 280),
-                    child: ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: segments.length,
-                      itemBuilder: (_, i) {
-                        final seg = Map<String, dynamic>.from(segments[i] as Map);
-                        final on = seg['status'] == 'AVAILABLE';
-                        return ListTile(
-                          dense: true,
-                          leading: Icon(
-                            on ? Icons.gps_fixed : Icons.gps_off,
-                            color: on ? const Color(0xFF2E7D32) : Colors.red,
-                          ),
-                          title: Text(on ? 'Location available' : 'Location off'),
-                          subtitle: Text(
-                            '${_formatClock(seg['start']?.toString())} → ${_formatClock(seg['end']?.toString())}'
-                            '  (${_formatSeconds((seg['durationSeconds'] as num?)?.toInt() ?? 0)})'
-                            '${on ? '' : '\n${(seg['reason']?.toString() ?? 'NO_LOCATION_PING').replaceAll('_', ' ')}'}',
-                          ),
-                          isThreeLine: !on,
-                        );
-                      },
-                    ),
-                  ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    TextButton(
-                      onPressed: () {
-                        Navigator.pop(ctx);
-                        context.go('/admin/employees/$employeeId');
-                      },
-                      child: const Text('Profile'),
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        Navigator.pop(ctx);
-                        context.push(
-                          '/admin/tracking-hub/employee/$employeeId',
-                        );
-                      },
-                      child: const Text('Full timeline'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
+    _activeAlertEmployeeIds
+      ..clear()
+      ..addAll(currentIds);
   }
 
   Widget _buildDutyAvailabilityPanel(List<dynamic> employees) {
     return Material(
-      elevation: 10,
+      elevation: 12,
       color: Theme.of(context).colorScheme.surface,
       child: SizedBox(
-        height: 156,
+        height: 188,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
               child: Text(
-                'On-duty GPS (punch-in → punch-out)',
+                'On-duty location availability',
                 style: Theme.of(context).textTheme.labelLarge?.copyWith(
                   fontWeight: FontWeight.w800,
                 ),
@@ -451,36 +211,42 @@ class _AdminLiveTrackingScreenState
               child: ListView.separated(
                 padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
                 itemCount: employees.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 6),
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
                 itemBuilder: (context, index) {
                   final row = Map<String, dynamic>.from(employees[index] as Map);
-                  final id = _asEmployeeId(row['employeeId']) ?? 0;
+                  final id = asEmployeeId(row['employeeId']) ?? 0;
                   final name = row['fullName']?.toString() ?? 'Employee';
-                  final on = row['currentlyAvailable'] == true || row['isLive'] == true;
-                  final avail = (row['availableSeconds'] as num?)?.toInt() ?? 0;
-                  final off = (row['unavailableSeconds'] as num?)?.toInt() ?? 0;
-                  final segments = (row['segments'] as List?) ?? const [];
+                  final on = isLocationCurrentlyOn(row);
                   return InkWell(
-                    onTap: () => _showEmployeeAvailabilitySheet(row, id, name),
-                    child: Row(
+                    onTap: () => _openEmployeeLive(id),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(
-                          on ? Icons.gps_fixed : Icons.gps_off,
-                          size: 16,
-                          color: on ? const Color(0xFF2E7D32) : Colors.red,
+                        Row(
+                          children: [
+                            AvailabilityStatusPill(
+                              available: on,
+                              live: row['isLive'] == true,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                name,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontWeight: FontWeight.w800),
+                              ),
+                            ),
+                            Text(
+                              'On ${formatAvailabilityDuration((row['availableSeconds'] as num?)?.toInt() ?? 0)}'
+                              ' · Off ${formatAvailabilityDuration((row['unavailableSeconds'] as num?)?.toInt() ?? 0)}',
+                              style: Theme.of(context).textTheme.labelSmall,
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            name,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                        ),
-                        Text(
-                          'On ${_formatSeconds(avail)} · Off ${_formatSeconds(off)}'
-                          '${segments.length > 1 ? ' · ${segments.length} slots' : ''}',
-                          style: Theme.of(context).textTheme.labelSmall,
+                        const SizedBox(height: 6),
+                        AvailabilitySlotBar(
+                          segments: (row['segments'] as List?) ?? const [],
+                          height: 8,
                         ),
                       ],
                     ),
@@ -492,13 +258,6 @@ class _AdminLiveTrackingScreenState
         ),
       ),
     );
-  }
-
-  static int? _asEmployeeId(dynamic value) {
-    if (value == null) return null;
-    if (value is int) return value;
-    if (value is num) return value.toInt();
-    return int.tryParse(value.toString());
   }
 
   @override
@@ -530,7 +289,7 @@ class _AdminLiveTrackingScreenState
 
     final myEmployeeId = auth.user?.employeeId;
     final asyncBoard = ref.watch(liveBoardProvider);
-    final asyncGeofences = ref.watch(_geofenceLocationsProvider);
+    final asyncGeofences = ref.watch(geofenceLocationsProvider);
 
     ref.listen<AsyncValue<Map<String, dynamic>>>(liveBoardProvider,
         (previous, next) {
@@ -593,12 +352,13 @@ class _AdminLiveTrackingScreenState
         data: (board) {
           final allLocations = (board['locations'] as List?) ?? const [];
           final dutyEmployees = (board['employees'] as List?) ?? const [];
-          final dutyMap = _dutyById(dutyEmployees);
+          final boardAlerts = (board['alerts'] as List?) ?? const [];
+          final dutyMap = dutyById(dutyEmployees);
           final byEmployee = <int, Map<String, dynamic>>{};
           for (final raw in allLocations) {
             if (raw is! Map) continue;
             final loc = Map<String, dynamic>.from(raw);
-            final id = _asEmployeeId(loc['employeeId']);
+            final id = asEmployeeId(loc['employeeId']);
             if (id == null) continue;
             loc['employeeId'] = id;
             byEmployee[id] = loc;
@@ -608,221 +368,65 @@ class _AdminLiveTrackingScreenState
           final markers = locations.map((loc) {
             final lat = (loc['latitude'] as num).toDouble();
             final lng = (loc['longitude'] as num).toDouble();
-            final name = loc['fullName'] ?? 'Unknown';
+            final name = loc['fullName']?.toString() ?? 'Unknown';
             final employeeId = loc['employeeId'] as int;
-            final pinColor = _getColorForUser(name);
-            final tripId = loc['tripId']?.toString();
-            final hasTrip =
-                tripId != null && tripId.isNotEmpty && tripId != 'null';
+            final pinColor = colorForUser(name);
+            final onTrip = hasOpenTrip(loc);
+            final duty = dutyMap[employeeId];
+            final gpsOn = duty == null || isLocationCurrentlyOn(duty);
 
             Widget? stopBubble;
             final stopStartTime = _stopStartTimes[employeeId];
-            if (hasTrip && stopStartTime != null) {
+            if (onTrip && stopStartTime != null) {
               final stopDuration = DateTime.now().difference(stopStartTime);
               if (stopDuration >= _stopBubbleAfter) {
-                final minutes = stopDuration.inMinutes;
-                final seconds = stopDuration.inSeconds % 60;
-                final timeStr =
-                    '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-                stopBubble = Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  margin: const EdgeInsets.only(bottom: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.red.shade600,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Colors.black45,
-                        blurRadius: 4,
-                        offset: Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.timer, color: Colors.white, size: 14),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Stopped $timeStr',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
+                stopBubble = StoppedBubble(duration: stopDuration);
               }
             }
 
-            final nameChip = Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-              margin: const EdgeInsets.only(bottom: 4),
-              decoration: BoxDecoration(
-                color: isDark ? Colors.black87 : Colors.white,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: pinColor, width: 1.5),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Colors.black26,
-                    blurRadius: 4,
-                  ),
-                ],
-              ),
-              child: Text(
-                name,
-                style: const TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            );
-
-            final duty = dutyMap[employeeId];
-            final gpsOn = duty == null
-                ? true
-                : duty['currentlyAvailable'] == true || duty['isLive'] == true;
-            final availSec = (duty?['availableSeconds'] as num?)?.toInt() ?? 0;
-            final offSec = (duty?['unavailableSeconds'] as num?)?.toInt() ?? 0;
-            final gpsChip = Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              margin: const EdgeInsets.only(bottom: 4),
-              decoration: BoxDecoration(
-                color: gpsOn ? const Color(0xFF2E7D32) : Colors.red.shade700,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                gpsOn
-                    ? 'GPS on ${_formatSeconds(availSec)}'
-                    : 'GPS off ${_formatSeconds(offSec)}',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 9,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            );
-
-            late final Widget markerChild;
-            final photoUrl = loc['photoUrl']?.toString();
-            markerChild = GestureDetector(
-              onTap: () => _showEmployeeAvailabilitySheet(duty, employeeId, name),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (stopBubble != null) stopBubble,
-                  gpsChip,
-                  nameChip,
-                  TrackingAvatarMarker(
-                    photoUrl: photoUrl,
-                    size: hasTrip ? 46 : 36,
-                    borderColor: pinColor,
-                  ),
-                ],
-              ),
-            );
-
-            final snappedPosition =
-                (_snappedTrails[employeeId]?.isNotEmpty ?? false)
-                    ? _snappedTrails[employeeId]!.last
-                    : LatLng(lat, lng);
-
-            // No key: AnimatedMarkerLayer/MarkerLayer world-copies reuse the
-            // same key for each wrap → Duplicate GlobalKey / tree corruption.
             return AnimatedMarker(
-              point: snappedPosition,
+              point: LatLng(lat, lng),
               width: 140,
               height: stopBubble != null ? 168 : 148,
               duration: const Duration(milliseconds: 2200),
               curve: Curves.linear,
-              builder: (context, animation) => markerChild,
-            );
-          }).toList();
-
-          // Only draw paths for employees currently on a trip (outside geofence).
-          // Multi-pass: U-turn / reverse on same road → stacked colors + legend.
-          final polylines = <Polyline>[];
-          RoutePassAnalysis? legendAnalysis;
-          for (final e in _snappedTrails.entries) {
-            final tripId = _trailTripIds[e.key];
-            if (tripId == null || e.value.length < 2) continue;
-            final analysis = analyzeRoutePasses(e.value);
-            polylines.addAll(analysis.polylines);
-            if (legendAnalysis == null ||
-                analysis.passCount > legendAnalysis.passCount) {
-              legendAnalysis = analysis;
-            }
-          }
-
-          final staticMarkers = <Marker>[];
-          for (final loc in filteredGeofences) {
-            staticMarkers.add(
-              Marker(
-                point: LatLng(loc['latitude'], loc['longitude']),
-                width: 150,
-                height: 40,
-                child: Center(
-                  child: Text(
-                    loc['name'] ?? '',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: (loc['isUnique'] == true)
-                          ? Colors.blue.shade900
-                          : Colors.blue,
-                      shadows: const [
-                        Shadow(color: Colors.white, blurRadius: 4),
-                      ],
+              builder: (context, animation) => GestureDetector(
+                onTap: () => _openEmployeeLive(employeeId),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (stopBubble != null) stopBubble,
+                    GpsStatusChip(
+                      on: gpsOn,
+                      availableSeconds:
+                          (duty?['availableSeconds'] as num?)?.toInt() ?? 0,
+                      unavailableSeconds:
+                          (duty?['unavailableSeconds'] as num?)?.toInt() ?? 0,
                     ),
-                    textAlign: TextAlign.center,
-                  ),
+                    NameChip(name: name, borderColor: pinColor, isDark: isDark),
+                    TrackingAvatarMarker(
+                      photoUrl: loc['photoUrl']?.toString(),
+                      size: onTrip ? 46 : 36,
+                      borderColor: pinColor,
+                    ),
+                  ],
                 ),
               ),
             );
-          }
+          }).toList();
 
-          // Avoid duplicate pin when admin's own live location is already on the map.
+          final staticMarkers = geofenceLabelMarkers(filteredGeofences);
           final alreadyShowingMe =
               myEmployeeId != null && byEmployee.containsKey(myEmployeeId);
           if (_myLocation != null && !alreadyShowingMe) {
-            final myPinColor = Colors.blue.shade600;
-            final myPhoto = auth.user?.photoUrl;
             staticMarkers.add(
               Marker(
                 point: _myLocation!,
                 width: 120,
                 height: 70,
-                child: Column(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 3,
-                      ),
-                      margin: const EdgeInsets.only(bottom: 4),
-                      decoration: BoxDecoration(
-                        color: isDark ? Colors.black87 : Colors.white,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: myPinColor, width: 1.5),
-                      ),
-                      child: const Text(
-                        'You',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    TrackingAvatarMarker(
-                      photoUrl: myPhoto,
-                      size: 32,
-                      borderColor: myPinColor,
-                    ),
-                  ],
+                child: youAreHereMarker(
+                  isDark: isDark,
+                  photoUrl: auth.user?.photoUrl,
                 ),
               ),
             );
@@ -855,32 +459,22 @@ class _AdminLiveTrackingScreenState
                         'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                     userAgentPackageName: 'com.nb.hrms',
                   ),
-                  CircleLayer(
-                    circles: filteredGeofences.map((loc) {
-                      final isUnique = loc['isUnique'] == true;
-                      final baseColor =
-                          isUnique ? Colors.blue.shade900 : Colors.blue;
-                      return CircleMarker(
-                        point: LatLng(loc['latitude'], loc['longitude']),
-                        color: baseColor.withValues(alpha: 0.2),
-                        borderColor: baseColor.withValues(alpha: 0.8),
-                        borderStrokeWidth: isUnique ? 3 : 2,
-                        useRadiusInMeter: true,
-                        radius: (loc['radiusKm'] * 1000).toDouble(),
-                      );
-                    }).toList(),
-                  ),
-                  PolylineLayer(polylines: polylines),
+                  CircleLayer(circles: geofenceCircles(filteredGeofences)),
                   AnimatedMarkerLayer(markers: markers.cast<AnimatedMarker>()),
                   if (staticMarkers.isNotEmpty)
                     MarkerLayer(markers: staticMarkers),
                 ],
               ),
-              if (legendAnalysis != null && legendAnalysis.passes.isNotEmpty)
+              if (activeLocationAlerts(boardAlerts).isNotEmpty)
                 Positioned(
                   left: 12,
-                  bottom: dutyEmployees.isEmpty ? 12 : 168,
-                  child: RoutePassLegend(analysis: legendAnalysis),
+                  right: 12,
+                  top: 12,
+                  child: ActiveLocationAlertsBanner(
+                    alerts: boardAlerts,
+                    dense: true,
+                    onTapEmployee: _openEmployeeLive,
+                  ),
                 ),
               if (dutyEmployees.isNotEmpty)
                 Positioned(

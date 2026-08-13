@@ -5,6 +5,7 @@ import { deriveDayInOut } from '../attendance/dayPunch.rules';
 import {
   getRecentLocationAlerts,
   notifyAdminsLocationUnavailable,
+  resolveLocationAlert,
 } from './tracking.alerts';
 
 export interface LiveLocation {
@@ -428,7 +429,7 @@ export const trackingService = {
 
     if (isPunchedIn) {
       try {
-        await redis.del(`alert:loc_off:${params.employeeId}`);
+        await resolveLocationAlert(params.employeeId);
       } catch {
         /* ignore */
       }
@@ -483,7 +484,7 @@ export const trackingService = {
       }
     }
     
-    if (params.permissionStatus && params.permissionStatus !== 'granted') {
+    if (params.permissionStatus && !isLocationPermissionOk(params.permissionStatus)) {
       await prisma.trackingEvent.create({
         data: {
           employeeId: params.employeeId,
@@ -688,6 +689,23 @@ export const trackingService = {
       return { date: ymd, employees: [] };
     }
 
+    const liveById = new Map<number, { latitude: number; longitude: number }>();
+    if (ymd === todayIstYmd()) {
+      try {
+        const live = await this.getAllLiveLocations();
+        for (const loc of live) {
+          if (Number.isFinite(loc.employeeId)) {
+            liveById.set(loc.employeeId, {
+              latitude: loc.latitude,
+              longitude: loc.longitude,
+            });
+          }
+        }
+      } catch {
+        /* live overlay is optional */
+      }
+    }
+
     const employees = await prisma.employee.findMany({
       where: { id: { in: employeeIds } },
       include: {
@@ -704,7 +722,7 @@ export const trackingService = {
         timestamp: { gte: fromUtc, lt: toExclusive },
       },
       orderBy: { timestamp: 'asc' },
-      select: { employeeId: true, timestamp: true },
+      select: { employeeId: true, timestamp: true, latitude: true, longitude: true },
     });
 
     const events = await prisma.trackingEvent.findMany({
@@ -724,10 +742,10 @@ export const trackingService = {
       },
     });
 
-    const pointsByEmp = new Map<number, Date[]>();
+    const pointsByEmp = new Map<number, Array<{ timestamp: Date; latitude: number; longitude: number }>>();
     for (const p of locationPoints) {
       const arr = pointsByEmp.get(p.employeeId) ?? [];
-      arr.push(p.timestamp);
+      arr.push({ timestamp: p.timestamp, latitude: p.latitude, longitude: p.longitude });
       pointsByEmp.set(p.employeeId, arr);
     }
 
@@ -742,12 +760,16 @@ export const trackingService = {
       .map((id) => {
         const emp = empMap.get(id);
         const dayPunches = byEmployee.get(id) ?? [];
-        const { firstIn, lastOut } = deriveDayInOut(dayPunches);
+        const { firstIn, lastOut } = deriveTrackingDutyWindow(dayPunches);
         if (!firstIn) return null;
 
         const punchIn = new Date(firstIn);
         const punchOut = lastOut ? new Date(lastOut) : (now < toExclusive ? now : new Date(toExclusive.getTime() - 1));
         const windowEnd = punchOut.getTime() < punchIn.getTime() ? punchIn : punchOut;
+        const pts = (pointsByEmp.get(id) ?? []).filter(
+          (t) => t.timestamp.getTime() >= punchIn.getTime() && t.timestamp.getTime() <= windowEnd.getTime(),
+        );
+        const live = liveById.get(id) ?? null;
 
         return buildEmployeeAvailability({
           employeeId: id,
@@ -758,11 +780,12 @@ export const trackingService = {
           punchIn,
           punchOut: lastOut ? new Date(lastOut) : null,
           stillOnDuty: !lastOut,
-          points: (pointsByEmp.get(id) ?? []).filter(
-            (t) => t.getTime() >= punchIn.getTime() && t.getTime() <= windowEnd.getTime(),
-          ),
+          points: pts,
           events: eventsByEmp.get(id) ?? [],
           windowEnd,
+          isLiveNow: live != null,
+          liveLatitude: live?.latitude ?? null,
+          liveLongitude: live?.longitude ?? null,
         });
       })
       .filter((r): r is NonNullable<typeof r> => r != null)
@@ -794,6 +817,15 @@ export const trackingService = {
         employeeCode: null,
         designation: null,
         department: null,
+        currentlyAvailable: false,
+        isLive: false,
+        alertActive: false,
+        pingCount: 0,
+        lastKnownLatitude: null,
+        lastKnownLongitude: null,
+        lastKnownAt: null,
+        lastPingAgeSeconds: null,
+        currentStatus: 'UNAVAILABLE',
       };
     }
     return { date: params.date, ...row };
@@ -811,12 +843,13 @@ export const trackingService = {
     const liveIds = new Set(locations.map((l) => l.employeeId));
 
     const employees = day.employees.map((emp) => {
-      const lastSeg = emp.segments[emp.segments.length - 1];
-      const currentlyAvailable = lastSeg?.status === 'AVAILABLE';
+      const isLive = liveIds.has(emp.employeeId);
+      const currentlyAvailable = isLive || emp.currentlyAvailable;
       return {
         ...emp,
-        isLive: liveIds.has(emp.employeeId),
+        isLive,
         currentlyAvailable,
+        alertActive: currentlyAvailable ? false : Boolean(emp.alertActive),
       };
     });
 
@@ -890,27 +923,30 @@ ${trkpts}
       redis = null;
     }
 
-    for (const emp of day.employees) {
-      if (!emp.stillOnDuty) {
-        if (redis) {
-          try {
-            await redis.del(`alert:loc_off:${emp.employeeId}`);
-          } catch {
-            /* ignore */
-          }
+    const liveIds = new Set<number>();
+    if (redis) {
+      try {
+        const keys = await redis.keys('live_location:*');
+        for (const k of keys) {
+          const id = Number(k.split(':')[1]);
+          if (Number.isFinite(id)) liveIds.add(id);
         }
+      } catch {
+        /* ignore */
+      }
+    }
+
+    for (const emp of day.employees) {
+      const lastSeg = emp.segments[emp.segments.length - 1];
+      const isLive = liveIds.has(emp.employeeId);
+      const gpsOn = isLive || emp.currentlyAvailable;
+
+      if (!emp.stillOnDuty || gpsOn || !lastSeg || lastSeg.status !== 'UNAVAILABLE') {
+        await resolveLocationAlert(emp.employeeId);
         continue;
       }
 
-      const lastSeg = emp.segments[emp.segments.length - 1];
-      if (!lastSeg || lastSeg.status !== 'UNAVAILABLE') {
-        if (redis) {
-          try {
-            await redis.del(`alert:loc_off:${emp.employeeId}`);
-          } catch {
-            /* ignore */
-          }
-        }
+      if (lastSeg.durationSeconds < ALERT_AFTER_SEC) {
         continue;
       }
 
@@ -926,12 +962,6 @@ ${trkpts}
         }
       }
 
-      const lastPing = await prisma.locationHistory.findFirst({
-        where: { employeeId: emp.employeeId },
-        orderBy: { timestamp: 'desc' },
-        select: { latitude: true, longitude: true, timestamp: true, tripId: true },
-      });
-
       await notifyAdminsLocationUnavailable({
         id: `${emp.employeeId}-${gapStart}`,
         employeeId: emp.employeeId,
@@ -945,18 +975,46 @@ ${trkpts}
         durationSeconds: lastSeg.durationSeconds,
         reason: lastSeg.reason,
         confidence: lastSeg.confidence,
-        lastKnownLatitude: lastPing?.latitude ?? null,
-        lastKnownLongitude: lastPing?.longitude ?? null,
-        lastKnownAt: lastPing?.timestamp ? lastPing.timestamp.toISOString() : null,
-        tripId: lastPing?.tripId ?? null,
+        lastKnownLatitude: emp.lastKnownLatitude,
+        lastKnownLongitude: emp.lastKnownLongitude,
+        lastKnownAt: emp.lastKnownAt,
+        tripId: null,
         notifiedAt: new Date().toISOString(),
       });
     }
   },
 };
 
-/** Gap threshold aligned with live Redis TTL (120s) + heartbeat (90s). */
+/** Silence longer than Redis live TTL is a real GPS-off slot (native pings ~2–8s). */
 const AVAILABILITY_GAP_MS = 120_000;
+/** First GPS fix after punch-in is allowed this long before counting as off. */
+const GPS_WARMUP_MS = 120_000;
+/** Admin alert only after confirmed off this long — no instant false alarms. */
+const ALERT_AFTER_SEC = 180;
+
+/**
+ * Tracking duty window: mobile punch pairs win so a mid-day machine scan
+ * does not close the GPS window while the employee is still on duty.
+ */
+function deriveTrackingDutyWindow(
+  punches: Array<{ punchAt: Date; source: string }>,
+): { firstIn: Date | null; lastOut: Date | null } {
+  const ordered = [...punches].sort(
+    (a, b) => a.punchAt.getTime() - b.punchAt.getTime(),
+  );
+  const mobile = ordered.filter((p) => String(p.source) === 'MOBILE_APP');
+  if (mobile.length > 0) {
+    return {
+      firstIn: mobile[0]!.punchAt,
+      lastOut: mobile.length >= 2 ? mobile[1]!.punchAt : null,
+    };
+  }
+  const derived = deriveDayInOut(ordered);
+  return {
+    firstIn: derived.firstIn ? new Date(derived.firstIn) : null,
+    lastOut: derived.lastOut ? new Date(derived.lastOut) : null,
+  };
+}
 
 function todayIstYmd() {
   return new Intl.DateTimeFormat('en-CA', {
@@ -975,6 +1033,23 @@ function xmlEscape(value: string) {
     .replace(/"/g, '&quot;');
 }
 
+function isLocationPermissionOk(status: string | null) {
+  if (!status) return true;
+  const s = status.toLowerCase().replace(/[\s-]/g, '_');
+  return [
+    'granted',
+    'always',
+    'whileinuse',
+    'while_in_use',
+    'authorizedalways',
+    'authorizedwheninuse',
+    'allow',
+    'allowed',
+  ].includes(s);
+}
+
+type PingPoint = { timestamp: Date; latitude: number; longitude: number };
+
 type AvailabilitySegment = {
   start: string;
   end: string;
@@ -982,6 +1057,8 @@ type AvailabilitySegment = {
   durationSeconds: number;
   reason: string | null;
   confidence: string | null;
+  lastKnownLatitude: number | null;
+  lastKnownLongitude: number | null;
 };
 
 function buildEmployeeAvailability(input: {
@@ -993,7 +1070,7 @@ function buildEmployeeAvailability(input: {
   punchIn: Date;
   punchOut: Date | null;
   stillOnDuty: boolean;
-  points: Date[];
+  points: PingPoint[];
   events: Array<{
     eventType: string;
     timestamp: Date;
@@ -1002,12 +1079,16 @@ function buildEmployeeAvailability(input: {
     source: string;
   }>;
   windowEnd: Date;
+  isLiveNow?: boolean;
+  liveLatitude?: number | null;
+  liveLongitude?: number | null;
 }) {
   const segments = buildAvailabilitySegments(
     input.punchIn,
     input.windowEnd,
     input.points,
     input.events,
+    Boolean(input.isLiveNow),
   );
 
   let availableSeconds = 0;
@@ -1024,6 +1105,22 @@ function buildEmployeeAvailability(input: {
   const availablePercent =
     dutySeconds > 0 ? Math.round((availableSeconds / dutySeconds) * 1000) / 10 : 0;
 
+  const lastPing = input.points.length ? input.points[input.points.length - 1]! : null;
+  const lastPingAgeSeconds = lastPing
+    ? Math.max(0, Math.round((input.windowEnd.getTime() - lastPing.timestamp.getTime()) / 1000))
+    : input.isLiveNow
+      ? 0
+      : null;
+  const lastSeg = segments[segments.length - 1];
+  const currentlyAvailable =
+    Boolean(input.isLiveNow) ||
+    (lastPingAgeSeconds != null && lastPingAgeSeconds <= AVAILABILITY_GAP_MS / 1000);
+  const alertActive =
+    input.stillOnDuty &&
+    !currentlyAvailable &&
+    lastSeg?.status === 'UNAVAILABLE' &&
+    lastSeg.durationSeconds >= ALERT_AFTER_SEC;
+
   return {
     employeeId: input.employeeId,
     fullName: input.fullName,
@@ -1039,6 +1136,14 @@ function buildEmployeeAvailability(input: {
     availablePercent,
     gapCount,
     pingCount: input.points.length,
+    lastKnownLatitude: lastPing?.latitude ?? input.liveLatitude ?? null,
+    lastKnownLongitude: lastPing?.longitude ?? input.liveLongitude ?? null,
+    lastKnownAt: lastPing?.timestamp.toISOString() ?? (input.isLiveNow ? input.windowEnd.toISOString() : null),
+    lastPingAgeSeconds,
+    currentlyAvailable,
+    isLive: Boolean(input.isLiveNow),
+    currentStatus: currentlyAvailable ? 'AVAILABLE' : lastSeg?.status ?? 'UNAVAILABLE',
+    alertActive,
     segments,
   };
 }
@@ -1046,7 +1151,7 @@ function buildEmployeeAvailability(input: {
 function buildAvailabilitySegments(
   punchIn: Date,
   windowEnd: Date,
-  points: Date[],
+  points: PingPoint[],
   events: Array<{
     eventType: string;
     timestamp: Date;
@@ -1054,15 +1159,15 @@ function buildAvailabilitySegments(
     confidence: string;
     source: string;
   }>,
+  isLiveNow = false,
 ): AvailabilitySegment[] {
   const startMs = punchIn.getTime();
   const endMs = windowEnd.getTime();
   if (endMs <= startMs) return [];
 
   const sorted = [...points]
-    .map((d) => d.getTime())
-    .filter((t) => t >= startMs && t <= endMs)
-    .sort((a, b) => a - b);
+    .filter((p) => p.timestamp.getTime() >= startMs && p.timestamp.getTime() <= endMs)
+    .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
 
   const raw: Array<{ start: number; end: number; status: 'AVAILABLE' | 'UNAVAILABLE' }> = [];
 
@@ -1079,18 +1184,23 @@ function buildAvailabilitySegments(
   };
 
   if (sorted.length === 0) {
-    pushSeg(startMs, endMs, 'UNAVAILABLE');
+    const openMs = endMs - startMs;
+    if (isLiveNow || openMs < GPS_WARMUP_MS) {
+      pushSeg(startMs, endMs, 'AVAILABLE');
+    } else {
+      pushSeg(startMs, endMs, 'UNAVAILABLE');
+    }
   } else {
-    const first = sorted[0]!;
-    if (first - startMs > AVAILABILITY_GAP_MS) {
+    const first = sorted[0]!.timestamp.getTime();
+    if (first - startMs > GPS_WARMUP_MS && first - startMs > AVAILABILITY_GAP_MS) {
       pushSeg(startMs, first, 'UNAVAILABLE');
     } else {
       pushSeg(startMs, first, 'AVAILABLE');
     }
 
     for (let i = 0; i < sorted.length - 1; i++) {
-      const cur = sorted[i]!;
-      const next = sorted[i + 1]!;
+      const cur = sorted[i]!.timestamp.getTime();
+      const next = sorted[i + 1]!.timestamp.getTime();
       const gap = next - cur;
       if (gap > AVAILABILITY_GAP_MS) {
         pushSeg(cur, next, 'UNAVAILABLE');
@@ -1099,9 +1209,10 @@ function buildAvailabilitySegments(
       }
     }
 
-    const last = sorted[sorted.length - 1]!;
+    const last = sorted[sorted.length - 1]!.timestamp.getTime();
     if (endMs - last > AVAILABILITY_GAP_MS) {
-      pushSeg(last, endMs, 'UNAVAILABLE');
+      // Redis still has a live ping — do not mark the open tail as off.
+      pushSeg(last, endMs, isLiveNow ? 'AVAILABLE' : 'UNAVAILABLE');
     } else {
       pushSeg(last, endMs, 'AVAILABLE');
     }
@@ -1111,6 +1222,17 @@ function buildAvailabilitySegments(
     const durationSeconds = Math.max(0, Math.round((seg.end - seg.start) / 1000));
     let reason: string | null = null;
     let confidence: string | null = null;
+    let lastKnownLatitude: number | null = null;
+    let lastKnownLongitude: number | null = null;
+
+    const pingBefore = [...sorted].reverse().find((p) => p.timestamp.getTime() <= seg.start);
+    if (pingBefore) {
+      lastKnownLatitude = pingBefore.latitude;
+      lastKnownLongitude = pingBefore.longitude;
+    } else if (sorted[0]) {
+      lastKnownLatitude = sorted[0].latitude;
+      lastKnownLongitude = sorted[0].longitude;
+    }
 
     if (seg.status === 'UNAVAILABLE') {
       const mid = (seg.start + seg.end) / 2;
@@ -1126,6 +1248,9 @@ function buildAvailabilitySegments(
       if (match) {
         reason = String(match.eventType);
         confidence = String(match.confidence);
+      } else if (sorted.length === 0) {
+        reason = 'WAITING_FOR_GPS';
+        confidence = 'LOW';
       } else {
         reason = 'NO_LOCATION_PING';
         confidence = 'MEDIUM';
@@ -1139,6 +1264,8 @@ function buildAvailabilitySegments(
       durationSeconds,
       reason,
       confidence,
+      lastKnownLatitude,
+      lastKnownLongitude,
     };
   });
 }

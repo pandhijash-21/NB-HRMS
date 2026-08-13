@@ -37,6 +37,7 @@ dependencies:
   battery_plus: ^7.1.1
   connectivity_plus: ^7.3.1
   model_viewer_plus: ^1.10.0
+  audioplayers: ^6.8.1
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -47,6 +48,7 @@ flutter:
   assets:
     - assets/images/
     - assets/3d/
+    - assets/sounds/
 
 dependency_overrides:
   latlong2: ^0.10.1

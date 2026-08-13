@@ -3,14 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../../../auth/presentation/auth_providers.dart';
-import '../widgets/route_pass_legend.dart';
 import '../widgets/tracking_avatar_marker.dart';
 
 import '../../../../core/logging/app_logger.dart';
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/services/map_matching_service.dart';
 import '../../../../core/utils/heading_utils.dart';
-import '../../../../core/utils/route_pass_analyzer.dart';
 import '../../../tracking_hub/presentation/trip_recording_download.dart';
 
 final adminTripRouteProvider = FutureProvider.autoDispose.family<Map<String, dynamic>, String>((ref, tripId) async {
@@ -249,7 +247,7 @@ class _AdminTripReplayScreenState extends ConsumerState<AdminTripReplayScreen> w
         leading: const AppBackButton(fallbackLocation: '/admin/trips'),
         actions: [
           IconButton(
-            tooltip: 'Download recording',
+            tooltip: 'Download trip video',
             icon: const Icon(Icons.download_rounded),
             onPressed: () => showTripDownloadMenu(
               context: context,
@@ -313,7 +311,6 @@ class _AdminTripReplayScreenState extends ConsumerState<AdminTripReplayScreen> w
           final photoUrl = trip['employee']?['photoUrl']?.toString();
 
           final bounds = LatLngBounds.fromPoints(_routePoints);
-          final passAnalysis = analyzeRoutePasses(_routePoints);
 
           final computedStops = data['stops'] as List<dynamic>? ?? [];
 
@@ -332,7 +329,15 @@ class _AdminTripReplayScreenState extends ConsumerState<AdminTripReplayScreen> w
                     urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                     userAgentPackageName: 'com.nb.hrms',
                   ),
-                  PolylineLayer(polylines: passAnalysis.polylines),
+                  PolylineLayer(
+                    polylines: [
+                      Polyline(
+                        points: _routePoints,
+                        color: const Color(0xFFC5A059),
+                        strokeWidth: 5,
+                      ),
+                    ],
+                  ),
                   if (computedStops.isNotEmpty)
                     MarkerLayer(
                       markers: computedStops.map((stop) {
@@ -431,12 +436,6 @@ class _AdminTripReplayScreenState extends ConsumerState<AdminTripReplayScreen> w
                 ],
               ),
 
-              Positioned(
-                top: 12,
-                right: 12,
-                child: RoutePassLegend(analysis: passAnalysis),
-              ),
-              
               // Floating control panel
               Positioned(
                 bottom: 30,

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import '../../auth/presentation/auth_providers.dart';
+import 'location_alert_watch.dart';
 
 String _ymd(DateTime d) =>
     '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
@@ -125,15 +126,6 @@ final liveBoardProvider =
       }
     });
 
-final trackingAlertsProvider =
-    FutureProvider.autoDispose<List<dynamic>>((ref) async {
-      final dioClient = ref.watch(dioClientProvider);
-      try {
-        return await dioClient.getEnvelope<List<dynamic>>(
-          'tracking/alerts',
-          parse: (raw) => raw as List<dynamic>,
-        );
-      } catch (_) {
-        return const [];
-      }
-    });
+final trackingAlertsProvider = Provider<List<dynamic>>((ref) {
+  return ref.watch(locationAlertWatchProvider).alerts;
+});

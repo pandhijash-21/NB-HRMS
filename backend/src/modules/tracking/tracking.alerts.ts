@@ -15,6 +15,7 @@ const ADMIN_ROLES = [
 ];
 
 const ALERTS_KEY = 'admin:location_alerts';
+const ACTIVE_ALERTS_KEY = 'admin:location_alerts_active';
 const ALERTS_MAX = 50;
 
 export type LocationUnavailableAlert = {
@@ -35,6 +36,8 @@ export type LocationUnavailableAlert = {
   lastKnownAt: string | null;
   tripId: string | null;
   notifiedAt: string;
+  resolvedAt?: string | null;
+  active?: boolean;
 };
 
 function createTransport() {
@@ -100,7 +103,10 @@ async function resolveAdminEmails(): Promise<string[]> {
 export async function pushRecentAlert(alert: LocationUnavailableAlert) {
   try {
     const redis = getRedisClient();
-    await redis.lPush(ALERTS_KEY, JSON.stringify(alert));
+    const payload = JSON.stringify({ ...alert, active: true, resolvedAt: null });
+    await redis.hSet(ACTIVE_ALERTS_KEY, String(alert.employeeId), payload);
+    await redis.expire(ACTIVE_ALERTS_KEY, 60 * 60 * 24);
+    await redis.lPush(ALERTS_KEY, payload);
     await redis.lTrim(ALERTS_KEY, 0, ALERTS_MAX - 1);
     await redis.expire(ALERTS_KEY, 60 * 60 * 24);
   } catch (err) {
@@ -108,10 +114,10 @@ export async function pushRecentAlert(alert: LocationUnavailableAlert) {
   }
 }
 
-export async function getRecentLocationAlerts(): Promise<LocationUnavailableAlert[]> {
+export async function getActiveLocationAlerts(): Promise<LocationUnavailableAlert[]> {
   try {
     const redis = getRedisClient();
-    const raw = await redis.lRange(ALERTS_KEY, 0, 19);
+    const raw = await redis.hVals(ACTIVE_ALERTS_KEY);
     return raw
       .map((item) => {
         try {
@@ -120,9 +126,35 @@ export async function getRecentLocationAlerts(): Promise<LocationUnavailableAler
           return null;
         }
       })
-      .filter((x): x is LocationUnavailableAlert => x != null);
+      .filter((x): x is LocationUnavailableAlert => x != null && x.active !== false)
+      .sort((a, b) => String(b.notifiedAt).localeCompare(String(a.notifiedAt)));
   } catch {
     return [];
+  }
+}
+
+export async function getRecentLocationAlerts(): Promise<LocationUnavailableAlert[]> {
+  return getActiveLocationAlerts();
+}
+
+export async function resolveLocationAlert(employeeId: number): Promise<LocationUnavailableAlert | null> {
+  try {
+    const redis = getRedisClient();
+    await redis.del(`alert:loc_off:${employeeId}`);
+    const existing = await redis.hGet(ACTIVE_ALERTS_KEY, String(employeeId));
+    if (!existing) return null;
+    const parsed = JSON.parse(existing) as LocationUnavailableAlert;
+    const resolved: LocationUnavailableAlert = {
+      ...parsed,
+      active: false,
+      resolvedAt: new Date().toISOString(),
+    };
+    await redis.hDel(ACTIVE_ALERTS_KEY, String(employeeId));
+    sseService.toAdmins('location_available', resolved);
+    return resolved;
+  } catch (err) {
+    console.warn('[tracking-alert] resolve failed', err);
+    return null;
   }
 }
 

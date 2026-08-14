@@ -1,7 +1,7 @@
 name: nb_crm_flutter
 description: NB Developer CRM+HRMS+ERP Flutter client (REST-only).
 publish_to: "none"
-version: 1.0.0+1
+version: 1.0.1+2
 
 environment:
   sdk: ^3.9.2
@@ -36,8 +36,10 @@ dependencies:
   vector_math: ^2.2.0
   battery_plus: ^7.1.1
   connectivity_plus: ^7.3.1
-  model_viewer_plus: ^1.10.0
-  audioplayers: ^6.8.1
+  # 1.10+ requires Dart ^3.10 / Flutter >=3.38
+  model_viewer_plus: ">=1.9.3 <1.10.0"
+  # 6.8+ requires Flutter >=3.44; 6.7.x supports Flutter 3.35
+  audioplayers: ">=6.7.1 <6.8.0"
 dev_dependencies:
   flutter_test:
     sdk: flutter

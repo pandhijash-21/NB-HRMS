@@ -3,9 +3,9 @@ class AppConfig {
   AppConfig._();
 
   /// Mirror of Next.js `NEXT_PUBLIC_API_URL` (includes `/api` suffix).
-  /// Production default matches Netlify `netlify.toml` / Render API.
+  /// Production default matches Netlify `netlify.toml` / VPS API.
   static const String apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://nb-crm-api.onrender.com/api',
+    defaultValue: 'https://crm.nbdeveloper.co.in/api',
   );
 }

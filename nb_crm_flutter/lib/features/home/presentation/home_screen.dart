@@ -141,7 +141,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       _ModuleCardData(
         title: 'Recruitment',
         subtitle: isHR || canAccessAdmin
-            ? 'Vacancies (coming soon)'
+            ? 'Vacancies'
             : 'Openings (view only when posted)',
         icon: Icons.work_outline_rounded,
         route: '/recruitment',

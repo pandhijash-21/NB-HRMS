@@ -467,18 +467,7 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
           _buildHelperChip('Managed via Designation Upgrade'),
           _buildTextField('Department', _departmentCtrl, required: true),
           _buildTextField('Functional Department', _functionalDeptCtrl),
-          lookupLabelDropdown(
-            ref: ref,
-            category: 'ORGANIZATION',
-            label: 'Organization',
-            value: _organization,
-            required: true,
-            fallbackLabels: const [
-              'Gandhinagar University',
-              'Platinum Foundation',
-            ],
-            onChanged: (v) => setState(() => _organization = v),
-          ),
+          _organizationDropdown(),
           _buildReadOnlyField('Institute', _instituteLabel(institutes)),
           _buildHelperChip('Managed via Institute Transfer'),
           lookupDropdown(
@@ -721,6 +710,38 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
             if (mounted) onChanged(v);
           });
         },
+      ),
+    );
+  }
+
+  Widget _organizationDropdown() {
+    final orgs = ref.watch(activeOrganizationsProvider).asData?.value ?? const [];
+    final lookupLabels =
+        resolveLookupOptions(ref, 'ORGANIZATION').map((o) => o.label).toList();
+    final labels = orgs.isNotEmpty
+        ? orgs.map((o) => o.name).where((n) => n.trim().isNotEmpty).toList()
+        : (lookupLabels.isNotEmpty
+            ? lookupLabels
+            : const ['Gandhinagar University', 'Platinum Foundation']);
+    final value = labels.contains(_organization) ? _organization : null;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: DropdownButtonFormField<String>(
+        isExpanded: true,
+        initialValue: value,
+        decoration: const InputDecoration(
+          labelText: 'Organization *',
+          border: OutlineInputBorder(),
+        ),
+        items: [
+          for (final name in labels)
+            DropdownMenuItem(value: name, child: Text(name, overflow: TextOverflow.ellipsis)),
+        ],
+        onChanged: (v) {
+          if (v == null) return;
+          setState(() => _organization = v);
+        },
+        validator: (v) => (v == null || v.isEmpty) ? 'Organization is required' : null,
       ),
     );
   }

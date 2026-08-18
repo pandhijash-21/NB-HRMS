@@ -5,6 +5,7 @@ import { sendAccountCreatedEmail } from '../../utils/mailer';
 import type { CreateUserInput, UpdateUserInput } from './types';
 import { buildCredentialView } from './credentials.util';
 import { encryptPasswordForAdmin } from '../../utils/passwordCrypto';
+import { clearLoginLock, loadLocksByUserIds, lockSummary } from '../auth/loginLock.service';
 
 async function invalidateSession(userId: string, roleId?: string) {
   try {
@@ -18,7 +19,7 @@ async function invalidateSession(userId: string, roleId?: string) {
 
 export const userService = {
   async list(filters: { roleId?: string; isActive?: boolean; search?: string }) {
-    return prisma.user.findMany({
+    const rows = await prisma.user.findMany({
       where: {
         ...(filters.roleId   ? { roleId: filters.roleId }     : {}),
         ...(filters.isActive !== undefined ? { isActive: filters.isActive } : {}),
@@ -62,6 +63,8 @@ export const userService = {
       },
       orderBy: { createdAt: 'asc' },
     });
+    const locks = await loadLocksByUserIds(rows.map((u) => u.id));
+    return rows.map((u) => ({ ...u, ...(locks[u.id] ?? lockSummary({ stage: 0, fails: 0, lockedUntil: null, blockedAt: null })) }));
   },
 
   async getCredentials(id: string) {
@@ -234,5 +237,28 @@ export const userService = {
     await invalidateSession(id, user.roleId);
 
     return { message: 'User deactivated' };
+  },
+
+  async unblockLogin(id: string, requesterId: string) {
+    const user = await prisma.user.findUnique({
+      where: { id },
+      include: { employee: { select: { generalInfo: { select: { employeeCode: true } } } } },
+    });
+    if (!user) return { error: 'User not found', status: 404 } as const;
+
+    await clearLoginLock({
+      userId: id,
+      aliases: [
+        user.username ?? '',
+        user.employee?.generalInfo?.employeeCode ?? '',
+        user.employeeId != null ? String(user.employeeId) : '',
+      ].filter(Boolean),
+    });
+    await invalidateSession(id, user.roleId);
+
+    return {
+      message: 'Login unblocked. The user can sign in again.',
+      updatedBy: requesterId,
+    };
   },
 };

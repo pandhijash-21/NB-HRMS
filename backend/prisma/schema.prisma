@@ -230,6 +230,7 @@ model Employee {
   locationHistories   LocationHistory[]
   trips               Trip[]
   trackingEvents      TrackingEvent[]
+  workTasks           WorkTask[]
 
   @@map("employees")
 }
@@ -325,9 +326,10 @@ model EmployeeAssignment {
   shift           String?
   appointmentType String?      @map("appointment_type")
 
-  reason    String?
-  changedBy String   @map("changed_by")
-  createdAt DateTime @default(now()) @map("created_at")
+  reason     String?
+  changeType String?  @map("change_type") // INSTITUTE_TRANSFER | DESIGNATION_UPGRADE | JOINING
+  changedBy  String   @map("changed_by")
+  createdAt  DateTime @default(now()) @map("created_at")
 
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
@@ -1053,6 +1055,11 @@ model User {
   isActive          Boolean   @default(true) @map("is_active")
   lastLoginAt       DateTime? @map("last_login_at")
   passwordChangedAt DateTime? @map("password_changed_at")
+  /// 0 = 3 attempts, 1 = 2 attempts after 15m lock, 2 = 1 attempt after 1h lock, 3 = permanently blocked
+  loginLockStage    Int       @default(0) @map("login_lock_stage")
+  loginFailCount    Int       @default(0) @map("login_fail_count")
+  loginLockedUntil  DateTime? @map("login_locked_until")
+  loginBlockedAt    DateTime? @map("login_blocked_at")
   createdAt         DateTime  @default(now()) @map("created_at")
   createdBy         String?   @map("created_by")
   updatedAt         DateTime  @updatedAt @map("updated_at")
@@ -1065,6 +1072,11 @@ model User {
   firstApproverFor  EmployeeGeneralInfo[] @relation("FirstApproverUser")
   secondApproverFor EmployeeGeneralInfo[] @relation("SecondApproverUser")
   thirdApproverFor  EmployeeGeneralInfo[] @relation("ThirdApproverUser")
+
+  assignedTasks      WorkTask[]      @relation("TaskAssigner")
+  receivedTasks      WorkTask[]      @relation("TaskAssignee")
+  extraApprovalTasks WorkTask[]      @relation("TaskExtraApprover")
+  taskEvents         WorkTaskEvent[] @relation("TaskEventActor")
 
   @@map("users")
 }
@@ -1764,4 +1776,91 @@ model TrackingEvent {
   @@index([employeeId, timestamp])
   @@index([tripId, timestamp])
   @@map("tracking_events")
+}
+
+// =============================================================================
+// WORK TASKS (reporting-manager assigned work)
+// =============================================================================
+
+enum WorkTaskStatus {
+  ASSIGNED
+  ONGOING
+  COMPLETED
+  CHANGES_REQUESTED
+  APPROVED
+  REJECTED
+}
+
+enum WorkTaskExtraApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum WorkTaskEventType {
+  CREATED
+  STATUS_CHANGED
+  EXTRA_APPROVAL_REQUESTED
+  EXTRA_APPROVAL_DECIDED
+  REVIEWED
+}
+
+model WorkTask {
+  id          String         @id @default(uuid())
+  title       String
+  description String?        @db.Text
+  status      WorkTaskStatus @default(ASSIGNED)
+
+  assignerUserId      String @map("assigner_user_id")
+  assigneeUserId      String @map("assignee_user_id")
+  assigneeEmployeeId  Int    @map("assignee_employee_id")
+
+  deadline    DateTime
+  startedAt   DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
+  reviewedAt  DateTime? @map("reviewed_at")
+
+  attachmentUrl  String? @map("attachment_url")
+  attachmentName String? @map("attachment_name")
+  attachmentMime String? @map("attachment_mime")
+
+  extraApproverUserId    String?                     @map("extra_approver_user_id")
+  extraApprovalStatus    WorkTaskExtraApprovalStatus? @map("extra_approval_status")
+  extraApprovalRemarks   String?                     @map("extra_approval_remarks") @db.Text
+  extraApprovalDecidedAt DateTime?                   @map("extra_approval_decided_at")
+
+  reviewRemarks String? @map("review_remarks") @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  assigner      User      @relation("TaskAssigner", fields: [assignerUserId], references: [id])
+  assignee      User      @relation("TaskAssignee", fields: [assigneeUserId], references: [id])
+  extraApprover User?     @relation("TaskExtraApprover", fields: [extraApproverUserId], references: [id])
+  employee      Employee  @relation(fields: [assigneeEmployeeId], references: [id], onDelete: Cascade)
+  events        WorkTaskEvent[]
+
+  @@index([assignerUserId, status])
+  @@index([assigneeUserId, status])
+  @@index([extraApproverUserId, extraApprovalStatus])
+  @@index([deadline])
+  @@map("work_tasks")
+}
+
+model WorkTaskEvent {
+  id          String            @id @default(uuid())
+  taskId      String            @map("task_id")
+  actorUserId String            @map("actor_user_id")
+  type        WorkTaskEventType
+  fromStatus  WorkTaskStatus?   @map("from_status")
+  toStatus    WorkTaskStatus?   @map("to_status")
+  remarks     String?           @db.Text
+  newDeadline DateTime?         @map("new_deadline")
+  createdAt   DateTime          @default(now()) @map("created_at")
+
+  task  WorkTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  actor User     @relation("TaskEventActor", fields: [actorUserId], references: [id])
+
+  @@index([taskId, createdAt])
+  @@map("work_task_events")
 }

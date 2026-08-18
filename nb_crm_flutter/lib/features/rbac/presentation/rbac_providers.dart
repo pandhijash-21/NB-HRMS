@@ -73,6 +73,11 @@ class UsersListNotifier extends AsyncNotifier<List<UserAccount>> {
     });
   }
 
+  Future<void> unblockLogin(String id) async {
+    await ref.read(rbacRepositoryProvider).unblockLogin(id);
+    ref.invalidateSelf();
+  }
+
   Future<void> deleteUser(String id) async {
     await ref.read(rbacRepositoryProvider).deleteUser(id);
     ref.invalidateSelf();

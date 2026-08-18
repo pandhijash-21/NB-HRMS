@@ -40,6 +40,7 @@ async function requireCurrentAssignment(employeeId: number) {
       shift: gi.shift ?? null,
       appointmentType: gi.appointmentType ?? null,
       reason: 'Auto-backfill on change',
+      changeType: 'JOINING',
       changedBy: 'system',
     },
   });
@@ -113,6 +114,7 @@ export const employmentChangeService = {
           shift: base.shift ?? null,
           appointmentType: base.appointmentType ?? null,
           reason: params.reason ?? 'Institute transfer',
+          changeType: 'INSTITUTE_TRANSFER',
           changedBy: params.changedBy,
         },
       });
@@ -177,6 +179,7 @@ export const employmentChangeService = {
           shift: base.shift ?? null,
           appointmentType: base.appointmentType ?? null,
           reason: params.reason ?? 'Designation upgrade',
+          changeType: 'DESIGNATION_UPGRADE',
           changedBy: params.changedBy,
         },
       });

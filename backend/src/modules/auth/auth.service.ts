@@ -7,6 +7,11 @@ import { sendPasswordResetEmail } from '../../utils/mailer';
 import { encryptPasswordForAdmin } from '../../utils/passwordCrypto';
 import { passwordFromBirthDate } from '../../utils/dobPassword';
 import type { LoginInput, ChangePasswordInput } from './auth.types';
+import {
+  assertNotLocked,
+  clearLoginLock,
+  recordLoginFailure,
+} from './loginLock.service';
 
 const SESSION_TTL = 8 * 60 * 60; // 8 hours in seconds
 
@@ -100,12 +105,31 @@ export const authService = {
       }
     }
 
-    if (!user) return { error: 'Invalid credentials', status: 401 } as const;
+    if (!user) {
+      const fail = await recordLoginFailure({ identifier });
+      return { error: fail.error, status: fail.status } as const;
+    }
+
+    const aliases = [
+      identifier,
+      user.username ?? '',
+      user.employee?.generalInfo?.employeeCode ?? '',
+      user.employeeId != null ? String(user.employeeId) : '',
+    ].filter(Boolean);
+
+    const locked = await assertNotLocked({ userId: user.id, identifier });
+    if (locked) return { error: locked.error, status: locked.status } as const;
+
     if (!user.isActive) return { error: 'Account disabled', status: 403 } as const;
 
     // 2. Verify password
     const valid = await bcrypt.compare(input.password, user.passwordHash);
-    if (!valid) return { error: 'Invalid credentials', status: 401 } as const;
+    if (!valid) {
+      const fail = await recordLoginFailure({ userId: user.id, identifier, aliases });
+      return { error: fail.error, status: fail.status } as const;
+    }
+
+    await clearLoginLock({ userId: user.id, aliases });
 
     // 3. Build permissions map
     const permissions = buildPermissionsMap(user.role.permissions);
@@ -238,6 +262,10 @@ export const authService = {
 
     // Invalidate any active session for this user
     await deleteSession(targetUserId, user.roleId);
+    await clearLoginLock({
+      userId: targetUserId,
+      aliases: [user.username ?? '', user.employeeId != null ? String(user.employeeId) : ''].filter(Boolean),
+    });
 
     // Fire-and-forget email notification
     const toEmail: string =
@@ -283,6 +311,10 @@ export const authService = {
       },
     });
     await deleteSession(targetUserId, user.roleId);
+    await clearLoginLock({
+      userId: targetUserId,
+      aliases: [user.username ?? '', user.employee?.generalInfo?.employeeCode ?? '', user.employeeId != null ? String(user.employeeId) : ''].filter(Boolean),
+    });
 
     return {
       loginId: user.username ?? user.employee?.generalInfo?.employeeCode ?? null,

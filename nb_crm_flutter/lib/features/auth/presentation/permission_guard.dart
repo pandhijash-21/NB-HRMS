@@ -11,9 +11,9 @@ import '../../../core/logging/app_logger.dart';
 import '../../../core/services/background_tracking_service.dart';
 import '../../../core/services/web_live_tracking_service.dart';
 
-/// On native: hard-gates the app until Always location + battery opt-out.
-/// On web (Netlify): never blocks login / HR features; location is best-effort
-/// for punch + live tracking while the tab is open.
+/// Hard-gates the app until location is allowed.
+/// Native: Always location + battery opt-out.
+/// Web: browser geolocation (While using the site). No access until granted.
 class PermissionGuard extends StatefulWidget {
   final Widget child;
 
@@ -35,11 +35,12 @@ class _PermissionGuardState extends State<PermissionGuard> {
     super.initState();
     _checkPermissions();
     _timer = Timer.periodic(const Duration(seconds: 2), (timer) {
+      if (_checking) return;
       if (kIsWeb) {
-        unawaited(WebLiveTrackingService.ensureRunning());
+        unawaited(_verifyPermissionsQuietly());
         return;
       }
-      if (_hasPermissions && !_checking) {
+      if (_hasPermissions) {
         _verifyPermissionsQuietly();
       }
     });
@@ -59,15 +60,44 @@ class _PermissionGuardState extends State<PermissionGuard> {
     return true;
   }
 
+  bool _webLocationGranted(LocationPermission permission) {
+    return permission == LocationPermission.always ||
+        permission == LocationPermission.whileInUse;
+  }
+
+  Future<bool> _isWebLocationReady() async {
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) return false;
+    final permission = await Geolocator.checkPermission();
+    return _webLocationGranted(permission);
+  }
+
   Future<void> _checkPermissions() async {
-    // Web: never lock the shell — leave/salary/admin must work without GPS.
     if (kIsWeb) {
-      setState(() {
-        _hasPermissions = true;
-        _checking = false;
-        _errorMsg = '';
-      });
-      unawaited(WebLiveTrackingService.ensureRunning());
+      setState(() => _checking = true);
+      try {
+        final ok = await _isWebLocationReady();
+        if (!mounted) return;
+        setState(() {
+          _hasPermissions = ok;
+          _checking = false;
+          _errorMsg = ok
+              ? ''
+              : 'This website requires location access. Allow location in the browser prompt to continue.';
+        });
+        if (ok) {
+          unawaited(WebLiveTrackingService.ensureRunning());
+        } else {
+          WebLiveTrackingService.stop();
+        }
+      } catch (e) {
+        if (!mounted) return;
+        setState(() {
+          _hasPermissions = false;
+          _checking = false;
+          _errorMsg = 'Location access is required. Allow location in your browser to use this site.';
+        });
+      }
       return;
     }
 
@@ -131,7 +161,26 @@ class _PermissionGuardState extends State<PermissionGuard> {
 
   Future<void> _verifyPermissionsQuietly() async {
     if (kIsWeb) {
-      await WebLiveTrackingService.ensureRunning();
+      final ok = await _isWebLocationReady();
+      if (!mounted) return;
+      if (ok) {
+        if (!_hasPermissions) {
+          setState(() {
+            _hasPermissions = true;
+            _errorMsg = '';
+          });
+        }
+        await WebLiveTrackingService.ensureRunning();
+      } else {
+        WebLiveTrackingService.stop();
+        if (_hasPermissions || _errorMsg.isEmpty) {
+          setState(() {
+            _hasPermissions = false;
+            _errorMsg =
+                'Location was blocked. Allow location for this site in the browser address bar, then tap Enable.';
+          });
+        }
+      }
       return;
     }
 
@@ -174,6 +223,58 @@ class _PermissionGuardState extends State<PermissionGuard> {
 
   Future<void> _requestPermissions() async {
     setState(() => _checking = true);
+
+    if (kIsWeb) {
+      try {
+        final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+        if (!serviceEnabled) {
+          if (mounted) {
+            setState(() {
+              _checking = false;
+              _hasPermissions = false;
+              _errorMsg = 'Turn on location/GPS on this device, then tap Enable again.';
+            });
+          }
+          return;
+        }
+
+        var permission = await Geolocator.checkPermission();
+        if (permission == LocationPermission.denied) {
+          permission = await Geolocator.requestPermission();
+        }
+
+        if (_webLocationGranted(permission)) {
+          unawaited(WebLiveTrackingService.ensureRunning());
+          if (mounted) {
+            setState(() {
+              _hasPermissions = true;
+              _checking = false;
+              _errorMsg = '';
+            });
+          }
+          return;
+        }
+
+        if (mounted) {
+          setState(() {
+            _checking = false;
+            _hasPermissions = false;
+            _errorMsg = permission == LocationPermission.deniedForever
+                ? 'Location is blocked for this site. Click the lock/tune icon in the address bar, set Location to Allow, then tap Enable again.'
+                : 'You must allow location to use this website.';
+          });
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() {
+            _checking = false;
+            _hasPermissions = false;
+            _errorMsg = 'You must allow location to use this website.';
+          });
+        }
+      }
+      return;
+    }
 
     var locStatus = await Permission.location.request();
     bool needsBg = await _needsBackgroundPermission();
@@ -226,10 +327,6 @@ class _PermissionGuardState extends State<PermissionGuard> {
 
   @override
   Widget build(BuildContext context) {
-    if (kIsWeb) {
-      return widget.child;
-    }
-
     if (_checking) {
       return const Scaffold(
         backgroundColor: Color(0xFF0F172A),
@@ -314,7 +411,9 @@ class _PermissionGuardState extends State<PermissionGuard> {
                             Text(
                               _errorMsg.isNotEmpty
                                   ? _errorMsg
-                                  : "Allow location All the time + disable battery optimization so live tracking continues when the app is closed.",
+                                  : kIsWeb
+                                      ? 'Allow location in your browser to continue. Without it you cannot use this website.'
+                                      : 'Allow location All the time + disable battery optimization so live tracking continues when the app is closed.',
                               style: TextStyle(
                                 fontSize: 16,
                                 height: 1.5,
@@ -324,7 +423,9 @@ class _PermissionGuardState extends State<PermissionGuard> {
                             ),
                             const SizedBox(height: 12),
                             Text(
-                              "Required: Foreground · Background (Always) · Notifications · Battery unrestricted",
+                              kIsWeb
+                                  ? 'Required: Browser location (Allow). If you previously blocked it, use the lock icon in the address bar.'
+                                  : 'Required: Foreground · Background (Always) · Notifications · Battery unrestricted',
                               style: TextStyle(
                                 fontSize: 12,
                                 height: 1.4,
@@ -370,25 +471,27 @@ class _PermissionGuardState extends State<PermissionGuard> {
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 16),
-                            SizedBox(
-                              width: double.infinity,
-                              child: TextButton(
-                                onPressed: () => openAppSettings(),
-                                style: TextButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(vertical: 16),
-                                  foregroundColor: Colors.amberAccent,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    side: BorderSide(color: Colors.amber.withOpacity(0.4)),
+                            if (!kIsWeb) ...[
+                              const SizedBox(height: 16),
+                              SizedBox(
+                                width: double.infinity,
+                                child: TextButton(
+                                  onPressed: () => openAppSettings(),
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                    foregroundColor: Colors.amberAccent,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      side: BorderSide(color: Colors.amber.withOpacity(0.4)),
+                                    ),
+                                  ),
+                                  child: const Text(
+                                    "OPEN APP SETTINGS",
+                                    style: TextStyle(fontWeight: FontWeight.w600, letterSpacing: 1.2),
                                   ),
                                 ),
-                                child: const Text(
-                                  "OPEN APP SETTINGS",
-                                  style: TextStyle(fontWeight: FontWeight.w600, letterSpacing: 1.2),
-                                ),
                               ),
-                            ),
+                            ],
                           ],
                         ),
                       ),

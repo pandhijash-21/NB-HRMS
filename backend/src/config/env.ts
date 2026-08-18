@@ -13,6 +13,8 @@ const envSchema = z.object({
   REDIS_URL: z.string().min(1),
 
   JWT_SECRET: z.string().min(16),
+  /** Shared with the Flutter client for double AES-GCM transport encryption. */
+  TRANSPORT_SECRET: z.string().min(16).default('nb-crm-double-enc-v2-local'),
   ENCRYPTION_KEY: z
     .string()
     .trim()

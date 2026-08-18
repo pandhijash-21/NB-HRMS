@@ -165,8 +165,66 @@ class GeneralViewTab extends ConsumerWidget {
               ),
             ],
           ),
+          const SizedBox(height: 16),
+          _AssignmentHistoryCard(employeeId: profile.id),
         ],
       ),
+    );
+  }
+}
+
+class _AssignmentHistoryCard extends ConsumerWidget {
+  const _AssignmentHistoryCard({required this.employeeId});
+
+  final int employeeId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(employeeAssignmentsProvider(employeeId));
+    return async.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (list) {
+        if (list.isEmpty) return const SizedBox.shrink();
+        final sorted = List<EmployeeAssignment>.from(list)
+          ..sort((a, b) => b.effectiveFrom.compareTo(a.effectiveFrom));
+        return _buildSectionCard(
+          context: context,
+          title: 'Institute transfer & designation history',
+          icon: Icons.swap_horiz_rounded,
+          children: [
+            for (var i = 0; i < sorted.length; i++)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      assignmentEventLabel(
+                        sorted[i],
+                        i + 1 < sorted.length ? sorted[i + 1] : null,
+                      ),
+                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                    ),
+                    Text(
+                      '${sorted[i].designation} · ${sorted[i].subOrganization ?? "—"}',
+                      style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor),
+                    ),
+                    Text(
+                      '${_formatDate(sorted[i].effectiveFrom)} – ${sorted[i].effectiveTo == null ? "Present" : _formatDate(sorted[i].effectiveTo!)}',
+                      style: TextStyle(fontSize: 11, color: Theme.of(context).hintColor),
+                    ),
+                    if (sorted[i].reason != null && sorted[i].reason!.isNotEmpty)
+                      Text(
+                        sorted[i].reason!,
+                        style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic),
+                      ),
+                  ],
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }

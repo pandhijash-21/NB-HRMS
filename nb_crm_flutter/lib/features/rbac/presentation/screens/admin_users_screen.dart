@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/widgets/header_action_button.dart';
+import '../../../admin/presentation/widgets/hr_employment_change_actions.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/auth_providers.dart';
 import '../../domain/rbac_models.dart';
@@ -150,9 +151,11 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminUsersScreen> {
                     itemCount: users.length,
                     itemBuilder: (context, index) => _UserCard(
                       user: users[index],
+                      isAdmin: isAdminRole(auth.user?.role),
                       onCredentials: () => _showCredentialsDialog(context, users[index]),
                       onEdit: () => _showEditUserDialog(context, users[index], rolesAsync),
                       onDelete: () => _confirmDelete(context, users[index]),
+                      onUnblock: () => _unblockLogin(context, users[index]),
                     ),
                   );
                 },
@@ -673,6 +676,27 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminUsersScreen> {
     }
   }
 
+  Future<void> _unblockLogin(BuildContext context, UserAccount user) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Unblock login'),
+        content: Text('Allow ${user.displayName} to sign in again? Failed-password lock will reset.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Unblock')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await ref.read(usersListProvider.notifier).unblockLogin(user.id);
+      if (mounted) _showSnack('Login unblocked for ${user.displayName}.');
+    } catch (e) {
+      if (mounted) _showSnack(e.toString().replaceFirst('Exception: ', ''));
+    }
+  }
+
   void _showSnack(String message) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
@@ -681,15 +705,19 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminUsersScreen> {
 class _UserCard extends StatelessWidget {
   const _UserCard({
     required this.user,
+    required this.isAdmin,
     required this.onCredentials,
     required this.onEdit,
     required this.onDelete,
+    required this.onUnblock,
   });
 
   final UserAccount user;
+  final bool isAdmin;
   final VoidCallback onCredentials;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final VoidCallback onUnblock;
 
   @override
   Widget build(BuildContext context) {
@@ -772,6 +800,10 @@ class _UserCard extends StatelessWidget {
                         user.isActive ? Colors.green : Colors.red,
                         soft: true,
                       ),
+                      if (user.loginBlocked)
+                        _badge('LOGIN BLOCKED', Colors.red, soft: true)
+                      else if (user.loginTemporarilyLocked)
+                        _badge('LOGIN LOCKED', Colors.orange, soft: true),
                       const SizedBox(width: 4),
                       if (user.lastLoginAt != null)
                         Text(
@@ -801,6 +833,12 @@ class _UserCard extends StatelessWidget {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (isAdmin && (user.loginBlocked || user.loginTemporarilyLocked))
+                  IconButton(
+                    tooltip: 'Unblock login',
+                    onPressed: onUnblock,
+                    icon: const Icon(Icons.lock_open_rounded, color: Colors.orange, size: 18),
+                  ),
                 IconButton(
                   tooltip: 'Credentials',
                   onPressed: onCredentials,

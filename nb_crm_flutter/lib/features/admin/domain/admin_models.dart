@@ -139,6 +139,7 @@ class EmployeeAssignment {
   final String? designationId;
   final String? shift;
   final String? reason;
+  final String? changeType;
   final String changedBy;
   final DateTime createdAt;
 
@@ -155,6 +156,7 @@ class EmployeeAssignment {
     this.designationId,
     this.shift,
     this.reason,
+    this.changeType,
     required this.changedBy,
     required this.createdAt,
   });
@@ -175,10 +177,31 @@ class EmployeeAssignment {
       designationId: json['designationId'] as String?,
       shift: json['shift'] as String?,
       reason: json['reason'] as String?,
+      changeType: json['changeType'] as String?,
       changedBy: json['changedBy'] as String? ?? '',
       createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'].toString())
           : DateTime.now(),
     );
   }
+}
+
+String assignmentEventLabel(EmployeeAssignment current, EmployeeAssignment? previous) {
+  switch (current.changeType) {
+    case 'INSTITUTE_TRANSFER':
+      return 'Institute transfer';
+    case 'DESIGNATION_UPGRADE':
+      return 'Designation upgrade';
+    case 'JOINING':
+      return 'Joined';
+  }
+  if (previous == null) return 'Joined / initial assignment';
+  final currentInst = current.instituteId ?? current.subOrganization ?? '';
+  final previousInst = previous.instituteId ?? previous.subOrganization ?? '';
+  final instChanged = currentInst != previousInst;
+  final desChanged = current.designation != previous.designation;
+  if (instChanged && desChanged) return 'Institute + designation change';
+  if (instChanged) return 'Institute transfer';
+  if (desChanged) return 'Designation upgrade';
+  return current.reason?.trim().isNotEmpty == true ? current.reason! : 'Assignment update';
 }

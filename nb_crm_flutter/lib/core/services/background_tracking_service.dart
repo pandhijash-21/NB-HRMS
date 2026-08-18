@@ -13,6 +13,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../logging/app_logger.dart';
 import '../network/app_config.dart';
+import '../network/transport_crypto.dart';
 
 const _notifChannelId = 'my_foreground';
 const _notifId = 888;
@@ -127,8 +128,10 @@ void onStart(ServiceInstance service) async {
       receiveTimeout: const Duration(seconds: 12),
       headers: {
         'Authorization': 'Bearer $token',
+        transportEncHeader: '$transportEncVersion',
       },
-    ));
+    ))
+      ..interceptors.add(transportEncryptionInterceptor());
   }
 
   Future<void> updateNotif(AndroidServiceInstance android, String body) async {

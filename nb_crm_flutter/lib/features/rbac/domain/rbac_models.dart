@@ -113,6 +113,9 @@ class UserAccount {
     this.lastLoginAt,
     this.createdAt,
     this.updatedAt,
+    this.loginBlocked = false,
+    this.loginTemporarilyLocked = false,
+    this.loginLockedUntil,
   });
 
   final String id;
@@ -126,6 +129,9 @@ class UserAccount {
   final DateTime? lastLoginAt;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  final bool loginBlocked;
+  final bool loginTemporarilyLocked;
+  final DateTime? loginLockedUntil;
 
   String get displayName {
     final empName = employee?.fullName;
@@ -173,6 +179,9 @@ class UserAccount {
       lastLoginAt: _parseDate(json['lastLoginAt']),
       createdAt: _parseDate(json['createdAt']),
       updatedAt: _parseDate(json['updatedAt']),
+      loginBlocked: json['loginBlocked'] == true,
+      loginTemporarilyLocked: json['loginTemporarilyLocked'] == true,
+      loginLockedUntil: _parseDate(json['loginLockedUntil']),
     );
   }
 }

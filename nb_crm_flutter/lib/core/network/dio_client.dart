@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import '../logging/app_logger.dart';
 import 'api_envelope.dart';
 import 'app_config.dart';
+import 'transport_crypto.dart';
 
 /// Mutable hook so [DioClient] can notify auth without circular construction.
 class UnauthorizedGate {
@@ -31,6 +32,7 @@ class DioClient {
         headers: const {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
+          transportEncHeader: '$transportEncVersion',
         },
       ),
     );
@@ -58,8 +60,6 @@ class DioClient {
           AppLogger.network.w('$method $path → ${status ?? error.type.name}');
           final isLogin = path.contains('auth/login');
           final hadToken = error.requestOptions.headers['Authorization'] != null;
-          // Only wipe session when a request that actually carried a Bearer got 401.
-          // Missing-token 401s (storage glitch) must not force logout mid-navigation.
           if (status == 401 && !isLogin && hadToken) {
             await unauthorizedGate.notify();
           }
@@ -67,6 +67,7 @@ class DioClient {
         },
       ),
     );
+    dio.interceptors.add(transportEncryptionInterceptor());
   }
 
   late final Dio dio;

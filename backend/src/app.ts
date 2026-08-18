@@ -19,6 +19,7 @@ import { env } from './config/env';
 import { configureCloudinary } from './config/cloudinary';
 import { connectRedis } from './config/redis';
 import { fail, ok } from './utils/response';
+import { transportEncryptionMiddleware } from './middleware/transportEncryption';
 import { lettersRouter } from './modules/letters';
 import { reimbursementsRouter } from './modules/reimbursements';
 import { recruitmentRouter } from './modules/recruitment';
@@ -59,7 +60,7 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-NB-Enc'],
 }));
 // Allow Flutter/web on Netlify/Vercel to read API responses (default helmet CORP is same-origin).
 app.use(helmet({
@@ -67,6 +68,7 @@ app.use(helmet({
   crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
 }));
 app.use(express.json({ limit: '2mb' }));
+app.use(transportEncryptionMiddleware);
 
 app.get('/', (_req, res) => {
   res.json(ok({ 
@@ -98,6 +100,7 @@ app.use('/actions', actionsRouter);
 app.use('/events', eventsRouter);
 
 import { trackingRouter } from './modules/tracking/tracking.routes';
+import { tasksRouter } from './modules/tasks';
 
 // Generic /api prefix - personal-education module
 app.use('/api', personalEducationRouter);
@@ -119,6 +122,7 @@ app.use('/api', instituteRouter);
 app.use('/api/salary', salaryRouter);
 app.use('/api', lookupRouter);
 app.use('/api/tracking', trackingRouter);
+app.use('/api/tasks', tasksRouter);
 app.use('/api/events', sseEventsRouter);
 
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

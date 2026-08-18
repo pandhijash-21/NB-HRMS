@@ -6,6 +6,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/name_utils.dart';
 import '../../../admin/presentation/admin_notifier.dart';
 import '../../../admin/domain/admin_models.dart';
+import '../../../admin/presentation/widgets/hr_employment_change_actions.dart';
 import '../../../auth/presentation/auth_providers.dart';
 import '../../../org/presentation/org_providers.dart';
 import '../../../org/domain/org_models.dart';
@@ -243,7 +244,7 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
   DateTime? _incrementMonth;
   late DateTime _joiningDate;
   late DateTime _originalJoiningDate;
-  String _organization = 'Gandhinagar University';
+  String _organization = '';
   String? _shift;
   String _employeeCategory = 'NON_TEACHING';
   String? _appointmentType;
@@ -266,9 +267,7 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
     _empCodeCtrl = TextEditingController(text: info?.employeeCode ?? '');
     _punchIdCtrl = TextEditingController(text: info?.punchId ?? '');
     final org = info?.organization.trim();
-    _organization = (org != null && org.isNotEmpty)
-        ? org
-        : 'Gandhinagar University';
+    _organization = (org != null && org.isNotEmpty) ? org : '';
     _departmentCtrl = TextEditingController(text: info?.department ?? '');
     _functionalDeptCtrl = TextEditingController(
       text: info?.functionalDepartment ?? '',
@@ -361,6 +360,11 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
 
   @override
   Widget build(BuildContext context) {
+    final isAdmin = isAdminRole(ref.watch(authNotifierProvider).user?.role);
+    if (isAdmin) {
+      ref.watch(activeInstitutesProvider);
+      ref.watch(jobDesignationsProvider);
+    }
     final institutesAsync = ref.watch(institutesListProvider);
     final namesAsync = ref.watch(employeeNamesProvider);
     final institutes = institutesAsync.asData?.value ?? const <Institute>[];
@@ -464,12 +468,26 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
             required: true,
             readOnly: true,
           ),
-          _buildHelperChip('Managed via Designation Upgrade'),
+          if (isAdmin)
+            hrChangeActionButtons(
+              context: context,
+              ref: ref,
+              employeeId: widget.profile.id,
+              onDone: () {
+                final info = ref.read(profileProvider).asData?.value?.generalInfo;
+                if (info == null) return;
+                _designationCtrl.text = info.designation;
+                setState(() {});
+              },
+            )
+          else
+            _buildHelperChip('Managed via Designation Upgrade (Admin only)'),
           _buildTextField('Department', _departmentCtrl, required: true),
           _buildTextField('Functional Department', _functionalDeptCtrl),
           _organizationDropdown(),
           _buildReadOnlyField('Institute', _instituteLabel(institutes)),
-          _buildHelperChip('Managed via Institute Transfer'),
+          if (!isAdmin)
+            _buildHelperChip('Managed via Institute Transfer (Admin only)'),
           lookupDropdown(
             ref: ref,
             category: 'EMPLOYEE_CATEGORY',
@@ -582,8 +600,8 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
         ),
       ),
       child: Text(
-        'Institute transfer & promotion history\n'
-        'Designation/Sub-Organization changes are tracked via Institute Transfer and Designation Upgrade (effective-dated). They are read-only here to preserve history.',
+        'Institute transfer & designation upgrade\n'
+        'Use the Admin buttons below to transfer institute or upgrade designation. Those changes are dated and kept in history.',
         style: TextStyle(
           fontSize: 12,
           color: isDark ? const Color(0xFFFDE68A) : const Color(0xFF92400E),
@@ -716,22 +734,25 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
 
   Widget _organizationDropdown() {
     final orgs = ref.watch(activeOrganizationsProvider).asData?.value ?? const [];
-    final lookupLabels =
-        resolveLookupOptions(ref, 'ORGANIZATION').map((o) => o.label).toList();
-    final labels = orgs.isNotEmpty
-        ? orgs.map((o) => o.name).where((n) => n.trim().isNotEmpty).toList()
-        : (lookupLabels.isNotEmpty
-            ? lookupLabels
-            : const ['Gandhinagar University', 'Platinum Foundation']);
+    final labels = orgs
+        .map((o) => o.name)
+        .where((n) => n.trim().isNotEmpty)
+        .toList();
+    if (_organization.isNotEmpty && !labels.contains(_organization)) {
+      labels.insert(0, _organization);
+    }
     final value = labels.contains(_organization) ? _organization : null;
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: DropdownButtonFormField<String>(
         isExpanded: true,
         initialValue: value,
-        decoration: const InputDecoration(
+        decoration: InputDecoration(
           labelText: 'Organization *',
-          border: OutlineInputBorder(),
+          border: const OutlineInputBorder(),
+          helperText: labels.isEmpty
+              ? 'Nothing in Configurations → Organizations. Add one there first.'
+              : null,
         ),
         items: [
           for (final name in labels)

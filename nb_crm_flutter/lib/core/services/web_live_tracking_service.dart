@@ -8,6 +8,7 @@ import 'package:geolocator/geolocator.dart';
 
 import '../logging/app_logger.dart';
 import '../network/app_config.dart';
+import '../network/transport_crypto.dart';
 import '../storage/secure_storage_service.dart';
 
 /// Foreground live pings + heartbeats for Flutter web (Netlify).
@@ -70,9 +71,6 @@ class WebLiveTrackingService {
       }
 
       var permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
       if (permission != LocationPermission.always &&
           permission != LocationPermission.whileInUse) {
         return;
@@ -150,8 +148,9 @@ class WebLiveTrackingService {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
           'Accept': 'application/json',
+          transportEncHeader: '$transportEncVersion',
         },
       ),
-    );
+    )..interceptors.add(transportEncryptionInterceptor());
   }
 }

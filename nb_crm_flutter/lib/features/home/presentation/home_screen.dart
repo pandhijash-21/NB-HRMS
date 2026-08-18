@@ -88,6 +88,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     final modules = <_ModuleCardData>[
       _ModuleCardData(
+        title: 'Tasks',
+        subtitle: 'Assign work, track progress, review & Gantt',
+        icon: Icons.task_alt_rounded,
+        route: '/tasks',
+        enabled: true,
+        category: ModuleCategory.mySpace,
+        color: const Color(0xFF4f46e5),
+      ),
+      _ModuleCardData(
         title: 'Leave',
         subtitle: () {
           final parts = <String>['Balances', 'apply', 'history'];

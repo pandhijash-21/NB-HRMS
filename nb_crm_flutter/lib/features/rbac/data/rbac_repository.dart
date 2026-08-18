@@ -54,6 +54,14 @@ class RbacRepository {
     );
   }
 
+  Future<void> unblockLogin(String userId) async {
+    await _dio.postEnvelope<void>(
+      'admin/users/$userId/unblock-login',
+      data: const {},
+      parse: (_) {},
+    );
+  }
+
   Future<void> deleteUser(String id) async {
     await _dio.deleteEnvelope<void>(
       'admin/users/$id',

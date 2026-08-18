@@ -10,13 +10,18 @@ export const authController = {
       return res.status(400).json(fail(body.error.issues[0]?.message ?? 'Validation error'));
     }
 
-    const result = await authService.login(body.data);
+    try {
+      const result = await authService.login(body.data);
 
-    if ('error' in result) {
-      return res.status(result.status ?? 400).json(fail(result.error ?? 'Error'));
+      if ('error' in result) {
+        return res.status(result.status ?? 400).json(fail(result.error ?? 'Error'));
+      }
+
+      return res.json(ok(result));
+    } catch (err) {
+      console.error('LOGIN FAILED', err);
+      return res.status(500).json(fail('Internal server error'));
     }
-
-    return res.json(ok(result));
   },
 
   async logout(req: Request, res: Response) {

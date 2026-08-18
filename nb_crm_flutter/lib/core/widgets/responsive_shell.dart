@@ -114,6 +114,12 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
         ),
       const _Destination('/home', Icons.home_outlined, Icons.home, 'Home'),
       const _Destination(
+        '/tasks',
+        Icons.task_alt_outlined,
+        Icons.task_alt,
+        'Tasks',
+      ),
+      const _Destination(
         '/profile',
         Icons.person_outline,
         Icons.person,

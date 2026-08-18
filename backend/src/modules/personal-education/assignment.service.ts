@@ -11,12 +11,15 @@ export type AssignmentSnapshot = {
   effectiveFrom: string;
   effectiveTo: string | null;
   organization: string | null;
+  instituteId: string | null;
   subOrganization: string | null;
   department: string | null;
   designation: string;
+  designationId: string | null;
   shift: string | null;
   appointmentType: string | null;
   reason: string | null;
+  changeType: string | null;
   changedBy: string;
   createdAt: string;
 };
@@ -33,12 +36,15 @@ export const assignmentService = {
       effectiveFrom: r.effectiveFrom.toISOString().slice(0, 10),
       effectiveTo: r.effectiveTo ? r.effectiveTo.toISOString().slice(0, 10) : null,
       organization: r.organization ?? null,
+      instituteId: r.instituteId ?? null,
       subOrganization: r.subOrganization ?? null,
       department: r.department ?? null,
       designation: r.designation,
+      designationId: r.designationId ?? null,
       shift: r.shift ?? null,
       appointmentType: r.appointmentType ? String(r.appointmentType) : null,
       reason: r.reason ?? null,
+      changeType: r.changeType ?? null,
       changedBy: r.changedBy,
       createdAt: r.createdAt.toISOString(),
     }));
@@ -102,6 +108,7 @@ export const assignmentService = {
           shift: e.generalInfo.shift ?? null,
           appointmentType: e.generalInfo.appointmentType ?? null,
           reason: 'Backfill from current general info',
+          changeType: 'JOINING',
           changedBy,
         },
       });

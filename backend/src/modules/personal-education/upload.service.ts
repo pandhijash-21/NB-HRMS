@@ -60,13 +60,18 @@ export const uploadService = {
 
     const base64 = file.buffer.toString('base64');
     const dataUri = `data:${file.mimetype};base64,${base64}`;
-    const isPdf =
+    const name = (file.originalname || '').toLowerCase();
+    const isRawDoc =
       file.mimetype === 'application/pdf' ||
-      (file.originalname || '').toLowerCase().endsWith('.pdf');
+      name.endsWith('.pdf') ||
+      name.endsWith('.ppt') ||
+      name.endsWith('.pptx') ||
+      file.mimetype === 'application/vnd.ms-powerpoint' ||
+      file.mimetype === 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
 
     const result = await cloudinary.uploader.upload(dataUri, {
       folder: `hrms/${folder}`,
-      resource_type: isPdf ? 'raw' : 'auto',
+      resource_type: isRawDoc ? 'raw' : 'auto',
       type: 'upload',
       access_mode: 'public',
       use_filename: true,

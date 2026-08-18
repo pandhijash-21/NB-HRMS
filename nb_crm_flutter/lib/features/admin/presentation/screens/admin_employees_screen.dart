@@ -654,7 +654,6 @@ class _AddEmployeeDialog extends ConsumerStatefulWidget {
 }
 
 class _AddEmployeeDialogState extends ConsumerState<_AddEmployeeDialog> {
-  static const _fallbackOrgs = ['Gandhinagar University', 'Platinum Foundation'];
   static const _fallbackCategories = ['TEACHING', 'NON_TEACHING', 'CONTRACT', 'VISITING'];
 
   final _formKey = GlobalKey<FormState>();
@@ -694,24 +693,24 @@ class _AddEmployeeDialogState extends ConsumerState<_AddEmployeeDialog> {
     final designationsAsync = ref.watch(jobDesignationsProvider);
     final rolesAsync = ref.watch(allRolesProvider);
     final namesAsync = ref.watch(employeeNamesProvider);
-    final orgLookups = ref.watch(activeLookupsByCategoryProvider('ORGANIZATION'));
+    final orgsAsync = ref.watch(activeOrganizationsProvider);
     final catLookups = ref.watch(activeLookupsByCategoryProvider('EMPLOYEE_CATEGORY'));
     final institutes = institutesAsync.asData?.value ?? const [];
     final designations = designationsAsync.asData?.value ?? const [];
     final roles = rolesAsync.asData?.value ?? const [];
     final names = namesAsync.asData?.value ?? const [];
-    final organizations = (orgLookups.asData?.value ?? const [])
-        .map((o) => o.label)
+    final orgItems = (orgsAsync.asData?.value ?? const [])
+        .map((o) => o.name)
+        .where((n) => n.trim().isNotEmpty)
         .toList();
-    final orgItems = organizations.isNotEmpty ? organizations : _fallbackOrgs;
     final categories = (catLookups.asData?.value ?? const [])
         .map((o) => o.code)
         .toList();
     final categoryItems = categories.isNotEmpty ? categories : _fallbackCategories;
-    final organizationValue = _organization ??
-        (orgItems.contains('Gandhinagar University')
-            ? 'Gandhinagar University'
-            : orgItems.first);
+    final organizationValue =
+        (_organization != null && orgItems.contains(_organization))
+            ? _organization
+            : null;
 
     return AlertDialog(
       backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
@@ -784,12 +783,21 @@ class _AddEmployeeDialogState extends ConsumerState<_AddEmployeeDialog> {
                 isDark: isDark,
                 label: 'Organization *',
                 value: organizationValue,
-                items: orgItems
-                    .map((org) => DropdownMenuItem<String?>(value: org, child: Text(org)))
-                    .toList(),
-                onChanged: (v) {
-                  if (v != null) setState(() => _organization = v);
-                },
+                helper: orgItems.isEmpty
+                    ? 'Nothing in Configurations → Organizations. Add one there first.'
+                    : null,
+                items: [
+                  const DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text('Select organization...'),
+                  ),
+                  ...orgItems.map(
+                    (org) => DropdownMenuItem<String?>(value: org, child: Text(org)),
+                  ),
+                ],
+                onChanged: (v) => setState(() => _organization = v),
+                validator: (v) =>
+                    (v == null || v.isEmpty) ? 'Organization is required' : null,
               ),
               _buildDropdown(
                 isDark: isDark,
@@ -1061,6 +1069,15 @@ class _AddEmployeeDialogState extends ConsumerState<_AddEmployeeDialog> {
       );
       return;
     }
+    if (_organization == null || _organization!.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Organization is required. Add one in Configurations first.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
     if (_instituteId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Institute is required'), backgroundColor: Colors.red),
@@ -1081,7 +1098,7 @@ class _AddEmployeeDialogState extends ConsumerState<_AddEmployeeDialog> {
       'institutionalEmail': _instEmailCtrl.text.trim().isEmpty ? null : _instEmailCtrl.text.trim(),
       'employeeCode': _employeeCodeCtrl.text.trim(),
       'abbreviation': generateAbbreviation(_fullNameCtrl.text.trim()),
-      'organization': _organization ?? 'Gandhinagar University',
+      'organization': _organization!.trim(),
       'designation': _designation,
       'department': _departmentCtrl.text.trim(),
       'instituteId': _instituteId,

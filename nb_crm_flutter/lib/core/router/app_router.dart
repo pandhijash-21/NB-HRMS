@@ -33,6 +33,7 @@ import '../../features/org/presentation/screens/designations_screen.dart';
 import '../../features/lookups/presentation/screens/configurations_hub_screen.dart';
 import '../../features/lookups/presentation/screens/lookup_category_screen.dart';
 import '../../features/letters/presentation/screens/admin_letters_screen.dart';
+import '../../features/tasks/presentation/screens/tasks_hub_screen.dart';
 import '../../features/leave/presentation/screens/leave_hub_screen.dart';
 import '../../features/leave/presentation/screens/leave_apply_screen.dart';
 import '../../features/leave/presentation/screens/leave_history_screen.dart';
@@ -159,6 +160,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/home',
             builder: (context, state) => const HomeScreen(),
+          ),
+          GoRoute(
+            path: '/tasks',
+            builder: (context, state) => const TasksHubScreen(),
           ),
           GoRoute(
             path: '/leave',

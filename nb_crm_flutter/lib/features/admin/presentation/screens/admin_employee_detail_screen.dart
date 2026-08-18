@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -11,6 +11,9 @@ import '../../../profile/presentation/widgets/profile_tabs.dart';
 import '../../../profile/domain/profile_models.dart';
 import '../../domain/admin_models.dart';
 import '../../../profile/presentation/widgets/employee_attendance_tab.dart';
+import '../../../org/presentation/org_providers.dart';
+import '../../../org/domain/org_models.dart';
+import '../../presentation/widgets/hr_employment_change_actions.dart';
 
 class AdminEmployeeDetailScreen extends ConsumerStatefulWidget {
   final int employeeId;
@@ -94,6 +97,8 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
 
     final profileAsyncVal = ref.watch(profileProvider);
     final assignmentsAsync = ref.watch(employeeAssignmentsProvider(widget.employeeId));
+    ref.watch(activeInstitutesProvider);
+    ref.watch(jobDesignationsProvider);
     final canManageAttendanceSettings =
         Permissions.canManageEmployeeAttendance(
           authState.permissions,
@@ -332,6 +337,7 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
 
   Widget _buildAssignmentSection(BuildContext context, AsyncValue<List<EmployeeAssignment>> assignmentsAsync) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isAdmin = isAdminRole(ref.watch(authNotifierProvider).user?.role);
 
     return Card(
       elevation: 0,
@@ -444,10 +450,12 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
                       child: Row(
                         children: [
                           _buildActionButton(context, 'Assign Position', () => _showPositionDialog(context)),
-                          const SizedBox(width: 10),
-                          _buildActionButton(context, 'Transfer Institute', () => _showTransferDialog(context)),
-                          const SizedBox(width: 10),
-                          _buildActionButton(context, 'Upgrade Designation', () => _showUpgradeDialog(context)),
+                          if (isAdmin) ...[
+                            const SizedBox(width: 10),
+                            _buildActionButton(context, 'Transfer Institute', () => _showTransferDialog(context)),
+                            const SizedBox(width: 10),
+                            _buildActionButton(context, 'Upgrade Designation', () => _showUpgradeDialog(context)),
+                          ],
                         ],
                       ),
                     ),
@@ -562,7 +570,7 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
                           const Icon(Icons.circle, size: 8, color: Color(0xFFC5A059)),
                           const SizedBox(width: 8),
                           Text(
-                            log.designation,
+                            assignmentEventLabel(log, i + 1 < sorted.length ? sorted[i + 1] : null),
                             style: TextStyle(
                               fontWeight: FontWeight.w800, 
                               fontSize: 13,
@@ -577,7 +585,11 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Sub-Org: ${log.subOrganization ?? "GIT"} · Department: ${log.department ?? "N/A"}',
+                              'Designation: ${log.designation}',
+                              style: TextStyle(color: isDark ? Colors.white70 : const Color(0xFF212F3D), fontSize: 12, fontWeight: FontWeight.w700),
+                            ),
+                            Text(
+                              'Institute: ${log.subOrganization ?? "—"} · Department: ${log.department ?? "N/A"}',
                               style: TextStyle(color: isDark ? Colors.white60 : const Color(0xFF607D8B), fontSize: 12),
                             ),
                             const SizedBox(height: 2),
@@ -712,7 +724,10 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
   // Transfer Dialog
   void _showTransferDialog(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final subOrgCtrl = TextEditingController(text: 'GIT');
+    final institutes = ref.read(activeInstitutesProvider).asData?.value ?? const <Institute>[];
+    final profile = ref.read(profileProvider).asData?.value;
+    final currentId = profile?.generalInfo?.instituteId;
+    String? selectedId = institutes.any((i) => i.id == currentId) ? currentId : null;
     final reasonCtrl = TextEditingController();
     DateTime effectiveFrom = DateTime.now();
 
@@ -738,12 +753,24 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
           scrollable: true,
           content: Column(
             children: [
-              TextField(
-                controller: subOrgCtrl,
+              Text(
+                'Current: ${profile?.generalInfo?.instituteName ?? profile?.generalInfo?.subOrganization ?? "â€”"}',
+                style: TextStyle(fontSize: 12, color: isDark ? Colors.white60 : const Color(0xFF607D8B)),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                isExpanded: true,
+                value: selectedId,
                 decoration: const InputDecoration(
-                  labelText: 'New Sub-Organization / Institute',
+                  labelText: 'Transfer to institute *',
                   border: OutlineInputBorder(),
+                  helperText: 'From Configurations â†’ Institutes',
                 ),
+                items: [
+                  for (final inst in institutes.where((i) => i.isActive))
+                    DropdownMenuItem(value: inst.id, child: Text('${inst.name} (${inst.code})')),
+                ],
+                onChanged: (v) => setDialogState(() => selectedId = v),
               ),
               const SizedBox(height: 12),
               TextField(
@@ -798,10 +825,16 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
             ),
             FilledButton(
               onPressed: () async {
+                if (selectedId == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Select the destination institute')),
+                  );
+                  return;
+                }
                 Navigator.pop(ctx);
                 try {
                   await ref.read(adminRepositoryProvider).instituteTransfer(widget.employeeId, {
-                    'newSubOrganization': subOrgCtrl.text.trim(),
+                    'instituteId': selectedId,
                     'effectiveFrom': effectiveFrom.toIso8601String().split('T').first,
                     'reason': reasonCtrl.text.trim().isEmpty ? null : reasonCtrl.text.trim(),
                   });
@@ -832,7 +865,13 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
   // Designation Upgrade Dialog
   void _showUpgradeDialog(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final desCtrl = TextEditingController();
+    final designations = (ref.read(jobDesignationsProvider).asData?.value ?? const <Designation>[])
+        .where((d) => d.isActive && !d.isAlias)
+        .toList()
+      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    final profile = ref.read(profileProvider).asData?.value;
+    final currentName = profile?.generalInfo?.designation ?? '';
+    String? selectedName;
     final reasonCtrl = TextEditingController();
     DateTime effectiveFrom = DateTime.now();
 
@@ -858,12 +897,27 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
           scrollable: true,
           content: Column(
             children: [
-              TextField(
-                controller: desCtrl,
+              Text(
+                'Current: ${currentName.isEmpty ? "â€”" : currentName}',
+                style: TextStyle(fontSize: 12, color: isDark ? Colors.white60 : const Color(0xFF607D8B)),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                isExpanded: true,
+                value: selectedName,
                 decoration: const InputDecoration(
-                  labelText: 'New Designation Name',
+                  labelText: 'New designation *',
                   border: OutlineInputBorder(),
+                  helperText: 'From Configurations â†’ Designations. Pick any other designation.',
                 ),
+                items: [
+                  for (final d in designations)
+                    DropdownMenuItem(
+                      value: d.name,
+                      child: Text(d.name == currentName ? '${d.name} (current)' : d.name),
+                    ),
+                ],
+                onChanged: (v) => setDialogState(() => selectedName = v),
               ),
               const SizedBox(height: 12),
               TextField(
@@ -918,10 +972,17 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
             ),
             FilledButton(
               onPressed: () async {
+                final name = selectedName?.trim() ?? '';
+                if (name.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Select the new designation')),
+                  );
+                  return;
+                }
                 Navigator.pop(ctx);
                 try {
                   await ref.read(adminRepositoryProvider).designationUpgrade(widget.employeeId, {
-                    'newDesignation': desCtrl.text.trim(),
+                    'newDesignation': name,
                     'effectiveFrom': effectiveFrom.toIso8601String().split('T').first,
                     'reason': reasonCtrl.text.trim().isEmpty ? null : reasonCtrl.text.trim(),
                   });

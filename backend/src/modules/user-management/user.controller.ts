@@ -53,4 +53,10 @@ export const userController = {
     if ('error' in result) return res.status(result.status ?? 400).json(fail(result.error ?? 'Error'));
     return res.json(ok(result));
   },
+
+  async unblockLogin(req: Request, res: Response) {
+    const result = await userService.unblockLogin(String(req.params.id), req.user!.id);
+    if ('error' in result) return res.status(result.status ?? 400).json(fail(result.error ?? 'Error'));
+    return res.json(ok(result));
+  },
 };

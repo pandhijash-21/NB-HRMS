@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/utils/platform_file_picker.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -8,6 +9,7 @@ import '../../../admin/presentation/admin_notifier.dart';
 import '../../../admin/domain/admin_models.dart';
 import '../../../admin/presentation/widgets/hr_employment_change_actions.dart';
 import '../../../auth/presentation/auth_providers.dart';
+import '../../../auth/presentation/auth_notifier.dart';
 import '../../../org/presentation/org_providers.dart';
 import '../../../org/domain/org_models.dart';
 import '../../../salary/domain/salary_models.dart';
@@ -241,6 +243,12 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
   late TextEditingController _departmentCtrl;
   late TextEditingController _functionalDeptCtrl;
   late TextEditingController _designationCtrl;
+  late TextEditingController _personalEmailCtrl;
+  late TextEditingController _instituteEmailCtrl;
+  late String _originalPersonalEmail;
+  late String _originalInstituteEmail;
+  late bool _originalPersonalVerified;
+  late bool _originalInstituteVerified;
   DateTime? _incrementMonth;
   late DateTime _joiningDate;
   late DateTime _originalJoiningDate;
@@ -248,6 +256,8 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
   String? _shift;
   String _employeeCategory = 'NON_TEACHING';
   String? _appointmentType;
+  String? _instituteId;
+  String? _positionDesignationId;
   String? _firstApproverUserId;
   String? _secondApproverUserId;
   String? _thirdApproverUserId;
@@ -273,12 +283,29 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
       text: info?.functionalDepartment ?? '',
     );
     _designationCtrl = TextEditingController(text: info?.designation ?? '');
+    final local = widget.profile.addresses
+        .where((a) => a.addressType.toUpperCase() == 'LOCAL')
+        .firstOrNull;
+    _originalPersonalEmail = local?.personalEmail?.trim() ?? '';
+    _originalInstituteEmail = local?.instituteEmail?.trim() ?? '';
+    _originalPersonalVerified = local?.isPersonalEmailVerified ?? false;
+    _originalInstituteVerified = local?.isInstituteEmailVerified ?? false;
+    _personalEmailCtrl = TextEditingController(text: local?.personalEmail ?? '');
+    _instituteEmailCtrl = TextEditingController(text: local?.instituteEmail ?? '');
+    _personalEmailCtrl.addListener(() {
+      if (mounted) setState(() {});
+    });
+    _instituteEmailCtrl.addListener(() {
+      if (mounted) setState(() {});
+    });
     _shift = info?.shift;
     _incrementMonth = parseIncrementMonth(info?.incrementMonth);
     _joiningDate = info?.joiningDate ?? DateTime.now();
     _originalJoiningDate = info?.originalJoiningDate ?? _joiningDate;
     _employeeCategory = info?.employeeCategory ?? 'NON_TEACHING';
     _appointmentType = info?.appointmentType;
+    _instituteId = info?.instituteId;
+    _positionDesignationId = widget.profile.position?.id;
     _firstApproverUserId = info?.firstApproverUserId;
     _secondApproverUserId = info?.secondApproverUserId;
     _thirdApproverUserId = info?.thirdApproverUserId;
@@ -308,6 +335,8 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
     _departmentCtrl.dispose();
     _functionalDeptCtrl.dispose();
     _designationCtrl.dispose();
+    _personalEmailCtrl.dispose();
+    _instituteEmailCtrl.dispose();
     super.dispose();
   }
 
@@ -361,13 +390,17 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
   @override
   Widget build(BuildContext context) {
     final isAdmin = isAdminRole(ref.watch(authNotifierProvider).user?.role);
-    if (isAdmin) {
+    if (widget.isPrivileged) {
       ref.watch(activeInstitutesProvider);
       ref.watch(jobDesignationsProvider);
     }
-    final institutesAsync = ref.watch(institutesListProvider);
+    final institutes = widget.isPrivileged
+        ? (ref.watch(activeInstitutesProvider).asData?.value ??
+            ref.watch(institutesListProvider).asData?.value ??
+            const <Institute>[])
+        : (ref.watch(institutesListProvider).asData?.value ??
+            const <Institute>[]);
     final namesAsync = ref.watch(employeeNamesProvider);
-    final institutes = institutesAsync.asData?.value ?? const <Institute>[];
     final allNames = namesAsync.asData?.value ?? const <EmployeeNameOption>[];
     // Exclude the employee whose profile is being edited (cannot be own reporting manager)
     final names = allNames
@@ -385,13 +418,13 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
           ),
           const SizedBox(height: 12),
           const Text(
-            'Employment details are read-only.',
+            'General tab is view-only for employees.',
             textAlign: TextAlign.center,
             style: TextStyle(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 4),
           const Text(
-            'Please contact HR to update employment fields. You can still upload your photo and signature below.',
+            'Only Admin/HR can edit employment, emails, institute, and position. You can still upload your photo and signature below.',
             textAlign: TextAlign.center,
             style: TextStyle(color: AppColors.textSecondary),
           ),
@@ -410,19 +443,59 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          Text(
+            'Identity & Media',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+          const SizedBox(height: 8),
           BonusUploadZone(
             employeeId: widget.profile.id,
             photoUrl: widget.profile.photoUrl,
             signatureUrl: widget.profile.signatureUrl,
           ),
+          const SizedBox(height: 8),
+          Text(
+            'Abbreviation updates automatically from Full Name on save.',
+            style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+          ),
           const SizedBox(height: 16),
           _buildInfoBanner(context),
           const SizedBox(height: 16),
-          _buildTextField('Full Name', _fullNameCtrl, required: true),
-          _buildReadOnlyField(
-            'Abbreviation',
-            _abbreviationCtrl.text.isEmpty ? '—' : _abbreviationCtrl.text,
+          Text(
+            'Contact & Access',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
           ),
+          const SizedBox(height: 8),
+          _buildTextField('Personal Email (Gmail)', _personalEmailCtrl),
+          _emailStatusRow(
+            currentText: _personalEmailCtrl.text,
+            originalText: _originalPersonalEmail,
+            originallyVerified: _originalPersonalVerified,
+          ),
+          _buildTextField('Institutional Email', _instituteEmailCtrl),
+          _emailStatusRow(
+            currentText: _instituteEmailCtrl.text,
+            originalText: _originalInstituteEmail,
+            originallyVerified: _originalInstituteVerified,
+          ),
+          _buildHelperChip(
+            'Changing email marks it Unverified. That employee must verify via OTP on next login before using the app.',
+          ),
+          _positionDropdown(ref),
+          const SizedBox(height: 8),
+          Text(
+            'Employment Details',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+          const SizedBox(height: 8),
+          _buildTextField('Full Name', _fullNameCtrl, required: true),
+          _buildTextField('Abbreviation', _abbreviationCtrl),
           _buildTextField('Employee Code', _empCodeCtrl),
           _buildTextField('Punch ID (biometric Empcode)', _punchIdCtrl),
           _buildHelperChip('Must match the biometric machine Empcode — not employee code'),
@@ -462,12 +535,7 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
             }).toList(),
           ),
           _buildHelperChip('Admins can mark employee-specific weekly holidays like only Sunday or Saturday+Sunday'),
-          _buildTextField(
-            'Designation',
-            _designationCtrl,
-            required: true,
-            readOnly: true,
-          ),
+          _designationDropdown(ref),
           if (isAdmin)
             hrChangeActionButtons(
               context: context,
@@ -477,17 +545,14 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
                 final info = ref.read(profileProvider).asData?.value?.generalInfo;
                 if (info == null) return;
                 _designationCtrl.text = info.designation;
+                _instituteId = info.instituteId;
                 setState(() {});
               },
-            )
-          else
-            _buildHelperChip('Managed via Designation Upgrade (Admin only)'),
+            ),
           _buildTextField('Department', _departmentCtrl, required: true),
           _buildTextField('Functional Department', _functionalDeptCtrl),
           _organizationDropdown(),
-          _buildReadOnlyField('Institute', _instituteLabel(institutes)),
-          if (!isAdmin)
-            _buildHelperChip('Managed via Institute Transfer (Admin only)'),
+          _instituteDropdown(institutes),
           lookupDropdown(
             ref: ref,
             category: 'EMPLOYEE_CATEGORY',
@@ -529,6 +594,14 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
             fallbackLabels: const ['General', 'Morning', 'Evening'],
             onChanged: (v) => setState(() => _shift = v),
           ),
+          const SizedBox(height: 8),
+          Text(
+            'Timeline & Reporting',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+          const SizedBox(height: 8),
           _buildDateRow(
             'Joining Date *',
             _joiningDate,
@@ -588,6 +661,28 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
     );
   }
 
+  Widget _emailStatusRow({
+    required String currentText,
+    required String originalText,
+    required bool originallyVerified,
+  }) {
+    final trimmed = currentText.trim();
+    if (trimmed.isEmpty) return const SizedBox.shrink();
+    final changed =
+        trimmed.toLowerCase() != originalText.trim().toLowerCase();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: emailVerificationStatusChip(
+          context,
+          verified: originallyVerified && !changed,
+          pendingChange: changed,
+        ),
+      ),
+    );
+  }
+
   Widget _buildInfoBanner(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
@@ -600,8 +695,9 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
         ),
       ),
       child: Text(
-        'Institute transfer & designation upgrade\n'
-        'Use the Admin buttons below to transfer institute or upgrade designation. Those changes are dated and kept in history.',
+        'Optional history actions\n'
+        'Use Institute transfer / Designation upgrade below when you need a dated history entry. '
+        'You can also change institute, designation, emails, and position directly in the fields.',
         style: TextStyle(
           fontSize: 12,
           color: isDark ? const Color(0xFFFDE68A) : const Color(0xFF92400E),
@@ -732,6 +828,117 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
     );
   }
 
+  Widget _positionDropdown(WidgetRef ref) {
+    final designations = (ref.watch(jobDesignationsProvider).asData?.value ??
+            const <Designation>[])
+        .where((d) =>
+            d.isActive && d.isAlias && (d.linkedRoleId ?? '').isNotEmpty)
+        .toList()
+      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    final ids = designations.map((d) => d.id).toSet();
+    final value =
+        (_positionDesignationId != null && ids.contains(_positionDesignationId))
+            ? _positionDesignationId
+            : null;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: DropdownButtonFormField<String?>(
+        key: ValueKey('position-${value ?? 'none'}-${designations.length}'),
+        isExpanded: true,
+        initialValue: value,
+        decoration: const InputDecoration(
+          labelText: 'Position (Permissions)',
+          border: OutlineInputBorder(),
+          helperText: 'Maps RBAC position role. Leave empty for Staff.',
+        ),
+        items: [
+          const DropdownMenuItem<String?>(
+            value: null,
+            child: Text('Staff — no admin position'),
+          ),
+          for (final d in designations)
+            DropdownMenuItem<String?>(
+              value: d.id,
+              child: Text(
+                '${d.name}${d.linkedRole != null ? ' (${d.linkedRole!.name})' : ''}',
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+        ],
+        onChanged: (v) => setState(() => _positionDesignationId = v),
+      ),
+    );
+  }
+
+  Widget _designationDropdown(WidgetRef ref) {
+    final designations = (ref.watch(jobDesignationsProvider).asData?.value ??
+            const <Designation>[])
+        .where((d) => d.isActive && !d.isAlias)
+        .toList()
+      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    final names = designations.map((d) => d.name).toList();
+    final current = _designationCtrl.text.trim();
+    if (current.isNotEmpty && !names.contains(current)) {
+      names.insert(0, current);
+    }
+    final value = names.contains(current) ? current : null;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: DropdownButtonFormField<String>(
+        key: ValueKey('designation-${value ?? 'none'}-${names.length}'),
+        isExpanded: true,
+        initialValue: value,
+        decoration: const InputDecoration(
+          labelText: 'Designation *',
+          border: OutlineInputBorder(),
+        ),
+        items: [
+          for (final name in names)
+            DropdownMenuItem(value: name, child: Text(name)),
+        ],
+        onChanged: (v) {
+          if (v == null) return;
+          setState(() => _designationCtrl.text = v);
+        },
+        validator: (v) =>
+            (v == null || v.trim().isEmpty) ? 'Designation is required' : null,
+      ),
+    );
+  }
+
+  Widget _instituteDropdown(List<Institute> institutes) {
+    final active = institutes.where((i) => i.isActive).toList();
+    final ids = active.map((i) => i.id).toSet();
+    final value = (_instituteId != null && ids.contains(_instituteId))
+        ? _instituteId
+        : null;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: DropdownButtonFormField<String?>(
+        key: ValueKey('institute-${value ?? 'none'}-${active.length}'),
+        isExpanded: true,
+        initialValue: value,
+        decoration: const InputDecoration(
+          labelText: 'Institute',
+          border: OutlineInputBorder(),
+          helperText: 'From Configurations → Institutes',
+        ),
+        items: [
+          const DropdownMenuItem<String?>(
+            value: null,
+            child: Text('Not assigned'),
+          ),
+          for (final inst in active)
+            DropdownMenuItem<String?>(
+              value: inst.id,
+              child: Text('${inst.name} (${inst.code})'),
+            ),
+        ],
+        onChanged: (v) => setState(() => _instituteId = v),
+      ),
+    );
+  }
+
   Widget _organizationDropdown() {
     final orgs = ref.watch(activeOrganizationsProvider).asData?.value ?? const [];
     final labels = orgs
@@ -773,6 +980,8 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
       final notifier = ref.read(profileProvider.notifier);
       final empCode = _empCodeCtrl.text.trim();
       final punchId = _punchIdCtrl.text.trim();
+      final personalEmail = _personalEmailCtrl.text.trim();
+      final instituteEmail = _instituteEmailCtrl.text.trim();
       final rematch = await notifier.updateGeneralInfoDirect({
         'fullName': _fullNameCtrl.text.trim(),
         if (empCode.isNotEmpty) 'employeeCode': empCode,
@@ -795,18 +1004,53 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
         'secondApproverUserId': _secondApproverUserId,
         'thirdApproverUserId': _thirdApproverUserId,
         'weeklyOffDays': _weeklyOffDays.toList()..sort(),
+        'instituteId': _instituteId,
       });
-      final abbr = generateAbbreviation(_fullNameCtrl.text.trim());
+      final abbr = _abbreviationCtrl.text.trim().isNotEmpty
+          ? _abbreviationCtrl.text.trim()
+          : generateAbbreviation(_fullNameCtrl.text.trim());
       if (abbr.isNotEmpty && abbr != (widget.profile.abbreviation ?? '')) {
         await notifier.updateEmployeeAbbreviation(abbr);
       }
+
+      final prevPositionId = widget.profile.position?.id;
+      if (_positionDesignationId != prevPositionId) {
+        await ref.read(adminRepositoryProvider).assignPosition(
+              widget.profile.id,
+              _positionDesignationId,
+            );
+      }
+
+      // Emails live on LOCAL address — keep them editable from General tab.
+      final emailReverify = await notifier.updateAddressInfoDirect('LOCAL', {
+        'personalEmail': personalEmail.isEmpty ? null : personalEmail,
+        'instituteEmail': instituteEmail.isEmpty ? null : instituteEmail,
+      });
+
+      await notifier.refresh();
+
+      final auth = ref.read(authNotifierProvider);
+      final editingSelf = auth.user?.employeeId == widget.profile.id;
+      if (emailReverify && editingSelf) {
+        await ref
+            .read(authNotifierProvider.notifier)
+            .refreshEmailVerificationGate();
+        if (mounted &&
+            ref.read(authNotifierProvider).needsEmailVerification) {
+          context.go('/verify-emails');
+          return;
+        }
+      }
+
       if (mounted) {
         final inserted = rematch?['inserted'];
         final fetched = rematch?['fetched'];
         final msg = inserted is num
             ? 'Saved. Imported $inserted machine punches'
                 '${fetched is num ? ' (from $fetched rows)' : ''} for Punch ID.'
-            : 'General Info updated successfully';
+            : emailReverify
+                ? 'General Info updated. Email changed — employee must verify via OTP.'
+                : 'General Info updated successfully';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(msg)),
         );
@@ -1433,6 +1677,10 @@ class _EditAddressTabState extends ConsumerState<EditAddressTab> {
   bool _sameAsLocal = false;
   bool _seeded = false;
   bool _listenersAttached = false;
+  String _originalPersonalEmail = '';
+  String _originalInstituteEmail = '';
+  bool _originalPersonalVerified = false;
+  bool _originalInstituteVerified = false;
 
   static const _localKeys = [
     'l_flat',
@@ -1445,6 +1693,7 @@ class _EditAddressTabState extends ConsumerState<EditAddressTab> {
     'l_phone',
     'l_mobile',
     'l_email',
+    'l_inst_email',
   ];
 
   static const _permKeys = [
@@ -1505,6 +1754,11 @@ class _EditAddressTabState extends ConsumerState<EditAddressTab> {
     _c('l_phone').text = local?.phoneNo ?? '';
     _c('l_mobile').text = local?.mobileNo ?? '';
     _c('l_email').text = local?.personalEmail ?? '';
+    _c('l_inst_email').text = local?.instituteEmail ?? '';
+    _originalPersonalEmail = local?.personalEmail?.trim() ?? '';
+    _originalInstituteEmail = local?.instituteEmail?.trim() ?? '';
+    _originalPersonalVerified = local?.isPersonalEmailVerified ?? false;
+    _originalInstituteVerified = local?.isInstituteEmailVerified ?? false;
 
     _c('p_flat').text = perm?.flatBlockNo ?? '';
     _c('p_building').text = perm?.buildingSociety ?? '';
@@ -1529,7 +1783,12 @@ class _EditAddressTabState extends ConsumerState<EditAddressTab> {
   void _attachLocalListeners() {
     if (_listenersAttached) return;
     for (final key in _localKeys) {
-      if (key == 'l_email') continue;
+      if (key == 'l_email' || key == 'l_inst_email') {
+        _c(key).addListener(() {
+          if (mounted) setState(() {});
+        });
+        continue;
+      }
       _c(key).addListener(_onLocalChanged);
     }
     _listenersAttached = true;
@@ -1584,6 +1843,7 @@ class _EditAddressTabState extends ConsumerState<EditAddressTab> {
     'phoneNo': _optional(_t('l_phone')),
     'mobileNo': _optional(_t('l_mobile')),
     'personalEmail': _optional(_t('l_email')),
+    'instituteEmail': _optional(_t('l_inst_email')),
   };
 
   Map<String, dynamic> _permanentPayload() {
@@ -1619,6 +1879,28 @@ class _EditAddressTabState extends ConsumerState<EditAddressTab> {
           fontWeight: FontWeight.w700,
           letterSpacing: 1.1,
           color: AppColors.textSecondary,
+        ),
+      ),
+    );
+  }
+
+  Widget _addressEmailStatusRow({
+    required String currentText,
+    required String originalText,
+    required bool originallyVerified,
+  }) {
+    final trimmed = currentText.trim();
+    if (trimmed.isEmpty) return const SizedBox.shrink();
+    final changed =
+        trimmed.toLowerCase() != originalText.trim().toLowerCase();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: emailVerificationStatusChip(
+          context,
+          verified: originallyVerified && !changed,
+          pendingChange: changed,
         ),
       ),
     );
@@ -1710,7 +1992,25 @@ class _EditAddressTabState extends ConsumerState<EditAddressTab> {
           _buildTextField('Country', _c('l_country')),
           _buildTextField('Phone', _c('l_phone')),
           _buildTextField('Mobile', _c('l_mobile')),
-          _buildTextField('Personal Email', _c('l_email')),
+          _buildTextField('Personal Email (Gmail)', _c('l_email')),
+          _addressEmailStatusRow(
+            currentText: _t('l_email'),
+            originalText: _originalPersonalEmail,
+            originallyVerified: _originalPersonalVerified,
+          ),
+          _buildTextField('Institutional Email', _c('l_inst_email')),
+          _addressEmailStatusRow(
+            currentText: _t('l_inst_email'),
+            originalText: _originalInstituteEmail,
+            originallyVerified: _originalInstituteVerified,
+          ),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text(
+              'Changing email marks it Unverified. Employee must OTP-verify on next login.',
+              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+            ),
+          ),
           const Divider(height: 28),
           CheckboxListTile(
             contentPadding: EdgeInsets.zero,
@@ -1777,16 +2077,24 @@ class _EditAddressTabState extends ConsumerState<EditAddressTab> {
 
     try {
       final notifier = ref.read(profileProvider.notifier);
+      final auth = ref.read(authNotifierProvider);
+      final editingSelf = auth.user?.employeeId == widget.profile.id;
+      var emailChanged = false;
+
       if (canDirect) {
-        await notifier.updateAddressInfoDirect('LOCAL', local);
+        final localReverify =
+            await notifier.updateAddressInfoDirect('LOCAL', local);
         await notifier.updateAddressInfoDirect('PERMANENT', permanent);
+        emailChanged = localReverify;
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                widget.isPrivileged
-                    ? 'Address details updated directly'
-                    : 'Address saved. Later edits will need Admin/HR approval.',
+                emailChanged && editingSelf
+                    ? 'Address updated. Please verify your new email address.'
+                    : widget.isPrivileged
+                        ? 'Address details updated directly'
+                        : 'Address saved. Later edits will need Admin/HR approval.',
               ),
             ),
           );
@@ -1800,10 +2108,21 @@ class _EditAddressTabState extends ConsumerState<EditAddressTab> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
-                'Address change request submitted for Admin/HR approval. Changes apply only after approval.',
+                'Address change request submitted for Admin/HR approval. '
+                'If the email changes, you must verify it after approval.',
               ),
             ),
           );
+        }
+      }
+
+      if (emailChanged && editingSelf && mounted) {
+        await ref
+            .read(authNotifierProvider.notifier)
+            .refreshEmailVerificationGate();
+        if (mounted &&
+            ref.read(authNotifierProvider).needsEmailVerification) {
+          context.go('/verify-emails');
         }
       }
     } catch (e) {

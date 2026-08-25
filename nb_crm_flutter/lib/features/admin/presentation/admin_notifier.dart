@@ -106,9 +106,10 @@ class WorkforceListNotifier extends AsyncNotifier<Map<String, dynamic>> {
     Map<String, dynamic> data,
   ) async {
     final created = await ref.read(adminRepositoryProvider).createEmployee(data);
+    // Keep the full directory visible (don't filter to the new hire only).
+    ref.read(workforceFilterProvider.notifier).setSearch('');
+    ref.read(workforceFilterProvider.notifier).setPage(0);
     ref.invalidateSelf();
-    final name = created.profile.generalInfo?.fullName.trim() ?? '';
-    ref.read(workforceFilterProvider.notifier).setSearch(name);
     return created;
   }
 }

@@ -105,9 +105,34 @@ function summarizeChanges(
 async function applyAddress(employeeId: number, addressType: 'LOCAL' | 'PERMANENT', raw: Record<string, unknown>) {
   const filtered = pickAllowed(raw, ADDRESS_ALLOWED);
   if (Object.keys(filtered).length === 0) return;
+
+  const existing = await prisma.employeeAddress.findUnique({
+    where: { employeeId_addressType: { employeeId, addressType } },
+  });
+
+  const nextPersonal =
+    filtered.personalEmail !== undefined
+      ? ((filtered.personalEmail as string | null) ?? null)
+      : existing?.personalEmail ?? null;
+  const nextInstitute =
+    filtered.instituteEmail !== undefined
+      ? ((filtered.instituteEmail as string | null) ?? null)
+      : existing?.instituteEmail ?? null;
+
+  const personalChanged =
+    addressType === 'LOCAL' &&
+    (existing?.personalEmail ?? null)?.toLowerCase() !== (nextPersonal ?? null)?.toLowerCase();
+  const instituteChanged =
+    addressType === 'LOCAL' &&
+    (existing?.instituteEmail ?? null)?.toLowerCase() !== (nextInstitute ?? null)?.toLowerCase();
+
   await prisma.employeeAddress.upsert({
     where: { employeeId_addressType: { employeeId, addressType } },
-    update: filtered as any,
+    update: {
+      ...(filtered as any),
+      ...(personalChanged ? { personalEmailVerifiedAt: null } : {}),
+      ...(instituteChanged ? { instituteEmailVerifiedAt: null } : {}),
+    },
     create: {
       employeeId,
       addressType,

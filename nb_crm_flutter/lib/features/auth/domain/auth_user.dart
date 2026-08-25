@@ -49,19 +49,51 @@ class AuthUser {
       };
 }
 
+class PendingEmail {
+  const PendingEmail({
+    required this.kind,
+    required this.email,
+    required this.verified,
+    this.cooldownSeconds = 0,
+  });
+
+  final String kind; // personal | institute
+  final String email;
+  final bool verified;
+  final int cooldownSeconds;
+
+  String get label =>
+      kind == 'institute' ? 'Institutional email' : 'Personal email';
+
+  factory PendingEmail.fromJson(Map<String, dynamic> json) {
+    return PendingEmail(
+      kind: json['kind']?.toString() ?? 'personal',
+      email: json['email']?.toString() ?? '',
+      verified: json['verified'] == true,
+      cooldownSeconds: json['cooldownSeconds'] is int
+          ? json['cooldownSeconds'] as int
+          : int.tryParse('${json['cooldownSeconds'] ?? 0}') ?? 0,
+    );
+  }
+}
+
 /// Full login payload inside `{ success, data }`.
 class LoginResult {
   const LoginResult({
     required this.token,
     required this.isFirstLogin,
+    required this.needsEmailVerification,
     required this.user,
     required this.permissions,
+    this.pendingEmails = const [],
   });
 
   final String token;
   final bool isFirstLogin;
+  final bool needsEmailVerification;
   final AuthUser user;
   final Map<String, List<String>> permissions;
+  final List<PendingEmail> pendingEmails;
 
   factory LoginResult.fromJson(Map<String, dynamic> json) {
     final permsRaw = json['permissions'];
@@ -76,15 +108,27 @@ class LoginResult {
     }
 
     final userMap = json['user'];
-    if (userMap is! Map<String, dynamic>) {
+    if (userMap is! Map) {
       throw const FormatException('Login response missing user object');
+    }
+
+    final pendingRaw = json['pendingEmails'];
+    final pending = <PendingEmail>[];
+    if (pendingRaw is List) {
+      for (final item in pendingRaw) {
+        if (item is Map) {
+          pending.add(PendingEmail.fromJson(Map<String, dynamic>.from(item)));
+        }
+      }
     }
 
     return LoginResult(
       token: json['token'] as String? ?? '',
       isFirstLogin: json['isFirstLogin'] == true,
-      user: AuthUser.fromJson(userMap),
+      needsEmailVerification: json['needsEmailVerification'] == true,
+      user: AuthUser.fromJson(Map<String, dynamic>.from(userMap)),
       permissions: permissions,
+      pendingEmails: pending,
     );
   }
 }

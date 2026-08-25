@@ -481,6 +481,8 @@ class AddressInfo {
   final String? intercomNo;
   final String? personalEmail;
   final String? instituteEmail;
+  final DateTime? personalEmailVerifiedAt;
+  final DateTime? instituteEmailVerifiedAt;
   final String? url;
 
   const AddressInfo({
@@ -499,11 +501,17 @@ class AddressInfo {
     this.intercomNo,
     this.personalEmail,
     this.instituteEmail,
+    this.personalEmailVerifiedAt,
+    this.instituteEmailVerifiedAt,
     this.url,
   });
 
   factory AddressInfo.fromJson(Map<String, dynamic> json) {
     final rawType = (json['addressType'] ?? json['address_type'] ?? 'LOCAL').toString();
+    DateTime? parseDt(Object? v) {
+      if (v == null) return null;
+      return DateTime.tryParse(v.toString());
+    }
     return AddressInfo(
       id: json['id']?.toString() ?? '',
       employeeId: json['employeeId'] is int
@@ -522,6 +530,12 @@ class AddressInfo {
       intercomNo: json['intercomNo'] as String? ?? json['intercom_no'] as String?,
       personalEmail: json['personalEmail'] as String? ?? json['personal_email'] as String?,
       instituteEmail: json['instituteEmail'] as String? ?? json['institute_email'] as String?,
+      personalEmailVerifiedAt: parseDt(
+        json['personalEmailVerifiedAt'] ?? json['personal_email_verified_at'],
+      ),
+      instituteEmailVerifiedAt: parseDt(
+        json['instituteEmailVerifiedAt'] ?? json['institute_email_verified_at'],
+      ),
       url: json['url'] as String?,
     );
   }
@@ -542,8 +556,13 @@ class AddressInfo {
         'intercomNo': intercomNo,
         'personalEmail': personalEmail,
         'instituteEmail': instituteEmail,
+        'personalEmailVerifiedAt': personalEmailVerifiedAt?.toIso8601String(),
+        'instituteEmailVerifiedAt': instituteEmailVerifiedAt?.toIso8601String(),
         'url': url,
       };
+
+  bool get isPersonalEmailVerified => personalEmailVerifiedAt != null;
+  bool get isInstituteEmailVerified => instituteEmailVerifiedAt != null;
 }
 
 class OtherInfo {

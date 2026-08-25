@@ -1,25 +1,124 @@
-import nodemailer from 'nodemailer';
-import { v4 as uuidv4 } from 'uuid';
-import { env } from '../../config/env';
+import { prisma } from '../../config/prisma';
 import { getRedisClient } from '../../config/redis';
+import { isSmtpConfigured, sendOtpEmail } from '../../utils/mailer';
 
 const OTP_EXPIRY_SECONDS = 300; // 5 minutes
-const OTP_LENGTH = 6;
+const OTP_RESEND_COOLDOWN_SECONDS = 120; // 2 minutes
+const MAX_VERIFY_ATTEMPTS = 3;
+
+export type PendingEmailKind = 'personal' | 'institute';
+
+export type PendingEmail = {
+  kind: PendingEmailKind;
+  email: string;
+  verified: boolean;
+};
+
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
 
 function generateOtp(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
 function getOtpKey(email: string): string {
-  return `otp:${email.toLowerCase()}`;
+  return `otp:${normalizeEmail(email)}`;
+}
+
+function getCooldownKey(email: string): string {
+  return `otp_cooldown:${normalizeEmail(email)}`;
+}
+
+function httpError(message: string, status: number): Error & { status: number } {
+  const err = new Error(message) as Error & { status: number };
+  err.status = status;
+  return err;
+}
+
+async function getLocalAddress(employeeId: number) {
+  return prisma.employeeAddress.findUnique({
+    where: {
+      employeeId_addressType: { employeeId, addressType: 'LOCAL' },
+    },
+  });
 }
 
 export const otpService = {
-  async sendOtp(email: string, userId: string): Promise<void> {
+  async getEmailVerificationStatus(userId: string, employeeId: number | null) {
+    if (employeeId == null) {
+      return {
+        needsEmailVerification: false,
+        emails: [] as PendingEmail[],
+      };
+    }
+
+    const addr = await getLocalAddress(employeeId);
+    const emails: PendingEmail[] = [];
+
+    const personal = addr?.personalEmail?.trim();
+    if (personal) {
+      emails.push({
+        kind: 'personal',
+        email: personal,
+        verified: !!addr?.personalEmailVerifiedAt,
+      });
+    }
+
+    const institute = addr?.instituteEmail?.trim();
+    if (institute) {
+      emails.push({
+        kind: 'institute',
+        email: institute,
+        verified: !!addr?.instituteEmailVerifiedAt,
+      });
+    }
+
+    const needsEmailVerification = emails.some((e) => !e.verified);
+    return { needsEmailVerification, emails };
+  },
+
+  /** True when employee must finish OTP before using the app (after first password change). */
+  async needsEmailVerification(userId: string, employeeId: number | null, isFirstLogin: boolean) {
+    if (isFirstLogin) return false;
+    const status = await this.getEmailVerificationStatus(userId, employeeId);
+    return status.needsEmailVerification;
+  },
+
+  async assertOwnsEmail(employeeId: number | null, email: string): Promise<PendingEmailKind> {
+    if (employeeId == null) {
+      throw httpError('Position accounts do not have employee emails to verify', 400);
+    }
+    const addr = await getLocalAddress(employeeId);
+    const target = normalizeEmail(email);
+    if (addr?.personalEmail && normalizeEmail(addr.personalEmail) === target) {
+      return 'personal';
+    }
+    if (addr?.instituteEmail && normalizeEmail(addr.instituteEmail) === target) {
+      return 'institute';
+    }
+    throw httpError('You can only verify your own personal or institutional email', 403);
+  },
+
+  async sendOtp(email: string, userId: string): Promise<{ cooldownSeconds: number }> {
+    if (!isSmtpConfigured()) {
+      throw httpError(
+        'SMTP is not configured. Set SMTP_HOST, SMTP_USER, and SMTP_PASS in backend/.env',
+        503,
+      );
+    }
+
     const redis = getRedisClient();
+    const cooldownKey = getCooldownKey(email);
+    const remaining = await redis.ttl(cooldownKey);
+    if (remaining > 0) {
+      throw httpError(
+        `Please wait ${remaining} seconds before requesting a new OTP`,
+        429,
+      );
+    }
+
     const otp = generateOtp();
-    const token = uuidv4();
-    
     const otpData = JSON.stringify({
       otp,
       userId,
@@ -27,98 +126,132 @@ export const otpService = {
       attempts: 0,
     });
 
-    // Store OTP in Redis
     await redis.setEx(getOtpKey(email), OTP_EXPIRY_SECONDS, otpData);
-
-    // Create email transporter
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: env.SMTP_USER,
-        pass: env.SMTP_PASS,
-      },
-    });
-
-    const mailOptions = {
-      from: env.SMTP_FROM || 'noreply@gandhinagaruni.ac.in',
-      to: email,
-      subject: 'HRMS Email Verification - One Time Password',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <div style="background: linear-gradient(135deg, #1d3459 0%, #2a4a7f 100%); padding: 30px; text-align: center;">
-            <h1 style="color: white; margin: 0; font-size: 24px;">Gandhinagar University HRMS</h1>
-            <p style="color: rgba(255,255,255,0.8); margin: 10px 0 0;">Email Verification</p>
-          </div>
-          <div style="padding: 30px; background: #f8fafc;">
-            <p style="font-size: 16px; color: #333;">Hello,</p>
-            <p style="font-size: 16px; color: #333;">Your one-time password (OTP) for email verification is:</p>
-            <div style="background: white; border: 2px dashed #1d3459; border-radius: 8px; padding: 20px; text-align: center; margin: 20px 0;">
-              <span style="font-size: 36px; font-weight: bold; color: #1d3459; letter-spacing: 8px;">${otp}</span>
-            </div>
-            <p style="font-size: 14px; color: #666;">This OTP is valid for <strong>5 minutes</strong>. Please do not share this code with anyone.</p>
-            <p style="font-size: 12px; color: #999; margin-top: 20px;">If you did not request this OTP, please ignore this email.</p>
-          </div>
-          <div style="padding: 20px; text-align: center; color: #999; font-size: 12px;">
-            <p>Gandhinagar University HRMS System</p>
-            <p>This is an automated message. Please do not reply.</p>
-          </div>
-        </div>
-      `,
-    };
+    await redis.setEx(cooldownKey, OTP_RESEND_COOLDOWN_SECONDS, '1');
 
     try {
-      await transporter.sendMail(mailOptions);
+      await sendOtpEmail(email, otp);
     } catch (err: any) {
+      await redis.del(getOtpKey(email));
+      await redis.del(cooldownKey);
+      if (err?.status) throw err;
       console.error('Failed to send OTP email:', err);
-      // If email fails, still keep the OTP in Redis for testing
-      // In production, you'd want to handle this differently
-      if (env.NODE_ENV === 'production') {
-        throw new Error('Failed to send verification email');
-      }
+      throw httpError('Failed to send verification email', 502);
     }
+
+    return { cooldownSeconds: OTP_RESEND_COOLDOWN_SECONDS };
   },
 
-  async verifyOtp(email: string, otp: string, userId: string): Promise<boolean> {
+  async verifyOtp(
+    email: string,
+    otp: string,
+    userId: string,
+    employeeId: number | null,
+  ): Promise<{ verified: true; kind: PendingEmailKind; needsEmailVerification: boolean }> {
+    const kind = await this.assertOwnsEmail(employeeId, email);
     const redis = getRedisClient();
     const key = getOtpKey(email);
-    
     const storedData = await redis.get(key);
-    
+
     if (!storedData) {
-      return false;
+      throw httpError('Invalid or expired OTP. Please request a new code.', 400);
     }
 
-    const data = JSON.parse(storedData);
-    
-    // Check if OTP matches and user matches
-    if (data.otp !== otp) {
-      // Increment attempts
-      data.attempts += 1;
-      if (data.attempts >= 3) {
-        // Too many failed attempts, delete the OTP
-        await redis.del(key);
-        throw new Error('Too many failed attempts. Please request a new OTP.');
-      }
-      await redis.setEx(key, OTP_EXPIRY_SECONDS, JSON.stringify(data));
-      return false;
-    }
+    const data = JSON.parse(storedData) as {
+      otp: string;
+      userId: string;
+      attempts: number;
+    };
 
     if (data.userId !== userId) {
-      return false;
+      throw httpError('Invalid or expired OTP. Please request a new code.', 400);
     }
 
-    // Mark email as verified in Redis (longer expiry or permanent)
-    await redis.set(`verified:${email.toLowerCase()}`, userId, { EX: 86400 * 30 }); // 30 days
-    
-    // Delete the used OTP
+    if (data.otp !== otp) {
+      data.attempts += 1;
+      const left = MAX_VERIFY_ATTEMPTS - data.attempts;
+      if (data.attempts >= MAX_VERIFY_ATTEMPTS) {
+        await redis.del(key);
+        throw httpError(
+          'Too many failed attempts. Please wait and request a new OTP.',
+          400,
+        );
+      }
+      await redis.setEx(key, OTP_EXPIRY_SECONDS, JSON.stringify(data));
+      throw httpError(
+        `Incorrect OTP. ${left} attempt${left === 1 ? '' : 's'} remaining.`,
+        400,
+      );
+    }
+
+    if (employeeId == null) {
+      throw httpError('No employee profile linked to this account', 400);
+    }
+
+    const field =
+      kind === 'personal'
+        ? { personalEmailVerifiedAt: new Date() }
+        : { instituteEmailVerifiedAt: new Date() };
+
+    await prisma.employeeAddress.update({
+      where: {
+        employeeId_addressType: { employeeId, addressType: 'LOCAL' },
+      },
+      data: field,
+    });
+
     await redis.del(key);
 
-    return true;
+    const status = await this.getEmailVerificationStatus(userId, employeeId);
+    return {
+      verified: true,
+      kind,
+      needsEmailVerification: status.needsEmailVerification,
+    };
   },
 
-  async isEmailVerified(email: string): Promise<boolean> {
+  /** Resend cooldown remaining for an email (0 if ready). */
+  async getCooldownRemaining(email: string): Promise<number> {
     const redis = getRedisClient();
-    const verified = await redis.get(`verified:${email.toLowerCase()}`);
-    return !!verified;
+    const ttl = await redis.ttl(getCooldownKey(email));
+    return ttl > 0 ? ttl : 0;
+  },
+
+  /**
+   * HR/Admin create-employee wizard: validate OTP without writing employee flags.
+   * Still enforces 3 failed attempts then invalidates the code.
+   */
+  async verifyOtpCodeOnly(email: string, otp: string, userId: string): Promise<void> {
+    const redis = getRedisClient();
+    const key = getOtpKey(email);
+    const storedData = await redis.get(key);
+    if (!storedData) {
+      throw httpError('Invalid or expired OTP. Please request a new code.', 400);
+    }
+    const data = JSON.parse(storedData) as {
+      otp: string;
+      userId: string;
+      attempts: number;
+    };
+    if (data.userId !== userId) {
+      throw httpError('Invalid or expired OTP. Please request a new code.', 400);
+    }
+    if (data.otp !== otp) {
+      data.attempts += 1;
+      if (data.attempts >= MAX_VERIFY_ATTEMPTS) {
+        await redis.del(key);
+        throw httpError(
+          'Too many failed attempts. Please wait and request a new OTP.',
+          400,
+        );
+      }
+      await redis.setEx(key, OTP_EXPIRY_SECONDS, JSON.stringify(data));
+      const left = MAX_VERIFY_ATTEMPTS - data.attempts;
+      throw httpError(
+        `Incorrect OTP. ${left} attempt${left === 1 ? '' : 's'} remaining.`,
+        400,
+      );
+    }
+    await redis.del(key);
   },
 };

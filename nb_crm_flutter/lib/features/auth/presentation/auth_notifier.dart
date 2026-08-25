@@ -16,6 +16,7 @@ class AuthState {
     this.user,
     this.permissions = const <String, List<String>>{},
     this.isFirstLogin = false,
+    this.needsEmailVerification = false,
     this.errorMessage,
     this.infoMessage,
     this.isSubmitting = false,
@@ -36,6 +37,7 @@ class AuthState {
   final AuthUser? user;
   final Map<String, List<String>> permissions;
   final bool isFirstLogin;
+  final bool needsEmailVerification;
   final String? errorMessage;
   final String? infoMessage;
   final bool isSubmitting;
@@ -47,6 +49,7 @@ class AuthState {
     AuthUser? user,
     Map<String, List<String>>? permissions,
     bool? isFirstLogin,
+    bool? needsEmailVerification,
     String? errorMessage,
     bool clearError = false,
     String? infoMessage,
@@ -58,6 +61,8 @@ class AuthState {
       user: user ?? this.user,
       permissions: permissions ?? this.permissions,
       isFirstLogin: isFirstLogin ?? this.isFirstLogin,
+      needsEmailVerification:
+          needsEmailVerification ?? this.needsEmailVerification,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       infoMessage: clearInfo ? null : (infoMessage ?? this.infoMessage),
       isSubmitting: isSubmitting ?? this.isSubmitting,
@@ -86,11 +91,32 @@ class AuthNotifier extends Notifier<AuthState> {
   /// Polls auth/me so a displaced device is kicked even when idle.
   void _startSessionWatch() {
     _stopSessionWatch();
-    _sessionWatch = Timer.periodic(const Duration(seconds: 25), (_) async {
+    _sessionWatch = Timer.periodic(const Duration(seconds: 15), (_) async {
       if (state.status != AuthStatus.authenticated) return;
       try {
         final dio = ref.read(dioClientProvider);
-        await dio.dio.get('auth/me');
+        final me = await dio.getEnvelope<Map<String, dynamic>>(
+          'auth/me',
+          parse: (raw) {
+            if (raw is Map) return Map<String, dynamic>.from(raw);
+            return <String, dynamic>{};
+          },
+        );
+        final needs = me['needsEmailVerification'] == true;
+        if (needs != state.needsEmailVerification && !state.isFirstLogin) {
+          state = state.copyWith(needsEmailVerification: needs);
+          final repo = ref.read(authRepositoryProvider);
+          final token = await ref.read(secureStorageProvider).readToken();
+          if (token != null && state.user != null) {
+            await repo.persistSession(
+              token: token,
+              user: state.user!,
+              permissions: state.permissions,
+              isFirstLogin: state.isFirstLogin,
+              needsEmailVerification: needs,
+            );
+          }
+        }
       } catch (_) {
         // 401 is handled by UnauthorizedGate → _handleUnauthorized.
       }
@@ -109,8 +135,27 @@ class AuthNotifier extends Notifier<AuthState> {
       user: restored.user,
       permissions: restored.permissions,
       isFirstLogin: restored.isFirstLogin,
+      needsEmailVerification: restored.needsEmailVerification,
     );
     _startSessionWatch();
+    // Refresh gate from server (emails may have been verified elsewhere).
+    if (!restored.isFirstLogin) {
+      try {
+        final status = await repo.fetchEmailVerificationStatus();
+        if (status.needsEmailVerification != restored.needsEmailVerification) {
+          state = state.copyWith(
+            needsEmailVerification: status.needsEmailVerification,
+          );
+          await repo.persistSession(
+            token: restored.token,
+            user: restored.user,
+            permissions: restored.permissions,
+            isFirstLogin: restored.isFirstLogin,
+            needsEmailVerification: status.needsEmailVerification,
+          );
+        }
+      } catch (_) {}
+    }
     await WebLiveTrackingService.ensureRunning();
   }
 
@@ -153,6 +198,7 @@ class AuthNotifier extends Notifier<AuthState> {
         user: result.user,
         permissions: result.permissions,
         isFirstLogin: result.isFirstLogin,
+        needsEmailVerification: result.needsEmailVerification,
       );
 
       state = AuthState(
@@ -160,6 +206,7 @@ class AuthNotifier extends Notifier<AuthState> {
         user: result.user,
         permissions: result.permissions,
         isFirstLogin: result.isFirstLogin,
+        needsEmailVerification: result.needsEmailVerification,
         isSubmitting: false,
       );
       ref.invalidate(profileProvider);
@@ -202,8 +249,8 @@ class AuthNotifier extends Notifier<AuthState> {
       _stopSessionWatch();
       state = AuthState.unauthenticated(
         infoMessage: message.isNotEmpty
-            ? message
-            : 'Password changed. Please log in again.',
+            ? '$message Then verify your email address(es).'
+            : 'Password changed. Please log in again to verify your email.',
       );
       return true;
     } on ApiException catch (e) {
@@ -216,6 +263,42 @@ class AuthNotifier extends Notifier<AuthState> {
       );
       return false;
     }
+  }
+
+  Future<void> markEmailVerificationComplete() async {
+    if (!state.isAuthenticated || state.user == null) return;
+    final repo = ref.read(authRepositoryProvider);
+    final token = await ref.read(secureStorageProvider).readToken();
+    if (token == null) return;
+    state = state.copyWith(needsEmailVerification: false);
+    await repo.persistSession(
+      token: token,
+      user: state.user!,
+      permissions: state.permissions,
+      isFirstLogin: state.isFirstLogin,
+      needsEmailVerification: false,
+    );
+  }
+
+  Future<void> refreshEmailVerificationGate() async {
+    if (!state.isAuthenticated || state.isFirstLogin) return;
+    final repo = ref.read(authRepositoryProvider);
+    try {
+      final status = await repo.fetchEmailVerificationStatus();
+      state = state.copyWith(
+        needsEmailVerification: status.needsEmailVerification,
+      );
+      final token = await ref.read(secureStorageProvider).readToken();
+      if (token != null && state.user != null) {
+        await repo.persistSession(
+          token: token,
+          user: state.user!,
+          permissions: state.permissions,
+          isFirstLogin: state.isFirstLogin,
+          needsEmailVerification: status.needsEmailVerification,
+        );
+      }
+    } catch (_) {}
   }
 
   Future<void> logout() async {

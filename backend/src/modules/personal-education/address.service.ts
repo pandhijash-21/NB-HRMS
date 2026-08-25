@@ -23,6 +23,19 @@ type AddressInput = {
 
 type AddressPatch = Partial<Omit<AddressInput, 'addressType'>> & { updatedBy?: string | null };
 
+type AddressWriteResult = {
+  created: boolean;
+  address: Awaited<ReturnType<typeof prisma.employeeAddress.create>>;
+  personalEmailChanged: boolean;
+  instituteEmailChanged: boolean;
+  requiresEmailReverification: boolean;
+};
+
+function normEmail(v: string | null | undefined): string | null {
+  const t = v?.trim().toLowerCase();
+  return t ? t : null;
+}
+
 export const addressService = {
   getByType(employeeId: number, addressType: AddressType) {
     return prisma.employeeAddress.findUnique({
@@ -30,7 +43,7 @@ export const addressService = {
     });
   },
 
-  async upsert(employeeId: number, input: AddressInput, req: Request) {
+  async upsert(employeeId: number, input: AddressInput, req: Request): Promise<AddressWriteResult> {
     const existing = await prisma.employeeAddress.findUnique({
       where: { employeeId_addressType: { employeeId, addressType: input.addressType } },
     });
@@ -65,8 +78,26 @@ export const addressService = {
         after: { ...input, addressType: input.addressType },
       });
 
-      return { created: true as const, address: created };
+      const hasEmail =
+        !!normEmail(created.personalEmail) || !!normEmail(created.instituteEmail);
+      return {
+        created: true,
+        address: created,
+        personalEmailChanged: !!normEmail(created.personalEmail),
+        instituteEmailChanged: !!normEmail(created.instituteEmail),
+        requiresEmailReverification:
+          input.addressType === 'LOCAL' && hasEmail,
+      };
     }
+
+    const personalChanged =
+      input.addressType === 'LOCAL' &&
+      input.personalEmail !== undefined &&
+      normEmail(input.personalEmail) !== normEmail(existing.personalEmail);
+    const instituteChanged =
+      input.addressType === 'LOCAL' &&
+      input.instituteEmail !== undefined &&
+      normEmail(input.instituteEmail) !== normEmail(existing.instituteEmail);
 
     const updated = await prisma.employeeAddress.update({
       where: { employeeId_addressType: { employeeId, addressType: input.addressType } },
@@ -85,6 +116,8 @@ export const addressService = {
         instituteEmail: input.instituteEmail ?? undefined,
         url: input.url ?? undefined,
         updatedBy: input.updatedBy ?? req.user?.id ?? undefined,
+        ...(personalChanged ? { personalEmailVerifiedAt: null } : {}),
+        ...(instituteChanged ? { instituteEmailVerifiedAt: null } : {}),
       },
     });
 
@@ -96,14 +129,59 @@ export const addressService = {
       after: { ...existing, ...input },
     });
 
-    return { created: false as const, address: updated };
+    return {
+      created: false,
+      address: updated,
+      personalEmailChanged: personalChanged,
+      instituteEmailChanged: instituteChanged,
+      requiresEmailReverification: personalChanged || instituteChanged,
+    };
   },
 
-  async updateByType(employeeId: number, addressType: AddressType, patch: AddressPatch, req: Request) {
+  async updateByType(
+    employeeId: number,
+    addressType: AddressType,
+    patch: AddressPatch,
+    req: Request,
+  ): Promise<AddressWriteResult | null> {
     const existing = await prisma.employeeAddress.findUnique({
       where: { employeeId_addressType: { employeeId, addressType } },
     });
-    if (!existing) return null;
+
+    // General-tab email edits (and similar) may run before any address row exists.
+    // Create a minimal LOCAL/PERMANENT row instead of 404.
+    if (!existing) {
+      return this.upsert(
+        employeeId,
+        {
+          addressType,
+          flatBlockNo: patch.flatBlockNo ?? null,
+          buildingSociety: patch.buildingSociety ?? null,
+          area: patch.area ?? null,
+          city: patch.city ?? null,
+          state: patch.state ?? null,
+          country: patch.country ?? 'India',
+          zipPostalCode: patch.zipPostalCode ?? null,
+          phoneNo: patch.phoneNo ?? null,
+          mobileNo: patch.mobileNo ?? null,
+          intercomNo: patch.intercomNo ?? null,
+          personalEmail: patch.personalEmail ?? null,
+          instituteEmail: patch.instituteEmail ?? null,
+          url: patch.url ?? null,
+          updatedBy: patch.updatedBy ?? null,
+        },
+        req,
+      );
+    }
+
+    const personalChanged =
+      addressType === 'LOCAL' &&
+      patch.personalEmail !== undefined &&
+      normEmail(patch.personalEmail) !== normEmail(existing.personalEmail);
+    const instituteChanged =
+      addressType === 'LOCAL' &&
+      patch.instituteEmail !== undefined &&
+      normEmail(patch.instituteEmail) !== normEmail(existing.instituteEmail);
 
     const updated = await prisma.employeeAddress.update({
       where: { employeeId_addressType: { employeeId, addressType } },
@@ -122,6 +200,8 @@ export const addressService = {
         instituteEmail: patch.instituteEmail ?? undefined,
         url: patch.url ?? undefined,
         updatedBy: patch.updatedBy ?? req.user?.id ?? undefined,
+        ...(personalChanged ? { personalEmailVerifiedAt: null } : {}),
+        ...(instituteChanged ? { instituteEmailVerifiedAt: null } : {}),
       },
     });
 
@@ -133,7 +213,13 @@ export const addressService = {
       after: { ...existing, ...patch },
     });
 
-    return updated;
+    return {
+      created: false,
+      address: updated,
+      personalEmailChanged: personalChanged,
+      instituteEmailChanged: instituteChanged,
+      requiresEmailReverification: personalChanged || instituteChanged,
+    };
   },
 };
 

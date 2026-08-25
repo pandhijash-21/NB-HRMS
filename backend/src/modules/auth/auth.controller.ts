@@ -60,7 +60,8 @@ export const authController = {
     return res.json(ok(result));
   },
 
-  getMe(req: Request, res: Response) {
-    return res.json(ok(authService.getMe(req.user!)));
+  async getMe(req: Request, res: Response) {
+    const data = await authService.getMe(req.user!);
+    return res.json(ok(data));
   },
 };

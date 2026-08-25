@@ -431,6 +431,9 @@ model EmployeeAddress {
   intercomNo     String? @map("intercom_no") // 203
   personalEmail  String? @map("personal_email") // dspatel2011@gmail.com
   instituteEmail String? @map("institute_email") // dinesh.patel@gandhinagaruni.ac.in
+  /// Set when employee verifies this address via OTP after first password change
+  personalEmailVerifiedAt  DateTime? @map("personal_email_verified_at")
+  instituteEmailVerifiedAt DateTime? @map("institute_email_verified_at")
   url            String? // personal website
 
   updatedAt DateTime @updatedAt @map("updated_at")

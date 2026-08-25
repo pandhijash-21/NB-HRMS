@@ -51,11 +51,18 @@ class ProfileNotifier extends AsyncNotifier<EmployeeProfile> {
   /// Returns rematch summary when Punch ID changed (machine punches imported).
   Future<Map<String, dynamic>?> updateGeneralInfoDirect(Map<String, dynamic> data) async {
     Map<String, dynamic>? rematch;
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
+    final previous = state.asData?.value;
+    try {
       rematch = await _repo.updateGeneralInfo(employeeId, data);
-      return _repo.getProfile(employeeId);
-    });
+      state = AsyncValue.data(await _repo.getProfile(employeeId));
+    } catch (e, st) {
+      if (previous != null) {
+        state = AsyncValue.data(previous);
+      } else {
+        state = AsyncValue.error(e, st);
+      }
+      rethrow;
+    }
     return rematch;
   }
 
@@ -79,12 +86,23 @@ class ProfileNotifier extends AsyncNotifier<EmployeeProfile> {
   }
 
   /// Update address info direct (admin write).
-  Future<void> updateAddressInfoDirect(String type, Map<String, dynamic> data) async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
-      await _repo.updateAddressInfoDirect(employeeId, type, data);
-      return _repo.getProfile(employeeId);
-    });
+  /// Returns true when emails changed and the current user must re-verify.
+  Future<bool> updateAddressInfoDirect(String type, Map<String, dynamic> data) async {
+    var requiresReverify = false;
+    final previous = state.asData?.value;
+    try {
+      requiresReverify = await _repo.updateAddressInfoDirect(employeeId, type, data);
+      state = AsyncValue.data(await _repo.getProfile(employeeId));
+    } catch (e, st) {
+      // Keep last good profile so Edit Profile does not get stuck on an error screen.
+      if (previous != null) {
+        state = AsyncValue.data(previous);
+      } else {
+        state = AsyncValue.error(e, st);
+      }
+      throw e; // ignore: use_rethrow_when_possible — keep typed Object for callers
+    }
+    return requiresReverify;
   }
 
   /// Submit change request for Personal info (self-service).
@@ -205,7 +223,10 @@ class ProfileNotifier extends AsyncNotifier<EmployeeProfile> {
       // is open — that triggers "widget tree was locked" on web.
       if (kebabType == 'marksheet' ||
           kebabType == 'certificate' ||
-          kebabType == 'aadhaar-family') {
+          kebabType == 'aadhaar-family' ||
+          kebabType == 'experience-letter' ||
+          kebabType == 'last-paycheck' ||
+          kebabType == 'recommendation') {
         return url;
       }
 

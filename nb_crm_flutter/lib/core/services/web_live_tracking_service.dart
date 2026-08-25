@@ -128,6 +128,15 @@ class WebLiveTrackingService {
           'lastKnownGapReason': null,
         },
       );
+    } on DioException catch (e) {
+      final status = e.response?.statusCode;
+      if (status == 401) {
+        // Stale / kicked session — stop until PermissionGuard / auth restarts us.
+        AppLogger.tracking.w('Web live ping unauthorized (401) — stopping until re-auth');
+        stop();
+        return;
+      }
+      AppLogger.tracking.w('Web live ping failed: $e');
     } catch (e) {
       AppLogger.tracking.w('Web live ping failed: $e');
     } finally {

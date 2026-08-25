@@ -116,6 +116,8 @@ class UserAccount {
     this.loginBlocked = false,
     this.loginTemporarilyLocked = false,
     this.loginLockedUntil,
+    this.loginLockStage = 0,
+    this.loginFailCount = 0,
   });
 
   final String id;
@@ -132,6 +134,10 @@ class UserAccount {
   final bool loginBlocked;
   final bool loginTemporarilyLocked;
   final DateTime? loginLockedUntil;
+  final int loginLockStage;
+  final int loginFailCount;
+
+  bool get isLoginLocked => loginBlocked || loginTemporarilyLocked;
 
   String get displayName {
     final empName = employee?.fullName;
@@ -182,6 +188,8 @@ class UserAccount {
       loginBlocked: json['loginBlocked'] == true,
       loginTemporarilyLocked: json['loginTemporarilyLocked'] == true,
       loginLockedUntil: _parseDate(json['loginLockedUntil']),
+      loginLockStage: _parseInt(json['loginLockStage']) ?? 0,
+      loginFailCount: _parseInt(json['loginFailCount']) ?? 0,
     );
   }
 }

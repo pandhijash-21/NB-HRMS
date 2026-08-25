@@ -65,7 +65,14 @@ export const addressController = {
     }
 
     const result = await addressService.upsert(employeeId, body.data, req);
-    return res.status(result.created ? 201 : 200).json(ok(result.address));
+    return res.status(result.created ? 201 : 200).json(
+      ok({
+        ...result.address,
+        personalEmailChanged: result.personalEmailChanged,
+        instituteEmailChanged: result.instituteEmailChanged,
+        requiresEmailReverification: result.requiresEmailReverification,
+      }),
+    );
   },
 
   async updateByType(req: Request, res: Response) {
@@ -97,6 +104,13 @@ export const addressController = {
 
     const updated = await addressService.updateByType(employeeId, addressType, body.data, req);
     if (!updated) return res.status(404).json(fail('Address not found'));
-    return res.json(ok(updated));
+    return res.json(
+      ok({
+        ...updated.address,
+        personalEmailChanged: updated.personalEmailChanged,
+        instituteEmailChanged: updated.instituteEmailChanged,
+        requiresEmailReverification: updated.requiresEmailReverification,
+      }),
+    );
   },
 };

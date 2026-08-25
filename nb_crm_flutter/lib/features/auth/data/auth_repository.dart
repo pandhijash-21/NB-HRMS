@@ -53,6 +53,64 @@ class AuthRepository {
     );
   }
 
+  Future<({bool needsEmailVerification, List<PendingEmail> emails})>
+      fetchEmailVerificationStatus() {
+    return _dio.getEnvelope(
+      'otp/status',
+      parse: (raw) {
+        if (raw is! Map) {
+          throw const FormatException('Invalid OTP status payload');
+        }
+        final map = Map<String, dynamic>.from(raw);
+        final list = <PendingEmail>[];
+        final emailsRaw = map['emails'];
+        if (emailsRaw is List) {
+          for (final item in emailsRaw) {
+            if (item is Map) {
+              list.add(PendingEmail.fromJson(Map<String, dynamic>.from(item)));
+            }
+          }
+        }
+        return (
+          needsEmailVerification: map['needsEmailVerification'] == true,
+          emails: list,
+        );
+      },
+    );
+  }
+
+  Future<int> sendEmailOtp(String email) {
+    return _dio.postEnvelope<int>(
+      'otp/send',
+      data: {'email': email},
+      parse: (raw) {
+        if (raw is Map && raw['cooldownSeconds'] is int) {
+          return raw['cooldownSeconds'] as int;
+        }
+        return 120;
+      },
+    );
+  }
+
+  Future<({bool needsEmailVerification})> verifyEmailOtp({
+    required String email,
+    required String otp,
+  }) {
+    return _dio.postEnvelope(
+      'otp/verify',
+      data: {'email': email, 'otp': otp},
+      parse: (raw) {
+        if (raw is! Map) {
+          return (needsEmailVerification: false);
+        }
+        final map = Map<String, dynamic>.from(raw);
+        return (
+          needsEmailVerification: map['needsEmailVerification'] == true,
+        );
+      },
+    );
+  }
+
   Future<void> logoutRemote() async {
     try {
       await _dio.postEnvelope<Map<String, dynamic>>(
@@ -73,19 +131,27 @@ class AuthRepository {
     required AuthUser user,
     required Map<String, List<String>> permissions,
     required bool isFirstLogin,
+    required bool needsEmailVerification,
   }) async {
     await _storage.writeToken(token);
     await _storage.writeSessionJson(
       jsonEncode({
         'isFirstLogin': isFirstLogin,
+        'needsEmailVerification': needsEmailVerification,
         'permissions': permissions,
         'user': user.toJson(),
       }),
     );
   }
 
-  Future<({String token, AuthUser user, Map<String, List<String>> permissions, bool isFirstLogin})?>
-      restoreSession() async {
+  Future<
+      ({
+        String token,
+        AuthUser user,
+        Map<String, List<String>> permissions,
+        bool isFirstLogin,
+        bool needsEmailVerification,
+      })?> restoreSession() async {
     final token = await _storage.readToken();
     final sessionJson = await _storage.readSessionJson();
     if (token == null || token.isEmpty || sessionJson == null) return null;
@@ -109,6 +175,7 @@ class AuthRepository {
         user: AuthUser.fromJson(Map<String, dynamic>.from(userRaw)),
         permissions: permissions,
         isFirstLogin: map['isFirstLogin'] == true,
+        needsEmailVerification: map['needsEmailVerification'] == true,
       );
     } catch (_) {
       await _storage.clearAuth();

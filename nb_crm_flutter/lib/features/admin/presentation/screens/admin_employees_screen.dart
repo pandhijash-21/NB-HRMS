@@ -251,9 +251,23 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminEmployeesScreen> {
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
-                hintText: 'Search by name or code...',
+                hintText: 'Search by name, code, or ID...',
                 hintStyle: TextStyle(color: isDark ? Colors.white30 : const Color(0xFF607D8B).withOpacity(0.6)),
                 prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFFC5A059), size: 20),
+                suffixIcon: filters.search.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: 'Clear search',
+                        icon: Icon(
+                          Icons.clear_rounded,
+                          size: 18,
+                          color: isDark ? Colors.white54 : const Color(0xFF607D8B),
+                        ),
+                        onPressed: () {
+                          _searchController.clear();
+                          ref.read(workforceFilterProvider.notifier).setSearch('');
+                        },
+                      ),
                 filled: true,
                 fillColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
                 border: OutlineInputBorder(
@@ -622,10 +636,7 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminEmployeesScreen> {
       builder: (_) => const _AddEmployeeDialog(),
     ).then((created) {
       if (created is! ({EmployeeProfile profile, String? initialPassword})) return;
-      final name = created.profile.generalInfo?.fullName ?? '';
-      if (name.isNotEmpty) {
-        _searchController.text = name;
-      }
+      _searchController.clear();
       final pwd = created.initialPassword;
       if (!mounted) return;
       if (pwd != null && pwd.isNotEmpty) {

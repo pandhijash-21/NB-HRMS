@@ -11,7 +11,8 @@ function createTransport() {
     secure: env.SMTP_SECURE ?? false,
     auth: {
       user: env.SMTP_USER,
-      pass: env.SMTP_PASS,
+      // Gmail app passwords are often pasted with spaces — strip them.
+      pass: env.SMTP_PASS.replace(/\s+/g, ''),
     },
   });
 }
@@ -66,6 +67,45 @@ export async function sendPasswordResetEmail(
       <p><strong>Temporary Password:</strong> ${tempPassword}</p>
       <p>Please log in and change your password immediately.</p>
       <p>Login at: <a href="${env.FRONTEND_URL}">${env.FRONTEND_URL}</a></p>
+    `,
+  });
+}
+
+/** Returns false when SMTP is not configured. */
+export function isSmtpConfigured(): boolean {
+  return !!(env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASS);
+}
+
+export async function sendOtpEmail(to: string, otp: string): Promise<void> {
+  const t = getTransporter();
+  if (!t) {
+    const err = new Error(
+      'SMTP is not configured. Set SMTP_HOST, SMTP_USER, and SMTP_PASS in backend/.env',
+    ) as Error & { status?: number };
+    err.status = 503;
+    throw err;
+  }
+  if (!to) return;
+
+  await t.sendMail({
+    from: `"NB CRM" <${env.SMTP_FROM ?? env.SMTP_USER}>`,
+    to,
+    subject: 'Email verification code',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background: #1d3459; padding: 24px; text-align: center;">
+          <h1 style="color: white; margin: 0; font-size: 22px;">NB Developer CRM</h1>
+          <p style="color: rgba(255,255,255,0.85); margin: 8px 0 0;">Email verification</p>
+        </div>
+        <div style="padding: 28px; background: #f8fafc;">
+          <p style="font-size: 16px; color: #333;">Your one-time password (OTP) is:</p>
+          <div style="background: white; border: 2px dashed #1d3459; border-radius: 8px; padding: 20px; text-align: center; margin: 20px 0;">
+            <span style="font-size: 36px; font-weight: bold; color: #1d3459; letter-spacing: 8px;">${otp}</span>
+          </div>
+          <p style="font-size: 14px; color: #666;">Valid for <strong>5 minutes</strong>. Do not share this code.</p>
+          <p style="font-size: 12px; color: #999; margin-top: 20px;">If you did not request this, ignore this email.</p>
+        </div>
+      </div>
     `,
   });
 }

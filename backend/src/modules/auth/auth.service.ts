@@ -12,6 +12,7 @@ import {
   clearLoginLock,
   recordLoginFailure,
 } from './loginLock.service';
+import { otpService } from './otp.service';
 
 const SESSION_TTL = 8 * 60 * 60; // 8 hours in seconds
 
@@ -174,9 +175,16 @@ export const authService = {
       data: { lastLoginAt: new Date() },
     });
 
+    // After first password change, gate on unverified personal/institute emails.
+    const emailStatus = user.isFirstLogin
+      ? { needsEmailVerification: false, emails: [] as Awaited<ReturnType<typeof otpService.getEmailVerificationStatus>>['emails'] }
+      : await otpService.getEmailVerificationStatus(user.id, user.employeeId ?? null);
+
     return {
       token,
       isFirstLogin: user.isFirstLogin,
+      needsEmailVerification: emailStatus.needsEmailVerification,
+      pendingEmails: emailStatus.emails.filter((e) => !e.verified),
       permissions,
       exclusiveSession: true,
       user: {
@@ -323,7 +331,11 @@ export const authService = {
     };
   },
 
-  getMe(user: NonNullable<Express.Request['user']>) {
+  async getMe(user: NonNullable<Express.Request['user']>) {
+    const emailStatus = await otpService.getEmailVerificationStatus(
+      user.id,
+      user.employeeId ?? null,
+    );
     return {
       employeeId:  user.employeeId,
       roleId:      user.roleId,
@@ -331,6 +343,8 @@ export const authService = {
       permissions: user.permissions,
       employeeViewScope: user.employeeViewScope ?? 'NONE',
       subOrganization: user.subOrganization ?? null,
+      needsEmailVerification: emailStatus.needsEmailVerification,
+      pendingEmails: emailStatus.emails.filter((e) => !e.verified),
     };
   },
 };

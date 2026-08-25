@@ -15,21 +15,25 @@ class UsersFilterState {
     required this.search,
     required this.status,
     required this.roleId,
+    this.lockedOnly = false,
   });
 
   final String search;
   final String status;
   final String roleId;
+  final bool lockedOnly;
 
   UsersFilterState copyWith({
     String? search,
     String? status,
     String? roleId,
+    bool? lockedOnly,
   }) {
     return UsersFilterState(
       search: search ?? this.search,
       status: status ?? this.status,
       roleId: roleId ?? this.roleId,
+      lockedOnly: lockedOnly ?? this.lockedOnly,
     );
   }
 }
@@ -40,11 +44,13 @@ class UsersFilterNotifier extends Notifier<UsersFilterState> {
         search: '',
         status: 'all',
         roleId: 'all',
+        lockedOnly: false,
       );
 
   void setSearch(String search) => state = state.copyWith(search: search);
   void setStatus(String status) => state = state.copyWith(status: status);
   void setRoleId(String roleId) => state = state.copyWith(roleId: roleId);
+  void setLockedOnly(bool value) => state = state.copyWith(lockedOnly: value);
 }
 
 final usersFilterProvider =
@@ -197,14 +203,14 @@ class RolePermissionsNotifier extends AsyncNotifier<List<ModulePermission>> {
         previous.map((p) {
           if (p.moduleKey != moduleKey) return p;
           return p.copyWith(
-            canRead: data.containsKey('canRead') ? data['canRead'] as bool : null,
-            canWrite: data.containsKey('canWrite') ? data['canWrite'] as bool : null,
+            canRead: data.containsKey('canRead') ? data['canRead'] == true : null,
+            canWrite: data.containsKey('canWrite') ? data['canWrite'] == true : null,
             canApprove:
-                data.containsKey('canApprove') ? data['canApprove'] as bool : null,
+                data.containsKey('canApprove') ? data['canApprove'] == true : null,
             canDelete:
-                data.containsKey('canDelete') ? data['canDelete'] as bool : null,
+                data.containsKey('canDelete') ? data['canDelete'] == true : null,
             canExport:
-                data.containsKey('canExport') ? data['canExport'] as bool : null,
+                data.containsKey('canExport') ? data['canExport'] == true : null,
             employeeViewScope: data.containsKey('employeeViewScope')
                 ? employeeViewScopeFromJson(data['employeeViewScope']?.toString())
                 : null,

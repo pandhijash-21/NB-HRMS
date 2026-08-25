@@ -7,9 +7,21 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// On web, [FlutterSecureStorage] (WebCrypto) can fail to decrypt between
 /// navigations and return null — that made Dio send no Bearer and triggered
 /// a 401 logout. Web uses [SharedPreferences] (localStorage) instead.
+///
+/// Default construction is a process-wide singleton so every caller (Dio,
+/// web live tracking, auth) shares the same token cache. Otherwise a second
+/// instance can keep a stale JWT after re-login and spam 401s on tracking.
 class SecureStorageService {
-  SecureStorageService({FlutterSecureStorage? storage})
-      : _secure = storage ?? const FlutterSecureStorage();
+  factory SecureStorageService({FlutterSecureStorage? storage}) {
+    if (storage != null) {
+      return SecureStorageService._(storage);
+    }
+    return _instance ??= SecureStorageService._(const FlutterSecureStorage());
+  }
+
+  SecureStorageService._(this._secure);
+
+  static SecureStorageService? _instance;
 
   static const _tokenKey = 'access_token';
   static const _sessionKey = 'auth_session_json';

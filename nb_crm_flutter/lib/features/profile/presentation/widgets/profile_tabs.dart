@@ -98,8 +98,18 @@ class GeneralViewTab extends ConsumerWidget {
             title: 'Contact & Access',
             icon: Icons.contact_mail_outlined,
             children: [
-              _buildField(context, 'Personal Email (Gmail)', local?.personalEmail ?? '—'),
-              _buildField(context, 'Institutional Email', local?.instituteEmail ?? '—'),
+              _buildEmailField(
+                context,
+                'Personal Email (Gmail)',
+                local?.personalEmail,
+                verified: local?.isPersonalEmailVerified ?? false,
+              ),
+              _buildEmailField(
+                context,
+                'Institutional Email',
+                local?.instituteEmail,
+                verified: local?.isInstituteEmailVerified ?? false,
+              ),
               _buildField(
                 context,
                 'Position (Permissions)',
@@ -441,7 +451,20 @@ class AddressViewTab extends StatelessWidget {
             _buildFieldDetail(context, 'Country', addr?.country ?? 'India'),
             _buildFieldDetail(context, 'Phone', addr?.phoneNo),
             _buildFieldDetail(context, 'Mobile', addr?.mobileNo),
-            if (isLocal) _buildFieldDetail(context, 'Personal Email', addr?.personalEmail),
+            if (isLocal) ...[
+              _buildFieldDetailWithStatus(
+                context,
+                'Personal Email',
+                addr?.personalEmail,
+                verified: addr?.isPersonalEmailVerified ?? false,
+              ),
+              _buildFieldDetailWithStatus(
+                context,
+                'Institutional Email',
+                addr?.instituteEmail,
+                verified: addr?.isInstituteEmailVerified ?? false,
+              ),
+            ],
           ],
         ),
       ),
@@ -478,6 +501,61 @@ class AddressViewTab extends StatelessWidget {
                 fontWeight: display == '—' ? FontWeight.w500 : FontWeight.w700,
                 fontStyle: display == '—' ? FontStyle.italic : FontStyle.normal,
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFieldDetailWithStatus(
+    BuildContext context,
+    String label,
+    String? value, {
+    required bool verified,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final display = (value == null || value.trim().isEmpty) ? '—' : value;
+    final hasEmail = display != '—';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 140,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.white60 : const Color(0xFF607D8B),
+                fontSize: 12,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  display,
+                  style: TextStyle(
+                    color: !hasEmail
+                        ? (isDark ? Colors.white30 : const Color(0xFF607D8B))
+                        : (isDark ? Colors.white : const Color(0xFF212F3D)),
+                    fontSize: 13,
+                    fontWeight: !hasEmail ? FontWeight.w500 : FontWeight.w700,
+                    fontStyle: !hasEmail ? FontStyle.italic : FontStyle.normal,
+                  ),
+                ),
+                if (hasEmail) ...[
+                  const SizedBox(height: 4),
+                  emailVerificationStatusChip(
+                    context,
+                    verified: verified,
+                  ),
+                ],
+              ],
             ),
           ),
         ],
@@ -1919,6 +1997,90 @@ Widget _buildField(BuildContext context, String label, String value) {
             fontWeight: FontWeight.w700,
             color: isDark ? Colors.white : const Color(0xFF212F3D),
             fontSize: 14,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+Widget _buildEmailField(
+  BuildContext context,
+  String label,
+  String? email, {
+  required bool verified,
+}) {
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+  final display = (email == null || email.trim().isEmpty) ? '—' : email.trim();
+  final hasEmail = display != '—';
+  return SizedBox(
+    width: 280,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            color: isDark ? Colors.white60 : const Color(0xFF607D8B),
+            fontSize: 12,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          display,
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            color: isDark ? Colors.white : const Color(0xFF212F3D),
+            fontSize: 14,
+          ),
+        ),
+        if (hasEmail) ...[
+          const SizedBox(height: 6),
+          emailVerificationStatusChip(context, verified: verified),
+        ],
+      ],
+    ),
+  );
+}
+
+/// Shared verified / unverified chip for email fields (view + edit).
+Widget emailVerificationStatusChip(
+  BuildContext context, {
+  required bool verified,
+  bool pendingChange = false,
+}) {
+  final label = pendingChange
+      ? 'Will be Unverified'
+      : (verified ? 'Verified' : 'Unverified');
+  final color = pendingChange
+      ? Colors.orange
+      : (verified ? Colors.green : Colors.orange);
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(6),
+      border: Border.all(color: color, width: 1),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          verified && !pendingChange
+              ? Icons.verified_outlined
+              : Icons.mark_email_unread_outlined,
+          size: 14,
+          color: color,
+        ),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w800,
+            color: color,
+            letterSpacing: 0.3,
           ),
         ),
       ],

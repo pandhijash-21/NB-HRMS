@@ -9,6 +9,7 @@ import '../../features/auth/presentation/auth_notifier.dart';
 import '../../features/auth/presentation/auth_providers.dart';
 import '../../features/auth/presentation/change_password_screen.dart';
 import '../../features/auth/presentation/login_screen.dart';
+import '../../features/auth/presentation/verify_emails_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
 import '../../features/profile/presentation/screens/profile_edit_screen.dart';
@@ -94,7 +95,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
   final shellNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'shellNav');
 
   // Bump when route table changes so hot-restart rebuilds GoRouter cleanly.
-  const routerRevision = 10;
+  const routerRevision = 11;
 
   return GoRouter(
     navigatorKey: rootNavigatorKey,
@@ -115,6 +116,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
 
       final loggingIn = loc == '/login';
       final changingPassword = loc == '/change-password';
+      final verifyingEmails = loc == '/verify-emails';
       final trackingSetup = loc == '/tracking/setup';
       final authenticated = auth.isAuthenticated;
 
@@ -123,7 +125,9 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         next = loggingIn ? null : '/login';
       } else if (auth.isFirstLogin) {
         next = changingPassword ? null : '/change-password';
-      } else if (changingPassword) {
+      } else if (auth.needsEmailVerification) {
+        next = verifyingEmails ? null : '/verify-emails';
+      } else if (changingPassword || verifyingEmails) {
         next = '/home';
       } else if (loggingIn) {
         next = '/home';
@@ -142,6 +146,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/change-password',
         builder: (context, state) => const ChangePasswordScreen(),
+      ),
+      GoRoute(
+        path: '/verify-emails',
+        builder: (context, state) => const VerifyEmailsScreen(),
       ),
       GoRoute(
         path: '/tracking/setup',

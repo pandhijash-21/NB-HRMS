@@ -221,7 +221,8 @@ class ProfileRepository {
   }
 
   /// Direct update employee address info directly via `PATCH employees/{id}/address/{type}`.
-  Future<void> updateAddressInfoDirect(
+  /// Returns whether the signed-in employee must re-verify emails after this write.
+  Future<bool> updateAddressInfoDirect(
     int employeeId,
     String type,
     Map<String, dynamic> data,
@@ -231,7 +232,12 @@ class ProfileRepository {
         'employees/$employeeId/address/$type',
         data: data,
       );
-      _unwrapResponse(response);
+      final body = _unwrapResponseData(response);
+      final payload = body['data'];
+      if (payload is Map && payload['requiresEmailReverification'] == true) {
+        return true;
+      }
+      return false;
     } on DioException catch (e) {
       throw _mapDioException(e);
     }

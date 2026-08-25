@@ -84,6 +84,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final session = ref.read(authNotifierProvider);
     if (session.isFirstLogin) {
       context.go('/change-password');
+    } else if (session.needsEmailVerification) {
+      context.go('/verify-emails');
     } else {
       context.go('/home');
     }

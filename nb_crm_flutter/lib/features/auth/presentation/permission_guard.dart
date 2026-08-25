@@ -152,7 +152,10 @@ class _PermissionGuardState extends State<PermissionGuard> {
     if (!mounted) return;
     if (prefs.getBool('hasSeenAutostartOnboarding') == true) return;
     final loc = GoRouterState.of(context).matchedLocation;
-    if (loc == '/tracking/setup' || loc == '/login' || loc == '/change-password') {
+    if (loc == '/tracking/setup' ||
+        loc == '/login' ||
+        loc == '/change-password' ||
+        loc == '/verify-emails') {
       return;
     }
     if (!mounted) return;

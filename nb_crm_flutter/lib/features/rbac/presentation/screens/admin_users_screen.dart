@@ -123,7 +123,10 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminUsersScreen> {
             Expanded(
               child: usersAsync.when(
                 data: (users) {
-                  if (users.isEmpty) {
+                  final visible = filters.lockedOnly
+                      ? users.where((u) => u.isLoginLocked).toList()
+                      : users;
+                  if (visible.isEmpty) {
                     return Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -135,7 +138,9 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminUsersScreen> {
                           ),
                           const SizedBox(height: 16),
                           Text(
-                            'No users found matching filters.',
+                            filters.lockedOnly
+                                ? 'No locked / blocked logins right now.'
+                                : 'No users found matching filters.',
                             style: TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w600,
@@ -148,14 +153,14 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminUsersScreen> {
                   }
                   return ListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-                    itemCount: users.length,
+                    itemCount: visible.length,
                     itemBuilder: (context, index) => _UserCard(
-                      user: users[index],
+                      user: visible[index],
                       isAdmin: isAdminRole(auth.user?.role),
-                      onCredentials: () => _showCredentialsDialog(context, users[index]),
-                      onEdit: () => _showEditUserDialog(context, users[index], rolesAsync),
-                      onDelete: () => _confirmDelete(context, users[index]),
-                      onUnblock: () => _unblockLogin(context, users[index]),
+                      onCredentials: () => _showCredentialsDialog(context, visible[index]),
+                      onEdit: () => _showEditUserDialog(context, visible[index], rolesAsync),
+                      onDelete: () => _confirmDelete(context, visible[index]),
+                      onUnblock: () => _unblockLogin(context, visible[index]),
                     ),
                   );
                 },
@@ -307,6 +312,27 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminUsersScreen> {
             onChanged: (v) {
               if (v != null) ref.read(usersFilterProvider.notifier).setRoleId(v);
             },
+          ),
+          const SizedBox(width: 12),
+          FilterChip(
+            label: const Text('Locked only'),
+            selected: filters.lockedOnly,
+            avatar: Icon(
+              Icons.lock_outline_rounded,
+              size: 16,
+              color: filters.lockedOnly ? Colors.white : Colors.orange,
+            ),
+            selectedColor: Colors.orange,
+            checkmarkColor: Colors.white,
+            labelStyle: TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+              color: filters.lockedOnly
+                  ? Colors.white
+                  : (isDark ? Colors.white70 : const Color(0xFF263238)),
+            ),
+            onSelected: (v) =>
+                ref.read(usersFilterProvider.notifier).setLockedOnly(v),
           ),
         ],
       ),
@@ -801,9 +827,15 @@ class _UserCard extends StatelessWidget {
                         soft: true,
                       ),
                       if (user.loginBlocked)
-                        _badge('LOGIN BLOCKED', Colors.red, soft: true)
+                        _badge('BLOCKED — NEEDS ADMIN', Colors.red, soft: true)
                       else if (user.loginTemporarilyLocked)
-                        _badge('LOGIN LOCKED', Colors.orange, soft: true),
+                        _badge(
+                          user.loginLockedUntil != null
+                              ? 'LOCKED UNTIL ${_formatDateTime(user.loginLockedUntil!)}'
+                              : 'TEMP LOCKED',
+                          Colors.orange,
+                          soft: true,
+                        ),
                       const SizedBox(width: 4),
                       if (user.lastLoginAt != null)
                         Text(
@@ -826,6 +858,27 @@ class _UserCard extends StatelessWidget {
                         ),
                     ],
                   ),
+                  if (isAdmin && user.isLoginLocked) ...[
+                    const SizedBox(height: 10),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: FilledButton.tonalIcon(
+                        onPressed: onUnblock,
+                        icon: const Icon(Icons.lock_open_rounded, size: 16),
+                        label: Text(
+                          user.loginBlocked ? 'Unblock login' : 'Clear temp lock',
+                        ),
+                        style: FilledButton.styleFrom(
+                          foregroundColor: user.loginBlocked
+                              ? Colors.red.shade800
+                              : Colors.orange.shade900,
+                          backgroundColor: user.loginBlocked
+                              ? Colors.red.withValues(alpha: 0.12)
+                              : Colors.orange.withValues(alpha: 0.12),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -833,7 +886,7 @@ class _UserCard extends StatelessWidget {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (isAdmin && (user.loginBlocked || user.loginTemporarilyLocked))
+                if (isAdmin && user.isLoginLocked)
                   IconButton(
                     tooltip: 'Unblock login',
                     onPressed: onUnblock,
@@ -875,6 +928,15 @@ class _UserCard extends StatelessWidget {
         style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: color, letterSpacing: 0.5),
       ),
     );
+  }
+
+  String _formatDateTime(DateTime d) {
+    final local = d.toLocal();
+    final dd = local.day.toString().padLeft(2, '0');
+    final mm = local.month.toString().padLeft(2, '0');
+    final hh = local.hour.toString().padLeft(2, '0');
+    final min = local.minute.toString().padLeft(2, '0');
+    return '$dd/$mm ${hh}:$min';
   }
 
   String _formatDate(DateTime dt) {

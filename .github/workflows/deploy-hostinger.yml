@@ -147,19 +147,49 @@ jobs:
           mkdir -p deploy/frontend
           cp -a nb_crm_flutter/build/web/. deploy/frontend/
 
-      - name: Install SSH key
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.HOSTINGER_SSH_KEY }}
-
-      - name: Trust host
+      # Prefer a key file over ssh-agent — clearer errors if the secret is a .pub by mistake.
+      - name: Setup SSH key file
         env:
+          SSH_KEY: ${{ secrets.HOSTINGER_SSH_KEY }}
           HOST: ${{ secrets.HOSTINGER_HOST }}
           PORT: ${{ secrets.HOSTINGER_PORT }}
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
+
+          # Write secret; fix CRLF and accidental literal \n from copy/paste
+          printf '%s\n' "$SSH_KEY" | sed 's/\r$//' | sed 's/\\n/\n/g' > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          if head -1 ~/.ssh/deploy_key | grep -qE '^ssh-(ed25519|rsa|dss|ecdsa) '; then
+            echo "HOSTINGER_SSH_KEY looks like a PUBLIC key (.pub)."
+            echo "Paste the PRIVATE key file: nb_hrms_deploy (no .pub), including BEGIN/END lines."
+            exit 1
+          fi
+
+          if ! grep -qE 'BEGIN (OPENSSH |RSA )?PRIVATE KEY' ~/.ssh/deploy_key; then
+            echo "HOSTINGER_SSH_KEY is not a valid OpenSSH private key (missing BEGIN PRIVATE KEY)."
+            echo "Open C:\\Users\\DELL\\.ssh\\nb_hrms_deploy in Notepad and paste the FULL file into the secret."
+            exit 1
+          fi
+
+          # Ensure trailing newline (required by OpenSSH)
+          printf '\n' >> ~/.ssh/deploy_key
+
           ssh-keyscan -p "${PORT:-22}" -H "$HOST" >> ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<EOF
+          Host hostinger
+            HostName ${HOST}
+            User ${{ secrets.HOSTINGER_USER }}
+            Port ${PORT:-22}
+            IdentityFile ~/.ssh/deploy_key
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+          EOF
+          # Fix leading spaces from heredoc indent
+          sed -i 's/^[[:space:]]*//' ~/.ssh/config
+          chmod 600 ~/.ssh/config
+          echo "SSH key file ready"
 
       - name: Sync files to VPS
         env:
@@ -169,7 +199,7 @@ jobs:
         run: |
           port="${PORT:-22}"
           remote="${USER}@${HOST}"
-          rsh="ssh -p ${port} -o StrictHostKeyChecking=yes"
+          rsh="ssh -i ~/.ssh/deploy_key -p ${port} -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
 
           $rsh "$remote" "mkdir -p /opt/nb-crm/backend /opt/nb-crm/deploy/nginx"
 
@@ -179,18 +209,18 @@ jobs:
           rsync -az --delete -e "$rsh" deploy/frontend/ "$remote:/opt/nb-crm/deploy/frontend/"
           rsync -az --delete -e "$rsh" deploy/nginx/ "$remote:/opt/nb-crm/deploy/nginx/"
 
-          scp -P "$port" \
+          scp -i ~/.ssh/deploy_key -P "$port" -o IdentitiesOnly=yes \
             backend/package.json \
             backend/package-lock.json \
             backend/tsconfig.json \
             backend/Dockerfile.prod \
             "$remote:/opt/nb-crm/backend/"
 
-          scp -P "$port" \
+          scp -i ~/.ssh/deploy_key -P "$port" -o IdentitiesOnly=yes \
             docker-compose.prod.yml \
             "$remote:/opt/nb-crm/docker-compose.prod.yml"
 
-          scp -P "$port" \
+          scp -i ~/.ssh/deploy_key -P "$port" -o IdentitiesOnly=yes \
             deploy/hostinger-apply.sh \
             "$remote:/opt/nb-crm/deploy/hostinger-apply.sh"
 
@@ -200,5 +230,6 @@ jobs:
           USER: ${{ secrets.HOSTINGER_USER }}
           PORT: ${{ secrets.HOSTINGER_PORT }}
         run: |
-          ssh -p "${PORT:-22}" "${USER}@${HOST}" \
+          ssh -i ~/.ssh/deploy_key -p "${PORT:-22}" -o IdentitiesOnly=yes \
+            "${USER}@${HOST}" \
             "chmod +x /opt/nb-crm/deploy/hostinger-apply.sh && sh /opt/nb-crm/deploy/hostinger-apply.sh"

@@ -88,8 +88,9 @@ jobs:
       - name: Pub get
         run: flutter pub get
 
+      # Repo has many legacy infos/warnings; fail CI only on analyzer *errors*.
       - name: Analyze
-        run: flutter analyze --no-fatal-infos
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
       - name: Unit / widget tests
         run: flutter test

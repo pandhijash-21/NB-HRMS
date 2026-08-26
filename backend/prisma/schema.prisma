@@ -231,6 +231,7 @@ model Employee {
   trips               Trip[]
   trackingEvents      TrackingEvent[]
   workTasks           WorkTask[]
+  orgTreeContacts     OrgTreeContact[]
 
   @@map("employees")
 }
@@ -1080,8 +1081,47 @@ model User {
   receivedTasks      WorkTask[]      @relation("TaskAssignee")
   extraApprovalTasks WorkTask[]      @relation("TaskExtraApprover")
   taskEvents         WorkTaskEvent[] @relation("TaskEventActor")
+  orgTreesCreated    OrgTree[]
 
   @@map("users")
+}
+
+// =============================================================================
+// ORG / EMPLOYEE TREE (admin-generated snapshots)
+// =============================================================================
+
+model OrgTree {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  grouping    String   @default("DEPARTMENT_LEAD")
+  isActive    Boolean  @default(false) @map("is_active")
+  snapshot    Json
+  createdById String   @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  createdBy User            @relation(fields: [createdById], references: [id])
+  contacts  OrgTreeContact[]
+
+  @@index([isActive])
+  @@map("org_trees")
+}
+
+model OrgTreeContact {
+  id           String  @id @default(uuid())
+  treeId       String  @map("tree_id")
+  moduleKey    String  @map("module_key")
+  moduleName   String  @map("module_name")
+  employeeId   Int?    @map("employee_id")
+  note         String?
+  sortOrder    Int     @default(0) @map("sort_order")
+
+  tree     OrgTree   @relation(fields: [treeId], references: [id], onDelete: Cascade)
+  employee Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+
+  @@unique([treeId, moduleKey])
+  @@map("org_tree_contacts")
 }
 
 // =============================================================================

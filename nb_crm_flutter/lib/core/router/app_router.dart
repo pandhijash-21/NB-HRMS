@@ -66,6 +66,7 @@ import '../../features/salary/presentation/screens/employee_salary_slip_screen.d
 import '../../features/rbac/presentation/screens/admin_users_screen.dart';
 import '../../features/rbac/presentation/screens/admin_roles_screen.dart';
 import '../../features/rbac/presentation/screens/admin_role_detail_screen.dart';
+import '../../features/org_tree/presentation/screens/employee_tree_screen.dart';
 import '../widgets/responsive_shell.dart';
 
 /// Listenable bridge so GoRouter refreshes when [AuthState] changes.
@@ -95,7 +96,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
   final shellNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'shellNav');
 
   // Bump when route table changes so hot-restart rebuilds GoRouter cleanly.
-  const routerRevision = 11;
+  const routerRevision = 12;
 
   return GoRouter(
     navigatorKey: rootNavigatorKey,
@@ -168,6 +169,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/home',
             builder: (context, state) => const HomeScreen(),
+          ),
+          GoRoute(
+            path: '/org-tree',
+            builder: (context, state) => const EmployeeTreeScreen(),
           ),
           GoRoute(
             path: '/tasks',

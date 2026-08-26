@@ -25,6 +25,7 @@ import { reimbursementsRouter } from './modules/reimbursements';
 import { recruitmentRouter } from './modules/recruitment';
 import { repositoryRouter } from './modules/repository';
 import { organizationRouter } from './modules/organization';
+import { orgTreeRouter } from './modules/org-tree';
 
 configureCloudinary();
 
@@ -117,6 +118,7 @@ app.use('/api/reimbursements', reimbursementsRouter);
 app.use('/api/recruitment', recruitmentRouter);
 app.use('/api/repository', repositoryRouter);
 app.use('/api', organizationRouter);
+app.use('/api/org-tree', orgTreeRouter);
 app.use('/api/admin', designationRouter);
 app.use('/api', instituteRouter);
 app.use('/api/salary', salaryRouter);

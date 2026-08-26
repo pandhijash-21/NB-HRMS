@@ -75,6 +75,10 @@ class Permissions {
     return hasPermission(perms, 'LEAVE', 'APPROVE');
   }
 
+  static bool isAdmin(String? role) {
+    return (role ?? '').toUpperCase() == 'ADMIN';
+  }
+
   static bool canManageUsers(PermissionMap? perms, [String? role]) {
     if (role != null && role.toUpperCase() == 'ADMIN') return true;
     return hasPermission(perms, 'USER_MGMT', 'READ');

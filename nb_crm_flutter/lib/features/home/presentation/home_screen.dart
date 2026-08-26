@@ -88,6 +88,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     final modules = <_ModuleCardData>[
       _ModuleCardData(
+        title: 'Employee tree',
+        subtitle: 'Org chart, leads, and who to contact',
+        icon: Icons.account_tree_rounded,
+        route: '/org-tree',
+        enabled: true,
+        category: ModuleCategory.mySpace,
+        color: const Color(0xFF2563EB),
+      ),
+      _ModuleCardData(
         title: 'Tasks',
         subtitle: 'Assign work, track progress, review & Gantt',
         icon: Icons.task_alt_rounded,

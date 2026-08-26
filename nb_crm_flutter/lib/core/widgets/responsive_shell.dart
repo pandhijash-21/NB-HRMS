@@ -114,6 +114,12 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
         ),
       const _Destination('/home', Icons.home_outlined, Icons.home, 'Home'),
       const _Destination(
+        '/org-tree',
+        Icons.account_tree_outlined,
+        Icons.account_tree,
+        'Employee tree',
+      ),
+      const _Destination(
         '/tasks',
         Icons.task_alt_outlined,
         Icons.task_alt,
@@ -227,6 +233,11 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
         appBar: AppBar(
           title: const Text('NB Developer'),
           actions: [
+            IconButton(
+              tooltip: 'Employee tree',
+              icon: const Icon(Icons.account_tree_rounded),
+              onPressed: () => context.go('/org-tree'),
+            ),
             IconButton(
               icon: Icon(isDark ? Icons.light_mode : Icons.dark_mode),
               onPressed: () =>
@@ -613,27 +624,31 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
         children: [
           // Header
           Container(
-            height: 90,
+            height: expanded ? 90 : 128,
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
                 if (!expanded)
                   Expanded(
-                    child: Center(
-                      child: allowExpanded
-                          ? IconButton(
-                              icon: Icon(
-                                Icons.menu_rounded,
-                                color: isDark
-                                    ? Colors.white.withOpacity(0.5)
-                                    : const Color(0xFF607D8B).withOpacity(0.7),
-                              ),
-                              onPressed: () {
-                                setState(() => _isExpanded = true);
-                              },
-                              tooltip: 'Expand sidebar',
-                            )
-                          : _buildLogo(context),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (allowExpanded)
+                          IconButton(
+                            icon: Icon(
+                              Icons.menu_rounded,
+                              color: isDark
+                                  ? Colors.white.withOpacity(0.5)
+                                  : const Color(0xFF607D8B).withOpacity(0.7),
+                            ),
+                            onPressed: () {
+                              setState(() => _isExpanded = true);
+                            },
+                            tooltip: 'Expand sidebar',
+                          )
+                        else
+                          _buildLogo(context),
+                      ],
                     ),
                   )
                 else ...[
@@ -648,9 +663,6 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                         color: isDark ? Colors.white : const Color(0xFF212F3D),
                         letterSpacing: -0.3,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.fade,
-                      softWrap: false,
                     ),
                   ),
                   IconButton(

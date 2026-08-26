@@ -13,7 +13,10 @@ const envSchema = z.object({
   REDIS_URL: z.string().min(1),
 
   JWT_SECRET: z.string().min(16),
-  /** Shared with the Flutter client for double AES-GCM transport encryption. */
+  /** Shared with the Flutter client for double AES-GCM transport encryption.
+   *  Client-visible protocol key (especially on Flutter Web) — not JWT/DB/SMTP secrecy.
+   *  AuthZ still depends on HTTPS + JWT + RBAC.
+   */
   TRANSPORT_SECRET: z.string().min(16).default('nb-crm-double-enc-v2-local'),
   ENCRYPTION_KEY: z
     .string()

@@ -1,11 +1,16 @@
 # CI quality gates, then Hostinger deploy (main only).
 #
-# Deploy never runs unless backend + Flutter checks pass.
-# .env.production is never uploaded (SMTP/JWT stay on the VPS).
+# Mandatory (unchanged architecture):
+# - Backend + Flutter checks must pass before deploy
+# - Deploy only from main (push or workflow_dispatch)
+# - .env.production NEVER uploaded; server secrets stay on VPS
+# - TRANSPORT_SECRET is a client-visible transport protocol key (dart-define);
+#   NOT for auth/JWT/DB/SMTP. Real security: HTTPS + JWT + RBAC.
+# - Production DB: prisma migrate deploy only (no reset/push/seed/accept-data-loss)
+# - SSH/rsync Hostinger deploy preserved
 #
-# Required GitHub Actions secrets:
-#   HOSTINGER_HOST, HOSTINGER_USER, HOSTINGER_SSH_KEY, TRANSPORT_SECRET
-# Optional: HOSTINGER_PORT, API_BASE_URL
+# Required secrets: HOSTINGER_HOST, HOSTINGER_USER, HOSTINGER_SSH_KEY, TRANSPORT_SECRET
+# Optional: HOSTINGER_PORT, API_BASE_URL, HOSTINGER_SSH_KNOWN_HOSTS (pinned host keys)
 
 name: CI and Deploy
 
@@ -56,7 +61,6 @@ jobs:
 
       - name: Prisma validate
         env:
-          # Validate only — no real DB connection required
           DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci
         run: npx prisma validate
 
@@ -70,6 +74,9 @@ jobs:
 
       - name: Production build
         run: npm run build
+
+      - name: Unit tests
+        run: npm test
 
   test-flutter:
     name: Flutter checks
@@ -88,20 +95,83 @@ jobs:
       - name: Pub get
         run: flutter pub get
 
-      # Repo has many legacy infos/warnings; fail CI only on analyzer *errors*.
       - name: Analyze
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
       - name: Unit / widget tests
         run: flutter test
 
+  migration-safety:
+    name: Migration safety
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan new migrations for destructive SQL
+        run: |
+          chmod +x deploy/ci-check-migrations.sh
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch origin main --depth=1 || true
+            ./deploy/ci-check-migrations.sh origin/main
+          else
+            BEFORE="${{ github.event.before }}"
+            if [ -z "$BEFORE" ] || [[ "$BEFORE" =~ ^0+$ ]]; then
+              git fetch origin main --depth=1 || true
+              ./deploy/ci-check-migrations.sh origin/main
+            else
+              ./deploy/ci-check-migrations.sh "$BEFORE"
+            fi
+          fi
+
+  build-flutter-web:
+    name: Flutter web release build
+    needs: [test-flutter]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Build web release
+        working-directory: nb_crm_flutter
+        env:
+          API_BASE_URL: ${{ secrets.API_BASE_URL }}
+          TRANSPORT_SECRET: ${{ secrets.TRANSPORT_SECRET }}
+        run: |
+          # PRs may lack secrets — use a dummy protocol key only to prove the release compile.
+          # Main/deploy uses the real TRANSPORT_SECRET (still client-visible by design).
+          SECRET="${TRANSPORT_SECRET:-ci-transport-protocol-key}"
+          API="${API_BASE_URL:-https://crm.nbdeveloper.co.in/api}"
+          if [ "${{ github.ref }}" = "refs/heads/main" ] && [ -z "${TRANSPORT_SECRET}" ]; then
+            echo "Missing TRANSPORT_SECRET for main web build"
+            exit 1
+          fi
+          flutter pub get
+          flutter build web --release \
+            --dart-define=API_BASE_URL="$API" \
+            --dart-define=TRANSPORT_SECRET="$SECRET"
+
+      - name: Upload web artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-web-${{ github.sha }}
+          path: nb_crm_flutter/build/web/
+          retention-days: 7
+
   deploy:
     name: Deploy Hostinger
-    needs: [test-backend, test-flutter]
+    needs: [test-backend, test-flutter, migration-safety, build-flutter-web]
     if: >
       always() &&
       needs.test-backend.result == 'success' &&
       needs.test-flutter.result == 'success' &&
+      needs.migration-safety.result == 'success' &&
+      needs.build-flutter-web.result == 'success' &&
       github.ref == 'refs/heads/main' &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
@@ -125,71 +195,67 @@ jobs:
           [ -n "$TRANSPORT_SECRET" ] || { echo "Missing secret TRANSPORT_SECRET"; missing=1; }
           exit $missing
 
-      - uses: subosito/flutter-action@v2
+      - name: Download Flutter web artifact
+        uses: actions/download-artifact@v4
         with:
-          channel: stable
-          cache: true
+          name: flutter-web-${{ github.sha }}
+          path: deploy/frontend
 
-      - name: Build Flutter web
-        working-directory: nb_crm_flutter
-        env:
-          API_BASE_URL: ${{ secrets.API_BASE_URL }}
-          TRANSPORT_SECRET: ${{ secrets.TRANSPORT_SECRET }}
-        run: |
-          flutter pub get
-          flutter build web --release \
-            --dart-define=API_BASE_URL="${API_BASE_URL:-https://crm.nbdeveloper.co.in/api}" \
-            --dart-define=TRANSPORT_SECRET="$TRANSPORT_SECRET"
-
-      - name: Stage frontend
-        run: |
-          rm -rf deploy/frontend
-          mkdir -p deploy/frontend
-          cp -a nb_crm_flutter/build/web/. deploy/frontend/
-
-      # Prefer a key file over ssh-agent — clearer errors if the secret is a .pub by mistake.
       - name: Setup SSH key file
         env:
           SSH_KEY: ${{ secrets.HOSTINGER_SSH_KEY }}
           HOST: ${{ secrets.HOSTINGER_HOST }}
           PORT: ${{ secrets.HOSTINGER_PORT }}
+          KNOWN_HOSTS: ${{ secrets.HOSTINGER_SSH_KNOWN_HOSTS }}
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
 
-          # Write secret; fix CRLF and accidental literal \n from copy/paste
           printf '%s\n' "$SSH_KEY" | sed 's/\r$//' | sed 's/\\n/\n/g' > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
 
           if head -1 ~/.ssh/deploy_key | grep -qE '^ssh-(ed25519|rsa|dss|ecdsa) '; then
             echo "HOSTINGER_SSH_KEY looks like a PUBLIC key (.pub)."
-            echo "Paste the PRIVATE key file: nb_hrms_deploy (no .pub), including BEGIN/END lines."
             exit 1
           fi
-
           if ! grep -qE 'BEGIN (OPENSSH |RSA )?PRIVATE KEY' ~/.ssh/deploy_key; then
-            echo "HOSTINGER_SSH_KEY is not a valid OpenSSH private key (missing BEGIN PRIVATE KEY)."
-            echo "Open C:\\Users\\DELL\\.ssh\\nb_hrms_deploy in Notepad and paste the FULL file into the secret."
+            echo "HOSTINGER_SSH_KEY is not a valid OpenSSH private key."
             exit 1
           fi
-
-          # Ensure trailing newline (required by OpenSSH)
           printf '\n' >> ~/.ssh/deploy_key
 
-          ssh-keyscan -p "${PORT:-22}" -H "$HOST" >> ~/.ssh/known_hosts
-          cat > ~/.ssh/config <<EOF
-          Host hostinger
-            HostName ${HOST}
-            User ${{ secrets.HOSTINGER_USER }}
-            Port ${PORT:-22}
-            IdentityFile ~/.ssh/deploy_key
-            IdentitiesOnly yes
-            StrictHostKeyChecking yes
-          EOF
-          # Fix leading spaces from heredoc indent
-          sed -i 's/^[[:space:]]*//' ~/.ssh/config
-          chmod 600 ~/.ssh/config
+          if [ -n "$KNOWN_HOSTS" ]; then
+            printf '%s\n' "$KNOWN_HOSTS" | sed 's/\r$//' > ~/.ssh/known_hosts
+            echo "Using pinned HOSTINGER_SSH_KNOWN_HOSTS"
+          else
+            echo "WARNING: HOSTINGER_SSH_KNOWN_HOSTS not set; falling back to ssh-keyscan"
+            ssh-keyscan -p "${PORT:-22}" -H "$HOST" >> ~/.ssh/known_hosts
+          fi
+          chmod 600 ~/.ssh/known_hosts
           echo "SSH key file ready"
+
+      - name: Backup previous release on VPS (before overwrite)
+        env:
+          HOST: ${{ secrets.HOSTINGER_HOST }}
+          USER: ${{ secrets.HOSTINGER_USER }}
+          PORT: ${{ secrets.HOSTINGER_PORT }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -p "${PORT:-22}" -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            "${USER}@${HOST}" 'bash -s' <<'EOS'
+          set -e
+          cd /opt/nb-crm
+          mkdir -p deploy
+          if [ -d deploy/frontend ]; then
+            rm -rf deploy/frontend.prev
+            cp -a deploy/frontend deploy/frontend.prev
+            echo "frontend.prev saved"
+          fi
+          if docker inspect --format='{{.Image}}' nb-crm-backend-1 >/dev/null 2>&1; then
+            docker inspect --format='{{.Image}}' nb-crm-backend-1 > .deploy-prev-backend-image
+            echo "prev backend image saved"
+          fi
+          EOS
 
       - name: Sync files to VPS
         env:
@@ -203,6 +269,7 @@ jobs:
 
           $rsh "$remote" "mkdir -p /opt/nb-crm/backend /opt/nb-crm/deploy/nginx"
 
+          # --delete only within these app dirs — never .env.production or Docker volumes
           rsync -az --delete -e "$rsh" backend/src/ "$remote:/opt/nb-crm/backend/src/"
           rsync -az --delete -e "$rsh" backend/prisma/ "$remote:/opt/nb-crm/backend/prisma/"
           rsync -az --delete -e "$rsh" backend/docker/ "$remote:/opt/nb-crm/backend/docker/"
@@ -222,7 +289,8 @@ jobs:
 
           scp -i ~/.ssh/deploy_key -P "$port" -o IdentitiesOnly=yes \
             deploy/hostinger-apply.sh \
-            "$remote:/opt/nb-crm/deploy/hostinger-apply.sh"
+            deploy/ci-check-migrations.sh \
+            "$remote:/opt/nb-crm/deploy/"
 
       - name: Apply on server
         env:
@@ -231,5 +299,6 @@ jobs:
           PORT: ${{ secrets.HOSTINGER_PORT }}
         run: |
           ssh -i ~/.ssh/deploy_key -p "${PORT:-22}" -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
             "${USER}@${HOST}" \
-            "chmod +x /opt/nb-crm/deploy/hostinger-apply.sh && sh /opt/nb-crm/deploy/hostinger-apply.sh"
+            "chmod +x /opt/nb-crm/deploy/hostinger-apply.sh && DEPLOY_SHA='${{ github.sha }}' sh /opt/nb-crm/deploy/hostinger-apply.sh"

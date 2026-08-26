@@ -1,0 +1,203 @@
+# CI quality gates, then Hostinger deploy (main only).
+#
+# Deploy never runs unless backend + Flutter checks pass.
+# .env.production is never uploaded (SMTP/JWT stay on the VPS).
+#
+# Required GitHub Actions secrets:
+#   HOSTINGER_HOST, HOSTINGER_USER, HOSTINGER_SSH_KEY, TRANSPORT_SECRET
+# Optional: HOSTINGER_PORT, API_BASE_URL
+
+name: CI and Deploy
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - backend/**
+      - nb_crm_flutter/**
+      - docker-compose.prod.yml
+      - deploy/**
+      - .github/workflows/**
+  push:
+    branches: [main]
+    paths:
+      - backend/**
+      - nb_crm_flutter/**
+      - docker-compose.prod.yml
+      - deploy/**
+      - .github/workflows/**
+  workflow_dispatch:
+
+concurrency:
+  group: ci-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test-backend:
+    name: Backend checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prisma validate
+        env:
+          # Validate only — no real DB connection required
+          DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci
+        run: npx prisma validate
+
+      - name: Prisma generate
+        env:
+          DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci
+        run: npx prisma generate
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Production build
+        run: npm run build
+
+  test-flutter:
+    name: Flutter checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nb_crm_flutter
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Pub get
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos
+
+      - name: Unit / widget tests
+        run: flutter test
+
+  deploy:
+    name: Deploy Hostinger
+    needs: [test-backend, test-flutter]
+    if: >
+      always() &&
+      needs.test-backend.result == 'success' &&
+      needs.test-flutter.result == 'success' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-hostinger
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check required secrets
+        env:
+          HOST: ${{ secrets.HOSTINGER_HOST }}
+          USER: ${{ secrets.HOSTINGER_USER }}
+          KEY: ${{ secrets.HOSTINGER_SSH_KEY }}
+          TRANSPORT_SECRET: ${{ secrets.TRANSPORT_SECRET }}
+        run: |
+          missing=0
+          [ -n "$HOST" ] || { echo "Missing secret HOSTINGER_HOST"; missing=1; }
+          [ -n "$USER" ] || { echo "Missing secret HOSTINGER_USER"; missing=1; }
+          [ -n "$KEY" ] || { echo "Missing secret HOSTINGER_SSH_KEY"; missing=1; }
+          [ -n "$TRANSPORT_SECRET" ] || { echo "Missing secret TRANSPORT_SECRET"; missing=1; }
+          exit $missing
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Build Flutter web
+        working-directory: nb_crm_flutter
+        env:
+          API_BASE_URL: ${{ secrets.API_BASE_URL }}
+          TRANSPORT_SECRET: ${{ secrets.TRANSPORT_SECRET }}
+        run: |
+          flutter pub get
+          flutter build web --release \
+            --dart-define=API_BASE_URL="${API_BASE_URL:-https://crm.nbdeveloper.co.in/api}" \
+            --dart-define=TRANSPORT_SECRET="$TRANSPORT_SECRET"
+
+      - name: Stage frontend
+        run: |
+          rm -rf deploy/frontend
+          mkdir -p deploy/frontend
+          cp -a nb_crm_flutter/build/web/. deploy/frontend/
+
+      - name: Install SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.HOSTINGER_SSH_KEY }}
+
+      - name: Trust host
+        env:
+          HOST: ${{ secrets.HOSTINGER_HOST }}
+          PORT: ${{ secrets.HOSTINGER_PORT }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh-keyscan -p "${PORT:-22}" -H "$HOST" >> ~/.ssh/known_hosts
+
+      - name: Sync files to VPS
+        env:
+          HOST: ${{ secrets.HOSTINGER_HOST }}
+          USER: ${{ secrets.HOSTINGER_USER }}
+          PORT: ${{ secrets.HOSTINGER_PORT }}
+        run: |
+          port="${PORT:-22}"
+          remote="${USER}@${HOST}"
+          rsh="ssh -p ${port} -o StrictHostKeyChecking=yes"
+
+          $rsh "$remote" "mkdir -p /opt/nb-crm/backend /opt/nb-crm/deploy/nginx"
+
+          rsync -az --delete -e "$rsh" backend/src/ "$remote:/opt/nb-crm/backend/src/"
+          rsync -az --delete -e "$rsh" backend/prisma/ "$remote:/opt/nb-crm/backend/prisma/"
+          rsync -az --delete -e "$rsh" backend/docker/ "$remote:/opt/nb-crm/backend/docker/"
+          rsync -az --delete -e "$rsh" deploy/frontend/ "$remote:/opt/nb-crm/deploy/frontend/"
+          rsync -az --delete -e "$rsh" deploy/nginx/ "$remote:/opt/nb-crm/deploy/nginx/"
+
+          scp -P "$port" \
+            backend/package.json \
+            backend/package-lock.json \
+            backend/tsconfig.json \
+            backend/Dockerfile.prod \
+            "$remote:/opt/nb-crm/backend/"
+
+          scp -P "$port" \
+            docker-compose.prod.yml \
+            "$remote:/opt/nb-crm/docker-compose.prod.yml"
+
+          scp -P "$port" \
+            deploy/hostinger-apply.sh \
+            "$remote:/opt/nb-crm/deploy/hostinger-apply.sh"
+
+      - name: Apply on server
+        env:
+          HOST: ${{ secrets.HOSTINGER_HOST }}
+          USER: ${{ secrets.HOSTINGER_USER }}
+          PORT: ${{ secrets.HOSTINGER_PORT }}
+        run: |
+          ssh -p "${PORT:-22}" "${USER}@${HOST}" \
+            "chmod +x /opt/nb-crm/deploy/hostinger-apply.sh && sh /opt/nb-crm/deploy/hostinger-apply.sh"

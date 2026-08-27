@@ -72,6 +72,7 @@ services:
     volumes:
       - ./deploy/frontend:/usr/share/nginx/html:ro
       - ./deploy/nginx/frontend.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/nginx/vpn-blocked.html:/usr/share/nginx/html/vpn-blocked.html:ro
     labels:
       - traefik.enable=true
       - traefik.http.routers.nbcrm-web.rule=Host(`crm.nbdeveloper.co.in`)

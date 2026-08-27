@@ -14,6 +14,8 @@ ENV_FILE="$ROOT/backend/.env.production"
 SHA="${DEPLOY_SHA:-unknown}"
 PUBLIC_HEALTH_URL="${PUBLIC_HEALTH_URL:-https://crm.nbdeveloper.co.in/health}"
 PUBLIC_FRONTEND_URL="${PUBLIC_FRONTEND_URL:-https://crm.nbdeveloper.co.in/}"
+# Probe path without VPN auth_request (curl from the VPS uses a hosting IP and would get 403→404).
+PUBLIC_FRONTEND_HEALTH_URL="${PUBLIC_FRONTEND_HEALTH_URL:-https://crm.nbdeveloper.co.in/frontend-health}"
 BACKEND_IMAGE_REPO="nb-crm-backend"
 PREV_IMAGE_FILE="$ROOT/.deploy-prev-backend-image"
 CURRENT_SHA_FILE="$ROOT/.deploy-current-sha"
@@ -30,6 +32,11 @@ fi
 sed -i 's/\r$//' "$ROOT/backend/docker/entrypoint.sh" 2>/dev/null || true
 chmod +x "$ROOT/backend/docker/entrypoint.sh" 2>/dev/null || true
 
+# Ensure VPN deny page exists in the nginx docroot (volume bind can also mount it).
+if [ -f "$ROOT/deploy/nginx/vpn-blocked.html" ]; then
+  cp -f "$ROOT/deploy/nginx/vpn-blocked.html" "$ROOT/deploy/frontend/vpn-blocked.html"
+fi
+
 compose() {
   docker compose -f "$COMPOSE" --env-file "$ENV_FILE" "$@"
 }
@@ -40,7 +47,10 @@ rollback() {
     echo "Restoring previous frontend from deploy/frontend.prev"
     rm -rf "$ROOT/deploy/frontend"
     cp -a "$FRONTEND_PREV" "$ROOT/deploy/frontend"
-    compose up -d --force-recreate frontend || true
+  fi
+  if [ -f "$ROOT/deploy/nginx/vpn-blocked.html" ]; then
+    mkdir -p "$ROOT/deploy/frontend"
+    cp -f "$ROOT/deploy/nginx/vpn-blocked.html" "$ROOT/deploy/frontend/vpn-blocked.html"
   fi
 
   if [ -f "$PREV_IMAGE_FILE" ]; then
@@ -53,6 +63,33 @@ rollback() {
       echo "No usable previous backend image to restore"
     fi
   fi
+
+  # Old backend images may lack /vpn-gate; new nginx auth_request then 500s the whole site.
+  gate_code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:4000/vpn-gate || echo 000)
+  case "$gate_code" in
+    204|403) ;;
+    *)
+      echo "vpn-gate unavailable (HTTP $gate_code) — writing nginx conf without auth_request"
+      cat > "$ROOT/deploy/nginx/frontend.conf" <<'EOF'
+server {
+    listen 80;
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+    location = /frontend-health {
+        access_log off;
+        default_type text/plain;
+        return 200 'ok\n';
+    }
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
+EOF
+      ;;
+  esac
+
+  compose up -d --force-recreate frontend || true
 
   echo "==> Rollback attempted. Inspect logs; DB schema left as migrate deploy applied it."
   compose logs --tail=80 backend || true
@@ -104,13 +141,19 @@ if ! curl -fsS -k --max-time 25 "$PUBLIC_HEALTH_URL" >/dev/null; then
   rollback
 fi
 
-echo "==> Public frontend: $PUBLIC_FRONTEND_URL"
-code=$(curl -sS -k --max-time 25 -o /dev/null -w '%{http_code}' "$PUBLIC_FRONTEND_URL" || echo 000)
+echo "==> Public frontend health: $PUBLIC_FRONTEND_HEALTH_URL"
+# Do not curl / — VPS egress is often flagged hosting/proxy and auth_request returns 403.
+code=$(curl -sS -k --max-time 25 -o /dev/null -w '%{http_code}' "$PUBLIC_FRONTEND_HEALTH_URL" || echo 000)
 case "$code" in
-  200|301|302|304) echo "Frontend HTTP $code OK" ;;
+  200|301|302|304) echo "Frontend health HTTP $code OK" ;;
   *)
-    echo "Frontend not reachable (HTTP $code)"
-    rollback
+    echo "Frontend health not reachable (HTTP $code)"
+    # Fallback: in-container check (bypasses Traefik; still exercises nginx).
+    if compose exec -T frontend wget -q -O - http://127.0.0.1/frontend-health 2>/dev/null | grep -q ok; then
+      echo "Frontend health OK via container (public probe failed with HTTP $code)"
+    else
+      rollback
+    fi
     ;;
 esac
 

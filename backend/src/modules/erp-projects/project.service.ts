@@ -28,9 +28,9 @@ function dateOnly(v: unknown): Date | null {
 type DocInput = {
   id?: string;
   typeCode?: string | null;
-  name?: string;
+  name: string;
   remarks?: string | null;
-  fileUrl?: string;
+  fileUrl: string;
   fileName?: string | null;
   mimeType?: string | null;
   fileSize?: number | null;
@@ -39,25 +39,24 @@ type DocInput = {
 
 function parseDocuments(raw: unknown): DocInput[] {
   if (!Array.isArray(raw)) return [];
-  return raw
-    .map((row, i) => {
-      const r = (row ?? {}) as Record<string, unknown>;
-      const fileUrl = str(r.fileUrl);
-      const name = str(r.name) ?? str(r.fileName) ?? 'Document';
-      if (!fileUrl) return null;
-      return {
-        id: str(r.id) ?? undefined,
-        typeCode: str(r.typeCode),
-        name,
-        remarks: str(r.remarks),
-        fileUrl,
-        fileName: str(r.fileName),
-        mimeType: str(r.mimeType),
-        fileSize: num(r.fileSize),
-        sortOrder: num(r.sortOrder) ?? i,
-      } satisfies DocInput;
-    })
-    .filter((d): d is DocInput => d != null);
+  const out: DocInput[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const r = (raw[i] ?? {}) as Record<string, unknown>;
+    const fileUrl = str(r.fileUrl);
+    if (!fileUrl) continue;
+    out.push({
+      id: str(r.id) ?? undefined,
+      typeCode: str(r.typeCode),
+      name: str(r.name) ?? str(r.fileName) ?? 'Document',
+      remarks: str(r.remarks),
+      fileUrl,
+      fileName: str(r.fileName),
+      mimeType: str(r.mimeType),
+      fileSize: num(r.fileSize),
+      sortOrder: num(r.sortOrder) ?? i,
+    });
+  }
+  return out;
 }
 
 function amenitiesCode(raw: unknown): string | null {
@@ -203,13 +202,13 @@ export const projectService = {
         updatedBy: actorId,
         documents: {
           create: documents.map((d, i) => ({
-            typeCode: d.typeCode,
+            typeCode: d.typeCode ?? null,
             name: d.name,
-            remarks: d.remarks,
-            fileUrl: d.fileUrl!,
-            fileName: d.fileName,
-            mimeType: d.mimeType,
-            fileSize: d.fileSize,
+            remarks: d.remarks ?? null,
+            fileUrl: d.fileUrl,
+            fileName: d.fileName ?? null,
+            mimeType: d.mimeType ?? null,
+            fileSize: d.fileSize ?? null,
             sortOrder: d.sortOrder ?? i,
           })),
         },
@@ -236,13 +235,13 @@ export const projectService = {
         });
         for (const [i, d] of documents.entries()) {
           const payload = {
-            typeCode: d.typeCode,
+            typeCode: d.typeCode ?? null,
             name: d.name,
-            remarks: d.remarks,
-            fileUrl: d.fileUrl!,
-            fileName: d.fileName,
-            mimeType: d.mimeType,
-            fileSize: d.fileSize,
+            remarks: d.remarks ?? null,
+            fileUrl: d.fileUrl,
+            fileName: d.fileName ?? null,
+            mimeType: d.mimeType ?? null,
+            fileSize: d.fileSize ?? null,
             sortOrder: d.sortOrder ?? i,
           };
           if (d.id) {

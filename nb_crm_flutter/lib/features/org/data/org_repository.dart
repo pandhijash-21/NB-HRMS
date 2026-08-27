@@ -82,6 +82,20 @@ class OrgRepository {
     );
   }
 
+  Future<List<Institute>> listActiveInstitutes() async {
+    return _dio.getEnvelope<List<Institute>>(
+      'institutes',
+      parse: (raw) {
+        if (raw is! List) {
+          throw const FormatException('Invalid institutes response');
+        }
+        return raw
+            .map((e) => Institute.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList();
+      },
+    );
+  }
+
   Future<Institute> createInstitute(Map<String, dynamic> body) async {
     return _dio.postEnvelope<Institute>(
       'admin/institutes',

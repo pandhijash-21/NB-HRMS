@@ -15,11 +15,13 @@ import { designationRouter } from './modules/designation';
 import { instituteRouter } from './modules/institute';
 import { salaryRouter } from './modules/salary';
 import { lookupRouter } from './modules/lookups/lookup.routes';
+import { projectRouter } from './modules/erp-projects';
 import { env } from './config/env';
 import { configureCloudinary } from './config/cloudinary';
 import { connectRedis } from './config/redis';
 import { fail, ok } from './utils/response';
 import { transportEncryptionMiddleware } from './middleware/transportEncryption';
+import { vpnBlockMiddleware } from './middleware/vpnBlock';
 import { lettersRouter } from './modules/letters';
 import { reimbursementsRouter } from './modules/reimbursements';
 import { recruitmentRouter } from './modules/recruitment';
@@ -51,6 +53,8 @@ function isAllowedCorsOrigin(origin: string | undefined): boolean {
 
 app.set('trust proxy', 1);
 
+app.use(vpnBlockMiddleware);
+
 app.use(cors({
   origin: (origin, callback) => {
     if (isAllowedCorsOrigin(origin)) {
@@ -68,6 +72,7 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
   crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
 }));
+app.use(vpnBlockMiddleware);
 app.use(express.json({ limit: '2mb' }));
 app.use(transportEncryptionMiddleware);
 
@@ -123,6 +128,7 @@ app.use('/api/admin', designationRouter);
 app.use('/api', instituteRouter);
 app.use('/api/salary', salaryRouter);
 app.use('/api', lookupRouter);
+app.use('/api/projects', projectRouter);
 app.use('/api/tracking', trackingRouter);
 app.use('/api/tasks', tasksRouter);
 app.use('/api/events', sseEventsRouter);

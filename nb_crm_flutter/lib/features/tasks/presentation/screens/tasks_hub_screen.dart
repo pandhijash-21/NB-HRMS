@@ -173,7 +173,10 @@ class _TaskCard extends StatelessWidget {
       child: ListTile(
         onTap: () => showTaskDetailSheet(context, task),
         title: Text(task.title, style: const TextStyle(fontWeight: FontWeight.w800)),
-        subtitle: Text('${task.assignee.name} · ${taskStatusLabel(task.status)} · due ${_short(task.deadline)}'),
+        subtitle: Text(
+          '${task.assignee.name} · ${taskStatusLabel(task.status)}'
+          '${task.subtasks.isEmpty ? '' : ' · ${task.subtasksDone}/${task.subtasks.length} subtasks'} · due ${_short(task.deadline)}',
+        ),
         trailing: const Icon(Icons.chevron_right_rounded),
       ),
     );

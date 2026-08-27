@@ -52,6 +52,11 @@ final positionSlotsProvider =
   return ref.watch(orgRepositoryProvider).listPositionSlots();
 });
 
+final pickerInstitutesProvider =
+    FutureProvider.autoDispose<List<Institute>>((ref) async {
+  return ref.watch(orgRepositoryProvider).listActiveInstitutes();
+});
+
 final activeInstitutesProvider =
     FutureProvider.autoDispose<List<Institute>>((ref) async {
   final all = await ref.watch(orgRepositoryProvider).listInstitutes();

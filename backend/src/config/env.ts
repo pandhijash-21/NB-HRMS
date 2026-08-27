@@ -33,6 +33,14 @@ const envSchema = z.object({
   CORS_ALLOWED_ORIGINS: z.string().optional(),
   FRONTEND_URL: z.string().default('http://localhost:3000'),
 
+  /** Block commercial VPN / datacenter / proxy IPs. Default on in production. */
+  VPN_BLOCK_ENABLED: z.preprocess((v) => {
+    if (v === undefined || v === '') return undefined;
+    return v === 'true' || v === true;
+  }, z.boolean().optional()),
+  /** Comma-separated public IPs that skip the VPN check (office WAN, etc.). */
+  VPN_ALLOW_IPS: z.string().optional(),
+
   SMTP_HOST:   z.string().optional(),
   SMTP_PORT:   z.coerce.number().optional().default(587),
   SMTP_SECURE: z.preprocess((v) => v === 'true' || v === true, z.boolean()).optional().default(false),
@@ -63,6 +71,16 @@ const envSchema = z.object({
   MSSQL_PUNCH_AT_COLUMN: optionalNonEmptyString,
   MSSQL_TERMINAL_COLUMN: optionalNonEmptyString,
   MSSQL_MODE_COLUMN: optionalNonEmptyString,
+
+  /** When unset: on in production, off in development. Explicit true/false overrides. */
+  VPN_BLOCK_ENABLED: z.preprocess((v) => {
+    if (v === undefined || v === '') return undefined;
+    if (v === true || v === 'true') return true;
+    if (v === false || v === 'false') return false;
+    return undefined;
+  }, z.boolean().optional()),
+  /** Comma-separated IPs that always bypass VPN/proxy blocking. */
+  VPN_ALLOW_IPS: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

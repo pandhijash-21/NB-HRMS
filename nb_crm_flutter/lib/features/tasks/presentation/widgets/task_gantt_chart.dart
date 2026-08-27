@@ -10,6 +10,7 @@ const _dayLetterH = 20.0;
 const _dayNumH = 22.0;
 const _groupH = 30.0;
 const _rowH = 34.0;
+const _subRowH = 28.0;
 
 const _weekPalette = <Color>[
   Color(0xFF7ECDE0),
@@ -166,7 +167,7 @@ class _TaskGanttChartState extends State<TaskGanttChart> {
         ),
         const SizedBox(height: 4),
         Text(
-          'Full month · workdays only. Gold = today, orange = assigned, navy = deadline.',
+          'Full month · workdays only. Gold = today, orange = assigned by (hover for name), navy = deadline.',
           style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
         ),
         const SizedBox(height: 8),
@@ -203,8 +204,8 @@ class _TaskGanttChartState extends State<TaskGanttChart> {
                                     children: [
                                       for (var g = 0; g < groups.length; g++) ...[
                                         _GroupHeader(title: groups[g].title, chartWidth: chartWidth),
-                                        for (final task in groups[g].tasks)
-                                          _ActivityRow(
+                                        for (final task in groups[g].tasks) ...[
+                                          _GanttRowWidget(
                                             task: task,
                                             weeks: weeks,
                                             month: _month,
@@ -212,6 +213,17 @@ class _TaskGanttChartState extends State<TaskGanttChart> {
                                             dayWidth: dayWidth,
                                             onTap: widget.onSelect == null ? null : () => widget.onSelect!(task),
                                           ),
+                                          for (final sub in task.subtasks)
+                                            _GanttRowWidget(
+                                              task: task,
+                                              subtask: sub,
+                                              weeks: weeks,
+                                              month: _month,
+                                              chartWidth: chartWidth,
+                                              dayWidth: dayWidth,
+                                              onTap: widget.onSelect == null ? null : () => widget.onSelect!(task),
+                                            ),
+                                        ],
                                       ],
                                     ],
                                   ),
@@ -451,16 +463,6 @@ String _weekLabel(List<DateTime> days, DateTime month) {
 
 const _dayLetters = {1: 'M', 2: 'T', 3: 'W', 4: 'T', 5: 'F'};
 
-String _initials(String name) {
-  final parts = name.trim().split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList();
-  if (parts.isEmpty) return '?';
-  if (parts.length == 1) {
-    final s = parts.first;
-    return (s.length >= 2 ? s.substring(0, 2) : s).toUpperCase();
-  }
-  return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
-}
-
 class _WeekHeader extends StatelessWidget {
   const _WeekHeader({required this.weeks, required this.month, required this.dayWidth});
   final List<_Week> weeks;
@@ -637,68 +639,118 @@ class _GroupHeader extends StatelessWidget {
   }
 }
 
-class _ActivityRow extends StatelessWidget {
-  const _ActivityRow({
+String _barTooltip(WorkTask task, WorkTaskSubtask? subtask) {
+  if (subtask != null) {
+    return subtask.isDone ? '${subtask.title}\nDone' : '${subtask.title}\nPending';
+  }
+  final base = taskStatusLabel(task.status);
+  if (task.subtasks.isEmpty) return base;
+  return '$base\n${task.subtasksDone}/${task.subtasks.length} subtasks done';
+}
+
+class _GanttRowWidget extends StatelessWidget {
+  const _GanttRowWidget({
     required this.task,
     required this.weeks,
     required this.month,
     required this.chartWidth,
     required this.dayWidth,
+    this.subtask,
     this.onTap,
   });
 
   final WorkTask task;
+  final WorkTaskSubtask? subtask;
   final List<_Week> weeks;
   final DateTime month;
   final double chartWidth;
   final double dayWidth;
   final VoidCallback? onTap;
 
+  bool get _isSubtask => subtask != null;
+
+  double get _height => _isSubtask ? _subRowH : _rowH;
+
   @override
   Widget build(BuildContext context) {
+    final label = _isSubtask ? '↳ ${subtask!.title}' : task.title;
     return InkWell(
       onTap: onTap,
       child: SizedBox(
-        height: _rowH,
+        height: _height,
         child: Row(
           children: [
             SizedBox(
               width: _labelWidth,
               child: Container(
-                margin: const EdgeInsets.fromLTRB(6, 4, 6, 4),
+                margin: EdgeInsets.fromLTRB(_isSubtask ? 14 : 6, 4, 6, 4),
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 alignment: Alignment.centerLeft,
-                decoration: BoxDecoration(color: _labelFill, borderRadius: BorderRadius.circular(4)),
-                child: Text(
-                  task.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontStyle: FontStyle.italic,
-                    fontWeight: FontWeight.w600,
-                    color: _labelText,
-                  ),
+                decoration: BoxDecoration(
+                  color: _isSubtask ? const Color(0xFFF0F4F8) : _labelFill,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Row(
+                  children: [
+                    if (_isSubtask)
+                      Icon(
+                        subtask!.isDone ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
+                        size: 14,
+                        color: subtask!.isDone ? const Color(0xFF16a34a) : const Color(0xFF94A3B8),
+                      ),
+                    if (_isSubtask) const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: _isSubtask ? 10 : 11,
+                          fontStyle: _isSubtask ? FontStyle.normal : FontStyle.italic,
+                          fontWeight: FontWeight.w600,
+                          color: _isSubtask ? const Color(0xFF64748B) : _labelText,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
-            SizedBox(
-              width: chartWidth,
-              height: _rowH,
-              child: CustomPaint(painter: _BarPainter(task: task, weeks: weeks, month: month, dayWidth: dayWidth)),
+            Tooltip(
+              message: _barTooltip(task, subtask),
+              waitDuration: const Duration(milliseconds: 250),
+              child: SizedBox(
+                width: chartWidth,
+                height: _height,
+                child: CustomPaint(
+                  painter: _BarPainter(
+                    task: task,
+                    subtask: subtask,
+                    weeks: weeks,
+                    month: month,
+                    dayWidth: dayWidth,
+                  ),
+                ),
+              ),
             ),
             SizedBox(
               width: _avatarWidth,
-              child: Center(
-                child: CircleAvatar(
-                  radius: 13,
-                  backgroundColor: _assignOrange,
-                  child: Text(
-                    _initials(task.assignee.name),
-                    style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800),
-                  ),
-                ),
-              ),
+              child: _isSubtask
+                  ? const SizedBox.shrink()
+                  : Center(
+                      child: Tooltip(
+                        message: 'Assigned by ${task.assigner.name}',
+                        waitDuration: const Duration(milliseconds: 250),
+                        child: CircleAvatar(
+                          radius: 13,
+                          backgroundColor: _assignOrange,
+                          child: Text(
+                            taskPersonInitials(task.assigner.name),
+                            style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                      ),
+                    ),
             ),
           ],
         ),
@@ -718,9 +770,16 @@ class _GridPainter extends CustomPainter {
 }
 
 class _BarPainter extends CustomPainter {
-  _BarPainter({required this.task, required this.weeks, required this.month, required this.dayWidth});
+  _BarPainter({
+    required this.task,
+    required this.weeks,
+    required this.month,
+    required this.dayWidth,
+    this.subtask,
+  });
 
   final WorkTask task;
+  final WorkTaskSubtask? subtask;
   final List<_Week> weeks;
   final DateTime month;
   final double dayWidth;
@@ -732,8 +791,8 @@ class _BarPainter extends CustomPainter {
     final days = weeks.expand((w) => w.days).toList();
     final start = _dateOnly(task.createdAt);
     final end = _dateOnly(task.deadline);
-    const barTop = 8.0;
-    final barBottom = size.height - 8;
+    final barTop = subtask == null ? 8.0 : 10.0;
+    final barBottom = size.height - (subtask == null ? 8.0 : 10.0);
     final today = _dateOnly(DateTime.now());
 
     var x = 0.0;
@@ -754,11 +813,20 @@ class _BarPainter extends CustomPainter {
         );
 
         if (inMonth && !day.isBefore(start) && !day.isAfter(end)) {
-          final isStart = day == start;
-          final isEnd = day == end;
+          Color color;
+          if (subtask != null) {
+            color = subtask!.isDone ? const Color(0xFF16a34a) : const Color(0xFFCBD5E1);
+          } else {
+            final isStart = day == start;
+            final isEnd = day == end;
+            color = isStart ? _assignOrange : (isEnd ? _navy : week.color);
+            if (task.subtasks.isNotEmpty && task.subtaskProgress > 0) {
+              color = Color.lerp(color, const Color(0xFF16a34a), task.subtaskProgress * 0.45) ?? color;
+            }
+          }
           canvas.drawRect(
             Rect.fromLTRB(x, barTop, x + dayWidth, barBottom),
-            Paint()..color = isStart ? _assignOrange : (isEnd ? _navy : week.color),
+            Paint()..color = color,
           );
         }
         x += dayWidth;
@@ -782,5 +850,6 @@ class _BarPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _BarPainter oldDelegate) => true;
+  bool shouldRepaint(covariant _BarPainter oldDelegate) =>
+      oldDelegate.task != task || oldDelegate.subtask != subtask;
 }

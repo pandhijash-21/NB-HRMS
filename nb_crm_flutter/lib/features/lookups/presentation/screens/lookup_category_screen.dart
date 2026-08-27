@@ -1,15 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../domain/lookup_models.dart';
 import '../lookup_providers.dart';
 
 class LookupCategoryScreen extends ConsumerStatefulWidget {
-  const LookupCategoryScreen({super.key, required this.category});
+  const LookupCategoryScreen({
+    super.key,
+    required this.category,
+    this.fallbackLocation = '/admin/configurations',
+  });
 
   final String category;
+  final String fallbackLocation;
 
   @override
   ConsumerState<LookupCategoryScreen> createState() => _LookupCategoryScreenState();
@@ -48,7 +52,7 @@ class _LookupCategoryScreenState extends ConsumerState<LookupCategoryScreen> {
         backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
         elevation: 0,
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-        leading: const AppBackButton(fallbackLocation: '/admin/configurations'),
+        leading: AppBackButton(fallbackLocation: widget.fallbackLocation),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded, color: Color(0xFFC5A059)),

@@ -1,11 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/utils/picked_file_data.dart';
 import '../../../../core/utils/platform_file_picker.dart';
 import '../../../admin/presentation/admin_notifier.dart';
 import '../../domain/task_models.dart';
 import '../tasks_providers.dart';
+import 'searchable_dropdown.dart';
+
+class _SubtaskDraft {
+  _SubtaskDraft({String title = ''}) : title = TextEditingController(text: title);
+
+  final TextEditingController title;
+  PickedFileData? file;
+
+  String get titleText => title.text.trim();
+
+  void dispose() => title.dispose();
+}
 
 Future<void> showAssignTaskDialog(BuildContext context, WidgetRef ref) async {
   await showDialog<void>(
@@ -29,12 +40,27 @@ class _AssignTaskDialogState extends ConsumerState<_AssignTaskDialog> {
   DateTime _deadline = DateTime.now().add(const Duration(days: 3));
   PickedFileData? _file;
   bool _saving = false;
+  final _subtasks = <_SubtaskDraft>[];
 
   @override
   void dispose() {
     _title.dispose();
     _description.dispose();
+    for (final s in _subtasks) {
+      s.dispose();
+    }
     super.dispose();
+  }
+
+  void _addSubtaskRow() {
+    setState(() => _subtasks.add(_SubtaskDraft()));
+  }
+
+  void _removeSubtask(int index) {
+    setState(() {
+      _subtasks[index].dispose();
+      _subtasks.removeAt(index);
+    });
   }
 
   Future<void> _pickDeadline() async {
@@ -69,17 +95,36 @@ class _AssignTaskDialogState extends ConsumerState<_AssignTaskDialog> {
       );
       return;
     }
+    if (_subtasks.any((s) => s.titleText.isEmpty && s.file != null)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Each subtask with a file needs a title')),
+      );
+      return;
+    }
+
     setState(() => _saving = true);
     try {
-      await ref.read(tasksRepositoryProvider).create(
-            assigneeUserId: _assigneeUserId!,
-            title: title,
-            description: _description.text.trim(),
-            deadline: _deadline,
-            extraApproverUserId: _extraApproverUserId,
-            fileBytes: _file?.bytes,
-            fileName: _file?.name,
-          );
+      final repo = ref.read(tasksRepositoryProvider);
+      var task = await repo.create(
+        assigneeUserId: _assigneeUserId!,
+        title: title,
+        description: _description.text.trim(),
+        deadline: _deadline,
+        extraApproverUserId: _extraApproverUserId,
+        fileBytes: _file?.bytes,
+        fileName: _file?.name,
+      );
+      for (var i = 0; i < _subtasks.length; i++) {
+        final draft = _subtasks[i];
+        final st = draft.titleText;
+        if (st.isEmpty) continue;
+        task = await repo.addSubtask(
+          task.id,
+          title: st,
+          fileBytes: draft.file?.bytes,
+          fileName: draft.file?.name,
+        );
+      }
       ref.invalidate(myTasksProvider);
       ref.invalidate(taskSummaryProvider);
       if (mounted) Navigator.pop(context);
@@ -99,6 +144,10 @@ class _AssignTaskDialogState extends ConsumerState<_AssignTaskDialog> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final reportees = ref.watch(taskReporteesProvider).asData?.value ?? const <TaskReportee>[];
     final names = ref.watch(employeeNamesProvider).asData?.value ?? const [];
+    final approverOptions = [
+      for (final n in names)
+        if (n.userId.isNotEmpty && n.userId != _assigneeUserId) n,
+    ];
 
     return AlertDialog(
       backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
@@ -108,18 +157,14 @@ class _AssignTaskDialogState extends ConsumerState<_AssignTaskDialog> {
         width: 460,
         child: Column(
           children: [
-            DropdownButtonFormField<String>(
+            SearchableDropdown<TaskReportee>(
+              label: 'Assign to *',
               value: _assigneeUserId,
-              isExpanded: true,
-              decoration: const InputDecoration(
-                labelText: 'Assign to *',
-                border: OutlineInputBorder(),
-                helperText: 'Only people whose 1st reporting is you',
-              ),
-              items: [
-                for (final r in reportees)
-                  DropdownMenuItem(value: r.userId, child: Text(r.displayLabel, overflow: TextOverflow.ellipsis)),
-              ],
+              helperText: 'Only people whose 1st reporting is you',
+              hint: 'Search reportees…',
+              items: reportees,
+              itemLabel: (r) => r.displayLabel,
+              itemValue: (r) => r.userId,
               onChanged: (v) => setState(() {
                 _assigneeUserId = v;
                 if (_extraApproverUserId == v) _extraApproverUserId = null;
@@ -153,23 +198,17 @@ class _AssignTaskDialogState extends ConsumerState<_AssignTaskDialog> {
               ),
               trailing: TextButton(onPressed: _pickDeadline, child: const Text('Change')),
             ),
-            DropdownButtonFormField<String?>(
+            const SizedBox(height: 8),
+            SearchableDropdown(
+              label: 'Extra approval (optional)',
               value: _extraApproverUserId,
-              isExpanded: true,
-              decoration: const InputDecoration(
-                labelText: 'Extra approval (optional)',
-                border: OutlineInputBorder(),
-                helperText: 'If this task needs a sign-off from someone else',
-              ),
-              items: [
-                const DropdownMenuItem<String?>(value: null, child: Text('No extra approval')),
-                for (final n in names)
-                  if (n.userId.isNotEmpty && n.userId != _assigneeUserId)
-                    DropdownMenuItem<String?>(
-                      value: n.userId,
-                      child: Text(n.displayLabel, overflow: TextOverflow.ellipsis),
-                    ),
-              ],
+              helperText: 'If this task needs a sign-off from someone else',
+              hint: 'Search employees…',
+              allowClear: true,
+              clearLabel: 'No extra approval',
+              items: approverOptions,
+              itemLabel: (n) => n.displayLabel,
+              itemValue: (n) => n.userId,
               onChanged: (v) => setState(() => _extraApproverUserId = v),
             ),
             const SizedBox(height: 12),
@@ -184,6 +223,59 @@ class _AssignTaskDialogState extends ConsumerState<_AssignTaskDialog> {
               icon: const Icon(Icons.attach_file_rounded),
               label: Text(_file == null ? 'Attach PDF / PPT' : _file!.name),
             ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Text('Subtasks', style: TextStyle(fontWeight: FontWeight.w800, color: isDark ? Colors.white : const Color(0xFF212F3D))),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: _addSubtaskRow,
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: const Text('Add subtask'),
+                ),
+              ],
+            ),
+            if (_subtasks.isEmpty)
+              Text(
+                'Optional checklist items for the assignee. No separate deadline — parent task deadline applies.',
+                style: TextStyle(fontSize: 12, color: isDark ? Colors.white60 : const Color(0xFF607D8B)),
+              ),
+            for (var i = 0; i < _subtasks.length; i++) ...[
+              const SizedBox(height: 8),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _subtasks[i].title,
+                      decoration: InputDecoration(
+                        labelText: 'Subtask ${i + 1}',
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Remove',
+                    onPressed: () => _removeSubtask(i),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () async {
+                    final picked = await pickFileFromDevice(
+                      imagesOnly: false,
+                      extensions: const ['pdf', 'ppt', 'pptx'],
+                    );
+                    if (picked != null) setState(() => _subtasks[i].file = picked);
+                  },
+                  icon: const Icon(Icons.attach_file_outlined, size: 18),
+                  label: Text(_subtasks[i].file?.name ?? 'Attach doc (optional)'),
+                ),
+              ),
+            ],
           ],
         ),
       ),

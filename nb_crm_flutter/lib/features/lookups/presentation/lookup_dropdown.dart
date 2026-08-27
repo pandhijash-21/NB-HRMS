@@ -69,6 +69,222 @@ Widget lookupDropdown({
   );
 }
 
+/// Multi-select chips bound to a lookup category (stores codes as a set).
+Widget lookupMultiCheckbox({
+  required WidgetRef ref,
+  required String category,
+  required String label,
+  required Set<String> selected,
+  required ValueChanged<Set<String>> onChanged,
+}) {
+  final options = resolveLookupOptions(ref, category);
+  if (lookupsLoading(ref, category) && options.isEmpty) {
+    return InputDecorator(
+      decoration: InputDecoration(
+        labelText: label,
+        border: const OutlineInputBorder(),
+      ),
+      child: const SizedBox(
+        height: 24,
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      ),
+    );
+  }
+  if (options.isEmpty) {
+    return InputDecorator(
+      decoration: InputDecoration(
+        labelText: label,
+        border: const OutlineInputBorder(),
+        helperText: 'Add options under Configurations → Projects → Amenities.',
+      ),
+      child: const Text('No amenities configured yet'),
+    );
+  }
+
+  return _LookupMultiChipField(
+    label: label,
+    options: options,
+    selected: selected,
+    onChanged: onChanged,
+  );
+}
+
+class _LookupMultiChipField extends StatelessWidget {
+  const _LookupMultiChipField({
+    required this.label,
+    required this.options,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final String label;
+  final List<LookupOption> options;
+  final Set<String> selected;
+  final ValueChanged<Set<String>> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    const accent = Color(0xFF2563eb);
+    const accentDark = Color(0xFF1d4ed8);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+                color: isDark ? Colors.white70 : const Color(0xFF607D8B),
+              ),
+            ),
+            const Spacer(),
+            if (selected.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  '${selected.length} selected',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: accent,
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF141210) : const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isDark
+                  ? const Color(0xFFC5A059).withValues(alpha: 0.2)
+                  : const Color(0xFFCFD8DC),
+            ),
+          ),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final o in options)
+                _AmenityChip(
+                  label: o.label,
+                  selected: selected.contains(o.code),
+                  isDark: isDark,
+                  accent: accent,
+                  accentDark: accentDark,
+                  onTap: () {
+                    final next = Set<String>.from(selected);
+                    if (next.contains(o.code)) {
+                      next.remove(o.code);
+                    } else {
+                      next.add(o.code);
+                    }
+                    onChanged(next);
+                  },
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AmenityChip extends StatelessWidget {
+  const _AmenityChip({
+    required this.label,
+    required this.selected,
+    required this.isDark,
+    required this.accent,
+    required this.accentDark,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final bool isDark;
+  final Color accent;
+  final Color accentDark;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = selected
+        ? (isDark ? accentDark : accent)
+        : (isDark ? const Color(0xFF1E1B18) : Colors.white);
+    final border = selected
+        ? (isDark ? accent : accent)
+        : (isDark ? const Color(0xFF3A3530) : const Color(0xFFCFD8DC));
+    final fg = selected
+        ? Colors.white
+        : (isDark ? Colors.white.withValues(alpha: 0.85) : const Color(0xFF37474F));
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: border),
+            boxShadow: selected && !isDark
+                ? [
+                    BoxShadow(
+                      color: accent.withValues(alpha: 0.18),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                selected ? Icons.check_circle_rounded : Icons.circle_outlined,
+                size: 16,
+                color: selected ? Colors.white : (isDark ? Colors.white38 : const Color(0xFF90A4AE)),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  color: fg,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Nullable dropdown (includes "Not set").
 Widget lookupNullableDropdown({
   required WidgetRef ref,
@@ -270,9 +486,10 @@ class _LookupCodeDropdownState extends State<_LookupCodeDropdown> {
     }
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.only(bottom: 0),
       child: DropdownButtonFormField<String>(
         key: ValueKey('lookup-code-${widget.category}-$selected'),
+        isExpanded: true,
         initialValue: selected,
         decoration: InputDecoration(
           labelText: widget.required ? '${widget.label} *' : widget.label,
@@ -280,7 +497,10 @@ class _LookupCodeDropdownState extends State<_LookupCodeDropdown> {
         ),
         items: [
           for (final o in options)
-            DropdownMenuItem(value: o.code, child: Text(o.label)),
+            DropdownMenuItem(
+              value: o.code,
+              child: Text(o.label, overflow: TextOverflow.ellipsis),
+            ),
         ],
         onChanged: (v) {
           if (v == null) return;
@@ -352,9 +572,10 @@ class _LookupNullableCodeDropdownState
     }
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.only(bottom: 0),
       child: DropdownButtonFormField<String?>(
         key: ValueKey('lookup-nullable-code-${widget.category}-$selected'),
+        isExpanded: true,
         initialValue: selected,
         decoration: InputDecoration(
           labelText: widget.label,
@@ -363,7 +584,10 @@ class _LookupNullableCodeDropdownState
         items: [
           const DropdownMenuItem<String?>(value: null, child: Text('Not set')),
           for (final o in options)
-            DropdownMenuItem<String?>(value: o.code, child: Text(o.label)),
+            DropdownMenuItem<String?>(
+              value: o.code,
+              child: Text(o.label, overflow: TextOverflow.ellipsis),
+            ),
         ],
         onChanged: (v) {
           setState(() => _selected = v);
@@ -463,7 +687,7 @@ class _LookupLabelDropdownState extends State<_LookupLabelDropdown> {
     }
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.only(bottom: 0),
       child: DropdownButtonFormField<String>(
         key: ValueKey('lookup-label-${widget.category}-$selected'),
         initialValue: selected,
@@ -538,7 +762,7 @@ class _LookupNullableLabelDropdownState
     }
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.only(bottom: 0),
       child: DropdownButtonFormField<String?>(
         key: ValueKey('lookup-nullable-label-${widget.category}-$selected'),
         initialValue: selected,

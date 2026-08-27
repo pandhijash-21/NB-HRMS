@@ -67,7 +67,28 @@ export type OrganizationUpdateInput = CompanyProfileInput & {
 };
 
 export const organizationService = {
+  /** Copy ORGANIZATION lookups into the Organization table if missing.
+   *  Employee add-form historically used SystemLookup; Config uses Organization. */
+  async syncFromLookups() {
+    const lookups = await prisma.systemLookup.findMany({
+      where: { category: 'ORGANIZATION' },
+    });
+    for (const row of lookups) {
+      await prisma.organization.upsert({
+        where: { code: row.code },
+        update: {},
+        create: {
+          code: row.code,
+          name: row.label,
+          sortOrder: row.sortOrder,
+          isActive: row.isActive,
+        },
+      });
+    }
+  },
+
   async list(options?: { activeOnly?: boolean }) {
+    await this.syncFromLookups();
     const rows = await prisma.organization.findMany({
       where: options?.activeOnly ? { isActive: true } : undefined,
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],

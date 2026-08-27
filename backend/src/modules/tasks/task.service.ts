@@ -58,6 +58,16 @@ function mapTask(row: Awaited<ReturnType<typeof loadTask>>) {
       createdAt: e.createdAt.toISOString(),
       actor: mapUser(e.actor),
     })),
+    subtasks: row.subtasks.map((s) => ({
+      id: s.id,
+      title: s.title,
+      sortOrder: s.sortOrder,
+      isDone: s.isDone,
+      completedAt: s.completedAt?.toISOString() ?? null,
+      attachmentUrl: s.attachmentUrl,
+      attachmentName: s.attachmentName,
+      attachmentMime: s.attachmentMime,
+    })),
   };
 }
 
@@ -98,6 +108,9 @@ const taskInclude = {
         },
       },
     },
+  },
+  subtasks: {
+    orderBy: [{ sortOrder: 'asc' as const }, { createdAt: 'asc' as const }],
   },
 };
 
@@ -454,5 +467,124 @@ export const taskService = {
       },
     });
     return mapTask(await loadTask(updated.id));
+  },
+
+  async addSubtask(params: {
+    taskId: string;
+    actorUserId: string;
+    title: string;
+    attachmentUrl?: string | null;
+    attachmentName?: string | null;
+    attachmentMime?: string | null;
+  }) {
+    const title = params.title.trim();
+    if (!title) throw new Error('Subtask title is required');
+    const row = await prisma.workTask.findUnique({
+      where: { id: params.taskId },
+      include: { subtasks: { select: { sortOrder: true }, orderBy: { sortOrder: 'desc' }, take: 1 } },
+    });
+    if (!row) throw new Error('Task not found');
+    if (row.assignerUserId !== params.actorUserId) {
+      throw new Error('Only the person who assigned this task can add subtasks');
+    }
+    if (CLOSED.includes(row.status)) throw new Error('This task is already closed');
+
+    const nextOrder = (row.subtasks[0]?.sortOrder ?? -1) + 1;
+    await prisma.workTaskSubtask.create({
+      data: {
+        taskId: row.id,
+        title,
+        sortOrder: nextOrder,
+        attachmentUrl: params.attachmentUrl ?? null,
+        attachmentName: params.attachmentName ?? null,
+        attachmentMime: params.attachmentMime ?? null,
+      },
+    });
+    await prisma.workTaskEvent.create({
+      data: {
+        taskId: row.id,
+        actorUserId: params.actorUserId,
+        type: 'SUBTASK_UPDATED',
+        remarks: `Subtask added: ${title}`,
+      },
+    });
+    return mapTask(await loadTask(row.id));
+  },
+
+  async setSubtaskDone(params: { taskId: string; subtaskId: string; actorUserId: string; isDone: boolean }) {
+    const row = await prisma.workTask.findUnique({
+      where: { id: params.taskId },
+      include: { subtasks: { orderBy: { sortOrder: 'asc' } } },
+    });
+    if (!row) throw new Error('Task not found');
+    if (row.assigneeUserId !== params.actorUserId) {
+      throw new Error('Only the assignee can check subtasks');
+    }
+    if (CLOSED.includes(row.status)) throw new Error('This task is already closed');
+
+    const sub = row.subtasks.find((s) => s.id === params.subtaskId);
+    if (!sub) throw new Error('Subtask not found');
+
+    const now = new Date();
+    await prisma.workTaskSubtask.update({
+      where: { id: sub.id },
+      data: {
+        isDone: params.isDone,
+        completedAt: params.isDone ? now : null,
+      },
+    });
+
+    const doneCount = row.subtasks.reduce((n, s) => {
+      const done = s.id === sub.id ? params.isDone : s.isDone;
+      return n + (done ? 1 : 0);
+    }, 0);
+    const total = row.subtasks.length;
+    const allDone = total > 0 && doneCount === total;
+
+    let nextStatus: WorkTaskStatus = row.status;
+    if (allDone && (row.status === 'ASSIGNED' || row.status === 'ONGOING' || row.status === 'CHANGES_REQUESTED')) {
+      nextStatus = 'COMPLETED';
+    } else if (!allDone && row.status === 'COMPLETED') {
+      nextStatus = 'ONGOING';
+    } else if (!allDone && doneCount > 0 && row.status === 'ASSIGNED') {
+      nextStatus = 'ONGOING';
+    }
+
+    await prisma.workTask.update({
+      where: { id: row.id },
+      data: {
+        status: nextStatus,
+        startedAt: nextStatus === 'ONGOING' || nextStatus === 'COMPLETED' ? row.startedAt ?? now : row.startedAt,
+        completedAt: nextStatus === 'COMPLETED' ? now : nextStatus === 'ONGOING' ? null : row.completedAt,
+        events: {
+          create: [
+            {
+              actorUserId: params.actorUserId,
+              type: 'SUBTASK_UPDATED',
+              remarks: params.isDone
+                ? `Subtask checked: ${sub.title} (${doneCount}/${total})`
+                : `Subtask unchecked: ${sub.title} (${doneCount}/${total})`,
+            },
+            ...(nextStatus !== row.status
+              ? [
+                  {
+                    actorUserId: params.actorUserId,
+                    type: 'STATUS_CHANGED' as const,
+                    fromStatus: row.status,
+                    toStatus: nextStatus,
+                    remarks: allDone
+                      ? 'All subtasks completed'
+                      : doneCount === 0
+                        ? 'Subtask unchecked'
+                        : `${doneCount}/${total} subtasks done`,
+                  },
+                ]
+              : []),
+          ],
+        },
+      },
+    });
+
+    return mapTask(await loadTask(row.id));
   },
 };

@@ -67,6 +67,14 @@ import '../../features/rbac/presentation/screens/admin_users_screen.dart';
 import '../../features/rbac/presentation/screens/admin_roles_screen.dart';
 import '../../features/rbac/presentation/screens/admin_role_detail_screen.dart';
 import '../../features/org_tree/presentation/screens/employee_tree_screen.dart';
+import '../../features/erp/presentation/screens/erp_home_screen.dart';
+import '../../features/erp/presentation/screens/erp_configurations_screen.dart';
+import '../../features/erp/presentation/screens/projects_list_screen.dart';
+import '../../features/erp/presentation/screens/project_form_screen.dart';
+import '../../features/erp/presentation/screens/project_structure_screen.dart';
+import '../../features/erp/presentation/screens/tower_form_screen.dart';
+import '../../features/erp/presentation/screens/tower_units_screen.dart';
+import '../../features/erp/presentation/screens/unit_form_screen.dart';
 import '../widgets/responsive_shell.dart';
 
 /// Listenable bridge so GoRouter refreshes when [AuthState] changes.
@@ -96,7 +104,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
   final shellNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'shellNav');
 
   // Bump when route table changes so hot-restart rebuilds GoRouter cleanly.
-  const routerRevision = 12;
+  const routerRevision = 16;
 
   return GoRouter(
     navigatorKey: rootNavigatorKey,
@@ -177,6 +185,88 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/tasks',
             builder: (context, state) => const TasksHubScreen(),
+          ),
+          GoRoute(
+            path: '/erp/home',
+            builder: (context, state) => const ErpHomeScreen(),
+          ),
+          GoRoute(
+            path: '/erp/projects',
+            builder: (context, state) => const ProjectsListScreen(),
+          ),
+          GoRoute(
+            path: '/erp/projects/new',
+            builder: (context, state) => const ProjectFormScreen(),
+          ),
+          GoRoute(
+            path: '/erp/projects/:id',
+            builder: (context, state) {
+              final id = state.pathParameters['id'];
+              if (id == null || id.isEmpty) {
+                return const Scaffold(body: Center(child: Text('Invalid project')));
+              }
+              return ProjectFormScreen(projectId: id);
+            },
+          ),
+          GoRoute(
+            path: '/erp/structure/:projectId',
+            builder: (context, state) {
+              return ProjectStructureScreen(
+                projectId: state.pathParameters['projectId'] ?? '',
+              );
+            },
+            routes: [
+              GoRoute(
+                path: 'towers/new',
+                builder: (context, state) {
+                  return TowerFormScreen(
+                    projectId: state.pathParameters['projectId'] ?? '',
+                  );
+                },
+              ),
+              GoRoute(
+                path: 'towers/:towerId/units/:unitId',
+                builder: (context, state) {
+                  return UnitFormScreen(
+                    projectId: state.pathParameters['projectId'] ?? '',
+                    towerId: state.pathParameters['towerId'] ?? '',
+                    unitId: state.pathParameters['unitId'] ?? '',
+                  );
+                },
+              ),
+              GoRoute(
+                path: 'towers/:towerId/units',
+                builder: (context, state) {
+                  return TowerUnitsScreen(
+                    projectId: state.pathParameters['projectId'] ?? '',
+                    towerId: state.pathParameters['towerId'] ?? '',
+                  );
+                },
+              ),
+              GoRoute(
+                path: 'towers/:towerId',
+                builder: (context, state) {
+                  return TowerFormScreen(
+                    projectId: state.pathParameters['projectId'] ?? '',
+                    towerId: state.pathParameters['towerId'],
+                  );
+                },
+              ),
+            ],
+          ),
+          GoRoute(
+            path: '/erp/configurations',
+            builder: (context, state) => const ErpConfigurationsScreen(),
+          ),
+          GoRoute(
+            path: '/erp/configurations/lookups/:category',
+            builder: (context, state) {
+              final category = state.pathParameters['category'] ?? '';
+              return LookupCategoryScreen(
+                category: category,
+                fallbackLocation: '/erp/configurations',
+              );
+            },
           ),
           GoRoute(
             path: '/leave',

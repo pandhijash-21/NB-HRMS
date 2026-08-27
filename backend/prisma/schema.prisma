@@ -232,6 +232,7 @@ model Employee {
   trackingEvents      TrackingEvent[]
   workTasks           WorkTask[]
   orgTreeContacts     OrgTreeContact[]
+  ownedErpProjects    ErpProject[]
 
   @@map("employees")
 }
@@ -1194,6 +1195,7 @@ model Organization {
   updatedAt         DateTime @updatedAt @map("updated_at")
 
   childInstitutes Institute[]
+  erpProjects     ErpProject[]
 
   @@map("organizations")
 }
@@ -1245,6 +1247,7 @@ model Institute {
   positionSlots      PositionSlot[]
   assignments        EmployeeAssignment[]
   jobRequirements    JobRequirement[]
+  erpProjects        ErpProject[]
 
   @@index([parentOrganizationId])
   @@map("institutes")
@@ -1846,6 +1849,7 @@ enum WorkTaskEventType {
   EXTRA_APPROVAL_REQUESTED
   EXTRA_APPROVAL_DECIDED
   REVIEWED
+  SUBTASK_UPDATED
 }
 
 model WorkTask {
@@ -1854,9 +1858,9 @@ model WorkTask {
   description String?        @db.Text
   status      WorkTaskStatus @default(ASSIGNED)
 
-  assignerUserId      String @map("assigner_user_id")
-  assigneeUserId      String @map("assignee_user_id")
-  assigneeEmployeeId  Int    @map("assignee_employee_id")
+  assignerUserId     String @map("assigner_user_id")
+  assigneeUserId     String @map("assignee_user_id")
+  assigneeEmployeeId Int    @map("assignee_employee_id")
 
   deadline    DateTime
   startedAt   DateTime? @map("started_at")
@@ -1867,21 +1871,22 @@ model WorkTask {
   attachmentName String? @map("attachment_name")
   attachmentMime String? @map("attachment_mime")
 
-  extraApproverUserId    String?                     @map("extra_approver_user_id")
+  extraApproverUserId    String?                      @map("extra_approver_user_id")
   extraApprovalStatus    WorkTaskExtraApprovalStatus? @map("extra_approval_status")
-  extraApprovalRemarks   String?                     @map("extra_approval_remarks") @db.Text
-  extraApprovalDecidedAt DateTime?                   @map("extra_approval_decided_at")
+  extraApprovalRemarks   String?                      @map("extra_approval_remarks") @db.Text
+  extraApprovalDecidedAt DateTime?                    @map("extra_approval_decided_at")
 
   reviewRemarks String? @map("review_remarks") @db.Text
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  assigner      User      @relation("TaskAssigner", fields: [assignerUserId], references: [id])
-  assignee      User      @relation("TaskAssignee", fields: [assigneeUserId], references: [id])
-  extraApprover User?     @relation("TaskExtraApprover", fields: [extraApproverUserId], references: [id])
-  employee      Employee  @relation(fields: [assigneeEmployeeId], references: [id], onDelete: Cascade)
+  assigner      User            @relation("TaskAssigner", fields: [assignerUserId], references: [id])
+  assignee      User            @relation("TaskAssignee", fields: [assigneeUserId], references: [id])
+  extraApprover User?           @relation("TaskExtraApprover", fields: [extraApproverUserId], references: [id])
+  employee      Employee        @relation(fields: [assigneeEmployeeId], references: [id], onDelete: Cascade)
   events        WorkTaskEvent[]
+  subtasks      WorkTaskSubtask[]
 
   @@index([assignerUserId, status])
   @@index([assigneeUserId, status])
@@ -1906,4 +1911,165 @@ model WorkTaskEvent {
 
   @@index([taskId, createdAt])
   @@map("work_task_events")
+}
+
+model WorkTaskSubtask {
+  id        String  @id @default(uuid())
+  taskId    String  @map("task_id")
+  title     String
+  sortOrder Int     @default(0) @map("sort_order")
+  isDone    Boolean @default(false) @map("is_done")
+
+  completedAt DateTime? @map("completed_at")
+
+  attachmentUrl  String? @map("attachment_url")
+  attachmentName String? @map("attachment_name")
+  attachmentMime String? @map("attachment_mime")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  task WorkTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, sortOrder])
+  @@map("work_task_subtasks")
+}
+
+// =============================================================================
+// ERP — Projects (development sites)
+// Dropdown codes are SystemLookup values, managed from Configurations → Projects.
+// =============================================================================
+
+model ErpProject {
+  id        String @id @default(uuid())
+  projectNo Int    @unique @default(autoincrement()) @map("project_no")
+  name      String
+
+  organizationId String? @map("organization_id")
+  instituteId    String? @map("institute_id")
+
+  categoryCode           String?   @map("category_code")
+  subCategoryCode        String?   @map("sub_category_code")
+  structureCode          String?   @map("structure_code")
+  segmentCode            String?   @map("segment_code")
+  reraNo                 String?   @map("rera_no")
+  expectedCompletionDate DateTime? @map("expected_completion_date") @db.Date
+  notes                  String?   @db.Text
+  statusCode             String    @default("ACTIVE") @map("status_code")
+  ownerEmployeeId        Int?      @map("owner_employee_id")
+
+  totalProjectArea Decimal? @map("total_project_area") @db.Decimal(14, 2)
+  areaUnitCode     String?  @map("area_unit_code")
+  estimatedCost    Decimal? @map("estimated_cost") @db.Decimal(14, 2)
+  imageUrl         String?  @map("image_url")
+
+  address     String? @db.Text
+  landmark    String?
+  countryCode String? @map("country_code")
+  stateCode   String? @map("state_code")
+  cityCode    String? @map("city_code")
+  areaCode    String? @map("area_code")
+  pincode     String?
+
+  totalPlotArea            Decimal? @map("total_plot_area") @db.Decimal(14, 2)
+  amenitiesCode            String?  @map("amenities_code")
+  livabilityCode           String?  @map("livability_code")
+  bankTieUpCode            String?  @map("bank_tie_up_code")
+  developmentAuthorityCode String?  @map("development_authority_code")
+  electricityProviderCode  String?  @map("electricity_provider_code")
+  specNotes                String?  @map("spec_notes") @db.Text
+
+  isActive  Boolean  @default(true) @map("is_active")
+  createdBy String?  @map("created_by")
+  updatedBy String?  @map("updated_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  organization Organization?        @relation(fields: [organizationId], references: [id])
+  institute    Institute?           @relation(fields: [instituteId], references: [id])
+  owner        Employee?            @relation(fields: [ownerEmployeeId], references: [id])
+  documents    ErpProjectDocument[]
+  towers       ErpProjectTower[]
+
+  @@index([isActive, createdAt])
+  @@index([organizationId])
+  @@index([instituteId])
+  @@index([statusCode])
+  @@map("erp_projects")
+}
+
+model ErpProjectDocument {
+  id        String   @id @default(uuid())
+  projectId String   @map("project_id")
+  typeCode  String?  @map("type_code")
+  name      String
+  remarks   String?
+  fileUrl   String   @map("file_url")
+  fileName  String?  @map("file_name")
+  mimeType  String?  @map("mime_type")
+  fileSize  Int?     @map("file_size")
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  project ErpProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@map("erp_project_documents")
+}
+
+model ErpProjectTower {
+  id            String  @id @default(uuid())
+  projectId     String  @map("project_id")
+  name          String
+  phase         String?
+  basementCount Int     @default(0) @map("basement_count")
+  floorCount    Int     @map("floor_count")
+  flatsPerFloor Int     @map("flats_per_floor")
+  hasGround     Boolean @default(false) @map("has_ground")
+  sequence      Int     @default(0)
+  statusCode    String  @default("ACTIVE") @map("status_code")
+  remarks       String? @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  project ErpProject       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  units   ErpProjectUnit[]
+
+  @@index([projectId, sequence])
+  @@map("erp_project_towers")
+}
+
+model ErpProjectUnit {
+  id                String   @id @default(uuid())
+  towerId           String   @map("tower_id")
+  unitNo            String   @map("unit_no")
+  unitTypeCode      String?  @map("unit_type_code")
+  floorNo           Int      @map("floor_no")
+  superBuiltUp      Decimal? @map("super_built_up") @db.Decimal(14, 2)
+  carpetArea        Decimal? @map("carpet_area") @db.Decimal(14, 2)
+  areaUnitCode      String?  @map("area_unit_code")
+  statusCode        String   @default("AVAILABLE") @map("status_code")
+  facingCode        String?  @map("facing_code")
+  categoryCode      String?  @map("category_code")
+  builtUpArea       Decimal? @map("built_up_area") @db.Decimal(14, 2)
+  balconyArea       Decimal? @map("balcony_area") @db.Decimal(14, 2)
+  terraceArea       Decimal? @map("terrace_area") @db.Decimal(14, 2)
+  plotArea          Decimal? @map("plot_area") @db.Decimal(14, 2)
+  parkingAllocation String?  @map("parking_allocation")
+  plc               Decimal? @db.Decimal(14, 2)
+  baseRate          Decimal? @map("base_rate") @db.Decimal(14, 2)
+  totalValue        Decimal? @map("total_value") @db.Decimal(14, 2)
+  remarks           String?
+  sortOrder         Int      @default(0) @map("sort_order")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tower ErpProjectTower @relation(fields: [towerId], references: [id], onDelete: Cascade)
+
+  @@unique([towerId, unitNo])
+  @@index([towerId, floorNo])
+  @@map("erp_project_units")
 }

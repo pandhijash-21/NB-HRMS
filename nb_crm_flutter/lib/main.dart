@@ -11,7 +11,7 @@ import 'core/theme/theme_provider.dart';
 import 'features/auth/presentation/permission_guard.dart';
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  WidgetsFlutterBinding.ensureInitialized(); 
   if (!kIsWeb) {
     await initializeBackgroundService();
   }

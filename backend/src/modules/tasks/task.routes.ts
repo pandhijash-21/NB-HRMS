@@ -184,3 +184,48 @@ tasksRouter.post('/:id/review', async (req: Request, res: Response) => {
     return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed to review task'));
   }
 });
+
+tasksRouter.post('/:id/subtasks', upload.single('file'), async (req: Request, res: Response) => {
+  try {
+    const title = String(req.body?.title ?? '').trim();
+    let attachmentUrl: string | null = null;
+    let attachmentName: string | null = null;
+    let attachmentMime: string | null = null;
+    if (req.file) {
+      if (!isAllowedAttachment(req.file)) {
+        return res.status(400).json(fail('Only PDF or PPT files are allowed'));
+      }
+      attachmentUrl = await uploadService.uploadToCloudinary(req.file, 'tasks');
+      attachmentName = req.file.originalname || 'attachment';
+      attachmentMime = req.file.mimetype || null;
+    }
+    const data = await taskService.addSubtask({
+      taskId: p(req.params.id),
+      actorUserId: req.user!.id,
+      title,
+      attachmentUrl,
+      attachmentName,
+      attachmentMime,
+    });
+    return res.status(201).json(ok(data));
+  } catch (e: unknown) {
+    return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed to add subtask'));
+  }
+});
+
+tasksRouter.post('/:id/subtasks/:subId/done', async (req: Request, res: Response) => {
+  try {
+    const Schema = z.object({ isDone: z.boolean() });
+    const body = Schema.safeParse(req.body);
+    if (!body.success) return res.status(400).json(fail('isDone is required'));
+    const data = await taskService.setSubtaskDone({
+      taskId: p(req.params.id),
+      subtaskId: p(req.params.subId),
+      actorUserId: req.user!.id,
+      isDone: body.data.isDone,
+    });
+    return res.json(ok(data));
+  } catch (e: unknown) {
+    return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed to update subtask'));
+  }
+});

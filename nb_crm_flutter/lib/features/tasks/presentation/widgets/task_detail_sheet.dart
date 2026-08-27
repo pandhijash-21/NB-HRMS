@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/network/api_envelope.dart';
 import '../../../../core/utils/open_stored_document.dart';
+import '../../../../core/utils/picked_file_data.dart';
+import '../../../../core/utils/platform_file_picker.dart';
 import '../../../admin/presentation/admin_notifier.dart';
 import '../../../auth/presentation/auth_providers.dart';
 import '../../domain/task_models.dart';
@@ -52,8 +55,9 @@ class _TaskDetailSheetState extends ConsumerState<TaskDetailSheet> {
       ref.invalidate(taskSummaryProvider);
     } catch (e) {
       if (mounted) {
+        final msg = e is ApiException ? e.message : '$e';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$e'), backgroundColor: Colors.red),
+          SnackBar(content: Text(msg), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -82,6 +86,20 @@ class _TaskDetailSheetState extends ConsumerState<TaskDetailSheet> {
     return value;
   }
 
+  Future<void> _addSubtask() async {
+    final result = await showDialog<({String title, PickedFileData? file})>(
+      context: context,
+      builder: (ctx) => const _AddSubtaskDialog(),
+    );
+    if (result == null) return;
+    await _run(() => ref.read(tasksRepositoryProvider).addSubtask(
+          _task.id,
+          title: result.title,
+          fileBytes: result.file?.bytes,
+          fileName: result.file?.name,
+        ));
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -97,17 +115,6 @@ class _TaskDetailSheetState extends ConsumerState<TaskDetailSheet> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: isDark ? Colors.white24 : Colors.black12,
-                  borderRadius: BorderRadius.circular(99),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
             Text(_task.title, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: isDark ? Colors.white : const Color(0xFF212F3D))),
             const SizedBox(height: 8),
             Wrap(
@@ -158,9 +165,60 @@ class _TaskDetailSheetState extends ConsumerState<TaskDetailSheet> {
               const SizedBox(height: 8),
               Text('Review notes: ${_task.reviewRemarks!}', style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.w600)),
             ],
+            if (_task.subtasks.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Text(
+                'Subtasks (${_task.subtasksDone}/${_task.subtasks.length} done)',
+                style: TextStyle(fontWeight: FontWeight.w800, color: isDark ? Colors.white : const Color(0xFF212F3D)),
+              ),
+              const SizedBox(height: 8),
+              for (final sub in _task.subtasks)
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: sub.isDone,
+                  onChanged: isAssignee && !_task.isClosed
+                      ? (checked) => _run(
+                            () => ref.read(tasksRepositoryProvider).setSubtaskDone(
+                                  _task.id,
+                                  sub.id,
+                                  isDone: checked ?? false,
+                                ),
+                          )
+                      : null,
+                  title: Text(sub.title),
+                  subtitle: sub.attachmentUrl != null && sub.attachmentUrl!.isNotEmpty
+                      ? TextButton(
+                          onPressed: () => openStoredDocument(
+                            context,
+                            url: sub.attachmentUrl!,
+                            fileName: sub.attachmentName,
+                            title: sub.attachmentName ?? 'Subtask attachment',
+                          ),
+                          child: Text(sub.attachmentName ?? 'Open attachment'),
+                        )
+                      : null,
+                  controlAffinity: ListTileControlAffinity.leading,
+                ),
+              if (isAssigner && !_task.isClosed)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: _busy ? null : _addSubtask,
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('Add subtask'),
+                  ),
+                ),
+            ] else if (isAssigner && !_task.isClosed) ...[
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: _busy ? null : _addSubtask,
+                icon: const Icon(Icons.checklist_rounded),
+                label: const Text('Add subtasks'),
+              ),
+            ],
             const SizedBox(height: 16),
             if (_busy) const LinearProgressIndicator(),
-            if (isAssignee && !_task.isClosed) ...[
+            if (isAssignee && !_task.isClosed && _task.subtasks.isEmpty) ...[
               Wrap(
                 spacing: 8,
                 children: [
@@ -305,8 +363,8 @@ class _TaskDetailSheetState extends ConsumerState<TaskDetailSheet> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Text(
-                  '${_fmt(e.createdAt)}  ·  ${e.actor.name}  ·  ${e.type.replaceAll('_', ' ').toLowerCase()}'
-                  '${e.remarks == null ? '' : '\n${e.remarks}'}',
+                  '${_fmt(e.createdAt)}  ·  ${e.actor.name}  ·  ${taskEventSummary(e)}'
+                  '${e.remarks != null && e.type != 'SUBTASK_UPDATED' && e.type != 'STATUS_CHANGED' ? '\n${e.remarks}' : ''}',
                   style: TextStyle(fontSize: 12, color: isDark ? Colors.white60 : const Color(0xFF607D8B)),
                 ),
               ),
@@ -350,5 +408,62 @@ Color _statusColor(String status) {
       return const Color(0xFFe11d48);
     default:
       return const Color(0xFF64748b);
+  }
+}
+
+class _AddSubtaskDialog extends StatefulWidget {
+  const _AddSubtaskDialog();
+
+  @override
+  State<_AddSubtaskDialog> createState() => _AddSubtaskDialogState();
+}
+
+class _AddSubtaskDialogState extends State<_AddSubtaskDialog> {
+  final _title = TextEditingController();
+  PickedFileData? _file;
+
+  @override
+  void dispose() {
+    _title.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Add subtask'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _title,
+            decoration: const InputDecoration(labelText: 'Subtask title *', border: OutlineInputBorder()),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: () async {
+              final picked = await pickFileFromDevice(
+                imagesOnly: false,
+                extensions: const ['pdf', 'ppt', 'pptx'],
+              );
+              if (picked != null) setState(() => _file = picked);
+            },
+            icon: const Icon(Icons.attach_file_outlined),
+            label: Text(_file?.name ?? 'Attach doc (optional)'),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        FilledButton(
+          onPressed: () {
+            final title = _title.text.trim();
+            if (title.isEmpty) return;
+            Navigator.pop(context, (title: title, file: _file));
+          },
+          child: const Text('Add'),
+        ),
+      ],
+    );
   }
 }

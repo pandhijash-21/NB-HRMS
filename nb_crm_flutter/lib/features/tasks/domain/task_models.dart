@@ -24,6 +24,41 @@ class TaskPerson {
   }
 }
 
+class WorkTaskSubtask {
+  const WorkTaskSubtask({
+    required this.id,
+    required this.title,
+    required this.sortOrder,
+    required this.isDone,
+    this.completedAt,
+    this.attachmentUrl,
+    this.attachmentName,
+    this.attachmentMime,
+  });
+
+  final String id;
+  final String title;
+  final int sortOrder;
+  final bool isDone;
+  final DateTime? completedAt;
+  final String? attachmentUrl;
+  final String? attachmentName;
+  final String? attachmentMime;
+
+  factory WorkTaskSubtask.fromJson(Map<String, dynamic> json) {
+    return WorkTaskSubtask(
+      id: json['id']?.toString() ?? '',
+      title: json['title'] as String? ?? '',
+      sortOrder: json['sortOrder'] as int? ?? 0,
+      isDone: json['isDone'] == true,
+      completedAt: parseTaskDate(json['completedAt']),
+      attachmentUrl: json['attachmentUrl'] as String?,
+      attachmentName: json['attachmentName'] as String?,
+      attachmentMime: json['attachmentMime'] as String?,
+    );
+  }
+}
+
 class TaskEvent {
   const TaskEvent({
     required this.id,
@@ -85,6 +120,7 @@ class WorkTask {
     required this.assignee,
     this.extraApprover,
     this.events = const [],
+    this.subtasks = const [],
   });
 
   final String id;
@@ -109,8 +145,13 @@ class WorkTask {
   final TaskPerson assignee;
   final TaskPerson? extraApprover;
   final List<TaskEvent> events;
+  final List<WorkTaskSubtask> subtasks;
 
   bool get isClosed => status == 'APPROVED' || status == 'REJECTED';
+
+  int get subtasksDone => subtasks.where((s) => s.isDone).length;
+
+  double get subtaskProgress => subtasks.isEmpty ? 0 : subtasksDone / subtasks.length;
 
   factory WorkTask.fromJson(Map<String, dynamic> json) {
     return WorkTask(
@@ -144,6 +185,10 @@ class WorkTask {
       events: (json['events'] as List? ?? [])
           .whereType<Map>()
           .map((e) => TaskEvent.fromJson(Map<String, dynamic>.from(e)))
+          .toList(),
+      subtasks: (json['subtasks'] as List? ?? [])
+          .whereType<Map>()
+          .map((e) => WorkTaskSubtask.fromJson(Map<String, dynamic>.from(e)))
           .toList(),
     );
   }
@@ -231,5 +276,44 @@ String taskStatusLabel(String status) {
       return 'Rejected';
     default:
       return status;
+  }
+}
+
+String taskPersonInitials(String name) {
+  final parts = name.trim().split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList();
+  if (parts.isEmpty) return '?';
+  if (parts.length == 1) {
+    final s = parts.first;
+    return (s.length >= 2 ? s.substring(0, 2) : s).toUpperCase();
+  }
+  return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+}
+
+String taskEventSummary(TaskEvent event) {
+  switch (event.type) {
+    case 'CREATED':
+      return 'Task created'
+          '${event.toStatus == null ? '' : ' · status set to ${taskStatusLabel(event.toStatus!)}'}';
+    case 'STATUS_CHANGED':
+      if (event.fromStatus != null && event.toStatus != null) {
+        return 'Status changed from ${taskStatusLabel(event.fromStatus!)} to ${taskStatusLabel(event.toStatus!)}';
+      }
+      if (event.toStatus != null) {
+        return 'Status changed to ${taskStatusLabel(event.toStatus!)}';
+      }
+      return 'Status changed';
+    case 'REVIEWED':
+      if (event.toStatus != null) {
+        return 'Reviewed · status set to ${taskStatusLabel(event.toStatus!)}';
+      }
+      return 'Reviewed';
+    case 'EXTRA_APPROVAL_REQUESTED':
+      return 'Extra approval requested';
+    case 'EXTRA_APPROVAL_DECIDED':
+      return 'Extra approval decided';
+    case 'SUBTASK_UPDATED':
+      return event.remarks ?? 'Subtask updated';
+    default:
+      return event.type.replaceAll('_', ' ').toLowerCase();
   }
 }

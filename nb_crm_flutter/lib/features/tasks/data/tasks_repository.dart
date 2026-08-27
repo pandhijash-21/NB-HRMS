@@ -55,7 +55,7 @@ class TasksRepository {
     String? extraApproverUserId,
     Uint8List? fileBytes,
     String? fileName,
-  }) async {
+  }) {
     final map = <String, dynamic>{
       'assigneeUserId': assigneeUserId,
       'title': title,
@@ -67,21 +67,16 @@ class TasksRepository {
     if (fileBytes != null && fileName != null) {
       map['file'] = MultipartFile.fromBytes(fileBytes, filename: fileName);
     }
-    final response = await _dio.dio.post<Map<String, dynamic>>(
+    return _dio.postMultipartEnvelope<WorkTask>(
       'tasks',
       data: FormData.fromMap(map),
-      options: Options(
-        sendTimeout: const Duration(minutes: 2),
-        receiveTimeout: const Duration(minutes: 2),
-      ),
+      sendTimeout: const Duration(minutes: 2),
+      receiveTimeout: const Duration(minutes: 2),
+      parse: (raw) {
+        if (raw is! Map) throw const FormatException('Invalid create task response');
+        return WorkTask.fromJson(Map<String, dynamic>.from(raw));
+      },
     );
-    final body = response.data;
-    if (body == null || body['success'] != true) {
-      throw Exception(body?['error'] ?? 'Failed to create task');
-    }
-    final data = body['data'];
-    if (data is! Map) throw const FormatException('Invalid create task response');
-    return WorkTask.fromJson(Map<String, dynamic>.from(data));
   }
 
   Future<WorkTask> setStatus(String id, String status) {
@@ -130,6 +125,42 @@ class TasksRepository {
         if (remarks != null) 'remarks': remarks,
         if (newDeadline != null) 'newDeadline': newDeadline.toUtc().toIso8601String(),
       },
+      parse: (raw) {
+        if (raw is! Map) throw const FormatException('Invalid task response');
+        return WorkTask.fromJson(Map<String, dynamic>.from(raw));
+      },
+    );
+  }
+
+  Future<WorkTask> addSubtask(
+    String taskId, {
+    required String title,
+    Uint8List? fileBytes,
+    String? fileName,
+  }) {
+    if (taskId.trim().isEmpty) {
+      throw Exception('Task id is missing');
+    }
+    final map = <String, dynamic>{'title': title};
+    if (fileBytes != null && fileName != null) {
+      map['file'] = MultipartFile.fromBytes(fileBytes, filename: fileName);
+    }
+    return _dio.postMultipartEnvelope<WorkTask>(
+      'tasks/$taskId/subtasks',
+      data: FormData.fromMap(map),
+      sendTimeout: const Duration(minutes: 2),
+      receiveTimeout: const Duration(minutes: 2),
+      parse: (raw) {
+        if (raw is! Map) throw const FormatException('Invalid add subtask response');
+        return WorkTask.fromJson(Map<String, dynamic>.from(raw));
+      },
+    );
+  }
+
+  Future<WorkTask> setSubtaskDone(String taskId, String subtaskId, {required bool isDone}) {
+    return _dio.postEnvelope<WorkTask>(
+      'tasks/$taskId/subtasks/$subtaskId/done',
+      data: {'isDone': isDone},
       parse: (raw) {
         if (raw is! Map) throw const FormatException('Invalid task response');
         return WorkTask.fromJson(Map<String, dynamic>.from(raw));

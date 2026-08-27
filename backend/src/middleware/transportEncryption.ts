@@ -7,14 +7,25 @@ import {
   wantsTransportEncryption,
 } from '../utils/transportCrypto';
 
-const SKIP_PATHS = new Set(['/', '/health']);
+const SKIP_PATHS = new Set(['/', '/health', '/vpn-gate']);
 
 export function transportEncryptionMiddleware(req: Request, res: Response, next: NextFunction) {
   if (SKIP_PATHS.has(req.path)) return next();
   if (String(req.headers.accept ?? '').includes('text/event-stream')) return next();
 
-  const useEnc = wantsTransportEncryption(req);
+  const isApiRoute = req.path.startsWith('/api/');
+  const hasEncryptedBody =
+    req.body &&
+    typeof req.body === 'object' &&
+    isEncryptedEnvelope(req.body);
+  const useEnc = wantsTransportEncryption(req) || !!hasEncryptedBody;
   const isMultipart = String(req.headers['content-type'] ?? '').includes('multipart/form-data');
+  const isJsonRequest = String(req.headers['content-type'] ?? '').includes('application/json');
+
+  if (isApiRoute && !isMultipart && isJsonRequest && !useEnc) {
+    return res.status(400).json(fail('Secure transport required'));
+  }
+
   if (useEnc && !isMultipart && req.body && typeof req.body === 'object' && Object.keys(req.body as object).length > 0) {
     if (!isEncryptedEnvelope(req.body)) {
       return res.status(400).json(fail('Encrypted payload required'));

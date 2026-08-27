@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/router/app_back_button.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/auth_providers.dart';
+import '../../../erp/domain/project_lookup_keys.dart';
 import '../lookup_providers.dart';
 
 /// Hub for institutes, designations, and all dropdown masters.
@@ -225,15 +226,21 @@ class _ConfigurationsHubScreenState
                   .where((g) => _matches(q, [g.label, g.description, g.key]))
                   .toList();
               // ORGANIZATION is managed under Organization masters now — hide legacy lookup.
+              final project = groups
+                  .where((g) => kProjectLookupKeys.contains(g.key))
+                  .where((g) => _matches(q, [g.label, g.description, g.key]))
+                  .toList();
               final other = groups
                   .where((g) =>
                       !_recruitmentKeys.contains(g.key) &&
-                      g.key != 'ORGANIZATION')
+                      g.key != 'ORGANIZATION' &&
+                      !kProjectLookupKeys.contains(g.key))
                   .where((g) => _matches(q, [g.label, g.description, g.key]))
                   .toList();
 
               if (orgTiles.isEmpty &&
                   recruitment.isEmpty &&
+                  project.isEmpty &&
                   other.isEmpty) {
                 return Padding(
                   padding: const EdgeInsets.only(top: 24),
@@ -252,6 +259,47 @@ class _ConfigurationsHubScreenState
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (project.isNotEmpty) ...[
+                    const SizedBox(height: 14),
+                    Text(
+                      'Projects',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                        color: isDark ? Colors.white : const Color(0xFF212F3D),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    for (final g in project) ...[
+                      _HubTile(
+                        icon: Icons.apartment_outlined,
+                        title: g.label,
+                        subtitle: g.description ??
+                            '${g.options.where((o) => o.isActive).length} active options',
+                        color: const Color(0xFF2563eb),
+                        onTap: () =>
+                            context.go('/admin/configurations/lookups/${g.key}'),
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+                  ] else if (q.isEmpty &&
+                      groups
+                          .where((g) => kProjectLookupKeys.contains(g.key))
+                          .isEmpty) ...[
+                    const SizedBox(height: 14),
+                    Text(
+                      'Projects',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                        color: isDark ? Colors.white : const Color(0xFF212F3D),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'Project lookups not seeded yet. Run ERP bootstrap on backend.',
+                    ),
+                  ],
                   if (recruitment.isNotEmpty) ...[
                     const SizedBox(height: 14),
                     Text(

@@ -51,11 +51,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
           label: 'ERP',
           backgroundColor: itemBgColor,
           foregroundColor: itemFgColor,
-          onTap: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('ERP Module Coming Soon')),
-            );
-          },
+          onTap: () => context.go('/erp/home'),
         ),
         RadialMenuItem(
           icon: Icons.support_agent_rounded,
@@ -104,107 +100,125 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
       auth.user?.role ?? '',
     );
 
-    final destinations = <_Destination>[
-      if (canAccessAdmin)
-        const _Destination(
-          '/admin/dashboard',
-          Icons.dashboard_outlined,
-          Icons.dashboard,
-          'Dashboard',
-        ),
-      const _Destination('/home', Icons.home_outlined, Icons.home, 'Home'),
-      const _Destination(
-        '/org-tree',
-        Icons.account_tree_outlined,
-        Icons.account_tree,
-        'Employee tree',
-      ),
-      const _Destination(
-        '/tasks',
-        Icons.task_alt_outlined,
-        Icons.task_alt,
-        'Tasks',
-      ),
-      const _Destination(
-        '/profile',
-        Icons.person_outline,
-        Icons.person,
-        'Profile',
-      ),
-      if (Permissions.canReadLeave(auth.permissions) ||
-          Permissions.canWriteLeave(auth.permissions) ||
-          canApproveLeave ||
-          Permissions.canAdminLeave(
-            auth.permissions,
-            auth.user?.role ?? '',
-            auth.user?.employeeViewScope,
-          ))
-        const _Destination(
-          '/leave',
-          Icons.event_available_outlined,
-          Icons.event_available,
-          'Leave',
-        ),
-      if (Permissions.canReadAttendance(auth.permissions))
-        const _Destination(
-          '/attendance',
-          Icons.fingerprint_outlined,
-          Icons.fingerprint,
-          'Attendance',
-        ),
-      if (hasWorkforce)
-        const _Destination(
-          '/admin/employees',
-          Icons.people_outline,
-          Icons.people,
-          'Workforce',
-        ),
-      if (canManageUsers)
-        const _Destination(
-          '/admin/users',
-          Icons.manage_accounts_outlined,
-          Icons.manage_accounts,
-          'Users',
-        ),
-      if (canManageRoles)
-        const _Destination(
-          '/admin/roles',
-          Icons.shield_outlined,
-          Icons.shield,
-          'Roles',
-        ),
-      if (isHR)
-        const _Destination(
-          '/admin/approvals',
-          Icons.assignment_turned_in_outlined,
-          Icons.assignment_turned_in,
-          'Profile Approvals',
-        ),
-      if (canTrackField)
-        const _Destination(
-          '/admin/live-tracking',
-          Icons.location_on_outlined,
-          Icons.location_on,
-          'Live Tracking',
-        ),
-      if (canTrackField)
-        const _Destination(
-          '/admin/trips',
-          Icons.route_outlined,
-          Icons.route,
-          'Trips',
-        ),
-      if (canTrackField)
-        const _Destination(
-          '/admin/tracking-hub',
-          Icons.insights_outlined,
-          Icons.insights,
-          'Tracking Hub',
-          alertBadge: true,
-        ),
-    ];
-
     final currentPath = GoRouterState.of(context).matchedLocation;
+    final isErp = currentPath.startsWith('/erp');
+
+    final destinations = <_Destination>[
+      if (!isErp) ...[
+        if (canAccessAdmin)
+          const _Destination(
+            '/admin/dashboard',
+            Icons.dashboard_outlined,
+            Icons.dashboard,
+            'Dashboard',
+          ),
+        const _Destination('/home', Icons.home_outlined, Icons.home, 'Home'),
+        const _Destination(
+          '/org-tree',
+          Icons.account_tree_outlined,
+          Icons.account_tree,
+          'Employee tree',
+        ),
+        const _Destination(
+          '/tasks',
+          Icons.task_alt_outlined,
+          Icons.task_alt,
+          'Tasks',
+        ),
+        const _Destination(
+          '/profile',
+          Icons.person_outline,
+          Icons.person,
+          'Profile',
+        ),
+        if (Permissions.canReadLeave(auth.permissions) ||
+            Permissions.canWriteLeave(auth.permissions) ||
+            canApproveLeave ||
+            Permissions.canAdminLeave(
+              auth.permissions,
+              auth.user?.role ?? '',
+              auth.user?.employeeViewScope,
+            ))
+          const _Destination(
+            '/leave',
+            Icons.event_available_outlined,
+            Icons.event_available,
+            'Leave',
+          ),
+        if (Permissions.canReadAttendance(auth.permissions))
+          const _Destination(
+            '/attendance',
+            Icons.fingerprint_outlined,
+            Icons.fingerprint,
+            'Attendance',
+          ),
+        if (hasWorkforce)
+          const _Destination(
+            '/admin/employees',
+            Icons.people_outline,
+            Icons.people,
+            'Workforce',
+          ),
+        if (canManageUsers)
+          const _Destination(
+            '/admin/users',
+            Icons.manage_accounts_outlined,
+            Icons.manage_accounts,
+            'Users',
+          ),
+        if (canManageRoles)
+          const _Destination(
+            '/admin/roles',
+            Icons.shield_outlined,
+            Icons.shield,
+            'Roles',
+          ),
+        if (isHR)
+          const _Destination(
+            '/admin/approvals',
+            Icons.assignment_turned_in_outlined,
+            Icons.assignment_turned_in,
+            'Profile Approvals',
+          ),
+        if (canTrackField)
+          const _Destination(
+            '/admin/live-tracking',
+            Icons.location_on_outlined,
+            Icons.location_on,
+            'Live Tracking',
+          ),
+        if (canTrackField)
+          const _Destination(
+            '/admin/trips',
+            Icons.route_outlined,
+            Icons.route,
+            'Trips',
+          ),
+        if (canTrackField)
+          const _Destination(
+            '/admin/tracking-hub',
+            Icons.insights_outlined,
+            Icons.insights,
+            'Tracking Hub',
+            alertBadge: true,
+          ),
+      ] else ...[
+        const _Destination('/erp/home', Icons.home_outlined, Icons.home, 'Home'),
+        const _Destination(
+          '/erp/projects',
+          Icons.apartment_outlined,
+          Icons.apartment,
+          'Projects',
+        ),
+        if (canAccessAdmin)
+          const _Destination(
+            '/erp/configurations',
+            Icons.settings_outlined,
+            Icons.settings,
+            'Configurations',
+          ),
+      ],
+    ];
     final alertCount = canTrackField
         ? ref.watch(locationAlertWatchProvider).count
         : 0;

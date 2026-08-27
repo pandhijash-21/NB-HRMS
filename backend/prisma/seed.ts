@@ -26,6 +26,7 @@ const MODULES = [
   { key: 'USER_MGMT',     name: 'User Management' },
   { key: 'ROLE_MGMT',     name: 'Role Management' },
   { key: 'FIELD_MGMT',    name: 'Dynamic Field Management' },
+  { key: 'PROJECTS',      name: 'ERP Projects' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -58,6 +59,7 @@ const PERMISSION_MATRIX: PermissionMatrix = {
     ATTENDANCE:    RO,
     BANK_DETAILS:  RW,
     DOCUMENTS:     RW,
+    PROJECTS:      RO,
   },
 };
 

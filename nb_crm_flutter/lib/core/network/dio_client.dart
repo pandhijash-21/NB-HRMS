@@ -44,13 +44,43 @@ class DioClient {
           if (token != null && token.isNotEmpty) {
             options.headers['Authorization'] = 'Bearer $token';
           }
+          options.headers[transportEncHeader] = '$transportEncVersion';
+          final data = options.data;
+          if (data != null &&
+              data is! FormData &&
+              data is! List<int> &&
+              !isEncryptedEnvelope(data)) {
+            try {
+              options.data = await wrapEncrypted(data);
+            } catch (e) {
+              return handler.reject(
+                DioException(
+                  requestOptions: options,
+                  error: 'Unable to secure request',
+                  type: DioExceptionType.unknown,
+                ),
+              );
+            }
+          }
           AppLogger.network.d('${options.method} ${options.path}');
           handler.next(options);
         },
-        onResponse: (response, handler) {
+        onResponse: (response, handler) async {
           AppLogger.network.d(
             '${response.requestOptions.method} ${response.requestOptions.path} → ${response.statusCode}',
           );
+          try {
+            response.data = await unwrapTransportBody(response.data);
+          } catch (_) {
+            return handler.reject(
+              DioException(
+                requestOptions: response.requestOptions,
+                response: response,
+                error: 'Unable to read secure response',
+                type: DioExceptionType.badResponse,
+              ),
+            );
+          }
           handler.next(response);
         },
         onError: (error, handler) async {
@@ -58,6 +88,11 @@ class DioClient {
           final path = error.requestOptions.path;
           final method = error.requestOptions.method;
           AppLogger.network.w('$method $path → ${status ?? error.type.name}');
+          if (error.response != null) {
+            try {
+              error.response!.data = await unwrapTransportBody(error.response!.data);
+            } catch (_) {}
+          }
           final isLogin = path.contains('auth/login');
           final hadToken = error.requestOptions.headers['Authorization'] != null;
           if (status == 401 && !isLogin && hadToken) {
@@ -67,7 +102,6 @@ class DioClient {
         },
       ),
     );
-    dio.interceptors.add(transportEncryptionInterceptor());
   }
 
   late final Dio dio;
@@ -82,6 +116,7 @@ class DioClient {
   Future<T> postEnvelope<T>(
     String path, {
     Object? data,
+    Duration? sendTimeout,
     Duration? receiveTimeout,
     required T Function(Object? raw) parse,
   }) async {
@@ -89,14 +124,36 @@ class DioClient {
       final response = await dio.post<Map<String, dynamic>>(
         path,
         data: data,
-        options: receiveTimeout == null
-            ? null
-            : Options(receiveTimeout: receiveTimeout),
+        options: _timeoutOptions(sendTimeout: sendTimeout, receiveTimeout: receiveTimeout),
       );
       return _unwrap(response.data, response.statusCode, parse);
     } on DioException catch (e) {
       throw _mapDio(e);
     }
+  }
+
+  Future<T> postMultipartEnvelope<T>(
+    String path, {
+    required FormData data,
+    Duration? sendTimeout,
+    Duration? receiveTimeout,
+    required T Function(Object? raw) parse,
+  }) async {
+    try {
+      final response = await dio.post<Map<String, dynamic>>(
+        path,
+        data: data,
+        options: _timeoutOptions(sendTimeout: sendTimeout, receiveTimeout: receiveTimeout),
+      );
+      return _unwrap(response.data, response.statusCode, parse);
+    } on DioException catch (e) {
+      throw _mapDio(e);
+    }
+  }
+
+  Options? _timeoutOptions({Duration? sendTimeout, Duration? receiveTimeout}) {
+    if (sendTimeout == null && receiveTimeout == null) return null;
+    return Options(sendTimeout: sendTimeout, receiveTimeout: receiveTimeout);
   }
 
   Future<T> getEnvelope<T>(
@@ -190,6 +247,7 @@ class DioClient {
   }
 
   ApiException _mapDio(DioException e) {
+    final path = e.requestOptions.path;
     final data = e.response?.data;
     if (data is Map) {
       final error = data['error'];
@@ -214,9 +272,16 @@ class DioClient {
           'Unable to reach the server. Check your network and API URL.',
         );
       default:
+        final status = e.response?.statusCode;
+        if (status == 404 && path.contains('subtasks')) {
+          return const ApiException(
+            'Subtasks API not found on this server. Use local API (127.0.0.1:4000) or deploy the latest backend to VPS.',
+            statusCode: 404,
+          );
+        }
         return ApiException(
           e.message ?? 'Something went wrong. Please try again.',
-          statusCode: e.response?.statusCode,
+          statusCode: status,
         );
     }
   }

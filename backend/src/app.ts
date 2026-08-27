@@ -72,7 +72,6 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
   crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
 }));
-app.use(vpnBlockMiddleware);
 app.use(express.json({ limit: '2mb' }));
 app.use(transportEncryptionMiddleware);
 

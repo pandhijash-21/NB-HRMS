@@ -27,9 +27,6 @@ if [ ! -f "$ENV_FILE" ]; then
   exit 1
 fi
 
-# Orphan leftover that failed a previous TypeScript build
-rm -f "$ROOT/backend/src/middleware/vpnBlock.ts"
-
 sed -i 's/\r$//' "$ROOT/backend/docker/entrypoint.sh" 2>/dev/null || true
 chmod +x "$ROOT/backend/docker/entrypoint.sh" 2>/dev/null || true
 

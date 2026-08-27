@@ -224,12 +224,26 @@ jobs:
           fi
           printf '\n' >> ~/.ssh/deploy_key
 
+          touch ~/.ssh/known_hosts
           if [ -n "$KNOWN_HOSTS" ]; then
             printf '%s\n' "$KNOWN_HOSTS" | sed 's/\r$//' > ~/.ssh/known_hosts
             echo "Using pinned HOSTINGER_SSH_KNOWN_HOSTS"
           else
-            echo "WARNING: HOSTINGER_SSH_KNOWN_HOSTS not set; falling back to ssh-keyscan"
-            ssh-keyscan -p "${PORT:-22}" -H "$HOST" >> ~/.ssh/known_hosts
+            echo "HOSTINGER_SSH_KNOWN_HOSTS not set; trying ssh-keyscan (non-fatal)"
+            port="${PORT:-22}"
+            for attempt in 1 2 3; do
+              if ssh-keyscan -T 15 -p "$port" "$HOST" >> ~/.ssh/known_hosts 2>/tmp/ssh-keyscan.err; then
+                if grep -q "$HOST" ~/.ssh/known_hosts 2>/dev/null; then
+                  echo "ssh-keyscan ok (attempt $attempt)"
+                  break
+                fi
+              fi
+              echo "ssh-keyscan attempt $attempt failed; retrying..."
+              sleep 2
+            done
+            if ! grep -q "$HOST" ~/.ssh/known_hosts 2>/dev/null; then
+              echo "ssh-keyscan unavailable; SSH will use StrictHostKeyChecking=accept-new"
+            fi
           fi
           chmod 600 ~/.ssh/known_hosts
           echo "SSH key file ready"
@@ -241,7 +255,8 @@ jobs:
           PORT: ${{ secrets.HOSTINGER_PORT }}
         run: |
           ssh -i ~/.ssh/deploy_key -p "${PORT:-22}" -o IdentitiesOnly=yes \
-            -o StrictHostKeyChecking=yes \
+            -o StrictHostKeyChecking=accept-new \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
             "${USER}@${HOST}" 'bash -s' <<'EOS'
           set -e
           cd /opt/nb-crm
@@ -265,7 +280,8 @@ jobs:
         run: |
           port="${PORT:-22}"
           remote="${USER}@${HOST}"
-          rsh="ssh -i ~/.ssh/deploy_key -p ${port} -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+          ssh_common="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=$HOME/.ssh/known_hosts"
+          rsh="ssh -p ${port} ${ssh_common}"
 
           $rsh "$remote" "mkdir -p /opt/nb-crm/backend /opt/nb-crm/deploy/nginx"
 
@@ -276,18 +292,19 @@ jobs:
           rsync -az --delete -e "$rsh" deploy/frontend/ "$remote:/opt/nb-crm/deploy/frontend/"
           rsync -az --delete -e "$rsh" deploy/nginx/ "$remote:/opt/nb-crm/deploy/nginx/"
 
-          scp -i ~/.ssh/deploy_key -P "$port" -o IdentitiesOnly=yes \
+          # scp uses -P for port (-p means preserve timestamps)
+          scp -P "$port" $ssh_common \
             backend/package.json \
             backend/package-lock.json \
             backend/tsconfig.json \
             backend/Dockerfile.prod \
             "$remote:/opt/nb-crm/backend/"
 
-          scp -i ~/.ssh/deploy_key -P "$port" -o IdentitiesOnly=yes \
+          scp -P "$port" $ssh_common \
             docker-compose.prod.yml \
             "$remote:/opt/nb-crm/docker-compose.prod.yml"
 
-          scp -i ~/.ssh/deploy_key -P "$port" -o IdentitiesOnly=yes \
+          scp -P "$port" $ssh_common \
             deploy/hostinger-apply.sh \
             deploy/ci-check-migrations.sh \
             "$remote:/opt/nb-crm/deploy/"
@@ -299,6 +316,7 @@ jobs:
           PORT: ${{ secrets.HOSTINGER_PORT }}
         run: |
           ssh -i ~/.ssh/deploy_key -p "${PORT:-22}" -o IdentitiesOnly=yes \
-            -o StrictHostKeyChecking=yes \
+            -o StrictHostKeyChecking=accept-new \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
             "${USER}@${HOST}" \
             "chmod +x /opt/nb-crm/deploy/hostinger-apply.sh && DEPLOY_SHA='${{ github.sha }}' sh /opt/nb-crm/deploy/hostinger-apply.sh"

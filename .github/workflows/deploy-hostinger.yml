@@ -224,29 +224,44 @@ jobs:
           fi
           printf '\n' >> ~/.ssh/deploy_key
 
-          touch ~/.ssh/known_hosts
+          : > ~/.ssh/known_hosts
+          port="${PORT:-22}"
           if [ -n "$KNOWN_HOSTS" ]; then
             printf '%s\n' "$KNOWN_HOSTS" | sed 's/\r$//' > ~/.ssh/known_hosts
             echo "Using pinned HOSTINGER_SSH_KNOWN_HOSTS"
           else
-            echo "HOSTINGER_SSH_KNOWN_HOSTS not set; trying ssh-keyscan (non-fatal)"
-            port="${PORT:-22}"
-            for attempt in 1 2 3; do
-              if ssh-keyscan -T 15 -p "$port" "$HOST" >> ~/.ssh/known_hosts 2>/tmp/ssh-keyscan.err; then
-                if grep -q "$HOST" ~/.ssh/known_hosts 2>/dev/null; then
-                  echo "ssh-keyscan ok (attempt $attempt)"
+            echo "HOSTINGER_SSH_KNOWN_HOSTS not set — scanning host keys with ssh-keyscan"
+            scanned=0
+            for attempt in 1 2 3 4 5 6; do
+              tmp="$(mktemp)"
+              # Do not use -H (hashed) so we can verify the host entry landed.
+              if ssh-keyscan -T 20 -p "$port" -t rsa,ecdsa,ed25519 "$HOST" >"$tmp" 2>/tmp/ssh-keyscan.err; then
+                if [ -s "$tmp" ] && grep -E '^\S+\s+(ssh-|ecdsa-)' "$tmp" >/dev/null; then
+                  cat "$tmp" >> ~/.ssh/known_hosts
+                  scanned=1
+                  echo "ssh-keyscan ok (attempt $attempt, $(wc -l < "$tmp") key lines)"
+                  rm -f "$tmp"
                   break
                 fi
               fi
-              echo "ssh-keyscan attempt $attempt failed; retrying..."
-              sleep 2
+              echo "ssh-keyscan attempt $attempt failed"
+              cat /tmp/ssh-keyscan.err 2>/dev/null || true
+              rm -f "$tmp"
+              sleep $((attempt * 2))
             done
-            if ! grep -q "$HOST" ~/.ssh/known_hosts 2>/dev/null; then
-              echo "ssh-keyscan unavailable; SSH will use StrictHostKeyChecking=accept-new"
+            if [ "$scanned" != 1 ]; then
+              echo "ERROR: ssh-keyscan could not fetch host keys for ${HOST}:${port}"
+              echo "Fix: ensure the VPS SSH port is reachable from GitHub Actions, or set secret HOSTINGER_SSH_KNOWN_HOSTS to the output of:"
+              echo "  ssh-keyscan -p ${port} -t rsa,ecdsa,ed25519 YOUR_HOST"
+              exit 1
             fi
           fi
+          if [ ! -s ~/.ssh/known_hosts ]; then
+            echo "ERROR: ~/.ssh/known_hosts is empty — refusing to deploy without scanned/pinned host keys"
+            exit 1
+          fi
           chmod 600 ~/.ssh/known_hosts
-          echo "SSH key file ready"
+          echo "SSH key file ready (known_hosts lines=$(wc -l < ~/.ssh/known_hosts))"
 
       - name: Backup previous release on VPS (before overwrite)
         env:
@@ -255,7 +270,7 @@ jobs:
           PORT: ${{ secrets.HOSTINGER_PORT }}
         run: |
           ssh -i ~/.ssh/deploy_key -p "${PORT:-22}" -o IdentitiesOnly=yes \
-            -o StrictHostKeyChecking=accept-new \
+            -o StrictHostKeyChecking=yes \
             -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
             "${USER}@${HOST}" 'bash -s' <<'EOS'
           set -e
@@ -280,7 +295,7 @@ jobs:
         run: |
           port="${PORT:-22}"
           remote="${USER}@${HOST}"
-          ssh_common="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=$HOME/.ssh/known_hosts"
+          ssh_common="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts"
           rsh="ssh -p ${port} ${ssh_common}"
 
           $rsh "$remote" "mkdir -p /opt/nb-crm/backend /opt/nb-crm/deploy/nginx"
@@ -316,7 +331,7 @@ jobs:
           PORT: ${{ secrets.HOSTINGER_PORT }}
         run: |
           ssh -i ~/.ssh/deploy_key -p "${PORT:-22}" -o IdentitiesOnly=yes \
-            -o StrictHostKeyChecking=accept-new \
+            -o StrictHostKeyChecking=yes \
             -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
             "${USER}@${HOST}" \
             "chmod +x /opt/nb-crm/deploy/hostinger-apply.sh && DEPLOY_SHA='${{ github.sha }}' sh /opt/nb-crm/deploy/hostinger-apply.sh"

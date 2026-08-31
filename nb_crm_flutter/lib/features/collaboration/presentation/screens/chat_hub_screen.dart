@@ -1355,7 +1355,7 @@ class _TeamsEmpty extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.chat, size: 56, color: muted.withValues(alpha: 0.7)),
+            NbIcon(Icons.chat, size: 56, color: muted.withValues(alpha: 0.7)),
             const SizedBox(height: 12),
             Text(
               'Select a chat to start messaging',

@@ -178,7 +178,7 @@ class _MeetHubScreenState extends ConsumerState<MeetHubScreen> {
             onPressed: _starting ? null : _start,
             icon: _starting
                 ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : const Icon(Icons.videocam),
+                : const NbIcon(Icons.videocam),
             label: const Text('Start now'),
           ),
         ],
@@ -248,7 +248,7 @@ class _MeetHubScreenState extends ConsumerState<MeetHubScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.videocam, color: Colors.white, size: 32),
+                      const NbIcon(Icons.videocam, color: Colors.white, size: 32),
                       const SizedBox(height: 12),
                       Text(
                         'Meet with your team',

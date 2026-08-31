@@ -847,7 +847,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                           child: previewOn
                               ? VideoTrackRenderer(_previewCam!, fit: VideoViewFit.cover)
                               : const Center(
-                                  child: const Icon(Icons.videocam_off, color: Colors.white38, size: 56),
+                                  child: const NbIcon(Icons.videocam_off, color: Colors.white38, size: 56),
                                 ),
                         ),
                         Positioned(

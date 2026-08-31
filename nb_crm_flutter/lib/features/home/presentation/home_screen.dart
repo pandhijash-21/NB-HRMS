@@ -666,23 +666,11 @@ class _ModernModuleCardState extends State<_ModernModuleCard> {
                             : widget.data.color.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(16),
                       ),
-                      child: switch (widget.data.route) {
-                        '/chat' => Icon(
-                            Icons.chat,
-                            color: _isHovered ? Colors.white : widget.data.color,
-                            size: 28,
-                          ),
-                        '/meet' => Icon(
-                            Icons.videocam,
-                            color: _isHovered ? Colors.white : widget.data.color,
-                            size: 28,
-                          ),
-                        _ => Icon(
-                            widget.data.icon,
-                            color: _isHovered ? Colors.white : widget.data.color,
-                            size: 28,
-                          ),
-                      },
+                      child: NbIcon(
+                        widget.data.icon,
+                        color: _isHovered ? Colors.white : widget.data.color,
+                        size: 28,
+                      ),
                     ),
                     const SizedBox(width: 18),
                     Expanded(

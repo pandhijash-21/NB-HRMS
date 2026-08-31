@@ -17,10 +17,11 @@ Future<bool> openExternalUrl(String url) async {
   return true;
 }
 
-/// Open a same-origin tab in the same click; navigate it after an async join/create.
+/// Open a blank tab in the same click; navigate it after an async join/create.
+/// Opening `/#/` first boots the CRM and races the later hash change, so the
+/// host lands on the lobby instead of joining their own room.
 (void Function(String url), void Function())? openPendingTab() {
-  final origin = window.location.origin;
-  final win = window.open('$origin/#/', '_blank');
+  final win = window.open('about:blank', '_blank');
   if (win == null) return null;
   return (
     (String url) {
@@ -31,7 +32,9 @@ Future<bool> openExternalUrl(String url) async {
       }
     },
     () {
-      win.close();
+      try {
+        win.close();
+      } catch (_) {}
     },
   );
 }

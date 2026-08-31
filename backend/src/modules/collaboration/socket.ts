@@ -76,11 +76,34 @@ export function emitChatNewMessage(
   const memberIds = message.memberUserIds ?? [];
   const mentioned = new Set(message.mentionedUserIds ?? []);
   const senderName = message.sender?.name || 'Someone';
-  const preview = (message.content || 'Sent an attachment').replace(/\s+/g, ' ').slice(0, 140);
+  const content = String(message.content || '');
+  const preview = (content || 'Sent an attachment').replace(/\s+/g, ' ').slice(0, 140);
+  const meet = content.match(/\/meet\/r\/([A-Za-z0-9-]+)/i);
+  const voice = /voice=1|voice call/i.test(content);
+  const startedCall = /started a (voice call|meeting)/i.test(content);
   for (const id of memberIds) {
     if (!id) continue;
     io.to(`user:${id}`).emit('new_message', message);
     if (id === message.senderId) continue;
+    if (meet && startedCall) {
+      const code = meet[1];
+      const kind = voice ? 'voice_call' : 'meet_call';
+      const title = voice ? `${senderName} is calling` : `${senderName} started a meeting`;
+      const path = `/meet/r/${code}${voice ? '?voice=1' : ''}`;
+      const callPayload = {
+        kind,
+        title,
+        body: preview,
+        channelId,
+        senderId: message.senderId,
+        code,
+        voice,
+        path,
+      };
+      io.to(`user:${id}`).emit('incoming_call', callPayload);
+      io.to(`user:${id}`).emit('push_notify', callPayload);
+      continue;
+    }
     const tagged = mentioned.has(id);
     io.to(`user:${id}`).emit('push_notify', {
       kind: tagged ? 'mention' : 'chat',

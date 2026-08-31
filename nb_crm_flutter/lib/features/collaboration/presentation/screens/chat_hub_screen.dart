@@ -558,6 +558,76 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
     );
   }
 
+  void _showReactionPeople(ChatMessage message, ChatReaction reaction) {
+    final me = ref.read(authNotifierProvider).user?.id;
+    final mine = reaction.isMine(me);
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                child: Row(
+                  children: [
+                    Text(reaction.emoji, style: const TextStyle(fontSize: 22)),
+                    const SizedBox(width: 8),
+                    Text(
+                      reaction.users.length == 1
+                          ? '1 reaction'
+                          : '${reaction.count} reactions',
+                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                    ),
+                  ],
+                ),
+              ),
+              if (reaction.users.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 8, 16, 24),
+                  child: Text('No names available for this reaction'),
+                )
+              else
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 360),
+                  child: ListView(
+                    shrinkWrap: true,
+                    children: [
+                      for (final person in reaction.users)
+                        ListTile(
+                          leading: NbProfilePhoto(
+                            url: person.photoUrl,
+                            name: person.name,
+                            identity: person.userId,
+                            radius: 18,
+                          ),
+                          title: Text(person.userId == me ? '${person.name} (you)' : person.name),
+                        ),
+                    ],
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      ref.read(collabSocketProvider).react(message.id, reaction.emoji);
+                    },
+                    child: Text(mine ? 'Remove your reaction' : 'React with ${reaction.emoji}'),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   void _showMessageActions(ChatMessage message) {
     final channel = _active;
     final me = ref.read(authNotifierProvider).user?.id;
@@ -705,7 +775,7 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
                   ...receipts.seen.map((p) => ListTile(
                         dense: true,
                         contentPadding: EdgeInsets.zero,
-                        leading: _Avatar(name: p.name, url: p.photoUrl, size: 32),
+                        leading: _Avatar(name: p.name, url: p.photoUrl, identity: p.userId, size: 32),
                         title: Text(p.name),
                         trailing: const NbIcon(Icons.done_all, size: 16, color: Color(0xFF5B5FC7)),
                       )),
@@ -717,7 +787,7 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
                   ...receipts.unseen.map((p) => ListTile(
                         dense: true,
                         contentPadding: EdgeInsets.zero,
-                        leading: _Avatar(name: p.name, url: p.photoUrl, size: 32),
+                        leading: _Avatar(name: p.name, url: p.photoUrl, identity: p.userId, size: 32),
                         title: Text(p.name),
                         trailing: NbIcon(Icons.done, size: 16, color: mutedOf(Theme.of(ctx).brightness == Brightness.dark)),
                       )),
@@ -840,7 +910,7 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
         tab?.dismiss();
         return;
       }
-      await openMeetRoom(context, meeting.code, voice: true, tab: tab);
+      await openMeetRoom(context, meeting.code, voice: true, auto: true, tab: tab);
       if (mounted) {
         setState(() => _meetStatusByCode = {
               ..._meetStatusByCode,
@@ -960,7 +1030,7 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
                     if (!group && me != null)
                       ListTile(
                         contentPadding: EdgeInsets.zero,
-                        leading: _Avatar(name: me.name, url: me.photoUrl),
+                        leading: _Avatar(name: me.name, url: me.photoUrl, identity: me.id),
                         title: Text('${me.name} (You)'),
                         subtitle: const Text('Note to self'),
                         onTap: () async {
@@ -977,7 +1047,7 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
                             .map(
                               (p) => ListTile(
                                 contentPadding: EdgeInsets.zero,
-                                leading: _Avatar(name: p.name, url: p.photoUrl, online: p.online),
+                                leading: _Avatar(name: p.name, url: p.photoUrl, identity: p.userId, online: p.online),
                                 title: Text(p.name),
                                 subtitle: p.department != null ? Text(p.department!) : null,
                                 trailing: group
@@ -1111,6 +1181,7 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
               _composerFocus.requestFocus();
             },
             onReact: (id, e) => ref.read(collabSocketProvider).react(id, e),
+            onReactionTap: _showReactionPeople,
             onReactPicker: _showMessageActions,
             onViewAttachment: _viewAttachment,
             onDownloadAttachment: _downloadAttachment,
@@ -1266,6 +1337,7 @@ class _TeamsChatList extends StatelessWidget {
                       final photo = _channelPhoto(c, me);
                       final other = c.members.where((m) => m.userId != me).firstOrNull;
                       return Material(
+                        key: ValueKey('chat-${c.id}'),
                         color: selected
                             ? (isDark ? const Color(0xFF2F2B4A) : const Color(0xFFE8EBFA))
                             : Colors.transparent,
@@ -1278,6 +1350,7 @@ class _TeamsChatList extends StatelessWidget {
                                 _Avatar(
                                   name: title,
                                   url: photo,
+                                  identity: c.type == 'GROUP' ? c.id : (other?.userId ?? c.id),
                                   isGroup: c.type == 'GROUP',
                                   online: c.type == 'GROUP'
                                       ? c.anyOtherOnline(me)
@@ -1414,6 +1487,7 @@ class _TeamsThread extends StatelessWidget {
     required this.onToggleEmoji,
     required this.onPickEmoji,
     required this.onReact,
+    required this.onReactionTap,
     required this.onReactPicker,
     required this.onViewAttachment,
     required this.onDownloadAttachment,
@@ -1455,6 +1529,7 @@ class _TeamsThread extends StatelessWidget {
   final VoidCallback onToggleEmoji;
   final void Function(String) onPickEmoji;
   final void Function(String id, String emoji) onReact;
+  final void Function(ChatMessage, ChatReaction) onReactionTap;
   final void Function(ChatMessage) onReactPicker;
   final void Function(ChatAttachment) onViewAttachment;
   final void Function(ChatAttachment) onDownloadAttachment;
@@ -1519,6 +1594,7 @@ class _TeamsThread extends StatelessWidget {
                           _Avatar(
                             name: title,
                             url: photo,
+                            identity: channel.type == 'GROUP' ? channel.id : (other?.userId ?? channel.id),
                             isGroup: channel.type == 'GROUP',
                             online: channel.type == 'GROUP'
                                 ? channel.anyOtherOnline(me)
@@ -1590,6 +1666,7 @@ class _TeamsThread extends StatelessWidget {
                 final grouped = prev != null && prev.senderId == m.senderId;
                 final showDate = prev == null || !_sameDay(prev.createdAt, m.createdAt);
                 return Column(
+                  key: ValueKey('msg-${m.id}'),
                   children: [
                     if (showDate && m.createdAt != null) _DateChip(date: m.createdAt!, isDark: isDark),
                     _MessageBubble(
@@ -1600,6 +1677,7 @@ class _TeamsThread extends StatelessWidget {
                       channel: channel,
                       me: me,
                       onReact: onReact,
+                      onReactionTap: onReactionTap,
                       onReactPicker: onReactPicker,
                       onViewAttachment: onViewAttachment,
                       onDownloadAttachment: onDownloadAttachment,
@@ -1673,6 +1751,7 @@ class _TeamsThread extends StatelessWidget {
                                       : _Avatar(
                                           name: hit.label,
                                           url: hit.person?.photoUrl,
+                                          identity: hit.person?.userId,
                                           size: 28,
                                           online: hit.person?.online == true,
                                         ),
@@ -1971,6 +2050,7 @@ class _MessageBubble extends StatelessWidget {
     required this.channel,
     required this.me,
     required this.onReact,
+    required this.onReactionTap,
     required this.onReactPicker,
     required this.onViewAttachment,
     required this.onDownloadAttachment,
@@ -1987,6 +2067,7 @@ class _MessageBubble extends StatelessWidget {
   final ChatChannel channel;
   final String? me;
   final void Function(String id, String emoji) onReact;
+  final void Function(ChatMessage, ChatReaction) onReactionTap;
   final void Function(ChatMessage) onReactPicker;
   final void Function(ChatAttachment) onViewAttachment;
   final void Function(ChatAttachment) onDownloadAttachment;
@@ -2014,7 +2095,12 @@ class _MessageBubble extends StatelessWidget {
               padding: const EdgeInsets.only(right: 8),
               child: grouped
                   ? const SizedBox(width: 28)
-                  : _Avatar(name: message.senderName ?? '?', url: message.senderPhoto, size: 28),
+                  : _Avatar(
+                      name: message.senderName ?? '?',
+                      url: message.senderPhoto,
+                      identity: message.senderId,
+                      size: 28,
+                    ),
             ),
           Flexible(
             child: Align(
@@ -2173,20 +2259,23 @@ class _MessageBubble extends StatelessWidget {
                       spacing: 4,
                       children: [
                         ...message.reactions.map(
-                          (r) => InkWell(
-                            onTap: () => onReact(message.id, r.emoji),
+                          (r) {
+                            final mineReact = r.isMine(me);
+                            return InkWell(
+                            onTap: () => onReactionTap(message, r),
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
-                                color: r.mine ? const Color(0x335B5FC7) : (isDark ? AppColors.surfaceDark : Colors.white),
+                                color: mineReact ? const Color(0x335B5FC7) : (isDark ? AppColors.surfaceDark : Colors.white),
                                 borderRadius: BorderRadius.circular(999),
                                 border: Border.all(
-                                  color: r.mine ? _teamsPurple : (isDark ? AppColors.borderDark : const Color(0xFFE0E0E0)),
+                                  color: mineReact ? _teamsPurple : (isDark ? AppColors.borderDark : const Color(0xFFE0E0E0)),
                                 ),
                               ),
                               child: Text('${r.emoji} ${r.count}', style: const TextStyle(fontSize: 11)),
                             ),
-                          ),
+                          );
+                          },
                         ),
                       ],
                     ),
@@ -2315,39 +2404,35 @@ class _Avatar extends StatelessWidget {
   const _Avatar({
     required this.name,
     this.url,
+    this.identity,
     this.online = false,
     this.isGroup = false,
     this.size = 40,
   });
   final String name;
   final String? url;
+  final String? identity;
   final bool online;
   final bool isGroup;
   final double size;
 
   @override
   Widget build(BuildContext context) {
-    final hasPhoto = url != null && url!.isNotEmpty;
-    final letter = name.trim().isEmpty ? '?' : name.trim()[0].toUpperCase();
     return SizedBox(
       width: size,
       height: size,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          ZoomablePhoto(
+          NbProfilePhoto(
             url: url,
-            label: name,
-            child: CircleAvatar(
-              radius: size / 2,
-              backgroundColor: _teamsPurple,
-              backgroundImage: hasPhoto ? NetworkImage(url!) : null,
-              child: hasPhoto
-                  ? null
-                  : isGroup
-                      ? NbIcon(Icons.groups_rounded, color: Colors.white, size: size * 0.5)
-                      : Text(letter, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: size * 0.38)),
-            ),
+            name: name,
+            identity: identity ?? name,
+            radius: size / 2,
+            backgroundColor: _teamsPurple,
+            fallback: isGroup
+                ? NbIcon(Icons.groups_rounded, color: Colors.white, size: size * 0.5)
+                : null,
           ),
           if (online)
             Positioned(
@@ -2486,13 +2571,8 @@ class _ChatEmojiGridState extends State<ChatEmojiGrid> {
   @override
   Widget build(BuildContext context) {
     final q = _search.text.trim();
-    List<ChatEmojiCategory> categories;
-    if (q.isEmpty) {
-      categories = kChatEmojiCategories;
-    } else {
-      final matches = kAllChatEmojis.where((e) => e.contains(q)).toList();
-      categories = matches.isEmpty ? kChatEmojiCategories : [ChatEmojiCategory('Results', matches)];
-    }
+    final categories = searchChatEmojis(q);
+    final emptySearch = q.isNotEmpty && categories.isEmpty;
     return Column(
       children: [
         Padding(
@@ -2515,7 +2595,11 @@ class _ChatEmojiGridState extends State<ChatEmojiGrid> {
           ),
         ),
         Expanded(
-          child: ListView.builder(
+          child: emptySearch
+              ? Center(
+                  child: Text('No matching emoji', style: TextStyle(color: mutedOf(widget.isDark))),
+                )
+              : ListView.builder(
             padding: const EdgeInsets.fromLTRB(8, 0, 8, 12),
             itemCount: categories.length,
             itemBuilder: (context, i) {
@@ -2577,9 +2661,20 @@ String? _channelPhoto(ChatChannel c, String? me) {
     if (url != null && url.isNotEmpty) return _absoluteFileUrl(url);
     return null;
   }
-  if (c.avatarUrl != null && c.avatarUrl!.isNotEmpty) return _absoluteFileUrl(c.avatarUrl!);
-  final other = c.members.where((m) => m.userId != me).firstOrNull;
-  final url = other?.photoUrl ?? c.members.where((m) => m.userId == me).firstOrNull?.photoUrl;
+  if (me == null || me.isEmpty) {
+    final url = c.avatarUrl;
+    if (url != null && url.isNotEmpty) return _absoluteFileUrl(url);
+    return null;
+  }
+  final others = c.members.where((m) => m.userId != me).toList();
+  final isSelfDm = others.isEmpty;
+  if (isSelfDm) {
+    final self = c.members.where((m) => m.userId == me).firstOrNull;
+    final url = self?.photoUrl ?? c.avatarUrl;
+    if (url == null || url.isEmpty) return null;
+    return _absoluteFileUrl(url);
+  }
+  final url = others.first.photoUrl;
   if (url == null || url.isEmpty) return null;
   return _absoluteFileUrl(url);
 }

@@ -433,7 +433,6 @@ class AdminDashboardScreen extends ConsumerWidget {
   }
 
   Widget _recentRow(BuildContext context, EmployeeProfile emp, bool isDark) {
-    final initials = emp.generalInfo?.fullName.split(' ').map((e) => e[0]).take(2).join('').toUpperCase() ?? '#';
     return InkWell(
       onTap: () => context.push('/admin/employees/${emp.id}'),
       borderRadius: BorderRadius.circular(10),
@@ -441,26 +440,13 @@ class AdminDashboardScreen extends ConsumerWidget {
         padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
         child: Row(
           children: [
-            ZoomablePhoto(
+            NbProfilePhoto(
               url: emp.photoUrl,
-              label: emp.generalInfo?.fullName,
-              child: CircleAvatar(
+              name: emp.generalInfo?.fullName,
+              identity: 'emp-${emp.id}',
               radius: 20,
               backgroundColor: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFE5ECF0),
-              backgroundImage: emp.photoUrl != null && emp.photoUrl!.isNotEmpty
-                  ? NetworkImage(emp.photoUrl!)
-                  : null,
-              child: emp.photoUrl == null || emp.photoUrl!.isEmpty
-                  ? Text(
-                initials,
-                style: TextStyle(
-                  color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13,
-                ),
-              )
-                  : null,
-            ),
+              foregroundColor: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
             ),
             const SizedBox(width: 12),
             Expanded(

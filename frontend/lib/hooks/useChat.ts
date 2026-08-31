@@ -51,7 +51,13 @@ export type ChatMessage = {
     fileUrl: string | null;
     scanStatus: string;
   }[];
-  reactions: { emoji: string; count: number; mine: boolean; userIds: string[] }[];
+  reactions: {
+    emoji: string;
+    count: number;
+    mine: boolean;
+    userIds: string[];
+    users?: { userId: string; name: string; photoUrl: string | null }[];
+  }[];
   seenBy?: { userId: string; name: string; photoUrl: string | null }[];
   unseenBy?: { userId: string; name: string; photoUrl: string | null }[];
 };

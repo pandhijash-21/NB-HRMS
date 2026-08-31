@@ -266,6 +266,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           category: ModuleCategory.system,
           color: const Color(0xFF0d9488),
         ),
+      if (Permissions.isAdmin(role))
+        _ModuleCardData(
+          title: 'Storage',
+          subtitle: 'Used space, remaining capacity & data wipe',
+          icon: Icons.cloud_rounded,
+          route: '/admin/storage',
+          enabled: true,
+          category: ModuleCategory.system,
+          color: const Color(0xFF7c3aed),
+        ),
       if (canAccessAdmin)
         _ModuleCardData(
           title: 'Audit',

@@ -268,17 +268,11 @@ class _GroupInfoSheetState extends ConsumerState<_GroupInfoSheet> {
                           for (final p in visible)
                             ListTile(
                               contentPadding: EdgeInsets.zero,
-                              leading: ZoomablePhoto(
+                              leading: NbProfilePhoto(
                                 url: p.photoUrl != null && p.photoUrl!.isNotEmpty ? _abs(p.photoUrl!) : null,
-                                label: p.name,
-                                child: CircleAvatar(
-                                backgroundImage: p.photoUrl != null && p.photoUrl!.isNotEmpty
-                                    ? NetworkImage(_abs(p.photoUrl!))
-                                    : null,
-                                child: p.photoUrl == null || p.photoUrl!.isEmpty
-                                    ? Text(p.name.isEmpty ? '?' : p.name[0].toUpperCase())
-                                    : null,
-                              ),
+                                name: p.name,
+                                identity: p.userId,
+                                radius: 20,
                               ),
                               title: Text(p.name),
                               subtitle: p.department != null ? Text(p.department!) : null,
@@ -567,22 +561,12 @@ class _MemberTile extends StatelessWidget {
         child: Stack(
           clipBehavior: Clip.none,
           children: [
-            ZoomablePhoto(
+            NbProfilePhoto(
               url: person.photoUrl != null && person.photoUrl!.isNotEmpty ? _abs(person.photoUrl!) : null,
-              label: person.name,
-              child: CircleAvatar(
+              name: person.name,
+              identity: person.userId,
               radius: 20,
               backgroundColor: _purple,
-              backgroundImage: person.photoUrl != null && person.photoUrl!.isNotEmpty
-                  ? NetworkImage(_abs(person.photoUrl!))
-                  : null,
-              child: person.photoUrl == null || person.photoUrl!.isEmpty
-                  ? Text(
-                      person.name.isEmpty ? '?' : person.name[0].toUpperCase(),
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
-                    )
-                  : null,
-            ),
             ),
             Positioned(
               right: 0,
@@ -639,17 +623,13 @@ class _GroupAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final resolved = url != null && url!.isNotEmpty ? _abs(url!) : null;
-    return ZoomablePhoto(
+    return NbProfilePhoto(
       url: resolved,
-      label: name,
-      child: CircleAvatar(
+      name: name,
+      identity: 'group-$name',
       radius: size / 2,
       backgroundColor: _purple,
-      backgroundImage: resolved != null ? NetworkImage(resolved) : null,
-      child: resolved == null
-          ? NbIcon(Icons.groups_rounded, color: Colors.white, size: size * 0.48)
-          : null,
-    ),
+      fallback: NbIcon(Icons.groups_rounded, color: Colors.white, size: size * 0.48),
     );
   }
 }
@@ -673,20 +653,12 @@ class _DmInfoSheet extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: [
           Center(
-            child: ZoomablePhoto(
+            child: NbProfilePhoto(
               url: photo != null && photo.isNotEmpty ? _abs(photo) : null,
-              label: name,
-              child: CircleAvatar(
+              name: name,
+              identity: self ? me : other.userId,
               radius: 48,
               backgroundColor: _purple,
-              backgroundImage: photo != null && photo.isNotEmpty ? NetworkImage(_abs(photo)) : null,
-              child: photo == null || photo.isEmpty
-                  ? Text(
-                      name.isEmpty ? '?' : name[0].toUpperCase(),
-                      style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w800),
-                    )
-                  : null,
-            ),
             ),
           ),
           const SizedBox(height: 12),

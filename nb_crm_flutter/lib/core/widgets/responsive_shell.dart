@@ -8,6 +8,7 @@ import 'radial_menu.dart';
 import '../../features/auth/domain/permissions.dart';
 import '../../features/auth/presentation/auth_providers.dart';
 import '../../features/collaboration/presentation/chat_inbox.dart';
+import '../../features/collaboration/presentation/notification_bell.dart';
 import '../../features/tracking_hub/presentation/location_alert_watch.dart';
 import '../app_module.dart';
 import '../logging/app_logger.dart';
@@ -114,6 +115,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
       auth.permissions,
       auth.user?.role ?? '',
     );
+    final isAdmin = Permissions.isAdmin(auth.user?.role);
 
     final currentPath = GoRouterState.of(context).matchedLocation;
     final module = ref.watch(appModuleProvider);
@@ -243,6 +245,14 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             'Roles',
             section: 'Organisation',
           ),
+        if (isAdmin)
+          const _Destination(
+            '/admin/storage',
+            Icons.cloud_outlined,
+            Icons.cloud,
+            'Storage',
+            section: 'Organisation',
+          ),
         if (isHR)
           const _Destination(
             '/admin/approvals',
@@ -319,6 +329,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
               icon: const NbIcon(Icons.account_tree_rounded),
               onPressed: () => context.go('/org-tree'),
             ),
+            const NotificationBellButton(),
             IconButton(
               icon: NbIcon(isDark ? Icons.light_mode : Icons.dark_mode),
               onPressed: () =>
@@ -1022,6 +1033,10 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                NotificationBellButton(
+                  variant: NotificationBellVariant.sidebar,
+                  expanded: expanded,
+                ),
                 Tooltip(
                   message: isDark ? 'Light Mode' : 'Dark Mode',
                   child: InkWell(

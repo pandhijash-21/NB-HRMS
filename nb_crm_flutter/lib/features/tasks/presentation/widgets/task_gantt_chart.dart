@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/app_colors.dart';
 import '../../domain/task_models.dart';
 
 const _labelWidth = 148.0;
@@ -12,21 +13,157 @@ const _groupH = 30.0;
 const _rowH = 34.0;
 const _subRowH = 28.0;
 
-const _weekPalette = <Color>[
-  Color(0xFF7ECDE0),
-  Color(0xFF4BA8D4),
-  Color(0xFF3B7FBF),
-  Color(0xFF6B5B9A),
-  Color(0xFF4A3B7A),
-  Color(0xFF3A2A62),
-];
+class GanttColors {
+  const GanttColors({
+    required this.dark,
+    required this.chartBg,
+    required this.chartBorder,
+    required this.title,
+    required this.hint,
+    required this.navy,
+    required this.gold,
+    required this.assignOrange,
+    required this.labelFill,
+    required this.labelFillSub,
+    required this.labelText,
+    required this.labelTextSub,
+    required this.gridLine,
+    required this.rowBg,
+    required this.rowBgOut,
+    required this.weekHeaderBg,
+    required this.weekHeaderFg,
+    required this.dayNumFg,
+    required this.dayNumMuted,
+    required this.dayNumBorder,
+    required this.groupFg,
+    required this.emptyFg,
+    required this.todayFg,
+    required this.assignedFg,
+    required this.subtaskDone,
+    required this.subtaskPending,
+    required this.weekPalette,
+  });
 
-const _navy = Color(0xFF1C3554);
-const _labelFill = Color(0xFFE4EAF0);
-const _labelText = Color(0xFF3A6B9A);
-const _gridLine = Color(0xFFFFFFFF);
-const _gold = Color(0xFFC5A059);
-const _assignOrange = Color(0xFFE07A3D);
+  final bool dark;
+  final Color chartBg;
+  final Color chartBorder;
+  final Color title;
+  final Color hint;
+  final Color navy;
+  final Color gold;
+  final Color assignOrange;
+  final Color labelFill;
+  final Color labelFillSub;
+  final Color labelText;
+  final Color labelTextSub;
+  final Color gridLine;
+  final Color rowBg;
+  final Color rowBgOut;
+  final Color weekHeaderBg;
+  final Color weekHeaderFg;
+  final Color dayNumFg;
+  final Color dayNumMuted;
+  final Color dayNumBorder;
+  final Color groupFg;
+  final Color emptyFg;
+  final Color todayFg;
+  final Color assignedFg;
+  final Color subtaskDone;
+  final Color subtaskPending;
+  final List<Color> weekPalette;
+
+  static GanttColors of(BuildContext context) {
+    final scope = context.dependOnInheritedWidgetOfExactType<_GanttScope>();
+    if (scope != null) return scope.colors;
+    return GanttColors.fromBrightness(Theme.of(context).brightness);
+  }
+
+  factory GanttColors.fromBrightness(Brightness brightness) {
+    final dark = brightness == Brightness.dark;
+    if (!dark) {
+      return const GanttColors(
+        dark: false,
+        chartBg: Color(0xFFF7F8FA),
+        chartBorder: Color(0xFFDDE3EA),
+        title: Color(0xFF1C3554),
+        hint: Color(0xFF64748B),
+        navy: Color(0xFF1C3554),
+        gold: Color(0xFFC5A059),
+        assignOrange: Color(0xFFE07A3D),
+        labelFill: Color(0xFFE4EAF0),
+        labelFillSub: Color(0xFFF0F4F8),
+        labelText: Color(0xFF3A6B9A),
+        labelTextSub: Color(0xFF64748B),
+        gridLine: Color(0xFFFFFFFF),
+        rowBg: Color(0xFFEEF1F5),
+        rowBgOut: Color(0xFFF7F8FA),
+        weekHeaderBg: Color(0xFFE9EDF1),
+        weekHeaderFg: Color(0xFF4A5563),
+        dayNumFg: Color(0xFF334155),
+        dayNumMuted: Color(0xFF94A3B8),
+        dayNumBorder: Color(0xFFE8EEF4),
+        groupFg: Colors.white,
+        emptyFg: Color(0xFF64748B),
+        todayFg: Color(0xFF7A5A20),
+        assignedFg: Color(0xFF9A3412),
+        subtaskDone: Color(0xFF16A34A),
+        subtaskPending: Color(0xFFCBD5E1),
+        weekPalette: [
+          Color(0xFF7ECDE0),
+          Color(0xFF4BA8D4),
+          Color(0xFF3B7FBF),
+          Color(0xFF6B5B9A),
+          Color(0xFF4A3B7A),
+          Color(0xFF3A2A62),
+        ],
+      );
+    }
+    return const GanttColors(
+      dark: true,
+      chartBg: Color(0xFF1A1816),
+      chartBorder: AppColors.borderDark,
+      title: AppColors.textPrimaryDark,
+      hint: AppColors.textSecondaryDark,
+      navy: Color(0xFF93C5FD),
+      gold: AppColors.bronze,
+      assignOrange: Color(0xFFF0A36B),
+      labelFill: Color(0xFF2A2622),
+      labelFillSub: Color(0xFF221F1C),
+      labelText: Color(0xFFE2D6BE),
+      labelTextSub: AppColors.textSecondaryDark,
+      gridLine: Color(0xFF2F2A26),
+      rowBg: Color(0xFF161412),
+      rowBgOut: Color(0xFF12100E),
+      weekHeaderBg: Color(0xFF241F1B),
+      weekHeaderFg: Color(0xFFE2D6BE),
+      dayNumFg: AppColors.textPrimaryDark,
+      dayNumMuted: Color(0xFF6B6560),
+      dayNumBorder: AppColors.borderDark,
+      groupFg: Color(0xFF1A1816),
+      emptyFg: AppColors.textSecondaryDark,
+      todayFg: Color(0xFFF5E6C8),
+      assignedFg: Color(0xFFFFEDD5),
+      subtaskDone: Color(0xFF4ADE80),
+      subtaskPending: Color(0xFF4B5563),
+      weekPalette: [
+        Color(0xFF5BB8D0),
+        Color(0xFF3D94C4),
+        Color(0xFF4F7FBF),
+        Color(0xFF8B7CC8),
+        Color(0xFFC5A059),
+        Color(0xFFA37F3E),
+      ],
+    );
+  }
+}
+
+class _GanttScope extends InheritedWidget {
+  const _GanttScope({required this.colors, required super.child});
+  final GanttColors colors;
+
+  @override
+  bool updateShouldNotify(_GanttScope oldWidget) => oldWidget.colors.dark != colors.dark;
+}
 
 const _monthNames = [
   'January',
@@ -139,7 +276,8 @@ class _TaskGanttChartState extends State<TaskGanttChart> {
 
   @override
   Widget build(BuildContext context) {
-    final weeks = _weeksForMonth(_month);
+    final colors = GanttColors.fromBrightness(Theme.of(context).brightness);
+    final weeks = _weeksForMonth(_month, colors.weekPalette);
     final visible = widget.tasks.where((t) => _overlapsMonth(t, _month)).toList();
     final groups = _groupByAssignee(visible);
     final marks = _DayMarks.fromTasks(widget.tasks);
@@ -147,13 +285,15 @@ class _TaskGanttChartState extends State<TaskGanttChart> {
     final now = DateTime.now();
     final isCurrentMonth = _month.year == now.year && _month.month == now.month;
 
-    return Column(
+    return _GanttScope(
+      colors: colors,
+      child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Row(
           children: [
-            const Expanded(
-              child: Text('Timeline', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+            Expanded(
+              child: Text('Timeline', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: colors.title)),
             ),
             _MonthNav(
               month: _month,
@@ -168,7 +308,7 @@ class _TaskGanttChartState extends State<TaskGanttChart> {
         const SizedBox(height: 4),
         Text(
           'Full month · workdays only. Gold = today, orange = assigned by (hover for name), navy = deadline.',
-          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+          style: TextStyle(fontSize: 12, color: colors.hint),
         ),
         const SizedBox(height: 8),
         const _Legend(),
@@ -182,9 +322,9 @@ class _TaskGanttChartState extends State<TaskGanttChart> {
               final totalWidth = _labelWidth + chartWidth + _avatarWidth;
               return DecoratedBox(
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF7F8FA),
+                  color: colors.chartBg,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFDDE3EA)),
+                  border: Border.all(color: colors.chartBorder),
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(12),
@@ -238,6 +378,7 @@ class _TaskGanttChartState extends State<TaskGanttChart> {
           ),
         ),
       ],
+    ),
     );
   }
 }
@@ -276,7 +417,7 @@ class _MonthNav extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             child: Text(
               '${_monthNames[month.month - 1]} ${month.year}',
-              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: _navy),
+              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: GanttColors.of(context).title),
             ),
           ),
         ),
@@ -297,6 +438,7 @@ class _Legend extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = GanttColors.of(context);
     Widget item(Color color, String label) {
       return Row(
         mainAxisSize: MainAxisSize.min,
@@ -307,7 +449,7 @@ class _Legend extends StatelessWidget {
             decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2)),
           ),
           const SizedBox(width: 5),
-          Text(label, style: TextStyle(fontSize: 11, color: Colors.grey.shade700)),
+          Text(label, style: TextStyle(fontSize: 11, color: colors.hint)),
         ],
       );
     }
@@ -316,10 +458,10 @@ class _Legend extends StatelessWidget {
       spacing: 14,
       runSpacing: 6,
       children: [
-        item(_gold, 'Today'),
-        item(_assignOrange, 'Assigned'),
-        item(_navy, 'Deadline'),
-        item(const Color(0xFF7ECDE0), 'In progress'),
+        item(colors.gold, 'Today'),
+        item(colors.assignOrange, 'Assigned'),
+        item(colors.navy, 'Deadline'),
+        item(colors.weekPalette.first, 'In progress'),
       ],
     );
   }
@@ -335,7 +477,7 @@ class _EmptyMonth extends StatelessWidget {
         padding: const EdgeInsets.all(24),
         child: Text(
           'No tasks in this month. Switch months, or assign one.',
-          style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+          style: TextStyle(fontSize: 13, color: GanttColors.of(context).emptyFg),
         ),
       ),
     );
@@ -430,7 +572,7 @@ bool _overlapsMonth(WorkTask t, DateTime month) {
   return !end.isBefore(monthStart) && !start.isAfter(monthEnd);
 }
 
-List<_Week> _weeksForMonth(DateTime month) {
+List<_Week> _weeksForMonth(DateTime month, List<Color> palette) {
   final first = DateTime(month.year, month.month, 1);
   final last = DateTime(month.year, month.month + 1, 0);
   var cursor = _mondayOnOrBefore(first);
@@ -444,7 +586,7 @@ List<_Week> _weeksForMonth(DateTime month) {
       if (!d.isAfter(end) && !_isWeekend(d)) days.add(d);
     }
     if (days.isNotEmpty) {
-      weeks.add(_Week(days: days, color: _weekPalette[colorI % _weekPalette.length]));
+      weeks.add(_Week(days: days, color: palette[colorI % palette.length]));
       colorI++;
     }
     cursor = cursor.add(const Duration(days: 7));
@@ -471,6 +613,7 @@ class _WeekHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = GanttColors.of(context);
     return SizedBox(
       height: _weekHeaderH,
       child: Row(
@@ -481,15 +624,15 @@ class _WeekHeader extends StatelessWidget {
               width: w.days.length * dayWidth,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: const Color(0xFFE9EDF1),
+                color: colors.weekHeaderBg,
                 border: Border(
                   bottom: BorderSide(color: w.color, width: 3),
-                  right: const BorderSide(color: Colors.white, width: 2),
+                  right: BorderSide(color: colors.gridLine, width: 2),
                 ),
               ),
               child: Text(
                 _weekLabel(w.days, month),
-                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFF4A5563)),
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: colors.weekHeaderFg),
               ),
             ),
           ),
@@ -508,6 +651,7 @@ class _DayLetterHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = GanttColors.of(context);
     return SizedBox(
       height: _dayLetterH,
       child: Row(
@@ -520,15 +664,15 @@ class _DayLetterHeader extends StatelessWidget {
                 width: dayWidth,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: w.color.withValues(alpha: inMonth ? 0.55 : 0.18),
-                  border: const Border(right: BorderSide(color: _gridLine, width: 1)),
+                  color: w.color.withValues(alpha: inMonth ? (colors.dark ? 0.42 : 0.55) : 0.18),
+                  border: Border(right: BorderSide(color: colors.gridLine, width: 1)),
                 ),
                 child: Text(
                   _dayLetters[d.weekday] ?? '',
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w800,
-                    color: inMonth ? _navy : _navy.withValues(alpha: 0.35),
+                    color: inMonth ? colors.navy : colors.navy.withValues(alpha: 0.35),
                   ),
                 ),
               );
@@ -551,6 +695,7 @@ class _DayNumberHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = GanttColors.of(context);
     final today = _dateOnly(DateTime.now());
     return SizedBox(
       height: _dayNumH,
@@ -564,20 +709,20 @@ class _DayNumberHeader extends StatelessWidget {
               final isAssigned = marks.assigned.contains(d);
               final isDeadline = marks.deadlines.contains(d);
               final isBusy = marks.busy.contains(d);
-              Color bg = Colors.white;
-              Color fg = inMonth ? const Color(0xFF334155) : const Color(0xFF94A3B8);
-              if (isBusy && inMonth) bg = w.color.withValues(alpha: 0.22);
+              Color bg = colors.chartBg;
+              Color fg = inMonth ? colors.dayNumFg : colors.dayNumMuted;
+              if (isBusy && inMonth) bg = w.color.withValues(alpha: colors.dark ? 0.28 : 0.22);
               if (isAssigned) {
-                bg = _assignOrange.withValues(alpha: 0.22);
-                fg = const Color(0xFF9A3412);
+                bg = colors.assignOrange.withValues(alpha: colors.dark ? 0.32 : 0.22);
+                fg = colors.assignedFg;
               }
               if (isDeadline) {
-                bg = _navy.withValues(alpha: 0.16);
-                fg = _navy;
+                bg = colors.navy.withValues(alpha: colors.dark ? 0.28 : 0.16);
+                fg = colors.navy;
               }
               if (isToday) {
-                bg = _gold.withValues(alpha: 0.35);
-                fg = const Color(0xFF7A5A20);
+                bg = colors.gold.withValues(alpha: colors.dark ? 0.45 : 0.35);
+                fg = colors.todayFg;
               }
               return Container(
                 width: dayWidth,
@@ -585,8 +730,8 @@ class _DayNumberHeader extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: bg,
                   border: Border(
-                    right: const BorderSide(color: _gridLine, width: 1),
-                    bottom: BorderSide(color: isToday ? _gold : const Color(0xFFE8EEF4), width: isToday ? 2 : 1),
+                    right: BorderSide(color: colors.gridLine, width: 1),
+                    bottom: BorderSide(color: isToday ? colors.gold : colors.dayNumBorder, width: isToday ? 2 : 1),
                   ),
                 ),
                 child: Text(
@@ -615,6 +760,7 @@ class _GroupHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = GanttColors.of(context);
     return SizedBox(
       height: _groupH,
       child: Row(
@@ -623,15 +769,15 @@ class _GroupHeader extends StatelessWidget {
             width: _labelWidth,
             alignment: Alignment.centerLeft,
             padding: const EdgeInsets.symmetric(horizontal: 10),
-            color: _navy,
+            color: colors.dark ? colors.gold : colors.navy,
             child: Text(
               title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12),
+              style: TextStyle(color: colors.groupFg, fontWeight: FontWeight.w800, fontSize: 12),
             ),
           ),
-          SizedBox(width: chartWidth, height: _groupH, child: CustomPaint(painter: _GridPainter())),
+          SizedBox(width: chartWidth, height: _groupH, child: CustomPaint(painter: _GridPainter(colors: colors))),
           const SizedBox(width: _avatarWidth),
         ],
       ),
@@ -673,6 +819,7 @@ class _GanttRowWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = GanttColors.of(context);
     final label = _isSubtask ? '↳ ${subtask!.title}' : task.title;
     return InkWell(
       onTap: onTap,
@@ -687,7 +834,7 @@ class _GanttRowWidget extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 alignment: Alignment.centerLeft,
                 decoration: BoxDecoration(
-                  color: _isSubtask ? const Color(0xFFF0F4F8) : _labelFill,
+                  color: _isSubtask ? colors.labelFillSub : colors.labelFill,
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Row(
@@ -696,7 +843,7 @@ class _GanttRowWidget extends StatelessWidget {
                       Icon(
                         subtask!.isDone ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
                         size: 14,
-                        color: subtask!.isDone ? const Color(0xFF16a34a) : const Color(0xFF94A3B8),
+                        color: subtask!.isDone ? colors.subtaskDone : colors.dayNumMuted,
                       ),
                     if (_isSubtask) const SizedBox(width: 4),
                     Expanded(
@@ -708,7 +855,7 @@ class _GanttRowWidget extends StatelessWidget {
                           fontSize: _isSubtask ? 10 : 11,
                           fontStyle: _isSubtask ? FontStyle.normal : FontStyle.italic,
                           fontWeight: FontWeight.w600,
-                          color: _isSubtask ? const Color(0xFF64748B) : _labelText,
+                          color: _isSubtask ? colors.labelTextSub : colors.labelText,
                         ),
                       ),
                     ),
@@ -729,6 +876,7 @@ class _GanttRowWidget extends StatelessWidget {
                     weeks: weeks,
                     month: month,
                     dayWidth: dayWidth,
+                    colors: colors,
                   ),
                 ),
               ),
@@ -743,7 +891,7 @@ class _GanttRowWidget extends StatelessWidget {
                         waitDuration: const Duration(milliseconds: 250),
                         child: CircleAvatar(
                           radius: 13,
-                          backgroundColor: _assignOrange,
+                          backgroundColor: colors.assignOrange,
                           child: Text(
                             taskPersonInitials(task.assigner.name),
                             style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800),
@@ -760,13 +908,16 @@ class _GanttRowWidget extends StatelessWidget {
 }
 
 class _GridPainter extends CustomPainter {
+  _GridPainter({required this.colors});
+  final GanttColors colors;
+
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.drawRect(Offset.zero & size, Paint()..color = const Color(0xFFF2F4F7));
+    canvas.drawRect(Offset.zero & size, Paint()..color = colors.rowBg);
   }
 
   @override
-  bool shouldRepaint(covariant _GridPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _GridPainter oldDelegate) => oldDelegate.colors.dark != colors.dark;
 }
 
 class _BarPainter extends CustomPainter {
@@ -775,6 +926,7 @@ class _BarPainter extends CustomPainter {
     required this.weeks,
     required this.month,
     required this.dayWidth,
+    required this.colors,
     this.subtask,
   });
 
@@ -783,10 +935,11 @@ class _BarPainter extends CustomPainter {
   final List<_Week> weeks;
   final DateTime month;
   final double dayWidth;
+  final GanttColors colors;
 
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.drawRect(Offset.zero & size, Paint()..color = const Color(0xFFEEF1F5));
+    canvas.drawRect(Offset.zero & size, Paint()..color = colors.rowBg);
 
     final days = weeks.expand((w) => w.days).toList();
     final start = _dateOnly(task.createdAt);
@@ -802,26 +955,26 @@ class _BarPainter extends CustomPainter {
         final inMonth = _sameMonth(day, month);
         final cell = Rect.fromLTWH(x, 0, dayWidth, size.height);
         if (!inMonth) {
-          canvas.drawRect(cell, Paint()..color = const Color(0xFFF7F8FA));
+          canvas.drawRect(cell, Paint()..color = colors.rowBgOut);
         }
         canvas.drawLine(
           cell.topRight,
           cell.bottomRight,
           Paint()
-            ..color = _gridLine
+            ..color = colors.gridLine
             ..strokeWidth = i == week.days.length - 1 ? 2 : 1,
         );
 
         if (inMonth && !day.isBefore(start) && !day.isAfter(end)) {
           Color color;
           if (subtask != null) {
-            color = subtask!.isDone ? const Color(0xFF16a34a) : const Color(0xFFCBD5E1);
+            color = subtask!.isDone ? colors.subtaskDone : colors.subtaskPending;
           } else {
             final isStart = day == start;
             final isEnd = day == end;
-            color = isStart ? _assignOrange : (isEnd ? _navy : week.color);
+            color = isStart ? colors.assignOrange : (isEnd ? colors.navy : week.color);
             if (task.subtasks.isNotEmpty && task.subtaskProgress > 0) {
-              color = Color.lerp(color, const Color(0xFF16a34a), task.subtaskProgress * 0.45) ?? color;
+              color = Color.lerp(color, colors.subtaskDone, task.subtaskProgress * 0.45) ?? color;
             }
           }
           canvas.drawRect(
@@ -840,7 +993,7 @@ class _BarPainter extends CustomPainter {
           Offset(x + dayWidth / 2, 2),
           Offset(x + dayWidth / 2, size.height - 2),
           Paint()
-            ..color = _gold
+            ..color = colors.gold
             ..strokeWidth = 1.6,
         );
         break;
@@ -851,5 +1004,6 @@ class _BarPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _BarPainter oldDelegate) =>
-      oldDelegate.task != task || oldDelegate.subtask != subtask;
+      oldDelegate.task != task || oldDelegate.subtask != subtask || oldDelegate.colors.dark != colors.dark;
 }
+

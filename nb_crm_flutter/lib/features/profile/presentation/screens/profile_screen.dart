@@ -254,12 +254,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     bool isDark,
   ) {
     final statusColor = _getStatusColor(profile.status, context);
-    final initials =
-        profile.generalInfo?.fullName
-            .split(' ')
-            .map((e) => e.isNotEmpty ? e[0] : '')
-            .join('') ??
-        '?';
 
     return Container(
       decoration: BoxDecoration(
@@ -310,29 +304,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                 ),
               ],
             ),
-            child: ZoomablePhoto(
+            child: NbProfilePhoto(
               url: profile.photoUrl,
-              label: profile.generalInfo?.fullName,
-              child: CircleAvatar(
+              name: profile.generalInfo?.fullName,
+              identity: 'profile-${profile.id}',
               radius: 40,
               backgroundColor: isDark ? const Color(0xFF2B2722) : Colors.white,
-              backgroundImage:
-                  profile.photoUrl != null && profile.photoUrl!.isNotEmpty
-                  ? NetworkImage(profile.photoUrl!)
-                  : null,
-              child: profile.photoUrl == null || profile.photoUrl!.isEmpty
-                  ? Text(
-                      initials.isNotEmpty ? initials.toUpperCase() : 'EE',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w800,
-                        color: isDark
-                            ? const Color(0xFFE2D6BE)
-                            : const Color(0xFF263238),
-                      ),
-                    )
-                  : null,
-            ),
+              foregroundColor: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
             ),
           ),
           const SizedBox(width: 24),

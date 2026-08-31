@@ -266,15 +266,41 @@ class ChatAttachment {
 }
 
 class ChatReaction {
-  const ChatReaction({required this.emoji, required this.count, required this.mine});
+  const ChatReaction({
+    required this.emoji,
+    required this.count,
+    required this.mine,
+    this.users = const [],
+  });
   final String emoji;
   final int count;
   final bool mine;
-  factory ChatReaction.fromJson(Map<String, dynamic> json) => ChatReaction(
-        emoji: json['emoji']?.toString() ?? '',
-        count: json['count'] is int ? json['count'] as int : 0,
-        mine: json['mine'] == true,
-      );
+  final List<CollabProfile> users;
+
+  bool isMine(String? me) {
+    if (me != null && me.isNotEmpty && users.any((u) => u.userId == me)) return true;
+    return users.isEmpty && mine;
+  }
+
+  factory ChatReaction.fromJson(Map<String, dynamic> json) {
+    final usersRaw = json['users'] ?? json['people'];
+    final fromUsers = (usersRaw as List? ?? [])
+        .whereType<Map>()
+        .map((e) => CollabProfile.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+    final fromIds = (json['userIds'] as List? ?? [])
+        .map((id) => id?.toString() ?? '')
+        .where((id) => id.isNotEmpty)
+        .where((id) => fromUsers.every((u) => u.userId != id))
+        .map((id) => CollabProfile(userId: id, name: 'Member'))
+        .toList();
+    return ChatReaction(
+      emoji: json['emoji']?.toString() ?? '',
+      count: json['count'] is int ? json['count'] as int : fromUsers.length + fromIds.length,
+      mine: json['mine'] == true,
+      users: [...fromUsers, ...fromIds],
+    );
+  }
 }
 
 class MeetingItem {
@@ -292,6 +318,7 @@ class MeetingItem {
     this.recordingUrl,
     this.hasRecording = false,
     this.isHost = false,
+    this.hostUserId,
     this.waitingRoom = false,
     this.recordEnabled = false,
     this.joinUrl,
@@ -314,6 +341,7 @@ class MeetingItem {
   final String? recordingUrl;
   final bool hasRecording;
   final bool isHost;
+  final String? hostUserId;
   final bool waitingRoom;
   final bool recordEnabled;
   final String? joinUrl;
@@ -338,6 +366,8 @@ class MeetingItem {
       hasRecording: json['hasRecording'] == true ||
           ((json['recordingUrl'] as String?)?.trim().isNotEmpty ?? false),
       isHost: json['isHost'] == true,
+      hostUserId: json['hostUserId']?.toString() ??
+          (json['host'] is Map ? (json['host'] as Map)['userId']?.toString() : null),
       waitingRoom: json['waitingRoom'] == true,
       recordEnabled: json['recordEnabled'] == true,
       joinUrl: json['joinUrl'] as String?,

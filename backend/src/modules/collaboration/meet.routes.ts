@@ -1,6 +1,8 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
+import jwt from 'jsonwebtoken';
 import { requireAuth } from '../../middleware/auth';
+import { env } from '../../config/env';
 import { ok, fail } from '../../utils/response';
 import { meetService, type GuestActor, type UserActor } from './meet.service';
 import { emitJoinDecision, emitMeetingEnded, emitMeetingInvites, emitWaitingUpdate, getIo } from './socket';
@@ -27,8 +29,28 @@ async function actorFromReq(req: Request): Promise<UserActor | GuestActor | null
 
 function optionalAuth(req: Request, res: Response, next: NextFunction) {
   const header = req.headers.authorization;
-  if (!header) return next();
-  requireAuth(req, res, next);
+  const token = header?.startsWith('Bearer ') ? header.slice(7) : undefined;
+  if (!token) return next();
+  try {
+    const decoded = jwt.verify(token, env.JWT_SECRET) as jwt.JwtPayload;
+    const userId = String(decoded.sub ?? '');
+    if (userId) {
+      req.user = {
+        id: userId,
+        employeeId: decoded.employeeId as number | null | undefined,
+        roleId: decoded.roleId as string,
+        roleName: decoded.roleName as string,
+        role: decoded.roleName as string,
+        subOrganization: (decoded.subOrganization as string | null | undefined) ?? null,
+        employeeViewScope:
+          (decoded.employeeViewScope as 'NONE' | 'SELF' | 'INSTITUTE' | 'UNIVERSITY' | undefined) ?? 'NONE',
+        permissions: (decoded.permissions as Record<string, string[]>) ?? {},
+      };
+    }
+  } catch {
+    // Continue as anonymous so the lobby still loads.
+  }
+  next();
 }
 
 meetingsRouter.get('/code/:code', optionalAuth, async (req: Request, res: Response) => {

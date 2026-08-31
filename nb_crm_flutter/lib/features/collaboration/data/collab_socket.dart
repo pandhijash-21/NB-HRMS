@@ -18,6 +18,8 @@ class CollabSocket {
   final _userTyping = <void Function(String, String)>[];
   final _meetingEnded = <void Function(String meetingId, String? code)>[];
   final _presence = <void Function(String userId, bool online)>[];
+  final _pushNotify = <void Function(Map<String, dynamic>)>[];
+  final _incomingCall = <void Function(Map<String, dynamic>)>[];
 
   io.Socket connect({required String token}) {
     if (_socket != null && _token == token) {
@@ -94,6 +96,20 @@ class CollabSocket {
       final online = data['online'] == true;
       for (final cb in List.of(_presence)) {
         cb(userId, online);
+      }
+    });
+    socket.on('push_notify', (data) {
+      if (data is! Map) return;
+      final row = Map<String, dynamic>.from(data);
+      for (final cb in List.of(_pushNotify)) {
+        cb(row);
+      }
+    });
+    socket.on('incoming_call', (data) {
+      if (data is! Map) return;
+      final row = Map<String, dynamic>.from(data);
+      for (final cb in List.of(_incomingCall)) {
+        cb(row);
       }
     });
     socket.connect();
@@ -250,6 +266,18 @@ class CollabSocket {
 
   void offPresence(void Function(String userId, bool online) cb) => _presence.remove(cb);
 
+  void onPushNotify(void Function(Map<String, dynamic>) cb) {
+    if (!_pushNotify.contains(cb)) _pushNotify.add(cb);
+  }
+
+  void offPushNotify(void Function(Map<String, dynamic>) cb) => _pushNotify.remove(cb);
+
+  void onIncomingCall(void Function(Map<String, dynamic>) cb) {
+    if (!_incomingCall.contains(cb)) _incomingCall.add(cb);
+  }
+
+  void offIncomingCall(void Function(Map<String, dynamic>) cb) => _incomingCall.remove(cb);
+
   void onMeetingEndProgress(void Function(Map<String, dynamic> row) cb) {
     _socket?.off('meeting_end_progress');
     _socket?.on('meeting_end_progress', (data) {
@@ -269,6 +297,8 @@ class CollabSocket {
     _userTyping.clear();
     _meetingEnded.clear();
     _presence.clear();
+    _pushNotify.clear();
+    _incomingCall.clear();
     _socket?.dispose();
     _socket = null;
   }

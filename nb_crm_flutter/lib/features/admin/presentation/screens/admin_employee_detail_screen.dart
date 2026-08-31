@@ -223,7 +223,6 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
 
   Widget _buildProfileSummaryHeader(EmployeeProfile profile) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final initials = profile.generalInfo?.fullName.split(' ').map((e) => e.isNotEmpty ? e[0] : '').join('') ?? '?';
     final statusColor = profile.status.toUpperCase() == 'ACTIVE' ? Colors.green : Colors.grey;
 
     return Container(
@@ -247,26 +246,13 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
                 width: 1.5,
               ),
             ),
-            child: ZoomablePhoto(
+            child: NbProfilePhoto(
               url: profile.photoUrl,
-              label: profile.generalInfo?.fullName,
-              child: CircleAvatar(
+              name: profile.generalInfo?.fullName,
+              identity: 'emp-${profile.id}',
               radius: 28,
               backgroundColor: isDark ? const Color(0xFF2B2722) : const Color(0xFFECEFF1),
-              backgroundImage: profile.photoUrl != null && profile.photoUrl!.isNotEmpty
-                  ? NetworkImage(profile.photoUrl!)
-                  : null,
-              child: profile.photoUrl == null || profile.photoUrl!.isEmpty
-                  ? Text(
-                      initials.toUpperCase(),
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold, 
-                        color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
-                        fontSize: 15,
-                      ),
-                    )
-                  : null,
-            ),
+              foregroundColor: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
             ),
           ),
           const SizedBox(width: 18),

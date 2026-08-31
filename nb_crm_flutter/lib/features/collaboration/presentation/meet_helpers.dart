@@ -27,14 +27,52 @@ String meetDurationLabel(DateTime? start, DateTime? end) {
   return '${s}s';
 }
 
-String meetingRoomPath(String code, {bool voice = false, bool guest = false}) {
+String sanitizeMeetCode(String? raw) {
+  var code = (raw ?? '').trim();
+  final q = code.indexOf('?');
+  if (q >= 0) code = code.substring(0, q);
+  final slash = code.lastIndexOf('/');
+  if (slash >= 0) code = code.substring(slash + 1);
+  return code.toLowerCase();
+}
+
+({bool voice, bool auto}) meetRouteFlags(Uri uri) {
+  var voice = uri.queryParameters['voice'] == '1';
+  var auto = uri.queryParameters['auto'] == '1';
+  if (kIsWeb) {
+    final frag = Uri.base.fragment;
+    final q = frag.indexOf('?');
+    if (q >= 0) {
+      final parsed = Uri.splitQueryString(frag.substring(q + 1));
+      voice = voice || parsed['voice'] == '1';
+      auto = auto || parsed['auto'] == '1';
+    }
+  }
+  return (voice: voice, auto: auto);
+}
+
+String meetingRoomPath(
+  String code, {
+  bool voice = false,
+  bool guest = false,
+  bool auto = false,
+}) {
   final path = guest ? '/meet/guest/$code' : '/meet/r/$code';
-  return voice ? '$path?voice=1' : path;
+  final q = <String>[
+    if (voice) 'voice=1',
+    if (auto) 'auto=1',
+  ];
+  return q.isEmpty ? path : '$path?${q.join('&')}';
 }
 
 /// Flutter web uses hash routes; the API joinUrl points at the Next.js app.
-String meetingRoomUrl(String code, {bool voice = false, bool guest = false}) {
-  final path = meetingRoomPath(code, voice: voice, guest: guest);
+String meetingRoomUrl(
+  String code, {
+  bool voice = false,
+  bool guest = false,
+  bool auto = false,
+}) {
+  final path = meetingRoomPath(code, voice: voice, guest: guest, auto: auto);
   if (kIsWeb) return '${Uri.base.origin}/#$path';
   return path;
 }
@@ -55,15 +93,16 @@ Future<void> openMeetRoom(
   String code, {
   bool voice = false,
   bool guest = false,
+  bool auto = false,
   PendingBrowserTab? tab,
 }) async {
-  final inApp = meetingRoomPath(code, voice: voice, guest: guest);
+  final inApp = meetingRoomPath(code, voice: voice, guest: guest, auto: auto);
   if (!kIsWeb) {
     tab?.dismiss();
     if (context.mounted) context.push(inApp);
     return;
   }
-  final url = meetingRoomUrl(code, voice: voice, guest: guest);
+  final url = meetingRoomUrl(code, voice: voice, guest: guest, auto: auto);
   if (tab != null) {
     tab.goTo(url);
     return;

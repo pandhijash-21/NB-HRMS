@@ -93,6 +93,7 @@ class _NodeCard extends StatelessWidget {
         [node.title, node.subtitle].whereType<String>().join(' ').toLowerCase().contains(query);
 
     return Padding(
+      key: ValueKey('org-node-${node.id}'),
       padding: EdgeInsets.only(left: depth == 0 ? 0 : 14, top: depth == 0 ? 0 : 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

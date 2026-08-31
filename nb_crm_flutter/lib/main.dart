@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/router/app_router.dart';
+import 'core/services/app_sounds.dart';
 import 'core/services/background_tracking_service.dart';
 import 'core/services/location_alert_sound.dart';
 import 'core/theme/app_breakpoints.dart';
@@ -11,6 +12,7 @@ import 'core/theme/icon_font_bootstrap.dart';
 import 'core/theme/material_icon_keep_alive.dart';
 import 'core/theme/theme_provider.dart';
 import 'features/auth/presentation/permission_guard.dart';
+import 'features/collaboration/presentation/notification_bell.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -54,8 +56,16 @@ class NbCrmApp extends ConsumerWidget {
                   behavior: HitTestBehavior.translucent,
                   onPointerDown: (_) {
                     LocationAlertSound.unlock();
+                    AppSounds.unlock();
                   },
-                  child: PermissionGuard(child: child ?? const SizedBox.shrink()),
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: PermissionGuard(child: child ?? const SizedBox.shrink()),
+                      ),
+                      const IncomingCallHost(),
+                    ],
+                  ),
                 ),
               ),
             ],

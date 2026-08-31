@@ -137,6 +137,12 @@ export function ChatApp() {
   const [mobilePane, setMobilePane] = useState<"list" | "thread">("list");
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [reactFor, setReactFor] = useState<ChatMessage | null>(null);
+  const [reactorsFor, setReactorsFor] = useState<{
+    messageId: string;
+    emoji: string;
+    mine: boolean;
+    users: { userId: string; name: string; photoUrl: string | null }[];
+  } | null>(null);
   const [seenFor, setSeenFor] = useState<ChatMessage | null>(null);
   const [mentionSel, setMentionSel] = useState(0);
   const mentionQ = mentionQuery(draft);
@@ -370,7 +376,21 @@ export function ChatApp() {
                           {m.reactions.map((r) => (
                             <button
                               key={r.emoji}
-                              onClick={() => chat.react(m.id, r.emoji)}
+                              type="button"
+                              onClick={() =>
+                                setReactorsFor({
+                                  messageId: m.id,
+                                  emoji: r.emoji,
+                                  mine: r.mine || (r.users ?? []).some((u) => u.userId === myId) || r.userIds.includes(myId || ""),
+                                  users: r.users?.length
+                                    ? r.users
+                                    : r.userIds.map((userId) => ({
+                                        userId,
+                                        name: chat.active?.members.find((p) => p.userId === userId)?.name || "Member",
+                                        photoUrl: chat.active?.members.find((p) => p.userId === userId)?.photoUrl ?? null,
+                                      })),
+                                })
+                              }
                               className={cn(
                                 "text-[11px] rounded-full border px-1.5 py-0.5",
                                 r.mine ? "border-primary bg-primary/10" : "border-border",
@@ -626,6 +646,40 @@ export function ChatApp() {
               </button>
             ))}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!reactorsFor} onOpenChange={() => setReactorsFor(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {reactorsFor?.emoji} {reactorsFor && reactorsFor.users.length === 1 ? "1 reaction" : `${reactorsFor?.users.length ?? 0} reactions`}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="max-h-72 overflow-y-auto space-y-1">
+            {(reactorsFor?.users ?? []).map((p) => (
+              <div key={p.userId} className="flex items-center gap-2 py-1">
+                <Avatar size="sm">
+                  <AvatarImage src={p.photoUrl || undefined} />
+                  <AvatarFallback>{initials(p.name)}</AvatarFallback>
+                </Avatar>
+                <span className="text-sm">{p.userId === myId ? `${p.name} (you)` : p.name}</span>
+              </div>
+            ))}
+          </div>
+          {reactorsFor && (
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  chat.react(reactorsFor.messageId, reactorsFor.emoji);
+                  setReactorsFor(null);
+                }}
+              >
+                {reactorsFor.mine ? "Remove your reaction" : `React with ${reactorsFor.emoji}`}
+              </Button>
+            </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
 

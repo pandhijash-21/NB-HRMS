@@ -348,9 +348,12 @@ export function MeetRoom({ code }: { code: string }) {
       const payload = await api.post("meetings/join", { code }).then((r) => r.data.data as JoinPayload);
       setMyParticipantId(payload.participant.id);
       participantIdRef.current = payload.participant.id;
-      if (payload.waiting || !payload.livekit) {
+      if (payload.waiting && !payload.meeting.isHost) {
         await beginWait(payload);
         return;
+      }
+      if (!payload.livekit?.url || !payload.livekit?.token) {
+        throw new Error("Meeting room is not available yet. Try again.");
       }
       await connect(payload);
     } catch (e) {
@@ -364,9 +367,12 @@ export function MeetRoom({ code }: { code: string }) {
       if (payload.guestToken) sessionStorage.setItem("meet_guest_token", payload.guestToken);
       setMyParticipantId(payload.participant.id);
       participantIdRef.current = payload.participant.id;
-      if (payload.waiting || !payload.livekit) {
+      if (payload.waiting) {
         await beginWait(payload, payload.guestToken);
         return;
+      }
+      if (!payload.livekit?.url || !payload.livekit?.token) {
+        throw new Error("Meeting room is not available yet. Try again.");
       }
       await connect(payload, payload.guestToken);
     } catch (e) {
@@ -463,26 +469,31 @@ export function MeetRoom({ code }: { code: string }) {
   }
 
   if (!room) {
+    const isHostPreview = Boolean(
+      preview?.isHost || preview?.host?.userId === (session?.user as { id?: string })?.id,
+    );
+    const needsKnock = Boolean(preview?.waitingRoom && !isHostPreview);
     return (
       <div className="h-full grid place-items-center p-6">
         <div className="w-full max-w-md rounded-2xl border bg-card p-6 space-y-4">
           <h1 className="text-xl font-bold">{preview?.title || "Join meeting"}</h1>
           <p className="text-sm text-muted-foreground">{preview?.agenda || "Google Meet-style room"}</p>
           <p className="font-mono text-sm">{code}</p>
-          {preview?.waitingRoom && (
+          {needsKnock && (
             <p className="text-xs rounded-lg bg-amber-500/10 text-amber-800 dark:text-amber-200 px-3 py-2">
               The host must admit you before you can join.
             </p>
           )}
           {loggedIn ? (
             <Button className="w-full" onClick={joinAsMember}>
-              <LogIn className="size-4 mr-2" /> {preview?.waitingRoom ? "Ask to join" : "Join with your account"}
+              <LogIn className="size-4 mr-2" />{" "}
+              {needsKnock ? "Ask to join" : isHostPreview ? "Join your meeting" : "Join with your account"}
             </Button>
           ) : (
             <>
               <Input placeholder="Your name" value={guestName} onChange={(e) => setGuestName(e.target.value)} />
               <Button className="w-full" onClick={joinAsGuest} disabled={guestName.trim().length < 2}>
-                {preview?.waitingRoom ? "Ask to join as guest" : "Join as guest"}
+                {needsKnock ? "Ask to join as guest" : "Join as guest"}
               </Button>
             </>
           )}

@@ -61,6 +61,7 @@ class OrgAvatar extends StatelessWidget {
     final initials = _initials(node.title);
     final url = node.photoUrl;
     final avatar = Container(
+      key: ValueKey('org-avatar-${node.id}'),
       width: size,
       height: size,
       decoration: BoxDecoration(
@@ -82,8 +83,14 @@ class OrgAvatar extends StatelessWidget {
       child: url != null && url.isNotEmpty
           ? Image.network(
               url,
+              key: ValueKey('org-photo-${node.id}-$url'),
               fit: BoxFit.cover,
+              gaplessPlayback: false,
               errorBuilder: (_, __, ___) => _fallback(initials),
+              loadingBuilder: (context, child, progress) {
+                if (progress == null) return child;
+                return _fallback(initials);
+              },
             )
           : _fallback(initials),
     );

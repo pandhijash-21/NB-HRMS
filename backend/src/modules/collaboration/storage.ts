@@ -200,6 +200,84 @@ export const collabStorage = {
     return keys;
   },
 
+  async summarize(prefix = ''): Promise<{ objectCount: number; bytes: number; keys: string[] }> {
+    if (minioConfigured()) {
+      const minio = getMinio();
+      const keys: string[] = [];
+      let bytes = 0;
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('MinIO list timed out')), 30_000);
+        const stream = minio.listObjects(env.MINIO_BUCKET, prefix, true);
+        stream.on('data', (obj) => {
+          if (obj.name) {
+            keys.push(obj.name);
+            bytes += Number(obj.size) || 0;
+          }
+        });
+        stream.on('error', (err) => {
+          clearTimeout(timer);
+          reject(err);
+        });
+        stream.on('end', () => {
+          clearTimeout(timer);
+          resolve();
+        });
+      });
+      return { objectCount: keys.length, bytes, keys };
+    }
+
+    try {
+      const names = await fs.readdir(localDir);
+      let bytes = 0;
+      const keys: string[] = [];
+      for (const name of names) {
+        const full = path.join(localDir, name);
+        try {
+          const st = await fs.stat(full);
+          bytes += st.size;
+          keys.push(name);
+        } catch {
+          // skip unreadable entries
+        }
+      }
+      return { objectCount: keys.length, bytes, keys };
+    } catch {
+      return { objectCount: 0, bytes: 0, keys: [] };
+    }
+  },
+
+  async purgeStoredFiles(): Promise<{ objectsRemoved: number; localFilesRemoved: number }> {
+    let objectsRemoved = 0;
+    let localFilesRemoved = 0;
+    try {
+      const { keys } = await this.summarize('');
+      if (minioConfigured()) {
+        for (const key of keys) {
+          await this.removeObject(key);
+          objectsRemoved += 1;
+        }
+      } else {
+        for (const name of keys) {
+          await fs.rm(path.join(localDir, name), { force: true, recursive: true });
+          localFilesRemoved += 1;
+        }
+        return { objectsRemoved, localFilesRemoved };
+      }
+    } catch (err) {
+      console.warn('Collab object purge skipped:', err);
+    }
+    try {
+      const names = await fs.readdir(localDir);
+      for (const name of names) {
+        await fs.rm(path.join(localDir, name), { force: true, recursive: true });
+        localFilesRemoved += 1;
+      }
+    } catch {
+      // local dir may not exist
+    }
+    return { objectsRemoved, localFilesRemoved };
+  },
+
   async allowPublicGetCors() {
     if (!minioConfigured()) return;
     try {

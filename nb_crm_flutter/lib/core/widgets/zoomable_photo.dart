@@ -45,11 +45,15 @@ class ZoomablePhoto extends StatelessWidget {
 }
 
 /// Drop-in circular profile photo with tap-to-zoom.
+///
+/// Uses [Image.network] (not [CircleAvatar.backgroundImage]) so list recycling
+/// cannot show another person's photo. Pass [identity] (user/employee id).
 class NbProfilePhoto extends StatelessWidget {
   const NbProfilePhoto({
     super.key,
     this.url,
     this.name,
+    this.identity,
     this.radius = 20,
     this.backgroundColor,
     this.foregroundColor,
@@ -58,6 +62,7 @@ class NbProfilePhoto extends StatelessWidget {
 
   final String? url;
   final String? name;
+  final String? identity;
   final double radius;
   final Color? backgroundColor;
   final Color? foregroundColor;
@@ -67,13 +72,13 @@ class NbProfilePhoto extends StatelessWidget {
   Widget build(BuildContext context) {
     final has = hasPhotoUrl(url);
     final letter = (name ?? '').trim().isEmpty ? '?' : name!.trim()[0].toUpperCase();
-    final avatar = CircleAvatar(
-      radius: radius,
-      backgroundColor: backgroundColor,
-      backgroundImage: has ? NetworkImage(url!.trim()) : null,
-      child: has
-          ? null
-          : (fallback ??
+    final size = radius * 2;
+    final cacheId = (identity ?? name ?? url ?? 'avatar').trim();
+    Widget placeholder() {
+      return ColoredBox(
+        color: backgroundColor ?? const Color(0xFF5B5FC7),
+        child: Center(
+          child: fallback ??
               Text(
                 letter,
                 style: TextStyle(
@@ -81,7 +86,32 @@ class NbProfilePhoto extends StatelessWidget {
                   fontWeight: FontWeight.w800,
                   fontSize: radius * 0.78,
                 ),
-              )),
+              ),
+        ),
+      );
+    }
+
+    final avatar = ClipOval(
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: has
+            ? Image.network(
+                url!.trim(),
+                key: ValueKey('nb-photo|$cacheId|${url!.trim()}'),
+                fit: BoxFit.cover,
+                width: size,
+                height: size,
+                gaplessPlayback: false,
+                filterQuality: FilterQuality.medium,
+                errorBuilder: (_, __, ___) => placeholder(),
+                loadingBuilder: (context, child, progress) {
+                  if (progress == null) return child;
+                  return placeholder();
+                },
+              )
+            : placeholder(),
+      ),
     );
     return ZoomablePhoto(url: url, label: name, child: avatar);
   }

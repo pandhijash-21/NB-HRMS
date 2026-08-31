@@ -95,6 +95,14 @@ class _ConfigurationsHubScreenState
         color: const Color(0xFF0d9488),
         onTap: () => context.go('/admin/configurations/letters'),
       ),
+      if (Permissions.isAdmin(role))
+        _StaticHubItem(
+          icon: Icons.cloud_rounded,
+          title: 'Storage',
+          subtitle: 'Used space, remaining capacity, and wipe documents',
+          color: const Color(0xFF7c3aed),
+          onTap: () => context.go('/admin/storage'),
+        ),
     ].where((t) => _matches(q, [t.title, t.subtitle])).toList();
 
     return Scaffold(

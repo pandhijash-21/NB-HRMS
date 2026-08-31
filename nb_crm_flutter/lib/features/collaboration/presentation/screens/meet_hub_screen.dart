@@ -80,7 +80,7 @@ class _MeetHubScreenState extends ConsumerState<MeetHubScreen> {
         tab?.dismiss();
         return;
       }
-      await openMeetRoom(context, meeting.code, tab: tab);
+      await openMeetRoom(context, meeting.code, auto: true, tab: tab);
       _load();
     } catch (e) {
       tab?.dismiss();

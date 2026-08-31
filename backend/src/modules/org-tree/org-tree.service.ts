@@ -246,6 +246,15 @@ function flattenOtherGroups(node: OrgTreeNode): OrgTreeNode {
   return { ...node, children };
 }
 
+function overlayLivePhotos(node: OrgTreeNode, photos: Map<number, string | null>): OrgTreeNode {
+  const live = node.employeeId != null ? photos.get(node.employeeId) : undefined;
+  return {
+    ...node,
+    photoUrl: live !== undefined ? live : node.photoUrl,
+    children: (node.children ?? []).map((child) => overlayLivePhotos(child, photos)),
+  };
+}
+
 function normalizeSnapshot(snapshot: unknown): unknown {
   if (!snapshot || typeof snapshot !== 'object') return snapshot;
   const snap = snapshot as { root?: OrgTreeNode };
@@ -253,7 +262,17 @@ function normalizeSnapshot(snapshot: unknown): unknown {
   return { ...snap, root: flattenOtherGroups(snap.root) };
 }
 
-function serializeTree(tree: {
+async function withLivePhotos(snapshot: unknown): Promise<unknown> {
+  const normalized = normalizeSnapshot(snapshot);
+  if (!normalized || typeof normalized !== 'object') return normalized;
+  const snap = normalized as { root?: OrgTreeNode };
+  if (!snap.root) return normalized;
+  const rows = await prisma.employee.findMany({ select: { id: true, photoUrl: true } });
+  const photos = new Map(rows.map((e) => [e.id, e.photoUrl]));
+  return { ...snap, root: overlayLivePhotos(snap.root, photos) };
+}
+
+async function serializeTree(tree: {
   id: string;
   name: string;
   description: string | null;
@@ -284,7 +303,7 @@ function serializeTree(tree: {
     description: tree.description,
     grouping: tree.grouping,
     isActive: tree.isActive,
-    snapshot: normalizeSnapshot(tree.snapshot),
+    snapshot: await withLivePhotos(tree.snapshot),
     createdById: tree.createdById,
     createdByName: tree.createdBy?.employee?.generalInfo?.fullName ?? null,
     createdAt: tree.createdAt,
@@ -328,7 +347,7 @@ export const orgTreeService = {
       include: includeTree,
       orderBy: [{ isActive: 'desc' }, { updatedAt: 'desc' }],
     });
-    return trees.map(serializeTree);
+    return Promise.all(trees.map((tree) => serializeTree(tree)));
   },
 
   async getById(id: string) {

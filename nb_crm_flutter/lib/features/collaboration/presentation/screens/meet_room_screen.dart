@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:nb_crm_flutter/core/theme/nb_icon.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +10,7 @@ import 'package:livekit_client/livekit_client.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../../auth/domain/permissions.dart';
+import '../../../auth/presentation/auth_notifier.dart';
 import '../../../auth/presentation/auth_providers.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/zoomable_photo.dart';
@@ -17,11 +20,18 @@ import '../end_meet_progress.dart';
 import '../meet_helpers.dart';
 
 class MeetRoomScreen extends ConsumerStatefulWidget {
-  const MeetRoomScreen({super.key, required this.code, this.asGuest = false, this.voiceOnly = false});
+  const MeetRoomScreen({
+    super.key,
+    required this.code,
+    this.asGuest = false,
+    this.voiceOnly = false,
+    this.autoJoin = false,
+  });
 
   final String code;
   final bool asGuest;
   final bool voiceOnly;
+  final bool autoJoin;
 
   @override
   ConsumerState<MeetRoomScreen> createState() => _MeetRoomScreenState();
@@ -52,6 +62,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
   LocalVideoTrack? _previewCam;
   Timer? _admitPoll;
   Timer? _hostWaitPoll;
+  bool _didAutoJoin = false;
 
   static const _connectTimeouts = Timeouts(
     connection: Duration(seconds: 40),
@@ -82,7 +93,11 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
       if (!mounted) return;
       await _restoreGuestName();
       unawaited(_loadLobbyMeeting());
-      if (!widget.voiceOnly) await _startLobbyPreview();
+      if (widget.autoJoin) {
+        unawaited(_tryAutoJoin());
+      } else if (!widget.voiceOnly) {
+        unawaited(_startLobbyPreview());
+      }
     });
   }
 
@@ -110,8 +125,42 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
     setState(() => _share = sharing);
   }
 
+  String get _code => sanitizeMeetCode(widget.code);
+
+  bool _isHostViewer(AuthState auth) {
+    final meeting = _join?.meeting ?? _lobbyMeeting;
+    if (meeting == null) return false;
+    if (meeting.isHost) return true;
+    final uid = auth.user?.id;
+    return uid != null && uid.isNotEmpty && meeting.hostUserId == uid;
+  }
+
+  Future<void> _tryAutoJoin() async {
+    if (_didAutoJoin || widget.asGuest) return;
+    _didAutoJoin = true;
+    for (var i = 0; i < 25; i++) {
+      if (!mounted) return;
+      if (ref.read(authNotifierProvider).status != AuthStatus.unknown) break;
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    }
+    if (!mounted || _room != null || _connecting || _waiting) return;
+    final auth = ref.read(authNotifierProvider);
+    if (!auth.isAuthenticated) {
+      _didAutoJoin = false;
+      return;
+    }
+    await _joinMember();
+  }
+
   Future<void> _ensureMedia() async {
-    await [Permission.camera, Permission.microphone].request();
+    if (kIsWeb) return;
+    try {
+      final perms = <Permission>[
+        Permission.microphone,
+        if (!widget.voiceOnly) Permission.camera,
+      ];
+      await perms.request().timeout(const Duration(seconds: 8));
+    } catch (_) {}
   }
 
   Future<void> _startLobbyPreview() async {
@@ -159,14 +208,24 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
 
   Future<void> _loadLobbyMeeting() async {
     try {
-      final meeting = await ref.read(meetRepositoryProvider).getByCode(widget.code);
+      if (!widget.asGuest) {
+        for (var i = 0; i < 20; i++) {
+          if (!mounted) return;
+          if (ref.read(authNotifierProvider).status != AuthStatus.unknown) break;
+          await Future<void>.delayed(const Duration(milliseconds: 150));
+        }
+      }
+      final meeting = await ref.read(meetRepositoryProvider).getByCode(_code);
       if (!mounted) return;
       setState(() => _lobbyMeeting = meeting);
+      if (widget.autoJoin && meeting.isHost && !_connecting && _room == null && !_waiting) {
+        unawaited(_tryAutoJoin());
+      }
     } catch (_) {}
   }
 
   Future<void> _restoreGuestName() async {
-    final session = await loadMeetSession(widget.code);
+    final session = await loadMeetSession(_code);
     final name = session?.guestName?.trim();
     if (name != null && name.isNotEmpty && mounted) {
       _name.text = name;
@@ -174,7 +233,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
   }
 
   Future<void> _leaveLobby() async {
-    await clearMeetSession(widget.code);
+    await clearMeetSession(_code);
     await _stopLobbyPreview();
     if (!mounted) return;
     if (context.canPop()) {
@@ -227,7 +286,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
         ],
       ),
     );
-    if (_isEndedError(error)) await clearMeetSession(widget.code);
+    if (_isEndedError(error)) await clearMeetSession(_code);
     if (retry == true && mounted && !_isEndedError(error)) await onRetry?.call();
   }
 
@@ -269,7 +328,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
       try {
         final payload = _guestToken != null
             ? await ref.read(meetRepositoryProvider).guestEnter(_guestToken!)
-            : await ref.read(meetRepositoryProvider).join(widget.code);
+            : await ref.read(meetRepositoryProvider).join(_code);
         if (!mounted) return;
         if (!payload.waiting && payload.livekitUrl.isNotEmpty) {
           await _connect(payload, guestToken: _guestToken);
@@ -322,6 +381,18 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
     } catch (_) {}
   }
 
+  Future<void> _publishLocalMedia(Room room) async {
+    try {
+      await room.localParticipant?.setMicrophoneEnabled(_mic).timeout(const Duration(seconds: 10));
+    } catch (_) {}
+    if (widget.voiceOnly || !_cam) return;
+    try {
+      await room.localParticipant?.setCameraEnabled(true).timeout(const Duration(seconds: 10));
+    } catch (_) {
+      if (mounted) setState(() => _cam = false);
+    }
+  }
+
   Future<void> _connect(MeetJoinPayload payload, {String? guestToken}) async {
     _admitPoll?.cancel();
     setState(() {
@@ -333,7 +404,6 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
     await _dropRoom(previous);
     await _stopLobbyPreview();
     await _ensureMedia();
-    await Future<void>.delayed(const Duration(milliseconds: 120));
 
     if (payload.livekitUrl.isEmpty || payload.livekitToken.isEmpty) {
       throw Exception('Meeting room is not available yet. Try again.');
@@ -362,30 +432,11 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
               'Timed out connecting to the meeting room. Check that LiveKit is running, then try again.',
             ),
           );
-      if (!mounted) {
-        await _dropRoom(room);
-        return;
-      }
-      try {
-        await room.localParticipant?.setMicrophoneEnabled(_mic);
-      } catch (_) {}
-      try {
-        await room.localParticipant?.setCameraEnabled(_cam);
-      } catch (_) {
-        if (mounted) setState(() => _cam = false);
-      }
     } catch (e) {
       await _dropRoom(room);
       rethrow;
     }
 
-    await _bindSocket(payload.meeting.id, guestToken: guestToken);
-    await saveMeetSession(
-      code: widget.code,
-      guest: guestToken != null,
-      guestToken: guestToken,
-      guestName: _name.text.trim().isEmpty ? null : _name.text.trim(),
-    );
     if (!mounted) {
       await _dropRoom(room);
       return;
@@ -397,6 +448,16 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
       _recording = false;
       _waitingFor = payload.meeting.waitingParticipants;
     });
+    unawaited(_publishLocalMedia(room));
+    try {
+      await _bindSocket(payload.meeting.id, guestToken: guestToken);
+      await saveMeetSession(
+        code: _code,
+        guest: guestToken != null,
+        guestToken: guestToken,
+        guestName: _name.text.trim().isEmpty ? null : _name.text.trim(),
+      );
+    } catch (_) {}
     if (payload.meeting.isHost) _startHostWaitingPoll();
   }
 
@@ -431,7 +492,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
     try {
       final payload = _guestToken != null
           ? await ref.read(meetRepositoryProvider).guestEnter(_guestToken!)
-          : await ref.read(meetRepositoryProvider).join(widget.code);
+          : await ref.read(meetRepositoryProvider).join(_code);
       if (!mounted || !_waiting) return;
       if (!payload.waiting && payload.livekitUrl.isNotEmpty) {
         _admitPoll?.cancel();
@@ -454,27 +515,31 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
     if (_connecting) return;
     setState(() => _connecting = true);
     try {
-      final payload = await ref.read(meetRepositoryProvider).join(widget.code);
+      final payload = await ref.read(meetRepositoryProvider).join(_code);
       if (!mounted) return;
       _myParticipantId = payload.participant?.id;
-      if (payload.waiting || payload.livekitUrl.isEmpty) {
+      final host = payload.meeting.isHost;
+      if (payload.waiting && !host) {
         await _beginWait(payload);
         if (mounted) setState(() => _connecting = false);
         return;
+      }
+      if (payload.livekitUrl.isEmpty || payload.livekitToken.isEmpty) {
+        throw Exception('Meeting room is not available yet. Try again.');
       }
       try {
         await _connect(payload);
       } catch (e) {
         if (!_isJoinSignalTimeout(e) || !mounted) rethrow;
         await Future<void>.delayed(const Duration(milliseconds: 600));
-        final retry = await ref.read(meetRepositoryProvider).join(widget.code);
+        final retry = await ref.read(meetRepositoryProvider).join(_code);
         if (!mounted) return;
         await _connect(retry);
       }
     } catch (e) {
       if (!mounted) return;
       setState(() => _connecting = false);
-      await _startLobbyPreview();
+      if (!widget.voiceOnly) await _startLobbyPreview();
       await _showJoinError(e, onRetry: _joinMember);
     }
   }
@@ -488,15 +553,18 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
       _guestToken = guestToken;
       _myParticipantId = payload.participant?.id;
       await saveMeetSession(
-        code: widget.code,
+        code: _code,
         guest: true,
         guestToken: guestToken,
         guestName: _name.text.trim().isEmpty ? payload.participant?.name : _name.text.trim(),
       );
-      if (payload.waiting || payload.livekitUrl.isEmpty) {
+      if (payload.waiting) {
         await _beginWait(payload, guestToken: guestToken);
         if (mounted) setState(() => _connecting = false);
         return;
+      }
+      if (payload.livekitUrl.isEmpty || payload.livekitToken.isEmpty) {
+        throw Exception('Meeting room is not available yet. Try again.');
       }
       try {
         await _connect(payload, guestToken: guestToken);
@@ -519,26 +587,29 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
     if (_connecting) return;
     setState(() => _connecting = true);
     try {
-      final saved = await loadMeetSession(widget.code);
+      final saved = await loadMeetSession(_code);
       if (saved?.guest == true && saved?.guestToken != null && saved!.guestToken!.isNotEmpty) {
         setState(() => _connecting = false);
         await _enterGuest(saved.guestToken!);
         return;
       }
-      final payload = await ref.read(meetRepositoryProvider).guestJoin(widget.code, _name.text.trim());
+      final payload = await ref.read(meetRepositoryProvider).guestJoin(_code, _name.text.trim());
       if (!mounted) return;
       _guestToken = payload.guestToken;
       _myParticipantId = payload.participant?.id;
       await saveMeetSession(
-        code: widget.code,
+        code: _code,
         guest: true,
         guestToken: payload.guestToken,
         guestName: _name.text.trim(),
       );
-      if (payload.waiting || payload.livekitUrl.isEmpty) {
+      if (payload.waiting) {
         await _beginWait(payload, guestToken: payload.guestToken);
         if (mounted) setState(() => _connecting = false);
         return;
+      }
+      if (payload.livekitUrl.isEmpty || payload.livekitToken.isEmpty) {
+        throw Exception('Meeting room is not available yet. Try again.');
       }
       try {
         await _connect(payload, guestToken: payload.guestToken);
@@ -548,7 +619,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
         final token = payload.guestToken;
         final retry = token != null
             ? await ref.read(meetRepositoryProvider).guestEnter(token)
-            : await ref.read(meetRepositoryProvider).guestJoin(widget.code, _name.text.trim());
+            : await ref.read(meetRepositoryProvider).guestJoin(_code, _name.text.trim());
         if (!mounted) return;
         await _connect(retry, guestToken: retry.guestToken ?? token);
       }
@@ -561,7 +632,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
   }
 
   Future<void> _onRemoteEnded() async {
-    await clearMeetSession(widget.code);
+    await clearMeetSession(_code);
     final room = _room;
     _room = null;
     await _dropRoom(room);
@@ -595,7 +666,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
   Future<void> _leaveCall() async {
     _admitPoll?.cancel();
     _hostWaitPoll?.cancel();
-    await clearMeetSession(widget.code);
+    await clearMeetSession(_code);
     final room = _room;
     _room = null;
     await _dropRoom(room);
@@ -618,7 +689,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
       hasRecording: _recording || join.meeting.recordEnabled,
     );
     if (!mounted) return;
-    await clearMeetSession(widget.code);
+    await clearMeetSession(_code);
     final room = _room;
     _room = null;
     await _dropRoom(room);
@@ -766,6 +837,37 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
 
   bool _isLocal(Participant p) => p is LocalParticipant || identical(p, _room?.localParticipant);
 
+  String? _photoForParticipant(Participant p) {
+    final people = _join?.meeting.participants ?? const <MeetingPerson>[];
+    final identity = p.identity;
+    MeetingPerson? match;
+    if (identity.isNotEmpty) {
+      final uid = identity.startsWith('user:') ? identity.substring(5) : identity;
+      for (final person in people) {
+        if (person.userId == uid ||
+            person.userId == identity ||
+            person.id == uid ||
+            person.id == identity) {
+          match = person;
+          break;
+        }
+      }
+    }
+    match ??= people.where((x) => x.name == p.name).firstOrNull;
+    if ((match?.photoUrl ?? '').isNotEmpty) return match!.photoUrl;
+    final meta = p.metadata;
+    if (meta != null && meta.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(meta);
+        if (decoded is Map && decoded['photoUrl'] != null) {
+          final url = decoded['photoUrl'].toString().trim();
+          if (url.isNotEmpty) return url;
+        }
+      } catch (_) {}
+    }
+    return null;
+  }
+
   VideoTrack? _screenTrack(Participant p) {
     for (final pub in p.videoTrackPublications) {
       if (pub.source == TrackSource.screenShareVideo && !pub.muted && pub.track is VideoTrack) {
@@ -778,6 +880,11 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authNotifierProvider);
+    ref.listen<AuthState>(authNotifierProvider, (prev, next) {
+      if (prev?.isAuthenticated == true || !next.isAuthenticated) return;
+      unawaited(_loadLobbyMeeting());
+      if (widget.autoJoin) unawaited(_tryAutoJoin());
+    });
     if (_summary != null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Meeting ended')),
@@ -809,7 +916,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                   style: const TextStyle(color: Colors.white70, height: 1.4),
                 ),
                 const SizedBox(height: 8),
-                Text(widget.code, style: const TextStyle(color: Colors.white38, fontFamily: 'monospace')),
+                Text(_code, style: const TextStyle(color: Colors.white38, fontFamily: 'monospace')),
                 const SizedBox(height: 24),
                 OutlinedButton(
                   onPressed: () {
@@ -827,6 +934,8 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
     }
     if (_room == null) {
       final loggedIn = auth.isAuthenticated && !widget.asGuest;
+      final isHost = _isHostViewer(auth);
+      final needsKnock = _lobbyMeeting?.waitingRoom == true && !isHost;
       final previewOn = _cam && _previewCam != null && !_previewCam!.muted;
       final isDark = Theme.of(context).brightness == Brightness.dark;
       final bg = isDark ? AppColors.backgroundDark : AppColors.backgroundLight;
@@ -845,7 +954,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
             tooltip: 'Back',
             onPressed: _leaveLobby,
           ),
-          title: Text('Join ${widget.code}', style: TextStyle(fontWeight: FontWeight.w700, color: text)),
+          title: Text(isHost ? 'Your meeting' : 'Join $_code', style: TextStyle(fontWeight: FontWeight.w700, color: text)),
         ),
         body: Center(
           child: ConstrainedBox(
@@ -865,7 +974,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                           child: previewOn
                               ? VideoTrackRenderer(_previewCam!, fit: VideoViewFit.cover)
                               : const Center(
-                                  child: const NbIcon(Icons.videocam_off, color: Colors.white38, size: 56),
+                                  child: NbIcon(Icons.videocam_off, color: Colors.white38, size: 56),
                                 ),
                         ),
                         Positioned(
@@ -897,7 +1006,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                 ),
                 const SizedBox(height: 20),
                 Text(
-                  'Ready to join?',
+                  isHost ? 'Start your meeting' : 'Ready to join?',
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                         color: text,
                         fontWeight: FontWeight.w800,
@@ -907,14 +1016,16 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                 Text(
                   widget.voiceOnly
                       ? 'Microphone is on. Camera stays off unless you turn it on. You can share your screen in the call.'
-                      : _lobbyMeeting?.waitingRoom == true
-                          ? 'This meeting is set to ask to join. The host must admit you before you can enter — including guests.'
-                          : loggedIn
-                              ? 'Check your camera and microphone, then join with your signed-in account.'
-                              : 'Enter your full name to join. No account or email is needed.',
+                      : isHost
+                          ? 'You are the host. Join to open the room for everyone else.'
+                          : needsKnock
+                              ? 'This meeting is set to ask to join. The host must admit you before you can enter — including guests.'
+                              : loggedIn
+                                  ? 'Check your camera and microphone, then join with your signed-in account.'
+                                  : 'Enter your full name to join. No account or email is needed.',
                   style: TextStyle(color: muted),
                 ),
-                if (_lobbyMeeting?.waitingRoom == true) ...[
+                if (needsKnock) ...[
                   const SizedBox(height: 10),
                   Container(
                     width: double.infinity,
@@ -937,10 +1048,12 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                     style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
                     child: Text(
                       _connecting
-                          ? 'Asking to join…'
-                          : _lobbyMeeting?.waitingRoom == true
+                          ? (isHost || !needsKnock ? 'Joining…' : 'Asking to join…')
+                          : needsKnock
                               ? 'Ask to join'
-                              : 'Join with account',
+                              : isHost
+                                  ? 'Join your meeting'
+                                  : 'Join with account',
                     ),
                   ),
                   if (_connecting) ...[
@@ -967,8 +1080,8 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                     style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
                     child: Text(
                       _connecting
-                          ? 'Asking to join…'
-                          : _lobbyMeeting?.waitingRoom == true
+                          ? (needsKnock ? 'Asking to join…' : 'Joining…')
+                          : needsKnock
                               ? 'Ask to join as guest'
                               : 'Join as guest',
                     ),
@@ -1160,7 +1273,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                   runSpacing: 4,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    Text(widget.code, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                    Text(_code, style: const TextStyle(color: Colors.white70, fontSize: 12)),
                     _peopleChip(participants),
                     if (join?.meeting.isHost == true && _waitingFor.isNotEmpty)
                       Container(
@@ -1254,26 +1367,18 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
       children: [
         ...shown.asMap().entries.map((e) {
           final p = e.value;
-          final photo = _join?.meeting.participants.where((x) => x.name == p.name).firstOrNull?.photoUrl;
+          final photo = _photoForParticipant(p);
           final label = _isLocal(p) ? 'You' : (p.name.isEmpty ? 'Guest' : p.name);
           return Padding(
             padding: EdgeInsets.only(left: e.key == 0 ? 0 : 4),
             child: Tooltip(
               message: label,
-              child: ZoomablePhoto(
+              child: NbProfilePhoto(
                 url: (photo ?? '').isNotEmpty ? photo : null,
-                label: label,
-                child: CircleAvatar(
+                name: label,
+                identity: p.identity,
                 radius: 11,
                 backgroundColor: const Color(0xFF374151),
-                backgroundImage: (photo ?? '').isNotEmpty ? NetworkImage(photo!) : null,
-                child: (photo ?? '').isEmpty
-                    ? Text(
-                        label.isNotEmpty ? label[0].toUpperCase() : '?',
-                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700),
-                      )
-                    : null,
-              ),
               ),
             ),
           );
@@ -1304,7 +1409,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
     }
     copyMeetLink(
       context,
-      MeetingItem(id: '', code: widget.code, title: 'Meeting', status: 'LIVE'),
+      MeetingItem(id: '', code: _code, title: 'Meeting', status: 'LIVE'),
     );
   }
 
@@ -1377,7 +1482,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
       return _ParticipantTile(
         participant: p,
         label: _isLocal(p) ? 'You' : (p.name.isEmpty ? 'Guest' : p.name),
-        photoUrl: _join?.meeting.participants.where((x) => x.name == p.name).firstOrNull?.photoUrl,
+        photoUrl: _photoForParticipant(p),
       );
     }
 
@@ -1492,26 +1597,13 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
               ].whereType<String>().where((s) => s.trim().isNotEmpty).join(' · ');
               final identity = Row(
                 children: [
-                  ZoomablePhoto(
+                  NbProfilePhoto(
                     url: person.photoUrl,
-                    label: person.name,
-                    child: CircleAvatar(
-                      radius: 22,
-                      backgroundColor: const Color(0xFFC5A059),
-                      backgroundImage: person.photoUrl != null && person.photoUrl!.isNotEmpty
-                          ? NetworkImage(person.photoUrl!)
-                          : null,
-                      child: person.photoUrl == null || person.photoUrl!.isEmpty
-                          ? Text(
-                              person.name.isEmpty ? '?' : person.name[0].toUpperCase(),
-                              style: const TextStyle(
-                                color: Color(0xFF161616),
-                                fontWeight: FontWeight.w800,
-                                fontSize: 16,
-                              ),
-                            )
-                          : null,
-                    ),
+                    name: person.name,
+                    identity: person.userId ?? person.id ?? person.name,
+                    radius: 22,
+                    backgroundColor: const Color(0xFFC5A059),
+                    foregroundColor: const Color(0xFF161616),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -1602,11 +1694,10 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
       itemCount: participants.length,
       itemBuilder: (context, i) {
         final p = participants[i];
-        final person = _join?.meeting.participants.where((x) => x.name == p.name).firstOrNull;
         return _ParticipantTile(
           participant: p,
           label: _isLocal(p) ? 'You' : (p.name.isEmpty ? 'Guest' : p.name),
-          photoUrl: person?.photoUrl,
+          photoUrl: _photoForParticipant(p),
         );
       },
     );
@@ -1940,14 +2031,11 @@ class _ParticipantTile extends StatelessWidget {
         final micOn = participant.isMicrophoneEnabled();
         final speaking = micOn && (participant.isSpeaking || participant.audioLevel > 0.08);
         Widget body = Center(
-          child: ZoomablePhoto(
+          child: NbProfilePhoto(
             url: photoUrl,
-            label: label,
-            child: CircleAvatar(
+            name: label,
+            identity: participant.identity,
             radius: 36,
-            backgroundImage: photoUrl != null ? NetworkImage(photoUrl!) : null,
-            child: photoUrl == null ? Text(label.isEmpty ? '?' : label[0]) : null,
-          ),
           ),
         );
         if (track != null) {

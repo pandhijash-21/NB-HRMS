@@ -53,12 +53,28 @@ function directKeyFor(a: string, b: string) {
   return [a, b].sort().join(':');
 }
 
-function groupReactions(reactions: ChatReaction[], me: string) {
-  const map = new Map<string, { emoji: string; count: number; mine: boolean; userIds: string[] }>();
+async function groupReactions(reactions: ChatReaction[], me: string) {
+  const profiles = await getProfiles(reactions.map((r) => r.userId));
+  const map = new Map<
+    string,
+    {
+      emoji: string;
+      count: number;
+      mine: boolean;
+      userIds: string[];
+      users: { userId: string; name: string; photoUrl: string | null }[];
+    }
+  >();
   for (const r of reactions) {
-    const cur = map.get(r.emoji) ?? { emoji: r.emoji, count: 0, mine: false, userIds: [] };
+    const cur = map.get(r.emoji) ?? { emoji: r.emoji, count: 0, mine: false, userIds: [], users: [] };
+    const profile = profiles.get(r.userId);
     cur.count += 1;
     cur.userIds.push(r.userId);
+    cur.users.push({
+      userId: r.userId,
+      name: profile?.name || 'Member',
+      photoUrl: profile?.photoUrl ?? null,
+    });
     if (r.userId === me) cur.mine = true;
     map.set(r.emoji, cur);
   }
@@ -112,7 +128,7 @@ async function serializeMessages(rows: MessageRow[], me: string, members: Receip
                 scanStatus: a.scanStatus,
               })),
             ),
-        reactions: groupReactions(m.reactions, me),
+        reactions: await groupReactions(m.reactions, me),
         seenBy,
         unseenBy,
         mentionedUserIds: mentionedUserIdsFromText(
@@ -564,14 +580,17 @@ export const chatService = {
       where: { channelId: msg.channelId, userId: me, leftAt: null },
     });
     if (!member) throw new Error('Not a member of this chat');
-    const existing = await prisma.chatReaction.findUnique({
-      where: { messageId_userId_emoji: { messageId, userId: me, emoji } },
+    await prisma.$transaction(async (tx) => {
+      const existing = await tx.chatReaction.findUnique({
+        where: { messageId_userId_emoji: { messageId, userId: me, emoji } },
+      });
+      if (existing) {
+        await tx.chatReaction.delete({ where: { id: existing.id } });
+        return;
+      }
+      await tx.chatReaction.deleteMany({ where: { messageId, userId: me } });
+      await tx.chatReaction.create({ data: { messageId, userId: me, emoji } });
     });
-    if (existing) {
-      await prisma.chatReaction.delete({ where: { id: existing.id } });
-    } else {
-      await prisma.chatReaction.create({ data: { messageId, userId: me, emoji } });
-    }
     const fresh = await prisma.chatMessage.findUnique({
       where: { id: messageId },
             include: { attachments: true, reactions: true, replyTo: true },

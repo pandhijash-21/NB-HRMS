@@ -7,7 +7,7 @@ import { prisma } from '../../config/prisma';
 import { env } from '../../config/env';
 import { cloudinary, getCloudinaryCredentials } from '../../config/cloudinary';
 import { getProfile, getProfiles } from './profiles';
-import { issueLiveKitToken, livekitPublicUrl, startRoomRecording, stopRoomRecording, deleteLiveKitRoom } from './livekit';
+import { issueLiveKitToken, livekitPublicUrl, startRoomRecording, stopRoomRecording, deleteLiveKitRoom, removeLiveKitParticipant } from './livekit';
 import { generateMeetingSummary } from './summary.service';
 import { sendMeetingInviteEmail, sendMeetingSummaryEmail } from '../../utils/mailer';
 import { collabStorage } from './storage';
@@ -616,14 +616,13 @@ export const meetService = {
       throw new Error('The host declined your request to join');
     }
 
-    // Ask-to-join: only the host, or someone the host already let in, may enter.
-    // Invited people and guests are created as ADMITTED for the roster but have
-    // no joinedAt until they actually enter — they must still knock.
+    // Host always enters. Waiting room only knocks other people, and only when
+    // the host turned it on. Invitees already admitted (joinedAt set) may re-enter.
     const previouslyLetIn =
       isHost ||
       participant?.role === 'HOST' ||
       (participant?.admission === 'ADMITTED' && participant.joinedAt != null);
-    const nextAdmission = meeting.waitingRoom && !previouslyLetIn ? 'WAITING' : 'ADMITTED';
+    const nextAdmission = isHost || !meeting.waitingRoom || previouslyLetIn ? 'ADMITTED' : 'WAITING';
 
     if (!participant) {
       participant = await prisma.meetingParticipant.create({
@@ -665,6 +664,10 @@ export const meetService = {
       };
     }
 
+    await Promise.race([
+      removeLiveKitParticipant(meeting.livekitRoom, `user:${userId}`),
+      sleep(2000),
+    ]);
     const token = await issueLiveKitToken({
       roomName: meeting.livekitRoom,
       identity: `user:${userId}`,

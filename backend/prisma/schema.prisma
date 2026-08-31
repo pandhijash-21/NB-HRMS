@@ -233,6 +233,8 @@ model Employee {
   workTasks           WorkTask[]
   orgTreeContacts     OrgTreeContact[]
   ownedErpProjects    ErpProject[]
+  ownedWorkOrders     ErpWorkOrder[] @relation("WorkOrderOwner")
+  workOrdersToApprove ErpWorkOrder[] @relation("WorkOrderApprover")
 
   @@map("employees")
 }
@@ -1990,6 +1992,7 @@ model ErpProject {
   owner        Employee?            @relation(fields: [ownerEmployeeId], references: [id])
   documents    ErpProjectDocument[]
   towers       ErpProjectTower[]
+  workOrders   ErpWorkOrder[]
 
   @@index([isActive, createdAt])
   @@index([organizationId])
@@ -2072,4 +2075,138 @@ model ErpProjectUnit {
   @@unique([towerId, unitNo])
   @@index([towerId, floorNo])
   @@map("erp_project_units")
+}
+
+// =============================================================================
+// ERP Work Orders — contractors, activities, work orders & line items
+// =============================================================================
+
+enum ErpWorkOrderStatus {
+  ISSUED
+  IN_PROGRESS
+  COMPLETED
+  COMPLETED_DELAYED
+  CANCELLED
+}
+
+enum ErpWorkOrderApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  NOT_APPLICABLE
+}
+
+model ErpContractor {
+  id            String   @id @default(uuid())
+  name          String
+  contactPerson String?  @map("contact_person")
+  phone         String?
+  email         String?
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  workOrders ErpWorkOrder[]
+
+  @@index([isActive, name])
+  @@map("erp_contractors")
+}
+
+model ErpActivity {
+  id        String   @id @default(uuid())
+  name      String
+  isActive  Boolean  @default(true) @map("is_active")
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  subtasks           ErpActivitySubtask[]
+  workOrderGroups    ErpWorkOrderActivityGroup[]
+
+  @@index([isActive, sortOrder])
+  @@map("erp_activities")
+}
+
+model ErpActivitySubtask {
+  id         String   @id @default(uuid())
+  activityId String   @map("activity_id")
+  name       String
+  isActive   Boolean  @default(true) @map("is_active")
+  sortOrder  Int      @default(0) @map("sort_order")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  activity ErpActivity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+
+  @@index([activityId, sortOrder])
+  @@map("erp_activity_subtasks")
+}
+
+model ErpWorkOrder {
+  id                 String                     @id @default(uuid())
+  workOrderId        String                     @unique @map("work_order_id")
+  orderDate          DateTime                   @map("order_date") @db.Date
+  dueDate            DateTime?                  @map("due_date") @db.Date
+  projectId          String                     @map("project_id")
+  tenderRef          String?                    @map("tender_ref")
+  contractorId       String?                    @map("contractor_id")
+  categoryCode       String?                    @map("category_code")
+  status             ErpWorkOrderStatus         @default(ISSUED)
+  approvalStatus     ErpWorkOrderApprovalStatus @default(PENDING) @map("approval_status")
+  approverEmployeeId Int?                       @map("approver_employee_id")
+  ownerEmployeeId    Int?                       @map("owner_employee_id")
+  totalAmount        Decimal                    @default(0) @map("total_amount") @db.Decimal(14, 2)
+  createdBy          String?                    @map("created_by")
+  updatedBy          String?                    @map("updated_by")
+  createdAt          DateTime                   @default(now()) @map("created_at")
+  updatedAt          DateTime                   @updatedAt @map("updated_at")
+
+  project    ErpProject   @relation(fields: [projectId], references: [id])
+  contractor ErpContractor? @relation(fields: [contractorId], references: [id])
+  owner      Employee?    @relation("WorkOrderOwner", fields: [ownerEmployeeId], references: [id])
+  approver   Employee?    @relation("WorkOrderApprover", fields: [approverEmployeeId], references: [id])
+  activities ErpWorkOrderActivityGroup[]
+
+  @@index([projectId, orderDate])
+  @@index([status])
+  @@index([approvalStatus])
+  @@map("erp_work_orders")
+}
+
+model ErpWorkOrderActivityGroup {
+  id           String   @id @default(uuid())
+  workOrderId  String   @map("work_order_id")
+  activityId   String?  @map("activity_id")
+  activityName String   @map("activity_name")
+  sortOrder    Int      @default(0) @map("sort_order")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  workOrder ErpWorkOrder       @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  activity  ErpActivity?       @relation(fields: [activityId], references: [id], onDelete: SetNull)
+  lines     ErpWorkOrderLine[]
+
+  @@index([workOrderId, sortOrder])
+  @@map("erp_work_order_activity_groups")
+}
+
+model ErpWorkOrderLine {
+  id         String   @id @default(uuid())
+  groupId    String   @map("group_id")
+  workDetail String   @map("work_detail")
+  towerIds   String?  @map("tower_ids") @db.Text
+  floorNos   String?  @map("floor_nos") @db.Text
+  unitIds    String?  @map("unit_ids") @db.Text
+  quantity   Decimal? @db.Decimal(14, 4)
+  unitCode   String?  @map("unit_code")
+  rate       Decimal? @db.Decimal(14, 2)
+  amount     Decimal? @db.Decimal(14, 2)
+  sortOrder  Int      @default(0) @map("sort_order")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  group ErpWorkOrderActivityGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([groupId, sortOrder])
+  @@map("erp_work_order_lines")
 }

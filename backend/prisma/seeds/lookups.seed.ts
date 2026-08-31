@@ -198,6 +198,18 @@ const SEED: SeedOpt[] = [
   { category: 'PROJECT_UNIT_CATEGORY', code: 'STANDARD', label: 'Standard', sortOrder: 1 },
   { category: 'PROJECT_UNIT_CATEGORY', code: 'CORNER', label: 'Corner', sortOrder: 2 },
   { category: 'PROJECT_UNIT_CATEGORY', code: 'PREMIUM', label: 'Premium', sortOrder: 3 },
+
+  // Work Orders
+  { category: 'WO_MEASUREMENT_UNIT', code: 'PCS', label: 'PCS', sortOrder: 1 },
+  { category: 'WO_MEASUREMENT_UNIT', code: 'SQ_FT', label: 'Sq Ft', sortOrder: 2 },
+  { category: 'WO_MEASUREMENT_UNIT', code: 'SQ_M', label: 'Sq M', sortOrder: 3 },
+  { category: 'WO_MEASUREMENT_UNIT', code: 'RMT', label: 'Rmt', sortOrder: 4 },
+  { category: 'WO_MEASUREMENT_UNIT', code: 'KG', label: 'Kg', sortOrder: 5 },
+  { category: 'WO_MEASUREMENT_UNIT', code: 'LTR', label: 'Ltr', sortOrder: 6 },
+  { category: 'WO_CATEGORY', code: 'CIVIL', label: 'Civil', sortOrder: 1 },
+  { category: 'WO_CATEGORY', code: 'ELECTRICAL', label: 'Electrical', sortOrder: 2 },
+  { category: 'WO_CATEGORY', code: 'PLUMBING', label: 'Plumbing', sortOrder: 3 },
+  { category: 'WO_CATEGORY', code: 'FINISHING', label: 'Finishing', sortOrder: 4 },
 ];
 
 export async function seedSystemLookups(prisma: PrismaClient) {

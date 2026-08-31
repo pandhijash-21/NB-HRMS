@@ -27,6 +27,7 @@ const MODULES = [
   { key: 'ROLE_MGMT',     name: 'Role Management' },
   { key: 'FIELD_MGMT',    name: 'Dynamic Field Management' },
   { key: 'PROJECTS',      name: 'ERP Projects' },
+  { key: 'WORK_ORDERS',   name: 'ERP Work Orders' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -60,6 +61,7 @@ const PERMISSION_MATRIX: PermissionMatrix = {
     BANK_DETAILS:  RW,
     DOCUMENTS:     RW,
     PROJECTS:      RO,
+    WORK_ORDERS:   RO,
   },
 };
 

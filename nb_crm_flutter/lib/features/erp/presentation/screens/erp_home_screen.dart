@@ -12,6 +12,9 @@ class ErpHomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(authNotifierProvider);
     final canRead = Permissions.hasPermission(auth.permissions, 'PROJECTS', 'READ') ||
+        Permissions.hasPermission(auth.permissions, 'WORK_ORDERS', 'READ') ||
+        Permissions.canAccessAdminPortal(auth.permissions, auth.user?.employeeViewScope);
+    final canReadWo = Permissions.hasPermission(auth.permissions, 'WORK_ORDERS', 'READ') ||
         Permissions.canAccessAdminPortal(auth.permissions, auth.user?.employeeViewScope);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -41,6 +44,24 @@ class ErpHomeScreen extends ConsumerWidget {
             color: const Color(0xFF2563eb),
             enabled: canRead,
             onTap: () => context.go('/erp/projects'),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Work Orders',
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 15,
+              color: isDark ? Colors.white : const Color(0xFF212F3D),
+            ),
+          ),
+          const SizedBox(height: 10),
+          _ErpTile(
+            icon: Icons.assignment_outlined,
+            title: 'Work Orders',
+            subtitle: 'Create and track contractor work orders',
+            color: const Color(0xFF0d9488),
+            enabled: canReadWo,
+            onTap: () => context.go('/erp/work-orders'),
           ),
         ],
       ),

@@ -75,6 +75,11 @@ import '../../features/erp/presentation/screens/project_structure_screen.dart';
 import '../../features/erp/presentation/screens/tower_form_screen.dart';
 import '../../features/erp/presentation/screens/tower_units_screen.dart';
 import '../../features/erp/presentation/screens/unit_form_screen.dart';
+import '../../features/erp/presentation/screens/work_orders_list_screen.dart';
+import '../../features/erp/presentation/screens/work_order_detail_screen.dart';
+import '../../features/erp/presentation/screens/work_order_form_screen.dart';
+import '../../features/erp/presentation/screens/activities_config_screen.dart';
+import '../../features/erp/presentation/screens/contractors_config_screen.dart';
 import '../widgets/responsive_shell.dart';
 
 /// Listenable bridge so GoRouter refreshes when [AuthState] changes.
@@ -259,6 +264,14 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const ErpConfigurationsScreen(),
           ),
           GoRoute(
+            path: '/erp/configurations/activities',
+            builder: (context, state) => const ActivitiesConfigScreen(),
+          ),
+          GoRoute(
+            path: '/erp/configurations/contractors',
+            builder: (context, state) => const ContractorsConfigScreen(),
+          ),
+          GoRoute(
             path: '/erp/configurations/lookups/:category',
             builder: (context, state) {
               final category = state.pathParameters['category'] ?? '';
@@ -266,6 +279,28 @@ final goRouterProvider = Provider<GoRouter>((ref) {
                 category: category,
                 fallbackLocation: '/erp/configurations',
               );
+            },
+          ),
+          GoRoute(
+            path: '/erp/work-orders',
+            builder: (context, state) => const WorkOrdersListScreen(),
+          ),
+          GoRoute(
+            path: '/erp/work-orders/new',
+            builder: (context, state) => const WorkOrderFormScreen(),
+          ),
+          GoRoute(
+            path: '/erp/work-orders/:id/edit',
+            builder: (context, state) {
+              final id = state.pathParameters['id'] ?? '';
+              return WorkOrderFormScreen(id: id);
+            },
+          ),
+          GoRoute(
+            path: '/erp/work-orders/:id',
+            builder: (context, state) {
+              final id = state.pathParameters['id'] ?? '';
+              return WorkOrderDetailScreen(id: id);
             },
           ),
           GoRoute(

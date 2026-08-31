@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/router/app_back_button.dart';
 import '../../../lookups/presentation/lookup_providers.dart';
 import '../../domain/project_lookup_keys.dart';
+import '../../domain/work_order_lookup_keys.dart';
 
 class ErpConfigurationsScreen extends ConsumerWidget {
   const ErpConfigurationsScreen({super.key});
@@ -73,6 +74,56 @@ class ErpConfigurationsScreen extends ConsumerWidget {
                       onTap: () => context.go(
                         '/erp/configurations/lookups/${g.key}',
                       ),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'Work Orders',
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 15,
+              color: isDark ? Colors.white : const Color(0xFF212F3D),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Activities, contractors, and measurement units.',
+            style: TextStyle(
+              fontSize: 13,
+              color: isDark ? Colors.white54 : const Color(0xFF607D8B),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _CfgTile(
+            title: 'Activities',
+            subtitle: 'Work order activities — add and toggle active/inactive',
+            onTap: () => context.go('/erp/configurations/activities'),
+          ),
+          const SizedBox(height: 10),
+          _CfgTile(
+            title: 'Contractors',
+            subtitle: 'Manage contractors for work orders',
+            onTap: () => context.go('/erp/configurations/contractors'),
+          ),
+          const SizedBox(height: 10),
+          groupsAsync.when(
+            loading: () => const SizedBox.shrink(),
+            error: (_, __) => const SizedBox.shrink(),
+            data: (groups) {
+              final wo = groups.where((g) => kWoLookupKeys.contains(g.key)).toList();
+              return Column(
+                children: [
+                  for (final g in wo) ...[
+                    _CfgTile(
+                      title: g.label,
+                      subtitle: g.description ??
+                          '${g.options.where((o) => o.isActive).length} active options',
+                      onTap: () => context.go('/erp/configurations/lookups/${g.key}'),
                     ),
                     const SizedBox(height: 10),
                   ],

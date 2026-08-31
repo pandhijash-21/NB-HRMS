@@ -210,6 +210,12 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
           Icons.apartment,
           'Projects',
         ),
+        const _Destination(
+          '/erp/work-orders',
+          Icons.assignment_outlined,
+          Icons.assignment,
+          'Work Orders',
+        ),
         if (canAccessAdmin)
           const _Destination(
             '/erp/configurations',

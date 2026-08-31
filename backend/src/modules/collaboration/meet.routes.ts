@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { requireAuth } from '../../middleware/auth';
 import { ok, fail } from '../../utils/response';
 import { meetService, type GuestActor, type UserActor } from './meet.service';
-import { emitJoinDecision, emitMeetingInvites, emitWaitingUpdate, getIo } from './socket';
+import { emitJoinDecision, emitMeetingEnded, emitMeetingInvites, emitWaitingUpdate, getIo } from './socket';
 import { getProfile } from './profiles';
 
 export const meetingsRouter = Router();
@@ -189,10 +189,10 @@ meetingsRouter.post('/:id/invite', async (req: Request, res: Response) => {
   }
 });
 
-meetingsRouter.post('/:id/join', async (req: Request, res: Response) => {
+meetingsRouter.post('/join', async (req: Request, res: Response) => {
   try {
-    const meeting = await meetService.getById(p(req.params.id), req.user!.id);
-    const data = await meetService.joinAsUser(meeting!.code, req.user!.id);
+    const body = z.object({ code: z.string().min(3) }).parse(req.body);
+    const data = await meetService.joinAsUser(body.code, req.user!.id);
     if (data.waiting && data.meeting) {
       emitWaitingUpdate(
         data.meeting.id,
@@ -207,10 +207,16 @@ meetingsRouter.post('/:id/join', async (req: Request, res: Response) => {
   }
 });
 
-meetingsRouter.post('/join', async (req: Request, res: Response) => {
+meetingsRouter.post('/:id/join', async (req: Request, res: Response) => {
   try {
-    const body = z.object({ code: z.string().min(3) }).parse(req.body);
-    const data = await meetService.joinAsUser(body.code, req.user!.id);
+    const idOrCode = p(req.params.id);
+    let meeting;
+    try {
+      meeting = await meetService.getById(idOrCode, req.user!.id);
+    } catch {
+      meeting = await meetService.getByCode(idOrCode, req.user!.id);
+    }
+    const data = await meetService.joinAsUser(meeting!.code, req.user!.id);
     if (data.waiting && data.meeting) {
       emitWaitingUpdate(
         data.meeting.id,
@@ -278,8 +284,12 @@ meetingsRouter.post('/:id/end', async (req: Request, res: Response) => {
     const data = await meetService.endMeeting(
       meetingId,
       req.user!.id,
-      () => {
-        getIo()?.to(`meeting:${meetingId}`).emit('meeting_ended', { meetingId });
+      (ended) => {
+        emitMeetingEnded({
+          meetingId: ended.meetingId,
+          code: ended.code,
+          userIds: ended.userIds,
+        });
       },
       emitProgress,
     );

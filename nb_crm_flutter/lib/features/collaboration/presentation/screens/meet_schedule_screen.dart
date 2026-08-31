@@ -24,7 +24,7 @@ class _MeetScheduleScreenState extends ConsumerState<MeetScheduleScreen> {
   final _agenda = TextEditingController();
   DateTime? _start;
   DateTime? _end;
-  bool _waitingRoom = true;
+  bool _waitingRoom = false;
   bool _recordEnabled = false;
   bool _loading = false;
   bool _saving = false;

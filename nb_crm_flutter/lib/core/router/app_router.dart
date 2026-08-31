@@ -182,6 +182,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         path: '/meet/r/:code',
         builder: (context, state) => MeetRoomScreen(
           code: state.pathParameters['code'] ?? '',
+          voiceOnly: state.uri.queryParameters['voice'] == '1',
         ),
       ),
       GoRoute(

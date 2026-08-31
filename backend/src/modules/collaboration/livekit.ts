@@ -41,6 +41,7 @@ export async function issueLiveKitToken(opts: {
   });
   token.addGrant({
     roomJoin: true,
+    roomCreate: true,
     room: opts.roomName,
     canPublish: true,
     canSubscribe: true,

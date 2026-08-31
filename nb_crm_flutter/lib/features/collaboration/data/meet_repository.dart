@@ -25,6 +25,13 @@ class MeetRepository {
     );
   }
 
+  Future<MeetingItem> getByCode(String code) {
+    return _dio.getEnvelope(
+      'meetings/code/${Uri.encodeComponent(code.trim().toLowerCase())}',
+      parse: (raw) => MeetingItem.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
   Future<MeetingItem> getById(String id) {
     return _dio.getEnvelope(
       'meetings/$id',
@@ -39,7 +46,7 @@ class MeetRepository {
     String? scheduledEnd,
     bool instant = true,
     bool recordEnabled = false,
-    bool waitingRoom = true,
+    bool waitingRoom = false,
     List<String>? inviteeIds,
   }) {
     return _dio.postEnvelope(

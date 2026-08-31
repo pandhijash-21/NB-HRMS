@@ -152,7 +152,7 @@ jobs:
             exit 1
           fi
           flutter pub get
-          flutter build web --release \
+          flutter build web --release --no-tree-shake-icons --pwa-strategy=none \
             --dart-define=API_BASE_URL="$API" \
             --dart-define=TRANSPORT_SECRET="$SECRET"
 

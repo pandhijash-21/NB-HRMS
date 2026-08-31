@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -13,10 +15,11 @@ import '../end_meet_progress.dart';
 import '../meet_helpers.dart';
 
 class MeetRoomScreen extends ConsumerStatefulWidget {
-  const MeetRoomScreen({super.key, required this.code, this.asGuest = false});
+  const MeetRoomScreen({super.key, required this.code, this.asGuest = false, this.voiceOnly = false});
 
   final String code;
   final bool asGuest;
+  final bool voiceOnly;
 
   @override
   ConsumerState<MeetRoomScreen> createState() => _MeetRoomScreenState();
@@ -44,6 +47,8 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
   final _chat = <Map<String, dynamic>>[];
   String? _summary;
   LocalVideoTrack? _previewCam;
+  Timer? _admitPoll;
+  Timer? _hostWaitPoll;
 
   static const _connectTimeouts = Timeouts(
     connection: Duration(seconds: 40),
@@ -69,15 +74,18 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
     _name.addListener(() {
       if (mounted) setState(() {});
     });
+    _cam = !widget.voiceOnly;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       await _restoreGuestName();
-      await _startLobbyPreview();
+      if (!widget.voiceOnly) await _startLobbyPreview();
     });
   }
 
   @override
   void dispose() {
+    _admitPoll?.cancel();
+    _hostWaitPoll?.cancel();
     final room = _room;
     _room = null;
     room?.removeListener(_onRoom);
@@ -262,7 +270,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
         const SnackBar(content: Text('The host declined your request to join')),
       );
     });
-    socket.onMeetingEnded((meetingId) {
+    socket.onMeetingEnded((meetingId, _) {
       if (_join?.meeting.id != meetingId) return;
       _onRemoteEnded();
     });
@@ -296,6 +304,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
   }
 
   Future<void> _connect(MeetJoinPayload payload, {String? guestToken}) async {
+    _admitPoll?.cancel();
     setState(() {
       _connecting = true;
       _waiting = false;
@@ -369,6 +378,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
       _recording = false;
       _waitingFor = payload.meeting.waitingParticipants;
     });
+    if (payload.meeting.isHost) _startHostWaitingPoll();
   }
 
   Future<void> _beginWait(MeetJoinPayload payload, {String? guestToken}) async {
@@ -380,6 +390,45 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
       _waitingFor = payload.meeting.waitingParticipants;
     });
     await _bindSocket(payload.meeting.id, guestToken: guestToken);
+    _startAdmitPoll();
+  }
+
+  void _startAdmitPoll() {
+    _admitPoll?.cancel();
+    _admitPoll = Timer.periodic(const Duration(seconds: 2), (_) {
+      unawaited(_pollAdmission());
+    });
+  }
+
+  void _startHostWaitingPoll() {
+    _hostWaitPoll?.cancel();
+    _hostWaitPoll = Timer.periodic(const Duration(seconds: 3), (_) {
+      unawaited(_pollHostWaiting());
+    });
+  }
+
+  Future<void> _pollAdmission() async {
+    if (!mounted || !_waiting || _room != null) return;
+    try {
+      final payload = _guestToken != null
+          ? await ref.read(meetRepositoryProvider).guestEnter(_guestToken!)
+          : await ref.read(meetRepositoryProvider).join(widget.code);
+      if (!mounted || !_waiting) return;
+      if (!payload.waiting && payload.livekitUrl.isNotEmpty) {
+        _admitPoll?.cancel();
+        await _connect(payload, guestToken: _guestToken);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _pollHostWaiting() async {
+    final id = _join?.meeting.id;
+    if (!mounted || id == null || _join?.meeting.isHost != true || _room == null) return;
+    try {
+      final meeting = await ref.read(meetRepositoryProvider).getById(id);
+      if (!mounted) return;
+      setState(() => _waitingFor = meeting.waitingParticipants);
+    } catch (_) {}
   }
 
   Future<void> _joinMember() async {
@@ -525,6 +574,8 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
   }
 
   Future<void> _leaveCall() async {
+    _admitPoll?.cancel();
+    _hostWaitPoll?.cancel();
     await clearMeetSession(widget.code);
     final room = _room;
     _room = null;
@@ -743,6 +794,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                 const SizedBox(height: 24),
                 OutlinedButton(
                   onPressed: () {
+                    _admitPoll?.cancel();
                     setState(() => _waiting = false);
                     if (context.canPop()) context.pop();
                   },
@@ -834,9 +886,11 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  loggedIn
-                      ? 'Check your camera and microphone, then join with your signed-in account.'
-                      : 'Enter your full name to join. No account or email is needed.',
+                  widget.voiceOnly
+                      ? 'Microphone is on. Camera stays off unless you turn it on. You can share your screen in the call.'
+                      : loggedIn
+                          ? 'Check your camera and microphone, then join with your signed-in account.'
+                          : 'Enter your full name to join. No account or email is needed.',
                   style: TextStyle(color: muted),
                 ),
                 const SizedBox(height: 20),
@@ -993,7 +1047,11 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                 _LobbyRoundButton(
                   icon: Icons.present_to_all,
                   on: !_share,
-                  tooltip: _share ? 'Stop presenting' : 'Present now',
+                  tooltip: _share
+                      ? 'Stop sharing screen'
+                      : widget.voiceOnly
+                          ? 'Share screen'
+                          : 'Present now',
                   onPressed: _toggleScreenShare,
                   accent: _share,
                 ),

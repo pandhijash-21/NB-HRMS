@@ -82,6 +82,7 @@ server {
         return 200 'ok\n';
     }
     location / {
+        add_header Cache-Control "no-store" always;
         try_files $uri $uri/ /index.html;
     }
 }

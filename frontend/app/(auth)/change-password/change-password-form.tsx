@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Lock, Eye, EyeOff, Loader2 } from "lucide-react";
+import { passwordPolicyIssue } from "@/lib/passwordPolicy";
 
 export default function ChangePasswordForm() {
   const router = useRouter();
@@ -30,8 +31,9 @@ export default function ChangePasswordForm() {
       return;
     }
 
-    if (formData.newPassword.length < 6) {
-      alert("Password must be at least 6 characters.");
+    const policyError = passwordPolicyIssue(formData.newPassword);
+    if (policyError) {
+      alert(policyError);
       return;
     }
 

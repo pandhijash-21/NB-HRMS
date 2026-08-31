@@ -55,7 +55,9 @@ class ChatChannel {
     required this.id,
     required this.type,
     this.name,
+    this.topic,
     this.avatarUrl,
+    this.createdById,
     this.unread = 0,
     this.members = const [],
     this.lastPreview,
@@ -65,11 +67,38 @@ class ChatChannel {
   final String id;
   final String type;
   final String? name;
+  final String? topic;
   final String? avatarUrl;
+  final String? createdById;
   final int unread;
   final List<CollabProfile> members;
   final String? lastPreview;
   final DateTime? lastAt;
+
+  bool get isGroup => type == 'GROUP';
+
+  List<CollabProfile> others(String? me) => members.where((m) => m.userId != me).toList();
+
+  bool anyOtherOnline(String? me) => members.any((m) => m.online && m.userId != me);
+
+  String presenceSubtitle(String? me) {
+    if (!isGroup) {
+      final other = others(me).firstOrNull;
+      if (other == null) return 'Saved messages';
+      return other.online ? 'Available' : 'Away';
+    }
+    final peers = others(me);
+    final online = peers.where((m) => m.online).toList();
+    if (online.isEmpty) return '${members.length} members';
+    String first(CollabProfile p) {
+      final t = p.name.trim();
+      if (t.isEmpty) return 'Someone';
+      return t.split(RegExp(r'\s+')).first;
+    }
+    if (online.length == 1) return '${first(online.first)} available';
+    if (online.length == 2) return '${first(online[0])} and ${first(online[1])} available';
+    return '${online.length} of ${peers.length} available';
+  }
 
   factory ChatChannel.fromJson(Map<String, dynamic> json) {
     final last = json['lastMessage'];
@@ -77,7 +106,9 @@ class ChatChannel {
       id: json['id']?.toString() ?? '',
       type: json['type']?.toString() ?? 'DIRECT',
       name: json['name'] as String?,
+      topic: json['topic'] as String?,
       avatarUrl: json['avatarUrl'] as String?,
+      createdById: json['createdById']?.toString(),
       unread: json['unread'] is int ? json['unread'] as int : 0,
       members: (json['members'] as List? ?? [])
           .whereType<Map>()
@@ -96,12 +127,18 @@ class ChatChannel {
     List<CollabProfile>? members,
     String? lastPreview,
     DateTime? lastAt,
+    String? name,
+    String? topic,
+    String? avatarUrl,
+    bool clearAvatar = false,
   }) {
     return ChatChannel(
       id: id,
       type: type,
-      name: name,
-      avatarUrl: avatarUrl,
+      name: name ?? this.name,
+      topic: topic ?? this.topic,
+      avatarUrl: clearAvatar ? null : (avatarUrl ?? this.avatarUrl),
+      createdById: createdById,
       unread: unread ?? this.unread,
       members: members ?? this.members,
       lastPreview: lastPreview ?? this.lastPreview,
@@ -121,6 +158,8 @@ class ChatMessage {
     this.deleted = false,
     this.attachments = const [],
     this.reactions = const [],
+    this.replyToId,
+    this.replyTo,
     this.seenBy = const [],
     this.unseenBy = const [],
     this.createdAt,
@@ -134,6 +173,8 @@ class ChatMessage {
   final String? senderPhoto;
   final String? content;
   final bool deleted;
+  final String? replyToId;
+  final ChatReplyPreview? replyTo;
   final List<ChatAttachment> attachments;
   final List<ChatReaction> reactions;
   final List<CollabProfile> seenBy;
@@ -151,6 +192,10 @@ class ChatMessage {
       senderPhoto: sender is Map ? sender['photoUrl'] as String? : null,
       content: json['content'] as String?,
       deleted: json['deletedAt'] != null,
+      replyToId: json['replyToId']?.toString(),
+      replyTo: json['replyTo'] is Map
+          ? ChatReplyPreview.fromJson(Map<String, dynamic>.from(json['replyTo'] as Map))
+          : null,
       attachments: (json['attachments'] as List? ?? [])
           .whereType<Map>()
           .map((e) => ChatAttachment.fromJson(Map<String, dynamic>.from(e)))
@@ -173,15 +218,50 @@ class ChatMessage {
   }
 }
 
+class ChatReplyPreview {
+  const ChatReplyPreview({
+    required this.id,
+    required this.senderName,
+    this.content,
+    this.senderId,
+  });
+  final String id;
+  final String senderName;
+  final String? content;
+  final String? senderId;
+
+  factory ChatReplyPreview.fromJson(Map<String, dynamic> json) => ChatReplyPreview(
+        id: json['id']?.toString() ?? '',
+        senderName: json['senderName']?.toString() ?? 'Member',
+        content: json['content'] as String?,
+        senderId: json['senderId']?.toString(),
+      );
+}
+
 class ChatAttachment {
-  const ChatAttachment({required this.fileName, this.id, this.fileUrl});
+  const ChatAttachment({required this.fileName, this.id, this.fileUrl, this.mimeType});
   final String? id;
   final String fileName;
   final String? fileUrl;
+  final String? mimeType;
+
+  bool get isImage {
+    final n = fileName.toLowerCase();
+    final mime = (mimeType ?? '').toLowerCase();
+    return mime.startsWith('image/') ||
+        n.endsWith('.png') ||
+        n.endsWith('.jpg') ||
+        n.endsWith('.jpeg') ||
+        n.endsWith('.gif') ||
+        n.endsWith('.webp') ||
+        n.endsWith('.bmp');
+  }
+
   factory ChatAttachment.fromJson(Map<String, dynamic> json) => ChatAttachment(
         id: json['id']?.toString(),
         fileName: json['fileName']?.toString() ?? 'file',
         fileUrl: json['fileUrl'] as String?,
+        mimeType: json['mimeType'] as String?,
       );
 }
 

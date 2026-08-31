@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PasswordPolicySchema } from '../../utils/passwordPolicy';
 
 export const LoginSchema = z.object({
   identifier: z.string().min(1, 'Employee ID or Username is required'),
@@ -7,11 +8,7 @@ export const LoginSchema = z.object({
 
 export const ChangePasswordSchema = z.object({
   currentPassword: z.string().min(1),
-  newPassword: z
-    .string()
-    .min(8, 'Minimum 8 characters')
-    .regex(/[a-zA-Z]/, 'Must contain at least one letter')
-    .regex(/[0-9]/, 'Must contain at least one number'),
+  newPassword: PasswordPolicySchema,
 });
 
 export type LoginInput = z.infer<typeof LoginSchema>;

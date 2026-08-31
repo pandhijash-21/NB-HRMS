@@ -25,3 +25,14 @@ Future<bool> openExternalUrl(String url) async {
   }
   return false;
 }
+
+Future<bool> downloadUrl(String url, String fileName) => openExternalUrl(url);
+
+(void Function(String url), void Function())? openPendingTab() {
+  return (
+    (String url) {
+      openExternalUrl(url);
+    },
+    () {},
+  );
+}

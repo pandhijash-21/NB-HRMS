@@ -68,20 +68,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (!mounted || !ok) return;
 
     final repo = ref.read(authRepositoryProvider);
-    if (_rememberMe) {
+    final session = ref.read(authNotifierProvider);
+    if (_rememberMe && !session.isFirstLogin) {
       await repo.saveRememberedCredentials(
         identifier: identifier,
         password: password,
       );
       TextInput.finishAutofillContext(shouldSave: true);
-    } else {
+    } else if (!_rememberMe) {
       await repo.clearRememberedCredentials();
       TextInput.finishAutofillContext(shouldSave: false);
     }
 
     if (!mounted) return;
 
-    final session = ref.read(authNotifierProvider);
     if (session.isFirstLogin) {
       context.go('/change-password');
     } else if (session.needsEmailVerification) {
@@ -98,7 +98,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final size = MediaQuery.sizeOf(context);
     final wide = size.width >= 720;
 
-    return Scaffold(
+    return Theme(
+      data: authScreenTheme(),
+      child: Scaffold(
       body: Stack(
         children: [
           // Background Gradient
@@ -224,23 +226,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                       textInputAction: TextInputAction.next,
                                       autofillHints: const [AutofillHints.username],
                                       style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-                                      decoration: InputDecoration(
-                                        labelText: 'Employee Code / Username',
-                                        labelStyle: TextStyle(color: Colors.white.withOpacity(0.5), fontWeight: FontWeight.w600),
-                                        hintText: 'e.g. TEST1234 or HOD_OPS',
-                                        hintStyle: TextStyle(color: Colors.white.withOpacity(0.2)),
-                                        prefixIcon: const Icon(Icons.person_rounded, color: Color(0xFFC5A059)),
-                                        filled: true,
-                                        fillColor: const Color(0xFF2B2722).withOpacity(0.5),
-                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
-                                        focusedBorder: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(14),
-                                          borderSide: const BorderSide(color: Color(0xFFC5A059), width: 1.5),
-                                        ),
-                                        enabledBorder: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(14),
-                                          borderSide: BorderSide(color: const Color(0xFFC5A059).withOpacity(0.1), width: 1.5),
-                                        ),
+                                      cursorColor: authGold,
+                                      decoration: authFieldDecoration(
+                                        label: 'Employee Code / Username',
+                                        hint: 'e.g. TEST1234 or HOD_OPS',
+                                        prefixIcon: const Icon(Icons.person_rounded),
                                       ),
                                       validator: (value) {
                                         if (value == null || value.trim().isEmpty) {
@@ -255,51 +245,29 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                     const SizedBox(height: 20),
                                     
                                     // Password Field
-                                    TextFormField(
+                                    AuthPasswordField(
                                       controller: _passwordController,
+                                      label: 'Password',
+                                      hint: '••••••••',
+                                      obscure: _obscurePassword,
                                       enabled: !submitting,
-                                      obscureText: _obscurePassword,
-                                      textInputAction: TextInputAction.done,
-                                      autofillHints: const [AutofillHints.password],
-                                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-                                      onFieldSubmitted: (_) => submitting ? null : _submit(),
-                                      decoration: InputDecoration(
-                                        labelText: 'Password',
-                                        labelStyle: TextStyle(color: Colors.white.withOpacity(0.5), fontWeight: FontWeight.w600),
-                                        hintText: '••••••••',
-                                        hintStyle: TextStyle(color: Colors.white.withOpacity(0.2)),
-                                        prefixIcon: const Icon(Icons.lock_rounded, color: Color(0xFFC5A059)),
-                                        filled: true,
-                                        fillColor: const Color(0xFF2B2722).withOpacity(0.5),
-                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
-                                        focusedBorder: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(14),
-                                          borderSide: const BorderSide(color: Color(0xFFC5A059), width: 1.5),
-                                        ),
-                                        enabledBorder: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(14),
-                                          borderSide: BorderSide(color: const Color(0xFFC5A059).withOpacity(0.1), width: 1.5),
-                                        ),
-                                        suffixIcon: IconButton(
-                                          tooltip: _obscurePassword ? 'Show password' : 'Hide password',
-                                          onPressed: submitting
-                                              ? null
-                                              : () => setState(() => _obscurePassword = !_obscurePassword),
-                                          icon: Icon(
-                                            _obscurePassword ? Icons.visibility_rounded : Icons.visibility_off_rounded,
-                                            color: Colors.white.withOpacity(0.5),
-                                          ),
-                                        ),
+                                      onToggle: () => setState(
+                                        () => _obscurePassword = !_obscurePassword,
                                       ),
+                                      textInputAction: TextInputAction.done,
+                                      onSubmitted: (_) =>
+                                          submitting ? null : _submit(),
+                                      onChanged: (_) => auth.errorMessage != null
+                                          ? ref
+                                              .read(authNotifierProvider.notifier)
+                                              .clearError()
+                                          : null,
                                       validator: (value) {
                                         if (value == null || value.isEmpty) {
                                           return 'Password is required';
                                         }
                                         return null;
                                       },
-                                      onChanged: (_) => auth.errorMessage != null
-                                          ? ref.read(authNotifierProvider.notifier).clearError()
-                                          : null,
                                     ),
                                     const SizedBox(height: 12),
                                     InkWell(
@@ -412,6 +380,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             ),
           ),
         ],
+      ),
       ),
     );
   }

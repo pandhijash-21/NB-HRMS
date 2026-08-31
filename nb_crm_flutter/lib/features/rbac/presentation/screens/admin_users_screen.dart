@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/utils/password_policy.dart';
 import '../../../../core/widgets/header_action_button.dart';
 import '../../../admin/presentation/widgets/hr_employment_change_actions.dart';
 import '../../../auth/domain/permissions.dart';
@@ -1000,6 +1001,14 @@ class _CredentialsDialogState extends ConsumerState<_CredentialsDialog> {
     setState(() => _resetting = true);
     try {
       final custom = _customPasswordController.text.trim();
+      if (custom.isNotEmpty) {
+        final issue = validateNewPassword(custom);
+        if (issue != null) {
+          setState(() => _resetting = false);
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(issue)));
+          return;
+        }
+      }
       final result = await ref.read(rbacRepositoryProvider).resetPassword(
             widget.user.id,
             password: custom.isEmpty ? null : custom,
@@ -1192,7 +1201,7 @@ class _CredentialsDialogState extends ConsumerState<_CredentialsDialog> {
                   TextField(
                     controller: _customPasswordController,
                     decoration: const InputDecoration(
-                      hintText: 'Optional custom password (min 8 chars)',
+                      hintText: 'Optional custom password (6+ chars, A-z and a number)',
                       border: OutlineInputBorder(),
                     ),
                   ),

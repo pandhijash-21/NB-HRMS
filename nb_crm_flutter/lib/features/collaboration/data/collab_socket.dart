@@ -11,6 +11,13 @@ class CollabSocket {
   String? _token;
   String? _joinedMeetingId;
 
+  final _newMessage = <void Function(ChatMessage)>[];
+  final _messageUpdated = <void Function(ChatMessage)>[];
+  final _channelRead = <void Function(String, String, DateTime?)>[];
+  final _userTyping = <void Function(String, String)>[];
+  final _meetingEnded = <void Function(String meetingId, String? code)>[];
+  final _presence = <void Function(String userId, bool online)>[];
+
   io.Socket connect({required String token}) {
     if (_socket != null && _token == token) {
       if (!_socket!.connected) _socket!.connect();
@@ -35,6 +42,55 @@ class CollabSocket {
         socket.emit('join_meeting', meetingId);
       }
     });
+    socket.on('new_message', (data) {
+      if (data is! Map) return;
+      final message = ChatMessage.fromJson(Map<String, dynamic>.from(data));
+      for (final cb in List.of(_newMessage)) {
+        cb(message);
+      }
+    });
+    socket.on('message_updated', (data) {
+      if (data is! Map) return;
+      final message = ChatMessage.fromJson(Map<String, dynamic>.from(data));
+      for (final cb in List.of(_messageUpdated)) {
+        cb(message);
+      }
+    });
+    socket.on('channel_read', (data) {
+      if (data is! Map) return;
+      final channelId = '${data['channelId'] ?? ''}';
+      final userId = '${data['userId'] ?? ''}';
+      final at = DateTime.tryParse('${data['lastReadAt'] ?? ''}');
+      for (final cb in List.of(_channelRead)) {
+        cb(channelId, userId, at);
+      }
+    });
+    socket.on('user_typing', (data) {
+      if (data is! Map) return;
+      final channelId = '${data['channelId'] ?? ''}';
+      final name = '${data['name'] ?? ''}';
+      for (final cb in List.of(_userTyping)) {
+        cb(channelId, name);
+      }
+    });
+    socket.on('meeting_ended', (data) {
+      if (data is! Map) return;
+      final id = data['meetingId']?.toString() ?? '';
+      final code = data['code']?.toString();
+      if (id.isEmpty && (code == null || code.isEmpty)) return;
+      for (final cb in List.of(_meetingEnded)) {
+        cb(id, code);
+      }
+    });
+    socket.on('presence', (data) {
+      if (data is! Map) return;
+      final userId = data['userId']?.toString() ?? '';
+      if (userId.isEmpty) return;
+      final online = data['online'] == true;
+      for (final cb in List.of(_presence)) {
+        cb(userId, online);
+      }
+    });
     socket.connect();
     _heartbeat = Timer.periodic(const Duration(seconds: 20), (_) {
       if (socket.connected) socket.emit('heartbeat');
@@ -45,17 +101,23 @@ class CollabSocket {
 
   void joinChannel(String id) => _socket?.emit('join_channel', id);
   void leaveChannel(String id) => _socket?.emit('leave_channel', id);
-  void sendMessage(String channelId, String content) =>
-      _socket?.emit('send_message', {'channelId': channelId, 'content': content});
+  void sendMessage(String channelId, String content, {String? replyToId}) =>
+      _socket?.emit('send_message', {
+        'channelId': channelId,
+        'content': content,
+        if (replyToId != null) 'replyToId': replyToId,
+      });
   void typing(String channelId) => _socket?.emit('typing', {'channelId': channelId});
   void react(String messageId, String emoji) =>
       _socket?.emit('react', {'messageId': messageId, 'emoji': emoji});
+
   void joinMeeting(String id) {
     _joinedMeetingId = id;
     if (_socket?.connected == true) {
       _socket!.emit('join_meeting', id);
     }
   }
+
   void meetingChat({
     required String meetingId,
     required String content,
@@ -79,40 +141,28 @@ class CollabSocket {
   }
 
   void onNewMessage(void Function(ChatMessage) cb) {
-    _socket?.off('new_message');
-    _socket?.on('new_message', (data) {
-      if (data is Map) cb(ChatMessage.fromJson(Map<String, dynamic>.from(data)));
-    });
+    if (!_newMessage.contains(cb)) _newMessage.add(cb);
   }
+
+  void offNewMessage(void Function(ChatMessage) cb) => _newMessage.remove(cb);
 
   void onMessageUpdated(void Function(ChatMessage) cb) {
-    _socket?.off('message_updated');
-    _socket?.on('message_updated', (data) {
-      if (data is Map) cb(ChatMessage.fromJson(Map<String, dynamic>.from(data)));
-    });
+    if (!_messageUpdated.contains(cb)) _messageUpdated.add(cb);
   }
+
+  void offMessageUpdated(void Function(ChatMessage) cb) => _messageUpdated.remove(cb);
 
   void onChannelRead(void Function(String channelId, String userId, DateTime? at) cb) {
-    _socket?.off('channel_read');
-    _socket?.on('channel_read', (data) {
-      if (data is Map) {
-        cb(
-          '${data['channelId'] ?? ''}',
-          '${data['userId'] ?? ''}',
-          DateTime.tryParse('${data['lastReadAt'] ?? ''}'),
-        );
-      }
-    });
+    if (!_channelRead.contains(cb)) _channelRead.add(cb);
   }
 
+  void offChannelRead(void Function(String, String, DateTime?) cb) => _channelRead.remove(cb);
+
   void onUserTyping(void Function(String channelId, String name) cb) {
-    _socket?.off('user_typing');
-    _socket?.on('user_typing', (data) {
-      if (data is Map) {
-        cb('${data['channelId'] ?? ''}', '${data['name'] ?? ''}');
-      }
-    });
+    if (!_userTyping.contains(cb)) _userTyping.add(cb);
   }
+
+  void offUserTyping(void Function(String, String) cb) => _userTyping.remove(cb);
 
   void onMeetingChat(void Function(Map<String, dynamic>) cb) {
     _socket?.off('meeting_chat');
@@ -164,13 +214,18 @@ class CollabSocket {
     });
   }
 
-  void onMeetingEnded(void Function(String meetingId) cb) {
-    _socket?.off('meeting_ended');
-    _socket?.on('meeting_ended', (data) {
-      final id = data is Map ? data['meetingId']?.toString() : null;
-      if (id != null && id.isNotEmpty) cb(id);
-    });
+  void onMeetingEnded(void Function(String meetingId, String? code) cb) {
+    if (!_meetingEnded.contains(cb)) _meetingEnded.add(cb);
   }
+
+  void offMeetingEnded(void Function(String meetingId, String? code) cb) =>
+      _meetingEnded.remove(cb);
+
+  void onPresence(void Function(String userId, bool online) cb) {
+    if (!_presence.contains(cb)) _presence.add(cb);
+  }
+
+  void offPresence(void Function(String userId, bool online) cb) => _presence.remove(cb);
 
   void onMeetingEndProgress(void Function(Map<String, dynamic> row) cb) {
     _socket?.off('meeting_end_progress');
@@ -183,6 +238,12 @@ class CollabSocket {
     _heartbeat?.cancel();
     _heartbeat = null;
     _token = null;
+    _newMessage.clear();
+    _messageUpdated.clear();
+    _channelRead.clear();
+    _userTyping.clear();
+    _meetingEnded.clear();
+    _presence.clear();
     _socket?.dispose();
     _socket = null;
   }

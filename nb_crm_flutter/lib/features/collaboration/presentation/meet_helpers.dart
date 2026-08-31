@@ -1,8 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/utils/open_url.dart';
 import '../domain/collab_models.dart';
 
 String meetWhen(DateTime? value) {
@@ -25,14 +27,72 @@ String meetDurationLabel(DateTime? start, DateTime? end) {
   return '${s}s';
 }
 
+String meetingRoomPath(String code, {bool voice = false, bool guest = false}) {
+  final path = guest ? '/meet/guest/$code' : '/meet/r/$code';
+  return voice ? '$path?voice=1' : path;
+}
+
+/// Flutter web uses hash routes; the API joinUrl points at the Next.js app.
+String meetingRoomUrl(String code, {bool voice = false, bool guest = false}) {
+  final path = meetingRoomPath(code, voice: voice, guest: guest);
+  if (kIsWeb) return '${Uri.base.origin}/#$path';
+  return path;
+}
+
 /// Share URL for this client. Flutter web uses hash routes; the API joinUrl
 /// points at the Next.js app on :3000, which is often not running in local Flutter work.
 String meetingShareUrl(MeetingItem item) {
   if (kIsWeb && item.code.isNotEmpty) {
-    return '${Uri.base.origin}/#/meet/r/${item.code}';
+    return meetingRoomUrl(item.code);
   }
   return item.joinUrl ?? item.code;
 }
+
+/// Opens the call in a **new browser tab** on web so CRM stays on this page.
+/// Native builds keep the in-app route. If a popup is blocked, falls back in-app.
+Future<void> openMeetRoom(
+  BuildContext context,
+  String code, {
+  bool voice = false,
+  bool guest = false,
+  PendingBrowserTab? tab,
+}) async {
+  final inApp = meetingRoomPath(code, voice: voice, guest: guest);
+  if (!kIsWeb) {
+    tab?.dismiss();
+    if (context.mounted) context.push(inApp);
+    return;
+  }
+  final url = meetingRoomUrl(code, voice: voice, guest: guest);
+  if (tab != null) {
+    tab.goTo(url);
+    return;
+  }
+  final ok = await openExternalUrl(url);
+  if (!ok && context.mounted) context.push(inApp);
+}
+
+final _meetCodeInText = RegExp(r'/meet/r/([A-Za-z0-9-]+)');
+
+({String code, bool voice})? meetLinkInText(String? content) {
+  if (content == null || content.isEmpty) return null;
+  final m = _meetCodeInText.firstMatch(content);
+  if (m == null) return null;
+  final voice = content.contains('voice=1') || content.toLowerCase().contains('voice call');
+  return (code: m.group(1)!, voice: voice);
+}
+
+/// Voice cards only stay joinable while the meeting is LIVE.
+bool meetCardEnded(String? status, {required bool voice}) {
+  final s = (status ?? '').trim().toUpperCase();
+  if (s == 'ENDED' || s == 'CANCELLED') return true;
+  if (s.isEmpty) return false;
+  if (voice) return s != 'LIVE';
+  return s != 'LIVE' && s != 'SCHEDULED';
+}
+
+/// Call from a button press *before* awaiting meeting create, so the tab is not blocked.
+PendingBrowserTab? prepareMeetTab() => kIsWeb ? openPendingTab() : null;
 
 void copyMeetLink(BuildContext context, MeetingItem item) {
   Clipboard.setData(ClipboardData(text: meetingShareUrl(item)));

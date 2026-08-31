@@ -29,7 +29,16 @@ export function emitWaitingUpdate(
   io.to(`meeting:${meetingId}`).emit('waiting_update', payload);
   if (hostUserId) {
     io.to(`user:${hostUserId}`).emit('waiting_update', payload);
-    if (knock) io.to(`user:${hostUserId}`).emit('waiting_knock', knock);
+    if (knock) {
+      io.to(`user:${hostUserId}`).emit('waiting_knock', knock);
+      io.to(`user:${hostUserId}`).emit('push_notify', {
+        kind: 'meet',
+        title: 'Someone is waiting',
+        body: 'A participant is waiting to join your meeting',
+        meetingId,
+        path: '/meet',
+      });
+    }
   }
 }
 
@@ -51,17 +60,107 @@ export function emitJoinDecision(opts: {
   if (opts.userId) io.to(`user:${opts.userId}`).emit(event, payload);
 }
 
-export function emitMeetingInvites(inviteeIds: string[], payload: unknown) {
+export function emitChatNewMessage(
+  channelId: string,
+  message: {
+    senderId: string;
+    content?: string | null;
+    mentionedUserIds?: string[];
+    memberUserIds?: string[];
+    sender?: { name?: string | null } | null;
+  },
+) {
+  const io = ioRef;
+  if (!io) return;
+  io.to(`channel:${channelId}`).emit('new_message', message);
+  const memberIds = message.memberUserIds ?? [];
+  const mentioned = new Set(message.mentionedUserIds ?? []);
+  const senderName = message.sender?.name || 'Someone';
+  const preview = (message.content || 'Sent an attachment').replace(/\s+/g, ' ').slice(0, 140);
+  for (const id of memberIds) {
+    if (!id || id === message.senderId) continue;
+    io.to(`user:${id}`).emit('new_message', message);
+    const tagged = mentioned.has(id);
+    io.to(`user:${id}`).emit('push_notify', {
+      kind: tagged ? 'mention' : 'chat',
+      title: tagged ? `${senderName} mentioned you` : senderName,
+      body: preview,
+      channelId,
+      senderId: message.senderId,
+      path: '/chat',
+    });
+  }
+}
+
+export function emitMeetingEnded(opts: {
+  meetingId: string;
+  code?: string;
+  userIds?: string[];
+}) {
+  const io = ioRef;
+  if (!io) return;
+  const payload = { meetingId: opts.meetingId, code: opts.code ?? '' };
+  io.to(`meeting:${opts.meetingId}`).emit('meeting_ended', payload);
+  for (const id of opts.userIds ?? []) {
+    if (id) io.to(`user:${id}`).emit('meeting_ended', payload);
+  }
+}
+
+export function emitPushNotify(
+  userIds: string[],
+  payload: {
+    kind: string;
+    title: string;
+    body: string;
+    channelId?: string;
+    senderId?: string;
+    meetingId?: string;
+    code?: string;
+    path?: string;
+  },
+) {
+  const io = ioRef;
+  if (!io) return;
+  for (const id of userIds) {
+    if (id) io.to(`user:${id}`).emit('push_notify', payload);
+  }
+}
+
+export function emitMeetingInvites(inviteeIds: string[], payload: {
+  meetingId: string;
+  title?: string | null;
+  code?: string;
+  joinUrl?: string;
+  scheduledStart?: unknown;
+}) {
   const io = ioRef;
   if (!io) return;
   for (const id of inviteeIds) {
-    if (id) io.to(`user:${id}`).emit('meeting_invite', payload);
+    if (!id) continue;
+    io.to(`user:${id}`).emit('meeting_invite', payload);
+    io.to(`user:${id}`).emit('push_notify', {
+      kind: 'meet',
+      title: 'Meeting invite',
+      body: payload.title || 'You were invited to a meeting',
+      meetingId: payload.meetingId,
+      code: payload.code,
+      path: payload.code ? `/meet/r/${payload.code}` : '/meet',
+    });
   }
 }
 
 export async function isOnline(userId: string) {
-  if (!presenceRedis?.isOpen) return false;
-  return Boolean(await presenceRedis.exists(`presence:${userId}`));
+  if (presenceRedis?.isOpen) {
+    return Boolean(await presenceRedis.exists(`presence:${userId}`));
+  }
+  const io = ioRef;
+  if (!io) return false;
+  try {
+    const sockets = await io.in(`user:${userId}`).fetchSockets();
+    return sockets.length > 0;
+  } catch {
+    return false;
+  }
 }
 
 async function markOnline(userId: string) {
@@ -168,7 +267,7 @@ export async function setupCollaborationSocket(httpServer: http.Server) {
           content: payload.content,
           replyToId: payload.replyToId,
         });
-        io.to(`channel:${payload.channelId}`).emit('new_message', message);
+        emitChatNewMessage(payload.channelId, message);
       } catch (err) {
         socket.emit('error_message', { error: err instanceof Error ? err.message : 'Send failed' });
       }
@@ -202,6 +301,7 @@ export async function setupCollaborationSocket(httpServer: http.Server) {
     socket.on('join_meeting', async (meetingId: string | { meetingId?: string }) => {
       const id = typeof meetingId === 'string' ? meetingId : String(meetingId?.meetingId ?? '');
       if (!id) return;
+      socket.data.meetingId = id;
       socket.join(`meeting:${id}`);
       if (actor.kind === 'guest') {
         socket.join(`waiting:${actor.participantId}`);
@@ -276,6 +376,12 @@ export async function setupCollaborationSocket(httpServer: http.Server) {
     socket.on('disconnect', async () => {
       if (actor.kind === 'user') {
         io.emit('presence', { userId: actor.userId, online: false });
+      }
+      const meetingId = typeof socket.data.meetingId === 'string' ? socket.data.meetingId : '';
+      if (meetingId) {
+        setTimeout(() => {
+          void meetService.closeAbandonedLive(meetingId);
+        }, 2000);
       }
     });
   });

@@ -27,6 +27,13 @@ function makeMeetCode() {
   return `${pick(3)}-${pick(4)}-${pick(3)}`;
 }
 
+function meetingJoinUrl(code: string) {
+  const base = env.FRONTEND_URL.replace(/\/$/, '');
+  // Flutter web in this app uses hash routes (`/#/meet/r/...`). A path-only
+  // URL drops people on login instead of the lobby.
+  return `${base}/#/meet/r/${code}`;
+}
+
 async function uniqueCode() {
   for (let i = 0; i < 8; i++) {
     const code = makeMeetCode();
@@ -292,7 +299,7 @@ async function serializeMeeting(meetingId: string, viewerUserId?: string | null)
     livekitRoom: meeting.livekitRoom,
     host,
     isHost: viewerUserId === meeting.hostUserId,
-    joinUrl: `${env.FRONTEND_URL.replace(/\/$/, '')}/meet/r/${meeting.code}`,
+    joinUrl: meetingJoinUrl(meeting.code),
     participants: meeting.participants
       .filter((p) => p.admission !== 'WAITING' && p.admission !== 'DENIED')
       .map((p) =>
@@ -424,13 +431,16 @@ export const meetService = {
       attendeeCount: m.participants.length,
       hasRecording: Boolean(m.recordingUrl),
       recordingUrl: m.recordingUrl,
-      joinUrl: `${env.FRONTEND_URL.replace(/\/$/, '')}/meet/r/${m.code}`,
+      joinUrl: meetingJoinUrl(m.code),
     }));
   },
 
   async getByCode(code: string, viewerUserId?: string | null) {
     const meeting = await prisma.meeting.findUnique({ where: { code: code.trim().toLowerCase() } });
     if (!meeting) throw new Error('Meeting not found');
+    if (meeting.status === 'LIVE') {
+      await this.closeAbandonedLive(meeting.id);
+    }
     return serializeMeeting(meeting.id, viewerUserId);
   },
 
@@ -559,7 +569,7 @@ export const meetService = {
       .map((id) => profiles.get(id)?.email)
       .filter((e): e is string => Boolean(e));
     const when = (meeting.scheduledStart || meeting.createdAt).toLocaleString();
-    const joinUrl = `${env.FRONTEND_URL.replace(/\/$/, '')}/meet/r/${meeting.code}`;
+    const joinUrl = meetingJoinUrl(meeting.code);
     try {
       await sendMeetingInviteEmail({
         to: emails,
@@ -605,8 +615,14 @@ export const meetService = {
       throw new Error('The host declined your request to join');
     }
 
-    const previouslyJoined = Boolean(participant?.joinedAt) && participant?.admission === 'ADMITTED';
-    const nextAdmission = isHost || !mustKnock || previouslyJoined ? 'ADMITTED' : 'WAITING';
+    // Invited people and anyone already admitted skip the waiting room.
+    // Never demote an ADMITTED invitee to WAITING on rejoin.
+    const skipKnock =
+      isHost ||
+      !mustKnock ||
+      participant?.admission === 'ADMITTED' ||
+      participant?.role === 'HOST';
+    const nextAdmission = skipKnock ? 'ADMITTED' : 'WAITING';
 
     if (!participant) {
       participant = await prisma.meetingParticipant.create({
@@ -815,7 +831,58 @@ export const meetService = {
     };
   },
 
-  async endMeeting(id: string, userId: string, onClosed?: () => void, onProgress?: ProgressFn) {
+  /** End a LIVE meeting if nobody is still connected (tab closed / hung up). */
+  async closeAbandonedLive(meetingId: string) {
+    const meeting = await prisma.meeting.findUnique({
+      where: { id: meetingId },
+      include: { participants: { select: { userId: true } } },
+    });
+    if (!meeting || meeting.status !== 'LIVE') return false;
+    const started = meeting.startedAt ?? meeting.createdAt;
+    if (Date.now() - started.getTime() < 90_000) return false;
+    let occupied = false;
+    try {
+      const { getIo } = await import('./socket');
+      const io = getIo();
+      if (io) {
+        const sockets = await io.in(`meeting:${meeting.id}`).fetchSockets();
+        occupied = sockets.length > 0;
+      }
+    } catch {
+      occupied = false;
+    }
+    if (occupied) return false;
+    await prisma.meeting.update({
+      where: { id: meeting.id },
+      data: { status: 'ENDED', endedAt: new Date() },
+    });
+    try {
+      await deleteLiveKitRoom(meeting.livekitRoom);
+    } catch {
+      /* room may already be gone */
+    }
+    try {
+      const { emitMeetingEnded } = await import('./socket');
+      emitMeetingEnded({
+        meetingId: meeting.id,
+        code: meeting.code,
+        userIds: [
+          meeting.hostUserId,
+          ...meeting.participants.map((p) => p.userId).filter((id): id is string => Boolean(id)),
+        ],
+      });
+    } catch {
+      /* sockets optional */
+    }
+    return true;
+  },
+
+  async endMeeting(
+    id: string,
+    userId: string,
+    onClosed?: (ended: { meetingId: string; code: string; userIds: string[] }) => void,
+    onProgress?: ProgressFn,
+  ) {
     const meeting = await prisma.meeting.findUnique({
       where: { id },
       include: { participants: true, chatMessages: { orderBy: { createdAt: 'asc' } } },
@@ -832,7 +899,14 @@ export const meetService = {
       data: { status: 'ENDED', endedAt: new Date() },
     });
     await deleteLiveKitRoom(meeting.livekitRoom);
-    onClosed?.();
+    onClosed?.({
+      meetingId: meeting.id,
+      code: meeting.code,
+      userIds: [
+        meeting.hostUserId,
+        ...meeting.participants.map((p) => p.userId).filter((x): x is string => Boolean(x)),
+      ],
+    });
     onProgress?.({ step: 'close_room', status: 'done', label: 'Meeting closed' });
 
     onProgress?.({ step: 'summary', status: 'running', label: 'Preparing meeting summary' });
@@ -893,7 +967,7 @@ export const meetService = {
         when,
         agenda: meeting.agenda,
         summary,
-        joinUrl: `${env.FRONTEND_URL.replace(/\/$/, '')}/meet/r/${meeting.code}`,
+        joinUrl: meetingJoinUrl(meeting.code),
       });
     } catch (err) {
       console.warn('Meeting summary email failed:', err);

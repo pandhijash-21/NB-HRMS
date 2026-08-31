@@ -7,6 +7,7 @@ import { sendPasswordResetEmail } from '../../utils/mailer';
 import { encryptPasswordForAdmin } from '../../utils/passwordCrypto';
 import { passwordFromBirthDate } from '../../utils/dobPassword';
 import type { LoginInput, ChangePasswordInput } from './auth.types';
+import { passwordMeetsPolicy, passwordPolicyIssue } from '../../utils/passwordPolicy';
 import {
   assertNotLocked,
   clearLoginLock,
@@ -152,14 +153,18 @@ export const authService = {
       data: { lastLoginAt: new Date() },
     });
 
-    // After first password change, gate on unverified personal/institute emails.
-    const emailStatus = user.isFirstLogin
+    // First login OR a password that no longer meets policy → force a change
+    // before email OTP. Clients already gate on `isFirstLogin`.
+    const mustChangePassword =
+      user.isFirstLogin || !passwordMeetsPolicy(input.password);
+
+    const emailStatus = mustChangePassword
       ? { needsEmailVerification: false, emails: [] as Awaited<ReturnType<typeof otpService.getEmailVerificationStatus>>['emails'] }
       : await otpService.getEmailVerificationStatus(user.id, user.employeeId ?? null);
 
     return {
       token,
-      isFirstLogin: user.isFirstLogin,
+      isFirstLogin: mustChangePassword,
       needsEmailVerification: emailStatus.needsEmailVerification,
       pendingEmails: emailStatus.emails.filter((e) => !e.verified),
       permissions,
@@ -189,15 +194,20 @@ export const authService = {
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) return { error: 'User not found', status: 404 } as const;
 
-    if (!user.isFirstLogin) {
+    const valid = await bcrypt.compare(input.currentPassword, user.passwordHash);
+    if (!valid) return { error: 'Current password is incorrect', status: 400 } as const;
+
+    const currentMeetsPolicy = passwordMeetsPolicy(input.currentPassword);
+    if (!user.isFirstLogin && currentMeetsPolicy) {
       return {
-        error: 'Password can only be changed on first login. Contact an administrator to reset your password.',
+        error: 'Password can only be changed on first login or when it no longer meets security rules. Contact an administrator to reset your password.',
         status: 403,
       } as const;
     }
 
-    const valid = await bcrypt.compare(input.currentPassword, user.passwordHash);
-    if (!valid) return { error: 'Current password is incorrect', status: 400 } as const;
+    if (input.newPassword === input.currentPassword) {
+      return { error: 'New password must be different from your current password', status: 400 } as const;
+    }
 
     const newHash = await bcrypt.hash(input.newPassword, 12);
 
@@ -281,8 +291,9 @@ export const authService = {
       include: { employee: { include: { generalInfo: true } } },
     });
     if (!user) return { error: 'User not found', status: 404 } as const;
-    if (newPassword.length < 8) {
-      return { error: 'Password must be at least 8 characters', status: 400 } as const;
+    const policyError = passwordPolicyIssue(newPassword);
+    if (policyError) {
+      return { error: policyError, status: 400 } as const;
     }
 
     const newHash = await bcrypt.hash(newPassword, 12);

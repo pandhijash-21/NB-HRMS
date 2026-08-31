@@ -44,6 +44,52 @@ class ChatRepository {
     );
   }
 
+  Future<ChatChannel> getChannel(String channelId) {
+    return _dio.getEnvelope(
+      'chat/channels/$channelId',
+      parse: (raw) => ChatChannel.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
+  Future<ChatChannel> updateGroup(
+    String channelId, {
+    String? name,
+    String? topic,
+    String? avatarUrl,
+    bool clearAvatar = false,
+    List<String>? addMemberIds,
+    List<String>? removeMemberIds,
+  }) {
+    return _dio.patchEnvelope(
+      'chat/channels/$channelId',
+      data: {
+        if (name != null) 'name': name,
+        if (topic != null) 'topic': topic,
+        if (clearAvatar) 'avatarUrl': null,
+        if (!clearAvatar && avatarUrl != null) 'avatarUrl': avatarUrl,
+        if (addMemberIds != null) 'addMemberIds': addMemberIds,
+        if (removeMemberIds != null) 'removeMemberIds': removeMemberIds,
+      },
+      parse: (raw) => ChatChannel.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
+  Future<ChatChannel> setMemberRole(String channelId, String userId, String role) {
+    return _dio.patchEnvelope(
+      'chat/channels/$channelId/members/$userId',
+      data: {'role': role},
+      parse: (raw) => ChatChannel.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
+  Future<void> leaveGroup(String channelId) async {
+    await _dio.postEnvelope<Map<String, dynamic>>(
+      'chat/channels/$channelId/leave',
+      data: {},
+      parse: (raw) => Map<String, dynamic>.from((raw as Map?) ?? const {}),
+    );
+  }
+
   Future<List<ChatMessage>> messages(String channelId) {
     return _dio.getEnvelope(
       'chat/channels/$channelId/messages',
@@ -68,12 +114,14 @@ class ChatRepository {
   Future<ChatMessage> send({
     required String channelId,
     String? content,
+    String? replyToId,
     List<Map<String, dynamic>>? attachments,
   }) {
     return _dio.postEnvelope(
       'chat/channels/$channelId/messages',
       data: {
         if (content != null) 'content': content,
+        if (replyToId != null) 'replyToId': replyToId,
         if (attachments != null) 'attachments': attachments,
       },
       parse: (raw) => ChatMessage.fromJson(Map<String, dynamic>.from(raw as Map)),

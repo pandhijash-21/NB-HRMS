@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { requireAuth } from '../../middleware/auth';
 import { ok, fail } from '../../utils/response';
 import { chatService } from './chat.service';
-import { getIo, isOnline } from './socket';
+import { emitChatNewMessage, getIo, isOnline } from './socket';
 
 export const chatRouter = Router();
 const upload = multer({
@@ -83,6 +83,7 @@ chatRouter.patch('/channels/:id', async (req: Request, res: Response) => {
       .object({
         name: z.string().optional(),
         topic: z.string().optional(),
+        avatarUrl: z.string().nullable().optional(),
         addMemberIds: z.array(z.string()).optional(),
         removeMemberIds: z.array(z.string()).optional(),
       })
@@ -91,6 +92,25 @@ chatRouter.patch('/channels/:id', async (req: Request, res: Response) => {
     return res.json(ok(data));
   } catch (e: unknown) {
     return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed to update group'));
+  }
+});
+
+chatRouter.post('/channels/:id/leave', async (req: Request, res: Response) => {
+  try {
+    const data = await chatService.leaveGroup(p(req.params.id), req.user!.id);
+    return res.json(ok(data));
+  } catch (e: unknown) {
+    return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed to leave group'));
+  }
+});
+
+chatRouter.patch('/channels/:id/members/:userId', async (req: Request, res: Response) => {
+  try {
+    const body = z.object({ role: z.enum(['admin', 'member']) }).parse(req.body);
+    const data = await chatService.setMemberRole(p(req.params.id), req.user!.id, p(req.params.userId), body.role);
+    return res.json(ok(data));
+  } catch (e: unknown) {
+    return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed to update member'));
   }
 });
 
@@ -143,7 +163,7 @@ chatRouter.post('/channels/:id/messages', async (req: Request, res: Response) =>
       replyToId: body.replyToId,
       attachments: body.attachments,
     });
-    getIo()?.to(`channel:${p(req.params.id)}`).emit('new_message', data);
+    emitChatNewMessage(p(req.params.id), data);
     return res.status(201).json(ok(data));
   } catch (e: unknown) {
     return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed to send'));

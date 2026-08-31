@@ -14,6 +14,10 @@ import '../../../auth/presentation/auth_providers.dart';
 import '../../domain/collab_models.dart';
 import '../chat_emojis.dart';
 import '../collab_providers.dart';
+import '../meet_helpers.dart';
+import '../chat_wallpaper.dart';
+import '../chat_inbox.dart';
+import 'group_info_sheet.dart';
 
 const _teamsPurple = Color(0xFF5B5FC7);
 
@@ -60,23 +64,138 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
   bool _sending = false;
   String? _error;
   List<_PendingFile> _pending = [];
+  ChatMessage? _replyTo;
+  int _wallpaper = 0;
+  bool _startingCall = false;
+  final _composerFocus = FocusNode();
+  /// Meeting code → status (LIVE / ENDED / CANCELLED / …).
+  Map<String, String> _meetStatusByCode = {};
+  Timer? _meetStatusPoll;
 
   @override
   void initState() {
     super.initState();
     if (kIsWeb) BrowserContextMenu.disableContextMenu();
     _listSearch.addListener(() => setState(() {}));
+    HardwareKeyboard.instance.addHandler(_onHardwareKey);
     _boot();
   }
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onHardwareKey);
     if (kIsWeb) BrowserContextMenu.enableContextMenu();
     _draft.dispose();
     _listSearch.dispose();
     _scroll.dispose();
+    _composerFocus.dispose();
     _typingClear?.cancel();
+    _meetStatusPoll?.cancel();
+    final socket = ref.read(collabSocketProvider);
+    socket.offNewMessage(_onNewMessage);
+    socket.offMessageUpdated(_onMessageUpdated);
+    socket.offChannelRead(_onChannelRead);
+    socket.offUserTyping(_onUserTyping);
+    socket.offMeetingEnded(_onMeetingEndedEvent);
+    socket.offPresence(_onPresence);
     super.dispose();
+  }
+
+  void _onPresence(String userId, bool online) {
+    if (!mounted || userId.isEmpty) return;
+    List<CollabProfile> bump(List<CollabProfile> members) => [
+          for (final m in members)
+            if (m.userId == userId) m.copyWith(online: online) else m,
+        ];
+    setState(() {
+      _channels = [for (final c in _channels) c.copyWith(members: bump(c.members))];
+      final active = _active;
+      if (active != null) {
+        _active = active.copyWith(members: bump(active.members));
+      }
+    });
+  }
+
+  void _onMeetingEndedEvent(String meetingId, String? code) {
+    if (!mounted) return;
+    final key = (code ?? '').trim().toLowerCase();
+    if (key.isEmpty) {
+      unawaited(_refreshMeetStatuses(_messages));
+      return;
+    }
+    setState(() {
+      _meetStatusByCode = {..._meetStatusByCode, key: 'ENDED'};
+    });
+  }
+
+  void _onNewMessage(ChatMessage m) {
+    if (!mounted) return;
+    final open = _active?.id == m.channelId;
+    setState(() {
+      if (open && _messages.every((x) => x.id != m.id)) {
+        _messages = [..._messages, m];
+      }
+      _channels = [
+        for (final c in _channels)
+          if (c.id == m.channelId)
+            c.copyWith(
+              unread: open ? 0 : c.unread + 1,
+              lastPreview: m.content ?? (m.attachments.isNotEmpty ? 'Attachment' : c.lastPreview),
+              lastAt: m.createdAt ?? DateTime.now(),
+            )
+          else
+            c,
+      ]..sort((a, b) => (b.lastAt ?? DateTime(0)).compareTo(a.lastAt ?? DateTime(0)));
+    });
+    if (open) {
+      _scrollToEnd();
+      unawaited(ref.read(chatRepositoryProvider).markRead(m.channelId));
+      final link = meetLinkInText(m.content);
+      if (link != null) unawaited(_refreshMeetStatuses([m]));
+    }
+    unawaited(ref.read(chatUnreadProvider.notifier).refresh());
+  }
+
+  void _onMessageUpdated(ChatMessage m) {
+    if (!mounted) return;
+    setState(() {
+      _messages = _messages.map((x) => x.id == m.id ? m : x).toList();
+    });
+  }
+
+  void _onChannelRead(String channelId, String userId, DateTime? at) {
+    if (!mounted || at == null) return;
+    setState(() {
+      _channels = [
+        for (final c in _channels)
+          if (c.id == channelId)
+            c.copyWith(
+              members: [
+                for (final member in c.members)
+                  member.userId == userId ? member.copyWith(lastReadAt: at) : member,
+              ],
+            )
+          else
+            c,
+      ];
+      if (_active?.id == channelId) {
+        _active = _active!.copyWith(
+          members: [
+            for (final member in _active!.members)
+              member.userId == userId ? member.copyWith(lastReadAt: at) : member,
+          ],
+        );
+      }
+    });
+  }
+
+  void _onUserTyping(String channelId, String name) {
+    if (!mounted || _active?.id != channelId) return;
+    setState(() => _typing = name);
+    _typingClear?.cancel();
+    _typingClear = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _typing = null);
+    });
   }
 
   Future<void> _boot() async {
@@ -84,68 +203,16 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
       final token = await ref.read(secureStorageProvider).readToken();
       final socket = ref.read(collabSocketProvider);
       if (token != null) socket.connect(token: token);
-      socket.onNewMessage((m) {
-        if (!mounted) return;
-        final open = _active?.id == m.channelId;
-        setState(() {
-          if (open && _messages.every((x) => x.id != m.id)) {
-            _messages = [..._messages, m];
-          }
-          _channels = [
-            for (final c in _channels)
-              if (c.id == m.channelId)
-                c.copyWith(
-                  unread: open ? 0 : c.unread + 1,
-                  lastPreview: m.content ?? (m.attachments.isNotEmpty ? 'Attachment' : c.lastPreview),
-                  lastAt: m.createdAt ?? DateTime.now(),
-                )
-              else
-                c,
-          ]..sort((a, b) => (b.lastAt ?? DateTime(0)).compareTo(a.lastAt ?? DateTime(0)));
-        });
-        if (open) {
-          _scrollToEnd();
-          unawaited(ref.read(chatRepositoryProvider).markRead(m.channelId));
-        }
-      });
-      socket.onMessageUpdated((m) {
-        if (!mounted) return;
-        setState(() {
-          _messages = _messages.map((x) => x.id == m.id ? m : x).toList();
-        });
-      });
-      socket.onChannelRead((channelId, userId, at) {
-        if (!mounted || at == null) return;
-        setState(() {
-          _channels = [
-            for (final c in _channels)
-              if (c.id == channelId)
-                c.copyWith(
-                  members: [
-                    for (final member in c.members)
-                      member.userId == userId ? member.copyWith(lastReadAt: at) : member,
-                  ],
-                )
-              else
-                c,
-          ];
-          if (_active?.id == channelId) {
-            _active = _active!.copyWith(
-              members: [
-                for (final member in _active!.members)
-                  member.userId == userId ? member.copyWith(lastReadAt: at) : member,
-              ],
-            );
-          }
-        });
-      });
-      socket.onUserTyping((channelId, name) {
-        if (!mounted || _active?.id != channelId) return;
-        setState(() => _typing = name);
-        _typingClear?.cancel();
-        _typingClear = Timer(const Duration(seconds: 3), () {
-          if (mounted) setState(() => _typing = null);
-        });
+      socket.onNewMessage(_onNewMessage);
+      socket.onMessageUpdated(_onMessageUpdated);
+      socket.onChannelRead(_onChannelRead);
+      socket.onUserTyping(_onUserTyping);
+      socket.onMeetingEnded(_onMeetingEndedEvent);
+      socket.onPresence(_onPresence);
+      _meetStatusPoll?.cancel();
+      _meetStatusPoll = Timer.periodic(const Duration(seconds: 20), (_) {
+        if (!mounted || _messages.isEmpty) return;
+        unawaited(_refreshMeetStatuses(_messages));
       });
       final channels = await ref.read(chatRepositoryProvider).channels();
       if (!mounted) return;
@@ -153,6 +220,12 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
         _channels = channels;
         _loading = false;
       });
+      unawaited(ref.read(chatUnreadProvider.notifier).refresh());
+      final lastId = await loadLastChatChannelId();
+      final target = lastId == null
+          ? null
+          : channels.where((c) => c.id == lastId).firstOrNull;
+      if (target != null && mounted) await _open(target);
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -181,6 +254,35 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
     setState(() => _channels = channels);
   }
 
+  bool _onHardwareKey(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    if (event.logicalKey != LogicalKeyboardKey.escape) return false;
+    if (!mounted || _active == null) return false;
+    final route = ModalRoute.of(context);
+    if (route != null && !route.isCurrent) return false;
+    _closeThread();
+    return true;
+  }
+
+  void _closeThread() {
+    final id = _active?.id;
+    if (id == null) return;
+    ref.read(collabSocketProvider).leaveChannel(id);
+    _composerFocus.unfocus();
+    setState(() {
+      _active = null;
+      _messages = [];
+      _emojiOpen = false;
+      _pending = [];
+      _replyTo = null;
+      _typing = null;
+      _sending = false;
+      _draft.clear();
+    });
+    unawaited(clearLastChatChannelId());
+    unawaited(ref.read(chatUnreadProvider.notifier).refresh());
+  }
+
   Future<void> _open(ChatChannel ch) async {
     ref.read(collabSocketProvider).leaveChannel(_active?.id ?? '');
     ref.read(collabSocketProvider).joinChannel(ch.id);
@@ -189,6 +291,8 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
     final latest = await ref.read(chatRepositoryProvider).channels();
     if (!mounted) return;
     final fresh = latest.where((c) => c.id == ch.id).firstOrNull ?? ch;
+    final wallpaper = await loadChatWallpaper(fresh.id);
+    if (!mounted) return;
     setState(() {
       _channels = [
         for (final c in latest)
@@ -198,6 +302,8 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
       _messages = msgs;
       _emojiOpen = false;
       _pending = [];
+      _replyTo = null;
+      _wallpaper = wallpaper;
       _sending = false;
       _typing = null;
       if (_channels.every((c) => c.id != fresh.id)) {
@@ -205,16 +311,46 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
       }
     });
     _scrollToEnd();
+    unawaited(saveLastChatChannelId(fresh.id));
+    unawaited(_refreshMeetStatuses(msgs));
+    unawaited(ref.read(chatUnreadProvider.notifier).refresh());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _composerFocus.requestFocus();
+    });
   }
 
-  Future<void> _openAttachment(ChatAttachment attachment) async {
-    try {
-      var url = '';
-      if (attachment.id != null && attachment.id!.isNotEmpty) {
-        url = await ref.read(chatRepositoryProvider).attachmentUrl(attachment.id!);
+  Future<void> _refreshMeetStatuses(List<ChatMessage> msgs) async {
+    final codes = <String>{};
+    for (final m in msgs) {
+      final link = meetLinkInText(m.content);
+      if (link != null) codes.add(link.code.toLowerCase());
+    }
+    if (codes.isEmpty) return;
+    final next = Map<String, String>.from(_meetStatusByCode);
+    await Future.wait(codes.map((code) async {
+      try {
+        final item = await ref.read(meetRepositoryProvider).getByCode(code);
+        next[code] = item.status;
+      } catch (_) {
+        next[code] = 'ENDED';
       }
-      if (url.isEmpty) url = attachment.fileUrl ?? '';
-      url = _absoluteFileUrl(url);
+    }));
+    if (!mounted) return;
+    setState(() => _meetStatusByCode = next);
+  }
+
+  Future<String> _attachmentUrl(ChatAttachment attachment) async {
+    var url = '';
+    if (attachment.id != null && attachment.id!.isNotEmpty) {
+      url = await ref.read(chatRepositoryProvider).attachmentUrl(attachment.id!);
+    }
+    if (url.isEmpty) url = attachment.fileUrl ?? '';
+    return _absoluteFileUrl(url);
+  }
+
+  Future<void> _viewAttachment(ChatAttachment attachment) async {
+    try {
+      final url = await _attachmentUrl(attachment);
       if (url.isEmpty || _isBlockedPublicFileUrl(url)) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -222,7 +358,61 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
         );
         return;
       }
+      if (attachment.isImage && mounted) {
+        await showDialog<void>(
+          context: context,
+          builder: (ctx) {
+            final size = MediaQuery.sizeOf(ctx);
+            return Dialog(
+              insetPadding: const EdgeInsets.all(16),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: size.width * 0.9,
+                  maxHeight: size.height * 0.88,
+                ),
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 8, 4, 0),
+                      child: Row(
+                        children: [
+                          Expanded(child: Text(attachment.fileName, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                          IconButton(
+                            tooltip: 'Download',
+                            onPressed: () => _downloadAttachment(attachment),
+                            icon: const Icon(Icons.download_rounded),
+                          ),
+                          IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close)),
+                        ],
+                      ),
+                    ),
+                    Expanded(child: InteractiveViewer(child: Image.network(url))),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+        return;
+      }
       await openExternalUrl(url);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+
+  Future<void> _downloadAttachment(ChatAttachment attachment) async {
+    try {
+      final url = await _attachmentUrl(attachment);
+      if (url.isEmpty || _isBlockedPublicFileUrl(url)) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('This file is not available')),
+        );
+        return;
+      }
+      await downloadUrl(url, attachment.fileName);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
@@ -257,6 +447,15 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
                 onTap: () {
                   Navigator.pop(ctx);
                   _showReactionPicker(message);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.reply_rounded),
+                title: const Text('Reply'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  setState(() => _replyTo = message);
+                  _composerFocus.requestFocus();
                 },
               ),
               if (canEdit)
@@ -409,10 +608,11 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
   }
 
   Future<void> _send() async {
-    final text = _draft.text.trim();
+    final text = _draft.text.replaceAll('\r\n', '\n').trim();
     final ch = _active;
     if (ch == null || _sending || (text.isEmpty && _pending.isEmpty)) return;
     final pending = List<_PendingFile>.from(_pending);
+    final replyId = _replyTo?.id;
     setState(() {
       _emojiOpen = false;
       _sending = true;
@@ -420,7 +620,8 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
     try {
       if (pending.isEmpty) {
         _draft.clear();
-        ref.read(collabSocketProvider).sendMessage(ch.id, text);
+        setState(() => _replyTo = null);
+        ref.read(collabSocketProvider).sendMessage(ch.id, text, replyToId: replyId);
         return;
       }
       final attachments = <Map<String, dynamic>>[];
@@ -430,20 +631,117 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
       await ref.read(chatRepositoryProvider).send(
         channelId: ch.id,
         content: text.isEmpty ? null : text,
+        replyToId: replyId,
         attachments: attachments,
       );
       _draft.clear();
-      if (mounted) setState(() => _pending = []);
+      if (mounted) {
+        setState(() {
+          _pending = [];
+          _replyTo = null;
+        });
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     } finally {
-      if (mounted) setState(() => _sending = false);
+      if (mounted) {
+        setState(() => _sending = false);
+        _composerFocus.requestFocus();
+      }
     }
   }
 
+  Future<void> _startVoiceCall() async {
+    final ch = _active;
+    if (ch == null || _startingCall) return;
+    final me = ref.read(authNotifierProvider).user?.id;
+    final invitees = ch.members.map((m) => m.userId).where((id) => id.isNotEmpty && id != me).toList();
+    final title = ch.type == 'GROUP'
+        ? '${ch.name?.trim().isNotEmpty == true ? ch.name : 'Group'} voice call'
+        : 'Voice call with ${_channelTitle(ch, me)}';
+    setState(() => _startingCall = true);
+    final tab = prepareMeetTab();
+    try {
+      final meeting = await ref.read(meetRepositoryProvider).create(
+            title: title,
+            instant: true,
+            waitingRoom: false,
+            inviteeIds: invitees,
+          );
+      final link = () {
+        final base = meetingShareUrl(meeting);
+        return base.contains('?') ? '$base&voice=1' : '$base?voice=1';
+      }();
+      ref.read(collabSocketProvider).sendMessage(ch.id, 'Started a voice call. Join: $link');
+      if (!mounted) {
+        tab?.dismiss();
+        return;
+      }
+      await openMeetRoom(context, meeting.code, voice: true, tab: tab);
+      if (mounted) {
+        setState(() => _meetStatusByCode = {
+              ..._meetStatusByCode,
+              meeting.code.toLowerCase(): meeting.status,
+            });
+      }
+    } catch (e) {
+      tab?.dismiss();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    } finally {
+      if (mounted) setState(() => _startingCall = false);
+    }
+  }
+
+  Future<void> _showChatInfo() async {
+    final ch = _active;
+    if (ch == null) return;
+    await showChatInfoSheet(
+      context: context,
+      channel: ch,
+      me: ref.read(authNotifierProvider).user?.id,
+      onUpdated: (next) {
+        if (!mounted) return;
+        setState(() {
+          _active = next;
+          _channels = [
+            for (final c in _channels)
+              if (c.id == next.id)
+                next.copyWith(
+                  unread: c.unread,
+                  lastPreview: c.lastPreview,
+                  lastAt: c.lastAt,
+                )
+              else
+                c,
+          ];
+        });
+      },
+      onLeft: () {
+        final id = ch.id;
+        if (!mounted) return;
+        final remaining = _channels.where((c) => c.id != id).toList();
+        setState(() {
+          _channels = remaining;
+          if (_active?.id == id) _active = null;
+        });
+        unawaited(clearLastChatChannelId());
+        unawaited(ref.read(chatUnreadProvider.notifier).refresh());
+        if (remaining.isNotEmpty) {
+          unawaited(_open(remaining.first));
+        }
+      },
+      onMessageMember: (userId) async {
+        final dm = await ref.read(chatRepositoryProvider).startDm(userId);
+        await _refreshChannels();
+        await _open(dm);
+      },
+    );
+  }
+
   Future<void> _attach() async {
-    if (_active == null || _sending) return;
+    if (_active == null) return;
     final pick = await FilePicker.pickFiles(withData: true, allowMultiple: true);
     if (pick == null || pick.files.isEmpty || !mounted) return;
     final added = <_PendingFile>[
@@ -452,6 +750,7 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
     ];
     if (added.isEmpty) return;
     setState(() => _pending = [..._pending, ...added]);
+    _composerFocus.requestFocus();
   }
 
   Future<void> _newChat({required bool group}) async {
@@ -591,7 +890,9 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
   @override
   Widget build(BuildContext context) {
     final me = ref.watch(authNotifierProvider).user?.id;
-    final wide = MediaQuery.sizeOf(context).width >= 900;
+    final screenW = MediaQuery.sizeOf(context).width;
+    final wide = screenW >= 900;
+    final listWidth = screenW >= 1280 ? 360.0 : 300.0;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     if (_loading) {
@@ -622,40 +923,75 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
             messages: _messages,
             me: me,
             draft: _draft,
+            composerFocus: _composerFocus,
             typing: _typing,
             emojiOpen: _emojiOpen,
             scroll: _scroll,
             showBack: !wide,
             isDark: isDark,
-            onBack: () => setState(() => _active = null),
+            wallpaper: ChatWallpaper.byId(_wallpaper),
+            meetStatusByCode: _meetStatusByCode,
+            replyTo: _replyTo,
+            startingCall: _startingCall,
+            onBack: _closeThread,
             onSend: _send,
             onAttach: _attach,
             pending: _pending,
             sending: _sending,
             onRemovePending: (i) => setState(() => _pending = [..._pending]..removeAt(i)),
-            onToggleEmoji: () => setState(() => _emojiOpen = !_emojiOpen),
+            onToggleEmoji: () {
+              setState(() => _emojiOpen = !_emojiOpen);
+              _composerFocus.requestFocus();
+            },
             onPickEmoji: (e) {
               _draft.text += e;
               _draft.selection = TextSelection.collapsed(offset: _draft.text.length);
+              _composerFocus.requestFocus();
             },
             onReact: (id, e) => ref.read(collabSocketProvider).react(id, e),
             onReactPicker: _showMessageActions,
-            onOpenAttachment: _openAttachment,
+            onViewAttachment: _viewAttachment,
+            onDownloadAttachment: _downloadAttachment,
             onShowReceipts: _showSeenDetails,
+            onReply: (m) {
+              setState(() => _replyTo = m);
+              _composerFocus.requestFocus();
+            },
+            onClearReply: () => setState(() => _replyTo = null),
+            onVoiceCall: _startVoiceCall,
+            onWallpaper: () async {
+              await pickChatWallpaper(
+                context: context,
+                selected: _wallpaper,
+                onPick: (id) async {
+                  final ch = _active;
+                  if (ch == null) return;
+                  await saveChatWallpaper(ch.id, id);
+                  if (mounted) setState(() => _wallpaper = id);
+                },
+              );
+              if (mounted) _composerFocus.requestFocus();
+            },
+            onOpenInfo: _showChatInfo,
             onChanged: () => ref.read(collabSocketProvider).typing(_active!.id),
           );
 
-    return Scaffold(
-      backgroundColor: isDark ? AppColors.backgroundDark : const Color(0xFFF5F5F5),
-      body: wide
-          ? Row(
-              children: [
-                SizedBox(width: 340, child: list),
-                VerticalDivider(width: 1, color: isDark ? AppColors.borderDark : const Color(0xFFE0E0E0)),
-                Expanded(child: thread),
-              ],
-            )
-          : (_active == null ? list : thread),
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.escape): _closeThread,
+      },
+      child: Scaffold(
+        backgroundColor: isDark ? AppColors.backgroundDark : const Color(0xFFF5F5F5),
+        body: wide
+            ? Row(
+                children: [
+                  SizedBox(width: listWidth, child: list),
+                  VerticalDivider(width: 1, color: isDark ? AppColors.borderDark : const Color(0xFFE0E0E0)),
+                  Expanded(child: thread),
+                ],
+              )
+            : (_active == null ? list : thread),
+      ),
     );
   }
 }
@@ -756,7 +1092,10 @@ class _TeamsChatList extends StatelessWidget {
                                 _Avatar(
                                   name: title,
                                   url: photo,
-                                  online: c.type == 'DIRECT' && other?.online == true,
+                                  isGroup: c.type == 'GROUP',
+                                  online: c.type == 'GROUP'
+                                      ? c.anyOtherOnline(me)
+                                      : other?.online == true,
                                 ),
                                 const SizedBox(width: 10),
                                 Expanded(
@@ -870,11 +1209,16 @@ class _TeamsThread extends StatelessWidget {
     required this.messages,
     required this.me,
     required this.draft,
+    required this.composerFocus,
     required this.typing,
     required this.emojiOpen,
     required this.scroll,
     required this.showBack,
     required this.isDark,
+    required this.wallpaper,
+    required this.meetStatusByCode,
+    required this.replyTo,
+    required this.startingCall,
     required this.onBack,
     required this.onSend,
     required this.onAttach,
@@ -885,8 +1229,14 @@ class _TeamsThread extends StatelessWidget {
     required this.onPickEmoji,
     required this.onReact,
     required this.onReactPicker,
-    required this.onOpenAttachment,
+    required this.onViewAttachment,
+    required this.onDownloadAttachment,
     required this.onShowReceipts,
+    required this.onReply,
+    required this.onClearReply,
+    required this.onVoiceCall,
+    required this.onWallpaper,
+    required this.onOpenInfo,
     required this.onChanged,
   });
 
@@ -894,11 +1244,16 @@ class _TeamsThread extends StatelessWidget {
   final List<ChatMessage> messages;
   final String? me;
   final TextEditingController draft;
+  final FocusNode composerFocus;
   final String? typing;
   final bool emojiOpen;
   final ScrollController scroll;
   final bool showBack;
   final bool isDark;
+  final ChatWallpaper wallpaper;
+  final Map<String, String> meetStatusByCode;
+  final ChatMessage? replyTo;
+  final bool startingCall;
   final VoidCallback onBack;
   final VoidCallback onSend;
   final VoidCallback onAttach;
@@ -909,8 +1264,14 @@ class _TeamsThread extends StatelessWidget {
   final void Function(String) onPickEmoji;
   final void Function(String id, String emoji) onReact;
   final void Function(ChatMessage) onReactPicker;
-  final void Function(ChatAttachment) onOpenAttachment;
+  final void Function(ChatAttachment) onViewAttachment;
+  final void Function(ChatAttachment) onDownloadAttachment;
   final void Function(ChatMessage) onShowReceipts;
+  final void Function(ChatMessage) onReply;
+  final VoidCallback onClearReply;
+  final VoidCallback onVoiceCall;
+  final VoidCallback onWallpaper;
+  final VoidCallback onOpenInfo;
   final VoidCallback onChanged;
 
   @override
@@ -918,17 +1279,13 @@ class _TeamsThread extends StatelessWidget {
     final title = _channelTitle(channel, me);
     final photo = _channelPhoto(channel, me);
     final other = channel.members.where((m) => m.userId != me).firstOrNull;
-    final selfDm = channel.type != 'GROUP' && other == null;
     final subtitle = typing != null
         ? '$typing is typing…'
-        : channel.type == 'GROUP'
-            ? '${channel.members.length} members'
-            : selfDm
-                ? 'Saved messages'
-                : (other?.online == true ? 'Available' : 'Direct message');
+        : channel.presenceSubtitle(me);
     final headerBg = isDark ? AppColors.surfaceDark : Colors.white;
     final text = isDark ? AppColors.textPrimaryDark : const Color(0xFF242424);
     final muted = isDark ? AppColors.textSecondaryDark : const Color(0xFF616161);
+    final narrow = MediaQuery.sizeOf(context).width < 420;
 
     return ColoredBox(
       color: isDark ? AppColors.backgroundDark : const Color(0xFFF5F5F5),
@@ -948,27 +1305,88 @@ class _TeamsThread extends StatelessWidget {
               child: Row(
                 children: [
                   if (showBack)
-                    IconButton(onPressed: onBack, icon: const Icon(Icons.arrow_back_rounded)),
-                  _Avatar(name: title, url: photo, online: other?.online == true, size: 36),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w700, color: text)),
-                        Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: typing != null ? _teamsPurple : muted)),
-                      ],
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      onPressed: onBack,
+                      icon: const Icon(Icons.arrow_back_rounded),
                     ),
+                  Expanded(
+                    child: InkWell(
+                      onTap: onOpenInfo,
+                      borderRadius: BorderRadius.circular(8),
+                      child: Tooltip(
+                        message: channel.type == 'GROUP' ? 'Group info' : 'Chat info',
+                        child: Row(
+                        children: [
+                          _Avatar(
+                            name: title,
+                            url: photo,
+                            isGroup: channel.type == 'GROUP',
+                            online: channel.type == 'GROUP'
+                                ? channel.anyOtherOnline(me)
+                                : other?.online == true,
+                            size: 36,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(fontWeight: FontWeight.w700, color: text),
+                                ),
+                                Text(
+                                  subtitle,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: typing != null ? _teamsPurple : muted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (!narrow) Icon(Icons.chevron_right_rounded, color: muted, size: 20),
+                          const SizedBox(width: 4),
+                        ],
+                      ),
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Wallpaper',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: onWallpaper,
+                    icon: Icon(Icons.wallpaper_rounded, color: muted),
+                  ),
+                  IconButton(
+                    tooltip: channel.type == 'GROUP' ? 'Group voice call' : 'Voice call',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: startingCall ? null : onVoiceCall,
+                    icon: startingCall
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                        : Icon(
+                            channel.type == 'GROUP' ? Icons.groups_rounded : Icons.call_rounded,
+                            color: _teamsPurple,
+                          ),
                   ),
                 ],
               ),
             ),
           ),
           Expanded(
-            child: ListView.builder(
-              controller: scroll,
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: ClipRect(
+              child: wallpaper.build(
+                isDark: isDark,
+                child: ListView.builder(
+                controller: scroll,
+                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.manual,
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
               itemCount: messages.length,
               itemBuilder: (context, i) {
                 final m = messages[i];
@@ -988,12 +1406,27 @@ class _TeamsThread extends StatelessWidget {
                       me: me,
                       onReact: onReact,
                       onReactPicker: onReactPicker,
-                      onOpenAttachment: onOpenAttachment,
+                      onViewAttachment: onViewAttachment,
+                      onDownloadAttachment: onDownloadAttachment,
                       onShowReceipts: onShowReceipts,
+                      onReply: onReply,
+                      onJoinMeet: (code, {required bool voice}) {
+                        openMeetRoom(context, code, voice: voice);
+                      },
+                      meetEnded: () {
+                        final link = meetLinkInText(m.content);
+                        if (link == null) return false;
+                        return meetCardEnded(
+                          meetStatusByCode[link.code.toLowerCase()],
+                          voice: link.voice,
+                        );
+                      }(),
                     ),
                   ],
                 );
               },
+            ),
+              ),
             ),
           ),
           if (emojiOpen)
@@ -1085,18 +1518,56 @@ class _TeamsThread extends StatelessWidget {
                         },
                       ),
                     ),
-                  Padding(
+                  if (replyTo != null)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
+                      child: Row(
+                        children: [
+                          Container(width: 3, height: 36, color: _teamsPurple),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Replying to ${replyTo!.senderName ?? 'message'}',
+                                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: _teamsPurple),
+                                ),
+                                Text(
+                                  (replyTo!.content ?? '').trim().isNotEmpty
+                                      ? replyTo!.content!.trim()
+                                      : (replyTo!.attachments.isNotEmpty ? 'Attachment' : 'Message'),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(fontSize: 12, color: muted),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Cancel reply',
+                            onPressed: onClearReply,
+                            icon: Icon(Icons.close_rounded, size: 18, color: muted),
+                          ),
+                        ],
+                      ),
+                    ),
+                  SafeArea(
+                    top: false,
+                    child: Padding(
                     padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         IconButton(
                           tooltip: 'Attach',
-                          onPressed: sending ? null : onAttach,
+                          visualDensity: VisualDensity.compact,
+                          onPressed: onAttach,
                           icon: Icon(Icons.attach_file_rounded, color: muted),
                         ),
                         IconButton(
                           tooltip: 'Emoji',
+                          visualDensity: VisualDensity.compact,
                           onPressed: onToggleEmoji,
                           icon: Icon(
                             emojiOpen ? Icons.emoji_emotions : Icons.emoji_emotions_outlined,
@@ -1104,22 +1575,32 @@ class _TeamsThread extends StatelessWidget {
                           ),
                         ),
                         Expanded(
-                          child: TextField(
-                            controller: draft,
-                            minLines: 1,
-                            maxLines: 5,
-                            enabled: !sending,
-                            textInputAction: TextInputAction.send,
-                            onChanged: (_) => onChanged(),
-                            onSubmitted: (_) => onSend(),
-                            decoration: InputDecoration(
-                              hintText: pending.isEmpty ? 'Type a message' : 'Add a caption',
-                              filled: true,
-                              fillColor: isDark ? AppColors.backgroundDark : const Color(0xFFF0F0F0),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: BorderSide.none,
+                          child: CallbackShortcuts(
+                            bindings: {
+                              const SingleActivator(LogicalKeyboardKey.enter): onSend,
+                              const SingleActivator(LogicalKeyboardKey.numpadEnter): onSend,
+                              const SingleActivator(LogicalKeyboardKey.escape): onBack,
+                            },
+                            child: TextField(
+                              controller: draft,
+                              focusNode: composerFocus,
+                              autofocus: true,
+                              showCursor: true,
+                              minLines: 1,
+                              maxLines: 6,
+                              keyboardType: TextInputType.multiline,
+                              textInputAction: TextInputAction.newline,
+                              onTapOutside: (_) {},
+                              onChanged: (_) => onChanged(),
+                              decoration: InputDecoration(
+                                hintText: pending.isEmpty ? 'Type a message' : 'Add a caption',
+                                filled: true,
+                                fillColor: isDark ? AppColors.backgroundDark : const Color(0xFFF0F0F0),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide.none,
+                                ),
                               ),
                             ),
                           ),
@@ -1142,10 +1623,76 @@ class _TeamsThread extends StatelessWidget {
                       ],
                     ),
                   ),
+                  ),
                 ],
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+String _breakLongTokens(String s) {
+  return s.replaceAllMapped(RegExp(r'(https?://[^\s]+)'), (m) {
+    return m[1]!
+        .replaceAll('/', '/\u200B')
+        .replaceAll('?', '?\u200B')
+        .replaceAll('&', '&\u200B')
+        .replaceAll('=', '\u200B=');
+  });
+}
+
+class _VoiceCallCard extends StatelessWidget {
+  const _VoiceCallCard({required this.voice, this.onJoin, this.ended = false});
+
+  final bool voice;
+  final bool ended;
+  final VoidCallback? onJoin;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 280),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: _teamsPurple.withValues(alpha: 0.18),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              voice ? Icons.call_rounded : Icons.videocam_rounded,
+              color: _teamsPurple,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              ended
+                  ? (voice ? 'Voice call ended' : 'Meeting ended')
+                  : (voice ? 'Voice call' : 'Meeting'),
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 14,
+                color: ended ? Colors.white54 : null,
+              ),
+            ),
+          ),
+          if (!ended)
+            FilledButton(
+              onPressed: onJoin,
+              style: FilledButton.styleFrom(
+                backgroundColor: _teamsPurple,
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+              ),
+              child: const Text('Join'),
+            ),
         ],
       ),
     );
@@ -1162,8 +1709,12 @@ class _MessageBubble extends StatelessWidget {
     required this.me,
     required this.onReact,
     required this.onReactPicker,
-    required this.onOpenAttachment,
+    required this.onViewAttachment,
+    required this.onDownloadAttachment,
     required this.onShowReceipts,
+    required this.onReply,
+    this.onJoinMeet,
+    this.meetEnded = false,
   });
 
   final ChatMessage message;
@@ -1174,8 +1725,12 @@ class _MessageBubble extends StatelessWidget {
   final String? me;
   final void Function(String id, String emoji) onReact;
   final void Function(ChatMessage) onReactPicker;
-  final void Function(ChatAttachment) onOpenAttachment;
+  final void Function(ChatAttachment) onViewAttachment;
+  final void Function(ChatAttachment) onDownloadAttachment;
   final void Function(ChatMessage) onShowReceipts;
+  final void Function(ChatMessage) onReply;
+  final void Function(String code, {required bool voice})? onJoinMeet;
+  final bool meetEnded;
 
   @override
   Widget build(BuildContext context) {
@@ -1183,7 +1738,8 @@ class _MessageBubble extends StatelessWidget {
     final otherBg = isDark ? AppColors.surfaceDark : Colors.white;
     final text = isDark ? AppColors.textPrimaryDark : const Color(0xFF242424);
     final muted = mutedOf(isDark);
-    final showText = message.deleted || (message.content != null && message.content!.trim().isNotEmpty);
+    final call = message.deleted ? null : meetLinkInText(message.content);
+    final showText = call == null && (message.deleted || (message.content != null && message.content!.trim().isNotEmpty));
     return Padding(
       padding: EdgeInsets.only(top: grouped ? 2 : 10),
       child: Row(
@@ -1198,8 +1754,10 @@ class _MessageBubble extends StatelessWidget {
                   : _Avatar(name: message.senderName ?? '?', url: message.senderPhoto, size: 28),
             ),
           Flexible(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.62),
+            child: Align(
+              alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+              child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
               child: Column(
                 crossAxisAlignment: mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                 children: [
@@ -1211,7 +1769,23 @@ class _MessageBubble extends StatelessWidget {
                         style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: muted),
                       ),
                     ),
-                  GestureDetector(
+                  Dismissible(
+                    key: ValueKey('reply-${message.id}'),
+                    direction: message.deleted
+                        ? DismissDirection.none
+                        : (mine ? DismissDirection.endToStart : DismissDirection.startToEnd),
+                    confirmDismiss: (_) async {
+                      onReply(message);
+                      return false;
+                    },
+                    background: Align(
+                      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        child: Icon(Icons.reply_rounded, color: muted),
+                      ),
+                    ),
+                    child: GestureDetector(
                     onLongPress: message.deleted ? null : () => onReactPicker(message),
                     onSecondaryTap: message.deleted ? null : () => onReactPicker(message),
                     child: Container(
@@ -1231,9 +1805,49 @@ class _MessageBubble extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          if (showText)
+                          if (message.replyTo != null)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 6),
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.06),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: const Border(left: BorderSide(color: _teamsPurple, width: 3)),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      message.replyTo!.senderName,
+                                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: _teamsPurple),
+                                    ),
+                                    Text(
+                                      (message.replyTo!.content ?? '').trim().isEmpty
+                                          ? 'Attachment'
+                                          : (message.replyTo!.content ?? '').trim(),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(fontSize: 12, color: muted),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          if (call != null)
+                            _VoiceCallCard(
+                              voice: call.voice,
+                              ended: meetEnded,
+                              onJoin: meetEnded || onJoinMeet == null
+                                  ? null
+                                  : () => onJoinMeet!(call.code, voice: call.voice),
+                            )
+                          else if (showText)
                             Text(
-                              message.deleted ? 'This message was deleted' : (message.content ?? ''),
+                              message.deleted
+                                  ? 'This message was deleted'
+                                  : _breakLongTokens(message.content ?? ''),
                               style: TextStyle(
                                 color: text,
                                 fontStyle: message.deleted ? FontStyle.italic : FontStyle.normal,
@@ -1243,39 +1857,46 @@ class _MessageBubble extends StatelessWidget {
                           ...message.attachments.map(
                             (a) => Padding(
                               padding: const EdgeInsets.only(top: 6),
-                              child: InkWell(
-                                onTap: () => onOpenAttachment(a),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(Icons.insert_drive_file_outlined, size: 18, color: _teamsPurple),
-                                      const SizedBox(width: 8),
-                                      Flexible(
-                                        child: Text(
-                                          a.fileName,
-                                          style: const TextStyle(
-                                            decoration: TextDecoration.underline,
-                                            fontWeight: FontWeight.w600,
-                                            color: _teamsPurple,
-                                          ),
-                                        ),
+                              child: Container(
+                                padding: const EdgeInsets.fromLTRB(10, 8, 6, 8),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      a.isImage ? Icons.image_outlined : Icons.insert_drive_file_outlined,
+                                      size: 18,
+                                      color: _teamsPurple,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        a.fileName,
+                                        style: const TextStyle(fontWeight: FontWeight.w600, color: _teamsPurple),
                                       ),
-                                      const SizedBox(width: 6),
-                                      const Icon(Icons.open_in_new, size: 14, color: _teamsPurple),
-                                    ],
-                                  ),
+                                    ),
+                                    IconButton(
+                                      tooltip: 'View',
+                                      visualDensity: VisualDensity.compact,
+                                      onPressed: () => onViewAttachment(a),
+                                      icon: const Icon(Icons.visibility_outlined, size: 18, color: _teamsPurple),
+                                    ),
+                                    IconButton(
+                                      tooltip: 'Download',
+                                      visualDensity: VisualDensity.compact,
+                                      onPressed: () => onDownloadAttachment(a),
+                                      icon: const Icon(Icons.download_rounded, size: 18, color: _teamsPurple),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ),
                           ),
                         ],
                       ),
+                    ),
                     ),
                   ),
                   if (message.reactions.isNotEmpty) ...[
@@ -1312,6 +1933,7 @@ class _MessageBubble extends StatelessWidget {
                     onShowReceipts: onShowReceipts,
                   ),
                 ],
+              ),
               ),
             ),
           ),
@@ -1422,14 +2044,22 @@ class _DateChip extends StatelessWidget {
 }
 
 class _Avatar extends StatelessWidget {
-  const _Avatar({required this.name, this.url, this.online = false, this.size = 40});
+  const _Avatar({
+    required this.name,
+    this.url,
+    this.online = false,
+    this.isGroup = false,
+    this.size = 40,
+  });
   final String name;
   final String? url;
   final bool online;
+  final bool isGroup;
   final double size;
 
   @override
   Widget build(BuildContext context) {
+    final hasPhoto = url != null && url!.isNotEmpty;
     final letter = name.trim().isEmpty ? '?' : name.trim()[0].toUpperCase();
     return SizedBox(
       width: size,
@@ -1440,10 +2070,12 @@ class _Avatar extends StatelessWidget {
           CircleAvatar(
             radius: size / 2,
             backgroundColor: _teamsPurple,
-            backgroundImage: url != null && url!.isNotEmpty ? NetworkImage(url!) : null,
-            child: url == null || url!.isEmpty
-                ? Text(letter, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: size * 0.38))
-                : null,
+            backgroundImage: hasPhoto ? NetworkImage(url!) : null,
+            child: hasPhoto
+                ? null
+                : isGroup
+                    ? Icon(Icons.groups_rounded, color: Colors.white, size: size * 0.5)
+                    : Text(letter, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: size * 0.38)),
           ),
           if (online)
             Positioned(
@@ -1668,9 +2300,16 @@ String _channelTitle(ChatChannel c, String? me) {
 }
 
 String? _channelPhoto(ChatChannel c, String? me) {
-  if (c.avatarUrl != null && c.avatarUrl!.isNotEmpty) return c.avatarUrl;
+  if (c.type == 'GROUP') {
+    final url = c.avatarUrl;
+    if (url != null && url.isNotEmpty) return _absoluteFileUrl(url);
+    return null;
+  }
+  if (c.avatarUrl != null && c.avatarUrl!.isNotEmpty) return _absoluteFileUrl(c.avatarUrl!);
   final other = c.members.where((m) => m.userId != me).firstOrNull;
-  return other?.photoUrl ?? c.members.where((m) => m.userId == me).firstOrNull?.photoUrl;
+  final url = other?.photoUrl ?? c.members.where((m) => m.userId == me).firstOrNull?.photoUrl;
+  if (url == null || url.isEmpty) return null;
+  return _absoluteFileUrl(url);
 }
 
 String _chatWhen(DateTime value) {

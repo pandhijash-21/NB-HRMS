@@ -239,7 +239,10 @@ class _MeetCard extends ConsumerWidget {
                 ),
                 if (item.status == 'SCHEDULED' || item.status == 'LIVE')
                   FilledButton(
-                    onPressed: () => context.push('/meet/r/${item.code}').then((_) => onChanged()),
+                    onPressed: () async {
+                      await openMeetRoom(context, item.code);
+                      onChanged();
+                    },
                     child: Text(item.status == 'LIVE' ? 'Join live' : 'Enter'),
                   ),
                 if (item.isHost && item.status == 'LIVE')

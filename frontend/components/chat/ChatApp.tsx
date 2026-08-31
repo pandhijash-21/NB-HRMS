@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Search,
   Plus,
@@ -50,6 +50,28 @@ function initials(name?: string | null) {
     .join("");
 }
 
+function firstName(name?: string | null) {
+  const t = (name || "").trim();
+  if (!t) return "Someone";
+  return t.split(/\s+/)[0];
+}
+
+function presenceSubtitle(channel: ChatChannel, myId?: string) {
+  const others = channel.members.filter((m) => m.userId !== myId);
+  if (channel.type !== "GROUP") {
+    const other = others[0];
+    if (!other) return "Saved messages";
+    return other.online ? "Available" : "Away";
+  }
+  const online = others.filter((m) => m.online);
+  if (online.length === 0) return `${channel.members.length} members`;
+  if (online.length === 1) return `${firstName(online[0].name)} available`;
+  if (online.length === 2) {
+    return `${firstName(online[0].name)} and ${firstName(online[1].name)} available`;
+  }
+  return `${online.length} of ${others.length} available`;
+}
+
 export function ChatApp() {
   const chat = useChat();
   const { data: session } = useSession();
@@ -65,6 +87,22 @@ export function ChatApp() {
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [reactFor, setReactFor] = useState<ChatMessage | null>(null);
   const [seenFor, setSeenFor] = useState<ChatMessage | null>(null);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      if (reactFor || seenFor || showNew) return;
+      if (!chat.activeId) return;
+      e.preventDefault();
+      chat.setActiveId(null);
+      setDraft("");
+      setFiles([]);
+      setEmojiOpen(false);
+      setMobilePane("list");
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [chat.activeId, chat.setActiveId, reactFor, seenFor, showNew]);
 
   async function openAttachment(id?: string, fallback?: string | null) {
     try {
@@ -199,11 +237,9 @@ export function ChatApp() {
               <div className="min-w-0">
                 <p className="font-semibold truncate">{chat.active.name}</p>
                 <p className="text-xs text-muted-foreground truncate">
-                  {chat.active.type === "GROUP"
-                    ? `${chat.active.members.length} members`
-                    : chat.typing
-                      ? `${chat.typing.name} is typing…`
-                      : "Direct message"}
+                  {chat.typing
+                    ? `${chat.typing.name} is typing…`
+                    : presenceSubtitle(chat.active, myId)}
                 </p>
               </div>
             </div>
@@ -345,6 +381,15 @@ export function ChatApp() {
                   chat.emitTyping();
                 }}
                 onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    chat.setActiveId(null);
+                    setDraft("");
+                    setFiles([]);
+                    setEmojiOpen(false);
+                    setMobilePane("list");
+                    return;
+                  }
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
                     submit();

@@ -10,6 +10,7 @@ import '../../domain/collab_models.dart';
 import '../collab_providers.dart';
 import '../end_meet_progress.dart';
 import '../meet_helpers.dart';
+import '../meet_icons.dart';
 
 class MeetHubScreen extends ConsumerStatefulWidget {
   const MeetHubScreen({super.key});
@@ -23,7 +24,7 @@ class _MeetHubScreenState extends ConsumerState<MeetHubScreen> {
   bool _loading = true;
   bool _starting = false;
   bool _ending = false;
-  bool _waitingRoom = true;
+  bool _waitingRoom = false;
   bool _canAdmin = false;
   final _title = TextEditingController(text: 'Team meeting');
   final _agenda = TextEditingController();
@@ -66,6 +67,7 @@ class _MeetHubScreenState extends ConsumerState<MeetHubScreen> {
 
   Future<void> _start() async {
     setState(() => _starting = true);
+    final tab = prepareMeetTab();
     try {
       final meeting = await ref.read(meetRepositoryProvider).create(
             title: _title.text.trim().isEmpty ? 'Meeting' : _title.text.trim(),
@@ -73,11 +75,14 @@ class _MeetHubScreenState extends ConsumerState<MeetHubScreen> {
             instant: true,
             waitingRoom: _waitingRoom,
           );
-      if (!mounted) return;
-      context.push('/meet/r/${meeting.code}').then((_) {
-        if (mounted) _load();
-      });
+      if (!mounted) {
+        tab?.dismiss();
+        return;
+      }
+      await openMeetRoom(context, meeting.code, tab: tab);
+      _load();
     } catch (e) {
+      tab?.dismiss();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     } finally {
@@ -85,15 +90,14 @@ class _MeetHubScreenState extends ConsumerState<MeetHubScreen> {
     }
   }
 
-  void _joinCode() {
+  Future<void> _joinCode() async {
     final code = _code.text.trim();
     if (code.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter a meeting code')));
       return;
     }
-    context.push('/meet/r/$code').then((_) {
-      if (mounted) _load();
-    });
+    await openMeetRoom(context, code);
+    if (mounted) _load();
   }
 
   Future<void> _endMeeting(MeetingItem meeting) async {
@@ -148,6 +152,8 @@ class _MeetHubScreenState extends ConsumerState<MeetHubScreen> {
     final text = isDark ? Colors.white : const Color(0xFF212F3D);
     final muted = isDark ? Colors.white60 : const Color(0xFF607D8B);
     final wide = MediaQuery.sizeOf(context).width >= 880;
+    final compact = MediaQuery.sizeOf(context).width < 520;
+    final pagePad = compact ? 12.0 : 20.0;
     final startCard = _HubCard(
       color: card,
       child: Column(
@@ -217,10 +223,10 @@ class _MeetHubScreenState extends ConsumerState<MeetHubScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+              padding: EdgeInsets.fromLTRB(pagePad, 16, pagePad, 32),
               children: [
                 Container(
-                  padding: const EdgeInsets.all(22),
+                  padding: EdgeInsets.all(compact ? 16 : 22),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(24),
                     gradient: LinearGradient(
@@ -238,27 +244,34 @@ class _MeetHubScreenState extends ConsumerState<MeetHubScreen> {
                       ),
                     ],
                   ),
-                  child: const Column(
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.videocam_rounded, color: Colors.white, size: 32),
-                      SizedBox(height: 12),
-                      Text('Meet with your team', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w800)),
-                      SizedBox(height: 6),
+                      const Icon(Icons.videocam_rounded, color: Colors.white, size: 32),
+                      const SizedBox(height: 12),
                       Text(
+                        'Meet with your team',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: compact ? 20 : 24,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
                         'Start now, join with a code, or schedule and invite people across the organisation.',
                         style: TextStyle(color: Colors.white70, height: 1.4),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 24),
                 if (wide)
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(child: startCard),
-                      const SizedBox(width: 16),
+                      const SizedBox(width: 20),
                       Expanded(child: joinCard),
                     ],
                   )
@@ -268,109 +281,173 @@ class _MeetHubScreenState extends ConsumerState<MeetHubScreen> {
                   joinCard,
                 ],
                 if (_live.isNotEmpty) ...[
-                  const SizedBox(height: 20),
-                  Text('Live now', style: TextStyle(fontWeight: FontWeight.w800, color: text)),
-                  const SizedBox(height: 8),
-                  ..._live.map(
-                    (m) => Card(
-                      clipBehavior: Clip.antiAlias,
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(4, 4, 12, 12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(12, 12, 4, 8),
-                              child: Row(
-                                children: [
-                                  const CircleAvatar(
-                                    backgroundColor: Color(0xFFDCFCE7),
-                                    child: Icon(Icons.circle, color: Color(0xFF16A34A), size: 12),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(m.title, style: const TextStyle(fontWeight: FontWeight.w700)),
-                                        Text(m.code, style: const TextStyle(fontFamily: 'monospace')),
-                                      ],
-                                    ),
-                                  ),
-                                ],
+                  const SizedBox(height: 28),
+                  Text('Live now', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: text)),
+                  const SizedBox(height: 12),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final multi = _live.length > 1 && constraints.maxWidth >= 640;
+                      final gap = 16.0;
+                      final tileWidth = multi
+                          ? (constraints.maxWidth - gap) / 2
+                          : constraints.maxWidth;
+                      return Wrap(
+                        spacing: gap,
+                        runSpacing: gap,
+                        children: [
+                          for (final m in _live)
+                            SizedBox(
+                              width: tileWidth,
+                              child: _LiveMeetingCard(
+                                meeting: m,
+                                ending: _ending,
+                                onJoin: () async {
+                                  await openMeetRoom(context, m.code);
+                                  if (mounted) _load();
+                                },
+                                onEnd: m.isHost ? () => _endMeeting(m) : null,
                               ),
                             ),
-                            Row(
-                              children: [
-                                const Spacer(),
-                                if (m.isHost) ...[
-                                  OutlinedButton.icon(
-                                    onPressed: _ending ? null : () => _endMeeting(m),
-                                    icon: _ending
-                                        ? const SizedBox(
-                                            width: 14,
-                                            height: 14,
-                                            child: CircularProgressIndicator(strokeWidth: 2),
-                                          )
-                                        : const Icon(Icons.call_end_rounded, size: 18),
-                                    label: const Text('End meet'),
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: const Color(0xFFDC2626),
-                                      side: const BorderSide(color: Color(0xFFDC2626)),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                ],
-                                FilledButton(
-                                  onPressed: () => context.push('/meet/r/${m.code}').then((_) {
-                                    if (mounted) _load();
-                                  }),
-                                  child: const Text('Join'),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+                        ],
+                      );
+                    },
                   ),
                 ],
-                const SizedBox(height: 22),
+                const SizedBox(height: 28),
                 Text('Manage meetings', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: text)),
-                const SizedBox(height: 10),
-                GridView.count(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  crossAxisCount: wide ? 3 : 2,
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 12,
-                  childAspectRatio: wide ? 1.15 : 0.88,
-                  children: [
-                    _ActionTile(
-                      icon: Icons.event_available_rounded,
-                      color: isDark ? AppColors.bronze : const Color(0xFF2563EB),
-                      title: 'Schedule a meet',
-                      subtitle: 'Pick time & invite people',
-                      onTap: () => context.push('/meet/schedule'),
-                    ),
-                    _ActionTile(
-                      icon: Icons.calendar_month_rounded,
-                      color: const Color(0xFF0F766E),
-                      title: 'View scheduled',
-                      subtitle: 'Upcoming invites',
-                      onTap: () => context.push('/meet/scheduled'),
-                    ),
-                    _ActionTile(
-                      icon: Icons.history_rounded,
-                      color: const Color(0xFF7C3AED),
-                      title: 'View past meets',
-                      subtitle: 'Search ended rooms',
-                      onTap: () => context.push('/meet/past'),
-                    ),
-                  ],
+                const SizedBox(height: 14),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final w = constraints.maxWidth;
+                    final cols = w >= 900 ? 3 : w >= 520 ? 2 : 1;
+                    final gap = 14.0;
+                    final tileW = (w - gap * (cols - 1)) / cols;
+                    final tiles = [
+                      _ActionTile(
+                        icon: Icons.event_available_rounded,
+                        color: isDark ? AppColors.bronze : const Color(0xFF2563EB),
+                        title: 'Schedule a meet',
+                        subtitle: 'Pick time & invite people',
+                        onTap: () => context.push('/meet/schedule'),
+                      ),
+                      _ActionTile(
+                        icon: Icons.calendar_month_rounded,
+                        color: const Color(0xFF0F766E),
+                        title: 'View scheduled',
+                        subtitle: 'Upcoming invites',
+                        onTap: () => context.push('/meet/scheduled'),
+                      ),
+                      _ActionTile(
+                        icon: Icons.history_rounded,
+                        color: const Color(0xFF7C3AED),
+                        title: 'View past meets',
+                        subtitle: 'Search ended rooms',
+                        onTap: () => context.push('/meet/past'),
+                      ),
+                    ];
+                    return Wrap(
+                      spacing: gap,
+                      runSpacing: gap,
+                      children: [
+                        for (final tile in tiles)
+                          SizedBox(width: tileW, child: tile),
+                      ],
+                    );
+                  },
                 ),
               ],
             ),
+    );
+  }
+}
+
+class _LiveMeetingCard extends StatelessWidget {
+  const _LiveMeetingCard({
+    required this.meeting,
+    required this.ending,
+    required this.onJoin,
+    this.onEnd,
+  });
+
+  final MeetingItem meeting;
+  final bool ending;
+  final VoidCallback onJoin;
+  final VoidCallback? onEnd;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Material(
+      color: isDark ? const Color(0xFF1E1B18) : Colors.white,
+      elevation: 0,
+      borderRadius: BorderRadius.circular(18),
+      child: Ink(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: const Color(0xFF16A34A).withValues(alpha: isDark ? 0.45 : 0.28),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 14, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  const CircleAvatar(
+                    backgroundColor: Color(0xFFDCFCE7),
+                    child: Icon(Icons.circle, color: Color(0xFF16A34A), size: 12),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          meeting.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        Text(meeting.code, style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                alignment: WrapAlignment.end,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (onEnd != null)
+                    OutlinedButton.icon(
+                      onPressed: ending ? null : onEnd,
+                      icon: ending
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.call_end_rounded, size: 18),
+                      label: const Text('End meet'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFFDC2626),
+                        side: const BorderSide(color: Color(0xFFDC2626)),
+                      ),
+                    ),
+                  FilledButton(
+                    onPressed: onJoin,
+                    child: const Text('Join'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -501,6 +578,7 @@ class _ActionTile extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 16, 14, 14),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
                   width: 48,
@@ -511,7 +589,7 @@ class _ActionTile extends StatelessWidget {
                   ),
                   child: Icon(icon, color: color, size: 26),
                 ),
-                const Spacer(),
+                const SizedBox(height: 16),
                 Text(
                   title,
                   maxLines: 2,

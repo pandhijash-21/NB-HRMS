@@ -6,6 +6,7 @@ import 'radial_menu.dart';
 
 import '../../features/auth/domain/permissions.dart';
 import '../../features/auth/presentation/auth_providers.dart';
+import '../../features/collaboration/presentation/chat_inbox.dart';
 import '../../features/tracking_hub/presentation/location_alert_watch.dart';
 import '../logging/app_logger.dart';
 import '../services/location_alert_sound.dart';
@@ -258,6 +259,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
 
     final trackingAlerts = ref.watch(locationAlertWatchProvider);
     final alertCount = canTrackField ? trackingAlerts.count : 0;
+    final chatUnread = ref.watch(chatUnreadProvider);
 
     bool isSelected(_Destination d) {
       if (d.route == '/leave') {
@@ -381,6 +383,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                       isDark,
                       expanded: true,
                       alertCount: alertCount,
+                      chatUnread: chatUnread,
                       isSelected: isSelected,
                       onTap: (d) => goTo(d, closeDrawer: true),
                     ),
@@ -501,6 +504,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                 isDark,
                 allowExpanded: allowExpandedSidebar,
                 alertCount: alertCount,
+                chatUnread: chatUnread,
               ),
               Expanded(child: widget.child),
             ],
@@ -614,6 +618,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     bool isDark, {
     required bool expanded,
     required int alertCount,
+    required int chatUnread,
     required bool Function(_Destination) isSelected,
     required void Function(_Destination) onTap,
   }) {
@@ -678,6 +683,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
           expanded: expanded,
           selected: isSelected(d),
           alertCount: alertCount,
+          chatUnread: chatUnread,
           onTap: () => onTap(d),
         ));
       }
@@ -691,8 +697,10 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     required bool expanded,
     required bool selected,
     required int alertCount,
+    required int chatUnread,
     required VoidCallback onTap,
   }) {
+    final badgeCount = d.route == '/chat' ? chatUnread : (d.alertBadge ? alertCount : 0);
     final icon = Icon(
       selected ? d.selectedIcon : d.icon,
       color: selected
@@ -741,7 +749,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      if (d.alertBadge) _alertCountBadge(alertCount),
+                      if (badgeCount > 0) _alertCountBadge(badgeCount),
                       const SizedBox(width: 12),
                     ],
                   )
@@ -750,11 +758,11 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                     clipBehavior: Clip.none,
                     children: [
                       icon,
-                      if (d.alertBadge)
+                      if (badgeCount > 0)
                         Positioned(
                           right: 6,
                           top: 6,
-                          child: _alertCountBadge(alertCount, compact: true),
+                          child: _alertCountBadge(badgeCount, compact: true),
                         ),
                     ],
                   ),
@@ -837,6 +845,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     bool isDark, {
     bool allowExpanded = true,
     int alertCount = 0,
+    int chatUnread = 0,
   }) {
     final expanded = allowExpanded && _isExpanded;
     return AnimatedContainer(
@@ -957,6 +966,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                 isDark,
                 expanded: expanded,
                 alertCount: alertCount,
+                chatUnread: chatUnread,
                 isSelected: isSelected,
                 onTap: (d) => goTo(d),
               ),

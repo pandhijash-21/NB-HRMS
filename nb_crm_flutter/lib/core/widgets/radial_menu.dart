@@ -2,6 +2,7 @@ import 'dart:math';
 import 'dart:ui';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:nb_crm_flutter/core/theme/nb_icon.dart';
 
 class RadialMenu extends StatefulWidget {
   final List<RadialMenuItem> items;
@@ -155,7 +156,7 @@ class _RadialMenuState extends State<RadialMenu> with SingleTickerProviderStateM
                         },
                         customBorder: const CircleBorder(),
                         child: Center(
-                          child: Icon(
+                          child: NbIcon(
                             item.icon,
                             size: 24,
                             color: item.foregroundColor ?? Theme.of(context).colorScheme.primary,
@@ -281,7 +282,7 @@ class _RadialMenuState extends State<RadialMenu> with SingleTickerProviderStateM
                   width: 1,
                 ),
               ),
-              child: Icon(
+              child: NbIcon(
                 Icons.chevron_left_rounded,
                 color: onThemeColor,
                 size: 20,
@@ -336,7 +337,7 @@ class _RadialMenuState extends State<RadialMenu> with SingleTickerProviderStateM
                       builder: (context, child) {
                         return Transform.rotate(
                           angle: _controller.value * (pi / 2),
-                          child: Icon(
+                          child: NbIcon(
                             _isOpen ? widget.closeIcon : widget.openIcon,
                             color: onThemeColor,
                             size: 26,

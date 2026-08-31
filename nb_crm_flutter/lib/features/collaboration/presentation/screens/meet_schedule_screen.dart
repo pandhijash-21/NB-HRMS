@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nb_crm_flutter/core/theme/nb_icon.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -197,25 +198,25 @@ class _MeetScheduleScreenState extends ConsumerState<MeetScheduleScreen> {
               children: [
                 TextField(
                   controller: _title,
-                  decoration: const InputDecoration(labelText: 'Title', prefixIcon: Icon(Icons.title_rounded)),
+                  decoration: const InputDecoration(labelText: 'Title', prefixIcon: NbIcon(Icons.title_rounded)),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: _agenda,
                   maxLines: 3,
-                  decoration: const InputDecoration(labelText: 'Agenda', prefixIcon: Icon(Icons.notes_rounded)),
+                  decoration: const InputDecoration(labelText: 'Agenda', prefixIcon: NbIcon(Icons.notes_rounded)),
                 ),
                 const SizedBox(height: 12),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.schedule_rounded),
+                  leading: const NbIcon(Icons.schedule_rounded),
                   title: const Text('Starts'),
                   subtitle: Text(_start == null ? 'Pick date & time' : meetWhen(_start)),
                   trailing: TextButton(onPressed: () => _pickDateTime(end: false), child: const Text('Choose')),
                 ),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.event_rounded),
+                  leading: const NbIcon(Icons.event_rounded),
                   title: const Text('Ends (optional)'),
                   subtitle: Text(_end == null ? 'Not set' : meetWhen(_end)),
                   trailing: TextButton(onPressed: () => _pickDateTime(end: true), child: const Text('Choose')),
@@ -254,7 +255,7 @@ class _MeetScheduleScreenState extends ConsumerState<MeetScheduleScreen> {
                           CircleAvatar(
                             backgroundColor: (isDark ? AppColors.bronze : Theme.of(context).colorScheme.primary)
                                 .withValues(alpha: 0.18),
-                            child: Icon(
+                            child: NbIcon(
                               Icons.group_add_rounded,
                               color: isDark ? AppColors.bronze : Theme.of(context).colorScheme.primary,
                             ),
@@ -281,7 +282,7 @@ class _MeetScheduleScreenState extends ConsumerState<MeetScheduleScreen> {
                               ],
                             ),
                           ),
-                          const Icon(Icons.chevron_right_rounded),
+                          const NbIcon(Icons.chevron_right_rounded),
                         ],
                       ),
                     ),
@@ -324,7 +325,7 @@ class _MeetScheduleScreenState extends ConsumerState<MeetScheduleScreen> {
                   onPressed: _saving ? null : _save,
                   icon: _saving
                       ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Icon(Icons.event_available_rounded),
+                      : const NbIcon(Icons.event_available_rounded),
                   label: Text(_editing ? 'Save changes' : 'Schedule meeting'),
                 ),
               ],

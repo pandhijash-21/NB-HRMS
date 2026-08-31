@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import api from "@/lib/axios";
-import { getCollabSocket } from "@/lib/socket";
+import { getCollabSocket, rememberChatChannel } from "@/lib/socket";
 
 export type CollabProfile = {
   userId: string;
@@ -55,6 +55,25 @@ export type ChatMessage = {
   seenBy?: { userId: string; name: string; photoUrl: string | null }[];
   unseenBy?: { userId: string; name: string; photoUrl: string | null }[];
 };
+
+function mergeIncoming(prev: ChatMessage[], msg: ChatMessage): ChatMessage[] {
+  if (prev.some((m) => m.id === msg.id)) return prev;
+  const samePayload = (m: ChatMessage) =>
+    m.channelId === msg.channelId &&
+    (m.content ?? "") === (msg.content ?? "") &&
+    (m.replyToId ?? "") === (msg.replyToId ?? "");
+  if (msg.id.startsWith("local:")) {
+    if (prev.some((m) => !m.id.startsWith("local:") && samePayload(m))) return prev;
+    return [...prev, msg];
+  }
+  const localIdx = prev.findIndex((m) => m.id.startsWith("local:") && samePayload(m));
+  if (localIdx >= 0) {
+    const next = [...prev];
+    next[localIdx] = msg;
+    return next;
+  }
+  return [...prev, msg];
+}
 
 function unwrap<T>(res: { data: { success: boolean; data: T; error?: string } }): T {
   if (!res.data?.success) throw new Error(res.data?.error || "Request failed");
@@ -114,6 +133,7 @@ export function useChat() {
     getCollabSocket().then((sock) => {
       s = sock;
       sock.emit("join_channel", activeId);
+      rememberChatChannel(activeId);
       const onNew = (msg: ChatMessage) => {
         if (msg.channelId !== activeId) {
           setChannels((prev) =>
@@ -123,7 +143,7 @@ export function useChat() {
           );
           return;
         }
-        setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
+        setMessages((prev) => mergeIncoming(prev, msg));
       };
       const onUpd = (msg: ChatMessage) => {
         if (msg.channelId !== activeId) return;
@@ -222,8 +242,22 @@ export function useChat() {
           const msg = unwrap<ChatMessage>(
             await api.post(`chat/channels/${activeId}/messages`, { content, attachments }),
           );
-          setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
+          setMessages((prev) => mergeIncoming(prev, msg));
         } else {
+          const optimistic: ChatMessage = {
+            id: `local:${Date.now()}`,
+            channelId: activeId,
+            senderId: "",
+            sender: null,
+            content,
+            replyToId: null,
+            createdAt: new Date().toISOString(),
+            editedAt: null,
+            deletedAt: null,
+            attachments: [],
+            reactions: [],
+          };
+          setMessages((prev) => mergeIncoming(prev, optimistic));
           sock.emit("send_message", { channelId: activeId, content });
         }
       } finally {

@@ -24,12 +24,6 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
   bool _obscureConfirm = true;
 
   @override
-  void initState() {
-    super.initState();
-    _newController.addListener(() => setState(() {}));
-  }
-
-  @override
   void dispose() {
     _currentController.dispose();
     _newController.dispose();
@@ -64,8 +58,7 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
           const AuthBrandMark(subtitle: 'Update your password to continue'),
           const SizedBox(height: 28),
           AuthGlassCard(
-            child: AutofillGroup(
-              child: Form(
+            child: Form(
               key: _formKey,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -92,6 +85,7 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                   ),
                   const SizedBox(height: 28),
                   AuthPasswordField(
+                    key: const ValueKey('pwd-current'),
                     controller: _currentController,
                     label: 'Current password',
                     hint: 'Temporary or existing password',
@@ -105,13 +99,14 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                   ),
                   const SizedBox(height: 14),
                   AuthPasswordField(
+                    key: const ValueKey('pwd-new'),
                     controller: _newController,
                     label: 'New password',
                     obscure: _obscureNew,
                     enabled: !submitting,
                     onToggle: () => setState(() => _obscureNew = !_obscureNew),
                     textInputAction: TextInputAction.next,
-                    autofillHints: const [AutofillHints.newPassword],
+                    autofillHints: const [],
                     validator: (v) {
                       final issue = validateNewPassword(v);
                       if (issue != null) return issue;
@@ -121,16 +116,21 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                       return null;
                     },
                   ),
-                  PasswordPolicyChecklist(password: _newController.text),
+                  ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: _newController,
+                    builder: (context, value, _) =>
+                        PasswordPolicyChecklist(password: value.text),
+                  ),
                   const SizedBox(height: 14),
                   AuthPasswordField(
+                    key: const ValueKey('pwd-confirm'),
                     controller: _confirmController,
                     label: 'Confirm new password',
                     obscure: _obscureConfirm,
                     enabled: !submitting,
                     onToggle: () => setState(() => _obscureConfirm = !_obscureConfirm),
                     textInputAction: TextInputAction.done,
-                    autofillHints: const [AutofillHints.newPassword],
+                    autofillHints: const [],
                     onSubmitted: (_) => submitting ? null : _submit(),
                     validator: (v) {
                       if (v == null || v.isEmpty) {
@@ -163,7 +163,6 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                   ),
                 ],
               ),
-            ),
             ),
           ),
         ],

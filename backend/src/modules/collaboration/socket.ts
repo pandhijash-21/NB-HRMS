@@ -78,8 +78,9 @@ export function emitChatNewMessage(
   const senderName = message.sender?.name || 'Someone';
   const preview = (message.content || 'Sent an attachment').replace(/\s+/g, ' ').slice(0, 140);
   for (const id of memberIds) {
-    if (!id || id === message.senderId) continue;
+    if (!id) continue;
     io.to(`user:${id}`).emit('new_message', message);
+    if (id === message.senderId) continue;
     const tagged = mentioned.has(id);
     io.to(`user:${id}`).emit('push_notify', {
       kind: tagged ? 'mention' : 'chat',
@@ -267,6 +268,7 @@ export async function setupCollaborationSocket(httpServer: http.Server) {
           content: payload.content,
           replyToId: payload.replyToId,
         });
+        socket.emit('new_message', message);
         emitChatNewMessage(payload.channelId, message);
       } catch (err) {
         socket.emit('error_message', { error: err instanceof Error ? err.message : 'Send failed' });

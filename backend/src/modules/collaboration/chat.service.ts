@@ -9,7 +9,7 @@ function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/** WhatsApp-style @Name / @all against channel members. */
+/** WhatsApp-style @Name / @FirstName / @all against channel members. */
 export function mentionedUserIdsFromText(
   content: string | null | undefined,
   members: { userId: string; name: string }[],
@@ -17,17 +17,34 @@ export function mentionedUserIdsFromText(
   senderId: string,
 ): string[] {
   if (!content) return [];
-  const others = members.filter((m) => m.userId !== senderId);
+  const others = members.filter((m) => m.userId && m.userId !== senderId);
+  if (others.length === 0) return [];
   if (isGroup && /(^|[\s])@all\b/i.test(content)) {
     return others.map((m) => m.userId);
   }
+
+  const firstCount = new Map<string, number>();
+  for (const m of others) {
+    const first = m.name.trim().split(/\s+/)[0]?.toLowerCase();
+    if (first) firstCount.set(first, (firstCount.get(first) ?? 0) + 1);
+  }
+
+  const tokens: { userId: string; token: string }[] = [];
+  for (const m of others) {
+    const full = m.name.trim();
+    if (!full) continue;
+    tokens.push({ userId: m.userId, token: full });
+    const first = full.split(/\s+/)[0];
+    if (first && first.toLowerCase() !== full.toLowerCase() && firstCount.get(first.toLowerCase()) === 1) {
+      tokens.push({ userId: m.userId, token: first });
+    }
+  }
+  tokens.sort((a, b) => b.token.length - a.token.length);
+
   const ids = new Set<string>();
-  const sorted = [...others].sort((a, b) => b.name.length - a.name.length);
-  for (const m of sorted) {
-    const name = m.name.trim();
-    if (name.length < 1) continue;
-    const re = new RegExp(`(^|[\\s])@${escapeRegExp(name)}(?=$|[\\s,.!?])`, 'i');
-    if (re.test(content)) ids.add(m.userId);
+  for (const row of tokens) {
+    const re = new RegExp(`(^|[\\s])@${escapeRegExp(row.token)}(?=$|[\\s,.!?;:])`, 'i');
+    if (re.test(content)) ids.add(row.userId);
   }
   return [...ids];
 }

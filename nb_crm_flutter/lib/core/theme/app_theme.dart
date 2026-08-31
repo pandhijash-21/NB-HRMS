@@ -69,6 +69,8 @@ abstract final class AppTheme {
       scaffoldBackgroundColor: backgroundColor,
       colorScheme: colorScheme,
       textTheme: textTheme,
+      iconTheme: IconThemeData(color: textColor, size: 24),
+      primaryIconTheme: IconThemeData(color: textColor),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: colorScheme.primary,

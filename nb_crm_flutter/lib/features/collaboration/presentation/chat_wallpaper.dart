@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:nb_crm_flutter/core/theme/nb_icon.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 enum WallpaperMotif { orbs, dots, diamonds, petals, mesh, none }
@@ -353,7 +354,7 @@ Future<void> pickChatWallpaper({
                                 const Positioned(
                                   top: 8,
                                   right: 8,
-                                  child: Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                                  child: NbIcon(Icons.check_circle_rounded, color: Colors.white, size: 20),
                                 ),
                               Positioned.fill(
                                 child: DecoratedBox(

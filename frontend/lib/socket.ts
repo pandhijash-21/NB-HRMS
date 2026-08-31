@@ -10,6 +10,11 @@ function apiOrigin() {
 
 let socket: Socket | null = null;
 let heartbeat: ReturnType<typeof setInterval> | null = null;
+let lastChatChannelId: string | null = null;
+
+export function rememberChatChannel(id: string | null) {
+  lastChatChannelId = id;
+}
 
 export async function getCollabSocket(guestToken?: string) {
   if (socket?.connected) return socket;
@@ -27,6 +32,7 @@ export async function getCollabSocket(guestToken?: string) {
   socket.on("connect", () => {
     if (heartbeat) clearInterval(heartbeat);
     heartbeat = setInterval(() => socket?.emit("heartbeat"), 20000);
+    if (lastChatChannelId) socket?.emit("join_channel", lastChatChannelId);
   });
   socket.on("disconnect", () => {
     if (heartbeat) {
@@ -40,6 +46,7 @@ export async function getCollabSocket(guestToken?: string) {
 export function disconnectCollabSocket() {
   if (heartbeat) clearInterval(heartbeat);
   heartbeat = null;
+  lastChatChannelId = null;
   socket?.disconnect();
   socket = null;
 }

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:nb_crm_flutter/core/theme/nb_icon.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:livekit_client/livekit_client.dart';
@@ -777,7 +778,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.hourglass_top, color: Color(0xFFC5A059), size: 48),
+                const NbIcon(Icons.hourglass_top, color: Color(0xFFC5A059), size: 48),
                 const SizedBox(height: 16),
                 Text(
                   'Asking to join',
@@ -822,7 +823,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
           elevation: 0,
           scrolledUnderElevation: 0,
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back_rounded),
+            icon: const NbIcon(Icons.arrow_back_rounded),
             tooltip: 'Back',
             onPressed: _leaveLobby,
           ),
@@ -846,7 +847,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                           child: previewOn
                               ? VideoTrackRenderer(_previewCam!, fit: VideoViewFit.cover)
                               : const Center(
-                                  child: Icon(Icons.videocam_off_rounded, color: Colors.white38, size: 56),
+                                  child: NbIcon(Icons.videocam_off_rounded, color: Colors.white38, size: 56),
                                 ),
                         ),
                         Positioned(
@@ -998,7 +999,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                                   IconButton(
                                     color: Colors.white,
                                     onPressed: () => setState(() => _chatOpen = false),
-                                    icon: const Icon(Icons.close),
+                                    icon: const NbIcon(Icons.close),
                                   ),
                                 ],
                               ),
@@ -1135,12 +1136,12 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                         tooltip: 'Copy meet link',
                         color: Colors.white,
                         onPressed: _copyInvite,
-                        icon: const Icon(Icons.link_rounded),
+                        icon: const NbIcon(Icons.link_rounded),
                       )
                     else
                       TextButton.icon(
                         onPressed: _copyInvite,
-                        icon: const Icon(Icons.link_rounded, color: Colors.white70, size: 18),
+                        icon: const NbIcon(Icons.link_rounded, color: Colors.white70, size: 18),
                         label: const Text('Copy meet link', style: TextStyle(color: Colors.white)),
                       ),
                     if (join?.meeting.isHost == true)
@@ -1149,7 +1150,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                               tooltip: 'End meet',
                               color: const Color(0xFFF87171),
                               onPressed: _endMeetFromCall,
-                              icon: const Icon(Icons.call_end_rounded),
+                              icon: const NbIcon(Icons.call_end_rounded),
                             )
                           : TextButton(
                               onPressed: _endMeetFromCall,
@@ -1164,7 +1165,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                               tooltip: 'Stop presenting',
                               color: const Color(0xFFC5A059),
                               onPressed: _toggleScreenShare,
-                              icon: const Icon(Icons.stop_screen_share_rounded),
+                              icon: const NbIcon(Icons.stop_screen_share_rounded),
                             )
                           : TextButton(
                               onPressed: _toggleScreenShare,
@@ -1599,7 +1600,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                           recipientUserId: _chatMode == 'DIRECT' ? _dmTo : null,
                         );
                   },
-                  icon: const Icon(Icons.send),
+                  icon: const NbIcon(Icons.send),
                 ),
               ],
             ),
@@ -1656,7 +1657,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                       ),
                     ),
                   ),
-                  Icon(
+                  NbIcon(
                     _dmPickerOpen ? Icons.expand_less_rounded : Icons.expand_more_rounded,
                     color: Colors.white70,
                   ),
@@ -1772,7 +1773,7 @@ class _LobbyRoundButton extends StatelessWidget {
           child: SizedBox(
             width: 48,
             height: 48,
-            child: Icon(icon, color: fg),
+            child: NbIcon(icon, color: fg),
           ),
         ),
       ),
@@ -1899,7 +1900,7 @@ class _MeetMicBadge extends StatelessWidget {
         width: 22,
         height: 22,
         decoration: const BoxDecoration(color: Color(0xFFB91C1C), shape: BoxShape.circle),
-        child: const Icon(Icons.mic_off_rounded, size: 14, color: Colors.white),
+        child: const NbIcon(Icons.mic_off_rounded, size: 14, color: Colors.white),
       );
     }
     if (speaking) {
@@ -1922,7 +1923,7 @@ class _MeetMicBadge extends StatelessWidget {
         ),
       );
     }
-    return const Icon(Icons.mic_rounded, size: 16, color: Colors.white);
+    return const NbIcon(Icons.mic_rounded, size: 16, color: Colors.white);
   }
 
   Widget _bar(double height) {

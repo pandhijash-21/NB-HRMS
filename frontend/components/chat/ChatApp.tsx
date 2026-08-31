@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Search,
   Plus,
@@ -72,6 +72,56 @@ function presenceSubtitle(channel: ChatChannel, myId?: string) {
   return `${online.length} of ${others.length} available`;
 }
 
+function mentionQuery(draft: string) {
+  const match = /(^|[\s])@([^\s@]*)$/.exec(draft);
+  if (!match) return null;
+  return match[2] ?? "";
+}
+
+function mentionChoices(channel: ChatChannel | null, myId?: string, q?: string | null) {
+  if (!channel || channel.type !== "GROUP" || q == null) return [];
+  const query = q.trim().toLowerCase();
+  const rows: { label: string; insert: string; everyone?: boolean }[] = [];
+  if (!query || "all".startsWith(query) || "everyone".startsWith(query)) {
+    rows.push({ label: "Everyone", insert: "@all ", everyone: true });
+  }
+  for (const m of channel.members) {
+    if (m.userId === myId) continue;
+    const name = (m.name || "").trim();
+    if (!name) continue;
+    const hay = `${name} ${m.email || ""}`.toLowerCase();
+    if (query && !hay.includes(query)) continue;
+    rows.push({ label: name, insert: `@${name} ` });
+  }
+  return rows.slice(0, 8);
+}
+
+function highlightMentions(content: string, members: CollabProfile[]) {
+  const tokens = ["all", ...members.map((m) => m.name.trim()).filter(Boolean)].sort(
+    (a, b) => b.length - a.length,
+  );
+  const unique = Array.from(new Set(tokens.map((t) => t.toLowerCase()))).map(
+    (key) => tokens.find((t) => t.toLowerCase() === key) as string,
+  );
+  if (!content.includes("@") || unique.length === 0) return content;
+  const re = new RegExp(`(@(?:${unique.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")}))(?=$|[\\s,.!?;:])`, "gi");
+  const parts: ReactNode[] = [];
+  let last = 0;
+  let i = 0;
+  for (const match of content.matchAll(re)) {
+    const start = match.index ?? 0;
+    if (start > last) parts.push(content.slice(last, start));
+    parts.push(
+      <span key={`m-${i++}`} className="font-semibold text-primary">
+        {match[0]}
+      </span>,
+    );
+    last = start + match[0].length;
+  }
+  if (last < content.length) parts.push(content.slice(last));
+  return parts;
+}
+
 export function ChatApp() {
   const chat = useChat();
   const { data: session } = useSession();
@@ -87,11 +137,23 @@ export function ChatApp() {
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [reactFor, setReactFor] = useState<ChatMessage | null>(null);
   const [seenFor, setSeenFor] = useState<ChatMessage | null>(null);
+  const [mentionSel, setMentionSel] = useState(0);
+  const mentionQ = mentionQuery(draft);
+  const mentionHits = mentionChoices(chat.active, myId, mentionQ);
+
+  useEffect(() => {
+    setMentionSel(0);
+  }, [mentionQ, chat.active?.id]);
+
+  function applyMention(insert: string) {
+    setDraft((prev) => prev.replace(/@([^\s@]*)$/, insert));
+  }
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key !== "Escape") return;
       if (reactFor || seenFor || showNew) return;
+      if (mentionHits.length) return;
       if (!chat.activeId) return;
       e.preventDefault();
       chat.setActiveId(null);
@@ -102,7 +164,7 @@ export function ChatApp() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [chat.activeId, chat.setActiveId, reactFor, seenFor, showNew]);
+  }, [chat.activeId, chat.setActiveId, reactFor, seenFor, showNew, mentionHits.length]);
 
   async function openAttachment(id?: string, fallback?: string | null) {
     try {
@@ -283,7 +345,7 @@ export function ChatApp() {
                           m.deletedAt && "italic opacity-70",
                         )}
                       >
-                        {m.deletedAt ? "This message was deleted" : m.content}
+                        {m.deletedAt ? "This message was deleted" : highlightMentions(m.content || "", chat.active?.members || [])}
                         {m.attachments.map((a) => (
                           <button
                             key={a.id}
@@ -374,13 +436,59 @@ export function ChatApp() {
               >
                 <Smile className="size-4" />
               </button>
-              <Textarea
+              <div className="relative flex-1">
+                {mentionHits.length > 0 && (
+                  <div className="absolute bottom-full left-0 right-0 mb-1 rounded-lg border border-border/60 bg-card shadow-lg overflow-hidden max-h-56 overflow-y-auto z-10">
+                    {mentionHits.map((hit, i) => (
+                      <button
+                        key={`${hit.insert}-${i}`}
+                        type="button"
+                        className={cn(
+                          "w-full text-left px-3 py-2 text-sm",
+                          i === mentionSel ? "bg-primary/10 text-primary" : "hover:bg-accent",
+                        )}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          applyMention(hit.insert);
+                        }}
+                      >
+                        <span className="font-semibold">{hit.label}</span>
+                        {hit.everyone ? (
+                          <span className="ml-2 text-xs text-muted-foreground">Notify all members</span>
+                        ) : null}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <Textarea
                 value={draft}
                 onChange={(e) => {
                   setDraft(e.target.value);
                   chat.emitTyping();
                 }}
                 onKeyDown={(e) => {
+                  if (mentionHits.length) {
+                    if (e.key === "ArrowDown") {
+                      e.preventDefault();
+                      setMentionSel((i) => (i + 1) % mentionHits.length);
+                      return;
+                    }
+                    if (e.key === "ArrowUp") {
+                      e.preventDefault();
+                      setMentionSel((i) => (i - 1 + mentionHits.length) % mentionHits.length);
+                      return;
+                    }
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      applyMention(mentionHits[mentionSel]?.insert || mentionHits[0].insert);
+                      return;
+                    }
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      setDraft((prev) => prev.replace(/@([^\s@]*)$/, ""));
+                      return;
+                    }
+                  }
                   if (e.key === "Escape") {
                     e.preventDefault();
                     chat.setActiveId(null);
@@ -398,6 +506,7 @@ export function ChatApp() {
                 placeholder="Type a message"
                 className="min-h-[44px] max-h-32"
               />
+              </div>
               <Button type="submit" disabled={chat.sending} className="h-11">
                 <Send className="size-4" />
               </Button>

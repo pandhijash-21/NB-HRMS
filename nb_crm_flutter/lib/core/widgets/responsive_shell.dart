@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nb_crm_flutter/core/theme/nb_icon.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -294,16 +295,16 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
           actions: [
             IconButton(
               tooltip: 'Employee tree',
-              icon: const Icon(Icons.account_tree_rounded),
+              icon: const NbIcon(Icons.account_tree_rounded),
               onPressed: () => context.go('/org-tree'),
             ),
             IconButton(
-              icon: Icon(isDark ? Icons.light_mode : Icons.dark_mode),
+              icon: NbIcon(isDark ? Icons.light_mode : Icons.dark_mode),
               onPressed: () =>
                   ref.read(themeModeProvider.notifier).toggleTheme(),
             ),
             IconButton(
-              icon: const Icon(Icons.logout),
+              icon: const NbIcon(Icons.logout),
               onPressed: () => ref.read(authNotifierProvider.notifier).logout(),
             ),
           ],
@@ -415,7 +416,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                         child: Row(
                           children: [
                             const SizedBox(width: 12),
-                            Icon(
+                            NbIcon(
                               isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
                               color: isDark ? Colors.white.withOpacity(0.7) : const Color(0xFF263238),
                               size: 22,
@@ -453,7 +454,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                         child: Row(
                           children: [
                             const SizedBox(width: 12),
-                            Icon(
+                            NbIcon(
                               Icons.logout_rounded,
                               color: const Color(0xFFEF4444).withOpacity(0.9),
                               size: 22,
@@ -571,7 +572,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
           fontSize: 13,
           color: isDark ? Colors.white38 : const Color(0xFF90A4AE),
         ),
-        prefixIcon: Icon(
+        prefixIcon: NbIcon(
           Icons.search_rounded,
           size: 20,
           color: isDark ? Colors.white54 : const Color(0xFF607D8B),
@@ -580,7 +581,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             ? null
             : IconButton(
                 tooltip: 'Clear',
-                icon: const Icon(Icons.close_rounded, size: 18),
+                icon: const NbIcon(Icons.close_rounded, size: 18),
                 onPressed: () {
                   _navSearch.clear();
                   setState(() {});
@@ -701,7 +702,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     required VoidCallback onTap,
   }) {
     final badgeCount = d.route == '/chat' ? chatUnread : (d.alertBadge ? alertCount : 0);
-    final icon = Icon(
+    final icon = NbIcon(
       selected ? d.selectedIcon : d.icon,
       color: selected
           ? (isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238))
@@ -887,7 +888,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                         ),
                       ),
                       IconButton(
-                        icon: Icon(
+                        icon: NbIcon(
                           Icons.menu_open_rounded,
                           color: isDark
                               ? Colors.white.withOpacity(0.5)
@@ -919,7 +920,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                           visualDensity: VisualDensity.compact,
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(minWidth: 36, minHeight: 32),
-                          icon: Icon(
+                          icon: NbIcon(
                             Icons.menu_rounded,
                             size: 20,
                             color: isDark
@@ -949,7 +950,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                   onPressed: allowExpanded
                       ? () => setState(() => _isExpanded = true)
                       : null,
-                  icon: Icon(
+                  icon: NbIcon(
                     Icons.search_rounded,
                     color: isDark ? Colors.white54 : const Color(0xFF607D8B),
                   ),
@@ -1000,7 +1001,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                           ? Row(
                               children: [
                                 const SizedBox(width: 12),
-                                Icon(
+                                NbIcon(
                                   isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
                                   color: isDark ? Colors.white.withOpacity(0.7) : const Color(0xFF263238),
                                   size: 22,
@@ -1021,7 +1022,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                               ],
                             )
                           : Center(
-                              child: Icon(
+                              child: NbIcon(
                                 isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
                                 color: isDark ? Colors.white.withOpacity(0.7) : const Color(0xFF263238),
                                 size: 22,
@@ -1048,7 +1049,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                           ? Row(
                               children: [
                                 const SizedBox(width: 12),
-                                Icon(
+                                NbIcon(
                                   Icons.logout_rounded,
                                   color: const Color(0xFFEF4444).withOpacity(0.9),
                                   size: 22,
@@ -1069,7 +1070,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                               ],
                             )
                           : Center(
-                              child: Icon(
+                              child: NbIcon(
                                 Icons.logout_rounded,
                                 color: const Color(0xFFEF4444).withOpacity(0.9),
                                 size: 22,

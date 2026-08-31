@@ -1,5 +1,6 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:nb_crm_flutter/core/theme/nb_icon.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/network/app_config.dart';
@@ -250,7 +251,7 @@ class _GroupInfoSheetState extends ConsumerState<_GroupInfoSheet> {
                       onChanged: searchPeople,
                       decoration: const InputDecoration(
                         hintText: 'Search people',
-                        prefixIcon: Icon(Icons.search_rounded),
+                        prefixIcon: NbIcon(Icons.search_rounded),
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -405,7 +406,7 @@ class _GroupInfoSheetState extends ConsumerState<_GroupInfoSheet> {
                         onTap: _changePhoto,
                         child: const Padding(
                           padding: EdgeInsets.all(8),
-                          child: Icon(Icons.camera_alt_rounded, size: 16, color: Colors.white),
+                          child: NbIcon(Icons.camera_alt_rounded, size: 16, color: Colors.white),
                         ),
                       ),
                     ),
@@ -489,7 +490,7 @@ class _GroupInfoSheetState extends ConsumerState<_GroupInfoSheet> {
           OutlinedButton.icon(
             onPressed: _leave,
             style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFFDC2626)),
-            icon: const Icon(Icons.logout_rounded),
+            icon: const NbIcon(Icons.logout_rounded),
             label: const Text('Leave group'),
           ),
         ],
@@ -507,7 +508,7 @@ class _ActionChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ActionChip(
-      avatar: Icon(icon, size: 16, color: _purple),
+      avatar: NbIcon(icon, size: 16, color: _purple),
       label: Text(label),
       onPressed: onTap,
     );
@@ -618,7 +619,7 @@ class _GroupAvatar extends StatelessWidget {
       backgroundColor: _purple,
       backgroundImage: resolved != null ? NetworkImage(resolved) : null,
       child: resolved == null
-          ? Icon(Icons.groups_rounded, color: Colors.white, size: size * 0.48)
+          ? NbIcon(Icons.groups_rounded, color: Colors.white, size: size * 0.48)
           : null,
     );
   }

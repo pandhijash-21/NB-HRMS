@@ -10,6 +10,7 @@ class CollabSocket {
   Timer? _heartbeat;
   String? _token;
   String? _joinedMeetingId;
+  String? _joinedChannelId;
 
   final _newMessage = <void Function(ChatMessage)>[];
   final _messageUpdated = <void Function(ChatMessage)>[];
@@ -40,6 +41,10 @@ class CollabSocket {
       final meetingId = _joinedMeetingId;
       if (meetingId != null && meetingId.isNotEmpty) {
         socket.emit('join_meeting', meetingId);
+      }
+      final channelId = _joinedChannelId;
+      if (channelId != null && channelId.isNotEmpty) {
+        socket.emit('join_channel', channelId);
       }
     });
     socket.on('new_message', (data) {
@@ -99,8 +104,17 @@ class CollabSocket {
     return socket;
   }
 
-  void joinChannel(String id) => _socket?.emit('join_channel', id);
-  void leaveChannel(String id) => _socket?.emit('leave_channel', id);
+  void joinChannel(String id) {
+    if (id.isEmpty) return;
+    _joinedChannelId = id;
+    _socket?.emit('join_channel', id);
+  }
+
+  void leaveChannel(String id) {
+    if (id.isEmpty) return;
+    if (_joinedChannelId == id) _joinedChannelId = null;
+    _socket?.emit('leave_channel', id);
+  }
   void sendMessage(String channelId, String content, {String? replyToId}) =>
       _socket?.emit('send_message', {
         'channelId': channelId,
@@ -238,6 +252,8 @@ class CollabSocket {
     _heartbeat?.cancel();
     _heartbeat = null;
     _token = null;
+    _joinedMeetingId = null;
+    _joinedChannelId = null;
     _newMessage.clear();
     _messageUpdated.clear();
     _channelRead.clear();

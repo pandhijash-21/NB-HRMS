@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
@@ -338,7 +339,7 @@ class InlineBanner extends StatelessWidget {
 
 enum _BannerTone { error, info }
 
-class AuthPasswordField extends StatelessWidget {
+class AuthPasswordField extends StatefulWidget {
   const AuthPasswordField({
     super.key,
     required this.controller,
@@ -367,18 +368,48 @@ class AuthPasswordField extends StatelessWidget {
   final Iterable<String> autofillHints;
 
   @override
+  State<AuthPasswordField> createState() => _AuthPasswordFieldState();
+}
+
+class _AuthPasswordFieldState extends State<AuthPasswordField> {
+  late final FocusNode _focus;
+
+  @override
+  void initState() {
+    super.initState();
+    _focus = FocusNode();
+  }
+
+  @override
+  void dispose() {
+    _focus.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    // Chrome + Flutter web treat `new-password` + obscureText as a password
+    // manager form and leave the previous field readonly after you tab away.
+    final hints = kIsWeb ? const <String>[] : widget.autofillHints;
     return TextFormField(
-      controller: controller,
-      enabled: enabled,
-      obscureText: obscure,
+      controller: widget.controller,
+      focusNode: _focus,
+      enabled: widget.enabled,
+      readOnly: false,
+      obscureText: widget.obscure,
       obscuringCharacter: '•',
-      textInputAction: textInputAction,
-      onFieldSubmitted: onSubmitted,
-      onChanged: onChanged,
-      autofillHints: autofillHints,
+      keyboardType: TextInputType.visiblePassword,
+      textInputAction: widget.textInputAction,
+      onFieldSubmitted: widget.onSubmitted,
+      onChanged: widget.onChanged,
+      onTap: () {
+        if (!_focus.hasFocus) _focus.requestFocus();
+      },
+      autofillHints: hints,
       autocorrect: false,
       enableSuggestions: false,
+      enableInteractiveSelection: true,
+      enableIMEPersonalizedLearning: false,
       smartDashesType: SmartDashesType.disabled,
       smartQuotesType: SmartQuotesType.disabled,
       style: const TextStyle(
@@ -388,19 +419,19 @@ class AuthPasswordField extends StatelessWidget {
       ),
       cursorColor: authGold,
       decoration: authFieldDecoration(
-        label: label,
-        hint: hint,
+        label: widget.label,
+        hint: widget.hint,
         prefixIcon: const Icon(Icons.lock_outline_rounded),
         suffixIcon: IconButton(
-          tooltip: obscure ? 'Show password' : 'Hide password',
-          onPressed: enabled ? onToggle : null,
+          tooltip: widget.obscure ? 'Show password' : 'Hide password',
+          onPressed: widget.enabled ? widget.onToggle : null,
           icon: Icon(
-            obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+            widget.obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
             color: Colors.white.withValues(alpha: 0.55),
           ),
         ),
       ),
-      validator: validator,
+      validator: widget.validator,
     );
   }
 }

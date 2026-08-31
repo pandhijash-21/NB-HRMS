@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:nb_crm_flutter/core/theme/nb_icon.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -17,6 +18,7 @@ import '../collab_providers.dart';
 import '../meet_helpers.dart';
 import '../chat_wallpaper.dart';
 import '../chat_inbox.dart';
+import '../chat_mentions.dart';
 import 'group_info_sheet.dart';
 
 const _teamsPurple = Color(0xFF5B5FC7);
@@ -71,12 +73,16 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
   /// Meeting code → status (LIVE / ENDED / CANCELLED / …).
   Map<String, String> _meetStatusByCode = {};
   Timer? _meetStatusPoll;
+  List<MentionChoice> _mentionHits = [];
+  int _mentionAt = -1;
+  int _mentionSel = 0;
 
   @override
   void initState() {
     super.initState();
     if (kIsWeb) BrowserContextMenu.disableContextMenu();
     _listSearch.addListener(() => setState(() {}));
+    _draft.addListener(_onDraftChanged);
     HardwareKeyboard.instance.addHandler(_onHardwareKey);
     _boot();
   }
@@ -129,17 +135,50 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
   }
 
   void _onNewMessage(ChatMessage m) {
+    _upsertMessage(m, markReadIfOpen: true);
+  }
+
+  bool _isLocalId(String id) => id.startsWith('local:');
+
+  List<ChatMessage> _mergeMessage(List<ChatMessage> current, ChatMessage m) {
+    final existing = current.indexWhere((x) => x.id == m.id);
+    if (existing >= 0) {
+      final next = [...current];
+      next[existing] = m;
+      return next;
+    }
+    bool samePayload(ChatMessage x) =>
+        x.channelId == m.channelId &&
+        x.senderId == m.senderId &&
+        (x.content ?? '') == (m.content ?? '') &&
+        (x.replyToId ?? '') == (m.replyToId ?? '');
+    if (_isLocalId(m.id)) {
+      if (current.any((x) => !_isLocalId(x.id) && samePayload(x))) return current;
+      return [...current, m];
+    }
+    final localIdx = current.indexWhere((x) => _isLocalId(x.id) && samePayload(x));
+    if (localIdx >= 0) {
+      final next = [...current];
+      next[localIdx] = m;
+      return next;
+    }
+    return [...current, m];
+  }
+
+  void _upsertMessage(ChatMessage m, {bool markReadIfOpen = false}) {
     if (!mounted) return;
     final open = _active?.id == m.channelId;
+    final me = ref.read(authNotifierProvider).user?.id;
+    final own = _isLocalId(m.id) || (me != null && m.senderId == me);
     setState(() {
-      if (open && _messages.every((x) => x.id != m.id)) {
-        _messages = [..._messages, m];
+      if (open) {
+        _messages = _mergeMessage(_messages, m);
       }
       _channels = [
         for (final c in _channels)
           if (c.id == m.channelId)
             c.copyWith(
-              unread: open ? 0 : c.unread + 1,
+              unread: open ? 0 : (own ? c.unread : c.unread + 1),
               lastPreview: m.content ?? (m.attachments.isNotEmpty ? 'Attachment' : c.lastPreview),
               lastAt: m.createdAt ?? DateTime.now(),
             )
@@ -149,11 +188,15 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
     });
     if (open) {
       _scrollToEnd();
-      unawaited(ref.read(chatRepositoryProvider).markRead(m.channelId));
-      final link = meetLinkInText(m.content);
-      if (link != null) unawaited(_refreshMeetStatuses([m]));
+      if (markReadIfOpen && !_isLocalId(m.id)) {
+        unawaited(ref.read(chatRepositoryProvider).markRead(m.channelId));
+        final link = meetLinkInText(m.content);
+        if (link != null) unawaited(_refreshMeetStatuses([m]));
+      }
     }
-    unawaited(ref.read(chatUnreadProvider.notifier).refresh());
+    if (!_isLocalId(m.id)) {
+      unawaited(ref.read(chatUnreadProvider.notifier).refresh());
+    }
   }
 
   void _onMessageUpdated(ChatMessage m) {
@@ -260,8 +303,82 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
     if (!mounted || _active == null) return false;
     final route = ModalRoute.of(context);
     if (route != null && !route.isCurrent) return false;
+    if (_mentionHits.isNotEmpty) {
+      setState(() {
+        _mentionHits = [];
+        _mentionAt = -1;
+      });
+      return true;
+    }
     _closeThread();
     return true;
+  }
+
+  void _onDraftChanged() {
+    final ch = _active;
+    final me = ref.read(authNotifierProvider).user?.id;
+    if (ch == null || !ch.isGroup) {
+      if (_mentionHits.isNotEmpty) {
+        setState(() {
+          _mentionHits = [];
+          _mentionAt = -1;
+        });
+      }
+      return;
+    }
+    final cursor = _draft.selection.baseOffset;
+    final found = mentionDraftQuery(_draft.text, cursor < 0 ? _draft.text.length : cursor);
+    if (found == null) {
+      if (_mentionHits.isNotEmpty) {
+        setState(() {
+          _mentionHits = [];
+          _mentionAt = -1;
+        });
+      }
+      return;
+    }
+    final hits = mentionChoicesFor(channel: ch, me: me, query: found.query);
+    setState(() {
+      _mentionHits = hits;
+      _mentionAt = found.start;
+      if (_mentionSel >= hits.length) _mentionSel = 0;
+    });
+  }
+
+  void _applyMention(MentionChoice choice) {
+    if (_mentionAt < 0) return;
+    applyMentionInsert(draft: _draft, atIndex: _mentionAt, insert: choice.insert);
+    setState(() {
+      _mentionHits = [];
+      _mentionAt = -1;
+      _mentionSel = 0;
+    });
+    _composerFocus.requestFocus();
+  }
+
+  void _startMention() {
+    final ch = _active;
+    if (ch == null || !ch.isGroup) return;
+    final text = _draft.text;
+    final cursor = _draft.selection.baseOffset < 0 ? text.length : _draft.selection.baseOffset;
+    final atCursor = cursor > 0 && text.substring(cursor - 1, cursor) == '@';
+    if (!atCursor) {
+      final prefix = cursor > 0 && !RegExp(r'\s').hasMatch(text.substring(cursor - 1, cursor)) ? ' @' : '@';
+      final next = text.replaceRange(cursor, cursor, prefix);
+      _draft.value = TextEditingValue(
+        text: next,
+        selection: TextSelection.collapsed(offset: cursor + prefix.length),
+      );
+    }
+    _composerFocus.requestFocus();
+  }
+
+  void _submitComposer() {
+    if (_mentionHits.isNotEmpty) {
+      _applyMention(_mentionHits[_mentionSel.clamp(0, _mentionHits.length - 1)]);
+      return;
+    }
+    _send();
   }
 
   void _closeThread() {
@@ -277,6 +394,8 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
       _replyTo = null;
       _typing = null;
       _sending = false;
+      _mentionHits = [];
+      _mentionAt = -1;
       _draft.clear();
     });
     unawaited(clearLastChatChannelId());
@@ -380,9 +499,9 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
                           IconButton(
                             tooltip: 'Download',
                             onPressed: () => _downloadAttachment(attachment),
-                            icon: const Icon(Icons.download_rounded),
+                            icon: const NbIcon(Icons.download_rounded),
                           ),
-                          IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close)),
+                          IconButton(onPressed: () => Navigator.pop(ctx), icon: const NbIcon(Icons.close)),
                         ],
                       ),
                     ),
@@ -442,7 +561,7 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: const Icon(Icons.emoji_emotions_outlined),
+                leading: const NbIcon(Icons.emoji_emotions_outlined),
                 title: const Text('React'),
                 onTap: () {
                   Navigator.pop(ctx);
@@ -450,7 +569,7 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.reply_rounded),
+                leading: const NbIcon(Icons.reply_rounded),
                 title: const Text('Reply'),
                 onTap: () {
                   Navigator.pop(ctx);
@@ -460,7 +579,7 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
               ),
               if (canEdit)
                 ListTile(
-                  leading: const Icon(Icons.edit_outlined),
+                  leading: const NbIcon(Icons.edit_outlined),
                   title: const Text('Edit'),
                   onTap: () {
                     Navigator.pop(ctx);
@@ -469,7 +588,7 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
                 ),
               if (canMutate)
                 ListTile(
-                  leading: const Icon(Icons.delete_outline, color: Color(0xFFDC2626)),
+                  leading: const NbIcon(Icons.delete_outline, color: Color(0xFFDC2626)),
                   title: const Text('Delete', style: TextStyle(color: Color(0xFFDC2626))),
                   onTap: () {
                     Navigator.pop(ctx);
@@ -576,7 +695,7 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
                         contentPadding: EdgeInsets.zero,
                         leading: _Avatar(name: p.name, url: p.photoUrl, size: 32),
                         title: Text(p.name),
-                        trailing: const Icon(Icons.done_all, size: 16, color: Color(0xFF5B5FC7)),
+                        trailing: const NbIcon(Icons.done_all, size: 16, color: Color(0xFF5B5FC7)),
                       )),
                 ],
                 if (receipts.unseen.isNotEmpty) ...[
@@ -588,7 +707,7 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
                         contentPadding: EdgeInsets.zero,
                         leading: _Avatar(name: p.name, url: p.photoUrl, size: 32),
                         title: Text(p.name),
-                        trailing: Icon(Icons.done, size: 16, color: mutedOf(Theme.of(ctx).brightness == Brightness.dark)),
+                        trailing: NbIcon(Icons.done, size: 16, color: mutedOf(Theme.of(ctx).brightness == Brightness.dark)),
                       )),
                 ],
               ],
@@ -612,7 +731,8 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
     final ch = _active;
     if (ch == null || _sending || (text.isEmpty && _pending.isEmpty)) return;
     final pending = List<_PendingFile>.from(_pending);
-    final replyId = _replyTo?.id;
+    final reply = _replyTo;
+    final replyId = reply?.id;
     setState(() {
       _emojiOpen = false;
       _sending = true;
@@ -621,14 +741,14 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
       if (pending.isEmpty) {
         _draft.clear();
         setState(() => _replyTo = null);
-        ref.read(collabSocketProvider).sendMessage(ch.id, text, replyToId: replyId);
+        _emitChatText(ch, text, replyId: replyId, replyTo: reply);
         return;
       }
       final attachments = <Map<String, dynamic>>[];
       for (final file in pending) {
         attachments.add(await ref.read(chatRepositoryProvider).upload(file.bytes, file.name));
       }
-      await ref.read(chatRepositoryProvider).send(
+      final sent = await ref.read(chatRepositoryProvider).send(
         channelId: ch.id,
         content: text.isEmpty ? null : text,
         replyToId: replyId,
@@ -640,6 +760,7 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
           _pending = [];
           _replyTo = null;
         });
+        _upsertMessage(sent, markReadIfOpen: true);
       }
     } catch (e) {
       if (!mounted) return;
@@ -650,6 +771,35 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
         _composerFocus.requestFocus();
       }
     }
+  }
+
+  void _emitChatText(
+    ChatChannel ch,
+    String text, {
+    String? replyId,
+    ChatMessage? replyTo,
+  }) {
+    final me = ref.read(authNotifierProvider).user;
+    final optimistic = ChatMessage(
+      id: 'local:${DateTime.now().microsecondsSinceEpoch}',
+      channelId: ch.id,
+      senderId: me?.id ?? '',
+      senderName: me?.name,
+      senderPhoto: me?.photoUrl,
+      content: text,
+      replyToId: replyId,
+      replyTo: replyTo == null
+          ? null
+          : ChatReplyPreview(
+              id: replyTo.id,
+              senderName: replyTo.senderName ?? 'Member',
+              content: replyTo.content,
+              senderId: replyTo.senderId,
+            ),
+      createdAt: DateTime.now(),
+    );
+    _upsertMessage(optimistic);
+    ref.read(collabSocketProvider).sendMessage(ch.id, text, replyToId: replyId);
   }
 
   Future<void> _startVoiceCall() async {
@@ -673,7 +823,7 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
         final base = meetingShareUrl(meeting);
         return base.contains('?') ? '$base&voice=1' : '$base?voice=1';
       }();
-      ref.read(collabSocketProvider).sendMessage(ch.id, 'Started a voice call. Join: $link');
+      _emitChatText(ch, 'Started a voice call. Join: $link');
       if (!mounted) {
         tab?.dismiss();
         return;
@@ -782,7 +932,7 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
                         controller: nameCtrl,
                         decoration: const InputDecoration(
                           labelText: 'Group name',
-                          prefixIcon: Icon(Icons.group_outlined),
+                          prefixIcon: NbIcon(Icons.group_outlined),
                         ),
                       ),
                     if (group) const SizedBox(height: 10),
@@ -791,7 +941,7 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
                       onChanged: search,
                       decoration: const InputDecoration(
                         hintText: 'Search people',
-                        prefixIcon: Icon(Icons.search_rounded),
+                        prefixIcon: NbIcon(Icons.search_rounded),
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -934,7 +1084,7 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
             replyTo: _replyTo,
             startingCall: _startingCall,
             onBack: _closeThread,
-            onSend: _send,
+            onSend: _submitComposer,
             onAttach: _attach,
             pending: _pending,
             sending: _sending,
@@ -973,12 +1123,36 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
               if (mounted) _composerFocus.requestFocus();
             },
             onOpenInfo: _showChatInfo,
-            onChanged: () => ref.read(collabSocketProvider).typing(_active!.id),
+            onChanged: () {
+              final id = _active?.id;
+              if (id != null) ref.read(collabSocketProvider).typing(id);
+            },
+            mentionHits: _mentionHits,
+            mentionSel: _mentionSel,
+            onPickMention: _applyMention,
+            onMentionSel: (i) => setState(() => _mentionSel = i),
+            onStartMention: _startMention,
+            onMentionMove: (delta) {
+              if (_mentionHits.isEmpty) return;
+              setState(() {
+                _mentionSel = (_mentionSel + delta) % _mentionHits.length;
+                if (_mentionSel < 0) _mentionSel = _mentionHits.length - 1;
+              });
+            },
           );
 
     return CallbackShortcuts(
       bindings: {
-        const SingleActivator(LogicalKeyboardKey.escape): _closeThread,
+        const SingleActivator(LogicalKeyboardKey.escape): () {
+          if (_mentionHits.isNotEmpty) {
+            setState(() {
+              _mentionHits = [];
+              _mentionAt = -1;
+            });
+            return;
+          }
+          _closeThread();
+        },
       },
       child: Scaffold(
         backgroundColor: isDark ? AppColors.backgroundDark : const Color(0xFFF5F5F5),
@@ -1038,7 +1212,7 @@ class _TeamsChatList extends StatelessWidget {
                 ),
                 PopupMenuButton<String>(
                   tooltip: 'New',
-                  icon: const Icon(Icons.edit_outlined, color: _teamsPurple),
+                  icon: const NbIcon(Icons.edit_outlined, color: _teamsPurple),
                   onSelected: (v) => v == 'group' ? onNewGroup() : onNewDm(),
                   itemBuilder: (ctx) => const [
                     PopupMenuItem(value: 'dm', child: Text('New chat')),
@@ -1054,7 +1228,7 @@ class _TeamsChatList extends StatelessWidget {
               controller: search,
               decoration: InputDecoration(
                 hintText: 'Search',
-                prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                prefixIcon: const NbIcon(Icons.search_rounded, size: 20),
                 filled: true,
                 fillColor: isDark ? AppColors.backgroundDark : const Color(0xFFF0F0F0),
                 isDense: true,
@@ -1181,7 +1355,7 @@ class _TeamsEmpty extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.chat_bubble_outline_rounded, size: 56, color: muted.withValues(alpha: 0.7)),
+            NbIcon(Icons.chat_bubble_outline_rounded, size: 56, color: muted.withValues(alpha: 0.7)),
             const SizedBox(height: 12),
             Text(
               'Select a chat to start messaging',
@@ -1193,7 +1367,7 @@ class _TeamsEmpty extends StatelessWidget {
             FilledButton.icon(
               onPressed: onNew,
               style: FilledButton.styleFrom(backgroundColor: _teamsPurple),
-              icon: const Icon(Icons.edit_outlined, size: 18),
+              icon: const NbIcon(Icons.edit_outlined, size: 18),
               label: const Text('New chat'),
             ),
           ],
@@ -1238,6 +1412,12 @@ class _TeamsThread extends StatelessWidget {
     required this.onWallpaper,
     required this.onOpenInfo,
     required this.onChanged,
+    required this.mentionHits,
+    required this.mentionSel,
+    required this.onPickMention,
+    required this.onMentionSel,
+    required this.onStartMention,
+    required this.onMentionMove,
   });
 
   final ChatChannel channel;
@@ -1273,6 +1453,12 @@ class _TeamsThread extends StatelessWidget {
   final VoidCallback onWallpaper;
   final VoidCallback onOpenInfo;
   final VoidCallback onChanged;
+  final List<MentionChoice> mentionHits;
+  final int mentionSel;
+  final void Function(MentionChoice) onPickMention;
+  final void Function(int) onMentionSel;
+  final VoidCallback onStartMention;
+  final void Function(int delta) onMentionMove;
 
   @override
   Widget build(BuildContext context) {
@@ -1308,7 +1494,7 @@ class _TeamsThread extends StatelessWidget {
                     IconButton(
                       visualDensity: VisualDensity.compact,
                       onPressed: onBack,
-                      icon: const Icon(Icons.arrow_back_rounded),
+                      icon: const NbIcon(Icons.arrow_back_rounded),
                     ),
                   Expanded(
                     child: InkWell(
@@ -1351,7 +1537,7 @@ class _TeamsThread extends StatelessWidget {
                               ],
                             ),
                           ),
-                          if (!narrow) Icon(Icons.chevron_right_rounded, color: muted, size: 20),
+                          if (!narrow) NbIcon(Icons.chevron_right_rounded, color: muted, size: 20),
                           const SizedBox(width: 4),
                         ],
                       ),
@@ -1362,7 +1548,7 @@ class _TeamsThread extends StatelessWidget {
                     tooltip: 'Wallpaper',
                     visualDensity: VisualDensity.compact,
                     onPressed: onWallpaper,
-                    icon: Icon(Icons.wallpaper_rounded, color: muted),
+                    icon: NbIcon(Icons.wallpaper_rounded, color: muted),
                   ),
                   IconButton(
                     tooltip: channel.type == 'GROUP' ? 'Group voice call' : 'Voice call',
@@ -1370,10 +1556,7 @@ class _TeamsThread extends StatelessWidget {
                     onPressed: startingCall ? null : onVoiceCall,
                     icon: startingCall
                         ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                        : Icon(
-                            channel.type == 'GROUP' ? Icons.groups_rounded : Icons.call_rounded,
-                            color: _teamsPurple,
-                          ),
+                        : const NbIcon(Icons.call_rounded, color: _teamsPurple),
                   ),
                 ],
               ),
@@ -1447,6 +1630,55 @@ class _TeamsThread extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  if (mentionHits.isNotEmpty)
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 240),
+                      child: Material(
+                        color: isDark ? AppColors.surfaceDark : Colors.white,
+                        elevation: 6,
+                        child: ListView.builder(
+                          shrinkWrap: true,
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          itemCount: mentionHits.length,
+                          itemBuilder: (context, i) {
+                            final hit = mentionHits[i];
+                            final selected = i == mentionSel;
+                            return InkWell(
+                              onTap: () => onPickMention(hit),
+                              onHover: (_) => onMentionSel(i),
+                              child: ColoredBox(
+                                color: selected
+                                    ? _teamsPurple.withValues(alpha: isDark ? 0.22 : 0.12)
+                                    : Colors.transparent,
+                                child: ListTile(
+                                  dense: true,
+                                  leading: hit.everyone
+                                      ? const CircleAvatar(
+                                          radius: 14,
+                                          backgroundColor: _teamsPurple,
+                                          child: NbIcon(Icons.groups_rounded, color: Colors.white, size: 16),
+                                        )
+                                      : _Avatar(
+                                          name: hit.label,
+                                          url: hit.person?.photoUrl,
+                                          size: 28,
+                                          online: hit.person?.online == true,
+                                        ),
+                                  title: Text(
+                                    hit.everyone ? 'Everyone' : hit.label,
+                                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                                  ),
+                                  subtitle: Text(
+                                    hit.everyone ? 'Notify all members' : (hit.person?.online == true ? 'Available' : 'Away'),
+                                    style: TextStyle(fontSize: 11, color: muted),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
                   if (pending.isNotEmpty)
                     SizedBox(
                       height: 108,
@@ -1480,7 +1712,7 @@ class _TeamsThread extends StatelessWidget {
                                               child: Image.memory(file.bytes, fit: BoxFit.cover, width: 72, height: 40),
                                             )
                                           : const Center(
-                                              child: Icon(Icons.insert_drive_file_outlined, color: _teamsPurple, size: 26),
+                                              child: NbIcon(Icons.insert_drive_file_outlined, color: _teamsPurple, size: 26),
                                             ),
                                     ),
                                     const SizedBox(height: 4),
@@ -1509,7 +1741,7 @@ class _TeamsThread extends StatelessWidget {
                                         BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 4),
                                       ],
                                     ),
-                                    child: const Icon(Icons.close, size: 12),
+                                    child: const NbIcon(Icons.close, size: 12),
                                   ),
                                 ),
                               ),
@@ -1547,7 +1779,7 @@ class _TeamsThread extends StatelessWidget {
                           IconButton(
                             tooltip: 'Cancel reply',
                             onPressed: onClearReply,
-                            icon: Icon(Icons.close_rounded, size: 18, color: muted),
+                            icon: NbIcon(Icons.close_rounded, size: 18, color: muted),
                           ),
                         ],
                       ),
@@ -1563,20 +1795,31 @@ class _TeamsThread extends StatelessWidget {
                           tooltip: 'Attach',
                           visualDensity: VisualDensity.compact,
                           onPressed: onAttach,
-                          icon: Icon(Icons.attach_file_rounded, color: muted),
+                          icon: NbIcon(Icons.attach_file_rounded, color: muted),
                         ),
                         IconButton(
                           tooltip: 'Emoji',
                           visualDensity: VisualDensity.compact,
                           onPressed: onToggleEmoji,
-                          icon: Icon(
+                          icon: NbIcon(
                             emojiOpen ? Icons.emoji_emotions : Icons.emoji_emotions_outlined,
                             color: emojiOpen ? _teamsPurple : muted,
                           ),
                         ),
+                        if (channel.isGroup)
+                          IconButton(
+                            tooltip: 'Mention someone',
+                            visualDensity: VisualDensity.compact,
+                            onPressed: onStartMention,
+                            icon: NbIcon(Icons.alternate_email_rounded, color: muted),
+                          ),
                         Expanded(
                           child: CallbackShortcuts(
                             bindings: {
+                              if (mentionHits.isNotEmpty) ...{
+                                const SingleActivator(LogicalKeyboardKey.arrowDown): () => onMentionMove(1),
+                                const SingleActivator(LogicalKeyboardKey.arrowUp): () => onMentionMove(-1),
+                              },
                               const SingleActivator(LogicalKeyboardKey.enter): onSend,
                               const SingleActivator(LogicalKeyboardKey.numpadEnter): onSend,
                               const SingleActivator(LogicalKeyboardKey.escape): onBack,
@@ -1606,19 +1849,23 @@ class _TeamsThread extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 6),
-                        IconButton.filled(
-                          onPressed: sending ? null : onSend,
-                          style: IconButton.styleFrom(
-                            backgroundColor: _teamsPurple,
-                            foregroundColor: Colors.white,
+                        Material(
+                          color: _teamsPurple,
+                          shape: const CircleBorder(),
+                          child: InkWell(
+                            customBorder: const CircleBorder(),
+                            onTap: sending ? null : onSend,
+                            child: Padding(
+                              padding: const EdgeInsets.all(10),
+                              child: sending
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                    )
+                                  : const NbIcon(Icons.send_rounded, color: Colors.white, size: 18),
+                            ),
                           ),
-                          icon: sending
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                                )
-                              : const Icon(Icons.send_rounded, size: 18),
                         ),
                       ],
                     ),
@@ -1664,7 +1911,7 @@ class _VoiceCallCard extends StatelessWidget {
               color: _teamsPurple.withValues(alpha: 0.18),
               shape: BoxShape.circle,
             ),
-            child: Icon(
+            child: NbIcon(
               voice ? Icons.call_rounded : Icons.videocam_rounded,
               color: _teamsPurple,
               size: 22,
@@ -1782,7 +2029,7 @@ class _MessageBubble extends StatelessWidget {
                       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 8),
-                        child: Icon(Icons.reply_rounded, color: muted),
+                        child: NbIcon(Icons.reply_rounded, color: muted),
                       ),
                     ),
                     child: GestureDetector(
@@ -1844,16 +2091,21 @@ class _MessageBubble extends StatelessWidget {
                                   : () => onJoinMeet!(call.code, voice: call.voice),
                             )
                           else if (showText)
-                            Text(
-                              message.deleted
-                                  ? 'This message was deleted'
-                                  : _breakLongTokens(message.content ?? ''),
-                              style: TextStyle(
-                                color: text,
-                                fontStyle: message.deleted ? FontStyle.italic : FontStyle.normal,
-                                height: 1.35,
-                              ),
-                            ),
+                            message.deleted
+                                ? Text(
+                                    'This message was deleted',
+                                    style: TextStyle(color: text, fontStyle: FontStyle.italic, height: 1.35),
+                                  )
+                                : Text.rich(
+                                    TextSpan(
+                                      style: TextStyle(color: text, height: 1.35),
+                                      children: mentionTextSpans(
+                                        text: _breakLongTokens(message.content ?? ''),
+                                        members: channel.members,
+                                        mentionColor: _teamsPurple,
+                                      ),
+                                    ),
+                                  ),
                           ...message.attachments.map(
                             (a) => Padding(
                               padding: const EdgeInsets.only(top: 6),
@@ -1865,7 +2117,7 @@ class _MessageBubble extends StatelessWidget {
                                 ),
                                 child: Row(
                                   children: [
-                                    Icon(
+                                    NbIcon(
                                       a.isImage ? Icons.image_outlined : Icons.insert_drive_file_outlined,
                                       size: 18,
                                       color: _teamsPurple,
@@ -1881,13 +2133,13 @@ class _MessageBubble extends StatelessWidget {
                                       tooltip: 'View',
                                       visualDensity: VisualDensity.compact,
                                       onPressed: () => onViewAttachment(a),
-                                      icon: const Icon(Icons.visibility_outlined, size: 18, color: _teamsPurple),
+                                      icon: const NbIcon(Icons.visibility_outlined, size: 18, color: _teamsPurple),
                                     ),
                                     IconButton(
                                       tooltip: 'Download',
                                       visualDensity: VisualDensity.compact,
                                       onPressed: () => onDownloadAttachment(a),
-                                      icon: const Icon(Icons.download_rounded, size: 18, color: _teamsPurple),
+                                      icon: const NbIcon(Icons.download_rounded, size: 18, color: _teamsPurple),
                                     ),
                                   ],
                                 ),
@@ -1997,7 +2249,7 @@ class _MessageMeta extends StatelessWidget {
           children: [
             Text(stamp, style: TextStyle(fontSize: 10.5, color: muted)),
             const SizedBox(width: 4),
-            Icon(
+            NbIcon(
               seen ? Icons.done_all : Icons.done,
               size: 14,
               color: seen ? _teamsPurple : muted,
@@ -2074,7 +2326,7 @@ class _Avatar extends StatelessWidget {
             child: hasPhoto
                 ? null
                 : isGroup
-                    ? Icon(Icons.groups_rounded, color: Colors.white, size: size * 0.5)
+                    ? NbIcon(Icons.groups_rounded, color: Colors.white, size: size * 0.5)
                     : Text(letter, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: size * 0.38)),
           ),
           if (online)
@@ -2171,7 +2423,7 @@ void showChatEmojiSheet({
                     const Spacer(),
                     IconButton(
                       onPressed: () => Navigator.pop(ctx),
-                      icon: const Icon(Icons.close_rounded),
+                      icon: const NbIcon(Icons.close_rounded),
                     ),
                   ],
                 ),
@@ -2230,7 +2482,7 @@ class _ChatEmojiGridState extends State<ChatEmojiGrid> {
             onChanged: (_) => setState(() {}),
             decoration: InputDecoration(
               hintText: 'Search emoji',
-              prefixIcon: const Icon(Icons.search_rounded, size: 18),
+              prefixIcon: const NbIcon(Icons.search_rounded, size: 18),
               isDense: true,
               filled: true,
               fillColor: widget.isDark ? AppColors.backgroundDark : const Color(0xFFF0F0F0),

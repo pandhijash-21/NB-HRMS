@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nb_crm_flutter/core/theme/nb_icon.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -163,12 +164,12 @@ class _MeetHubScreenState extends ConsumerState<MeetHubScreen> {
           const SizedBox(height: 12),
           TextField(
             controller: _title,
-            decoration: const InputDecoration(labelText: 'Title', prefixIcon: Icon(Icons.title_rounded)),
+            decoration: const InputDecoration(labelText: 'Title', prefixIcon: NbIcon(Icons.title_rounded)),
           ),
           const SizedBox(height: 10),
           TextField(
             controller: _agenda,
-            decoration: const InputDecoration(labelText: 'Agenda (optional)', prefixIcon: Icon(Icons.notes_rounded)),
+            decoration: const InputDecoration(labelText: 'Agenda (optional)', prefixIcon: NbIcon(Icons.notes_rounded)),
           ),
           const SizedBox(height: 12),
           _AccessChoice(waitingRoom: _waitingRoom, onChanged: (v) => setState(() => _waitingRoom = v)),
@@ -177,7 +178,7 @@ class _MeetHubScreenState extends ConsumerState<MeetHubScreen> {
             onPressed: _starting ? null : _start,
             icon: _starting
                 ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : const Icon(Icons.videocam_rounded),
+                : const NbIcon(Icons.videocam_rounded),
             label: const Text('Start now'),
           ),
         ],
@@ -198,13 +199,13 @@ class _MeetHubScreenState extends ConsumerState<MeetHubScreen> {
             decoration: const InputDecoration(
               labelText: 'Meeting code',
               hintText: 'abc-defg-hij',
-              prefixIcon: Icon(Icons.pin_rounded),
+              prefixIcon: NbIcon(Icons.pin_rounded),
             ),
           ),
           const SizedBox(height: 14),
           OutlinedButton.icon(
             onPressed: _joinCode,
-            icon: const Icon(Icons.login_rounded),
+            icon: const NbIcon(Icons.login_rounded),
             label: const Text('Join'),
           ),
         ],
@@ -247,7 +248,7 @@ class _MeetHubScreenState extends ConsumerState<MeetHubScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.videocam_rounded, color: Colors.white, size: 32),
+                      const NbIcon(Icons.videocam_rounded, color: Colors.white, size: 32),
                       const SizedBox(height: 12),
                       Text(
                         'Meet with your team',
@@ -397,7 +398,7 @@ class _LiveMeetingCard extends StatelessWidget {
                 children: [
                   const CircleAvatar(
                     backgroundColor: Color(0xFFDCFCE7),
-                    child: Icon(Icons.circle, color: Color(0xFF16A34A), size: 12),
+                    child: NbIcon(Icons.circle, color: Color(0xFF16A34A), size: 12),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -431,7 +432,7 @@ class _LiveMeetingCard extends StatelessWidget {
                               height: 14,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : const Icon(Icons.call_end_rounded, size: 18),
+                          : const NbIcon(Icons.call_end_rounded, size: 18),
                       label: const Text('End meet'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: const Color(0xFFDC2626),
@@ -491,7 +492,7 @@ class _AccessChoice extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
+                NbIcon(
                   selected ? Icons.radio_button_checked : Icons.radio_button_off,
                   color: selected ? const Color(0xFF1D4ED8) : Colors.grey,
                 ),
@@ -587,7 +588,7 @@ class _ActionTile extends StatelessWidget {
                     color: color.withValues(alpha: isDark ? 0.22 : 0.16),
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  child: Icon(icon, color: color, size: 26),
+                  child: NbIcon(icon, color: color, size: 26),
                 ),
                 const SizedBox(height: 16),
                 Text(
@@ -615,7 +616,7 @@ class _ActionTile extends StatelessWidget {
                       style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 12),
                     ),
                     const SizedBox(width: 4),
-                    Icon(Icons.arrow_forward_rounded, size: 16, color: color),
+                    NbIcon(Icons.arrow_forward_rounded, size: 16, color: color),
                   ],
                 ),
               ],

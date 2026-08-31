@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nb_crm_flutter/core/theme/nb_icon.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -120,19 +121,19 @@ class _MeetRecordingScreenState extends ConsumerState<MeetRecordingScreen> {
                   const SnackBar(content: Text('Recording link copied')),
                 );
               },
-              icon: const Icon(Icons.link_rounded),
+              icon: const NbIcon(Icons.link_rounded),
             ),
           if (ready)
             IconButton(
               tooltip: 'Open in new tab',
               onPressed: () => openExternalUrl(url!),
-              icon: const Icon(Icons.open_in_new_rounded),
+              icon: const NbIcon(Icons.open_in_new_rounded),
             ),
           if (_isAdmin && rec != null && !_deleting)
             IconButton(
               tooltip: 'Delete recording',
               onPressed: _delete,
-              icon: const Icon(Icons.delete_outline_rounded, color: Color(0xFFDC2626)),
+              icon: const NbIcon(Icons.delete_outline_rounded, color: Color(0xFFDC2626)),
             ),
         ],
       ),
@@ -185,7 +186,7 @@ class _PlayerCard extends StatelessWidget {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.videocam_off_outlined, color: Colors.white54, size: 40),
+                      const NbIcon(Icons.videocam_off_outlined, color: Colors.white54, size: 40),
                       const SizedBox(height: 12),
                       Text(
                         error ?? 'Recording is not ready yet',
@@ -308,7 +309,7 @@ class _DetailsCard extends StatelessWidget {
                   onPressed: deleting ? null : onDelete,
                   icon: deleting
                       ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.delete_outline_rounded, size: 18),
+                      : const NbIcon(Icons.delete_outline_rounded, size: 18),
                   label: const Text('Delete recording'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: const Color(0xFFDC2626),
@@ -340,7 +341,7 @@ class _MetaChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14),
+          NbIcon(icon, size: 14),
           const SizedBox(width: 6),
           Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
         ],

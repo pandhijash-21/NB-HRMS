@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:nb_crm_flutter/core/theme/nb_icon.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -195,7 +196,7 @@ class _MeetInvitePeopleScreenState extends ConsumerState<MeetInvitePeopleScreen>
               textInputAction: TextInputAction.search,
               decoration: InputDecoration(
                 hintText: 'Search name, email, department',
-                prefixIcon: const Icon(Icons.search_rounded),
+                prefixIcon: const NbIcon(Icons.search_rounded),
                 suffixIcon: _search.text.isEmpty
                     ? null
                     : IconButton(
@@ -203,7 +204,7 @@ class _MeetInvitePeopleScreenState extends ConsumerState<MeetInvitePeopleScreen>
                           _search.clear();
                           _load(reset: true);
                         },
-                        icon: const Icon(Icons.close_rounded),
+                        icon: const NbIcon(Icons.close_rounded),
                       ),
               ),
             ),
@@ -321,7 +322,7 @@ class _MeetInvitePeopleScreenState extends ConsumerState<MeetInvitePeopleScreen>
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
           child: FilledButton.icon(
             onPressed: () => context.pop(_result()),
-            icon: const Icon(Icons.check_rounded),
+            icon: const NbIcon(Icons.check_rounded),
             label: Text(_selected.isEmpty ? 'Done' : 'Invite ${_selected.length} people'),
           ),
         ),

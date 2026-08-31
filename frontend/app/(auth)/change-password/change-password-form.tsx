@@ -73,6 +73,7 @@ export default function ChangePasswordForm() {
           </div>
           <Input
             type={showCurrent ? "text" : "password"}
+            autoComplete="current-password"
             required
             className="w-full h-12 pl-12 pr-12 bg-white/5 border-white/10 focus:border-[#d9b557]/50 focus:ring-[#d9b557]/20 text-white placeholder:text-white/20 rounded-2xl transition-all"
             placeholder="••••••••"
@@ -101,6 +102,7 @@ export default function ChangePasswordForm() {
           </div>
           <Input
             type={showNew ? "text" : "password"}
+            autoComplete="new-password"
             required
             className="w-full h-12 pl-12 pr-12 bg-white/5 border-white/10 focus:border-[#d9b557]/50 focus:ring-[#d9b557]/20 text-white placeholder:text-white/20 rounded-2xl transition-all"
             placeholder="••••••••"
@@ -129,6 +131,7 @@ export default function ChangePasswordForm() {
           </div>
           <Input
             type={showConfirm ? "text" : "password"}
+            autoComplete="off"
             required
             className="w-full h-12 pl-12 pr-12 bg-white/5 border-white/10 focus:border-[#d9b557]/50 focus:ring-[#d9b557]/20 text-white placeholder:text-white/20 rounded-2xl transition-all"
             placeholder="••••••••"

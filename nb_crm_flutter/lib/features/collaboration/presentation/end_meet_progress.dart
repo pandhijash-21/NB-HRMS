@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nb_crm_flutter/core/theme/nb_icon.dart';
 
 import '../data/collab_socket.dart';
 import '../data/meet_repository.dart';
@@ -159,11 +160,11 @@ class _EndMeetProgressDialogState extends State<_EndMeetProgressDialog> {
           child: CircularProgressIndicator(strokeWidth: 2.4),
         );
       case 'done':
-        return const Icon(Icons.check_circle_rounded, color: Color(0xFF16A34A), size: 22);
+        return const NbIcon(Icons.check_circle_rounded, color: Color(0xFF16A34A), size: 22);
       case 'skipped':
-        return const Icon(Icons.remove_circle_outline_rounded, color: Color(0xFF94A3B8), size: 22);
+        return const NbIcon(Icons.remove_circle_outline_rounded, color: Color(0xFF94A3B8), size: 22);
       case 'error':
-        return const Icon(Icons.error_rounded, color: Color(0xFFDC2626), size: 22);
+        return const NbIcon(Icons.error_rounded, color: Color(0xFFDC2626), size: 22);
       default:
         return Container(
           width: 22,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nb_crm_flutter/core/theme/nb_icon.dart';
 import 'package:go_router/go_router.dart';
 
 import '../logging/app_logger.dart';
@@ -19,7 +20,7 @@ class AppBackButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return IconButton(
-      icon: Icon(icon),
+      icon: NbIcon(icon),
       tooltip: 'Back',
       onPressed: () {
         if (context.canPop()) {

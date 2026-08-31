@@ -106,6 +106,7 @@ export function ChangePasswordForm() {
             id="currentPassword"
             name="currentPassword"
             type={showCurrent ? "text" : "password"}
+            autoComplete="current-password"
             required
             className="w-full h-12 pl-12 pr-12 bg-white/5 border-white/10 focus:border-[#d9b557]/50 focus:ring-[#d9b557]/20 text-white placeholder:text-white/20 rounded-2xl transition-all"
             placeholder={isFirstLogin ? "Default password (DOB)" : "••••••••"}
@@ -136,6 +137,7 @@ export function ChangePasswordForm() {
             id="newPassword"
             name="newPassword"
             type={showNew ? "text" : "password"}
+            autoComplete="new-password"
             required
             className="w-full h-12 pl-12 pr-12 bg-white/5 border-white/10 focus:border-[#d9b557]/50 focus:ring-[#d9b557]/20 text-white placeholder:text-white/20 rounded-2xl transition-all"
             placeholder="At least 6 characters"
@@ -166,6 +168,7 @@ export function ChangePasswordForm() {
             id="confirmPassword"
             name="confirmPassword"
             type={showConfirm ? "text" : "password"}
+            autoComplete="off"
             required
             className="w-full h-12 pl-12 pr-12 bg-white/5 border-white/10 focus:border-[#d9b557]/50 focus:ring-[#d9b557]/20 text-white placeholder:text-white/20 rounded-2xl transition-all"
             placeholder="Repeat new password"

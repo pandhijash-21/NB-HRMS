@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nb_crm_flutter/core/theme/nb_icon.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -111,7 +112,7 @@ class _MeetListScreenState extends ConsumerState<MeetListScreen> {
         leading: const AppBackButton(fallbackLocation: '/meet'),
         title: Text(_title, style: const TextStyle(fontWeight: FontWeight.w700)),
         actions: [
-          IconButton(onPressed: _load, icon: const Icon(Icons.refresh_rounded)),
+          IconButton(onPressed: _load, icon: const NbIcon(Icons.refresh_rounded)),
         ],
       ),
       body: Column(
@@ -123,7 +124,7 @@ class _MeetListScreenState extends ConsumerState<MeetListScreen> {
               onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
                 hintText: _hint,
-                prefixIcon: const Icon(Icons.search_rounded),
+                prefixIcon: const NbIcon(Icons.search_rounded),
                 suffixIcon: _search.text.isEmpty
                     ? null
                     : IconButton(
@@ -131,7 +132,7 @@ class _MeetListScreenState extends ConsumerState<MeetListScreen> {
                           _search.clear();
                           setState(() {});
                         },
-                        icon: const Icon(Icons.close_rounded),
+                        icon: const NbIcon(Icons.close_rounded),
                       ),
               ),
             ),
@@ -213,19 +214,19 @@ class _MeetCard extends ConsumerWidget {
                 if (kind == MeetListKind.past)
                   OutlinedButton.icon(
                     onPressed: () => _showMeetDetails(context, item),
-                    icon: const Icon(Icons.info_outline_rounded, size: 16),
+                    icon: const NbIcon(Icons.info_outline_rounded, size: 16),
                     label: const Text('View details'),
                   ),
                 if (item.hasRecording || (item.recordingUrl ?? '').isNotEmpty)
                   FilledButton.tonalIcon(
                     onPressed: () => context.push('/meet/recording/${item.id}'),
-                    icon: const Icon(Icons.play_circle_rounded, size: 18),
+                    icon: const NbIcon(Icons.play_circle_rounded, size: 18),
                     label: const Text('Watch recording'),
                   ),
                 if (isAdmin && (item.hasRecording || (item.recordingUrl ?? '').isNotEmpty))
                   OutlinedButton.icon(
                     onPressed: () => _deleteMeetRecording(context, ref, item, onChanged),
-                    icon: const Icon(Icons.delete_outline_rounded, size: 16),
+                    icon: const NbIcon(Icons.delete_outline_rounded, size: 16),
                     label: const Text('Delete recording'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: const Color(0xFFDC2626),
@@ -234,7 +235,7 @@ class _MeetCard extends ConsumerWidget {
                   ),
                 OutlinedButton.icon(
                   onPressed: () => copyMeetLink(context, item),
-                  icon: const Icon(Icons.copy_rounded, size: 16),
+                  icon: const NbIcon(Icons.copy_rounded, size: 16),
                   label: const Text('Copy invite'),
                 ),
                 if (item.status == 'SCHEDULED' || item.status == 'LIVE')
@@ -279,7 +280,7 @@ class _MeetCard extends ConsumerWidget {
                         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
                       }
                     },
-                    icon: const Icon(Icons.call_end_rounded, size: 16),
+                    icon: const NbIcon(Icons.call_end_rounded, size: 16),
                     label: const Text('End meet'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: const Color(0xFFDC2626),

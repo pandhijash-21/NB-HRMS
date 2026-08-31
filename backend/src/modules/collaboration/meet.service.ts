@@ -83,7 +83,7 @@ async function uploadRecordingToCloudinary(code: string, objectKey: string) {
     const stat = await fs.stat(tmp);
     if (!stat.size) throw new Error('Recording file is empty');
     const filePath = tmp.replace(/\\/g, '/');
-    const result = await cloudinary.uploader.upload_large(filePath, {
+    const result = (await cloudinary.uploader.upload_large(filePath, {
       resource_type: 'video',
       chunk_size: 6_000_000,
       folder: 'hrms/meetings',
@@ -92,7 +92,7 @@ async function uploadRecordingToCloudinary(code: string, objectKey: string) {
       invalidate: true,
       timeout: 180_000,
       access_mode: 'public',
-    });
+    })) as { secure_url?: string };
     if (!result.secure_url) throw new Error('Cloudinary did not return a recording URL');
     return result.secure_url;
   } catch (err: unknown) {
@@ -208,7 +208,7 @@ async function resolveRecordingKey(
   try {
     const keys = await collabStorage.listObjectKeys(`meetings/${meeting.code}`);
     keys.sort();
-    return keys.at(-1) ?? null;
+    return keys.length ? keys[keys.length - 1] : null;
   } catch {
     return null;
   }

@@ -204,7 +204,11 @@ export const collabStorage = {
     if (!minioConfigured()) return;
     try {
       const minio = await ensureBucket();
-      await minio.setBucketCors(env.MINIO_BUCKET, {
+      const client = minio as unknown as {
+        setBucketCors?: (bucket: string, cfg: unknown) => Promise<void>;
+      };
+      if (typeof client.setBucketCors !== 'function') return;
+      await client.setBucketCors(env.MINIO_BUCKET, {
         corsRules: [
           {
             allowedOrigin: ['*'],
@@ -214,7 +218,7 @@ export const collabStorage = {
             maxAgeSeconds: 3600,
           },
         ],
-      } as never);
+      });
     } catch (err) {
       console.warn('MinIO CORS update skipped:', err);
     }

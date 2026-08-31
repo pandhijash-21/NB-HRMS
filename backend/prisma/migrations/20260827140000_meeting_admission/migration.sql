@@ -1,6 +1,9 @@
--- CreateEnum
-CREATE TYPE "MeetingAdmission" AS ENUM ('WAITING', 'ADMITTED', 'DENIED');
+-- Idempotent so a retry after a failed previous migration is safe.
+DO $$ BEGIN
+  CREATE TYPE "MeetingAdmission" AS ENUM ('WAITING', 'ADMITTED', 'DENIED');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
--- AlterTable
 ALTER TABLE "meeting_participants"
-ADD COLUMN "admission" "MeetingAdmission" NOT NULL DEFAULT 'ADMITTED';
+ADD COLUMN IF NOT EXISTS "admission" "MeetingAdmission" NOT NULL DEFAULT 'ADMITTED';

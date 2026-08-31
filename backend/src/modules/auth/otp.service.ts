@@ -74,7 +74,8 @@ export const otpService = {
       });
     }
 
-    const needsEmailVerification = emails.some((e) => !e.verified);
+    // OTP cannot be delivered without mail, so do not block the app.
+    const needsEmailVerification = isSmtpConfigured() && emails.some((e) => !e.verified);
     return { needsEmailVerification, emails };
   },
 

@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSCameraUsageDescription</key>
+	<string>NB CRM uses the camera for video meetings.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>NB CRM uses the microphone for voice and video meetings.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>NB HRMS needs your location while using the app for attendance and live field tracking.</string>
 	<key>NSLocationAlwaysUsageDescription</key>
@@ -18,7 +22,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Nb Crm Flutter</string>
+	<string>NB CRM</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -26,7 +30,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>nb_crm_flutter</string>
+	<string>NB CRM</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>

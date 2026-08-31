@@ -1,5 +1,5 @@
 name: nb_crm_flutter
-description: NB Developer CRM+HRMS+ERP Flutter client (REST-only).
+description: NB CRM — CRM+HRMS+ERP Flutter client (REST-only).
 publish_to: "none"
 version: 1.0.1+2
 
@@ -36,6 +36,8 @@ dependencies:
   vector_math: ^2.2.0
   battery_plus: ^7.1.1
   connectivity_plus: ^7.3.1
+  socket_io_client: ^3.1.2
+  livekit_client: ^2.5.0
   # 1.10+ requires Dart ^3.10 / Flutter >=3.38
   model_viewer_plus: ">=1.9.3 <1.10.0"
   # 6.8+ requires Flutter >=3.44; 6.7.x supports Flutter 3.35

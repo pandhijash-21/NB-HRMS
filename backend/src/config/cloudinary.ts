@@ -9,8 +9,8 @@ export type CloudinaryCredentials = {
 
 /** Parses `cloudinary://api_key:api_secret@cloud_name` */
 function parseCloudinaryUrl(raw: string): CloudinaryCredentials | null {
-  const url = raw.trim();
-  const m = url.match(/^cloudinary:\/\/([^:]+):([^@]+)@([^/]+)$/);
+  const url = raw.trim().replace(/^["']|["']$/g, '');
+  const m = url.match(/^cloudinary:\/\/([^:]+):([^@]+)@([^/?#]+)$/);
   if (!m) return null;
   return { api_key: m[1], api_secret: m[2], cloud_name: m[3] };
 }

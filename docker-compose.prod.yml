@@ -53,11 +53,17 @@ services:
       REDIS_URL: redis://redis:6379
       PRISMA_CLIENT_ENGINE_TYPE: binary
       PRISMA_CLI_QUERY_ENGINE_TYPE: binary
+      LIVEKIT_URL: http://livekit:7880
+      LIVEKIT_PUBLIC_URL: wss://crm.nbdeveloper.co.in
+      MINIO_ENDPOINT: minio
+      MINIO_EGRESS_ENDPOINT: http://minio:9000
+      FRONTEND_URL: https://crm.nbdeveloper.co.in
+      CORS_ALLOWED_ORIGINS: https://crm.nbdeveloper.co.in
     ports:
       - "4000:4000"
     labels:
       - traefik.enable=true
-      - traefik.http.routers.nbcrm-api.rule=Host(`crm.nbdeveloper.co.in`) && (PathPrefix(`/api`) || PathPrefix(`/health`) || PathPrefix(`/actions`) || PathPrefix(`/events`))
+      - traefik.http.routers.nbcrm-api.rule=Host(`crm.nbdeveloper.co.in`) && (PathPrefix(`/api`) || PathPrefix(`/health`) || PathPrefix(`/actions`) || PathPrefix(`/events`) || PathPrefix(`/socket.io`) || PathPrefix(`/uploads`))
       - traefik.http.routers.nbcrm-api.entrypoints=websecure
       - traefik.http.routers.nbcrm-api.tls.certresolver=letsencrypt
       - traefik.http.routers.nbcrm-api.tls=true
@@ -106,7 +112,62 @@ services:
       osrm-routed --algorithm mld gujarat-latest.osrm
       "
 
+  minio:
+    image: minio/minio:latest
+    restart: always
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin_password}
+    volumes:
+      - miniodata:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+  livekit:
+    image: livekit/livekit-server:v1.8.4
+    restart: always
+    command: --config /etc/livekit.yaml
+    volumes:
+      - ./livekit.prod.yaml:/etc/livekit.yaml:ro
+    ports:
+      - "7881:7881"
+      - "50000-50020:50000-50020/udp"
+    depends_on:
+      - redis
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.nbcrm-livekit.rule=Host(`crm.nbdeveloper.co.in`) && PathPrefix(`/rtc`)
+      - traefik.http.routers.nbcrm-livekit.entrypoints=websecure
+      - traefik.http.routers.nbcrm-livekit.tls.certresolver=letsencrypt
+      - traefik.http.routers.nbcrm-livekit.tls=true
+      - traefik.http.routers.nbcrm-livekit.priority=30
+      - traefik.http.routers.nbcrm-livekit.service=nbcrm-livekit
+      - traefik.http.services.nbcrm-livekit.loadbalancer.server.port=7880
+
+  livekit-egress:
+    image: livekit/egress:v1.8.4
+    restart: always
+    depends_on:
+      - livekit
+      - redis
+      - minio
+    environment:
+      EGRESS_CONFIG_BODY: |
+        api_key: devkey
+        api_secret: secret
+        ws_url: ws://livekit:7880
+        redis:
+          address: redis:6379
+        insecure: true
+        log_level: info
+    cap_add:
+      - SYS_ADMIN
+    shm_size: "2gb"
+
 volumes:
   pgdata:
   redisdata:
   osrmdata:
+  miniodata:

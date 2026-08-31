@@ -80,7 +80,7 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                       Text(
-                        'NB Developer',
+                        'NB CRM',
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
                               color: Colors.white,

@@ -1,4 +1,3 @@
-version: "3.8"
 services:
   postgres:
     image: postgres:15
@@ -47,6 +46,8 @@ services:
     volumes:
       - ./backend:/app
       - /app/node_modules
+    env_file:
+      - ./backend/.env
     environment:
       - DATABASE_URL=postgres://hrms_user:hrms_pass@postgres:5432/nb_crm_db
       - REDIS_URL=redis://redis:6379
@@ -56,7 +57,66 @@ services:
       - PRISMA_CLIENT_ENGINE_TYPE=binary
       - PRISMA_CLI_QUERY_ENGINE_TYPE=binary
       - DOCKER=true
+      - MINIO_ENDPOINT=minio
+      - MINIO_PORT=9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin_password
+      - MINIO_BUCKET=crm-files
+      - MINIO_USE_SSL=false
+      - MINIO_PUBLIC_URL=http://127.0.0.1:9000
+      - MINIO_EGRESS_ENDPOINT=http://minio:9000
     command: sh -c "npx prisma generate && nodemon -L --exec tsx src/index.ts"
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin_password
+      MINIO_REGION_NAME: us-east-1
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+  livekit:
+    image: livekit/livekit-server:v1.8.4
+    restart: unless-stopped
+    depends_on:
+      - redis
+    command: --config /etc/livekit.yaml --node-ip 127.0.0.1
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "50000-50020:50000-50020/udp"
+
+  livekit-egress:
+    image: livekit/egress:v1.8.4
+    restart: unless-stopped
+    # Share LiveKit's network so Chrome can ICE to node_ip 127.0.0.1 (required
+    # for host browsers). A separate container sees 127.0.0.1 as itself and aborts.
+    network_mode: "service:livekit"
+    depends_on:
+      - livekit
+      - redis
+      - minio
+    environment:
+      EGRESS_CONFIG_BODY: |
+        api_key: devkey
+        api_secret: secret
+        ws_url: ws://127.0.0.1:7880
+        redis:
+          address: redis:6379
+        insecure: true
+        log_level: info
+    cap_add:
+      - SYS_ADMIN
+    shm_size: "2gb"
 
 volumes:
   pgdata:
+  minio_data:

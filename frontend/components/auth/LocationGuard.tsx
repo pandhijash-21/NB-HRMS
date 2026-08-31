@@ -1,14 +1,21 @@
 "use client";
 
 import { useEffect, useState, ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import { AlertCircle, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export function LocationGuard({ children }: { children: ReactNode }) {
-  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+  const pathname = usePathname();
+  const skip = pathname.startsWith("/meet");
+  const [hasPermission, setHasPermission] = useState<boolean | null>(skip ? true : null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
+    if (skip) {
+      setHasPermission(true);
+      return;
+    }
     if (!("geolocation" in navigator)) {
       setErrorMsg("Geolocation is not supported by your browser.");
       setHasPermission(false);

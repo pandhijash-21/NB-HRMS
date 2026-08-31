@@ -13,36 +13,13 @@ import {
   recordLoginFailure,
 } from './loginLock.service';
 import { otpService } from './otp.service';
+import { buildPermissionsMap } from './permissions-map';
 
 const SESSION_TTL = 8 * 60 * 60; // 8 hours in seconds
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/** Build the { MODULE_KEY: ['READ','WRITE', ...] } permissions map from DB row. */
-function buildPermissionsMap(
-  permissions: Array<{
-    moduleKey: string;
-    canRead: boolean;
-    canWrite: boolean;
-    canApprove: boolean;
-    canDelete: boolean;
-    canExport: boolean;
-  }>
-): Record<string, string[]> {
-  const map: Record<string, string[]> = {};
-  for (const p of permissions) {
-    const actions: string[] = [];
-    if (p.canRead)    actions.push('READ');
-    if (p.canWrite)   actions.push('WRITE');
-    if (p.canApprove) actions.push('APPROVE');
-    if (p.canDelete)  actions.push('DELETE');
-    if (p.canExport)  actions.push('EXPORT');
-    map[p.moduleKey] = actions;
-  }
-  return map;
-}
 
 async function storeSession(userId: string, roleId: string, token: string) {
   await connectRedis();
@@ -336,12 +313,20 @@ export const authService = {
       user.id,
       user.employeeId ?? null,
     );
+    const dbUser = await prisma.user.findUnique({
+      where: { id: user.id },
+      include: { role: { include: { permissions: true } } },
+    });
+    const permissions = dbUser?.role
+      ? buildPermissionsMap(dbUser.role.permissions)
+      : user.permissions;
+    const personalPerm = dbUser?.role?.permissions.find((p) => p.moduleKey === 'PERSONAL_INFO');
     return {
-      employeeId:  user.employeeId,
-      roleId:      user.roleId,
-      roleName:    user.roleName,
-      permissions: user.permissions,
-      employeeViewScope: user.employeeViewScope ?? 'NONE',
+      employeeId: user.employeeId,
+      roleId: user.roleId,
+      roleName: dbUser?.role?.name ?? user.roleName,
+      permissions,
+      employeeViewScope: personalPerm?.employeeViewScope ?? user.employeeViewScope ?? 'NONE',
       subOrganization: user.subOrganization ?? null,
       needsEmailVerification: emailStatus.needsEmailVerification,
       pendingEmails: emailStatus.emails.filter((e) => !e.verified),

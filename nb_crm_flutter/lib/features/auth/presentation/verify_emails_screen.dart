@@ -100,7 +100,7 @@ class _VerifyEmailsScreenState extends ConsumerState<VerifyEmailsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Text(
-                        'NB Developer',
+                        'NB CRM',
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
                               color: Colors.white,
@@ -273,6 +273,10 @@ class _EmailVerifyCardState extends State<_EmailVerifyCard> {
       _startTicker();
     } on ApiException catch (e) {
       if (!mounted) return;
+      if (e.message.toLowerCase().contains('smtp is not configured')) {
+        await widget.onVerified();
+        return;
+      }
       setState(() {
         _sending = false;
         _message = e.message;

@@ -22,6 +22,13 @@ class ResponsiveShell extends ConsumerStatefulWidget {
 
 class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
   bool _isExpanded = true;
+  final _navSearch = TextEditingController();
+
+  @override
+  void dispose() {
+    _navSearch.dispose();
+    super.dispose();
+  }
 
   Widget _buildSpeedDial(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -111,25 +118,43 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             Icons.dashboard_outlined,
             Icons.dashboard,
             'Dashboard',
+            section: 'Main',
           ),
-        const _Destination('/home', Icons.home_outlined, Icons.home, 'Home'),
+        const _Destination('/home', Icons.home_outlined, Icons.home, 'Home', section: 'Main'),
         const _Destination(
           '/org-tree',
           Icons.account_tree_outlined,
           Icons.account_tree,
           'Employee tree',
-        ),
-        const _Destination(
-          '/tasks',
-          Icons.task_alt_outlined,
-          Icons.task_alt,
-          'Tasks',
+          section: 'Main',
         ),
         const _Destination(
           '/profile',
           Icons.person_outline,
           Icons.person,
           'Profile',
+          section: 'Main',
+        ),
+        const _Destination(
+          '/tasks',
+          Icons.task_alt_outlined,
+          Icons.task_alt,
+          'Tasks',
+          section: 'Collaboration',
+        ),
+        const _Destination(
+          '/chat',
+          Icons.chat_bubble_outline,
+          Icons.chat_bubble,
+          'Chat',
+          section: 'Collaboration',
+        ),
+        const _Destination(
+          '/meet',
+          Icons.videocam_outlined,
+          Icons.videocam,
+          'Meet',
+          section: 'Collaboration',
         ),
         if (Permissions.canReadLeave(auth.permissions) ||
             Permissions.canWriteLeave(auth.permissions) ||
@@ -144,6 +169,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             Icons.event_available_outlined,
             Icons.event_available,
             'Leave',
+            section: 'HR',
           ),
         if (Permissions.canReadAttendance(auth.permissions))
           const _Destination(
@@ -151,6 +177,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             Icons.fingerprint_outlined,
             Icons.fingerprint,
             'Attendance',
+            section: 'HR',
           ),
         if (hasWorkforce)
           const _Destination(
@@ -158,6 +185,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             Icons.people_outline,
             Icons.people,
             'Workforce',
+            section: 'Organisation',
           ),
         if (canManageUsers)
           const _Destination(
@@ -165,6 +193,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             Icons.manage_accounts_outlined,
             Icons.manage_accounts,
             'Users',
+            section: 'Organisation',
           ),
         if (canManageRoles)
           const _Destination(
@@ -172,6 +201,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             Icons.shield_outlined,
             Icons.shield,
             'Roles',
+            section: 'Organisation',
           ),
         if (isHR)
           const _Destination(
@@ -179,6 +209,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             Icons.assignment_turned_in_outlined,
             Icons.assignment_turned_in,
             'Profile Approvals',
+            section: 'Organisation',
           ),
         if (canTrackField)
           const _Destination(
@@ -186,6 +217,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             Icons.location_on_outlined,
             Icons.location_on,
             'Live Tracking',
+            section: 'Tracking',
           ),
         if (canTrackField)
           const _Destination(
@@ -193,6 +225,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             Icons.route_outlined,
             Icons.route,
             'Trips',
+            section: 'Tracking',
           ),
         if (canTrackField)
           const _Destination(
@@ -200,15 +233,17 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             Icons.insights_outlined,
             Icons.insights,
             'Tracking Hub',
+            section: 'Tracking',
             alertBadge: true,
           ),
       ] else ...[
-        const _Destination('/erp/home', Icons.home_outlined, Icons.home, 'Home'),
+        const _Destination('/erp/home', Icons.home_outlined, Icons.home, 'Home', section: 'ERP'),
         const _Destination(
           '/erp/projects',
           Icons.apartment_outlined,
           Icons.apartment,
           'Projects',
+          section: 'ERP',
         ),
         if (canAccessAdmin)
           const _Destination(
@@ -216,28 +251,36 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             Icons.settings_outlined,
             Icons.settings,
             'Configurations',
+            section: 'ERP',
           ),
       ],
     ];
-    final alertCount = canTrackField
-        ? ref.watch(locationAlertWatchProvider).count
-        : 0;
-    final selectedIndex = destinations
-        .indexWhere((d) {
-          if (d.route == '/leave') {
-            return currentPath.startsWith('/leave') ||
-                currentPath.startsWith('/approvals') ||
-                currentPath.startsWith('/admin/leaves');
-          }
-          return currentPath.startsWith(d.route);
-        })
-        .clamp(0, destinations.length - 1);
 
-    // Ensure index doesn't fall below 0 if not matched exactly
-    final safeSelectedIndex = selectedIndex == -1 ? 0 : selectedIndex;
+    final trackingAlerts = ref.watch(locationAlertWatchProvider);
+    final alertCount = canTrackField ? trackingAlerts.count : 0;
 
-    void onDestinationSelected(int index) {
-      context.go(destinations[index].route);
+    bool isSelected(_Destination d) {
+      if (d.route == '/leave') {
+        return currentPath.startsWith('/leave') ||
+            currentPath.startsWith('/approvals') ||
+            currentPath.startsWith('/admin/leaves');
+      }
+      if (d.route == '/home') return currentPath == '/home';
+      return currentPath.startsWith(d.route);
+    }
+
+    final query = _navSearch.text.trim().toLowerCase();
+    final visible = query.isEmpty
+        ? destinations
+        : destinations
+            .where((d) =>
+                d.label.toLowerCase().contains(query) ||
+                d.section.toLowerCase().contains(query))
+            .toList();
+
+    void goTo(_Destination d, {bool closeDrawer = false}) {
+      if (closeDrawer) Navigator.pop(context);
+      context.go(d.route);
     }
 
     if (!useSidebar) {
@@ -245,7 +288,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
         context,
         Scaffold(
         appBar: AppBar(
-          title: const Text('NB Developer'),
+          title: const Text('NB CRM'),
           actions: [
             IconButton(
               tooltip: 'Employee tree',
@@ -292,7 +335,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                         _buildLogo(context),
                         const SizedBox(width: 12),
                         Text(
-                          'NB Developer',
+                          'NB CRM',
                           style: TextStyle(
                             fontWeight: FontWeight.w700,
                             fontSize: 18,
@@ -323,68 +366,24 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                         ),
                       ),
                     ],
+                    const SizedBox(height: 16),
+                    _buildNavSearchField(isDark, expandedHint: true),
                   ],
                 ),
               ),
               // Destinations list
               Expanded(
                 child: ListView(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  padding: const EdgeInsets.fromLTRB(8, 8, 8, 12),
                   children: [
-                    for (var i = 0; i < destinations.length; i++)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-                        child: InkWell(
-                          onTap: () {
-                            Navigator.pop(context); // Close drawer
-                            onDestinationSelected(i);
-                          },
-                          borderRadius: BorderRadius.circular(12),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            height: 48,
-                            decoration: BoxDecoration(
-                              color: safeSelectedIndex == i
-                                  ? (isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFDFE6E9))
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.circular(12),
-                              border: safeSelectedIndex == i
-                                  ? Border.all(color: isDark ? const Color(0xFFC5A059).withOpacity(0.25) : const Color(0xFFB0BEC5), width: 1.2)
-                                  : null,
-                            ),
-                            child: Row(
-                              children: [
-                                const SizedBox(width: 12),
-                                Icon(
-                                  safeSelectedIndex == i
-                                      ? destinations[i].selectedIcon
-                                      : destinations[i].icon,
-                                  color: safeSelectedIndex == i
-                                      ? (isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238))
-                                      : (isDark ? Colors.white.withOpacity(0.4) : const Color(0xFF607D8B).withOpacity(0.7)),
-                                  size: 22,
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    destinations[i].label,
-                                    style: TextStyle(
-                                      color: safeSelectedIndex == i
-                                          ? (isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238))
-                                          : (isDark ? Colors.white.withOpacity(0.5) : const Color(0xFF607D8B).withOpacity(0.8)),
-                                      fontWeight: safeSelectedIndex == i ? FontWeight.w700 : FontWeight.w500,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                ),
-                                if (destinations[i].alertBadge)
-                                  _alertCountBadge(alertCount),
-                                const SizedBox(width: 12),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
+                    ..._buildSectionedNav(
+                      visible,
+                      isDark,
+                      expanded: true,
+                      alertCount: alertCount,
+                      isSelected: isSelected,
+                      onTap: (d) => goTo(d, closeDrawer: true),
+                    ),
                   ],
                 ),
               ),
@@ -496,8 +495,9 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             children: [
               _buildSidebarContent(
                 context,
-                safeSelectedIndex,
-                destinations,
+                visible,
+                isSelected,
+                goTo,
                 isDark,
                 allowExpanded: allowExpandedSidebar,
                 alertCount: alertCount,
@@ -551,6 +551,224 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
       child: child,
     ),
     );
+  }
+
+  Widget _buildNavSearchField(bool isDark, {required bool expandedHint}) {
+    return TextField(
+      controller: _navSearch,
+      onChanged: (_) => setState(() {}),
+      style: TextStyle(
+        fontSize: 13,
+        color: isDark ? Colors.white : const Color(0xFF212F3D),
+      ),
+      decoration: InputDecoration(
+        hintText: 'Search pages',
+        hintStyle: TextStyle(
+          fontSize: 13,
+          color: isDark ? Colors.white38 : const Color(0xFF90A4AE),
+        ),
+        prefixIcon: Icon(
+          Icons.search_rounded,
+          size: 20,
+          color: isDark ? Colors.white54 : const Color(0xFF607D8B),
+        ),
+        suffixIcon: _navSearch.text.isEmpty
+            ? null
+            : IconButton(
+                tooltip: 'Clear',
+                icon: const Icon(Icons.close_rounded, size: 18),
+                onPressed: () {
+                  _navSearch.clear();
+                  setState(() {});
+                },
+              ),
+        isDense: true,
+        filled: true,
+        fillColor: isDark ? const Color(0xFF261F1A) : Colors.white,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(
+            color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC),
+          ),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(
+            color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC),
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(
+            color: isDark ? const Color(0xFFC5A059) : const Color(0xFF2563EB),
+            width: 1.4,
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildSectionedNav(
+    List<_Destination> destinations,
+    bool isDark, {
+    required bool expanded,
+    required int alertCount,
+    required bool Function(_Destination) isSelected,
+    required void Function(_Destination) onTap,
+  }) {
+    const order = ['Main', 'Collaboration', 'HR', 'Organisation', 'Tracking'];
+    final grouped = <String, List<_Destination>>{};
+    for (final d in destinations) {
+      grouped.putIfAbsent(d.section, () => []).add(d);
+    }
+    final widgets = <Widget>[];
+    final sections = [
+      ...order.where(grouped.containsKey),
+      ...grouped.keys.where((k) => !order.contains(k)),
+    ];
+    if (destinations.isEmpty) {
+      widgets.add(
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          child: Text(
+            'No matching pages',
+            style: TextStyle(
+              fontSize: 13,
+              color: isDark ? Colors.white38 : const Color(0xFF90A4AE),
+            ),
+          ),
+        ),
+      );
+      return widgets;
+    }
+    for (final section in sections) {
+      final items = grouped[section] ?? [];
+      if (items.isEmpty) continue;
+      if (expanded) {
+        widgets.add(
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 14, 16, 4),
+            child: Text(
+              section.toUpperCase(),
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.1,
+                color: isDark ? const Color(0xFFE2D6BE).withOpacity(0.55) : const Color(0xFF78909C),
+              ),
+            ),
+          ),
+        );
+      } else if (widgets.isNotEmpty) {
+        widgets.add(
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+            child: Divider(
+              height: 8,
+              color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+            ),
+          ),
+        );
+      }
+      for (final d in items) {
+        widgets.add(_buildNavTile(
+          d,
+          isDark,
+          expanded: expanded,
+          selected: isSelected(d),
+          alertCount: alertCount,
+          onTap: () => onTap(d),
+        ));
+      }
+    }
+    return widgets;
+  }
+
+  Widget _buildNavTile(
+    _Destination d,
+    bool isDark, {
+    required bool expanded,
+    required bool selected,
+    required int alertCount,
+    required VoidCallback onTap,
+  }) {
+    final icon = Icon(
+      selected ? d.selectedIcon : d.icon,
+      color: selected
+          ? (isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238))
+          : (isDark ? Colors.white.withOpacity(0.4) : const Color(0xFF607D8B).withOpacity(0.7)),
+      size: 22,
+    );
+    final tile = Padding(
+      padding: EdgeInsets.symmetric(horizontal: expanded ? 12 : 8, vertical: 2),
+      child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            height: 48,
+            alignment: expanded ? Alignment.centerLeft : Alignment.center,
+            decoration: BoxDecoration(
+              color: selected
+                  ? (isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFDFE6E9))
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+              border: selected
+                  ? Border.all(
+                      color: isDark ? const Color(0xFFC5A059).withOpacity(0.25) : const Color(0xFFB0BEC5),
+                      width: 1.2,
+                    )
+                  : null,
+            ),
+            child: expanded
+                ? Row(
+                    children: [
+                      const SizedBox(width: 12),
+                      icon,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          d.label,
+                          style: TextStyle(
+                            color: selected
+                                ? (isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238))
+                                : (isDark ? Colors.white.withOpacity(0.5) : const Color(0xFF607D8B).withOpacity(0.8)),
+                            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                            fontSize: 14,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (d.alertBadge) _alertCountBadge(alertCount),
+                      const SizedBox(width: 12),
+                    ],
+                  )
+                : Stack(
+                    alignment: Alignment.center,
+                    clipBehavior: Clip.none,
+                    children: [
+                      icon,
+                      if (d.alertBadge)
+                        Positioned(
+                          right: 6,
+                          top: 6,
+                          child: _alertCountBadge(alertCount, compact: true),
+                        ),
+                    ],
+                  ),
+          ),
+        ),
+    );
+    if (!expanded) {
+      return Tooltip(
+        message: d.label,
+        waitDuration: const Duration(milliseconds: 400),
+        child: tile,
+      );
+    }
+    return tile;
   }
 
   Widget _buildLogo(BuildContext context) {
@@ -613,8 +831,9 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
 
   Widget _buildSidebarContent(
     BuildContext context,
-    int safeSelectedIndex,
     List<_Destination> destinations,
+    bool Function(_Destination) isSelected,
+    void Function(_Destination d, {bool closeDrawer}) goTo,
     bool isDark, {
     bool allowExpanded = true,
     int alertCount = 0,
@@ -634,147 +853,113 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
         ),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // Header
           Container(
-            height: expanded ? 90 : 128,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                if (!expanded)
-                  Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        if (allowExpanded)
-                          IconButton(
-                            icon: Icon(
-                              Icons.menu_rounded,
-                              color: isDark
-                                  ? Colors.white.withOpacity(0.5)
-                                  : const Color(0xFF607D8B).withOpacity(0.7),
-                            ),
-                            onPressed: () {
-                              setState(() => _isExpanded = true);
-                            },
-                            tooltip: 'Expand sidebar',
-                          )
-                        else
-                          _buildLogo(context),
-                      ],
-                    ),
-                  )
-                else ...[
-                  _buildLogo(context),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'NB Developer',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 17,
-                        color: isDark ? Colors.white : const Color(0xFF212F3D),
-                        letterSpacing: -0.3,
+            height: expanded ? 90 : 108,
+            width: double.infinity,
+            padding: EdgeInsets.symmetric(horizontal: expanded ? 16 : 0),
+            alignment: expanded ? Alignment.centerLeft : Alignment.center,
+            child: expanded
+                ? Row(
+                    children: [
+                      _buildLogo(context),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'NB CRM',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 17,
+                            color: isDark ? Colors.white : const Color(0xFF212F3D),
+                            letterSpacing: -0.3,
+                          ),
+                        ),
                       ),
-                    ),
+                      IconButton(
+                        icon: Icon(
+                          Icons.menu_open_rounded,
+                          color: isDark
+                              ? Colors.white.withOpacity(0.5)
+                              : const Color(0xFF607D8B).withOpacity(0.7),
+                        ),
+                        onPressed: () {
+                          setState(() => _isExpanded = false);
+                        },
+                        tooltip: 'Collapse sidebar',
+                      ),
+                    ],
+                  )
+                : Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Tooltip(
+                        message: allowExpanded ? 'Expand sidebar' : 'NB CRM',
+                        child: InkWell(
+                          onTap: allowExpanded
+                              ? () => setState(() => _isExpanded = true)
+                              : null,
+                          borderRadius: BorderRadius.circular(12),
+                          child: _buildLogo(context),
+                        ),
+                      ),
+                      if (allowExpanded)
+                        IconButton(
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 36, minHeight: 32),
+                          icon: Icon(
+                            Icons.menu_rounded,
+                            size: 20,
+                            color: isDark
+                                ? Colors.white.withOpacity(0.5)
+                                : const Color(0xFF607D8B).withOpacity(0.7),
+                          ),
+                          onPressed: () {
+                            setState(() => _isExpanded = true);
+                          },
+                          tooltip: 'Expand sidebar',
+                        ),
+                    ],
                   ),
-                  IconButton(
-                    icon: Icon(
-                      Icons.menu_open_rounded,
-                      color: isDark
-                          ? Colors.white.withOpacity(0.5)
-                          : const Color(0xFF607D8B).withOpacity(0.7),
-                    ),
-                    onPressed: () {
-                      setState(() => _isExpanded = false);
-                    },
-                    tooltip: 'Collapse sidebar',
-                  ),
-                ],
-              ],
-            ),
           ),
           
+          if (expanded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: _buildNavSearchField(isDark, expandedHint: true),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Center(
+                child: IconButton(
+                  tooltip: 'Search pages',
+                  onPressed: allowExpanded
+                      ? () => setState(() => _isExpanded = true)
+                      : null,
+                  icon: Icon(
+                    Icons.search_rounded,
+                    color: isDark ? Colors.white54 : const Color(0xFF607D8B),
+                  ),
+                ),
+              ),
+            ),
+
           // Destinations
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              children: destinations.asMap().entries.map((entry) {
-                final index = entry.key;
-                final d = entry.value;
-                final isSelected = safeSelectedIndex == index;
-                
-                return InkWell(
-                  onTap: () {
-                    context.go(d.route);
-                  },
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 300),
-                    curve: Curves.easeOutCubic,
-                    height: 48,
-                    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: isSelected 
-                          ? (isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFDFE6E9))
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(12),
-                      border: isSelected 
-                          ? Border.all(color: isDark ? const Color(0xFFC5A059).withOpacity(0.25) : const Color(0xFFB0BEC5), width: 1.2)
-                          : null,
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: OverflowBox(
-                      minWidth: 228,
-                      maxWidth: 228,
-                      minHeight: 48,
-                      maxHeight: 48,
-                      alignment: Alignment.centerLeft,
-                      child: Row(
-                        children: [
-                          const SizedBox(width: 12),
-                          Stack(
-                            clipBehavior: Clip.none,
-                            children: [
-                              Icon(
-                                isSelected ? d.selectedIcon : d.icon,
-                                color: isSelected 
-                                    ? (isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238))
-                                    : (isDark ? Colors.white.withOpacity(0.4) : const Color(0xFF607D8B).withOpacity(0.7)),
-                                size: 24,
-                              ),
-                              if (d.alertBadge && !expanded)
-                                Positioned(
-                                  right: -8,
-                                  top: -6,
-                                  child: _alertCountBadge(alertCount, compact: true),
-                                ),
-                            ],
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              d.label,
-                              style: TextStyle(
-                                color: isSelected 
-                                    ? (isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238))
-                                    : (isDark ? Colors.white.withOpacity(0.5) : const Color(0xFF607D8B).withOpacity(0.8)),
-                                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                                fontSize: 14,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.clip,
-                              softWrap: false,
-                            ),
-                          ),
-                          if (d.alertBadge && expanded) _alertCountBadge(alertCount),
-                          const SizedBox(width: 12),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(),
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              children: _buildSectionedNav(
+                destinations,
+                isDark,
+                expanded: expanded,
+                alertCount: alertCount,
+                isSelected: isSelected,
+                onTap: (d) => goTo(d),
+              ),
             ),
           ),
           
@@ -782,7 +967,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
           AnimatedContainer(
             duration: const Duration(milliseconds: 300),
             curve: Curves.easeOutCubic,
-            margin: const EdgeInsets.all(16),
+            margin: EdgeInsets.fromLTRB(expanded ? 16 : 10, 8, expanded ? 16 : 10, 16),
             padding: const EdgeInsets.symmetric(vertical: 8),
             decoration: BoxDecoration(
               color: isDark ? const Color(0xFFC5A059).withOpacity(0.08) : const Color(0xFFE5ECF0),
@@ -791,90 +976,95 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                 color: isDark ? const Color(0xFFC5A059).withOpacity(0.18) : const Color(0xFFCCD6DD),
               ),
             ),
-            clipBehavior: Clip.antiAlias,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                InkWell(
-                  onTap: () => ref.read(themeModeProvider.notifier).toggleTheme(),
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    height: 44,
-                    child: OverflowBox(
-                      minWidth: 228,
-                      maxWidth: 228,
-                      minHeight: 44,
-                      maxHeight: 44,
-                      alignment: Alignment.centerLeft,
-                      child: Row(
-                        children: [
-                          const SizedBox(width: 12),
-                          Icon(
-                            isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                            color: isDark ? Colors.white.withOpacity(0.7) : const Color(0xFF263238),
-                            size: 24,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              isDark ? 'Light Mode' : 'Dark Mode',
-                              style: TextStyle(
-                                color: isDark ? Colors.white.withOpacity(0.8) : const Color(0xFF263238),
-                                fontWeight: FontWeight.w600,
-                                fontSize: 13,
+                Tooltip(
+                  message: isDark ? 'Light Mode' : 'Dark Mode',
+                  child: InkWell(
+                    onTap: () => ref.read(themeModeProvider.notifier).toggleTheme(),
+                    borderRadius: BorderRadius.circular(12),
+                    child: SizedBox(
+                      height: 44,
+                      child: expanded
+                          ? Row(
+                              children: [
+                                const SizedBox(width: 12),
+                                Icon(
+                                  isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                                  color: isDark ? Colors.white.withOpacity(0.7) : const Color(0xFF263238),
+                                  size: 22,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    isDark ? 'Light Mode' : 'Dark Mode',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: isDark ? Colors.white.withOpacity(0.8) : const Color(0xFF263238),
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            )
+                          : Center(
+                              child: Icon(
+                                isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                                color: isDark ? Colors.white.withOpacity(0.7) : const Color(0xFF263238),
+                                size: 22,
                               ),
-                              maxLines: 1,
-                              overflow: TextOverflow.clip,
-                              softWrap: false,
                             ),
-                          ),
-                        ],
-                      ),
                     ),
                   ),
                 ),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Divider(
-                    height: 8, 
+                    height: 8,
                     color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCCD6DD),
                   ),
                 ),
-                InkWell(
-                  onTap: () => ref.read(authNotifierProvider.notifier).logout(),
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    height: 44,
-                    child: OverflowBox(
-                      minWidth: 228,
-                      maxWidth: 228,
-                      minHeight: 44,
-                      maxHeight: 44,
-                      alignment: Alignment.centerLeft,
-                      child: Row(
-                        children: [
-                          const SizedBox(width: 12),
-                          Icon(
-                            Icons.logout_rounded,
-                            color: const Color(0xFFEF4444).withOpacity(0.9),
-                            size: 24,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              'Sign out',
-                              style: const TextStyle(
-                                color: Color(0xFFEF4444),
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
+                Tooltip(
+                  message: 'Sign out',
+                  child: InkWell(
+                    onTap: () => ref.read(authNotifierProvider.notifier).logout(),
+                    borderRadius: BorderRadius.circular(12),
+                    child: SizedBox(
+                      height: 44,
+                      child: expanded
+                          ? Row(
+                              children: [
+                                const SizedBox(width: 12),
+                                Icon(
+                                  Icons.logout_rounded,
+                                  color: const Color(0xFFEF4444).withOpacity(0.9),
+                                  size: 22,
+                                ),
+                                const SizedBox(width: 12),
+                                const Expanded(
+                                  child: Text(
+                                    'Sign out',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: Color(0xFFEF4444),
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            )
+                          : Center(
+                              child: Icon(
+                                Icons.logout_rounded,
+                                color: const Color(0xFFEF4444).withOpacity(0.9),
+                                size: 22,
                               ),
-                              maxLines: 1,
-                              overflow: TextOverflow.clip,
-                              softWrap: false,
                             ),
-                          ),
-                        ],
-                      ),
                     ),
                   ),
                 ),
@@ -893,11 +1083,13 @@ class _Destination {
     this.icon,
     this.selectedIcon,
     this.label, {
+    this.section = 'Main',
     this.alertBadge = false,
   });
   final String route;
   final IconData icon;
   final IconData selectedIcon;
   final String label;
+  final String section;
   final bool alertBadge;
 }

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/network/api_envelope.dart';
 import '../../../core/services/web_live_tracking_service.dart';
 import '../domain/auth_user.dart';
+import '../domain/permissions.dart';
 import 'auth_providers.dart';
 import '../../profile/presentation/profile_notifier.dart';
 
@@ -103,19 +104,25 @@ class AuthNotifier extends Notifier<AuthState> {
           },
         );
         final needs = me['needsEmailVerification'] == true;
-        if (needs != state.needsEmailVerification && !state.isFirstLogin) {
-          state = state.copyWith(needsEmailVerification: needs);
-          final repo = ref.read(authRepositoryProvider);
-          final token = await ref.read(secureStorageProvider).readToken();
-          if (token != null && state.user != null) {
-            await repo.persistSession(
-              token: token,
-              user: state.user!,
-              permissions: state.permissions,
-              isFirstLogin: state.isFirstLogin,
-              needsEmailVerification: needs,
-            );
-          }
+        final permissions = Permissions.mapFromJson(me['permissions']);
+        final permsChanged =
+            permissions.isNotEmpty && !Permissions.mapsEqual(permissions, state.permissions);
+        final needsChanged = needs != state.needsEmailVerification && !state.isFirstLogin;
+        if (!permsChanged && !needsChanged) return;
+        state = state.copyWith(
+          permissions: permsChanged ? permissions : state.permissions,
+          needsEmailVerification: needsChanged ? needs : state.needsEmailVerification,
+        );
+        final repo = ref.read(authRepositoryProvider);
+        final token = await ref.read(secureStorageProvider).readToken();
+        if (token != null && state.user != null) {
+          await repo.persistSession(
+            token: token,
+            user: state.user!,
+            permissions: state.permissions,
+            isFirstLogin: state.isFirstLogin,
+            needsEmailVerification: state.needsEmailVerification,
+          );
         }
       } catch (_) {
         // 401 is handled by UnauthorizedGate → _handleUnauthorized.

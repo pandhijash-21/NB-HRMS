@@ -444,7 +444,7 @@ class _BrandHeader extends StatelessWidget {
         ),
         const SizedBox(height: 20),
         Text(
-          'NB Developer',
+          'NB CRM',
           textAlign: TextAlign.center,
           style: TextStyle(
             color: Colors.white,

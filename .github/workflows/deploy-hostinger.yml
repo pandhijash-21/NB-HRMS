@@ -317,7 +317,8 @@ jobs:
 
           scp -P "$port" $ssh_common \
             docker-compose.prod.yml \
-            "$remote:/opt/nb-crm/docker-compose.prod.yml"
+            livekit.prod.yaml \
+            "$remote:/opt/nb-crm/"
 
           scp -P "$port" $ssh_common \
             deploy/hostinger-apply.sh \

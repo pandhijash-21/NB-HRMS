@@ -75,6 +75,13 @@ import '../../features/erp/presentation/screens/project_structure_screen.dart';
 import '../../features/erp/presentation/screens/tower_form_screen.dart';
 import '../../features/erp/presentation/screens/tower_units_screen.dart';
 import '../../features/erp/presentation/screens/unit_form_screen.dart';
+import '../../features/collaboration/presentation/screens/chat_hub_screen.dart';
+import '../../features/collaboration/presentation/screens/meet_hub_screen.dart';
+import '../../features/collaboration/presentation/screens/meet_list_screen.dart';
+import '../../features/collaboration/presentation/screens/meet_schedule_screen.dart';
+import '../../features/collaboration/presentation/screens/meet_invite_people_screen.dart';
+import '../../features/collaboration/presentation/screens/meet_room_screen.dart';
+import '../../features/collaboration/presentation/screens/meet_recording_screen.dart';
 import '../widgets/responsive_shell.dart';
 
 /// Listenable bridge so GoRouter refreshes when [AuthState] changes.
@@ -104,7 +111,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
   final shellNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'shellNav');
 
   // Bump when route table changes so hot-restart rebuilds GoRouter cleanly.
-  const routerRevision = 16;
+  const routerRevision = 18;
 
   return GoRouter(
     navigatorKey: rootNavigatorKey,
@@ -127,11 +134,12 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       final changingPassword = loc == '/change-password';
       final verifyingEmails = loc == '/verify-emails';
       final trackingSetup = loc == '/tracking/setup';
+      final guestMeet = loc.startsWith('/meet/guest') || loc.startsWith('/meet/r/');
       final authenticated = auth.isAuthenticated;
 
       String? next;
       if (!authenticated) {
-        next = loggingIn ? null : '/login';
+        next = (loggingIn || guestMeet) ? null : '/login';
       } else if (auth.isFirstLogin) {
         next = changingPassword ? null : '/change-password';
       } else if (auth.needsEmailVerification) {
@@ -163,6 +171,25 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/tracking/setup',
         builder: (context, state) => const AutostartOnboardingScreen(),
+      ),
+      GoRoute(
+        path: '/meet/recording/:id',
+        builder: (context, state) => MeetRecordingScreen(
+          meetingId: state.pathParameters['id'] ?? '',
+        ),
+      ),
+      GoRoute(
+        path: '/meet/r/:code',
+        builder: (context, state) => MeetRoomScreen(
+          code: state.pathParameters['code'] ?? '',
+        ),
+      ),
+      GoRoute(
+        path: '/meet/guest/:code',
+        builder: (context, state) => MeetRoomScreen(
+          code: state.pathParameters['code'] ?? '',
+          asGuest: true,
+        ),
       ),
       ShellRoute(
         navigatorKey: shellNavigatorKey,
@@ -267,6 +294,49 @@ final goRouterProvider = Provider<GoRouter>((ref) {
                 fallbackLocation: '/erp/configurations',
               );
             },
+          ),
+          GoRoute(
+            path: '/chat',
+            builder: (context, state) => const ChatHubScreen(),
+          ),
+          GoRoute(
+            path: '/meet/invite-people',
+            builder: (context, state) {
+              final extra = state.extra;
+              if (extra is MeetInviteResult) {
+                return MeetInvitePeopleScreen(
+                  initialSelected: extra.ids,
+                  initialPeople: extra.people,
+                );
+              }
+              return const MeetInvitePeopleScreen();
+            },
+          ),
+          GoRoute(
+            path: '/meet/schedule/:id',
+            builder: (context, state) => MeetScheduleScreen(
+              meetingId: state.pathParameters['id'],
+            ),
+          ),
+          GoRoute(
+            path: '/meet/schedule',
+            builder: (context, state) => const MeetScheduleScreen(),
+          ),
+          GoRoute(
+            path: '/meet/scheduled',
+            builder: (context, state) => const MeetListScreen(kind: MeetListKind.scheduled),
+          ),
+          GoRoute(
+            path: '/meet/past',
+            builder: (context, state) => const MeetListScreen(kind: MeetListKind.past),
+          ),
+          GoRoute(
+            path: '/meet/org',
+            builder: (context, state) => const MeetListScreen(kind: MeetListKind.org),
+          ),
+          GoRoute(
+            path: '/meet',
+            builder: (context, state) => const MeetHubScreen(),
           ),
           GoRoute(
             path: '/leave',

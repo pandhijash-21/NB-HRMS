@@ -30,12 +30,42 @@ class _PermissionGuardState extends State<PermissionGuard> {
   Timer? _timer;
   DateTime? _lastServiceEnsureAt;
 
+  String _currentPath() {
+    try {
+      return GoRouterState.of(context).matchedLocation;
+    } catch (_) {}
+    try {
+      return GoRouter.of(context).state.matchedLocation;
+    } catch (_) {}
+    if (kIsWeb) {
+      final frag = Uri.base.fragment;
+      if (frag.isNotEmpty) return frag.startsWith('/') ? frag : '/$frag';
+    }
+    return '';
+  }
+
+  bool _isPublicMeetRoute() {
+    final path = _currentPath();
+    return path.startsWith('/meet/r/') || path.startsWith('/meet/guest/');
+  }
+
   @override
   void initState() {
     super.initState();
-    _checkPermissions();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_isPublicMeetRoute()) {
+        setState(() {
+          _checking = false;
+          _errorMsg = '';
+        });
+        return;
+      }
+      _checkPermissions();
+    });
     _timer = Timer.periodic(const Duration(seconds: 2), (timer) {
-      if (_checking) return;
+      if (!mounted || _checking) return;
+      if (_isPublicMeetRoute()) return;
       if (kIsWeb) {
         unawaited(_verifyPermissionsQuietly());
         return;
@@ -73,6 +103,15 @@ class _PermissionGuardState extends State<PermissionGuard> {
   }
 
   Future<void> _checkPermissions() async {
+    if (_isPublicMeetRoute()) {
+      if (mounted) {
+        setState(() {
+          _checking = false;
+          _errorMsg = '';
+        });
+      }
+      return;
+    }
     if (kIsWeb) {
       setState(() => _checking = true);
       try {
@@ -155,7 +194,9 @@ class _PermissionGuardState extends State<PermissionGuard> {
     if (loc == '/tracking/setup' ||
         loc == '/login' ||
         loc == '/change-password' ||
-        loc == '/verify-emails') {
+        loc == '/verify-emails' ||
+        loc.startsWith('/meet/r/') ||
+        loc.startsWith('/meet/guest/')) {
       return;
     }
     if (!mounted) return;
@@ -163,6 +204,7 @@ class _PermissionGuardState extends State<PermissionGuard> {
   }
 
   Future<void> _verifyPermissionsQuietly() async {
+    if (_isPublicMeetRoute()) return;
     if (kIsWeb) {
       final ok = await _isWebLocationReady();
       if (!mounted) return;
@@ -330,6 +372,9 @@ class _PermissionGuardState extends State<PermissionGuard> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isPublicMeetRoute()) {
+      return widget.child;
+    }
     if (_checking) {
       return const Scaffold(
         backgroundColor: Color(0xFF0F172A),

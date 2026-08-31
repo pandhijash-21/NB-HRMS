@@ -76,7 +76,8 @@ class Permissions {
   }
 
   static bool isAdmin(String? role) {
-    return (role ?? '').toUpperCase() == 'ADMIN';
+    final r = (role ?? '').toUpperCase().replaceAll(RegExp(r'\s+'), '');
+    return r == 'ADMIN' || r == 'SUPERADMIN' || r == 'SYSTEMADMIN';
   }
 
   static bool canManageUsers(PermissionMap? perms, [String? role]) {
@@ -206,5 +207,30 @@ class Permissions {
       return '/leave';
     }
     return '/home'; // Flutter fallback instead of /dashboard since dashboard links here/home.
+  }
+
+  static PermissionMap mapFromJson(Object? raw) {
+    final map = <String, List<String>>{};
+    if (raw is Map) {
+      raw.forEach((key, value) {
+        if (value is List) {
+          map[key.toString()] = value.map((e) => e.toString()).toList();
+        }
+      });
+    }
+    return map;
+  }
+
+  static bool mapsEqual(PermissionMap a, PermissionMap b) {
+    if (a.length != b.length) return false;
+    for (final key in a.keys) {
+      final left = List<String>.from(a[key] ?? const [])..sort();
+      final right = List<String>.from(b[key] ?? const [])..sort();
+      if (left.length != right.length) return false;
+      for (var i = 0; i < left.length; i++) {
+        if (left[i] != right[i]) return false;
+      }
+    }
+    return true;
   }
 }

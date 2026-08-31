@@ -191,7 +191,7 @@ class _AutostartOnboardingScreenState extends State<AutostartOnboardingScreen> {
                 title: const Text('2. Allow Background Autostart'),
                 subtitle: isKnownOEM
                     ? Text('Your $_manufacturer device frequently kills background apps. Please allow autostart.')
-                    : const Text('Please go to Settings > Apps > nb_crm_flutter > Battery, and allow unrestricted background activity.'),
+                    : const Text('Please go to Settings > Apps > NB CRM > Battery, and allow unrestricted background activity.'),
                 trailing: ElevatedButton(
                   onPressed: _openAutostartSettings,
                   child: const Text('Settings'),

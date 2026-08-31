@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import { fail } from '../utils/response';
+import { isAdminRole } from '../modules/auth/permissions-map';
 
 export type PermissionAction = 'READ' | 'WRITE' | 'APPROVE' | 'DELETE' | 'EXPORT';
 
@@ -10,6 +11,10 @@ export type PermissionAction = 'READ' | 'WRITE' | 'APPROVE' | 'DELETE' | 'EXPORT
 export function requirePermission(moduleKey: string, action: PermissionAction) {
   return (req: Request, res: Response, next: NextFunction) => {
     if (!req.user) return res.status(401).json(fail('Unauthenticated'));
+
+    if (isAdminRole(req.user.roleName ?? req.user.role)) {
+      return next();
+    }
 
     const actions = req.user.permissions?.[moduleKey] ?? [];
     if (!actions.includes(action)) {
@@ -36,6 +41,10 @@ export function requireSelfEmployeeOrPermission(
     const selfId = req.user.employeeId;
 
     if (Number.isFinite(targetId) && selfId != null && selfId === targetId) {
+      return next();
+    }
+
+    if (isAdminRole(req.user.roleName ?? req.user.role)) {
       return next();
     }
 

@@ -24,7 +24,7 @@ const envSchema = z.object({
     .regex(/^[0-9a-fA-F]{64}$/, 'ENCRYPTION_KEY must be 64 hex chars (32 bytes)'),
 
   /** Single connection string: cloudinary://API_KEY:API_SECRET@CLOUD_NAME */
-  CLOUDINARY_URL: z.string().optional(),
+  CLOUDINARY_URL: optionalNonEmptyString,
 
   CLOUDINARY_CLOUD_NAME: optionalNonEmptyString,
   CLOUDINARY_API_KEY: optionalNonEmptyString,
@@ -73,7 +73,31 @@ const envSchema = z.object({
   MSSQL_PUNCH_AT_COLUMN: optionalNonEmptyString,
   MSSQL_TERMINAL_COLUMN: optionalNonEmptyString,
   MSSQL_MODE_COLUMN: optionalNonEmptyString,
-});
+
+  /** LiveKit (voice/video/screen). Defaults match `livekit-server --dev`. */
+  LIVEKIT_URL: z.string().default('http://127.0.0.1:7880'),
+  LIVEKIT_PUBLIC_URL: optionalNonEmptyString,
+  LIVEKIT_API_KEY: z.string().default('devkey'),
+  LIVEKIT_API_SECRET: z.string().default('secret'),
+
+  /** MinIO S3-compatible storage for chat/meet files. Falls back to Cloudinary/local. */
+  MINIO_ENDPOINT: optionalNonEmptyString,
+  MINIO_PORT: z.coerce.number().int().positive().default(9000),
+  MINIO_ACCESS_KEY: optionalNonEmptyString,
+  MINIO_SECRET_KEY: optionalNonEmptyString,
+  MINIO_BUCKET: z.string().default('crm-files'),
+  MINIO_USE_SSL: z.preprocess((v) => v === 'true' || v === true, z.boolean()).default(false),
+  MINIO_PUBLIC_URL: optionalNonEmptyString,
+  /** Hostname LiveKit egress uses to reach MinIO (docker service name, not localhost). */
+  MINIO_EGRESS_ENDPOINT: optionalNonEmptyString,
+
+  /** Optional OpenAI key for meeting AI summaries. Transcript fallback if unset. */
+  OPENAI_API_KEY: optionalNonEmptyString,
+  OPENAI_MODEL: z.string().default('gpt-4o-mini'),
+
+  CLAMAV_HOST: optionalNonEmptyString,
+  CLAMAV_PORT: z.coerce.number().int().positive().default(3310),
+})
 
 export type Env = z.infer<typeof envSchema>;
 

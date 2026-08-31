@@ -40,7 +40,10 @@ class DioClient {
     dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
-          final token = await readToken();
+          final extraToken = options.extra['bearer'];
+          final token = extraToken is String && extraToken.isNotEmpty
+              ? extraToken
+              : await readToken();
           if (token != null && token.isNotEmpty) {
             options.headers['Authorization'] = 'Bearer $token';
           }
@@ -118,13 +121,18 @@ class DioClient {
     Object? data,
     Duration? sendTimeout,
     Duration? receiveTimeout,
+    String? bearer,
     required T Function(Object? raw) parse,
   }) async {
     try {
       final response = await dio.post<Map<String, dynamic>>(
         path,
         data: data,
-        options: _timeoutOptions(sendTimeout: sendTimeout, receiveTimeout: receiveTimeout),
+        options: Options(
+          sendTimeout: sendTimeout,
+          receiveTimeout: receiveTimeout,
+          extra: {if (bearer != null) 'bearer': bearer},
+        ),
       );
       return _unwrap(response.data, response.statusCode, parse);
     } on DioException catch (e) {

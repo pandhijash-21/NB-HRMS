@@ -106,6 +106,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         color: const Color(0xFF4f46e5),
       ),
       _ModuleCardData(
+        title: 'Chat',
+        subtitle: '1:1 and group chat, files, presence',
+        icon: Icons.chat_bubble_rounded,
+        route: '/chat',
+        enabled: true,
+        category: ModuleCategory.mySpace,
+        color: const Color(0xFF2563EB),
+      ),
+      _ModuleCardData(
+        title: 'Meet',
+        subtitle: 'Voice, video, screen share, guest codes, AI summary',
+        icon: Icons.videocam_rounded,
+        route: '/meet',
+        enabled: true,
+        category: ModuleCategory.mySpace,
+        color: const Color(0xFF0f766e),
+      ),
+      _ModuleCardData(
         title: 'Leave',
         subtitle: () {
           final parts = <String>['Balances', 'apply', 'history'];

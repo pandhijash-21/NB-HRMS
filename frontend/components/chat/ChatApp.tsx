@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useChat, type ChatChannel, type ChatMessage, type CollabProfile } from "@/lib/hooks/useChat";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { PhotoLightbox } from "@/components/ui/photo-lightbox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -252,10 +253,12 @@ export function ChatApp() {
                   )}
                 >
                   <div className="relative">
+                    <PhotoLightbox src={c.avatarUrl || other?.photoUrl} alt={title}>
                     <Avatar>
                       <AvatarImage src={c.avatarUrl || other?.photoUrl || undefined} />
                       <AvatarFallback>{initials(title)}</AvatarFallback>
                     </Avatar>
+                    </PhotoLightbox>
                     {online && (
                       <span className="absolute bottom-0 right-0 size-2.5 rounded-full bg-emerald-500 ring-2 ring-background" />
                     )}
@@ -292,10 +295,12 @@ export function ChatApp() {
               <button className="md:hidden text-sm text-primary" onClick={() => setMobilePane("list")}>
                 Back
               </button>
+              <PhotoLightbox src={chat.active.avatarUrl} alt={chat.active.name}>
               <Avatar>
                 <AvatarImage src={chat.active.avatarUrl || undefined} />
                 <AvatarFallback>{initials(chat.active.name)}</AvatarFallback>
               </Avatar>
+              </PhotoLightbox>
               <div className="min-w-0">
                 <p className="font-semibold truncate">{chat.active.name}</p>
                 <p className="text-xs text-muted-foreground truncate">
@@ -314,10 +319,12 @@ export function ChatApp() {
                 return (
                   <div key={m.id} className={cn("flex gap-2", mine ? "justify-end" : "justify-start")}>
                     {!mine && (
+                      <PhotoLightbox src={m.sender?.photoUrl} alt={m.sender?.name}>
                       <Avatar size="sm">
                         <AvatarImage src={m.sender?.photoUrl || undefined} />
                         <AvatarFallback>{initials(m.sender?.name)}</AvatarFallback>
                       </Avatar>
+                      </PhotoLightbox>
                     )}
                     <div className={cn("max-w-[78%] sm:max-w-[62%]")}>
                       {!mine && (

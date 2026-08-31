@@ -252,7 +252,7 @@ function serializeParticipant(p: {
   email: string | null;
   joinedAt: Date | null;
   leftAt: Date | null;
-  profile?: { name: string; photoUrl: string | null; email: string | null } | null;
+  profile?: { name: string; photoUrl: string | null; email: string | null; department?: string | null } | null;
 }) {
   return {
     id: p.id,
@@ -260,6 +260,7 @@ function serializeParticipant(p: {
     name: p.profile?.name || p.guestName || 'Guest',
     photoUrl: p.profile?.photoUrl || p.photoUrl,
     email: p.profile?.email || p.email,
+    department: p.profile?.department || null,
     role: p.role,
     admission: p.admission || 'ADMITTED',
     isGuest: !p.userId,
@@ -298,6 +299,7 @@ async function serializeMeeting(meetingId: string, viewerUserId?: string | null)
     summaryText: meeting.summaryText,
     livekitRoom: meeting.livekitRoom,
     host,
+    hostUserId: meeting.hostUserId,
     isHost: viewerUserId === meeting.hostUserId,
     joinUrl: meetingJoinUrl(meeting.code),
     participants: meeting.participants
@@ -608,21 +610,20 @@ export const meetService = {
     if (!profile) throw new Error('User not found');
 
     const isHost = meeting.hostUserId === userId;
-    const mustKnock = meeting.waitingRoom && !isHost;
 
     let participant = meeting.participants.find((p) => p.userId === userId);
-    if (participant?.admission === 'DENIED' && mustKnock) {
+    if (participant?.admission === 'DENIED' && meeting.waitingRoom && !isHost) {
       throw new Error('The host declined your request to join');
     }
 
-    // Invited people and anyone already admitted skip the waiting room.
-    // Never demote an ADMITTED invitee to WAITING on rejoin.
-    const skipKnock =
+    // Ask-to-join: only the host, or someone the host already let in, may enter.
+    // Invited people and guests are created as ADMITTED for the roster but have
+    // no joinedAt until they actually enter — they must still knock.
+    const previouslyLetIn =
       isHost ||
-      !mustKnock ||
-      participant?.admission === 'ADMITTED' ||
-      participant?.role === 'HOST';
-    const nextAdmission = skipKnock ? 'ADMITTED' : 'WAITING';
+      participant?.role === 'HOST' ||
+      (participant?.admission === 'ADMITTED' && participant.joinedAt != null);
+    const nextAdmission = meeting.waitingRoom && !previouslyLetIn ? 'WAITING' : 'ADMITTED';
 
     if (!participant) {
       participant = await prisma.meetingParticipant.create({

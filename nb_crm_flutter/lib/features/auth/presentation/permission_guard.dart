@@ -44,6 +44,13 @@ class _PermissionGuardState extends State<PermissionGuard> {
     return '';
   }
 
+  bool _isAuthRoute() {
+    final path = _currentPath();
+    return path == '/login' ||
+        path == '/change-password' ||
+        path == '/verify-emails';
+  }
+
   bool _isPublicMeetRoute() {
     final path = _currentPath();
     return path.startsWith('/meet/r/') || path.startsWith('/meet/guest/');
@@ -54,7 +61,8 @@ class _PermissionGuardState extends State<PermissionGuard> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      if (_isPublicMeetRoute()) {
+      if (_isPublicMeetRoute() || _isAuthRoute()) {
+        if (kIsWeb) WebLiveTrackingService.stop();
         setState(() {
           _checking = false;
           _errorMsg = '';
@@ -65,7 +73,10 @@ class _PermissionGuardState extends State<PermissionGuard> {
     });
     _timer = Timer.periodic(const Duration(seconds: 2), (timer) {
       if (!mounted || _checking) return;
-      if (_isPublicMeetRoute()) return;
+      if (_isPublicMeetRoute() || _isAuthRoute()) {
+        if (kIsWeb) WebLiveTrackingService.stop();
+        return;
+      }
       if (kIsWeb) {
         unawaited(_verifyPermissionsQuietly());
         return;
@@ -103,7 +114,8 @@ class _PermissionGuardState extends State<PermissionGuard> {
   }
 
   Future<void> _checkPermissions() async {
-    if (_isPublicMeetRoute()) {
+    if (_isPublicMeetRoute() || _isAuthRoute()) {
+      if (kIsWeb) WebLiveTrackingService.stop();
       if (mounted) {
         setState(() {
           _checking = false;
@@ -204,7 +216,10 @@ class _PermissionGuardState extends State<PermissionGuard> {
   }
 
   Future<void> _verifyPermissionsQuietly() async {
-    if (_isPublicMeetRoute()) return;
+    if (_isPublicMeetRoute() || _isAuthRoute()) {
+      if (kIsWeb) WebLiveTrackingService.stop();
+      return;
+    }
     if (kIsWeb) {
       final ok = await _isWebLocationReady();
       if (!mounted) return;
@@ -372,7 +387,7 @@ class _PermissionGuardState extends State<PermissionGuard> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isPublicMeetRoute()) {
+    if (_isPublicMeetRoute() || _isAuthRoute()) {
       return widget.child;
     }
     if (_checking) {

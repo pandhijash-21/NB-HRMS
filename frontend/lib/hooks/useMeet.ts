@@ -8,6 +8,8 @@ export type MeetingPerson = {
   userId: string | null;
   name: string;
   photoUrl: string | null;
+  email?: string | null;
+  department?: string | null;
   role: string;
   isGuest: boolean;
   admission?: string;

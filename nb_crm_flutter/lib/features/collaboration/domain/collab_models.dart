@@ -366,6 +366,7 @@ class MeetingPerson {
     this.photoUrl,
     this.role,
     this.email,
+    this.department,
     this.isGuest = false,
     this.admission,
     this.joinedAt,
@@ -377,6 +378,7 @@ class MeetingPerson {
   final String? photoUrl;
   final String? role;
   final String? email;
+  final String? department;
   final bool isGuest;
   final String? admission;
   final DateTime? joinedAt;
@@ -391,6 +393,7 @@ class MeetingPerson {
       photoUrl: json['photoUrl']?.toString(),
       role: json['role']?.toString(),
       email: json['email']?.toString(),
+      department: json['department']?.toString(),
       isGuest: json['isGuest'] == true || userId == null || userId.isEmpty,
       admission: json['admission']?.toString(),
       joinedAt: DateTime.tryParse('${json['joinedAt'] ?? ''}'),

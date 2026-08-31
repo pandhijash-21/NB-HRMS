@@ -212,6 +212,15 @@ class CollabSocket {
     });
   }
 
+  void onWaitingKnock(void Function(MeetingPerson) cb) {
+    _socket?.off('waiting_knock');
+    _socket?.on('waiting_knock', (data) {
+      if (data is Map) {
+        cb(MeetingPerson.fromJson(Map<String, dynamic>.from(data)));
+      }
+    });
+  }
+
   void onJoinApproved(void Function(String? participantId) cb) {
     _socket?.off('join_approved');
     _socket?.on('join_approved', (data) {

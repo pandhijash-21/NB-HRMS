@@ -275,12 +275,12 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     <div className="app-shell">
       <div className="app-main">
         <Sidebar
-          title="HRMS Admin"
+          title="NB HRMS"
           subtitle="Management Portal"
           navGroups={navGroups}
         />
         <div className="flex flex-col flex-1 min-w-0">
-          <Topbar title="HRMS Admin" isAdmin={true} />
+          <Topbar title="NB HRMS" isAdmin={true} />
           <main className="app-content">{children}</main>
         </div>
       </div>

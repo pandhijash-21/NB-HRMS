@@ -28,6 +28,7 @@ import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { PhotoLightbox } from "@/components/ui/photo-lightbox";
 import { cn } from "@/lib/utils";
 import api from "@/lib/axios";
 import { getCollabSocket } from "@/lib/socket";
@@ -174,10 +175,12 @@ function PersonTile({
         <VideoPane publication={cam} local={participant.isLocal} />
       ) : (
         <div className="h-full w-full grid place-items-center">
-          <Avatar className={compact ? "size-10" : "size-16"}>
-            <AvatarImage src={photoUrl || undefined} />
-            <AvatarFallback className="text-lg">{initials(participant.name)}</AvatarFallback>
-          </Avatar>
+          <PhotoLightbox src={photoUrl} alt={participant.name || "Guest"}>
+            <Avatar className={compact ? "size-10" : "size-16"}>
+              <AvatarImage src={photoUrl || undefined} />
+              <AvatarFallback className="text-lg">{initials(participant.name)}</AvatarFallback>
+            </Avatar>
+          </PhotoLightbox>
         </div>
       )}
       <div className="absolute bottom-2 left-2 text-xs bg-black/55 rounded-md px-2 py-0.5">
@@ -241,6 +244,7 @@ export function MeetRoom({ code }: { code: string }) {
     sock.off("meeting_ended");
     sock.off("recording");
     sock.off("waiting_update");
+    sock.off("waiting_knock");
     sock.off("join_approved");
     sock.off("join_denied");
     sock.on("meeting_chat", (row: ChatRow) => {
@@ -256,6 +260,12 @@ export function MeetRoom({ code }: { code: string }) {
     sock.on("recording", (p: { active: boolean }) => setRecording(p.active));
     sock.on("waiting_update", (p: { waiting?: MeetingPerson[] }) => {
       setWaitingFor(p.waiting ?? []);
+    });
+    sock.on("waiting_knock", (person: MeetingPerson) => {
+      setWaitingFor((current) => {
+        if (!person?.id || current.some((p) => p.id === person.id)) return current;
+        return [...current, person];
+      });
     });
     sock.on("join_approved", async (p: { participantId?: string }) => {
       if (!waitingRef.current) return;
@@ -466,13 +476,13 @@ export function MeetRoom({ code }: { code: string }) {
           )}
           {loggedIn ? (
             <Button className="w-full" onClick={joinAsMember}>
-              <LogIn className="size-4 mr-2" /> Join with your account
+              <LogIn className="size-4 mr-2" /> {preview?.waitingRoom ? "Ask to join" : "Join with your account"}
             </Button>
           ) : (
             <>
               <Input placeholder="Your name" value={guestName} onChange={(e) => setGuestName(e.target.value)} />
               <Button className="w-full" onClick={joinAsGuest} disabled={guestName.trim().length < 2}>
-                Ask to join as guest
+                {preview?.waitingRoom ? "Ask to join as guest" : "Join as guest"}
               </Button>
             </>
           )}
@@ -521,31 +531,58 @@ export function MeetRoom({ code }: { code: string }) {
       </header>
 
       {isHost && waitingFor.length > 0 && (
-        <div className="px-3 py-2 bg-amber-500/15 border-b border-amber-500/20 space-y-2">
-          {waitingFor.map((person) => (
-            <div key={person.id} className="flex items-center gap-2 text-sm">
-              <span className="flex-1 truncate">{person.name} wants to join</span>
-              <Button
-                size="sm"
-                onClick={async () => {
-                  if (!joinData) return;
-                  await admitParticipant(joinData.meeting.id, person.id);
-                }}
-              >
-                Admit
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={async () => {
-                  if (!joinData) return;
-                  await denyParticipant(joinData.meeting.id, person.id);
-                }}
-              >
-                Deny
-              </Button>
-            </div>
-          ))}
+        <div className="px-3 py-3 bg-amber-500/20 border-b-2 border-amber-400 space-y-3">
+          <p className="text-sm font-bold text-amber-100">
+            {waitingFor.length === 1
+              ? `${waitingFor[0].name} wants to join`
+              : `${waitingFor.length} people waiting to join`}
+          </p>
+          <p className="text-xs text-amber-100/80">They cannot enter until you admit them.</p>
+          {waitingFor.map((person) => {
+            const details = [
+              person.isGuest ? "Guest" : null,
+              person.department,
+              person.email,
+            ]
+              .filter(Boolean)
+              .join(" · ");
+            return (
+              <div key={person.id} className="flex items-center gap-3 text-sm flex-wrap">
+                <Avatar className="size-10 shrink-0">
+                  {person.photoUrl ? <AvatarImage src={person.photoUrl} alt="" /> : null}
+                  <AvatarFallback className="bg-amber-400 text-slate-900 font-bold">
+                    {(person.name || "?").slice(0, 1).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold truncate">{person.name}</p>
+                  <p className="text-xs text-amber-100/80 truncate">{details || (person.isGuest ? "Guest" : "Employee")}</p>
+                </div>
+                <div className="flex items-center gap-2 ml-auto">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={async () => {
+                      if (!joinData) return;
+                      await denyParticipant(joinData.meeting.id, person.id);
+                    }}
+                  >
+                    Deny
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="bg-amber-400 text-slate-900 hover:bg-amber-300 font-extrabold px-5"
+                    onClick={async () => {
+                      if (!joinData) return;
+                      await admitParticipant(joinData.meeting.id, person.id);
+                    }}
+                  >
+                    Admit
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 

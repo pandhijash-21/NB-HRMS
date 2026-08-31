@@ -9,6 +9,7 @@ import '../../features/auth/domain/permissions.dart';
 import '../../features/auth/presentation/auth_providers.dart';
 import '../../features/collaboration/presentation/chat_inbox.dart';
 import '../../features/tracking_hub/presentation/location_alert_watch.dart';
+import '../app_module.dart';
 import '../logging/app_logger.dart';
 import '../services/location_alert_sound.dart';
 import '../theme/theme_provider.dart';
@@ -53,14 +54,20 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
           label: 'HRMS',
           backgroundColor: itemBgColor,
           foregroundColor: itemFgColor,
-          onTap: () => context.go('/home'),
+          onTap: () {
+            ref.read(appModuleProvider.notifier).setModule(AppModule.hrms);
+            context.go('/home');
+          },
         ),
         RadialMenuItem(
           icon: Icons.account_balance_rounded,
           label: 'ERP',
           backgroundColor: itemBgColor,
           foregroundColor: itemFgColor,
-          onTap: () => context.go('/erp/home'),
+          onTap: () {
+            ref.read(appModuleProvider.notifier).setModule(AppModule.erp);
+            context.go('/erp/home');
+          },
         ),
         RadialMenuItem(
           icon: Icons.support_agent_rounded,
@@ -68,9 +75,8 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
           backgroundColor: itemBgColor,
           foregroundColor: itemFgColor,
           onTap: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('CRM Module Coming Soon')),
-            );
+            ref.read(appModuleProvider.notifier).setModule(AppModule.crm);
+            context.go('/chat');
           },
         ),
       ],
@@ -110,10 +116,50 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     );
 
     final currentPath = GoRouterState.of(context).matchedLocation;
-    final isErp = currentPath.startsWith('/erp');
+    final module = ref.watch(appModuleProvider);
+    final brandTitle = shellBrandTitle(module);
+
+    final inferred = inferAppModule(currentPath, module);
+    if (inferred != module) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ref.read(appModuleProvider.notifier).syncFromPath(currentPath);
+      });
+    }
+
+    const sharedCollab = <_Destination>[
+      _Destination(
+        '/org-tree',
+        Icons.account_tree_outlined,
+        Icons.account_tree,
+        'Employee tree',
+        section: 'Collaboration',
+      ),
+      _Destination(
+        '/tasks',
+        Icons.task_alt_outlined,
+        Icons.task_alt,
+        'Tasks',
+        section: 'Collaboration',
+      ),
+      _Destination(
+        '/chat',
+        Icons.chat_outlined,
+        Icons.chat,
+        'Chat',
+        section: 'Collaboration',
+      ),
+      _Destination(
+        '/meet',
+        Icons.videocam_outlined,
+        Icons.videocam,
+        'Meet',
+        section: 'Collaboration',
+      ),
+    ];
 
     final destinations = <_Destination>[
-      if (!isErp) ...[
+      if (module == AppModule.hrms) ...[
         if (canAccessAdmin)
           const _Destination(
             '/admin/dashboard',
@@ -124,40 +170,32 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
           ),
         const _Destination('/home', Icons.home_outlined, Icons.home, 'Home', section: 'Main'),
         const _Destination(
-          '/org-tree',
-          Icons.account_tree_outlined,
-          Icons.account_tree,
-          'Employee tree',
-          section: 'Main',
-        ),
-        const _Destination(
           '/profile',
           Icons.person_outline,
           Icons.person,
           'Profile',
           section: 'Main',
         ),
+      ] else if (module == AppModule.erp) ...[
+        const _Destination('/erp/home', Icons.home_outlined, Icons.home, 'Home', section: 'ERP'),
         const _Destination(
-          '/tasks',
-          Icons.task_alt_outlined,
-          Icons.task_alt,
-          'Tasks',
-          section: 'Collaboration',
+          '/erp/projects',
+          Icons.apartment_outlined,
+          Icons.apartment,
+          'Projects',
+          section: 'ERP',
         ),
-        const _Destination(
-          '/chat',
-          Icons.chat_outlined,
-          Icons.chat,
-          'Chat',
-          section: 'Collaboration',
-        ),
-        const _Destination(
-          '/meet',
-          Icons.videocam_outlined,
-          Icons.videocam,
-          'Meet',
-          section: 'Collaboration',
-        ),
+        if (canAccessAdmin)
+          const _Destination(
+            '/erp/configurations',
+            Icons.settings_outlined,
+            Icons.settings,
+            'Configurations',
+            section: 'ERP',
+          ),
+      ],
+      ...sharedCollab,
+      if (module == AppModule.hrms) ...[
         if (Permissions.canReadLeave(auth.permissions) ||
             Permissions.canWriteLeave(auth.permissions) ||
             canApproveLeave ||
@@ -238,23 +276,6 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             section: 'Tracking',
             alertBadge: true,
           ),
-      ] else ...[
-        const _Destination('/erp/home', Icons.home_outlined, Icons.home, 'Home', section: 'ERP'),
-        const _Destination(
-          '/erp/projects',
-          Icons.apartment_outlined,
-          Icons.apartment,
-          'Projects',
-          section: 'ERP',
-        ),
-        if (canAccessAdmin)
-          const _Destination(
-            '/erp/configurations',
-            Icons.settings_outlined,
-            Icons.settings,
-            'Configurations',
-            section: 'ERP',
-          ),
       ],
     ];
 
@@ -291,7 +312,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
         context,
         Scaffold(
         appBar: AppBar(
-          title: const Text('NB CRM'),
+          title: Text(brandTitle),
           actions: [
             IconButton(
               tooltip: 'Employee tree',
@@ -338,7 +359,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                         _buildLogo(context),
                         const SizedBox(width: 12),
                         Text(
-                          'NB CRM',
+                          brandTitle,
                           style: TextStyle(
                             fontWeight: FontWeight.w700,
                             fontSize: 18,
@@ -503,6 +524,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                 isSelected,
                 goTo,
                 isDark,
+                brandTitle: brandTitle,
                 allowExpanded: allowExpandedSidebar,
                 alertCount: alertCount,
                 chatUnread: chatUnread,
@@ -853,6 +875,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     bool Function(_Destination) isSelected,
     void Function(_Destination d, {bool closeDrawer}) goTo,
     bool isDark, {
+    required String brandTitle,
     bool allowExpanded = true,
     int alertCount = 0,
     int chatUnread = 0,
@@ -887,7 +910,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          'NB CRM',
+                          brandTitle,
                           style: TextStyle(
                             fontWeight: FontWeight.w700,
                             fontSize: 17,
@@ -915,7 +938,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Tooltip(
-                        message: allowExpanded ? 'Expand sidebar' : 'NB CRM',
+                        message: allowExpanded ? 'Expand sidebar' : brandTitle,
                         child: InkWell(
                           onTap: allowExpanded
                               ? () => setState(() => _isExpanded = true)

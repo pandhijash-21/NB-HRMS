@@ -25,6 +25,7 @@ import {
 } from "@/lib/graphql";
 import { useRequestChange, usePendingRequest } from "@/lib/hooks/useApprovals";
 import { useUpload } from "@/lib/hooks/useUpload";
+import { PhotoLightbox } from "@/components/ui/photo-lightbox";
 
 const personalSchema = z.object({
   birthDate: z.string().optional(),
@@ -406,13 +407,15 @@ export function PersonalTab({ employee, isAdmin, onUpdate }: PersonalTabProps) {
                   Photo <span className="text-rose-500">*</span>
                 </Label>
                 {employee.photoUrl ? (
-                  <div className="relative group">
+                  <PhotoLightbox src={employee.photoUrl as string} alt="Profile Photo">
+                    <div className="relative group">
                     <img
                       src={employee.photoUrl as string}
                       alt="Profile Photo"
                       className="w-full h-40 object-cover rounded-xl border border-slate-200"
                     />
                   </div>
+                  </PhotoLightbox>
                 ) : (
                   <div className="w-full h-40 border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center gap-2 bg-slate-50">
                     <Camera className="w-8 h-8 text-slate-300" />

@@ -524,7 +524,7 @@ class _AccessChoice extends StatelessWidget {
         tile(
           value: true,
           title: 'Ask to join',
-          subtitle: 'You admit each person, like Google Meet',
+          subtitle: 'You admit everyone before they enter, including guests',
         ),
       ],
     );

@@ -10,9 +10,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/network/api_envelope.dart';
 import '../../../../core/network/app_config.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/zoomable_photo.dart';
 import '../../../../core/utils/open_url.dart';
 import '../../../auth/presentation/auth_providers.dart';
 import '../../domain/collab_models.dart';
+import '../../data/collab_socket.dart';
 import '../chat_emojis.dart';
 import '../collab_providers.dart';
 import '../meet_helpers.dart';
@@ -76,6 +78,7 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
   List<MentionChoice> _mentionHits = [];
   int _mentionAt = -1;
   int _mentionSel = 0;
+  CollabSocket? _socket;
 
   @override
   void initState() {
@@ -97,13 +100,15 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
     _composerFocus.dispose();
     _typingClear?.cancel();
     _meetStatusPoll?.cancel();
-    final socket = ref.read(collabSocketProvider);
-    socket.offNewMessage(_onNewMessage);
-    socket.offMessageUpdated(_onMessageUpdated);
-    socket.offChannelRead(_onChannelRead);
-    socket.offUserTyping(_onUserTyping);
-    socket.offMeetingEnded(_onMeetingEndedEvent);
-    socket.offPresence(_onPresence);
+    final socket = _socket;
+    if (socket != null) {
+      socket.offNewMessage(_onNewMessage);
+      socket.offMessageUpdated(_onMessageUpdated);
+      socket.offChannelRead(_onChannelRead);
+      socket.offUserTyping(_onUserTyping);
+      socket.offMeetingEnded(_onMeetingEndedEvent);
+      socket.offPresence(_onPresence);
+    }
     super.dispose();
   }
 
@@ -243,8 +248,14 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
 
   Future<void> _boot() async {
     try {
+      if (!ref.read(authNotifierProvider).isAuthenticated) {
+        if (mounted) setState(() => _loading = false);
+        return;
+      }
       final token = await ref.read(secureStorageProvider).readToken();
+      if (!mounted) return;
       final socket = ref.read(collabSocketProvider);
+      _socket = socket;
       if (token != null) socket.connect(token: token);
       socket.onNewMessage(_onNewMessage);
       socket.onMessageUpdated(_onMessageUpdated);
@@ -292,6 +303,7 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
   }
 
   Future<void> _refreshChannels() async {
+    if (!mounted || !ref.read(authNotifierProvider).isAuthenticated) return;
     final channels = await ref.read(chatRepositoryProvider).channels();
     if (!mounted) return;
     setState(() => _channels = channels);
@@ -1900,6 +1912,10 @@ class _VoiceCallCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final labelColor = ended
+        ? mutedOf(isDark)
+        : (isDark ? Colors.white : const Color(0xFF1E1E1E));
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 280),
       child: Row(
@@ -1926,7 +1942,7 @@ class _VoiceCallCard extends StatelessWidget {
               style: TextStyle(
                 fontWeight: FontWeight.w800,
                 fontSize: 14,
-                color: ended ? Colors.white54 : null,
+                color: labelColor,
               ),
             ),
           ),
@@ -2319,15 +2335,19 @@ class _Avatar extends StatelessWidget {
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          CircleAvatar(
-            radius: size / 2,
-            backgroundColor: _teamsPurple,
-            backgroundImage: hasPhoto ? NetworkImage(url!) : null,
-            child: hasPhoto
-                ? null
-                : isGroup
-                    ? NbIcon(Icons.groups_rounded, color: Colors.white, size: size * 0.5)
-                    : Text(letter, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: size * 0.38)),
+          ZoomablePhoto(
+            url: url,
+            label: name,
+            child: CircleAvatar(
+              radius: size / 2,
+              backgroundColor: _teamsPurple,
+              backgroundImage: hasPhoto ? NetworkImage(url!) : null,
+              child: hasPhoto
+                  ? null
+                  : isGroup
+                      ? NbIcon(Icons.groups_rounded, color: Colors.white, size: size * 0.5)
+                      : Text(letter, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: size * 0.38)),
+            ),
           ),
           if (online)
             Positioned(

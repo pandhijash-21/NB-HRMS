@@ -10,6 +10,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/auth_providers.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/zoomable_photo.dart';
 import '../../domain/collab_models.dart';
 import '../collab_providers.dart';
 import '../end_meet_progress.dart';
@@ -47,6 +48,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
   final _draft = TextEditingController();
   final _chat = <Map<String, dynamic>>[];
   String? _summary;
+  MeetingItem? _lobbyMeeting;
   LocalVideoTrack? _previewCam;
   Timer? _admitPoll;
   Timer? _hostWaitPoll;
@@ -79,6 +81,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       await _restoreGuestName();
+      unawaited(_loadLobbyMeeting());
       if (!widget.voiceOnly) await _startLobbyPreview();
     });
   }
@@ -152,6 +155,14 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
       }
     } catch (_) {}
     if (mounted) setState(() => _cam = next);
+  }
+
+  Future<void> _loadLobbyMeeting() async {
+    try {
+      final meeting = await ref.read(meetRepositoryProvider).getByCode(widget.code);
+      if (!mounted) return;
+      setState(() => _lobbyMeeting = meeting);
+    } catch (_) {}
   }
 
   Future<void> _restoreGuestName() async {
@@ -242,6 +253,13 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
     socket.onWaitingUpdate((waiting) {
       if (!mounted) return;
       setState(() => _waitingFor = waiting);
+    });
+    socket.onWaitingKnock((person) {
+      if (!mounted) return;
+      setState(() {
+        if (_waitingFor.any((p) => p.id != null && p.id == person.id)) return;
+        _waitingFor = [..._waitingFor, person];
+      });
     });
     socket.onJoinApproved((participantId) async {
       if (!_waiting) return;
@@ -889,17 +907,41 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                 Text(
                   widget.voiceOnly
                       ? 'Microphone is on. Camera stays off unless you turn it on. You can share your screen in the call.'
-                      : loggedIn
-                          ? 'Check your camera and microphone, then join with your signed-in account.'
-                          : 'Enter your full name to join. No account or email is needed.',
+                      : _lobbyMeeting?.waitingRoom == true
+                          ? 'This meeting is set to ask to join. The host must admit you before you can enter — including guests.'
+                          : loggedIn
+                              ? 'Check your camera and microphone, then join with your signed-in account.'
+                              : 'Enter your full name to join. No account or email is needed.',
                   style: TextStyle(color: muted),
                 ),
+                if (_lobbyMeeting?.waitingRoom == true) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFC5A059).withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFC5A059).withValues(alpha: 0.45)),
+                    ),
+                    child: const Text(
+                      'You will wait in the lobby until the host admits you.',
+                      style: TextStyle(fontWeight: FontWeight.w600, height: 1.35),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 20),
                 if (loggedIn) ...[
                   FilledButton(
                     onPressed: _connecting ? null : _joinMember,
                     style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-                    child: Text(_connecting ? 'Joining…' : 'Join with account'),
+                    child: Text(
+                      _connecting
+                          ? 'Asking to join…'
+                          : _lobbyMeeting?.waitingRoom == true
+                              ? 'Ask to join'
+                              : 'Join with account',
+                    ),
                   ),
                   if (_connecting) ...[
                     const SizedBox(height: 8),
@@ -923,7 +965,13 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                   FilledButton(
                     onPressed: _connecting || _name.text.trim().length < 2 ? null : _joinGuest,
                     style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-                    child: Text(_connecting ? 'Joining…' : 'Join as guest'),
+                    child: Text(
+                      _connecting
+                          ? 'Asking to join…'
+                          : _lobbyMeeting?.waitingRoom == true
+                              ? 'Ask to join as guest'
+                              : 'Join as guest',
+                    ),
                   ),
                 ],
               ],
@@ -956,6 +1004,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
             bottom: false,
             child: _meetTopBar(participants),
           ),
+          if (_join?.meeting.isHost == true && _waitingFor.isNotEmpty) _knockPanel(),
           Expanded(
             child: Stack(
               children: [
@@ -973,11 +1022,6 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                       Expanded(child: _peopleGrid(participants, fill: true)),
                   ],
                 ),
-                if (_join?.meeting.isHost == true && _waitingFor.isNotEmpty)
-                  Align(
-                    alignment: Alignment.bottomRight,
-                    child: _knockPanel(),
-                  ),
                 if (_chatOpen)
                   Align(
                     alignment: Alignment.centerRight,
@@ -1118,6 +1162,22 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                   children: [
                     Text(widget.code, style: const TextStyle(color: Colors.white70, fontSize: 12)),
                     _peopleChip(participants),
+                    if (join?.meeting.isHost == true && _waitingFor.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFC5A059),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          _waitingFor.length == 1 ? '1 waiting' : '${_waitingFor.length} waiting',
+                          style: const TextStyle(
+                            color: Color(0xFF161616),
+                            fontWeight: FontWeight.w800,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ],
@@ -1200,7 +1260,10 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
             padding: EdgeInsets.only(left: e.key == 0 ? 0 : 4),
             child: Tooltip(
               message: label,
-              child: CircleAvatar(
+              child: ZoomablePhoto(
+                url: (photo ?? '').isNotEmpty ? photo : null,
+                label: label,
+                child: CircleAvatar(
                 radius: 11,
                 backgroundColor: const Color(0xFF374151),
                 backgroundImage: (photo ?? '').isNotEmpty ? NetworkImage(photo!) : null,
@@ -1210,6 +1273,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                         style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700),
                       )
                     : null,
+              ),
               ),
             ),
           );
@@ -1374,80 +1438,146 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
   }
 
   Widget _knockPanel() {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Material(
-        color: const Color(0xFF202124),
-        elevation: 12,
-        borderRadius: BorderRadius.circular(16),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 360),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 12, 12),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+    final narrow = MediaQuery.sizeOf(context).width < 620;
+    return Material(
+      color: const Color(0xFF1A1408),
+      child: Container(
+        width: double.infinity,
+        decoration: const BoxDecoration(
+          color: Color(0xFF2A1C0C),
+          border: Border(
+            bottom: BorderSide(color: Color(0xFFC5A059), width: 2.5),
+          ),
+        ),
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
-                Text(
-                  _waitingFor.length == 1
-                      ? '${_waitingFor.first.name} wants to join'
-                      : '${_waitingFor.length} people want to join',
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
+                const NbIcon(Icons.notifications_active_rounded, color: Color(0xFFC5A059), size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _waitingFor.length == 1
+                        ? '${_waitingFor.first.name} wants to join'
+                        : '${_waitingFor.length} people waiting to join',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15),
+                  ),
                 ),
-                const SizedBox(height: 4),
-                const Text(
-                  'Admit them like Google Meet. They can only enter after you let them in.',
-                  style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.35),
-                ),
-                const SizedBox(height: 10),
-                ..._waitingFor.map((person) {
-                  final busy = person.id != null && _busyAdmit.contains(person.id);
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 16,
-                          backgroundImage: person.photoUrl != null ? NetworkImage(person.photoUrl!) : null,
-                          child: person.photoUrl == null
-                              ? Text(person.name.isEmpty ? '?' : person.name[0], style: const TextStyle(fontSize: 13))
-                              : null,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            person.name + (person.isGuest ? ' (guest)' : ''),
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: Colors.white),
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: busy || person.id == null ? null : () => _admitPerson(person, admit: false),
-                          child: const Text('Deny', style: TextStyle(color: Color(0xFFF87171))),
-                        ),
-                        FilledButton(
-                          onPressed: busy || person.id == null ? null : () => _admitPerson(person, admit: true),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: const Color(0xFFC5A059),
-                            foregroundColor: const Color(0xFF161616),
-                          ),
-                          child: Text(busy ? '…' : 'Admit'),
-                        ),
-                      ],
-                    ),
-                  );
-                }),
                 if (_waitingFor.length > 1)
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: _admitAllWaiting,
-                      child: const Text('Admit all'),
+                  TextButton(
+                    onPressed: _admitAllWaiting,
+                    child: const Text(
+                      'Admit all',
+                      style: TextStyle(color: Color(0xFFC5A059), fontWeight: FontWeight.w800),
                     ),
                   ),
               ],
             ),
-          ),
+            const SizedBox(height: 4),
+            const Text(
+              'They cannot enter until you admit them.',
+              style: TextStyle(color: Color(0xFFE8D5A8), fontSize: 12, height: 1.35),
+            ),
+            const SizedBox(height: 10),
+            ..._waitingFor.map((person) {
+              final busy = person.id != null && _busyAdmit.contains(person.id);
+              final details = [
+                if (person.isGuest) 'Guest',
+                if (!person.isGuest && (person.role ?? '').isNotEmpty && person.role != 'ATTENDEE') person.role,
+                if ((person.department ?? '').trim().isNotEmpty) person.department,
+                if ((person.email ?? '').trim().isNotEmpty) person.email,
+              ].whereType<String>().where((s) => s.trim().isNotEmpty).join(' · ');
+              final identity = Row(
+                children: [
+                  ZoomablePhoto(
+                    url: person.photoUrl,
+                    label: person.name,
+                    child: CircleAvatar(
+                      radius: 22,
+                      backgroundColor: const Color(0xFFC5A059),
+                      backgroundImage: person.photoUrl != null && person.photoUrl!.isNotEmpty
+                          ? NetworkImage(person.photoUrl!)
+                          : null,
+                      child: person.photoUrl == null || person.photoUrl!.isEmpty
+                          ? Text(
+                              person.name.isEmpty ? '?' : person.name[0].toUpperCase(),
+                              style: const TextStyle(
+                                color: Color(0xFF161616),
+                                fontWeight: FontWeight.w800,
+                                fontSize: 16,
+                              ),
+                            )
+                          : null,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          person.name,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          details.isEmpty ? (person.isGuest ? 'Guest' : 'Employee') : details,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Color(0xFFE8D5A8), fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+              final actions = Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextButton(
+                    onPressed: busy || person.id == null ? null : () => _admitPerson(person, admit: false),
+                    child: const Text('Deny', style: TextStyle(color: Color(0xFFF87171), fontWeight: FontWeight.w700)),
+                  ),
+                  const SizedBox(width: 6),
+                  FilledButton(
+                    onPressed: busy || person.id == null ? null : () => _admitPerson(person, admit: true),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFFC5A059),
+                      foregroundColor: const Color(0xFF161616),
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                      elevation: 4,
+                      minimumSize: const Size(88, 40),
+                    ),
+                    child: Text(
+                      busy ? '…' : 'Admit',
+                      style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
+                    ),
+                  ),
+                ],
+              );
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: narrow
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          identity,
+                          const SizedBox(height: 8),
+                          Align(alignment: Alignment.centerRight, child: actions),
+                        ],
+                      )
+                    : Row(
+                        children: [
+                          Expanded(child: identity),
+                          actions,
+                        ],
+                      ),
+              );
+            }),
+          ],
         ),
       ),
     );
@@ -1810,10 +1940,14 @@ class _ParticipantTile extends StatelessWidget {
         final micOn = participant.isMicrophoneEnabled();
         final speaking = micOn && (participant.isSpeaking || participant.audioLevel > 0.08);
         Widget body = Center(
-          child: CircleAvatar(
+          child: ZoomablePhoto(
+            url: photoUrl,
+            label: label,
+            child: CircleAvatar(
             radius: 36,
             backgroundImage: photoUrl != null ? NetworkImage(photoUrl!) : null,
             child: photoUrl == null ? Text(label.isEmpty ? '?' : label[0]) : null,
+          ),
           ),
         );
         if (track != null) {

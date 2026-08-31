@@ -161,7 +161,9 @@ class AuthNotifier extends Notifier<AuthState> {
             needsEmailVerification: status.needsEmailVerification,
           );
         }
-      } catch (_) {}
+      } catch (_) {
+        // Stale token: UnauthorizedGate will sign out. Don't keep calling APIs.
+      }
     }
     await WebLiveTrackingService.ensureRunning();
   }

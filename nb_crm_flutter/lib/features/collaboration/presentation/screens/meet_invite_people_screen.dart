@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/zoomable_photo.dart';
 import '../../domain/collab_models.dart';
 import '../collab_providers.dart';
 
@@ -299,11 +300,15 @@ class _MeetInvitePeopleScreenState extends ConsumerState<MeetInvitePeopleScreen>
                                     }
                                   });
                                 },
-                                secondary: CircleAvatar(
+                                secondary: ZoomablePhoto(
+                                  url: p.photoUrl,
+                                  label: p.name,
+                                  child: CircleAvatar(
                                   backgroundImage: p.photoUrl != null ? NetworkImage(p.photoUrl!) : null,
                                   child: p.photoUrl == null
                                       ? Text(p.name.isEmpty ? '?' : p.name[0].toUpperCase())
                                       : null,
+                                ),
                                 ),
                                 title: Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis),
                                 subtitle: Text(

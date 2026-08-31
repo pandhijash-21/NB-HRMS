@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/zoomable_photo.dart';
 import '../../../auth/presentation/auth_providers.dart';
 import '../profile_notifier.dart';
 import '../widgets/profile_tabs.dart';
@@ -309,7 +310,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                 ),
               ],
             ),
-            child: CircleAvatar(
+            child: ZoomablePhoto(
+              url: profile.photoUrl,
+              label: profile.generalInfo?.fullName,
+              child: CircleAvatar(
               radius: 40,
               backgroundColor: isDark ? const Color(0xFF2B2722) : Colors.white,
               backgroundImage:
@@ -328,6 +332,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                       ),
                     )
                   : null,
+            ),
             ),
           ),
           const SizedBox(width: 24),

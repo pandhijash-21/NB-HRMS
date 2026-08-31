@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/widgets/zoomable_photo.dart';
 import '../../../auth/presentation/auth_providers.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../presentation/admin_notifier.dart';
@@ -246,7 +247,10 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
                 width: 1.5,
               ),
             ),
-            child: CircleAvatar(
+            child: ZoomablePhoto(
+              url: profile.photoUrl,
+              label: profile.generalInfo?.fullName,
+              child: CircleAvatar(
               radius: 28,
               backgroundColor: isDark ? const Color(0xFF2B2722) : const Color(0xFFECEFF1),
               backgroundImage: profile.photoUrl != null && profile.photoUrl!.isNotEmpty
@@ -262,6 +266,7 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
                       ),
                     )
                   : null,
+            ),
             ),
           ),
           const SizedBox(width: 18),

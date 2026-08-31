@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/utils/open_url.dart';
+import '../../../../core/widgets/zoomable_photo.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/auth_providers.dart';
 import '../../domain/collab_models.dart';
@@ -266,12 +267,16 @@ class _DetailsCard extends StatelessWidget {
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Row(
                     children: [
-                      CircleAvatar(
+                      ZoomablePhoto(
+                        url: p.photoUrl,
+                        label: p.name,
+                        child: CircleAvatar(
                         radius: 16,
                         backgroundImage: (p.photoUrl ?? '').isNotEmpty ? NetworkImage(p.photoUrl!) : null,
                         child: (p.photoUrl ?? '').isEmpty
                             ? Text(p.name.isNotEmpty ? p.name[0].toUpperCase() : '?')
                             : null,
+                      ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(

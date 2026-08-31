@@ -5,6 +5,7 @@ import 'package:syncfusion_flutter_charts/charts.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/widgets/header_action_button.dart';
+import '../../../../core/widgets/zoomable_photo.dart';
 import '../../../admin/presentation/admin_notifier.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/auth_providers.dart';
@@ -440,17 +441,26 @@ class AdminDashboardScreen extends ConsumerWidget {
         padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
         child: Row(
           children: [
-            CircleAvatar(
+            ZoomablePhoto(
+              url: emp.photoUrl,
+              label: emp.generalInfo?.fullName,
+              child: CircleAvatar(
               radius: 20,
               backgroundColor: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFE5ECF0),
-              child: Text(
+              backgroundImage: emp.photoUrl != null && emp.photoUrl!.isNotEmpty
+                  ? NetworkImage(emp.photoUrl!)
+                  : null,
+              child: emp.photoUrl == null || emp.photoUrl!.isEmpty
+                  ? Text(
                 initials,
                 style: TextStyle(
                   color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
                   fontWeight: FontWeight.w700,
                   fontSize: 13,
                 ),
-              ),
+              )
+                  : null,
+            ),
             ),
             const SizedBox(width: 12),
             Expanded(

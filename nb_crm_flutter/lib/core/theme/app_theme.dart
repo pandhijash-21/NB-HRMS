@@ -182,11 +182,23 @@ abstract final class AppTheme {
         dividerColor: borderColor,
       ),
       chipTheme: ChipThemeData(
+        backgroundColor: isDark ? const Color(0xFF333333) : const Color(0xFFF3F4F6),
         selectedColor: isDark ? colorScheme.primary : Colors.black,
         secondarySelectedColor: isDark ? colorScheme.primary : Colors.black,
-        labelStyle: GoogleFonts.inter(fontWeight: FontWeight.w500, fontSize: 13),
-        secondaryLabelStyle: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 13, color: Colors.white),
-        checkmarkColor: Colors.white,
+        labelStyle: GoogleFonts.inter(
+          fontWeight: FontWeight.w500,
+          fontSize: 13,
+          color: textColor,
+        ),
+        secondaryLabelStyle: GoogleFonts.inter(
+          fontWeight: FontWeight.w600,
+          fontSize: 13,
+          color: isDark ? const Color(0xFF161616) : Colors.white,
+        ),
+        checkmarkColor: isDark ? const Color(0xFF161616) : Colors.white,
+        iconTheme: IconThemeData(color: textColor, size: 18),
+        side: BorderSide(color: borderColor),
+        deleteIconColor: secondaryTextColor,
       ),
       floatingActionButtonTheme: FloatingActionButtonThemeData(
         backgroundColor: colorScheme.primary,

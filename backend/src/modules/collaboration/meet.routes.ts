@@ -53,7 +53,7 @@ meetingsRouter.post('/guest-join', async (req: Request, res: Response) => {
     if (data.waiting && data.meeting) {
       emitWaitingUpdate(
         data.meeting.id,
-        data.meeting.host?.userId,
+        data.meeting.hostUserId ?? data.meeting.host?.userId,
         data.meeting.waitingParticipants ?? [],
         data.participant,
       );
@@ -196,7 +196,7 @@ meetingsRouter.post('/join', async (req: Request, res: Response) => {
     if (data.waiting && data.meeting) {
       emitWaitingUpdate(
         data.meeting.id,
-        data.meeting.host?.userId,
+        data.meeting.hostUserId ?? data.meeting.host?.userId,
         data.meeting.waitingParticipants ?? [],
         data.participant,
       );
@@ -220,7 +220,7 @@ meetingsRouter.post('/:id/join', async (req: Request, res: Response) => {
     if (data.waiting && data.meeting) {
       emitWaitingUpdate(
         data.meeting.id,
-        data.meeting.host?.userId,
+        data.meeting.hostUserId ?? data.meeting.host?.userId,
         data.meeting.waitingParticipants ?? [],
         data.participant,
       );
@@ -243,7 +243,7 @@ meetingsRouter.post('/:id/admit', async (req: Request, res: Response) => {
     });
     emitWaitingUpdate(
       data.meeting!.id,
-      data.meeting!.host?.userId,
+      data.meeting!.hostUserId ?? data.meeting!.host?.userId,
       data.meeting!.waitingParticipants ?? [],
     );
     return res.json(ok(data));
@@ -264,7 +264,7 @@ meetingsRouter.post('/:id/deny', async (req: Request, res: Response) => {
     });
     emitWaitingUpdate(
       data.meeting!.id,
-      data.meeting!.host?.userId,
+      data.meeting!.hostUserId ?? data.meeting!.host?.userId,
       data.meeting!.waitingParticipants ?? [],
     );
     return res.json(ok(data));

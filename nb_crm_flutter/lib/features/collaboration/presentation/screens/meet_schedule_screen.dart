@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/network/api_envelope.dart';
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/zoomable_photo.dart';
 import '../../domain/collab_models.dart';
 import '../collab_providers.dart';
 import '../meet_helpers.dart';
@@ -224,7 +225,7 @@ class _MeetScheduleScreenState extends ConsumerState<MeetScheduleScreen> {
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Ask to join'),
-                  subtitle: const Text('Host admits each person. Others with the link can still request to join.'),
+                  subtitle: const Text('Host admits everyone before they enter, including guests and invited people.'),
                   value: _waitingRoom,
                   onChanged: (v) => setState(() => _waitingRoom = v),
                 ),
@@ -295,11 +296,15 @@ class _MeetScheduleScreenState extends ConsumerState<MeetScheduleScreen> {
                     runSpacing: 8,
                     children: _selectedPeople.take(12).map((p) {
                       return InputChip(
-                        avatar: CircleAvatar(
+                        avatar: ZoomablePhoto(
+                          url: p.photoUrl,
+                          label: p.name,
+                          child: CircleAvatar(
                           backgroundImage: p.photoUrl != null ? NetworkImage(p.photoUrl!) : null,
                           child: p.photoUrl == null
                               ? Text(p.name.isEmpty ? '?' : p.name[0].toUpperCase())
                               : null,
+                        ),
                         ),
                         label: Text(p.name, overflow: TextOverflow.ellipsis),
                         onDeleted: () {

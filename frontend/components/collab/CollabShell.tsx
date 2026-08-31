@@ -28,8 +28,10 @@ export function CollabShell({ children }: { children: React.ReactNode }) {
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="size-4" />
-          <span className="hidden sm:inline">HRMS</span>
+        <span className="hidden sm:inline">NB HRMS</span>
         </Link>
+        <div className="h-5 w-px bg-border" />
+        <span className="text-sm font-extrabold tracking-tight">NB CRM</span>
         <div className="h-5 w-px bg-border" />
         <nav className="flex items-center gap-1">
           {items.map((item) => {

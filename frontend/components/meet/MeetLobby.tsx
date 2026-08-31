@@ -302,7 +302,7 @@ function JoinAccess({
         />
         <span>
           <span className="block text-sm font-medium">Ask to join</span>
-          <span className="block text-xs text-muted-foreground">Host admits each person, like Google Meet.</span>
+          <span className="block text-xs text-muted-foreground">Host admits everyone before they enter, including guests.</span>
         </span>
       </label>
     </div>

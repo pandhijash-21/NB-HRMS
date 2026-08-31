@@ -4,6 +4,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { AuditLogDrawer } from "@/components/shared/AuditLogDrawer";
+import { PhotoLightbox } from "@/components/ui/photo-lightbox";
 
 interface ProfileHeaderProps {
   employee: {
@@ -48,15 +49,17 @@ export function ProfileHeader({
     <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-6">
       <div className="flex flex-col sm:flex-row gap-5 items-start sm:items-center">
         {/* Avatar */}
-        <Avatar className="h-20 w-20 shrink-0 ring-2 ring-[#1d3459]/20">
-          <AvatarImage src={employee.photoUrl} alt={employee.fullName} />
-          <AvatarFallback
-            style={{ backgroundColor: "#1d3459", color: "#d9b557" }}
-            className="text-2xl font-bold"
-          >
-            {initials}
-          </AvatarFallback>
-        </Avatar>
+        <PhotoLightbox src={employee.photoUrl} alt={employee.fullName}>
+          <Avatar className="h-20 w-20 shrink-0 ring-2 ring-[#1d3459]/20">
+            <AvatarImage src={employee.photoUrl} alt={employee.fullName} />
+            <AvatarFallback
+              style={{ backgroundColor: "#1d3459", color: "#d9b557" }}
+              className="text-2xl font-bold"
+            >
+              {initials}
+            </AvatarFallback>
+          </Avatar>
+        </PhotoLightbox>
 
         {/* Info */}
         <div className="flex-1 min-w-0">

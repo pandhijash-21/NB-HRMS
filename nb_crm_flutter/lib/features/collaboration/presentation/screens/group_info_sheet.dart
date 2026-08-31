@@ -5,7 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/network/app_config.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/zoomable_photo.dart';
 import '../../domain/collab_models.dart';
+import '../../data/collab_socket.dart';
 import '../../data/chat_repository.dart';
 import '../collab_providers.dart';
 
@@ -88,6 +90,7 @@ class _GroupInfoSheet extends ConsumerStatefulWidget {
 class _GroupInfoSheetState extends ConsumerState<_GroupInfoSheet> {
   late ChatChannel _channel;
   bool _busy = false;
+  CollabSocket? _socket;
 
   @override
   void initState() {
@@ -95,14 +98,16 @@ class _GroupInfoSheetState extends ConsumerState<_GroupInfoSheet> {
     _channel = widget.channel;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      ref.read(collabSocketProvider).onPresence(_onPresence);
+      final socket = ref.read(collabSocketProvider);
+      _socket = socket;
+      socket.onPresence(_onPresence);
     });
     _reload();
   }
 
   @override
   void dispose() {
-    ref.read(collabSocketProvider).offPresence(_onPresence);
+    _socket?.offPresence(_onPresence);
     super.dispose();
   }
 
@@ -263,13 +268,17 @@ class _GroupInfoSheetState extends ConsumerState<_GroupInfoSheet> {
                           for (final p in visible)
                             ListTile(
                               contentPadding: EdgeInsets.zero,
-                              leading: CircleAvatar(
+                              leading: ZoomablePhoto(
+                                url: p.photoUrl != null && p.photoUrl!.isNotEmpty ? _abs(p.photoUrl!) : null,
+                                label: p.name,
+                                child: CircleAvatar(
                                 backgroundImage: p.photoUrl != null && p.photoUrl!.isNotEmpty
                                     ? NetworkImage(_abs(p.photoUrl!))
                                     : null,
                                 child: p.photoUrl == null || p.photoUrl!.isEmpty
                                     ? Text(p.name.isEmpty ? '?' : p.name[0].toUpperCase())
                                     : null,
+                              ),
                               ),
                               title: Text(p.name),
                               subtitle: p.department != null ? Text(p.department!) : null,
@@ -507,9 +516,21 @@ class _ActionChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final fg = isDark ? theme.colorScheme.onSurface : _purple;
     return ActionChip(
-      avatar: NbIcon(icon, size: 16, color: _purple),
-      label: Text(label),
+      avatar: NbIcon(icon, size: 16, color: fg),
+      label: Text(
+        label,
+        style: TextStyle(color: fg, fontWeight: FontWeight.w600),
+      ),
+      backgroundColor: isDark
+          ? const Color(0xFF333333)
+          : _purple.withValues(alpha: 0.12),
+      side: BorderSide(
+        color: isDark ? theme.colorScheme.outlineVariant : _purple.withValues(alpha: 0.28),
+      ),
       onPressed: onTap,
     );
   }
@@ -546,7 +567,10 @@ class _MemberTile extends StatelessWidget {
         child: Stack(
           clipBehavior: Clip.none,
           children: [
-            CircleAvatar(
+            ZoomablePhoto(
+              url: person.photoUrl != null && person.photoUrl!.isNotEmpty ? _abs(person.photoUrl!) : null,
+              label: person.name,
+              child: CircleAvatar(
               radius: 20,
               backgroundColor: _purple,
               backgroundImage: person.photoUrl != null && person.photoUrl!.isNotEmpty
@@ -558,6 +582,7 @@ class _MemberTile extends StatelessWidget {
                       style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
                     )
                   : null,
+            ),
             ),
             Positioned(
               right: 0,
@@ -614,13 +639,17 @@ class _GroupAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final resolved = url != null && url!.isNotEmpty ? _abs(url!) : null;
-    return CircleAvatar(
+    return ZoomablePhoto(
+      url: resolved,
+      label: name,
+      child: CircleAvatar(
       radius: size / 2,
       backgroundColor: _purple,
       backgroundImage: resolved != null ? NetworkImage(resolved) : null,
       child: resolved == null
           ? NbIcon(Icons.groups_rounded, color: Colors.white, size: size * 0.48)
           : null,
+    ),
     );
   }
 }
@@ -644,7 +673,10 @@ class _DmInfoSheet extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: [
           Center(
-            child: CircleAvatar(
+            child: ZoomablePhoto(
+              url: photo != null && photo.isNotEmpty ? _abs(photo) : null,
+              label: name,
+              child: CircleAvatar(
               radius: 48,
               backgroundColor: _purple,
               backgroundImage: photo != null && photo.isNotEmpty ? NetworkImage(_abs(photo)) : null,
@@ -654,6 +686,7 @@ class _DmInfoSheet extends StatelessWidget {
                       style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w800),
                     )
                   : null,
+            ),
             ),
           ),
           const SizedBox(height: 12),

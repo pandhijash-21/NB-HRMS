@@ -44,9 +44,9 @@ class ChatWallpaper {
       id: 2,
       label: 'Ocean',
       light: [Color(0xFFD6F4FF), Color(0xFFC8F0F2), Color(0xFFB8E0FF)],
-      dark: [Color(0xFF071828), Color(0xFF0C3A4A), Color(0xFF0A2A38)],
-      motif: WallpaperMotif.petals,
-      accent: Color(0xFF7ED6DF),
+      dark: [Color(0xFF02141C), Color(0xFF0A5A62), Color(0xFF083848)],
+      motif: WallpaperMotif.orbs,
+      accent: Color(0xFF2EE6C8),
     ),
     ChatWallpaper(
       id: 3,
@@ -92,9 +92,9 @@ class ChatWallpaper {
       id: 8,
       label: 'Glacier',
       light: [Color(0xFFF2FBFF), Color(0xFFD8F0FA), Color(0xFFC4E4F6)],
-      dark: [Color(0xFF0A1822), Color(0xFF163848), Color(0xFF102830)],
-      motif: WallpaperMotif.petals,
-      accent: Color(0xFFA8D8F0),
+      dark: [Color(0xFF101820), Color(0xFF3A5870), Color(0xFF8AA8C0)],
+      motif: WallpaperMotif.diamonds,
+      accent: Color(0xFFE8F4FF),
     ),
     ChatWallpaper(
       id: 9,
@@ -126,9 +126,10 @@ class ChatWallpaper {
     return options.firstWhere((w) => w.id == id, orElse: () => options.first);
   }
 
-  List<Color> colors({required bool isDark}) => isDark ? dark : light;
+  /// Dark palettes are used in both themes — they read better as chat backdrops.
+  List<Color> colors({required bool isDark}) => dark;
 
-  CustomPainter painter({required bool isDark}) => _WallpaperPainter(this, isDark);
+  CustomPainter painter({required bool isDark}) => _WallpaperPainter(this);
 
   Widget build({required bool isDark, required Widget child}) {
     return CustomPaint(
@@ -151,15 +152,14 @@ class ChatWallpaper {
 }
 
 class _WallpaperPainter extends CustomPainter {
-  _WallpaperPainter(this.wall, this.isDark);
+  _WallpaperPainter(this.wall);
 
   final ChatWallpaper wall;
-  final bool isDark;
 
   @override
   void paint(Canvas canvas, Size size) {
     if (size.isEmpty) return;
-    final c = wall.colors(isDark: isDark);
+    final c = wall.colors(isDark: true);
     final rect = Offset.zero & size;
 
     canvas.drawRect(
@@ -172,13 +172,13 @@ class _WallpaperPainter extends CustomPainter {
         ).createShader(rect),
     );
 
-    final accent = wall.accent ?? (isDark ? const Color(0x66FFFFFF) : const Color(0x33000000));
-    final faint = accent.withValues(alpha: isDark ? 0.14 : 0.10);
-    final softer = accent.withValues(alpha: isDark ? 0.07 : 0.06);
+    final accent = wall.accent ?? const Color(0x66FFFFFF);
+    final faint = accent.withValues(alpha: 0.14);
+    final softer = accent.withValues(alpha: 0.07);
 
     switch (wall.motif) {
       case WallpaperMotif.orbs:
-        _orbs(canvas, size, [accent.withValues(alpha: isDark ? 0.22 : 0.16), faint, softer]);
+        _orbs(canvas, size, [accent.withValues(alpha: 0.22), faint, softer]);
       case WallpaperMotif.dots:
         _dots(canvas, size, faint);
       case WallpaperMotif.diamonds:
@@ -263,8 +263,7 @@ class _WallpaperPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _WallpaperPainter old) =>
-      old.wall.id != wall.id || old.isDark != isDark;
+  bool shouldRepaint(covariant _WallpaperPainter old) => old.wall.id != wall.id;
 }
 
 const _prefPrefix = 'chat_wallpaper_';
@@ -284,7 +283,6 @@ Future<void> pickChatWallpaper({
   required int selected,
   required ValueChanged<int> onPick,
 }) async {
-  final isDark = Theme.of(context).brightness == Brightness.dark;
   await showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
@@ -332,7 +330,7 @@ Future<void> pickChatWallpaper({
                           child: Stack(
                             fit: StackFit.expand,
                             children: [
-                              CustomPaint(painter: wall.painter(isDark: isDark)),
+                              CustomPaint(painter: wall.painter(isDark: true)),
                               Align(
                                 alignment: Alignment.bottomCenter,
                                 child: Container(

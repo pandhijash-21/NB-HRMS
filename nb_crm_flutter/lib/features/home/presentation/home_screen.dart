@@ -109,7 +109,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       _ModuleCardData(
         title: 'Chat',
         subtitle: '1:1 and group chat, files, presence',
-        icon: Icons.chat_bubble_rounded,
+        icon: Icons.chat,
         route: '/chat',
         enabled: true,
         category: ModuleCategory.mySpace,
@@ -118,7 +118,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       _ModuleCardData(
         title: 'Meet',
         subtitle: 'Voice, video, screen share, guest codes, AI summary',
-        icon: Icons.videocam_rounded,
+        icon: Icons.videocam,
         route: '/meet',
         enabled: true,
         category: ModuleCategory.mySpace,
@@ -666,11 +666,23 @@ class _ModernModuleCardState extends State<_ModernModuleCard> {
                             : widget.data.color.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(16),
                       ),
-                      child: NbIcon(
-                        widget.data.icon,
-                        color: _isHovered ? Colors.white : widget.data.color,
-                        size: 28,
-                      ),
+                      child: switch (widget.data.route) {
+                        '/chat' => Icon(
+                            Icons.chat,
+                            color: _isHovered ? Colors.white : widget.data.color,
+                            size: 28,
+                          ),
+                        '/meet' => Icon(
+                            Icons.videocam,
+                            color: _isHovered ? Colors.white : widget.data.color,
+                            size: 28,
+                          ),
+                        _ => Icon(
+                            widget.data.icon,
+                            color: _isHovered ? Colors.white : widget.data.color,
+                            size: 28,
+                          ),
+                      },
                     ),
                     const SizedBox(width: 18),
                     Expanded(

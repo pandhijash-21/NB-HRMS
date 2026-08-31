@@ -146,8 +146,8 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
         ),
         const _Destination(
           '/chat',
-          Icons.chat_bubble_outline,
-          Icons.chat_bubble,
+          Icons.chat_outlined,
+          Icons.chat,
           'Chat',
           section: 'Collaboration',
         ),
@@ -702,13 +702,22 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     required VoidCallback onTap,
   }) {
     final badgeCount = d.route == '/chat' ? chatUnread : (d.alertBadge ? alertCount : 0);
-    final icon = NbIcon(
-      selected ? d.selectedIcon : d.icon,
-      color: selected
-          ? (isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238))
-          : (isDark ? Colors.white.withOpacity(0.4) : const Color(0xFF607D8B).withOpacity(0.7)),
-      size: 22,
-    );
+    final iconColor = selected
+        ? (isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238))
+        : (isDark ? Colors.white.withOpacity(0.4) : const Color(0xFF607D8B).withOpacity(0.7));
+    final icon = switch (d.route) {
+      '/chat' => selected
+          ? Icon(Icons.chat, color: iconColor, size: 22)
+          : Icon(Icons.chat_outlined, color: iconColor, size: 22),
+      '/meet' => selected
+          ? Icon(Icons.videocam, color: iconColor, size: 22)
+          : Icon(Icons.videocam_outlined, color: iconColor, size: 22),
+      _ => Icon(
+          selected ? d.selectedIcon : d.icon,
+          color: iconColor,
+          size: 22,
+        ),
+    };
     final tile = Padding(
       padding: EdgeInsets.symmetric(horizontal: expanded ? 12 : 8, vertical: 2),
       child: InkWell(

@@ -4,13 +4,13 @@ import 'package:flutter/material.dart';
 /// does not tree-shake these out of MaterialIcons.
 abstract final class MeetIcons {
   static const back = Icons.arrow_back_rounded;
-  static const videocam = Icons.videocam_rounded;
-  static const videocamOff = Icons.videocam_off_rounded;
+  static const videocam = Icons.videocam;
+  static const videocamOff = Icons.videocam_off_outlined;
   static const mic = Icons.mic_rounded;
   static const micOff = Icons.mic_off_rounded;
   static const screenShare = Icons.screen_share_rounded;
   static const stopScreenShare = Icons.stop_screen_share_rounded;
-  static const chat = Icons.chat_bubble_rounded;
+  static const chat = Icons.chat;
   static const record = Icons.radio_button_checked_rounded;
   static const callEnd = Icons.call_end_rounded;
   static const link = Icons.link_rounded;

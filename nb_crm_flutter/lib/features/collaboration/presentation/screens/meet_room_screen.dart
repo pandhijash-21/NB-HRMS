@@ -847,7 +847,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                           child: previewOn
                               ? VideoTrackRenderer(_previewCam!, fit: VideoViewFit.cover)
                               : const Center(
-                                  child: NbIcon(Icons.videocam_off_rounded, color: Colors.white38, size: 56),
+                                  child: const Icon(Icons.videocam_off, color: Colors.white38, size: 56),
                                 ),
                         ),
                         Positioned(
@@ -865,7 +865,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                               ),
                               const SizedBox(width: 16),
                               _LobbyRoundButton(
-                                icon: _cam ? Icons.videocam_rounded : Icons.videocam_off_rounded,
+                                icon: _cam ? Icons.videocam : Icons.videocam_off,
                                 on: _cam,
                                 tooltip: _cam ? 'Turn off camera' : 'Turn on camera',
                                 onPressed: _toggleLobbyCam,
@@ -1035,7 +1035,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                 ),
                 const SizedBox(width: 14),
                 _LobbyRoundButton(
-                  icon: _cam ? Icons.videocam_rounded : Icons.videocam_off_rounded,
+                  icon: _cam ? Icons.videocam : Icons.videocam_off,
                   on: _cam,
                   tooltip: _cam ? 'Camera is on' : 'Camera is off',
                   onPressed: () async {
@@ -1058,7 +1058,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                 ),
                 const SizedBox(width: 14),
                 _LobbyRoundButton(
-                  icon: Icons.chat_bubble_outline,
+                  icon: Icons.chat,
                   on: !_chatOpen,
                   tooltip: _chatOpen ? 'Hide chat' : 'Chat',
                   onPressed: () => setState(() => _chatOpen = !_chatOpen),

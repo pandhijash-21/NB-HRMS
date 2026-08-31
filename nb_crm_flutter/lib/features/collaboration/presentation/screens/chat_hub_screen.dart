@@ -1355,7 +1355,7 @@ class _TeamsEmpty extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            NbIcon(Icons.chat_bubble_outline_rounded, size: 56, color: muted.withValues(alpha: 0.7)),
+            Icon(Icons.chat, size: 56, color: muted.withValues(alpha: 0.7)),
             const SizedBox(height: 12),
             Text(
               'Select a chat to start messaging',
@@ -1912,7 +1912,7 @@ class _VoiceCallCard extends StatelessWidget {
               shape: BoxShape.circle,
             ),
             child: NbIcon(
-              voice ? Icons.call_rounded : Icons.videocam_rounded,
+              voice ? Icons.call_rounded : Icons.videocam,
               color: _teamsPurple,
               size: 22,
             ),

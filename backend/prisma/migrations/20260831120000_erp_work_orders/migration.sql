@@ -125,7 +125,8 @@ DO $$ BEGIN
 END $$;
 
 DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'erp_work_orders_project_id_fkey') THEN
+  IF to_regclass('public.erp_projects') IS NOT NULL
+     AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'erp_work_orders_project_id_fkey') THEN
     ALTER TABLE "erp_work_orders"
       ADD CONSTRAINT "erp_work_orders_project_id_fkey"
       FOREIGN KEY ("project_id") REFERENCES "erp_projects"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

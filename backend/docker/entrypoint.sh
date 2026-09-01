@@ -15,6 +15,7 @@ unstick_idempotent_migrations() {
   # Migrations below use idempotent SQL — safe to mark rolled-back and re-apply after deploy timeouts.
   for mig in \
     20260827120000_employee_view_scope \
+    20260830120000_erp_projects \
     20260831120000_erp_work_orders; do
     echo "==> migrate resolve --rolled-back $mig (if failed)"
     npx prisma migrate resolve --rolled-back "$mig" 2>/dev/null || true

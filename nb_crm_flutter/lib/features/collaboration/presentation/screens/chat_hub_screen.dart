@@ -78,7 +78,14 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
   List<MentionChoice> _mentionHits = [];
   int _mentionAt = -1;
   int _mentionSel = 0;
+  String? _attachmentBusyId;
+  String? _attachmentBusyAction;
   CollabSocket? _socket;
+  final Map<String, String> _drafts = {};
+  final Map<String, List<_PendingFile>> _pendingByChannel = {};
+  final Map<String, ChatMessage?> _replyByChannel = {};
+  bool _applyingComposer = false;
+  Timer? _draftPersistTimer;
 
   @override
   void initState() {
@@ -94,6 +101,9 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_onHardwareKey);
     if (kIsWeb) BrowserContextMenu.enableContextMenu();
+    _draftPersistTimer?.cancel();
+    _stashComposer(_active?.id);
+    unawaited(saveChatDrafts(_drafts));
     _draft.dispose();
     _listSearch.dispose();
     _scroll.dispose();
@@ -269,9 +279,13 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
         unawaited(_refreshMeetStatuses(_messages));
       });
       final channels = await ref.read(chatRepositoryProvider).channels();
+      final savedDrafts = await loadChatDrafts();
       if (!mounted) return;
       setState(() {
         _channels = channels;
+        _drafts
+          ..clear()
+          ..addAll(savedDrafts);
         _loading = false;
       });
       unawaited(ref.read(chatUnreadProvider.notifier).refresh());
@@ -326,8 +340,56 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
     return true;
   }
 
+  void _stashComposer(String? channelId) {
+    if (channelId == null || channelId.isEmpty) return;
+    final text = _draft.text;
+    if (text.isEmpty) {
+      _drafts.remove(channelId);
+    } else {
+      _drafts[channelId] = text;
+    }
+    _pendingByChannel[channelId] = List<_PendingFile>.from(_pending);
+    _replyByChannel[channelId] = _replyTo;
+    _schedulePersistDrafts();
+  }
+
+  void _restoreComposer(String channelId) {
+    _applyingComposer = true;
+    _draft.value = TextEditingValue(
+      text: _drafts[channelId] ?? '',
+      selection: TextSelection.collapsed(offset: (_drafts[channelId] ?? '').length),
+    );
+    _pending = List<_PendingFile>.from(_pendingByChannel[channelId] ?? const []);
+    _replyTo = _replyByChannel[channelId];
+    _applyingComposer = false;
+  }
+
+  void _clearComposerDraft(String channelId) {
+    _drafts.remove(channelId);
+    _pendingByChannel.remove(channelId);
+    _replyByChannel.remove(channelId);
+    _schedulePersistDrafts();
+  }
+
+  void _schedulePersistDrafts() {
+    _draftPersistTimer?.cancel();
+    _draftPersistTimer = Timer(const Duration(milliseconds: 250), () {
+      unawaited(saveChatDrafts(_drafts));
+    });
+  }
+
   void _onDraftChanged() {
     final ch = _active;
+    if (ch != null && !_applyingComposer) {
+      final text = _draft.text;
+      if (text.isEmpty) {
+        _drafts.remove(ch.id);
+      } else {
+        _drafts[ch.id] = text;
+      }
+      _schedulePersistDrafts();
+      if (mounted) setState(() {});
+    }
     final me = ref.read(authNotifierProvider).user?.id;
     if (ch == null || !ch.isGroup) {
       if (_mentionHits.isNotEmpty) {
@@ -396,8 +458,12 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
   void _closeThread() {
     final id = _active?.id;
     if (id == null) return;
+    _stashComposer(id);
     ref.read(collabSocketProvider).leaveChannel(id);
     _composerFocus.unfocus();
+    _applyingComposer = true;
+    _draft.clear();
+    _applyingComposer = false;
     setState(() {
       _active = null;
       _messages = [];
@@ -408,13 +474,13 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
       _sending = false;
       _mentionHits = [];
       _mentionAt = -1;
-      _draft.clear();
     });
     unawaited(clearLastChatChannelId());
     unawaited(ref.read(chatUnreadProvider.notifier).refresh());
   }
 
   Future<void> _open(ChatChannel ch) async {
+    _stashComposer(_active?.id);
     ref.read(collabSocketProvider).leaveChannel(_active?.id ?? '');
     ref.read(collabSocketProvider).joinChannel(ch.id);
     final msgs = await ref.read(chatRepositoryProvider).messages(ch.id);
@@ -432,15 +498,17 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
       _active = fresh.copyWith(unread: 0);
       _messages = msgs;
       _emojiOpen = false;
-      _pending = [];
-      _replyTo = null;
       _wallpaper = wallpaper;
       _sending = false;
       _typing = null;
+      _mentionHits = [];
+      _mentionAt = -1;
       if (_channels.every((c) => c.id != fresh.id)) {
         _channels = [fresh.copyWith(unread: 0), ..._channels];
       }
     });
+    _restoreComposer(fresh.id);
+    if (mounted) setState(() {});
     _scrollToEnd();
     unawaited(saveLastChatChannelId(fresh.id));
     unawaited(_refreshMeetStatuses(msgs));
@@ -479,17 +547,56 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
     return _absoluteFileUrl(url);
   }
 
-  Future<void> _viewAttachment(ChatAttachment attachment) async {
+  Future<Uint8List> _loadAttachmentBytes(ChatAttachment attachment) async {
+    final id = attachment.id;
+    if (id == null || id.isEmpty) {
+      throw Exception('This file is not available');
+    }
+    return ref.read(chatRepositoryProvider).attachmentBytes(id);
+  }
+
+  Future<void> _withAttachmentBusy(
+    ChatAttachment attachment,
+    String action,
+    Future<void> Function() run,
+  ) async {
+    if (_attachmentBusyId != null) return;
+    setState(() {
+      _attachmentBusyId = attachment.id ?? attachment.fileName;
+      _attachmentBusyAction = action;
+    });
     try {
-      final url = await _attachmentUrl(attachment);
-      if (url.isEmpty || _isBlockedPublicFileUrl(url)) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('This file is not available')),
-        );
-        return;
+      await run();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _attachmentBusyId = null;
+          _attachmentBusyAction = null;
+        });
       }
-      if (attachment.isImage && mounted) {
+    }
+  }
+
+  Future<void> _saveAttachmentBytes(ChatAttachment attachment, Uint8List bytes) async {
+    final saved = await FilePicker.saveFile(
+      dialogTitle: 'Save file',
+      fileName: attachment.fileName,
+      bytes: bytes,
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(saved == null ? 'Save cancelled' : 'Saved ${attachment.fileName}')),
+    );
+  }
+
+  Future<void> _viewAttachment(ChatAttachment attachment) async {
+    await _withAttachmentBusy(attachment, 'view', () async {
+      if (attachment.isImage) {
+        final bytes = await _loadAttachmentBytes(attachment);
+        if (!mounted) return;
         await showDialog<void>(
           context: context,
           builder: (ctx) {
@@ -507,17 +614,30 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
                       padding: const EdgeInsets.fromLTRB(12, 8, 4, 0),
                       child: Row(
                         children: [
-                          Expanded(child: Text(attachment.fileName, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                          Expanded(
+                            child: Text(
+                              attachment.fileName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
                           IconButton(
                             tooltip: 'Download',
                             onPressed: () => _downloadAttachment(attachment),
                             icon: const NbIcon(Icons.download_rounded),
                           ),
-                          IconButton(onPressed: () => Navigator.pop(ctx), icon: const NbIcon(Icons.close)),
+                          IconButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            icon: const NbIcon(Icons.close),
+                          ),
                         ],
                       ),
                     ),
-                    Expanded(child: InteractiveViewer(child: Image.network(url))),
+                    Expanded(
+                      child: InteractiveViewer(
+                        child: Image.memory(bytes, fit: BoxFit.contain),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -526,28 +646,19 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
         );
         return;
       }
-      await openExternalUrl(url);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
-    }
+      final url = await _attachmentUrl(attachment);
+      if (url.isNotEmpty && !_isBlockedPublicFileUrl(url)) {
+        final opened = await openExternalUrl(url);
+        if (opened) return;
+      }
+      await _saveAttachmentBytes(attachment, await _loadAttachmentBytes(attachment));
+    });
   }
 
   Future<void> _downloadAttachment(ChatAttachment attachment) async {
-    try {
-      final url = await _attachmentUrl(attachment);
-      if (url.isEmpty || _isBlockedPublicFileUrl(url)) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('This file is not available')),
-        );
-        return;
-      }
-      await downloadUrl(url, attachment.fileName);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
-    }
+    await _withAttachmentBusy(attachment, 'download', () async {
+      await _saveAttachmentBytes(attachment, await _loadAttachmentBytes(attachment));
+    });
   }
 
   void _showReactionPicker(ChatMessage message) {
@@ -643,20 +754,36 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: const NbIcon(Icons.emoji_emotions_outlined),
-                title: const Text('React'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _showReactionPicker(message);
-                },
-              ),
-              ListTile(
                 leading: const NbIcon(Icons.reply_rounded),
                 title: const Text('Reply'),
                 onTap: () {
                   Navigator.pop(ctx);
                   setState(() => _replyTo = message);
                   _composerFocus.requestFocus();
+                },
+              ),
+              ListTile(
+                leading: const NbIcon(Icons.copy_rounded),
+                title: const Text('Copy'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  unawaited(_copyMessage(message));
+                },
+              ),
+              ListTile(
+                leading: const NbIcon(Icons.forward_rounded),
+                title: const Text('Forward'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  unawaited(_forwardMessage(message));
+                },
+              ),
+              ListTile(
+                leading: const NbIcon(Icons.emoji_emotions_outlined),
+                title: const Text('React'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showReactionPicker(message);
                 },
               ),
               if (canEdit)
@@ -683,6 +810,128 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
         );
       },
     );
+  }
+
+  String _messageCopyText(ChatMessage message) {
+    final parts = <String>[];
+    final text = (message.content ?? '').trim();
+    if (text.isNotEmpty) parts.add(text);
+    for (final a in message.attachments) {
+      parts.add(a.fileName);
+    }
+    return parts.join('\n');
+  }
+
+  Future<void> _copyMessage(ChatMessage message) async {
+    final text = _messageCopyText(message);
+    if (text.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nothing to copy')),
+      );
+      return;
+    }
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Copied')),
+    );
+  }
+
+  Future<void> _forwardMessage(ChatMessage message) async {
+    final me = ref.read(authNotifierProvider).user?.id;
+    final target = await showModalBottomSheet<ChatChannel>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (ctx) {
+        var q = '';
+        return SafeArea(
+          child: StatefulBuilder(
+            builder: (ctx, setLocal) {
+              final filtered = _channels.where((c) {
+                if (q.isEmpty) return true;
+                return _channelTitle(c, me).toLowerCase().contains(q);
+              }).toList();
+              return SizedBox(
+                height: MediaQuery.sizeOf(ctx).height * 0.62,
+                child: Column(
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text('Forward to', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      child: TextField(
+                        autofocus: true,
+                        onChanged: (v) => setLocal(() => q = v.trim().toLowerCase()),
+                        decoration: const InputDecoration(
+                          hintText: 'Search chats',
+                          prefixIcon: NbIcon(Icons.search_rounded),
+                          isDense: true,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: filtered.length,
+                        itemBuilder: (_, i) {
+                          final c = filtered[i];
+                          return ListTile(
+                            leading: _Avatar(
+                              name: _channelTitle(c, me),
+                              url: _channelPhoto(c, me),
+                              identity: c.id,
+                              isGroup: c.type == 'GROUP',
+                              size: 36,
+                            ),
+                            title: Text(_channelTitle(c, me)),
+                            onTap: () => Navigator.pop(ctx, c),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+    if (target == null || !mounted) return;
+    try {
+      final attachments = message.attachments
+          .map((a) => a.toForwardJson())
+          .whereType<Map<String, dynamic>>()
+          .toList();
+      final content = (message.content ?? '').trim();
+      if (content.isEmpty && attachments.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Nothing to forward')),
+        );
+        return;
+      }
+      final sent = await ref.read(chatRepositoryProvider).send(
+        channelId: target.id,
+        content: content.isEmpty ? null : content,
+        attachments: attachments.isEmpty ? null : attachments,
+      );
+      if (!mounted) return;
+      if (_active?.id == target.id) {
+        _upsertMessage(sent, markReadIfOpen: true);
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Forwarded to ${_channelTitle(target, me)}')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
   }
 
   Future<void> _editMessage(ChatMessage message) async {
@@ -821,7 +1070,10 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
     });
     try {
       if (pending.isEmpty) {
+        _applyingComposer = true;
         _draft.clear();
+        _applyingComposer = false;
+        _clearComposerDraft(ch.id);
         setState(() => _replyTo = null);
         _emitChatText(ch, text, replyId: replyId, replyTo: reply);
         return;
@@ -836,7 +1088,10 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
         replyToId: replyId,
         attachments: attachments,
       );
+      _applyingComposer = true;
       _draft.clear();
+      _applyingComposer = false;
+      _clearComposerDraft(ch.id);
       if (mounted) {
         setState(() {
           _pending = [];
@@ -1143,6 +1398,7 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
       me: me,
       search: _listSearch,
       isDark: isDark,
+      drafts: _drafts,
       onOpen: _open,
       onNewDm: () => _newChat(group: false),
       onNewGroup: () => _newChat(group: true),
@@ -1170,6 +1426,8 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
             onAttach: _attach,
             pending: _pending,
             sending: _sending,
+            busyAttachmentId: _attachmentBusyId,
+            busyAttachmentAction: _attachmentBusyAction,
             onRemovePending: (i) => setState(() => _pending = [..._pending]..removeAt(i)),
             onToggleEmoji: () {
               setState(() => _emojiOpen = !_emojiOpen);
@@ -1260,6 +1518,7 @@ class _TeamsChatList extends StatelessWidget {
     required this.me,
     required this.search,
     required this.isDark,
+    required this.drafts,
     required this.onOpen,
     required this.onNewDm,
     required this.onNewGroup,
@@ -1270,6 +1529,7 @@ class _TeamsChatList extends StatelessWidget {
   final String? me;
   final TextEditingController search;
   final bool isDark;
+  final Map<String, String> drafts;
   final void Function(ChatChannel) onOpen;
   final VoidCallback onNewDm;
   final VoidCallback onNewGroup;
@@ -1383,16 +1643,38 @@ class _TeamsChatList extends StatelessWidget {
                                         ],
                                       ),
                                       const SizedBox(height: 2),
-                                      Text(
-                                        (c.lastPreview ?? '').isEmpty ? 'No messages yet' : c.lastPreview!,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          fontSize: 12.5,
-                                          color: muted,
-                                          fontWeight: c.unread > 0 ? FontWeight.w600 : FontWeight.w400,
-                                        ),
-                                      ),
+                                      () {
+                                        final draft = drafts[c.id]?.trim() ?? '';
+                                        if (draft.isNotEmpty) {
+                                          return Text.rich(
+                                            TextSpan(
+                                              children: [
+                                                const TextSpan(
+                                                  text: 'Draft: ',
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.w700,
+                                                    color: Color(0xFFC4314B),
+                                                  ),
+                                                ),
+                                                TextSpan(text: draft),
+                                              ],
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(fontSize: 12.5, color: muted),
+                                          );
+                                        }
+                                        return Text(
+                                          (c.lastPreview ?? '').isEmpty ? 'No messages yet' : c.lastPreview!,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 12.5,
+                                            color: muted,
+                                            fontWeight: c.unread > 0 ? FontWeight.w600 : FontWeight.w400,
+                                          ),
+                                        );
+                                      }(),
                                     ],
                                   ),
                                 ),
@@ -1483,6 +1765,8 @@ class _TeamsThread extends StatelessWidget {
     required this.onAttach,
     required this.pending,
     required this.sending,
+    required this.busyAttachmentId,
+    required this.busyAttachmentAction,
     required this.onRemovePending,
     required this.onToggleEmoji,
     required this.onPickEmoji,
@@ -1525,6 +1809,8 @@ class _TeamsThread extends StatelessWidget {
   final VoidCallback onAttach;
   final List<_PendingFile> pending;
   final bool sending;
+  final String? busyAttachmentId;
+  final String? busyAttachmentAction;
   final void Function(int index) onRemovePending;
   final VoidCallback onToggleEmoji;
   final void Function(String) onPickEmoji;
@@ -1650,6 +1936,8 @@ class _TeamsThread extends StatelessWidget {
               ),
             ),
           ),
+          if (sending || busyAttachmentId != null)
+            const LinearProgressIndicator(minHeight: 2, color: _teamsPurple),
           Expanded(
             child: ClipRect(
               child: wallpaper.build(
@@ -1681,6 +1969,8 @@ class _TeamsThread extends StatelessWidget {
                       onReactPicker: onReactPicker,
                       onViewAttachment: onViewAttachment,
                       onDownloadAttachment: onDownloadAttachment,
+                      busyAttachmentId: busyAttachmentId,
+                      busyAttachmentAction: busyAttachmentAction,
                       onShowReceipts: onShowReceipts,
                       onReply: onReply,
                       onJoinMeet: (code, {required bool voice}) {
@@ -2054,6 +2344,8 @@ class _MessageBubble extends StatelessWidget {
     required this.onReactPicker,
     required this.onViewAttachment,
     required this.onDownloadAttachment,
+    this.busyAttachmentId,
+    this.busyAttachmentAction,
     required this.onShowReceipts,
     required this.onReply,
     this.onJoinMeet,
@@ -2071,6 +2363,8 @@ class _MessageBubble extends StatelessWidget {
   final void Function(ChatMessage) onReactPicker;
   final void Function(ChatAttachment) onViewAttachment;
   final void Function(ChatAttachment) onDownloadAttachment;
+  final String? busyAttachmentId;
+  final String? busyAttachmentAction;
   final void Function(ChatMessage) onShowReceipts;
   final void Function(ChatMessage) onReply;
   final void Function(String code, {required bool voice})? onJoinMeet;
@@ -2209,7 +2503,12 @@ class _MessageBubble extends StatelessWidget {
                                     ),
                                   ),
                           ...message.attachments.map(
-                            (a) => Padding(
+                            (a) {
+                              final key = a.id ?? a.fileName;
+                              final busy = busyAttachmentId == key;
+                              final viewing = busy && busyAttachmentAction == 'view';
+                              final downloading = busy && busyAttachmentAction == 'download';
+                              return Padding(
                               padding: const EdgeInsets.only(top: 6),
                               child: Container(
                                 padding: const EdgeInsets.fromLTRB(10, 8, 6, 8),
@@ -2234,19 +2533,38 @@ class _MessageBubble extends StatelessWidget {
                                     IconButton(
                                       tooltip: 'View',
                                       visualDensity: VisualDensity.compact,
-                                      onPressed: () => onViewAttachment(a),
-                                      icon: const NbIcon(Icons.visibility_outlined, size: 18, color: _teamsPurple),
+                                      onPressed: busy ? null : () => onViewAttachment(a),
+                                      icon: viewing
+                                          ? const SizedBox(
+                                              width: 18,
+                                              height: 18,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                color: _teamsPurple,
+                                              ),
+                                            )
+                                          : const NbIcon(Icons.visibility_outlined, size: 18, color: _teamsPurple),
                                     ),
                                     IconButton(
                                       tooltip: 'Download',
                                       visualDensity: VisualDensity.compact,
-                                      onPressed: () => onDownloadAttachment(a),
-                                      icon: const NbIcon(Icons.download_rounded, size: 18, color: _teamsPurple),
+                                      onPressed: busy ? null : () => onDownloadAttachment(a),
+                                      icon: downloading
+                                          ? const SizedBox(
+                                              width: 18,
+                                              height: 18,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                color: _teamsPurple,
+                                              ),
+                                            )
+                                          : const NbIcon(Icons.download_rounded, size: 18, color: _teamsPurple),
                                     ),
                                   ],
                                 ),
                               ),
-                            ),
+                            );
+                            },
                           ),
                         ],
                       ),
@@ -2492,13 +2810,14 @@ String _absoluteFileUrl(String url) {
 }
 
 bool _isBlockedPublicFileUrl(String url) {
+  if (url.toLowerCase().contains('cloudinary.com')) return false;
   final uri = Uri.tryParse(url);
   if (uri == null) return true;
   final signed = uri.queryParameters.containsKey('X-Amz-Signature') ||
       uri.queryParameters.containsKey('X-Amz-Algorithm') ||
       uri.queryParameters.containsKey('X-Amz-Credential');
   if (signed) return false;
-  return uri.port == 9000 || uri.path.contains('/crm-files/');
+  return uri.port == 9000 || uri.path.contains('/crm-files/') || uri.host.contains('minio');
 }
 
 void showChatEmojiSheet({
@@ -2600,7 +2919,7 @@ class _ChatEmojiGridState extends State<ChatEmojiGrid> {
                   child: Text('No matching emoji', style: TextStyle(color: mutedOf(widget.isDark))),
                 )
               : ListView.builder(
-            padding: const EdgeInsets.fromLTRB(8, 0, 8, 12),
+            padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
             itemCount: categories.length,
             itemBuilder: (context, i) {
               final cat = categories[i];
@@ -2614,7 +2933,7 @@ class _ChatEmojiGridState extends State<ChatEmojiGrid> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+                    padding: const EdgeInsets.fromLTRB(4, 6, 4, 2),
                     child: Text(
                       cat.label,
                       style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: mutedOf(widget.isDark)),
@@ -2624,17 +2943,18 @@ class _ChatEmojiGridState extends State<ChatEmojiGrid> {
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: cat.emojis.length,
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 8,
-                      mainAxisSpacing: 2,
-                      crossAxisSpacing: 2,
+                    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                      maxCrossAxisExtent: 36,
+                      mainAxisExtent: 32,
+                      mainAxisSpacing: 0,
+                      crossAxisSpacing: 0,
                     ),
                     itemBuilder: (context, j) {
                       final emoji = cat.emojis[j];
                       return InkWell(
                         onTap: () => widget.onPick(emoji),
-                        borderRadius: BorderRadius.circular(8),
-                        child: Center(child: Text(emoji, style: const TextStyle(fontSize: 22))),
+                        borderRadius: BorderRadius.circular(6),
+                        child: Center(child: Text(emoji, style: const TextStyle(fontSize: 20, height: 1))),
                       );
                     },
                   ),

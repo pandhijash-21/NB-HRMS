@@ -124,7 +124,10 @@ async function serializeMessages(rows: MessageRow[], me: string, members: Receip
                 mimeType: a.mimeType,
                 sizeBytes: a.sizeBytes,
                 bucketKey: a.bucketKey,
-                fileUrl: a.scanStatus === 'INFECTED' ? null : await collabStorage.readableUrl(a.bucketKey, a.fileUrl),
+                fileUrl:
+                  a.scanStatus === 'INFECTED'
+                    ? null
+                    : (await collabStorage.readableUrl(a.bucketKey, a.fileUrl)) || null,
                 scanStatus: a.scanStatus,
               })),
             ),
@@ -620,8 +623,30 @@ export const chatService = {
     if (!member) throw new Error('Not a member of this chat');
     if (attachment.scanStatus === 'INFECTED') throw new Error('This file is not available');
     const url = await collabStorage.readableUrl(attachment.bucketKey, attachment.fileUrl);
-    if (!url) throw new Error('File is not available');
-    return { url, fileName: attachment.fileName, mimeType: attachment.mimeType };
+    return {
+      url: url || null,
+      fileName: attachment.fileName,
+      mimeType: attachment.mimeType,
+    };
+  },
+
+  async attachmentFile(attachmentId: string, me: string) {
+    const meta = await this.attachmentUrl(attachmentId, me);
+    const attachment = await prisma.chatAttachment.findUnique({
+      where: { id: attachmentId },
+      select: { bucketKey: true, fileUrl: true, fileName: true, mimeType: true },
+    });
+    if (!attachment) throw new Error('File not found');
+    const { buffer, contentType } = await collabStorage.fetchBytes(
+      attachment.bucketKey,
+      attachment.fileUrl,
+      attachment.mimeType,
+    );
+    return {
+      buffer,
+      fileName: meta.fileName,
+      mimeType: contentType || meta.mimeType || 'application/octet-stream',
+    };
   },
 
   async memberIds(channelId: string) {

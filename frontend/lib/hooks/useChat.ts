@@ -40,6 +40,7 @@ export type ChatMessage = {
   sender: CollabProfile | null;
   content: string | null;
   replyToId: string | null;
+  replyTo?: { id: string; senderName: string; content: string | null } | null;
   createdAt: string;
   editedAt: string | null;
   deletedAt: string | null;
@@ -49,6 +50,7 @@ export type ChatMessage = {
     mimeType: string;
     sizeBytes: number;
     fileUrl: string | null;
+    bucketKey?: string;
     scanStatus: string;
   }[];
   reactions: {
@@ -224,7 +226,7 @@ export function useChat() {
   }, []);
 
   const send = useCallback(
-    async (content: string, files?: File[]) => {
+    async (content: string, files?: File[], opts?: { replyToId?: string }) => {
       if (!activeId) return;
       setSending(true);
       try {
@@ -244,9 +246,14 @@ export function useChat() {
           }
         }
         const sock = await getCollabSocket();
+        const replyToId = opts?.replyToId;
         if (attachments.length) {
           const msg = unwrap<ChatMessage>(
-            await api.post(`chat/channels/${activeId}/messages`, { content, attachments }),
+            await api.post(`chat/channels/${activeId}/messages`, {
+              content,
+              attachments,
+              replyToId,
+            }),
           );
           setMessages((prev) => mergeIncoming(prev, msg));
         } else {
@@ -256,7 +263,7 @@ export function useChat() {
             senderId: "",
             sender: null,
             content,
-            replyToId: null,
+            replyToId: replyToId ?? null,
             createdAt: new Date().toISOString(),
             editedAt: null,
             deletedAt: null,
@@ -264,7 +271,7 @@ export function useChat() {
             reactions: [],
           };
           setMessages((prev) => mergeIncoming(prev, optimistic));
-          sock.emit("send_message", { channelId: activeId, content });
+          sock.emit("send_message", { channelId: activeId, content, replyToId });
         }
       } finally {
         setSending(false);
@@ -272,6 +279,52 @@ export function useChat() {
     },
     [activeId],
   );
+
+  const sendToChannel = useCallback(
+    async (
+      channelId: string,
+      payload: {
+        content?: string;
+        attachments?: ChatMessage["attachments"];
+      },
+    ) => {
+      const attachments = (payload.attachments ?? [])
+        .map((a) => {
+          const bucketKey = a.bucketKey || a.fileUrl || "";
+          const fileUrl = a.fileUrl || a.bucketKey || "";
+          if (!bucketKey && !fileUrl) return null;
+          return {
+            bucketKey: bucketKey || fileUrl,
+            fileUrl: fileUrl || bucketKey,
+            fileName: a.fileName,
+            mimeType: a.mimeType || "application/octet-stream",
+            sizeBytes: a.sizeBytes || 0,
+          };
+        })
+        .filter((a): a is NonNullable<typeof a> => a != null);
+      const msg = unwrap<ChatMessage>(
+        await api.post(`chat/channels/${channelId}/messages`, {
+          content: payload.content || "",
+          attachments: attachments.length ? attachments : undefined,
+        }),
+      );
+      if (channelId === activeId) setMessages((prev) => mergeIncoming(prev, msg));
+      return msg;
+    },
+    [activeId],
+  );
+
+  const editMessage = useCallback(async (id: string, content: string) => {
+    const msg = unwrap<ChatMessage>(await api.patch(`chat/messages/${id}`, { content }));
+    setMessages((prev) => prev.map((m) => (m.id === id ? msg : m)));
+    return msg;
+  }, []);
+
+  const deleteMessage = useCallback(async (id: string) => {
+    const msg = unwrap<ChatMessage>(await api.delete(`chat/messages/${id}`));
+    setMessages((prev) => prev.map((m) => (m.id === id ? msg : m)));
+    return msg;
+  }, []);
 
   const emitTyping = useCallback(async () => {
     if (!activeId) return;
@@ -288,8 +341,19 @@ export function useChat() {
   );
 
   const attachmentUrl = useCallback(async (id: string) => {
-    const data = unwrap<{ url: string }>(await api.get(`chat/attachments/${id}`));
-    return data.url;
+    const data = unwrap<{ url: string | null; fileName?: string; mimeType?: string }>(
+      await api.get(`chat/attachments/${id}`),
+    );
+    return data.url || "";
+  }, []);
+
+  const attachmentBlob = useCallback(async (id: string, download = false) => {
+    const res = await api.get<Blob>(`chat/attachments/${id}/file`, {
+      params: download ? { download: 1 } : undefined,
+      responseType: "blob",
+      timeout: 120_000,
+    });
+    return res.data;
   }, []);
 
   return {
@@ -306,9 +370,13 @@ export function useChat() {
     startDm,
     createGroup,
     send,
+    sendToChannel,
+    editMessage,
+    deleteMessage,
     emitTyping,
     react,
     attachmentUrl,
+    attachmentBlob,
     reload: loadChannels,
   };
 }

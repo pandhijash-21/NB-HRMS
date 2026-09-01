@@ -180,6 +180,29 @@ chatRouter.post('/channels/:id/read', async (req: Request, res: Response) => {
   }
 });
 
+chatRouter.get('/attachments/:id/file', async (req: Request, res: Response) => {
+  try {
+    const download = String(req.query.download ?? '') === '1';
+    const data = await chatService.attachmentFile(p(req.params.id), req.user!.id);
+    const safeName = data.fileName.replace(/["\\\r\n]/g, '_');
+    res.setHeader('Content-Type', data.mimeType);
+    res.setHeader(
+      'Content-Disposition',
+      `${download ? 'attachment' : 'inline'}; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(data.fileName)}`,
+    );
+    res.setHeader('Content-Length', String(data.buffer.length));
+    res.setHeader('Cache-Control', 'private, max-age=60');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    return res.status(200).send(data.buffer);
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : 'File not found';
+    const status =
+      (e as { status?: number }).status ||
+      (message.includes('not found') || message.includes('not a member') ? 404 : 400);
+    return res.status(status).json(fail(message));
+  }
+});
+
 chatRouter.get('/attachments/:id', async (req: Request, res: Response) => {
   try {
     const data = await chatService.attachmentUrl(p(req.params.id), req.user!.id);

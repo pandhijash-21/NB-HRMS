@@ -59,6 +59,63 @@ function rewritePublicMinioUrl(url: string) {
 
 const localDir = path.join(process.cwd(), 'uploads', 'collab');
 
+function isHttpUrl(value: string) {
+  return /^https?:\/\//i.test(value);
+}
+
+function isCloudinaryUrl(value: string) {
+  return /cloudinary\.com/i.test(value);
+}
+
+function isMinioLikeUrl(value: string) {
+  try {
+    const u = new URL(value);
+    const host = u.hostname.toLowerCase();
+    return (
+      u.port === '9000' ||
+      u.pathname.includes('/crm-files/') ||
+      host === 'minio' ||
+      host.includes('minio')
+    );
+  } catch {
+    return false;
+  }
+}
+
+function localObjectName(objectKey: string) {
+  return objectKey.replace(/^collab\//, '');
+}
+
+async function readLocalFile(objectKey: string): Promise<Buffer | null> {
+  if (!objectKey || isHttpUrl(objectKey)) return null;
+  const names = [objectKey, localObjectName(objectKey)];
+  for (const name of names) {
+    try {
+      return await fs.readFile(path.join(localDir, name));
+    } catch {
+      // try next candidate
+    }
+  }
+  return null;
+}
+
+async function minioObjectBuffer(objectKey: string): Promise<Buffer | null> {
+  if (!minioConfigured() || !objectKey || isHttpUrl(objectKey) || isCloudinaryUrl(objectKey)) {
+    return null;
+  }
+  try {
+    const stream = await getMinio().getObject(env.MINIO_BUCKET, objectKey);
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    const buffer = Buffer.concat(chunks);
+    return buffer.length ? buffer : null;
+  } catch {
+    return null;
+  }
+}
+
 async function saveLocal(buffer: Buffer, fileName: string, mimeType: string): Promise<StoredFile> {
   await fs.mkdir(localDir, { recursive: true });
   const safe = fileName.replace(/[^\w.\-]+/g, '_');
@@ -82,23 +139,6 @@ export const collabStorage = {
     mimeType: string;
   }): Promise<StoredFile> {
     const { buffer, fileName, mimeType } = opts;
-    if (minioConfigured()) {
-      const minio = await ensureBucket();
-      const safe = fileName.replace(/[^\w.\-]+/g, '_');
-      const objectKey = `collab/${Date.now()}-${randomUUID()}-${safe}`;
-      await minio.putObject(env.MINIO_BUCKET, objectKey, buffer, buffer.length, {
-        'Content-Type': mimeType,
-      });
-      const fileUrl = await minio.presignedGetObject(env.MINIO_BUCKET, objectKey, 60 * 60 * 24 * 7);
-      return {
-        bucketKey: objectKey,
-        fileUrl,
-        fileName,
-        mimeType,
-        sizeBytes: buffer.length,
-      };
-    }
-
     try {
       const fake = {
         buffer,
@@ -113,7 +153,8 @@ export const collabStorage = {
         mimeType,
         sizeBytes: buffer.length,
       };
-    } catch {
+    } catch (err) {
+      console.warn('Cloudinary collab upload failed, saving locally:', err);
       return saveLocal(buffer, fileName, mimeType);
     }
   },
@@ -137,17 +178,81 @@ export const collabStorage = {
   },
 
   async readableUrl(objectKey: string, fallback?: string | null) {
-    if (!objectKey && fallback) return fallback;
-    if (objectKey.startsWith('http://') || objectKey.startsWith('https://')) return objectKey;
-    if (!minioConfigured()) {
-      if (fallback?.startsWith('http') || fallback?.startsWith('/')) return fallback;
-      return `/uploads/collab/${objectKey.replace(/^collab\//, '')}`;
+    const candidates = [objectKey, fallback].filter((v): v is string => Boolean(v && v.trim()));
+    for (const candidate of candidates) {
+      if (isCloudinaryUrl(candidate)) return candidate;
+      if (isHttpUrl(candidate) && !isMinioLikeUrl(candidate)) return candidate;
+      if (candidate.startsWith('/uploads/')) return candidate;
     }
-    try {
-      return await this.presignGet(objectKey);
-    } catch {
-      return fallback || objectKey;
+    const key = objectKey || '';
+    if (key && !isHttpUrl(key)) {
+      const localName = localObjectName(key);
+      try {
+        await fs.access(path.join(localDir, localName));
+        return `/uploads/collab/${localName}`;
+      } catch {
+        // not on disk — client should use the authenticated file proxy
+      }
     }
+    return '';
+  },
+
+  /** Server-side bytes for chat view/download. Never hands MinIO URLs to clients. */
+  async fetchBytes(
+    objectKey: string,
+    fallback?: string | null,
+    mimeType?: string | null,
+  ): Promise<{ buffer: Buffer; contentType: string | null }> {
+    const candidates = [objectKey, fallback].filter((v): v is string => Boolean(v && v.trim()));
+    for (const candidate of candidates) {
+      if (isCloudinaryUrl(candidate)) {
+        try {
+          return await uploadService.fetchDocumentBytes(candidate);
+        } catch (err) {
+          console.warn('Cloudinary collab fetch failed, trying direct URL:', err);
+          try {
+            const upstream = await fetch(candidate);
+            if (upstream.ok) {
+              const buffer = Buffer.from(await upstream.arrayBuffer());
+              if (buffer.length) {
+                return {
+                  buffer,
+                  contentType: upstream.headers.get('content-type') || mimeType || null,
+                };
+              }
+            }
+          } catch {
+            // try next candidate
+          }
+        }
+        continue;
+      }
+      if (isHttpUrl(candidate) && !isMinioLikeUrl(candidate)) {
+        try {
+          const upstream = await fetch(candidate);
+          if (upstream.ok) {
+            const buffer = Buffer.from(await upstream.arrayBuffer());
+            if (buffer.length) {
+              return {
+                buffer,
+                contentType: upstream.headers.get('content-type') || mimeType || null,
+              };
+            }
+          }
+        } catch {
+          // try next candidate
+        }
+      }
+    }
+
+    const key = objectKey || candidates.find((c) => c && !isHttpUrl(c)) || '';
+    const local = await readLocalFile(key);
+    if (local?.length) return { buffer: local, contentType: mimeType || null };
+
+    const fromMinio = await minioObjectBuffer(key);
+    if (fromMinio?.length) return { buffer: fromMinio, contentType: mimeType || null };
+
+    throw Object.assign(new Error('File is not available'), { status: 404 });
   },
 
   async objectExists(objectKey: string) {

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,6 +10,7 @@ import '../domain/collab_models.dart';
 import 'collab_providers.dart';
 
 const _lastChatKey = 'last_chat_channel_id';
+const _draftsKey = 'chat_composer_drafts';
 
 final chatUnreadProvider = NotifierProvider<ChatUnread, int>(ChatUnread.new);
 
@@ -84,4 +86,34 @@ Future<void> saveLastChatChannelId(String id) async {
 Future<void> clearLastChatChannelId() async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.remove(_lastChatKey);
+}
+
+Future<Map<String, String>> loadChatDrafts() async {
+  final prefs = await SharedPreferences.getInstance();
+  final raw = prefs.getString(_draftsKey);
+  if (raw == null || raw.isEmpty) return {};
+  try {
+    final decoded = jsonDecode(raw);
+    if (decoded is! Map) return {};
+    return {
+      for (final e in decoded.entries)
+        if (e.key is String && e.value is String && (e.value as String).isNotEmpty)
+          e.key as String: e.value as String,
+    };
+  } catch (_) {
+    return {};
+  }
+}
+
+Future<void> saveChatDrafts(Map<String, String> drafts) async {
+  final prefs = await SharedPreferences.getInstance();
+  final cleaned = {
+    for (final e in drafts.entries)
+      if (e.value.isNotEmpty) e.key: e.value,
+  };
+  if (cleaned.isEmpty) {
+    await prefs.remove(_draftsKey);
+    return;
+  }
+  await prefs.setString(_draftsKey, jsonEncode(cleaned));
 }

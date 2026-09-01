@@ -2267,19 +2267,23 @@ model MeetingParticipant {
 }
 
 model MeetingChatMessage {
-  id              String           @id @default(uuid())
-  meetingId       String           @map("meeting_id")
-  senderUserId    String?          @map("sender_user_id")
-  senderGuestName String?          @map("sender_guest_name")
-  senderPhotoUrl  String?          @map("sender_photo_url")
-  scope           MeetingChatScope @default(ROOM)
-  recipientUserId String?          @map("recipient_user_id")
-  content         String           @db.Text
-  createdAt       DateTime         @default(now()) @map("created_at")
+  id                     String           @id @default(uuid())
+  meetingId              String           @map("meeting_id")
+  senderUserId           String?          @map("sender_user_id")
+  senderParticipantId    String?          @map("sender_participant_id")
+  senderGuestName        String?          @map("sender_guest_name")
+  senderPhotoUrl         String?          @map("sender_photo_url")
+  scope                  MeetingChatScope @default(ROOM)
+  recipientUserId        String?          @map("recipient_user_id")
+  recipientParticipantId String?          @map("recipient_participant_id")
+  content                String           @db.Text
+  createdAt              DateTime         @default(now()) @map("created_at")
 
   meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
   sender  User?   @relation("MeetingChatSender", fields: [senderUserId], references: [id])
 
   @@index([meetingId, createdAt])
+  @@index([recipientParticipantId])
+  @@index([senderParticipantId])
   @@map("meeting_chat_messages")
 }

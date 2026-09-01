@@ -231,7 +231,8 @@ class _MeetScheduleScreenState extends ConsumerState<MeetScheduleScreen> {
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Enable recording'),
+                  title: const Text('Host recording'),
+                  subtitle: const Text('The host can record on their device. The file stays on the host phone or computer.'),
                   value: _recordEnabled,
                   onChanged: (v) => setState(() => _recordEnabled = v),
                 ),

@@ -144,6 +144,12 @@ export async function denyParticipant(meetingId: string, participantId: string) 
   );
 }
 
+export async function removeMeetingParticipant(meetingId: string, participantId: string) {
+  return unwrap<{ meeting: Meeting; participant: MeetingPerson; identity: string }>(
+    await api.post(`meetings/${meetingId}/remove`, { participantId }),
+  );
+}
+
 export async function startRecording(id: string) {
   return unwrap<Meeting>(await api.post(`meetings/${id}/recording/start`));
 }

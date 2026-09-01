@@ -153,12 +153,14 @@ class CollabSocket {
     required String content,
     String scope = 'ROOM',
     String? recipientUserId,
+    String? recipientParticipantId,
   }) {
     _socket?.emit('meeting_chat', {
       'meetingId': meetingId,
       'content': content,
       'scope': scope,
       if (recipientUserId != null) 'recipientUserId': recipientUserId,
+      if (recipientParticipantId != null) 'recipientParticipantId': recipientParticipantId,
     });
   }
 
@@ -212,6 +214,20 @@ class CollabSocket {
     _socket?.off('meeting_reaction');
     _socket?.on('meeting_reaction', (data) {
       if (data is Map) cb(Map<String, dynamic>.from(data));
+    });
+  }
+
+  void onMeetingRemoved(void Function(Map<String, dynamic>) cb) {
+    _socket?.off('meeting_removed');
+    _socket?.on('meeting_removed', (data) {
+      if (data is Map) cb(Map<String, dynamic>.from(data));
+    });
+  }
+
+  void onRecording(void Function(bool active) cb) {
+    _socket?.off('recording');
+    _socket?.on('recording', (data) {
+      if (data is Map) cb(data['active'] == true);
     });
   }
 

@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:url_launcher/url_launcher.dart';
+
 Future<bool> openExternalUrl(String url) async {
   final trimmed = url.trim();
   if (trimmed.isEmpty) return false;
@@ -17,8 +19,9 @@ Future<bool> openExternalUrl(String url) async {
       return true;
     }
     if (Platform.isAndroid || Platform.isIOS) {
-      // Mobile builds should add url_launcher; for now fail gracefully.
-      return false;
+      final uri = Uri.tryParse(trimmed);
+      if (uri == null) return false;
+      return await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
   } catch (_) {
     return false;

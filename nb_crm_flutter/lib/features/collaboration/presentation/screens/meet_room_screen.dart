@@ -3,13 +3,14 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:nb_crm_flutter/core/theme/nb_icon.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:livekit_client/livekit_client.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart' show DesktopCapturerSource;
 import 'package:permission_handler/permission_handler.dart';
 
-import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/auth_notifier.dart';
 import '../../../auth/presentation/auth_providers.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -18,6 +19,8 @@ import '../../domain/collab_models.dart';
 import '../collab_providers.dart';
 import '../end_meet_progress.dart';
 import '../meet_helpers.dart';
+import '../meet_local_recorder.dart';
+import '../meet_android_share_stub.dart' if (dart.library.io) '../meet_android_share.dart';
 
 class MeetRoomScreen extends ConsumerStatefulWidget {
   const MeetRoomScreen({
@@ -46,6 +49,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
   bool _cam = true;
   bool _share = false;
   bool _recording = false;
+  final _localRecorder = MeetLocalRecorder();
   bool _chatOpen = false;
   String _chatMode = 'ROOM';
   String? _dmTo;
@@ -57,12 +61,24 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
   final _name = TextEditingController();
   final _draft = TextEditingController();
   final _chat = <Map<String, dynamic>>[];
+  final _chatToasts = <Map<String, dynamic>>[];
+  final _toastTimers = <String, Timer>{};
   String? _summary;
   MeetingItem? _lobbyMeeting;
   LocalVideoTrack? _previewCam;
   Timer? _admitPoll;
   Timer? _hostWaitPoll;
   bool _didAutoJoin = false;
+  bool _handRaised = false;
+  bool _emojiOpen = false;
+  bool _peopleOpen = false;
+  int _presenterIndex = 0;
+  bool _leaving = false;
+  String? _busyLabel;
+  bool _shareFullscreenOpen = false;
+  final _hands = <String, String>{};
+  final _floatReactions = <({String id, String emoji, String name})>[];
+  final _reactionTimers = <String, Timer>{};
 
   static const _connectTimeouts = Timeouts(
     connection: Duration(seconds: 40),
@@ -105,6 +121,15 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
   void dispose() {
     _admitPoll?.cancel();
     _hostWaitPoll?.cancel();
+    for (final timer in _toastTimers.values) {
+      timer.cancel();
+    }
+    _toastTimers.clear();
+    for (final timer in _reactionTimers.values) {
+      timer.cancel();
+    }
+    _reactionTimers.clear();
+    unawaited(SystemChrome.setPreferredOrientations(DeviceOrientation.values));
     final room = _room;
     _room = null;
     room?.removeListener(_onRoom);
@@ -297,7 +322,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
     socket.joinMeeting(meetingId);
     socket.onMeetingChat((row) {
       if (!mounted) return;
-      setState(() => _upsertChat(row));
+      setState(() => _upsertChat(row, toast: true));
     });
     try {
       final history = await ref.read(meetRepositoryProvider).listChat(meetingId);
@@ -350,11 +375,60 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
     });
     socket.onMeetingEnded((meetingId, _) {
       if (_join?.meeting.id != meetingId) return;
-      _onRemoteEnded();
+      if (_join?.meeting.isHost == true) return;
+      unawaited(_onRemoteEnded());
+    });
+    socket.onMeetingHand((row) {
+      if (!mounted) return;
+      final id = row['identity']?.toString() ?? '';
+      if (id.isEmpty) return;
+      setState(() {
+        if (row['raised'] == false) {
+          _hands.remove(id);
+          if (id == _room?.localParticipant?.identity) _handRaised = false;
+        } else {
+          _hands[id] = row['name']?.toString() ?? 'Someone';
+          if (id == _room?.localParticipant?.identity) _handRaised = true;
+        }
+      });
+    });
+    socket.onMeetingReaction((row) {
+      if (!mounted) return;
+      final emoji = row['emoji']?.toString() ?? '';
+      if (emoji.isEmpty) return;
+      final id = '${DateTime.now().microsecondsSinceEpoch}';
+      setState(() {
+        _floatReactions.add((id: id, emoji: emoji, name: row['name']?.toString() ?? ''));
+        if (_floatReactions.length > 10) _floatReactions.removeRange(0, _floatReactions.length - 10);
+      });
+      _reactionTimers[id]?.cancel();
+      _reactionTimers[id] = Timer(const Duration(milliseconds: 2500), () {
+        if (!mounted) return;
+        setState(() => _floatReactions.removeWhere((r) => r.id == id));
+        _reactionTimers.remove(id);
+      });
+    });
+    socket.onMeetingRemoved((row) {
+      final part = row['participantId']?.toString();
+      final identity = row['identity']?.toString();
+      final mine = _myParticipantId;
+      final meIdentity = _room?.localParticipant?.identity;
+      final isMe = (part != null && mine != null && part == mine) ||
+          (identity != null && meIdentity != null && identity == meIdentity);
+      if (!isMe) return;
+      _onKicked();
+    });
+    socket.onRecording((active) {
+      if (!mounted) return;
+      if (_join?.meeting.isHost == true && _localRecorder.active) {
+        setState(() => _recording = true);
+        return;
+      }
+      setState(() => _recording = active);
     });
   }
 
-  void _upsertChat(Map<String, dynamic> row) {
+  void _upsertChat(Map<String, dynamic> row, {bool toast = false}) {
     final id = row['id']?.toString();
     if (id != null && id.isNotEmpty) {
       final existing = _chat.indexWhere((r) => r['id']?.toString() == id);
@@ -371,14 +445,186 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
           (r['scope'] ?? 'ROOM') == (row['scope'] ?? 'ROOM'),
     );
     _chat.add(row);
+    if (toast) _pushChatToast(row);
+  }
+
+  String? get _myUserId =>
+      ref.read(authNotifierProvider).user?.id ?? _join?.participant?.userId;
+
+  bool _chatIsMine(Map<String, dynamic> row) {
+    final senderUser = row['senderUserId']?.toString();
+    final senderPart = row['senderParticipantId']?.toString();
+    final meUser = _myUserId;
+    if (meUser != null && meUser.isNotEmpty && senderUser == meUser) return true;
+    if (_myParticipantId != null && senderPart == _myParticipantId) return true;
+    return false;
+  }
+
+  bool _chatIsForMe(Map<String, dynamic> row) {
+    if ((row['scope'] ?? 'ROOM') != 'DIRECT') return true;
+    final recUser = row['recipientUserId']?.toString();
+    final recPart = row['recipientParticipantId']?.toString();
+    final meUser = _myUserId;
+    if (meUser != null && meUser.isNotEmpty && recUser == meUser) return true;
+    if (_myParticipantId != null && recPart == _myParticipantId) return true;
+    return _chatIsMine(row);
+  }
+
+  void _pushChatToast(Map<String, dynamic> row) {
+    if (!mounted) return;
+    if (row['id']?.toString().startsWith('local-') == true) return;
+    if (_chatIsMine(row)) return;
+    if (row['scope'] == 'DIRECT' && !_chatIsForMe(row)) return;
+    final showing = _chatOpen && ((row['scope'] ?? 'ROOM') == _chatMode);
+    if (showing) return;
+    final id = row['id']?.toString();
+    if (id == null || id.isEmpty) return;
+    _chatToasts.removeWhere((t) => t['id']?.toString() == id);
+    _chatToasts.add(row);
+    if (_chatToasts.length > 3) _chatToasts.removeRange(0, _chatToasts.length - 3);
+    _toastTimers[id]?.cancel();
+    _toastTimers[id] = Timer(const Duration(milliseconds: 6500), () {
+      if (!mounted) return;
+      setState(() => _chatToasts.removeWhere((t) => t['id']?.toString() == id));
+      _toastTimers.remove(id);
+    });
+  }
+
+  String _peerKey(MeetingPerson p) {
+    if (p.id != null && p.id!.isNotEmpty) return p.id!;
+    if (p.userId != null && p.userId!.isNotEmpty) return 'user:${p.userId}';
+    return p.name;
+  }
+
+  bool _isSelfPerson(MeetingPerson p) {
+    if (_myParticipantId != null && p.id != null && p.id == _myParticipantId) return true;
+    final meUser = _myUserId;
+    if (meUser != null && meUser.isNotEmpty && p.userId == meUser) return true;
+    return false;
+  }
+
+  List<MeetingPerson> _dmPeople() {
+    final people = <MeetingPerson>[];
+    final seen = <String>{};
+
+    void add(MeetingPerson p) {
+      if (_isSelfPerson(p)) return;
+      final aliases = <String>[
+        if (p.id != null && p.id!.isNotEmpty) p.id!,
+        if (p.userId != null && p.userId!.isNotEmpty) 'user:${p.userId}',
+      ];
+      if (aliases.isEmpty || aliases.any(seen.contains)) return;
+      seen.addAll(aliases);
+      people.add(p);
+    }
+
+    for (final p in _join?.meeting.participants ?? const <MeetingPerson>[]) {
+      add(p);
+    }
+    final hostId = _join?.meeting.hostUserId;
+    if (hostId != null && hostId.isNotEmpty) {
+      add(MeetingPerson(
+        name: _join?.meeting.hostName ?? 'Host',
+        userId: hostId,
+        role: 'HOST',
+      ));
+    }
+    final remotes = _room?.remoteParticipants.values;
+    if (remotes != null) {
+      for (final p in remotes) {
+        final identity = p.identity;
+        String? userId;
+        String? partId;
+        var guest = true;
+        if (identity.startsWith('user:')) {
+          userId = identity.substring(5);
+          guest = false;
+        } else if (identity.startsWith('guest:')) {
+          partId = identity.substring(6);
+        }
+        add(MeetingPerson(
+          name: p.name.trim().isEmpty ? (guest ? 'Guest' : 'Member') : p.name,
+          id: partId,
+          userId: userId,
+          isGuest: guest,
+        ));
+      }
+    }
+    return people;
+  }
+
+  bool _dmThreadMatches(Map<String, dynamic> row, MeetingPerson peer) {
+    if ((row['scope'] ?? 'ROOM') != 'DIRECT') return false;
+    final peerUser = peer.userId;
+    final peerPart = peer.id;
+    final hit = (peerPart != null &&
+            peerPart.isNotEmpty &&
+            (row['senderParticipantId']?.toString() == peerPart ||
+                row['recipientParticipantId']?.toString() == peerPart)) ||
+        (peerUser != null &&
+            peerUser.isNotEmpty &&
+            (row['senderUserId']?.toString() == peerUser ||
+                row['recipientUserId']?.toString() == peerUser));
+    return hit && (_chatIsMine(row) || _chatIsForMe(row));
   }
 
   Future<void> _dropRoom(Room? room) async {
+    if (_localRecorder.active) {
+      try {
+        await _localRecorder.discard().timeout(const Duration(seconds: 2));
+      } catch (_) {}
+    }
     if (room == null) return;
     room.removeListener(_onRoom);
     try {
-      await room.disconnect();
+      await room.disconnect().timeout(const Duration(seconds: 3));
     } catch (_) {}
+  }
+
+  Future<void> _closeShareOverlay() async {
+    if (!_shareFullscreenOpen) return;
+    _shareFullscreenOpen = false;
+    if (!mounted) return;
+    try {
+      Navigator.of(context, rootNavigator: true).pop();
+    } catch (_) {}
+    try {
+      await SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    } catch (_) {}
+  }
+
+  Future<void> _teardownCall({
+    required String reason,
+    bool popRoute = false,
+  }) async {
+    if (_leaving) return;
+    if (mounted) {
+      setState(() {
+        _leaving = true;
+        _busyLabel = popRoute ? 'Leaving meeting…' : 'Meeting ended. Cleaning up…';
+      });
+    }
+    _admitPoll?.cancel();
+    _hostWaitPoll?.cancel();
+    await _closeShareOverlay();
+    await clearMeetSession(_code);
+    final room = _room;
+    _room = null;
+    try {
+      await _dropRoom(room).timeout(const Duration(seconds: 4));
+    } catch (_) {}
+    if (!mounted) return;
+    if (popRoute) {
+      Navigator.of(context).maybePop();
+      return;
+    }
+    setState(() {
+      _leaving = false;
+      _busyLabel = null;
+      _summary = reason;
+      _recording = false;
+    });
   }
 
   Future<void> _publishLocalMedia(Room room) async {
@@ -631,13 +877,12 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
     }
   }
 
+  Future<void> _onKicked() async {
+    await _teardownCall(reason: 'The host removed you from this meeting.');
+  }
+
   Future<void> _onRemoteEnded() async {
-    await clearMeetSession(_code);
-    final room = _room;
-    _room = null;
-    await _dropRoom(room);
-    if (!mounted) return;
-    setState(() => _summary = 'This meeting has ended. The host closed the room.');
+    await _teardownCall(reason: 'This meeting has ended. The host closed the room.');
   }
 
   Future<bool> _confirmEndMeet() async {
@@ -647,7 +892,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
         title: const Text('End this meeting?'),
         content: Text(
           _recording
-              ? 'Recording will be saved first, then everyone will be removed. This meeting link cannot be used again.'
+              ? 'Your recording will be saved on this device first, then everyone will be removed. This meeting link cannot be used again.'
               : 'Everyone will be removed and this meeting link cannot be used again.',
         ),
         actions: [
@@ -664,29 +909,42 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
   }
 
   Future<void> _leaveCall() async {
-    _admitPoll?.cancel();
-    _hostWaitPoll?.cancel();
-    await clearMeetSession(_code);
-    final room = _room;
-    _room = null;
-    await _dropRoom(room);
-    if (mounted) Navigator.of(context).maybePop();
+    await _teardownCall(reason: '', popRoute: true);
   }
 
   Future<void> _endMeetFromCall() async {
     if (!await _confirmEndMeet() || !mounted) return;
     final join = _join;
     if (join == null) return;
+    if (_localRecorder.active) {
+      try {
+        final saved = await _localRecorder.stopAndSave();
+        try {
+          await ref.read(meetRepositoryProvider).stopRecording(join.meeting.id);
+        } catch (_) {}
+        if (mounted) {
+          setState(() => _recording = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(saved == null ? 'Recording discarded' : 'Recording saved on this device')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+        }
+      }
+    }
     final token = _guestToken ?? await ref.read(secureStorageProvider).readToken();
     if (token != null) {
       ref.read(collabSocketProvider).connect(token: token);
     }
+    if (!mounted) return;
     final ended = await showEndMeetProgress(
       context: context,
       meetingId: join.meeting.id,
       socket: ref.read(collabSocketProvider),
       repo: ref.read(meetRepositoryProvider),
-      hasRecording: _recording || join.meeting.recordEnabled,
+      hasRecording: false,
     );
     if (!mounted) return;
     await clearMeetSession(_code);
@@ -745,10 +1003,47 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
     if (_share) {
       final stop = await _confirmStopPresenting();
       if (!stop || !mounted) return;
+      try {
+        await _room!.localParticipant?.setScreenShareEnabled(false);
+      } catch (_) {}
+      await stopAndroidScreenShare();
+      return;
+    }
+    if (lkPlatformIsWebMobile()) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Screen share is not supported in mobile browsers. Use the Android or iOS app.')),
+      );
+      return;
     }
     try {
+      if (mounted) setState(() => _busyLabel = 'Starting screen share…');
+      if (lkPlatformIs(PlatformType.android)) {
+        final ok = await prepareAndroidScreenShare();
+        if (!ok) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Screen share permission was denied')),
+            );
+          }
+          return;
+        }
+      }
+      if (lkPlatformIsDesktop()) {
+        final source = await showDialog<DesktopCapturerSource>(
+          context: context,
+          builder: (ctx) => ScreenSelectDialog(),
+        );
+        if (source == null || !mounted) return;
+        final track = await LocalVideoTrack.createScreenShareTrack(
+          ScreenShareCaptureOptions(sourceId: source.id, maxFrameRate: 15),
+        );
+        await _room!.localParticipant?.publishVideoTrack(track);
+        return;
+      }
       await _room!.localParticipant?.setScreenShareEnabled(
-        !_share,
+        true,
+        captureScreenAudio: true,
         screenShareCaptureOptions: const _ScreenShareNoCursorOptions(),
       );
     } catch (e) {
@@ -756,6 +1051,61 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Screen share failed: $e')),
       );
+    } finally {
+      if (mounted) setState(() => _busyLabel = null);
+    }
+  }
+
+  Future<void> _sendReaction(String emoji) async {
+    final id = _join?.meeting.id;
+    if (id == null) return;
+    setState(() => _emojiOpen = false);
+    ref.read(collabSocketProvider).meetingReaction(meetingId: id, emoji: emoji);
+  }
+
+  Future<void> _toggleHand() async {
+    final id = _join?.meeting.id;
+    if (id == null) return;
+    final next = !_handRaised;
+    setState(() => _handRaised = next);
+    ref.read(collabSocketProvider).meetingHand(meetingId: id, raised: next);
+  }
+
+  MeetingPerson? _rosterFor(Participant p) {
+    final parsedUser = p.identity.startsWith('user:') ? p.identity.substring(5) : null;
+    final parsedGuest = p.identity.startsWith('guest:') ? p.identity.substring(6) : null;
+    for (final person in _join?.meeting.participants ?? const <MeetingPerson>[]) {
+      if (parsedUser != null && person.userId == parsedUser) return person;
+      if (parsedGuest != null && person.id == parsedGuest) return person;
+    }
+    return null;
+  }
+
+  Future<void> _removeParticipant(Participant p) async {
+    final meetingId = _join?.meeting.id;
+    final person = _rosterFor(p);
+    if (meetingId == null || person?.id == null) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        title: const Text('Remove from meeting?', style: TextStyle(color: Colors.white)),
+        content: Text(
+          '${p.name.isEmpty ? 'This guest' : p.name} will be removed from the call.',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Remove')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await ref.read(meetRepositoryProvider).removeParticipant(meetingId, person!.id!);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     }
   }
 
@@ -763,6 +1113,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
     final id = _join?.meeting.id;
     if (id == null) return;
     final start = !_recording;
+    if (start && _room == null) return;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -773,8 +1124,8 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
         ),
         content: Text(
           start
-              ? 'Everyone in this meeting will be recorded. The recording is saved for people who can view this meeting later.'
-              : 'Stop the recording now? You can watch it from Past meetings after it finishes processing.',
+              ? 'Only you (the host) can record. The file is saved on this device, not in the cloud. When asked, pick this meeting window so everyone on screen is captured.'
+              : 'Stop recording and save the file on this device?',
           style: const TextStyle(color: Colors.white70, height: 1.4),
         ),
         actions: [
@@ -794,17 +1145,34 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
       ),
     );
     if (ok != true || !mounted) return;
+    setState(() => _busyLabel = start ? 'Starting recording…' : 'Saving recording…');
     try {
       if (start) {
-        await ref.read(meetRepositoryProvider).startRecording(id);
+        await _localRecorder.start(room: _room!, code: _code);
+        try {
+          await ref.read(meetRepositoryProvider).startRecording(id);
+        } catch (_) {}
+        if (!mounted) return;
+        setState(() => _recording = true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Recording on this device')),
+        );
       } else {
-        await ref.read(meetRepositoryProvider).stopRecording(id);
+        final saved = await _localRecorder.stopAndSave();
+        try {
+          await ref.read(meetRepositoryProvider).stopRecording(id);
+        } catch (_) {}
+        if (!mounted) return;
+        setState(() => _recording = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(saved == null ? 'Recording discarded' : 'Recording saved on this device')),
+        );
       }
-      if (!mounted) return;
-      setState(() => _recording = start);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    } finally {
+      if (mounted) setState(() => _busyLabel = null);
     }
   }
 
@@ -836,6 +1204,12 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
   }
 
   bool _isLocal(Participant p) => p is LocalParticipant || identical(p, _room?.localParticipant);
+
+  String _labelFor(Participant p) => meetParticipantLabel(
+        name: p.name,
+        identity: p.identity,
+        isLocal: _isLocal(p),
+      );
 
   String? _photoForParticipant(Participant p) {
     final people = _join?.meeting.participants ?? const <MeetingPerson>[];
@@ -885,6 +1259,38 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
       unawaited(_loadLobbyMeeting());
       if (widget.autoJoin) unawaited(_tryAutoJoin());
     });
+    if (_leaving && _summary == null) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(28),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const LinearProgressIndicator(
+                  minHeight: 4,
+                  color: Color(0xFFC5A059),
+                  backgroundColor: Color(0xFF333333),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  _busyLabel ?? 'Leaving meeting…',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700, height: 1.35),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Please wait while this device disconnects.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white54, height: 1.4),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     if (_summary != null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Meeting ended')),
@@ -904,6 +1310,12 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const NbIcon(Icons.hourglass_top, color: Color(0xFFC5A059), size: 48),
+                const SizedBox(height: 16),
+                const LinearProgressIndicator(
+                  minHeight: 4,
+                  color: Color(0xFFC5A059),
+                  backgroundColor: Color(0xFF333333),
+                ),
                 const SizedBox(height: 16),
                 Text(
                   'Asking to join',
@@ -955,6 +1367,16 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
             onPressed: _leaveLobby,
           ),
           title: Text(isHost ? 'Your meeting' : 'Join $_code', style: TextStyle(fontWeight: FontWeight.w700, color: text)),
+          bottom: _connecting
+              ? const PreferredSize(
+                  preferredSize: Size.fromHeight(3),
+                  child: LinearProgressIndicator(
+                    minHeight: 3,
+                    color: Color(0xFFC5A059),
+                    backgroundColor: Color(0x33000000),
+                  ),
+                )
+              : null,
         ),
         body: Center(
           child: ConstrainedBox(
@@ -1098,16 +1520,16 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
       if (_room!.localParticipant != null) _room!.localParticipant!,
       ..._room!.remoteParticipants.values,
     ];
-    Participant? presenter;
-    VideoTrack? screen;
+    final shares = <({Participant presenter, VideoTrack screen})>[];
     for (final p in participants) {
       final track = _screenTrack(p);
-      if (track != null) {
-        presenter = p;
-        screen = track;
-        break;
-      }
+      if (track != null) shares.add((presenter: p, screen: track));
     }
+    final share = shares.isEmpty
+        ? null
+        : shares[((_presenterIndex % shares.length) + shares.length) % shares.length];
+    final presenter = share?.presenter;
+    final screen = share?.screen;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -1115,7 +1537,29 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
         children: [
           SafeArea(
             bottom: false,
-            child: _meetTopBar(participants),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _meetTopBar(participants),
+                if (_busyLabel != null) ...[
+                  const LinearProgressIndicator(
+                    minHeight: 3,
+                    color: Color(0xFFC5A059),
+                    backgroundColor: Color(0xFF333333),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 6, 12, 4),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        _busyLabel!,
+                        style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
           if (_join?.meeting.isHost == true && _waitingFor.isNotEmpty) _knockPanel(),
           Expanded(
@@ -1129,12 +1573,170 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                           screen: screen,
                           presenter: presenter,
                           participants: participants,
+                          shares: shares,
                         ),
                       )
                     else
-                      Expanded(child: _peopleGrid(participants, fill: true)),
+                      Expanded(child: _peopleGrid(participants)),
                   ],
                 ),
+                if (_chatToasts.isNotEmpty)
+                  Positioned(
+                    left: 12,
+                    right: _chatOpen
+                        ? (MediaQuery.sizeOf(context).width >= 700 ? 332 : MediaQuery.sizeOf(context).width * 0.92 + 12)
+                        : 72,
+                    bottom: 12,
+                    child: IgnorePointer(
+                      ignoring: false,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          for (final t in _chatToasts)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: _MeetChatToast(
+                                senderName: '${t['senderName'] ?? ''}',
+                                content: '${t['content'] ?? ''}',
+                                direct: (t['scope'] ?? 'ROOM') == 'DIRECT',
+                                onTap: () {
+                                  setState(() {
+                                    _chatOpen = true;
+                                    _chatMode = (t['scope'] ?? 'ROOM') == 'DIRECT' ? 'DIRECT' : 'ROOM';
+                                    final key = t['senderParticipantId']?.toString();
+                                    final userKey = t['senderUserId']?.toString();
+                                    if (_chatMode == 'DIRECT') {
+                                      _dmTo = (key != null && key.isNotEmpty)
+                                          ? key
+                                          : (userKey != null && userKey.isNotEmpty)
+                                              ? 'user:$userKey'
+                                              : _dmTo;
+                                    }
+                                    _chatToasts.removeWhere((x) => x['id'] == t['id']);
+                                  });
+                                },
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                if (_floatReactions.isNotEmpty)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 16,
+                    child: IgnorePointer(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          for (final r in _floatReactions)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 6),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(r.emoji, style: const TextStyle(fontSize: 32)),
+                                  Text(
+                                    r.name,
+                                    style: const TextStyle(color: Colors.white70, fontSize: 10),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                if (_emojiOpen)
+                  Positioned(
+                    left: 12,
+                    right: 12,
+                    bottom: 8,
+                    child: Center(
+                      child: Material(
+                        color: const Color(0xF2222222),
+                        borderRadius: BorderRadius.circular(28),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              for (final emoji in meetReactionEmojis)
+                                IconButton(
+                                  onPressed: () => _sendReaction(emoji),
+                                  icon: Text(emoji, style: const TextStyle(fontSize: 22)),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                if (_peopleOpen)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: SizedBox(
+                      width: MediaQuery.sizeOf(context).width >= 700 ? 320 : MediaQuery.sizeOf(context).width * 0.92,
+                      child: Material(
+                        color: const Color(0xFF161616),
+                        child: Column(
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+                              child: Row(
+                                children: [
+                                  const Text('People', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                                  const Spacer(),
+                                  IconButton(
+                                    color: Colors.white,
+                                    onPressed: () => setState(() => _peopleOpen = false),
+                                    icon: const NbIcon(Icons.close),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Expanded(
+                              child: ListView(
+                                children: [
+                                  for (final p in participants)
+                                    ListTile(
+                                      title: Row(
+                                        children: [
+                                          Flexible(
+                                            child: Text(
+                                              _labelFor(p),
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(color: Colors.white),
+                                            ),
+                                          ),
+                                          if (isMeetGuestIdentity(p.identity)) ...[
+                                            const SizedBox(width: 8),
+                                            const _GuestBadge(),
+                                          ],
+                                        ],
+                                      ),
+                                      subtitle: Text(
+                                        _hands[p.identity] != null ? 'Hand raised' : (p.isMicrophoneEnabled() ? 'In this call' : 'Muted'),
+                                        style: const TextStyle(color: Colors.white54, fontSize: 12),
+                                      ),
+                                      trailing: (_join?.meeting.isHost == true) && !_isLocal(p)
+                                          ? TextButton(
+                                              onPressed: () => _removeParticipant(p),
+                                              child: const Text('Remove', style: TextStyle(color: Color(0xFFF87171))),
+                                            )
+                                          : (_hands[p.identity] != null
+                                              ? const Text('✋', style: TextStyle(fontSize: 18))
+                                              : null),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 if (_chatOpen)
                   Align(
                     alignment: Alignment.centerRight,
@@ -1215,13 +1817,46 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                 ),
                 const SizedBox(width: 14),
                 _LobbyRoundButton(
+                  icon: Icons.emoji_emotions_outlined,
+                  on: !_emojiOpen,
+                  tooltip: 'Send a reaction',
+                  onPressed: () => setState(() {
+                    _emojiOpen = !_emojiOpen;
+                    _peopleOpen = false;
+                  }),
+                  accent: _emojiOpen,
+                ),
+                const SizedBox(width: 14),
+                _LobbyRoundButton(
+                  icon: Icons.back_hand_outlined,
+                  on: !_handRaised,
+                  tooltip: _handRaised ? 'Lower hand' : 'Raise hand',
+                  onPressed: _toggleHand,
+                  accent: _handRaised,
+                ),
+                const SizedBox(width: 14),
+                _LobbyRoundButton(
                   icon: Icons.chat,
                   on: !_chatOpen,
                   tooltip: _chatOpen ? 'Hide chat' : 'Chat',
-                  onPressed: () => setState(() => _chatOpen = !_chatOpen),
+                  onPressed: () => setState(() {
+                    _chatOpen = !_chatOpen;
+                    if (_chatOpen) _peopleOpen = false;
+                  }),
                   accent: _chatOpen,
                 ),
-                if ((_join?.meeting.isHost == true) || Permissions.isAdmin(auth.user?.role)) ...[
+                const SizedBox(width: 14),
+                _LobbyRoundButton(
+                  icon: Icons.people_alt_outlined,
+                  on: !_peopleOpen,
+                  tooltip: 'People',
+                  onPressed: () => setState(() {
+                    _peopleOpen = !_peopleOpen;
+                    if (_peopleOpen) _chatOpen = false;
+                  }),
+                  accent: _peopleOpen,
+                ),
+                if (_join?.meeting.isHost == true) ...[
                   const SizedBox(width: 14),
                   _LobbyRoundButton(
                     icon: Icons.fiber_manual_record,
@@ -1368,11 +2003,11 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
         ...shown.asMap().entries.map((e) {
           final p = e.value;
           final photo = _photoForParticipant(p);
-          final label = _isLocal(p) ? 'You' : (p.name.isEmpty ? 'Guest' : p.name);
+          final label = _labelFor(p);
           return Padding(
             padding: EdgeInsets.only(left: e.key == 0 ? 0 : 4),
             child: Tooltip(
-              message: label,
+              message: isMeetGuestIdentity(p.identity) ? '$label · Guest' : label,
               child: NbProfilePhoto(
                 url: (photo ?? '').isNotEmpty ? photo : null,
                 name: label,
@@ -1413,7 +2048,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
     );
   }
 
-  Widget _screenShareStage(VideoTrack screen, Participant presenter) {
+  Widget _screenShareStage(VideoTrack screen, Participant presenter, {required int shareCount}) {
     final local = _isLocal(presenter);
     return Stack(
       children: [
@@ -1433,22 +2068,195 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
               borderRadius: BorderRadius.circular(6),
             ),
             child: Text(
-              local ? 'You are presenting' : '${presenter.name} is presenting',
+              local
+                  ? 'You are presenting'
+                  : '${_labelFor(presenter)}${isMeetGuestIdentity(presenter.identity) ? ' (Guest)' : ''} is presenting'
+                      '${shareCount > 1 ? ' (${(_presenterIndex % shareCount) + 1}/$shareCount)' : ''}',
               style: const TextStyle(color: Colors.white, fontSize: 12),
             ),
+          ),
+        ),
+        if (shareCount > 1) ...[
+          Positioned(
+            left: 8,
+            top: 0,
+            bottom: 0,
+            child: Center(
+              child: IconButton.filled(
+                style: IconButton.styleFrom(backgroundColor: Colors.black54),
+                onPressed: () => setState(() => _presenterIndex--),
+                icon: const NbIcon(Icons.chevron_left_rounded, color: Colors.white),
+              ),
+            ),
+          ),
+          Positioned(
+            right: 8,
+            top: 0,
+            bottom: 0,
+            child: Center(
+              child: IconButton.filled(
+                style: IconButton.styleFrom(backgroundColor: Colors.black54),
+                onPressed: () => setState(() => _presenterIndex++),
+                icon: const NbIcon(Icons.chevron_right_rounded, color: Colors.white),
+              ),
+            ),
+          ),
+        ],
+        Positioned(
+          right: 12,
+          bottom: 12,
+          child: IconButton.filled(
+            style: IconButton.styleFrom(backgroundColor: Colors.black54),
+            tooltip: 'Full screen',
+            onPressed: () => _openShareFullscreen(screen, presenter, shareCount),
+            icon: const NbIcon(Icons.fullscreen_rounded, color: Colors.white),
           ),
         ),
       ],
     );
   }
 
+  Future<void> _openShareFullscreen(VideoTrack screen, Participant presenter, int shareCount) async {
+    final mobile = MediaQuery.sizeOf(context).shortestSide < 700;
+    if (mobile) {
+      await SystemChrome.setPreferredOrientations(const [
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    }
+    if (!mounted) return;
+    _shareFullscreenOpen = true;
+    try {
+      await Navigator.of(context).push(
+      PageRouteBuilder<void>(
+        opaque: true,
+        pageBuilder: (ctx, _, __) {
+          return Scaffold(
+            backgroundColor: Colors.black,
+            body: SafeArea(
+              child: Stack(
+                children: [
+                  Positioned.fill(child: VideoTrackRenderer(screen, fit: VideoViewFit.contain)),
+                  Positioned(
+                    left: 8,
+                    top: 8,
+                    child: IconButton.filled(
+                      style: IconButton.styleFrom(backgroundColor: Colors.black54),
+                      onPressed: () => Navigator.pop(ctx),
+                      icon: const NbIcon(Icons.fullscreen_exit_rounded, color: Colors.white),
+                    ),
+                  ),
+                  if (shareCount > 1) ...[
+                    Positioned(
+                      left: 8,
+                      top: 0,
+                      bottom: 0,
+                      child: Center(
+                        child: IconButton.filled(
+                          style: IconButton.styleFrom(backgroundColor: Colors.black54),
+                          onPressed: () {
+                            setState(() => _presenterIndex--);
+                            Navigator.pop(ctx);
+                          },
+                          icon: const NbIcon(Icons.chevron_left_rounded, color: Colors.white),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      right: 8,
+                      top: 0,
+                      bottom: 0,
+                      child: Center(
+                        child: IconButton.filled(
+                          style: IconButton.styleFrom(backgroundColor: Colors.black54),
+                          onPressed: () {
+                            setState(() => _presenterIndex++);
+                            Navigator.pop(ctx);
+                          },
+                          icon: const NbIcon(Icons.chevron_right_rounded, color: Colors.white),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    } finally {
+      _shareFullscreenOpen = false;
+      if (mounted && !_leaving && _summary == null) {
+        await SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+        await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      }
+    }
+  }
+
   Widget _presentingLayout({
     required VideoTrack screen,
     required Participant presenter,
     required List<Participant> participants,
+    required List<({Participant presenter, VideoTrack screen})> shares,
   }) {
     final desktop = MediaQuery.sizeOf(context).width >= 800;
-    final stage = _screenShareStage(screen, presenter);
+    final shareCount = shares.length;
+    final stage = Column(
+      children: [
+        if (shareCount > 1)
+          SizedBox(
+            height: 64,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.fromLTRB(8, 6, 8, 4),
+              itemCount: shareCount,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (context, i) {
+                final row = shares[i];
+                final selected = identical(row.screen, screen) || row.presenter.identity == presenter.identity;
+                return GestureDetector(
+                  onTap: () => setState(() => _presenterIndex = i),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 160),
+                    width: 112,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: selected ? const Color(0xFFC5A059) : Colors.white24,
+                        width: selected ? 2 : 1,
+                      ),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        VideoTrackRenderer(row.screen, fit: VideoViewFit.cover),
+                        Align(
+                          alignment: Alignment.bottomCenter,
+                          child: Container(
+                            width: double.infinity,
+                            color: Colors.black54,
+                            padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
+                            child: Text(
+                              _isLocal(row.presenter) ? 'Your screen' : _labelFor(row.presenter),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        Expanded(child: _screenShareStage(screen, presenter, shareCount: shareCount)),
+      ],
+    );
     if (desktop) {
       return Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1481,8 +2289,11 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
     Widget tile(Participant p) {
       return _ParticipantTile(
         participant: p,
-        label: _isLocal(p) ? 'You' : (p.name.isEmpty ? 'Guest' : p.name),
+        label: _labelFor(p),
         photoUrl: _photoForParticipant(p),
+        handRaised: _hands.containsKey(p.identity),
+        canRemove: _join?.meeting.isHost == true && !_isLocal(p),
+        onRemove: () => _removeParticipant(p),
       );
     }
 
@@ -1610,10 +2421,20 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          person.name,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                person.name,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15),
+                              ),
+                            ),
+                            if (person.isGuest) ...[
+                              const SizedBox(width: 8),
+                              const _GuestBadge(),
+                            ],
+                          ],
                         ),
                         const SizedBox(height: 2),
                         Text(
@@ -1675,36 +2496,102 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
     );
   }
 
-  Widget _peopleGrid(List<Participant> participants, {required bool fill}) {
-    return GridView.builder(
-      padding: const EdgeInsets.all(8),
-      scrollDirection: fill ? Axis.vertical : Axis.horizontal,
-      gridDelegate: fill
-          ? SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: MediaQuery.sizeOf(context).width >= 800 ? 3 : 1,
-              childAspectRatio: 16 / 10,
-              crossAxisSpacing: 8,
-              mainAxisSpacing: 8,
-            )
-          : const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 1,
-              childAspectRatio: 16 / 10,
-              mainAxisSpacing: 8,
-            ),
-      itemCount: participants.length,
-      itemBuilder: (context, i) {
-        final p = participants[i];
-        return _ParticipantTile(
-          participant: p,
-          label: _isLocal(p) ? 'You' : (p.name.isEmpty ? 'Guest' : p.name),
-          photoUrl: _photoForParticipant(p),
+  Widget _peopleGrid(List<Participant> participants) {
+    return LayoutBuilder(
+      builder: (context, box) {
+        final n = participants.length;
+        final width = box.maxWidth;
+        final cols = n <= 1
+            ? 1
+            : width < 520
+                ? (n == 2 ? 1 : 2)
+                : n <= 2
+                    ? 2
+                    : n <= 4
+                        ? 2
+                        : n <= 9
+                            ? (width >= 900 ? 3 : 2)
+                            : (width >= 1100 ? 4 : 3);
+        return GridView.builder(
+          padding: const EdgeInsets.all(8),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: cols,
+            childAspectRatio: n == 1 ? 16 / 10 : 16 / 9,
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
+          ),
+          itemCount: n,
+          itemBuilder: (context, i) {
+            final p = participants[i];
+            return _ParticipantTile(
+              participant: p,
+              label: _labelFor(p),
+              photoUrl: _photoForParticipant(p),
+              handRaised: _hands.containsKey(p.identity),
+              canRemove: _join?.meeting.isHost == true && !_isLocal(p),
+              onRemove: () => _removeParticipant(p),
+            );
+          },
         );
       },
     );
   }
 
+  Future<void> _sendMeetChat() async {
+    final text = _draft.text.trim();
+    final people = _dmPeople();
+    if (text.isEmpty || _join == null) return;
+    if (_chatMode == 'DIRECT' && (_dmTo == null || _dmTo!.isEmpty)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            people.isEmpty
+                ? 'No one else is in this meeting yet.'
+                : 'Pick the host, a teammate, or a guest to message them privately.',
+          ),
+        ),
+      );
+      return;
+    }
+    final peer = people.where((p) => _peerKey(p) == _dmTo).firstOrNull;
+    final me = ref.read(authNotifierProvider).user;
+    setState(() {
+      _upsertChat({
+        'id': 'local-${DateTime.now().microsecondsSinceEpoch}',
+        'scope': _chatMode,
+        'content': text,
+        'senderName': me?.name ?? _join?.participant?.name ?? 'You',
+        'senderUserId': me?.id ?? _join?.participant?.userId,
+        'senderParticipantId': _myParticipantId,
+        'recipientUserId': peer?.userId,
+        'recipientParticipantId': peer?.id,
+        'recipientName': peer?.name,
+      });
+      _draft.clear();
+    });
+    ref.read(collabSocketProvider).meetingChat(
+          meetingId: _join!.meeting.id,
+          content: text,
+          scope: _chatMode,
+          recipientUserId: _chatMode == 'DIRECT'
+              ? (peer?.userId ?? (_dmTo!.startsWith('user:') ? _dmTo!.substring(5) : null))
+              : null,
+          recipientParticipantId: _chatMode == 'DIRECT'
+              ? (peer?.id ?? (_dmTo!.startsWith('user:') ? null : _dmTo))
+              : null,
+        );
+  }
+
   Widget _chatPane() {
-    final rows = _chat.where((r) => (r['scope'] ?? 'ROOM') == _chatMode).toList();
+    final people = _dmPeople();
+    final selected = people.where((p) => _peerKey(p) == _dmTo).firstOrNull;
+    final rows = _chat.where((r) {
+      if (_chatMode == 'ROOM') return (r['scope'] ?? 'ROOM') == 'ROOM';
+      if ((r['scope'] ?? 'ROOM') != 'DIRECT') return false;
+      if (selected == null) return true;
+      return _dmThreadMatches(r, selected);
+    }).toList();
     const gold = Color(0xFFC5A059);
     return ColoredBox(
       color: const Color(0xFF161616),
@@ -1743,7 +2630,11 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  '${r['senderName'] ?? ''}',
+                                  _chatIsMine(r)
+                                      ? (r['scope'] == 'DIRECT' && r['recipientName'] != null
+                                          ? 'You → ${r['recipientName']}'
+                                          : 'You')
+                                      : '${r['senderName'] ?? ''}${r['scope'] == 'DIRECT' ? ' → you' : ''}',
                                   style: const TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.w600),
                                 ),
                                 const SizedBox(height: 2),
@@ -1767,8 +2658,12 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                     controller: _draft,
                     style: const TextStyle(color: Colors.white),
                     cursorColor: gold,
+                    textInputAction: TextInputAction.send,
+                    onSubmitted: (_) => _sendMeetChat(),
                     decoration: InputDecoration(
-                      hintText: 'Message',
+                      hintText: _chatMode == 'DIRECT' && (_dmTo == null || _dmTo!.isEmpty)
+                          ? 'Pick someone first'
+                          : 'Send a message',
                       hintStyle: const TextStyle(color: Colors.white54),
                       filled: true,
                       fillColor: const Color(0xFF262626),
@@ -1790,37 +2685,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                 ),
                 IconButton(
                   color: gold,
-                  onPressed: () {
-                    final text = _draft.text.trim();
-                    if (text.isEmpty || _join == null) return;
-                    if (_chatMode == 'DIRECT' && (_dmTo == null || _dmTo!.isEmpty)) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'You are the only person in this meeting. Use Everyone to leave a note, or invite someone for a direct message.',
-                          ),
-                        ),
-                      );
-                      return;
-                    }
-                    final me = ref.read(authNotifierProvider).user;
-                    setState(() {
-                      _upsertChat({
-                        'id': 'local-${DateTime.now().microsecondsSinceEpoch}',
-                        'scope': _chatMode,
-                        'content': text,
-                        'senderName': me?.name ?? 'You',
-                        'senderUserId': me?.id,
-                      });
-                      _draft.clear();
-                    });
-                    ref.read(collabSocketProvider).meetingChat(
-                          meetingId: _join!.meeting.id,
-                          content: text,
-                          scope: _chatMode,
-                          recipientUserId: _chatMode == 'DIRECT' ? _dmTo : null,
-                        );
-                  },
+                  onPressed: _sendMeetChat,
                   icon: const NbIcon(Icons.send),
                 ),
               ],
@@ -1832,15 +2697,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
   }
 
   Widget _directRecipientPicker() {
-    final me = ref.read(authNotifierProvider).user?.id;
-    final people = <MeetingPerson>[];
-    final seen = <String>{};
-    for (final p in _join?.meeting.participants ?? const <MeetingPerson>[]) {
-      final id = p.userId;
-      if (id == null || id.isEmpty || id == me || seen.contains(id) || p.isGuest) continue;
-      seen.add(id);
-      people.add(p);
-    }
+    final people = _dmPeople();
     if (people.isEmpty) {
       return Container(
         width: double.infinity,
@@ -1850,12 +2707,18 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
           borderRadius: BorderRadius.circular(10),
         ),
         child: const Text(
-          'No other members in this meeting yet. Invite someone to send a direct message.',
+          'No one else is in this meeting yet. Direct messages work with the host, teammates, and guests.',
           style: TextStyle(color: Color(0xFFE5E7EB), fontSize: 13, height: 1.35),
         ),
       );
     }
-    final selected = people.where((p) => p.userId == _dmTo).firstOrNull;
+    final selected = people.where((p) => _peerKey(p) == _dmTo).firstOrNull;
+    String labelFor(MeetingPerson p) {
+      if (p.role == 'HOST' || p.userId == _join?.meeting.hostUserId) return '${p.name} (Host)';
+      if (p.isGuest) return '${p.name} (Guest)';
+      return p.name;
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1871,7 +2734,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                 children: [
                   Expanded(
                     child: Text(
-                      selected?.name ?? 'Pick a teammate',
+                      selected == null ? 'Pick anyone in this meeting' : labelFor(selected),
                       style: TextStyle(
                         color: selected == null ? const Color(0xFFE5E7EB) : Colors.white,
                         fontSize: 14,
@@ -1903,14 +2766,14 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
               separatorBuilder: (_, __) => const Divider(height: 1, color: Colors.white10),
               itemBuilder: (context, i) {
                 final p = people[i];
-                final on = p.userId == _dmTo;
+                final on = _peerKey(p) == _dmTo;
                 return ListTile(
                   dense: true,
                   selected: on,
                   selectedTileColor: const Color(0x33C5A059),
-                  title: Text(p.name, style: const TextStyle(color: Colors.white)),
+                  title: Text(labelFor(p), style: const TextStyle(color: Colors.white)),
                   onTap: () => setState(() {
-                    _dmTo = p.userId;
+                    _dmTo = _peerKey(p);
                     _dmPickerOpen = false;
                   }),
                 );
@@ -2002,16 +2865,46 @@ class _LobbyRoundButton extends StatelessWidget {
   }
 }
 
+class _GuestBadge extends StatelessWidget {
+  const _GuestBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFBBF24),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: const Text(
+        'Guest',
+        style: TextStyle(
+          color: Color(0xFF161616),
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.3,
+        ),
+      ),
+    );
+  }
+}
+
 class _ParticipantTile extends StatelessWidget {
   const _ParticipantTile({
     required this.participant,
     required this.label,
     this.photoUrl,
+    this.handRaised = false,
+    this.canRemove = false,
+    this.onRemove,
   });
 
   final Participant participant;
   final String label;
   final String? photoUrl;
+  final bool handRaised;
+  final bool canRemove;
+  final VoidCallback? onRemove;
 
   VideoTrack? get _camera {
     for (final pub in participant.videoTrackPublications) {
@@ -2083,6 +2976,10 @@ class _ParticipantTile extends StatelessWidget {
                                 ),
                               ),
                             ),
+                            if (isMeetGuestIdentity(participant.identity)) ...[
+                              const SizedBox(width: 6),
+                              const _GuestBadge(),
+                            ],
                             const SizedBox(width: 6),
                             _MeetMicBadge(
                               micOn: micOn,
@@ -2093,6 +2990,34 @@ class _ParticipantTile extends StatelessWidget {
                         ),
                       ),
                     ),
+                    if (handRaised)
+                      Positioned(
+                        top: compact ? 8 : 10,
+                        right: compact ? 8 : 10,
+                        child: Container(
+                          width: 28,
+                          height: 28,
+                          alignment: Alignment.center,
+                          decoration: const BoxDecoration(color: Color(0xFFFBBF24), shape: BoxShape.circle),
+                          child: const Text('✋', style: TextStyle(fontSize: 14)),
+                        ),
+                      ),
+                    if (canRemove && onRemove != null)
+                      Positioned(
+                        top: compact ? 6 : 8,
+                        left: compact ? 6 : 8,
+                        child: TextButton(
+                          style: TextButton.styleFrom(
+                            backgroundColor: Colors.black54,
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size(0, 28),
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                          onPressed: onRemove,
+                          child: const Text('Remove', style: TextStyle(fontSize: 11)),
+                        ),
+                      ),
                   ],
                 );
               },
@@ -2155,6 +3080,74 @@ class _MeetMicBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(2),
+      ),
+    );
+  }
+}
+
+class _MeetChatToast extends StatelessWidget {
+  const _MeetChatToast({
+    required this.senderName,
+    required this.content,
+    required this.direct,
+    required this.onTap,
+  });
+
+  final String senderName;
+  final String content;
+  final bool direct;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOut,
+      builder: (context, value, child) {
+        return Opacity(
+          opacity: value,
+          child: Transform.translate(
+            offset: Offset(-16 * (1 - value), 0),
+            child: child,
+          ),
+        );
+      },
+      child: Material(
+        color: const Color(0xED27272A),
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 320),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    direct ? '$senderName · Direct message' : senderName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFF7DD3FC),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    content,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.3),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

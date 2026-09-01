@@ -239,11 +239,20 @@ class ChatReplyPreview {
 }
 
 class ChatAttachment {
-  const ChatAttachment({required this.fileName, this.id, this.fileUrl, this.mimeType});
+  const ChatAttachment({
+    required this.fileName,
+    this.id,
+    this.fileUrl,
+    this.mimeType,
+    this.bucketKey,
+    this.sizeBytes,
+  });
   final String? id;
   final String fileName;
   final String? fileUrl;
   final String? mimeType;
+  final String? bucketKey;
+  final int? sizeBytes;
 
   bool get isImage {
     final n = fileName.toLowerCase();
@@ -262,7 +271,26 @@ class ChatAttachment {
         fileName: json['fileName']?.toString() ?? 'file',
         fileUrl: json['fileUrl'] as String?,
         mimeType: json['mimeType'] as String?,
+        bucketKey: json['bucketKey'] as String?,
+        sizeBytes: json['sizeBytes'] is int
+            ? json['sizeBytes'] as int
+            : int.tryParse('${json['sizeBytes'] ?? ''}'),
       );
+
+  Map<String, dynamic>? toForwardJson() {
+    final key = (bucketKey != null && bucketKey!.isNotEmpty)
+        ? bucketKey!
+        : (fileUrl ?? '');
+    final url = (fileUrl != null && fileUrl!.isNotEmpty) ? fileUrl! : key;
+    if (key.isEmpty && url.isEmpty) return null;
+    return {
+      'bucketKey': key.isEmpty ? url : key,
+      'fileUrl': url.isEmpty ? key : url,
+      'fileName': fileName,
+      'mimeType': mimeType ?? 'application/octet-stream',
+      'sizeBytes': sizeBytes ?? 0,
+    };
+  }
 }
 
 class ChatReaction {

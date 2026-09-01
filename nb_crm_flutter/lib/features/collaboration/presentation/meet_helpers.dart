@@ -7,6 +7,20 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/utils/open_url.dart';
 import '../domain/collab_models.dart';
 
+String meetParticipantLabel({
+  required String name,
+  required String identity,
+  required bool isLocal,
+}) {
+  final guest = identity.startsWith('guest:');
+  final trimmed = name.trim();
+  if (isLocal) return 'You';
+  if (trimmed.isNotEmpty) return trimmed;
+  return guest ? 'Guest' : 'Member';
+}
+
+bool isMeetGuestIdentity(String identity) => identity.startsWith('guest:');
+
 String meetWhen(DateTime? value) {
   if (value == null) return '';
   final d = value.toLocal();
@@ -179,3 +193,5 @@ Future<void> clearMeetSession(String code) async {
   await prefs.remove('$_sessionName$code');
   await prefs.remove('$_sessionAt$code');
 }
+
+const meetReactionEmojis = ['👍', '👏', '❤️', '😂', '🎉', '😮', '👋', '🔥'];

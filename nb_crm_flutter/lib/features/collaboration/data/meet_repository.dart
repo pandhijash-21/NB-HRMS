@@ -192,4 +192,12 @@ class MeetRepository {
           .toList(),
     );
   }
+
+  Future<void> removeParticipant(String meetingId, String participantId) async {
+    await _dio.postEnvelope<Map<String, dynamic>>(
+      'meetings/$meetingId/remove',
+      data: {'participantId': participantId},
+      parse: (raw) => Map<String, dynamic>.from(raw as Map? ?? {}),
+    );
+  }
 }

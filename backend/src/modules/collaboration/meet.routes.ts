@@ -5,7 +5,7 @@ import { requireAuth } from '../../middleware/auth';
 import { env } from '../../config/env';
 import { ok, fail } from '../../utils/response';
 import { meetService, type GuestActor, type UserActor } from './meet.service';
-import { emitJoinDecision, emitMeetingEnded, emitMeetingInvites, emitWaitingUpdate, getIo } from './socket';
+import { emitJoinDecision, emitMeetingChat, emitMeetingEnded, emitMeetingInvites, emitMeetingRemoved, emitWaitingUpdate, getIo } from './socket';
 import { getProfile } from './profiles';
 
 export const meetingsRouter = Router();
@@ -295,6 +295,30 @@ meetingsRouter.post('/:id/deny', async (req: Request, res: Response) => {
   }
 });
 
+meetingsRouter.post('/:id/remove', async (req: Request, res: Response) => {
+  try {
+    const body = z.object({ participantId: z.string().min(1) }).parse(req.body);
+    const data = await meetService.removeFromMeeting(
+      p(req.params.id),
+      req.user!.id,
+      body.participantId,
+      req.user,
+    );
+    emitMeetingRemoved({
+      meetingId: p(req.params.id),
+      participantId: data.participant.id,
+      userId: data.participant.userId,
+      identity: data.identity,
+      name: data.participant.name,
+    });
+    return res.json(ok(data));
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : 'Failed to remove';
+    const status = message.includes('Only the host') ? 403 : 400;
+    return res.status(status).json(fail(message));
+  }
+});
+
 meetingsRouter.post('/:id/end', async (req: Request, res: Response) => {
   try {
     const meetingId = p(req.params.id);
@@ -387,6 +411,7 @@ meetingsRouter.post('/:id/chat', async (req: Request, res: Response) => {
         content: z.string().min(1),
         scope: z.enum(['ROOM', 'DIRECT']).optional(),
         recipientUserId: z.string().optional(),
+        recipientParticipantId: z.string().optional(),
       })
       .parse(req.body);
     const data = await meetService.postChat({
@@ -395,14 +420,9 @@ meetingsRouter.post('/:id/chat', async (req: Request, res: Response) => {
       content: body.content,
       scope: body.scope,
       recipientUserId: body.recipientUserId,
+      recipientParticipantId: body.recipientParticipantId,
     });
-    const io = getIo();
-    if (data.scope === 'DIRECT' && data.recipientUserId) {
-      io?.to(`user:${data.recipientUserId}`).emit('meeting_chat', data);
-      if (actor.kind === 'user') io?.to(`user:${actor.userId}`).emit('meeting_chat', data);
-    } else {
-      io?.to(`meeting:${p(req.params.id)}`).emit('meeting_chat', data);
-    }
+    emitMeetingChat(data);
     return res.status(201).json(ok(data));
   } catch (e: unknown) {
     return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));

@@ -25,6 +25,13 @@ class ChatWallpaper {
 
   static const options = <ChatWallpaper>[
     ChatWallpaper(
+      id: 12,
+      label: 'None',
+      light: [Color(0xFFE8E8E8), Color(0xFFE0E0E0)],
+      dark: [Color(0xFF000000), Color(0xFF111111)],
+      motif: WallpaperMotif.none,
+    ),
+    ChatWallpaper(
       id: 0,
       label: 'Default',
       light: [Color(0xFFF7F4EF), Color(0xFFEDE6D6), Color(0xFFE8EEF6)],
@@ -126,10 +133,13 @@ class ChatWallpaper {
     return options.firstWhere((w) => w.id == id, orElse: () => options.first);
   }
 
-  /// Dark palettes are used in both themes — they read better as chat backdrops.
-  List<Color> colors({required bool isDark}) => dark;
+  /// Patterned walls stay on the dark palette. None follows the app theme.
+  List<Color> colors({required bool isDark}) {
+    if (motif == WallpaperMotif.none) return isDark ? dark : light;
+    return dark;
+  }
 
-  CustomPainter painter({required bool isDark}) => _WallpaperPainter(this);
+  CustomPainter painter({required bool isDark}) => _WallpaperPainter(this, isDark: isDark);
 
   Widget build({required bool isDark, required Widget child}) {
     return CustomPaint(
@@ -152,14 +162,15 @@ class ChatWallpaper {
 }
 
 class _WallpaperPainter extends CustomPainter {
-  _WallpaperPainter(this.wall);
+  _WallpaperPainter(this.wall, {required this.isDark});
 
   final ChatWallpaper wall;
+  final bool isDark;
 
   @override
   void paint(Canvas canvas, Size size) {
     if (size.isEmpty) return;
-    final c = wall.colors(isDark: true);
+    final c = wall.colors(isDark: isDark);
     final rect = Offset.zero & size;
 
     canvas.drawRect(
@@ -171,6 +182,8 @@ class _WallpaperPainter extends CustomPainter {
           end: Alignment.bottomRight,
         ).createShader(rect),
     );
+
+    if (wall.motif == WallpaperMotif.none) return;
 
     final accent = wall.accent ?? const Color(0x66FFFFFF);
     final faint = accent.withValues(alpha: 0.14);
@@ -263,7 +276,8 @@ class _WallpaperPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _WallpaperPainter old) => old.wall.id != wall.id;
+  bool shouldRepaint(covariant _WallpaperPainter old) =>
+      old.wall.id != wall.id || old.isDark != isDark;
 }
 
 const _prefPrefix = 'chat_wallpaper_';
@@ -300,7 +314,7 @@ Future<void> pickChatWallpaper({
                 const Text('Chat wallpaper', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
                 const SizedBox(height: 4),
                 Text(
-                  'Choose a backdrop for this chat',
+                  'Choose a backdrop for this chat. None is plain grey in light theme and black in dark theme.',
                   style: TextStyle(
                     fontSize: 12,
                     color: Theme.of(ctx).textTheme.bodySmall?.color?.withValues(alpha: 0.7),
@@ -319,6 +333,7 @@ Future<void> pickChatWallpaper({
                     itemBuilder: (context, i) {
                       final wall = ChatWallpaper.options[i];
                       final on = selected == wall.id;
+                      final previewDark = Theme.of(ctx).brightness == Brightness.dark;
                       return InkWell(
                         onTap: () {
                           onPick(wall.id);
@@ -330,7 +345,7 @@ Future<void> pickChatWallpaper({
                           child: Stack(
                             fit: StackFit.expand,
                             children: [
-                              CustomPaint(painter: wall.painter(isDark: true)),
+                              CustomPaint(painter: wall.painter(isDark: previewDark)),
                               Align(
                                 alignment: Alignment.bottomCenter,
                                 child: Container(

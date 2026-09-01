@@ -93,8 +93,9 @@ class _StorageBodyState extends ConsumerState<_StorageBody> {
     final remainingPct = usage.hasLimit ? (usage.remainingRatio * 100).clamp(0, 100) : null;
     final usedPct = usage.hasLimit ? (usage.usedRatio * 100).clamp(0, 100) : null;
 
+    final pad = MediaQuery.sizeOf(context).width < 420 ? 14.0 : 20.0;
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+      padding: EdgeInsets.fromLTRB(pad, 16, pad, 40),
       children: [
         _Card(
           isDark: isDark,
@@ -219,7 +220,7 @@ class _StorageBodyState extends ConsumerState<_StorageBody> {
         ),
         const SizedBox(height: 8),
         Text(
-          'Clears chat and meeting text, uploaded documents, photos, resumes, letters, and recordings. Employee records, payroll, and attendance are kept.',
+          'Deletes chat messages and files shared in chat. HR documents, photos, resumes, letters, repository files, and recordings are not deleted.',
           style: TextStyle(
             fontSize: 13,
             height: 1.4,
@@ -242,7 +243,7 @@ class _StorageBodyState extends ConsumerState<_StorageBody> {
                   child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                 )
               : const NbIcon(Icons.delete_forever_rounded, color: Colors.white),
-          label: Text(_purging ? 'Clearing…' : 'Clear all text and documents'),
+          label: Text(_purging ? 'Clearing…' : 'Clear chat messages and files'),
         ),
       ],
     );
@@ -262,7 +263,7 @@ class _StorageBodyState extends ConsumerState<_StorageBody> {
       if (!mounted) return;
       widget.onPurged();
       messenger.showSnackBar(
-        const SnackBar(content: Text('Text and document data cleared.')),
+        const SnackBar(content: Text('Chat messages and shared files cleared.')),
       );
     } catch (e) {
       if (!mounted) return;
@@ -302,7 +303,7 @@ class _AdminPasswordDialogState extends State<_AdminPasswordDialog> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'This permanently deletes chat text, documents, photos, and files. Enter your admin password to continue.',
+            'This permanently deletes chat messages and files shared in chat. Photos, resumes, letters, repository documents, and recordings are kept. Enter your admin password to continue.',
           ),
           const SizedBox(height: 16),
           TextField(
@@ -330,7 +331,7 @@ class _AdminPasswordDialogState extends State<_AdminPasswordDialog> {
         FilledButton(
           style: FilledButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
           onPressed: _submit,
-          child: const Text('Delete data'),
+          child: const Text('Clear chat'),
         ),
       ],
     );

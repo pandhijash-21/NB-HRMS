@@ -256,7 +256,7 @@ export function MeetLobby() {
           </div>
           <label className="text-sm flex items-center gap-2">
             <input type="checkbox" checked={recordEnabled} onChange={(e) => setRecordEnabled(e.target.checked)} />
-            Enable recording
+            Enable recording (host device only)
           </label>
           <JoinAccess waitingRoom={waitingRoom} onChange={setWaitingRoom} />
           <DialogFooter>

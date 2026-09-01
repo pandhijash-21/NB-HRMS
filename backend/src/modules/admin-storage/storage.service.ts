@@ -1,9 +1,12 @@
 import bcrypt from 'bcryptjs';
+import fs from 'fs/promises';
+import path from 'path';
 import { prisma } from '../../config/prisma';
 import { cloudinary, getCloudinaryCredentials } from '../../config/cloudinary';
 import { collabStorage } from '../collaboration/storage';
+import { parseCloudinaryDeliveryUrl } from '../personal-education/upload.service';
 
-const HRMS_PREFIX = 'hrms';
+const LOCAL_COLLAB_DIR = path.join(process.cwd(), 'uploads', 'collab');
 
 type CloudinaryUsage = {
   configured: boolean;
@@ -33,41 +36,59 @@ async function cloudinaryUsage(): Promise<CloudinaryUsage> {
   }
 }
 
-async function deleteCloudinaryPrefix(prefix: string): Promise<number> {
-  if (!getCloudinaryCredentials()) return 0;
-  const types: Array<'image' | 'raw' | 'video'> = ['image', 'raw', 'video'];
-  let deleted = 0;
+async function destroyCloudinaryUrl(rawUrl: string): Promise<boolean> {
+  if (!getCloudinaryCredentials() || !/cloudinary\.com/i.test(rawUrl)) return false;
+  const parsed = parseCloudinaryDeliveryUrl(rawUrl);
+  if (!parsed) return false;
+  const types: Array<'image' | 'raw' | 'video'> = [
+    ...(parsed.resourceType === 'image' || parsed.resourceType === 'raw' || parsed.resourceType === 'video'
+      ? [parsed.resourceType]
+      : []),
+    'image',
+    'raw',
+    'video',
+  ].filter((v, i, a) => a.indexOf(v) === i) as Array<'image' | 'raw' | 'video'>;
   for (const resourceType of types) {
-    let nextCursor: string | undefined;
-    for (let i = 0; i < 50; i += 1) {
+    try {
+      const result = (await cloudinary.uploader.destroy(parsed.publicId, {
+        resource_type: resourceType,
+        invalidate: true,
+      })) as { result?: string };
+      if (result?.result === 'ok' || result?.result === 'not found') return true;
+    } catch {
+      // try next resource type
+    }
+  }
+  return false;
+}
+
+async function deleteChatAttachmentMedia() {
+  const rows = await prisma.chatAttachment.findMany({
+    select: { bucketKey: true, fileUrl: true },
+  });
+  let cloudinaryDeleted = 0;
+  let localFilesRemoved = 0;
+  let collabObjectsRemoved = 0;
+  for (const row of rows) {
+    const candidates = [row.bucketKey, row.fileUrl].filter((v): v is string => Boolean(v && v.trim()));
+    for (const candidate of candidates) {
+      if (/cloudinary\.com/i.test(candidate)) {
+        if (await destroyCloudinaryUrl(candidate)) cloudinaryDeleted += 1;
+        continue;
+      }
+      if (candidate.startsWith('meetings/') || /^https?:\/\//i.test(candidate)) continue;
+      await collabStorage.removeObject(candidate);
+      collabObjectsRemoved += 1;
+      const localName = candidate.replace(/^collab\//, '');
       try {
-        const result = (await cloudinary.api.delete_resources_by_prefix(prefix, {
-          resource_type: resourceType,
-          invalidate: true,
-          ...(nextCursor ? { next_cursor: nextCursor } : {}),
-        })) as {
-          deleted?: Record<string, string>;
-          next_cursor?: string;
-          partial?: boolean;
-        };
-        deleted += Object.keys(result.deleted ?? {}).length;
-        nextCursor = result.next_cursor;
-        if (!nextCursor && !result.partial) break;
-      } catch (err) {
-        const http = err as { http_code?: number; error?: { http_code?: number } };
-        const code = http.http_code ?? http.error?.http_code;
-        if (code === 404) break;
-        console.warn(`Cloudinary ${resourceType} purge skipped:`, err);
-        break;
+        await fs.unlink(path.join(LOCAL_COLLAB_DIR, localName));
+        localFilesRemoved += 1;
+      } catch {
+        // not stored locally
       }
     }
   }
-  try {
-    await cloudinary.api.delete_folder(prefix);
-  } catch {
-    // folder may already be gone or still have derived assets
-  }
-  return deleted;
+  return { cloudinaryDeleted, localFilesRemoved, collabObjectsRemoved };
 }
 
 async function dbCounts() {
@@ -102,64 +123,13 @@ async function dbCounts() {
   };
 }
 
-async function clearDocumentUrls() {
-  await prisma.employee.updateMany({ data: { photoUrl: null, signatureUrl: null } });
-  await prisma.employeePersonalInfo.updateMany({
-    data: { aadhaarCardUrl: null, panCardUrl: null, otherDocumentUrl: null },
-  });
-  await prisma.employeeOtherInfo.updateMany({ data: { passportUrl: null } });
-  await prisma.familyMember.updateMany({ data: { aadhaarUrl: null } });
-  await prisma.academicQualification.updateMany({
-    data: {
-      certificateUrl: null,
-      sem1MarksheetUrl: null,
-      sem2MarksheetUrl: null,
-      sem3MarksheetUrl: null,
-      sem4MarksheetUrl: null,
-      sem5MarksheetUrl: null,
-      sem6MarksheetUrl: null,
-      sem7MarksheetUrl: null,
-      sem8MarksheetUrl: null,
-    },
-  });
-  await prisma.employeeExperience.updateMany({
-    data: {
-      experienceLetterUrl: null,
-      lastPaycheckUrl: null,
-      recommendationLetters: [],
-    },
-  });
-  await prisma.employeeBankInfo.updateMany({
-    data: { cancelledChequeUrl: null, passbookUrl: null },
-  });
-  await prisma.leaveApplication.updateMany({ data: { documentUrl: null } });
-  await prisma.reimbursementClaim.updateMany({ data: { proofUrl: null } });
-  await prisma.workTask.updateMany({
-    data: { attachmentUrl: null, attachmentName: null, attachmentMime: null },
-  });
-  await prisma.workTaskSubtask.updateMany({
-    data: { attachmentUrl: null, attachmentName: null, attachmentMime: null },
-  });
-  await prisma.recruitmentCandidate.updateMany({
-    data: { resumeUrl: null, resumeFileName: null },
-  });
-  await prisma.letterTemplate.updateMany({ data: { logoUrl: null } });
-  await prisma.erpProject.updateMany({ data: { imageUrl: null } });
-  await prisma.chatChannel.updateMany({ data: { avatarUrl: null, topic: null } });
-  await prisma.meeting.updateMany({ data: { recordingUrl: null } });
-  await prisma.meetingParticipant.updateMany({ data: { photoUrl: null } });
-}
-
-async function clearTextAndDocuments() {
+async function clearChatOnly() {
   await prisma.chatAttachment.deleteMany();
   await prisma.chatReaction.deleteMany();
   await prisma.chatMessage.updateMany({
     data: { content: null, deletedAt: new Date() },
   });
   await prisma.meetingChatMessage.deleteMany();
-  await prisma.companyRepositoryDocument.deleteMany();
-  await prisma.erpProjectDocument.deleteMany();
-  await prisma.employeeLetterDocument.deleteMany();
 }
 
 export const storageService = {
@@ -196,27 +166,22 @@ export const storageService = {
     const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) return { ok: false as const, error: 'Incorrect password', status: 403 };
 
-    const cloudinaryDeleted = await deleteCloudinaryPrefix(HRMS_PREFIX).catch((err) => {
-      console.warn('Cloudinary prefix delete failed:', err);
-      return 0;
+    const media = await deleteChatAttachmentMedia().catch((err) => {
+      console.warn('Chat attachment media delete failed:', err);
+      return { cloudinaryDeleted: 0, localFilesRemoved: 0, collabObjectsRemoved: 0 };
     });
-    const collab = await collabStorage.purgeStoredFiles().catch((err) => {
-      console.warn('Collab file purge failed:', err);
-      return { objectsRemoved: 0, localFilesRemoved: 0 };
-    });
-    await clearDocumentUrls();
-    await clearTextAndDocuments();
+    await clearChatOnly();
 
     console.warn(
-      `[admin-storage] purged text/documents by user ${userId} (cloudinary=${cloudinaryDeleted}, minio=${collab.objectsRemoved}, local=${collab.localFilesRemoved})`,
+      `[admin-storage] purged chat by user ${userId} (cloudinary=${media.cloudinaryDeleted}, minio=${media.collabObjectsRemoved}, local=${media.localFilesRemoved})`,
     );
 
     return {
       ok: true as const,
       data: {
-        cloudinaryDeleted,
-        collabObjectsRemoved: collab.objectsRemoved,
-        localFilesRemoved: collab.localFilesRemoved,
+        cloudinaryDeleted: media.cloudinaryDeleted,
+        collabObjectsRemoved: media.collabObjectsRemoved,
+        localFilesRemoved: media.localFilesRemoved,
       },
     };
   },

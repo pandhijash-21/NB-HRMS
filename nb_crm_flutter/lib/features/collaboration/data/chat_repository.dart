@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../../core/network/dio_client.dart';
 import '../domain/collab_models.dart';
@@ -151,6 +152,29 @@ class ChatRepository {
         return map['url']?.toString() ?? '';
       },
     );
+  }
+
+  Future<Uint8List> attachmentBytes(String id) async {
+    try {
+      final response = await _dio.dio.get<List<int>>(
+        'chat/attachments/$id/file',
+        options: Options(
+          responseType: ResponseType.bytes,
+          receiveTimeout: const Duration(minutes: 2),
+        ),
+      );
+      final data = response.data;
+      if (data == null || data.isEmpty) {
+        throw Exception('File is empty');
+      }
+      return Uint8List.fromList(data);
+    } on DioException catch (e) {
+      final body = e.response?.data;
+      if (body is Map && body['error'] != null) {
+        throw Exception(body['error'].toString());
+      }
+      throw Exception(e.message ?? 'Could not download file');
+    }
   }
 
   Future<Map<String, dynamic>> upload(List<int> bytes, String fileName) async {

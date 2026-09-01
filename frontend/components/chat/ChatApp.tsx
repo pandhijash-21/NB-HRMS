@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Search,
   Plus,
@@ -9,6 +9,14 @@ import {
   Users,
   MessageSquare,
   Smile,
+  Loader2,
+  Download,
+  X,
+  Copy,
+  Forward,
+  Reply,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import { useChat, type ChatChannel, type ChatMessage, type CollabProfile } from "@/lib/hooks/useChat";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -123,6 +131,46 @@ function highlightMentions(content: string, members: CollabProfile[]) {
   return parts;
 }
 
+function isImageAttachment(fileName?: string | null, mimeType?: string | null) {
+  const mime = (mimeType || "").toLowerCase();
+  const name = (fileName || "").toLowerCase();
+  return mime.startsWith("image/") || /\.(png|jpe?g|gif|webp|bmp)$/i.test(name);
+}
+
+function downloadBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName || "file";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+}
+
+const DRAFTS_KEY = "nb-hrms-chat-drafts";
+
+function loadDrafts(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(DRAFTS_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object") return {};
+    return parsed as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
+function persistDrafts(map: Record<string, string>) {
+  try {
+    localStorage.setItem(DRAFTS_KEY, JSON.stringify(map));
+  } catch {
+    /* ignore quota */
+  }
+}
+
 export function ChatApp() {
   const chat = useChat();
   const { data: session } = useSession();
@@ -130,6 +178,24 @@ export function ChatApp() {
   const [query, setQuery] = useState("");
   const [draft, setDraft] = useState("");
   const [files, setFiles] = useState<File[]>([]);
+  const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
+  const [actionFor, setActionFor] = useState<ChatMessage | null>(null);
+  const [forwardFor, setForwardFor] = useState<ChatMessage | null>(null);
+  const [editFor, setEditFor] = useState<ChatMessage | null>(null);
+  const [editText, setEditText] = useState("");
+  const [forwardQ, setForwardQ] = useState("");
+  const draftsRef = useRef<Record<string, string>>(loadDrafts());
+  const [drafts, setDrafts] = useState<Record<string, string>>(() => draftsRef.current);
+  const draftRef = useRef(draft);
+  const filesRef = useRef(files);
+  const replyRef = useRef<ChatMessage | null>(null);
+  const filesByChannel = useRef<Record<string, File[]>>({});
+  const replyByChannel = useRef<Record<string, ChatMessage | null>>({});
+  const prevActiveRef = useRef<string | null>(null);
+  const skipDraftSave = useRef(false);
+  draftRef.current = draft;
+  filesRef.current = files;
+  replyRef.current = replyTo;
   const [showNew, setShowNew] = useState<"dm" | "group" | null>(null);
   const [peopleQ, setPeopleQ] = useState("");
   const [picked, setPicked] = useState<CollabProfile[]>([]);
@@ -145,12 +211,47 @@ export function ChatApp() {
   } | null>(null);
   const [seenFor, setSeenFor] = useState<ChatMessage | null>(null);
   const [mentionSel, setMentionSel] = useState(0);
+  const [attachmentBusy, setAttachmentBusy] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{ src: string; alt: string } | null>(null);
   const mentionQ = mentionQuery(draft);
   const mentionHits = mentionChoices(chat.active, myId, mentionQ);
 
   useEffect(() => {
     setMentionSel(0);
   }, [mentionQ, chat.active?.id]);
+
+  useEffect(() => {
+    const prev = prevActiveRef.current;
+    const next = chat.activeId;
+    if (prev && prev !== next) {
+      const text = draftRef.current;
+      if (text) draftsRef.current[prev] = text;
+      else delete draftsRef.current[prev];
+      persistDrafts(draftsRef.current);
+      setDrafts({ ...draftsRef.current });
+      filesByChannel.current[prev] = filesRef.current;
+      replyByChannel.current[prev] = replyRef.current;
+    }
+    prevActiveRef.current = next;
+    skipDraftSave.current = true;
+    setDraft(next ? (draftsRef.current[next] ?? "") : "");
+    setFiles(next ? (filesByChannel.current[next] ?? []) : []);
+    setReplyTo(next ? (replyByChannel.current[next] ?? null) : null);
+    setEmojiOpen(false);
+  }, [chat.activeId]);
+
+  useEffect(() => {
+    if (!chat.activeId) return;
+    if (skipDraftSave.current) return;
+    if (draft) draftsRef.current[chat.activeId] = draft;
+    else delete draftsRef.current[chat.activeId];
+    persistDrafts(draftsRef.current);
+    setDrafts({ ...draftsRef.current });
+  }, [draft, chat.activeId]);
+
+  useEffect(() => {
+    skipDraftSave.current = false;
+  }, [chat.activeId, draft]);
 
   function applyMention(insert: string) {
     setDraft((prev) => prev.replace(/@([^\s@]*)$/, insert));
@@ -159,7 +260,7 @@ export function ChatApp() {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key !== "Escape") return;
-      if (reactFor || seenFor || showNew) return;
+      if (actionFor || reactFor || seenFor || showNew || forwardFor || editFor) return;
       if (mentionHits.length) return;
       if (!chat.activeId) return;
       e.preventDefault();
@@ -171,15 +272,53 @@ export function ChatApp() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [chat.activeId, chat.setActiveId, reactFor, seenFor, showNew, mentionHits.length]);
+  }, [chat.activeId, chat.setActiveId, actionFor, reactFor, seenFor, showNew, forwardFor, editFor, mentionHits.length]);
 
-  async function openAttachment(id?: string, fallback?: string | null) {
+  async function openAttachment(
+    id?: string,
+    fallback?: string | null,
+    fileName?: string,
+    mimeType?: string,
+  ) {
+    const key = id || fileName || "file";
+    setAttachmentBusy(`view:${key}`);
     try {
-      const url = id ? await chat.attachmentUrl(id) : fallback;
-      if (!url) return;
-      window.open(url, "_blank", "noopener,noreferrer");
+      if (id) {
+        const blob = await chat.attachmentBlob(id);
+        const url = URL.createObjectURL(blob);
+        if (isImageAttachment(fileName, mimeType) || blob.type.startsWith("image/")) {
+          setPreview((prev) => {
+            if (prev?.src.startsWith("blob:")) URL.revokeObjectURL(prev.src);
+            return { src: url, alt: fileName || "Photo" };
+          });
+          return;
+        }
+        window.open(url, "_blank", "noopener,noreferrer");
+        window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        return;
+      }
+      if (fallback) window.open(fallback, "_blank", "noopener,noreferrer");
     } catch {
       if (fallback) window.open(fallback, "_blank", "noopener,noreferrer");
+    } finally {
+      setAttachmentBusy(null);
+    }
+  }
+
+  async function downloadAttachment(id?: string, fallback?: string | null, fileName?: string) {
+    const key = id || fileName || "file";
+    setAttachmentBusy(`dl:${key}`);
+    try {
+      if (id) {
+        const blob = await chat.attachmentBlob(id, true);
+        downloadBlob(blob, fileName || "file");
+        return;
+      }
+      if (fallback) window.open(fallback, "_blank", "noopener,noreferrer");
+    } catch {
+      if (fallback) window.open(fallback, "_blank", "noopener,noreferrer");
+    } finally {
+      setAttachmentBusy(null);
     }
   }
 
@@ -200,13 +339,35 @@ export function ChatApp() {
   async function submit() {
     const text = draft.trim();
     if (!text && files.length === 0) return;
-    await chat.send(text, files);
+    const replyId = replyTo?.id;
+    await chat.send(text, files, { replyToId: replyId });
+    if (chat.activeId) {
+      delete draftsRef.current[chat.activeId];
+      persistDrafts(draftsRef.current);
+      setDrafts({ ...draftsRef.current });
+      filesByChannel.current[chat.activeId] = [];
+      replyByChannel.current[chat.activeId] = null;
+    }
+    skipDraftSave.current = true;
     setDraft("");
     setFiles([]);
+    setReplyTo(null);
+  }
+
+  function copyMessage(m: ChatMessage) {
+    const parts = [m.content?.trim() || "", ...m.attachments.map((a) => a.fileName)].filter(Boolean);
+    if (!parts.length) return;
+    void navigator.clipboard.writeText(parts.join("\n"));
+  }
+
+  function channelTitle(c: ChatChannel) {
+    const other = c.members.find((m) => m.userId !== myId);
+    const selfDm = c.type === "DIRECT" && !other;
+    return c.type === "GROUP" ? c.name : selfDm ? c.name || "Note to self" : other?.name;
   }
 
   return (
-    <div className="h-full grid grid-cols-1 md:grid-cols-[320px_1fr] min-h-0">
+    <div className="h-full min-h-0 overflow-hidden grid grid-cols-1 md:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
       <aside
         className={cn(
           "border-r border-border/60 bg-card/40 flex flex-col min-h-0",
@@ -259,7 +420,7 @@ export function ChatApp() {
                   )}
                 >
                   <div className="relative">
-                    <PhotoLightbox src={c.avatarUrl || other?.photoUrl} alt={title}>
+                    <PhotoLightbox src={c.avatarUrl || other?.photoUrl} alt={title || ""}>
                     <Avatar>
                       <AvatarImage src={c.avatarUrl || other?.photoUrl || undefined} />
                       <AvatarFallback>{initials(title)}</AvatarFallback>
@@ -279,7 +440,14 @@ export function ChatApp() {
                       )}
                     </div>
                     <p className="truncate text-xs text-muted-foreground">
-                      {c.lastMessage?.content || (c.lastMessage?.hasAttachment ? "Attachment" : "No messages yet")}
+                      {drafts[c.id]?.trim() ? (
+                        <>
+                          <span className="font-semibold text-red-600 dark:text-red-400">Draft: </span>
+                          {drafts[c.id]}
+                        </>
+                      ) : (
+                        c.lastMessage?.content || (c.lastMessage?.hasAttachment ? "Attachment" : "No messages yet")
+                      )}
                     </p>
                   </div>
                 </button>
@@ -291,17 +459,22 @@ export function ChatApp() {
 
       <section
         className={cn(
-          "flex flex-col min-h-0 bg-background",
+          "relative flex flex-col min-h-0 bg-background",
           mobilePane === "list" && "hidden md:flex",
         )}
       >
+        {(chat.sending || attachmentBusy) && (
+          <div className="absolute inset-x-0 top-0 z-20 h-0.5 overflow-hidden bg-primary/20">
+            <div className="h-full w-full animate-pulse bg-primary" />
+          </div>
+        )}
         {chat.active ? (
           <>
             <div className="h-14 border-b border-border/60 px-4 flex items-center gap-3">
               <button className="md:hidden text-sm text-primary" onClick={() => setMobilePane("list")}>
                 Back
               </button>
-              <PhotoLightbox src={chat.active.avatarUrl} alt={chat.active.name}>
+              <PhotoLightbox src={chat.active.avatarUrl} alt={chat.active.name || ""}>
               <Avatar>
                 <AvatarImage src={chat.active.avatarUrl || undefined} />
                 <AvatarFallback>{initials(chat.active.name)}</AvatarFallback>
@@ -336,16 +509,22 @@ export function ChatApp() {
                       {!mine && (
                         <p className="text-[11px] text-muted-foreground mb-0.5 px-1">{m.sender?.name}</p>
                       )}
+                      {m.replyTo && !m.deletedAt && (
+                        <div className="mb-1 mx-1 px-2 py-1 rounded-md border-l-[3px] border-primary bg-black/5 text-[11px]">
+                          <p className="font-semibold text-primary truncate">{m.replyTo.senderName}</p>
+                          <p className="truncate text-muted-foreground">{m.replyTo.content || "Attachment"}</p>
+                        </div>
+                      )}
                       <div
                         onContextMenu={(e) => {
                           if (m.deletedAt) return;
                           e.preventDefault();
-                          setReactFor(m);
+                          setActionFor(m);
                         }}
                         onPointerDown={(e) => {
                           if (m.deletedAt || e.pointerType !== "touch") return;
                           const node = e.currentTarget;
-                          const t = window.setTimeout(() => setReactFor(m), 450);
+                          const t = window.setTimeout(() => setActionFor(m), 450);
                           const clear = () => window.clearTimeout(t);
                           node.addEventListener("pointerup", clear, { once: true });
                           node.addEventListener("pointercancel", clear, { once: true });
@@ -359,17 +538,40 @@ export function ChatApp() {
                         )}
                       >
                         {m.deletedAt ? "This message was deleted" : highlightMentions(m.content || "", chat.active?.members || [])}
-                        {m.attachments.map((a) => (
-                          <button
-                            key={a.id}
-                            type="button"
-                            onClick={() => void openAttachment(a.id, a.fileUrl)}
-                            className="mt-1 flex items-center gap-2 text-xs underline"
-                          >
-                            <Paperclip className="size-3" />
-                            {a.fileName}
-                          </button>
-                        ))}
+                        {m.attachments.map((a) => {
+                          const viewing = attachmentBusy === `view:${a.id}`;
+                          const downloading = attachmentBusy === `dl:${a.id}`;
+                          return (
+                          <div key={a.id} className="mt-1 flex items-center gap-2 text-xs">
+                            <button
+                              type="button"
+                              disabled={!!attachmentBusy}
+                              onClick={() => void openAttachment(a.id, a.fileUrl, a.fileName, a.mimeType)}
+                              className="flex items-center gap-2 underline disabled:opacity-60"
+                            >
+                              {viewing ? (
+                                <Loader2 className="size-3 animate-spin" />
+                              ) : (
+                                <Paperclip className="size-3" />
+                              )}
+                              {a.fileName}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={!!attachmentBusy}
+                              title="Download"
+                              onClick={() => void downloadAttachment(a.id, a.fileUrl, a.fileName)}
+                              className="p-0.5 rounded hover:bg-black/10 disabled:opacity-60"
+                            >
+                              {downloading ? (
+                                <Loader2 className="size-3 animate-spin" />
+                              ) : (
+                                <Download className="size-3" />
+                              )}
+                            </button>
+                          </div>
+                          );
+                        })}
                       </div>
                       {m.reactions.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1 px-1">
@@ -426,13 +628,29 @@ export function ChatApp() {
                 {files.map((f) => f.name).join(", ")}
               </div>
             )}
+            {replyTo && (
+              <div className="px-4 py-2 border-t border-border/60 flex items-center gap-2">
+                <div className="w-0.5 self-stretch bg-primary rounded-full" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-primary truncate">
+                    Replying to {replyTo.sender?.name || "message"}
+                  </p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {replyTo.content?.trim() || (replyTo.attachments.length ? "Attachment" : "Message")}
+                  </p>
+                </div>
+                <button type="button" className="p-1 rounded hover:bg-accent" onClick={() => setReplyTo(null)}>
+                  <X className="size-4" />
+                </button>
+              </div>
+            )}
             {emojiOpen && (
-              <div className="max-h-48 overflow-y-auto border-t border-border/60 p-2 grid grid-cols-10 gap-1">
+              <div className="max-h-48 overflow-y-auto border-t border-border/60 p-1 grid grid-cols-8 sm:grid-cols-12 gap-0">
                 {CHAT_EMOJIS.map((e, i) => (
                   <button
                     key={`${e}-${i}`}
                     type="button"
-                    className="h-8 text-lg hover:bg-accent rounded"
+                    className="h-7 text-base leading-none hover:bg-accent rounded-sm"
                     onClick={() => setDraft((prev) => prev + e)}
                   >
                     {e}
@@ -463,7 +681,7 @@ export function ChatApp() {
               >
                 <Smile className="size-4" />
               </button>
-              <div className="relative flex-1">
+              <div className="relative flex-1 min-w-0">
                 {mentionHits.length > 0 && (
                   <div className="absolute bottom-full left-0 right-0 mb-1 rounded-lg border border-border/60 bg-card shadow-lg overflow-hidden max-h-56 overflow-y-auto z-10">
                     {mentionHits.map((hit, i) => (
@@ -535,7 +753,7 @@ export function ChatApp() {
               />
               </div>
               <Button type="submit" disabled={chat.sending} className="h-11">
-                <Send className="size-4" />
+                {chat.sending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
               </Button>
             </form>
           </>
@@ -625,17 +843,163 @@ export function ChatApp() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={!!actionFor} onOpenChange={() => setActionFor(null)}>
+        <DialogContent className="max-w-sm w-[calc(100vw-1.5rem)] sm:w-full">
+          <DialogHeader>
+            <DialogTitle>Message</DialogTitle>
+          </DialogHeader>
+          {actionFor && chat.active && (() => {
+            const mine = actionFor.senderId === myId;
+            const rec = receiptsFor(actionFor, chat.active);
+            const canMutate = mine && rec.seen.length === 0 && !actionFor.deletedAt;
+            const canEdit = canMutate && !!(actionFor.content || "").trim();
+            return (
+              <div className="grid gap-1">
+                <Button
+                  variant="ghost"
+                  className="justify-start"
+                  onClick={() => {
+                    setReplyTo(actionFor);
+                    setActionFor(null);
+                  }}
+                >
+                  <Reply className="size-4 mr-2" /> Reply
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="justify-start"
+                  onClick={() => {
+                    copyMessage(actionFor);
+                    setActionFor(null);
+                  }}
+                >
+                  <Copy className="size-4 mr-2" /> Copy
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="justify-start"
+                  onClick={() => {
+                    setForwardFor(actionFor);
+                    setForwardQ("");
+                    setActionFor(null);
+                  }}
+                >
+                  <Forward className="size-4 mr-2" /> Forward
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="justify-start"
+                  onClick={() => {
+                    setReactFor(actionFor);
+                    setActionFor(null);
+                  }}
+                >
+                  <Smile className="size-4 mr-2" /> React
+                </Button>
+                {canEdit && (
+                  <Button
+                    variant="ghost"
+                    className="justify-start"
+                    onClick={() => {
+                      setEditText(actionFor.content || "");
+                      setEditFor(actionFor);
+                      setActionFor(null);
+                    }}
+                  >
+                    <Pencil className="size-4 mr-2" /> Edit
+                  </Button>
+                )}
+                {canMutate && (
+                  <Button
+                    variant="ghost"
+                    className="justify-start text-destructive"
+                    onClick={async () => {
+                      const id = actionFor.id;
+                      setActionFor(null);
+                      await chat.deleteMessage(id);
+                    }}
+                  >
+                    <Trash2 className="size-4 mr-2" /> Delete
+                  </Button>
+                )}
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!forwardFor} onOpenChange={() => setForwardFor(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Forward to</DialogTitle>
+          </DialogHeader>
+          <Input
+            placeholder="Search chats"
+            value={forwardQ}
+            onChange={(e) => setForwardQ(e.target.value)}
+          />
+          <div className="max-h-72 overflow-y-auto space-y-1">
+            {chat.channels
+              .filter((c) => {
+                const q = forwardQ.trim().toLowerCase();
+                if (!q) return true;
+                return (channelTitle(c) || "").toLowerCase().includes(q);
+              })
+              .map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className="w-full text-left px-3 py-2 rounded-lg hover:bg-accent text-sm"
+                  onClick={async () => {
+                    if (!forwardFor) return;
+                    const msg = forwardFor;
+                    setForwardFor(null);
+                    await chat.sendToChannel(c.id, {
+                      content: msg.content || "",
+                      attachments: msg.attachments,
+                    });
+                  }}
+                >
+                  {channelTitle(c)}
+                </button>
+              ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!editFor} onOpenChange={() => setEditFor(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit message</DialogTitle>
+          </DialogHeader>
+          <Textarea value={editText} onChange={(e) => setEditText(e.target.value)} className="min-h-[80px]" />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditFor(null)}>Cancel</Button>
+            <Button
+              disabled={!editText.trim()}
+              onClick={async () => {
+                if (!editFor) return;
+                await chat.editMessage(editFor.id, editText.trim());
+                setEditFor(null);
+              }}
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={!!reactFor} onOpenChange={() => setReactFor(null)}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>React</DialogTitle>
           </DialogHeader>
-          <div className="max-h-72 overflow-y-auto grid grid-cols-10 gap-1">
+          <div className="max-h-72 overflow-y-auto grid grid-cols-8 sm:grid-cols-12 gap-0 p-1">
             {CHAT_EMOJIS.map((e, i) => (
               <button
                 key={`${e}-${i}`}
                 type="button"
-                className="h-8 text-lg hover:bg-accent rounded"
+                className="h-7 text-base leading-none hover:bg-accent rounded-sm"
                 onClick={() => {
                   if (!reactFor) return;
                   chat.react(reactFor.id, e);
@@ -725,6 +1089,38 @@ export function ChatApp() {
           )}
         </DialogContent>
       </Dialog>
+      {preview ? (
+        <div className="fixed inset-0 z-[80] bg-black/85 flex flex-col">
+          <div className="flex items-center gap-3 px-4 py-3 text-white shrink-0">
+            <button
+              type="button"
+              className="rounded-full p-2 hover:bg-white/10"
+              onClick={() => {
+                if (preview.src.startsWith("blob:")) URL.revokeObjectURL(preview.src);
+                setPreview(null);
+              }}
+              aria-label="Close photo"
+            >
+              <X className="size-5" />
+            </button>
+            <p className="font-semibold truncate flex-1">{preview.alt}</p>
+          </div>
+          <div
+            className="flex-1 overflow-auto grid place-items-center p-6"
+            onClick={() => {
+              if (preview.src.startsWith("blob:")) URL.revokeObjectURL(preview.src);
+              setPreview(null);
+            }}
+          >
+            <img
+              src={preview.src}
+              alt={preview.alt}
+              onClick={(e) => e.stopPropagation()}
+              className="max-w-[min(92vw,1100px)] max-h-[82vh] object-contain select-none"
+            />
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

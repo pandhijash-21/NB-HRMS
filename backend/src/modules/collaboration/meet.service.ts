@@ -7,7 +7,7 @@ import { prisma } from '../../config/prisma';
 import { env } from '../../config/env';
 import { cloudinary, getCloudinaryCredentials } from '../../config/cloudinary';
 import { getProfile, getProfiles } from './profiles';
-import { issueLiveKitToken, livekitPublicUrl, startRoomRecording, stopRoomRecording, deleteLiveKitRoom, removeLiveKitParticipant } from './livekit';
+import { issueLiveKitToken, livekitPublicUrl, stopRoomRecording, deleteLiveKitRoom, removeLiveKitParticipant } from './livekit';
 import { generateMeetingSummary } from './summary.service';
 import { sendMeetingInviteEmail, sendMeetingSummaryEmail } from '../../utils/mailer';
 import { collabStorage } from './storage';
@@ -133,14 +133,21 @@ async function finalizeMeetingRecording(
   },
   progress?: ProgressFn,
 ) {
-  const hasJob = Boolean(meeting.egressId || meeting.recordingKey || meeting.recordingUrl);
+  const livekitEgress = Boolean(meeting.egressId && meeting.egressId !== 'local');
+  const hasJob = Boolean(livekitEgress || meeting.recordingKey || meeting.recordingUrl);
   if (!hasJob) {
+    if (meeting.egressId === 'local') {
+      await prisma.meeting.update({
+        where: { id: meeting.id },
+        data: { recordEnabled: false, egressId: null },
+      });
+    }
     progress?.({ step: 'stop_recording', status: 'skipped', label: 'No recording to stop' });
     progress?.({ step: 'save_cloud', status: 'skipped', label: 'No recording to save' });
     return null;
   }
   progress?.({ step: 'stop_recording', status: 'running', label: 'Stopping recording' });
-  if (meeting.egressId) {
+  if (livekitEgress && meeting.egressId) {
     try {
       await stopRoomRecording(meeting.egressId);
     } catch (err) {
@@ -200,7 +207,7 @@ function canRecordMeeting(
   meetingHostId: string,
   user: { id: string; roleName?: string; role?: string; permissions?: Record<string, string[]> },
 ) {
-  return meetingHostId === user.id || canAdminMeetings(user);
+  return meetingHostId === user.id;
 }
 
 async function resolveRecordingKey(
@@ -329,6 +336,83 @@ export type UserActor = {
   name: string;
   photoUrl: string | null;
 };
+
+function resolveChatRecipient(
+  admitted: { id: string; userId: string | null; guestName: string | null }[],
+  opts: { participantId?: string; userId?: string },
+) {
+  const participantId = opts.participantId?.trim();
+  const userId = opts.userId?.trim();
+  if (participantId) {
+    const byId = admitted.find((p) => p.id === participantId);
+    if (byId) return byId;
+  }
+  if (userId) {
+    const byUser = admitted.find((p) => p.userId === userId);
+    if (byUser) return byUser;
+  }
+  return null;
+}
+
+function chatVisibleTo(
+  row: {
+    scope: string;
+    senderUserId: string | null;
+    recipientUserId: string | null;
+    senderParticipantId: string | null;
+    recipientParticipantId: string | null;
+  },
+  actor: UserActor | GuestActor,
+  actorParticipantId?: string | null,
+) {
+  if (row.scope !== 'DIRECT') return true;
+  if (actor.kind === 'guest') {
+    return (
+      row.senderParticipantId === actor.participantId ||
+      row.recipientParticipantId === actor.participantId
+    );
+  }
+  return (
+    row.senderUserId === actor.userId ||
+    row.recipientUserId === actor.userId ||
+    Boolean(
+      actorParticipantId &&
+        (row.senderParticipantId === actorParticipantId ||
+          row.recipientParticipantId === actorParticipantId),
+    )
+  );
+}
+
+function serializeChatRow(
+  row: {
+    id: string;
+    meetingId: string;
+    senderUserId: string | null;
+    senderParticipantId: string | null;
+    recipientUserId: string | null;
+    recipientParticipantId: string | null;
+    scope: string;
+    content: string;
+    createdAt: Date;
+    senderPhotoUrl?: string | null;
+  },
+  names: { senderName: string; senderPhotoUrl?: string | null; recipientName?: string | null },
+) {
+  return {
+    id: row.id,
+    meetingId: row.meetingId,
+    senderUserId: row.senderUserId,
+    senderParticipantId: row.senderParticipantId,
+    senderName: names.senderName,
+    senderPhotoUrl: names.senderPhotoUrl ?? row.senderPhotoUrl ?? null,
+    scope: row.scope,
+    recipientUserId: row.recipientUserId,
+    recipientParticipantId: row.recipientParticipantId,
+    recipientName: names.recipientName ?? null,
+    content: row.content,
+    createdAt: row.createdAt,
+  };
+}
 
 export const meetService = {
   canAdminMeetings,
@@ -612,8 +696,8 @@ export const meetService = {
     const isHost = meeting.hostUserId === userId;
 
     let participant = meeting.participants.find((p) => p.userId === userId);
-    if (participant?.admission === 'DENIED' && meeting.waitingRoom && !isHost) {
-      throw new Error('The host declined your request to join');
+    if (participant?.admission === 'DENIED' && !isHost) {
+      throw new Error('You were removed from this meeting');
     }
 
     // Host always enters. Waiting room only knocks other people, and only when
@@ -766,7 +850,7 @@ export const meetService = {
     if (meeting.status === 'CANCELLED') throw new Error('This meeting was cancelled');
     if (meeting.status === 'ENDED') throw new Error('This meeting has ended');
     if (participant.admission === 'DENIED') {
-      throw new Error('The host declined your request to join');
+      throw new Error('You were removed from this meeting');
     }
     if (participant.admission !== 'ADMITTED') {
       return {
@@ -835,7 +919,36 @@ export const meetService = {
     };
   },
 
-  /** End a LIVE meeting if nobody is still connected (tab closed / hung up). */
+  async removeFromMeeting(
+    meetingId: string,
+    hostUserId: string,
+    participantId: string,
+    actor?: { roleName?: string; role?: string },
+  ) {
+    const meeting = await prisma.meeting.findUnique({ where: { id: meetingId } });
+    if (!meeting) throw new Error('Meeting not found');
+    const isHost = meeting.hostUserId === hostUserId;
+    if (!isHost && !isAdminRole(actor ?? {})) {
+      throw new Error('Only the host can remove people from this meeting');
+    }
+    const participant = await prisma.meetingParticipant.findUnique({ where: { id: participantId } });
+    if (!participant || participant.meetingId !== meetingId) throw new Error('Participant not found');
+    if (participant.userId === meeting.hostUserId || participant.role === 'HOST') {
+      throw new Error('The host cannot be removed');
+    }
+    const updated = await prisma.meetingParticipant.update({
+      where: { id: participantId },
+      data: { admission: 'DENIED', leftAt: new Date() },
+    });
+    const identity = updated.userId ? `user:${updated.userId}` : `guest:${updated.id}`;
+    await removeLiveKitParticipant(meeting.livekitRoom, identity);
+    const profile = updated.userId ? await getProfile(updated.userId) : null;
+    return {
+      meeting: await serializeMeeting(meetingId, hostUserId),
+      participant: serializeParticipant({ ...updated, profile }),
+      identity,
+    };
+  },
   async closeAbandonedLive(meetingId: string) {
     const meeting = await prisma.meeting.findUnique({
       where: { id: meetingId },
@@ -988,28 +1101,16 @@ export const meetService = {
     const meeting = await prisma.meeting.findUnique({ where: { id } });
     if (!meeting) throw new Error('Meeting not found');
     if (!canRecordMeeting(meeting.hostUserId, user)) {
-      throw new Error('Only the host or an admin can record');
+      throw new Error('Only the host can record this meeting');
     }
     if (meeting.status !== 'LIVE') throw new Error('Start the meeting before recording');
-    try {
-      const rec = await startRoomRecording(meeting.livekitRoom, `${meeting.code}-${Date.now()}`);
-      await prisma.meeting.update({
-        where: { id },
-        data: {
-          recordEnabled: true,
-          egressId: rec.egressId,
-          recordingKey: rec.filepath,
-          recordingUrl: null,
-        },
-      });
-    } catch (err) {
-      console.warn('LiveKit egress not available:', err);
-      throw new Error(
-        err instanceof Error && err.message
-          ? err.message
-          : 'Recording is not available. Start LiveKit egress and MinIO.',
-      );
-    }
+    await prisma.meeting.update({
+      where: { id },
+      data: {
+        recordEnabled: true,
+        egressId: 'local',
+      },
+    });
     return serializeMeeting(id, user.id);
   },
 
@@ -1020,10 +1121,28 @@ export const meetService = {
     const meeting = await prisma.meeting.findUnique({ where: { id } });
     if (!meeting) throw new Error('Meeting not found');
     if (!canRecordMeeting(meeting.hostUserId, user)) {
-      throw new Error('Only the host or an admin can stop recording');
+      throw new Error('Only the host can stop recording');
     }
-    await finalizeMeetingRecording(meeting);
+    if (meeting.egressId && meeting.egressId !== 'local') {
+      try {
+        await stopRoomRecording(meeting.egressId);
+      } catch (err) {
+        console.warn('Stop LiveKit egress skipped:', err);
+      }
+    }
+    await prisma.meeting.update({
+      where: { id },
+      data: { recordEnabled: false, egressId: null },
+    });
     return serializeMeeting(id, user.id);
+  },
+
+  async recordingActive(id: string) {
+    const meeting = await prisma.meeting.findUnique({
+      where: { id },
+      select: { egressId: true },
+    });
+    return Boolean(meeting?.egressId);
   },
 
   async getRecordingPlayback(
@@ -1117,40 +1236,81 @@ export const meetService = {
     content: string;
     scope?: 'ROOM' | 'DIRECT';
     recipientUserId?: string;
+    recipientParticipantId?: string;
   }) {
     const content = opts.content.trim();
     if (!content) throw new Error('Message is empty');
-    const meeting = await prisma.meeting.findUnique({ where: { id: opts.meetingId } });
+    const meeting = await prisma.meeting.findUnique({
+      where: { id: opts.meetingId },
+      include: { participants: true },
+    });
     if (!meeting) throw new Error('Meeting not found');
     if (meeting.status === 'ENDED' || meeting.status === 'CANCELLED') {
       throw new Error('Meeting is not active');
     }
-    const scope = opts.scope === 'DIRECT' ? 'DIRECT' : 'ROOM';
-    if (scope === 'DIRECT' && !opts.recipientUserId && opts.actor.kind === 'user') {
-      throw new Error('Direct messages need a recipient');
+    if (opts.actor.kind === 'guest' && opts.actor.meetingId !== opts.meetingId) {
+      throw new Error('Not in this meeting');
     }
+
+    const actor = opts.actor;
+    const admitted = meeting.participants.filter(
+      (p) => p.admission !== 'WAITING' && p.admission !== 'DENIED',
+    );
+    const senderParticipant = (() => {
+      if (actor.kind === 'guest') {
+        const participantId = actor.participantId;
+        return (
+          admitted.find((p) => p.id === participantId) ??
+          meeting.participants.find((p) => p.id === participantId)
+        );
+      }
+      const userId = actor.userId;
+      return (
+        admitted.find((p) => p.userId === userId) ??
+        meeting.participants.find((p) => p.userId === userId)
+      );
+    })();
+    if (!senderParticipant) throw new Error('Join the meeting before sending chat');
+
+    const scope = opts.scope === 'DIRECT' ? 'DIRECT' : 'ROOM';
+    let recipient =
+      scope === 'DIRECT'
+        ? resolveChatRecipient(admitted, {
+            participantId: opts.recipientParticipantId,
+            userId: opts.recipientUserId,
+          })
+        : null;
+    if (scope === 'DIRECT' && !recipient) {
+      throw new Error('Pick someone in this meeting to send a direct message');
+    }
+    if (recipient && recipient.id === senderParticipant.id) {
+      throw new Error('Pick someone else for a direct message');
+    }
+
     const row = await prisma.meetingChatMessage.create({
       data: {
         meetingId: opts.meetingId,
-        senderUserId: opts.actor.kind === 'user' ? opts.actor.userId : null,
+        senderUserId: opts.actor.kind === 'user' ? opts.actor.userId : senderParticipant.userId,
+        senderParticipantId: senderParticipant.id,
         senderGuestName: opts.actor.kind === 'guest' ? opts.actor.name : null,
         senderPhotoUrl: opts.actor.photoUrl,
         scope,
-        recipientUserId: scope === 'DIRECT' ? opts.recipientUserId || null : null,
+        recipientUserId: scope === 'DIRECT' ? recipient?.userId || null : null,
+        recipientParticipantId: scope === 'DIRECT' ? recipient?.id || null : null,
         content,
       },
     });
-    return {
-      id: row.id,
-      meetingId: row.meetingId,
-      senderUserId: row.senderUserId,
+    const recipientName =
+      recipient != null
+        ? recipient.userId
+          ? (await getProfile(recipient.userId))?.name || recipient.guestName || 'Teammate'
+          : recipient.guestName || 'Guest'
+        : null;
+    return serializeChatRow(row, {
       senderName: opts.actor.name,
       senderPhotoUrl: opts.actor.photoUrl,
-      scope: row.scope,
-      recipientUserId: row.recipientUserId,
-      content: row.content,
-      createdAt: row.createdAt,
-    };
+      recipientName,
+    });
   },
 
   async listChat(meetingId: string, actor: UserActor | GuestActor) {
@@ -1159,30 +1319,44 @@ export const meetService = {
       orderBy: { createdAt: 'asc' },
       take: 500,
     });
-    const profiles = await getProfiles(
-      rows.map((r) => r.senderUserId).filter((id): id is string => Boolean(id)),
-    );
+    const meeting = await prisma.meeting.findUnique({
+      where: { id: meetingId },
+      include: { participants: true },
+    });
+    const actorParticipant = (() => {
+      if (actor.kind === 'guest') {
+        const participantId = actor.participantId;
+        return meeting?.participants.find((p) => p.id === participantId);
+      }
+      const userId = actor.userId;
+      return meeting?.participants.find((p) => p.userId === userId);
+    })();
+    const profiles = await getProfiles([
+      ...rows.map((r) => r.senderUserId).filter((id): id is string => Boolean(id)),
+      ...rows.map((r) => r.recipientUserId).filter((id): id is string => Boolean(id)),
+    ]);
+    const participantName = (id: string | null | undefined) => {
+      if (!id) return null;
+      const p = meeting?.participants.find((row) => row.id === id);
+      if (!p) return null;
+      if (p.userId) return profiles.get(p.userId)?.name || p.guestName || 'Member';
+      return p.guestName || 'Guest';
+    };
     return rows
-      .filter((r) => {
-        if (r.scope === 'ROOM') return true;
-        if (actor.kind === 'guest') return false;
-        return r.senderUserId === actor.userId || r.recipientUserId === actor.userId;
-      })
-      .map((r) => ({
-        id: r.id,
-        meetingId: r.meetingId,
-        senderUserId: r.senderUserId,
-        senderName: r.senderUserId
-          ? profiles.get(r.senderUserId)?.name || 'Member'
-          : r.senderGuestName || 'Guest',
-        senderPhotoUrl: r.senderUserId
-          ? profiles.get(r.senderUserId)?.photoUrl || r.senderPhotoUrl
-          : r.senderPhotoUrl,
-        scope: r.scope,
-        recipientUserId: r.recipientUserId,
-        content: r.content,
-        createdAt: r.createdAt,
-      }));
+      .filter((r) => chatVisibleTo(r, actor, actorParticipant?.id))
+      .map((r) =>
+        serializeChatRow(r, {
+          senderName: r.senderUserId
+            ? profiles.get(r.senderUserId)?.name || 'Member'
+            : r.senderGuestName || participantName(r.senderParticipantId) || 'Guest',
+          senderPhotoUrl: r.senderUserId
+            ? profiles.get(r.senderUserId)?.photoUrl || r.senderPhotoUrl
+            : r.senderPhotoUrl,
+          recipientName: r.recipientUserId
+            ? profiles.get(r.recipientUserId)?.name || 'Teammate'
+            : participantName(r.recipientParticipantId),
+        }),
+      );
   },
 
   async resolveGuest(token: string): Promise<GuestActor | null> {

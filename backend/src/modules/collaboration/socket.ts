@@ -8,7 +8,6 @@ import { REDIS_URL } from '../../config/redis';
 import { chatService } from './chat.service';
 import { meetService, type GuestActor, type UserActor } from './meet.service';
 import { getProfile } from './profiles';
-import { collabStorage } from './storage';
 
 let ioRef: Server | null = null;
 let presenceRedis: ReturnType<typeof createClient> | null = null;
@@ -58,6 +57,27 @@ export function emitJoinDecision(opts: {
   };
   io.to(`waiting:${opts.participantId}`).emit(event, payload);
   if (opts.userId) io.to(`user:${opts.userId}`).emit(event, payload);
+}
+
+export function emitMeetingRemoved(opts: {
+  meetingId: string;
+  participantId: string;
+  userId?: string | null;
+  identity: string;
+  name?: string;
+}) {
+  const io = ioRef;
+  if (!io) return;
+  const payload = {
+    meetingId: opts.meetingId,
+    participantId: opts.participantId,
+    identity: opts.identity,
+    name: opts.name ?? 'Participant',
+  };
+  io.to(`waiting:${opts.participantId}`).emit('meeting_removed', payload);
+  io.to(`participant:${opts.participantId}`).emit('meeting_removed', payload);
+  if (opts.userId) io.to(`user:${opts.userId}`).emit('meeting_removed', payload);
+  io.to(`meeting:${opts.meetingId}`).emit('meeting_peer_removed', payload);
 }
 
 export function emitChatNewMessage(
@@ -128,6 +148,42 @@ export function emitMeetingEnded(opts: {
   for (const id of opts.userIds ?? []) {
     if (id) io.to(`user:${id}`).emit('meeting_ended', payload);
   }
+}
+
+export type MeetingChatPayload = {
+  id: string;
+  meetingId: string;
+  senderUserId: string | null;
+  senderParticipantId?: string | null;
+  senderName: string;
+  senderPhotoUrl?: string | null;
+  scope: string;
+  recipientUserId: string | null;
+  recipientParticipantId?: string | null;
+  recipientName?: string | null;
+  content: string;
+  createdAt: Date | string;
+};
+
+export function emitMeetingChat(data: MeetingChatPayload) {
+  const io = ioRef;
+  if (!io) return;
+  if (data.scope === 'DIRECT') {
+    const rooms = new Set<string>();
+    if (data.recipientUserId) rooms.add(`user:${data.recipientUserId}`);
+    if (data.senderUserId) rooms.add(`user:${data.senderUserId}`);
+    if (data.recipientParticipantId) {
+      rooms.add(`waiting:${data.recipientParticipantId}`);
+      rooms.add(`participant:${data.recipientParticipantId}`);
+    }
+    if (data.senderParticipantId) {
+      rooms.add(`waiting:${data.senderParticipantId}`);
+      rooms.add(`participant:${data.senderParticipantId}`);
+    }
+    for (const room of rooms) io.to(room).emit('meeting_chat', data);
+    return;
+  }
+  io.to(`meeting:${data.meetingId}`).emit('meeting_chat', data);
 }
 
 export function emitPushNotify(
@@ -243,8 +299,6 @@ export async function setupCollaborationSocket(httpServer: http.Server) {
     console.warn('Socket.io Redis adapter unavailable — single-node only:', err instanceof Error ? err.message : err);
   }
 
-  void collabStorage.allowPublicGetCors();
-
   io.on('connection', async (socket) => {
     const token = (socket.handshake.auth as { token?: string })?.token
       || (typeof socket.handshake.query.token === 'string' ? socket.handshake.query.token : undefined);
@@ -262,6 +316,7 @@ export async function setupCollaborationSocket(httpServer: http.Server) {
     } else {
       socket.join(`meeting:${actor.meetingId}`);
       socket.join(`waiting:${actor.participantId}`);
+      socket.join(`participant:${actor.participantId}`);
     }
 
     socket.on('heartbeat', async () => {
@@ -328,14 +383,25 @@ export async function setupCollaborationSocket(httpServer: http.Server) {
       if (!id) return;
       socket.data.meetingId = id;
       socket.join(`meeting:${id}`);
+      try {
+        socket.emit('recording', { active: await meetService.recordingActive(id) });
+      } catch {
+        /* ignore */
+      }
       if (actor.kind === 'guest') {
         socket.join(`waiting:${actor.participantId}`);
+        socket.join(`participant:${actor.participantId}`);
         return;
       }
       try {
         const meeting = await meetService.getById(id, actor.userId);
-        const selfWait = (meeting?.waitingParticipants ?? []).find((p: { userId?: string | null }) => p.userId === actor.userId);
-        if (selfWait?.id) socket.join(`waiting:${selfWait.id}`);
+        const self =
+          (meeting?.participants ?? []).find((p: { userId?: string | null }) => p.userId === actor.userId) ??
+          (meeting?.waitingParticipants ?? []).find((p: { userId?: string | null }) => p.userId === actor.userId);
+        if (self?.id) {
+          socket.join(`waiting:${self.id}`);
+          socket.join(`participant:${self.id}`);
+        }
         if (meeting?.isHost) {
           socket.emit('waiting_update', { waiting: meeting.waitingParticipants ?? [] });
         }
@@ -349,6 +415,7 @@ export async function setupCollaborationSocket(httpServer: http.Server) {
       content: string;
       scope?: 'ROOM' | 'DIRECT';
       recipientUserId?: string;
+      recipientParticipantId?: string;
     }) => {
       try {
         if (payload.meetingId) socket.join(`meeting:${payload.meetingId}`);
@@ -358,15 +425,11 @@ export async function setupCollaborationSocket(httpServer: http.Server) {
           content: payload.content,
           scope: payload.scope,
           recipientUserId: payload.recipientUserId,
+          recipientParticipantId: payload.recipientParticipantId,
         });
-        // Always echo to the sender (host-only rooms never see io.to(room) if they
-        // missed join_meeting). socket.to() broadcasts to everyone else in the room.
+        // Echo to the sender even if they missed join_meeting.
         socket.emit('meeting_chat', data);
-        if (data.scope === 'DIRECT' && data.recipientUserId) {
-          io.to(`user:${data.recipientUserId}`).emit('meeting_chat', data);
-        } else {
-          socket.to(`meeting:${payload.meetingId}`).emit('meeting_chat', data);
-        }
+        emitMeetingChat(data);
       } catch (err) {
         socket.emit('error_message', { error: err instanceof Error ? err.message : 'Chat failed' });
       }
@@ -388,13 +451,15 @@ export async function setupCollaborationSocket(httpServer: http.Server) {
     socket.on('meeting_reaction', (payload: { meetingId?: string; emoji?: string }) => {
       const meetingId = String(payload?.meetingId ?? '');
       const emoji = String(payload?.emoji ?? '').slice(0, 8);
-      const allowed = new Set(['👍', '👏', '❤️', '😂', '🎉', '👋']);
+      const allowed = new Set(['👍', '👏', '❤️', '😂', '🎉', '😮', '👋', '🔥']);
       if (!meetingId || !allowed.has(emoji)) return;
       io.to(`meeting:${meetingId}`).emit('meeting_reaction', {
         meetingId,
         emoji,
         name: actor.name,
         identity: actor.kind === 'user' ? `user:${actor.userId}` : `guest:${actor.participantId}`,
+        userId: actor.kind === 'user' ? actor.userId : null,
+        participantId: actor.kind === 'guest' ? actor.participantId : null,
       });
     });
 

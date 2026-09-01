@@ -72,6 +72,10 @@ class DioClient {
           AppLogger.network.d(
             '${response.requestOptions.method} ${response.requestOptions.path} → ${response.statusCode}',
           );
+          if (response.requestOptions.responseType == ResponseType.bytes) {
+            handler.next(response);
+            return;
+          }
           try {
             response.data = await unwrapTransportBody(response.data);
           } catch (_) {

@@ -1,21 +1,30 @@
 -- ERP Work Orders, Activities, Contractors
+-- Idempotent: safe to re-run after a failed/partial apply (deploy health timeout).
 
-CREATE TYPE "ErpWorkOrderStatus" AS ENUM (
-  'ISSUED',
-  'IN_PROGRESS',
-  'COMPLETED',
-  'COMPLETED_DELAYED',
-  'CANCELLED'
-);
+DO $$ BEGIN
+  CREATE TYPE "ErpWorkOrderStatus" AS ENUM (
+    'ISSUED',
+    'IN_PROGRESS',
+    'COMPLETED',
+    'COMPLETED_DELAYED',
+    'CANCELLED'
+  );
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE TYPE "ErpWorkOrderApprovalStatus" AS ENUM (
-  'PENDING',
-  'APPROVED',
-  'REJECTED',
-  'NOT_APPLICABLE'
-);
+DO $$ BEGIN
+  CREATE TYPE "ErpWorkOrderApprovalStatus" AS ENUM (
+    'PENDING',
+    'APPROVED',
+    'REJECTED',
+    'NOT_APPLICABLE'
+  );
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE TABLE "erp_contractors" (
+CREATE TABLE IF NOT EXISTS "erp_contractors" (
   "id" TEXT NOT NULL,
   "name" TEXT NOT NULL,
   "contact_person" TEXT,
@@ -27,7 +36,7 @@ CREATE TABLE "erp_contractors" (
   CONSTRAINT "erp_contractors_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE "erp_activities" (
+CREATE TABLE IF NOT EXISTS "erp_activities" (
   "id" TEXT NOT NULL,
   "name" TEXT NOT NULL,
   "is_active" BOOLEAN NOT NULL DEFAULT true,
@@ -37,7 +46,7 @@ CREATE TABLE "erp_activities" (
   CONSTRAINT "erp_activities_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE "erp_activity_subtasks" (
+CREATE TABLE IF NOT EXISTS "erp_activity_subtasks" (
   "id" TEXT NOT NULL,
   "activity_id" TEXT NOT NULL,
   "name" TEXT NOT NULL,
@@ -48,7 +57,7 @@ CREATE TABLE "erp_activity_subtasks" (
   CONSTRAINT "erp_activity_subtasks_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE "erp_work_orders" (
+CREATE TABLE IF NOT EXISTS "erp_work_orders" (
   "id" TEXT NOT NULL,
   "work_order_id" TEXT NOT NULL,
   "order_date" DATE NOT NULL,
@@ -69,7 +78,7 @@ CREATE TABLE "erp_work_orders" (
   CONSTRAINT "erp_work_orders_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE "erp_work_order_activity_groups" (
+CREATE TABLE IF NOT EXISTS "erp_work_order_activity_groups" (
   "id" TEXT NOT NULL,
   "work_order_id" TEXT NOT NULL,
   "activity_id" TEXT,
@@ -80,7 +89,7 @@ CREATE TABLE "erp_work_order_activity_groups" (
   CONSTRAINT "erp_work_order_activity_groups_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE "erp_work_order_lines" (
+CREATE TABLE IF NOT EXISTS "erp_work_order_lines" (
   "id" TEXT NOT NULL,
   "group_id" TEXT NOT NULL,
   "work_detail" TEXT NOT NULL,
@@ -97,44 +106,76 @@ CREATE TABLE "erp_work_order_lines" (
   CONSTRAINT "erp_work_order_lines_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX "erp_work_orders_work_order_id_key" ON "erp_work_orders"("work_order_id");
-CREATE INDEX "erp_contractors_is_active_name_idx" ON "erp_contractors"("is_active", "name");
-CREATE INDEX "erp_activities_is_active_sort_order_idx" ON "erp_activities"("is_active", "sort_order");
-CREATE INDEX "erp_activity_subtasks_activity_id_sort_order_idx" ON "erp_activity_subtasks"("activity_id", "sort_order");
-CREATE INDEX "erp_work_orders_project_id_order_date_idx" ON "erp_work_orders"("project_id", "order_date");
-CREATE INDEX "erp_work_orders_status_idx" ON "erp_work_orders"("status");
-CREATE INDEX "erp_work_orders_approval_status_idx" ON "erp_work_orders"("approval_status");
-CREATE INDEX "erp_work_order_activity_groups_work_order_id_sort_order_idx" ON "erp_work_order_activity_groups"("work_order_id", "sort_order");
-CREATE INDEX "erp_work_order_lines_group_id_sort_order_idx" ON "erp_work_order_lines"("group_id", "sort_order");
+CREATE UNIQUE INDEX IF NOT EXISTS "erp_work_orders_work_order_id_key" ON "erp_work_orders"("work_order_id");
+CREATE INDEX IF NOT EXISTS "erp_contractors_is_active_name_idx" ON "erp_contractors"("is_active", "name");
+CREATE INDEX IF NOT EXISTS "erp_activities_is_active_sort_order_idx" ON "erp_activities"("is_active", "sort_order");
+CREATE INDEX IF NOT EXISTS "erp_activity_subtasks_activity_id_sort_order_idx" ON "erp_activity_subtasks"("activity_id", "sort_order");
+CREATE INDEX IF NOT EXISTS "erp_work_orders_project_id_order_date_idx" ON "erp_work_orders"("project_id", "order_date");
+CREATE INDEX IF NOT EXISTS "erp_work_orders_status_idx" ON "erp_work_orders"("status");
+CREATE INDEX IF NOT EXISTS "erp_work_orders_approval_status_idx" ON "erp_work_orders"("approval_status");
+CREATE INDEX IF NOT EXISTS "erp_work_order_activity_groups_work_order_id_sort_order_idx" ON "erp_work_order_activity_groups"("work_order_id", "sort_order");
+CREATE INDEX IF NOT EXISTS "erp_work_order_lines_group_id_sort_order_idx" ON "erp_work_order_lines"("group_id", "sort_order");
 
-ALTER TABLE "erp_activity_subtasks"
-  ADD CONSTRAINT "erp_activity_subtasks_activity_id_fkey"
-  FOREIGN KEY ("activity_id") REFERENCES "erp_activities"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'erp_activity_subtasks_activity_id_fkey') THEN
+    ALTER TABLE "erp_activity_subtasks"
+      ADD CONSTRAINT "erp_activity_subtasks_activity_id_fkey"
+      FOREIGN KEY ("activity_id") REFERENCES "erp_activities"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+END $$;
 
-ALTER TABLE "erp_work_orders"
-  ADD CONSTRAINT "erp_work_orders_project_id_fkey"
-  FOREIGN KEY ("project_id") REFERENCES "erp_projects"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'erp_work_orders_project_id_fkey') THEN
+    ALTER TABLE "erp_work_orders"
+      ADD CONSTRAINT "erp_work_orders_project_id_fkey"
+      FOREIGN KEY ("project_id") REFERENCES "erp_projects"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+  END IF;
+END $$;
 
-ALTER TABLE "erp_work_orders"
-  ADD CONSTRAINT "erp_work_orders_contractor_id_fkey"
-  FOREIGN KEY ("contractor_id") REFERENCES "erp_contractors"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'erp_work_orders_contractor_id_fkey') THEN
+    ALTER TABLE "erp_work_orders"
+      ADD CONSTRAINT "erp_work_orders_contractor_id_fkey"
+      FOREIGN KEY ("contractor_id") REFERENCES "erp_contractors"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+  END IF;
+END $$;
 
-ALTER TABLE "erp_work_orders"
-  ADD CONSTRAINT "erp_work_orders_owner_employee_id_fkey"
-  FOREIGN KEY ("owner_employee_id") REFERENCES "employees"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'erp_work_orders_owner_employee_id_fkey') THEN
+    ALTER TABLE "erp_work_orders"
+      ADD CONSTRAINT "erp_work_orders_owner_employee_id_fkey"
+      FOREIGN KEY ("owner_employee_id") REFERENCES "employees"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+  END IF;
+END $$;
 
-ALTER TABLE "erp_work_orders"
-  ADD CONSTRAINT "erp_work_orders_approver_employee_id_fkey"
-  FOREIGN KEY ("approver_employee_id") REFERENCES "employees"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'erp_work_orders_approver_employee_id_fkey') THEN
+    ALTER TABLE "erp_work_orders"
+      ADD CONSTRAINT "erp_work_orders_approver_employee_id_fkey"
+      FOREIGN KEY ("approver_employee_id") REFERENCES "employees"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+  END IF;
+END $$;
 
-ALTER TABLE "erp_work_order_activity_groups"
-  ADD CONSTRAINT "erp_work_order_activity_groups_work_order_id_fkey"
-  FOREIGN KEY ("work_order_id") REFERENCES "erp_work_orders"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'erp_work_order_activity_groups_work_order_id_fkey') THEN
+    ALTER TABLE "erp_work_order_activity_groups"
+      ADD CONSTRAINT "erp_work_order_activity_groups_work_order_id_fkey"
+      FOREIGN KEY ("work_order_id") REFERENCES "erp_work_orders"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+END $$;
 
-ALTER TABLE "erp_work_order_activity_groups"
-  ADD CONSTRAINT "erp_work_order_activity_groups_activity_id_fkey"
-  FOREIGN KEY ("activity_id") REFERENCES "erp_activities"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'erp_work_order_activity_groups_activity_id_fkey') THEN
+    ALTER TABLE "erp_work_order_activity_groups"
+      ADD CONSTRAINT "erp_work_order_activity_groups_activity_id_fkey"
+      FOREIGN KEY ("activity_id") REFERENCES "erp_activities"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+  END IF;
+END $$;
 
-ALTER TABLE "erp_work_order_lines"
-  ADD CONSTRAINT "erp_work_order_lines_group_id_fkey"
-  FOREIGN KEY ("group_id") REFERENCES "erp_work_order_activity_groups"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'erp_work_order_lines_group_id_fkey') THEN
+    ALTER TABLE "erp_work_order_lines"
+      ADD CONSTRAINT "erp_work_order_lines_group_id_fkey"
+      FOREIGN KEY ("group_id") REFERENCES "erp_work_order_activity_groups"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+END $$;

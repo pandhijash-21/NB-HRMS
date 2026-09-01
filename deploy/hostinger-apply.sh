@@ -93,7 +93,7 @@ EOF
   compose up -d --force-recreate frontend || true
 
   echo "==> Rollback attempted. Inspect logs; DB schema left as migrate deploy applied it."
-  compose logs --tail=80 backend || true
+  compose logs --tail=120 backend || true
   exit 1
 }
 
@@ -117,11 +117,18 @@ compose up -d minio livekit livekit-egress
 
 echo "==> Wait for local API health"
 i=0
+max_wait=90
 until curl -fsS http://127.0.0.1:4000/health >/dev/null 2>&1; do
   i=$((i + 1))
-  if [ "$i" -ge 30 ]; then
-    echo "Local API health check timed out"
+  if [ "$i" -ge "$max_wait" ]; then
+    echo "Local API health check timed out after $((max_wait * 2))s"
+    compose logs --tail=120 backend || true
     rollback
+  fi
+  if [ $((i % 10)) -eq 0 ]; then
+    st=$(docker inspect -f '{{.State.Status}}' nb-crm-backend-1 2>/dev/null || echo missing)
+    echo "  still waiting (${i}/${max_wait}) backend status=$st"
+    compose logs --tail=15 backend 2>/dev/null || true
   fi
   sleep 2
 done

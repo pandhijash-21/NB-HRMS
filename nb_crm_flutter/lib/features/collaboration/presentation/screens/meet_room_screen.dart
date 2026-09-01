@@ -172,6 +172,12 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
     return uid != null && uid.isNotEmpty && meeting.hostUserId == uid;
   }
 
+  Future<String?> _meetBearer({String? guestToken}) async {
+    if (guestToken != null && guestToken.isNotEmpty) return guestToken;
+    if (_guestToken != null && _guestToken!.isNotEmpty) return _guestToken;
+    return ref.read(secureStorageProvider).readToken();
+  }
+
   Future<void> _tryAutoJoin() async {
     if (_didAutoJoin || widget.asGuest) return;
     _didAutoJoin = true;
@@ -255,7 +261,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
       final meeting = await ref.read(meetRepositoryProvider).getByCode(_code);
       if (!mounted) return;
       setState(() => _lobbyMeeting = meeting);
-      if (widget.autoJoin && meeting.isHost && !_connecting && _room == null && !_waiting) {
+      if (!_connecting && _room == null && !_waiting && (meeting.isHost || widget.autoJoin)) {
         unawaited(_tryAutoJoin());
       }
     } catch (_) {}
@@ -329,7 +335,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
 
   Future<void> _bindSocket(String meetingId, {String? guestToken}) async {
     final token = guestToken ?? await ref.read(secureStorageProvider).readToken();
-    if (token == null) return;
+    if (token == null || token.isEmpty) return;
     final socket = ref.read(collabSocketProvider)..connect(token: token);
     socket.joinMeeting(meetingId);
     socket.onMeetingChat((row) {
@@ -354,7 +360,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
     try {
       final history = await ref.read(meetRepositoryProvider).listChat(
             meetingId,
-            bearer: guestToken,
+            bearer: await _meetBearer(guestToken: guestToken),
           );
       if (mounted && history.isNotEmpty) {
         setState(() {
@@ -768,13 +774,14 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
       ..addAll(payload.meeting.utterances);
     final stt = MeetBhashiniStt(repo: ref.read(meetRepositoryProvider));
     _stt = stt;
+    final bearer = await _meetBearer(guestToken: guestToken);
     unawaited(stt.start(
       meetingId: payload.meeting.id,
       language: _transcriptLang,
-      bearer: guestToken,
+      bearer: bearer,
       room: room,
     ));
-    _startWhisperPoll(bearer: guestToken);
+    _startWhisperPoll(bearer: bearer);
     if (payload.meeting.isHost) _startHostWaitingPoll();
   }
 
@@ -1486,15 +1493,44 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
       );
     }
     if (_room == null) {
-      final loggedIn = auth.isAuthenticated && !widget.asGuest;
-      final isHost = _isHostViewer(auth);
-      final needsKnock = _lobbyMeeting?.waitingRoom == true && !isHost;
-      final previewOn = _cam && _previewCam != null && !_previewCam!.muted;
       final isDark = Theme.of(context).brightness == Brightness.dark;
       final bg = isDark ? AppColors.backgroundDark : AppColors.backgroundLight;
       final text = isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight;
       final muted = isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight;
       final bar = isDark ? const Color(0xFF1A1816) : Colors.white;
+      if (!widget.asGuest && auth.status == AuthStatus.unknown) {
+        return Scaffold(
+          backgroundColor: bg,
+          appBar: AppBar(
+            backgroundColor: bar,
+            foregroundColor: text,
+            elevation: 0,
+            leading: IconButton(
+              icon: const NbIcon(Icons.arrow_back_rounded),
+              onPressed: _leaveLobby,
+            ),
+            title: Text('Join $_code', style: TextStyle(fontWeight: FontWeight.w700, color: text)),
+          ),
+          body: const Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: CircularProgressIndicator(strokeWidth: 3, color: Color(0xFFC5A059)),
+                ),
+                SizedBox(height: 16),
+                Text('Opening your meeting…', style: TextStyle(fontWeight: FontWeight.w600)),
+              ],
+            ),
+          ),
+        );
+      }
+      final loggedIn = auth.isAuthenticated && !widget.asGuest;
+      final isHost = _isHostViewer(auth);
+      final needsKnock = _lobbyMeeting?.waitingRoom == true && !isHost;
+      final previewOn = _cam && _previewCam != null && !_previewCam!.muted;
       return Scaffold(
         backgroundColor: bg,
         appBar: AppBar(
@@ -2571,143 +2607,101 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
   }
 
   Widget _knockPanel() {
-    final narrow = MediaQuery.sizeOf(context).width < 620;
+    final people = _waitingFor;
+    if (people.isEmpty) return const SizedBox.shrink();
+    const gold = Color(0xFFC5A059);
+    ButtonStyle compactText({required Color color}) => TextButton.styleFrom(
+          foregroundColor: color,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          minimumSize: const Size(0, 32),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          visualDensity: VisualDensity.compact,
+        );
+    final admitStyle = FilledButton.styleFrom(
+      backgroundColor: gold,
+      foregroundColor: const Color(0xFF161616),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      minimumSize: const Size(0, 32),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      visualDensity: VisualDensity.compact,
+      elevation: 0,
+    );
     return Material(
-      color: const Color(0xFF1A1408),
+      color: const Color(0xFF2A1C0C),
       child: Container(
         width: double.infinity,
+        constraints: BoxConstraints(maxHeight: people.length > 2 ? 96 : 52),
         decoration: const BoxDecoration(
-          color: Color(0xFF2A1C0C),
-          border: Border(
-            bottom: BorderSide(color: Color(0xFFC5A059), width: 2.5),
-          ),
+          border: Border(bottom: BorderSide(color: gold, width: 1.5)),
         ),
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const NbIcon(Icons.notifications_active_rounded, color: Color(0xFFC5A059), size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    _waitingFor.length == 1
-                        ? '${_waitingFor.first.name} wants to join'
-                        : '${_waitingFor.length} people waiting to join',
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15),
-                  ),
-                ),
-                if (_waitingFor.length > 1)
-                  TextButton(
-                    onPressed: _admitAllWaiting,
-                    child: const Text(
-                      'Admit all',
-                      style: TextStyle(color: Color(0xFFC5A059), fontWeight: FontWeight.w800),
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              'They cannot enter until you admit them.',
-              style: TextStyle(color: Color(0xFFE8D5A8), fontSize: 12, height: 1.35),
-            ),
-            const SizedBox(height: 10),
-            ..._waitingFor.map((person) {
-              final busy = person.id != null && _busyAdmit.contains(person.id);
-              final details = [
-                if (person.isGuest) 'Guest',
-                if (!person.isGuest && (person.role ?? '').isNotEmpty && person.role != 'ATTENDEE') person.role,
-                if ((person.department ?? '').trim().isNotEmpty) person.department,
-                if ((person.email ?? '').trim().isNotEmpty) person.email,
-              ].whereType<String>().where((s) => s.trim().isNotEmpty).join(' · ');
-              final identity = Row(
+        child: ListView.separated(
+          shrinkWrap: true,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          itemCount: people.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 4),
+          itemBuilder: (context, i) {
+            final person = people[i];
+            final busy = person.id != null && _busyAdmit.contains(person.id);
+            return SizedBox(
+              height: 36,
+              child: Row(
                 children: [
                   NbProfilePhoto(
                     url: person.photoUrl,
                     name: person.name,
                     identity: person.userId ?? person.id ?? person.name,
-                    radius: 22,
-                    backgroundColor: const Color(0xFFC5A059),
+                    radius: 14,
+                    backgroundColor: gold,
                     foregroundColor: const Color(0xFF161616),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 8),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Flexible(
-                              child: Text(
-                                person.name,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15),
-                              ),
+                    child: Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(
+                            text: person.name,
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13),
+                          ),
+                          TextSpan(
+                            text: people.length == 1 ? ' wants to join' : ' waiting',
+                            style: const TextStyle(color: Color(0xFFE8D5A8), fontWeight: FontWeight.w500, fontSize: 13),
+                          ),
+                          if (person.isGuest)
+                            const TextSpan(
+                              text: ' · Guest',
+                              style: TextStyle(color: Color(0xFFE8D5A8), fontSize: 12),
                             ),
-                            if (person.isGuest) ...[
-                              const SizedBox(width: 8),
-                              const _GuestBadge(),
-                            ],
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          details.isEmpty ? (person.isGuest ? 'Guest' : 'Employee') : details,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Color(0xFFE8D5A8), fontSize: 12),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              );
-              final actions = Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextButton(
-                    onPressed: busy || person.id == null ? null : () => _admitPerson(person, admit: false),
-                    child: const Text('Deny', style: TextStyle(color: Color(0xFFF87171), fontWeight: FontWeight.w700)),
-                  ),
-                  const SizedBox(width: 6),
-                  FilledButton(
-                    onPressed: busy || person.id == null ? null : () => _admitPerson(person, admit: true),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFFC5A059),
-                      foregroundColor: const Color(0xFF161616),
-                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                      elevation: 4,
-                      minimumSize: const Size(88, 40),
-                    ),
-                    child: Text(
-                      busy ? '…' : 'Admit',
-                      style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
-                    ),
-                  ),
-                ],
-              );
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: narrow
-                    ? Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          identity,
-                          const SizedBox(height: 8),
-                          Align(alignment: Alignment.centerRight, child: actions),
-                        ],
-                      )
-                    : Row(
-                        children: [
-                          Expanded(child: identity),
-                          actions,
                         ],
                       ),
-              );
-            }),
-          ],
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (i == 0 && people.length > 1)
+                    TextButton(
+                      onPressed: _admitAllWaiting,
+                      style: compactText(color: gold),
+                      child: const Text('Admit all', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
+                    ),
+                  TextButton(
+                    onPressed: busy || person.id == null ? null : () => _admitPerson(person, admit: false),
+                    style: compactText(color: const Color(0xFFF87171)),
+                    child: const Text('Deny', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+                  ),
+                  const SizedBox(width: 4),
+                  FilledButton(
+                    onPressed: busy || person.id == null ? null : () => _admitPerson(person, admit: true),
+                    style: admitStyle,
+                    child: Text(
+                      busy ? '…' : 'Admit',
+                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
         ),
       ),
     );
@@ -2717,38 +2711,65 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
     return LayoutBuilder(
       builder: (context, box) {
         final n = participants.length;
+        if (n == 0) return const SizedBox.shrink();
+
+        Widget tile(Participant p) {
+          return _ParticipantTile(
+            participant: p,
+            label: _labelFor(p),
+            photoUrl: _photoForParticipant(p),
+            handRaised: _hands.containsKey(p.identity),
+            canRemove: _join?.meeting.isHost == true && !_isLocal(p),
+            onRemove: () => _removeParticipant(p),
+          );
+        }
+
+        const pad = 16.0;
+        const gap = 10.0;
+        final maxW = (box.maxWidth - pad * 2).clamp(0.0, box.maxWidth);
+        final maxH = (box.maxHeight - pad * 2).clamp(0.0, box.maxHeight);
+
+        Size fit({required int cols, required int rows, double aspect = 16 / 9}) {
+          final cellW = (maxW - gap * (cols - 1)) / cols;
+          final cellH = (maxH - gap * (rows - 1)) / rows;
+          var w = cellW;
+          var h = w / aspect;
+          if (h > cellH) {
+            h = cellH;
+            w = h * aspect;
+          }
+          return Size(w, h);
+        }
+
+        if (n == 1) {
+          final size = fit(cols: 1, rows: 1);
+          return Center(
+            child: SizedBox(width: size.width, height: size.height, child: tile(participants.first)),
+          );
+        }
+
         final width = box.maxWidth;
-        final cols = n <= 1
-            ? 1
-            : width < 520
-                ? (n == 2 ? 1 : 2)
-                : n <= 2
+        final cols = width < 520
+            ? (n == 2 ? 1 : 2)
+            : n <= 2
+                ? 2
+                : n <= 4
                     ? 2
-                    : n <= 4
-                        ? 2
-                        : n <= 9
-                            ? (width >= 900 ? 3 : 2)
-                            : (width >= 1100 ? 4 : 3);
-        return GridView.builder(
-          padding: const EdgeInsets.all(8),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: cols,
-            childAspectRatio: n == 1 ? 16 / 10 : 16 / 9,
-            crossAxisSpacing: 8,
-            mainAxisSpacing: 8,
+                    : n <= 9
+                        ? (width >= 900 ? 3 : 2)
+                        : (width >= 1100 ? 4 : 3);
+        final rows = (n / cols).ceil();
+        final size = fit(cols: cols, rows: rows);
+        return Center(
+          child: Wrap(
+            spacing: gap,
+            runSpacing: gap,
+            alignment: WrapAlignment.center,
+            children: [
+              for (final p in participants)
+                SizedBox(width: size.width, height: size.height, child: tile(p)),
+            ],
           ),
-          itemCount: n,
-          itemBuilder: (context, i) {
-            final p = participants[i];
-            return _ParticipantTile(
-              participant: p,
-              label: _labelFor(p),
-              photoUrl: _photoForParticipant(p),
-              handRaised: _hands.containsKey(p.identity),
-              canRemove: _join?.meeting.isHost == true && !_isLocal(p),
-              onRemove: () => _removeParticipant(p),
-            );
-          },
         );
       },
     );
@@ -3205,7 +3226,9 @@ class _ParticipantTile extends StatelessWidget {
           ),
         );
         if (track != null) {
-          body = VideoTrackRenderer(track, fit: VideoViewFit.cover);
+          body = SizedBox.expand(
+            child: VideoTrackRenderer(track, fit: VideoViewFit.cover),
+          );
         }
         return AnimatedContainer(
           duration: const Duration(milliseconds: 180),
@@ -3216,6 +3239,7 @@ class _ParticipantTile extends StatelessWidget {
               width: 3,
             ),
           ),
+          clipBehavior: Clip.antiAlias,
           child: ClipRRect(
             borderRadius: BorderRadius.circular(13),
             child: LayoutBuilder(
@@ -3223,8 +3247,9 @@ class _ParticipantTile extends StatelessWidget {
                 final compact = box.maxHeight < 150;
                 final chipMax = (box.maxWidth * 0.72).clamp(72.0, 200.0);
                 return Stack(
+                  fit: StackFit.expand,
                   children: [
-                    Positioned.fill(child: ColoredBox(color: const Color(0xFF111827), child: body)),
+                    ColoredBox(color: const Color(0xFF111827), child: body),
                     Positioned(
                       left: compact ? 8 : 10,
                       bottom: compact ? 8 : 10,

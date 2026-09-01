@@ -39,6 +39,7 @@ function optionalAuth(req: Request, res: Response, next: NextFunction) {
   if (!token) return next();
   try {
     const decoded = jwt.verify(token, env.JWT_SECRET) as jwt.JwtPayload;
+    if (decoded.typ === 'meet-guest') return next();
     const userId = String(decoded.sub ?? '');
     if (userId) {
       req.user = {
@@ -164,7 +165,7 @@ meetingsRouter.post(
 );
 
 // In-meeting chat — guests use meet JWT (not user session); must stay before requireAuth.
-meetingsRouter.get('/:id/chat', async (req: Request, res: Response) => {
+meetingsRouter.get('/:id/chat', optionalAuth, async (req: Request, res: Response) => {
   try {
     const actor = await actorFromReq(req);
     if (!actor) return res.status(401).json(fail('Unauthenticated'));
@@ -175,7 +176,7 @@ meetingsRouter.get('/:id/chat', async (req: Request, res: Response) => {
   }
 });
 
-meetingsRouter.post('/:id/chat', async (req: Request, res: Response) => {
+meetingsRouter.post('/:id/chat', optionalAuth, async (req: Request, res: Response) => {
   try {
     const actor = await actorFromReq(req);
     if (!actor) return res.status(401).json(fail('Unauthenticated'));

@@ -358,6 +358,7 @@ export function MeetRoom({ code }: { code: string }) {
   const chatOpenRef = useRef(false);
   const chatModeRef = useRef<"ROOM" | "DIRECT">("ROOM");
   const waitingRef = useRef(false);
+  const joiningRef = useRef(false);
   const participantIdRef = useRef<string | null>(null);
   const toastTimers = useRef<Record<string, number>>({});
   const meRef = useRef<{ userId: string | null; participantId: string | null }>({ userId: null, participantId: null });
@@ -432,6 +433,15 @@ export function MeetRoom({ code }: { code: string }) {
       .then(setPreview)
       .catch(() => toast.error("Meeting not found"));
   }, [code]);
+
+  useEffect(() => {
+    if (!loggedIn || room || waiting) return;
+    const isHost = Boolean(preview?.isHost || preview?.host?.userId === (session?.user as { id?: string })?.id);
+    if (!isHost) return;
+    void joinAsMember();
+    // Host opening their own link should enter, not sit in the guest lobby.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loggedIn, preview?.isHost, preview?.host?.userId, room, waiting]);
 
   const refreshRoom = (r: Room) => {
     setParticipants([r.localParticipant, ...Array.from(r.remoteParticipants.values())]);
@@ -609,6 +619,8 @@ export function MeetRoom({ code }: { code: string }) {
   }
 
   async function joinAsMember() {
+    if (joiningRef.current || roomRef.current) return;
+    joiningRef.current = true;
     try {
       const payload = await api.post("meetings/join", { code }).then((r) => r.data.data as JoinPayload);
       setMyParticipantId(payload.participant.id);
@@ -623,6 +635,8 @@ export function MeetRoom({ code }: { code: string }) {
       await connect(payload);
     } catch (e) {
       toast.error(meetErrorMessage(e, "Unable to join"));
+    } finally {
+      joiningRef.current = false;
     }
   }
 
@@ -998,6 +1012,13 @@ export function MeetRoom({ code }: { code: string }) {
   }
 
   if (!room) {
+    if (status === "loading") {
+      return (
+        <div className="h-full grid place-items-center p-6 text-sm text-muted-foreground">
+          Opening your meeting…
+        </div>
+      );
+    }
     const isHostPreview = Boolean(
       preview?.isHost || preview?.host?.userId === (session?.user as { id?: string })?.id,
     );
@@ -1092,61 +1113,60 @@ export function MeetRoom({ code }: { code: string }) {
       )}
 
       {isHost && waitingFor.length > 0 && (
-        <div className="px-3 py-3 bg-amber-500/20 border-b-2 border-amber-400 space-y-3">
-          <p className="text-sm font-bold text-amber-100">
-            {waitingFor.length === 1
-              ? `${waitingFor[0].name} wants to join`
-              : `${waitingFor.length} people waiting to join`}
-          </p>
-          <p className="text-xs text-amber-100/80">They cannot enter until you admit them.</p>
-          {waitingFor.map((person) => {
-            const details = [
-              person.isGuest ? "Guest" : null,
-              person.department,
-              person.email,
-            ]
-              .filter(Boolean)
-              .join(" · ");
-            return (
-              <div key={person.id} className="flex items-center gap-3 text-sm flex-wrap">
-                <Avatar className="size-10 shrink-0">
-                  {person.photoUrl ? <AvatarImage src={person.photoUrl} alt="" /> : null}
-                  <AvatarFallback className="bg-amber-400 text-slate-900 font-bold">
-                    {(person.name || "?").slice(0, 1).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold truncate flex items-center gap-1.5">
-                    <span className="truncate">{person.name}</span>
-                    {person.isGuest ? <GuestBadge /> : null}
-                  </p>
-                  <p className="text-xs text-amber-100/80 truncate">{details || (person.isGuest ? "Guest" : "Employee")}</p>
-                </div>
-                <div className="flex items-center gap-2 ml-auto">
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={async () => {
-                      if (!joinData) return;
-                      await denyParticipant(joinData.meeting.id, person.id);
-                    }}
-                  >
-                    Deny
-                  </Button>
-                  <Button
-                    size="sm"
-                    className="bg-amber-400 text-slate-900 hover:bg-amber-300 font-extrabold px-5"
-                    onClick={async () => {
-                      if (!joinData) return;
-                      await admitParticipant(joinData.meeting.id, person.id);
-                    }}
-                  >
-                    Admit
-                  </Button>
-                </div>
-              </div>
-            );
-          })}
+        <div className="max-h-24 overflow-y-auto border-b border-amber-400/80 bg-[#2A1C0C] px-2.5 py-1.5 space-y-1">
+          {waitingFor.map((person, i) => (
+            <div key={person.id} className="flex h-9 items-center gap-2 text-sm">
+              <Avatar className="size-7 shrink-0">
+                {person.photoUrl ? <AvatarImage src={person.photoUrl} alt="" /> : null}
+                <AvatarFallback className="bg-amber-400 text-slate-900 text-[11px] font-bold">
+                  {(person.name || "?").slice(0, 1).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <p className="min-w-0 flex-1 truncate text-[13px]">
+                <span className="font-extrabold text-white">{person.name}</span>
+                <span className="font-medium text-amber-100/80">
+                  {waitingFor.length === 1 ? " wants to join" : " waiting"}
+                </span>
+                {person.isGuest ? <span className="text-amber-100/80"> · Guest</span> : null}
+              </p>
+              {i === 0 && waitingFor.length > 1 ? (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 px-2 text-xs font-extrabold text-amber-300 hover:text-amber-200"
+                  onClick={async () => {
+                    if (!joinData) return;
+                    for (const p of waitingFor) {
+                      await admitParticipant(joinData.meeting.id, p.id);
+                    }
+                  }}
+                >
+                  Admit all
+                </Button>
+              ) : null}
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-8 px-2 text-xs font-bold text-red-400 hover:text-red-300"
+                onClick={async () => {
+                  if (!joinData) return;
+                  await denyParticipant(joinData.meeting.id, person.id);
+                }}
+              >
+                Deny
+              </Button>
+              <Button
+                size="sm"
+                className="h-8 bg-amber-400 px-3 text-xs font-extrabold text-slate-900 hover:bg-amber-300"
+                onClick={async () => {
+                  if (!joinData) return;
+                  await admitParticipant(joinData.meeting.id, person.id);
+                }}
+              >
+                Admit
+              </Button>
+            </div>
+          ))}
         </div>
       )}
 
@@ -1244,18 +1264,34 @@ export function MeetRoom({ code }: { code: string }) {
               </div>
             </div>
           ) : (
-            <div className={cn("flex-1 min-h-0 grid gap-3 auto-rows-fr", gridCols)}>
+            <div
+              className={cn(
+                "flex-1 min-h-0 p-4",
+                participants.length <= 1
+                  ? "grid place-items-center"
+                  : cn("grid gap-3 auto-rows-fr content-center", gridCols),
+              )}
+            >
               {participants.map((p) => {
                 const person = rosterPerson(p);
                 return (
-                  <PersonTile
+                  <div
                     key={p.identity}
-                    participant={p}
-                    photoUrl={photos.get(p.identity) || photos.get(p.name || "") || null}
-                    handRaised={Boolean(hands[p.identity])}
-                    canRemove={isHost && !p.isLocal && Boolean(person?.id)}
-                    onRemove={person?.id ? () => void removePeer(person.id) : undefined}
-                  />
+                    className={cn(
+                      "min-h-0",
+                      participants.length <= 1
+                        ? "h-full max-h-full w-auto max-w-full aspect-video"
+                        : "h-full w-full",
+                    )}
+                  >
+                    <PersonTile
+                      participant={p}
+                      photoUrl={photos.get(p.identity) || photos.get(p.name || "") || null}
+                      handRaised={Boolean(hands[p.identity])}
+                      canRemove={isHost && !p.isLocal && Boolean(person?.id)}
+                      onRemove={person?.id ? () => void removePeer(person.id) : undefined}
+                    />
+                  </div>
                 );
               })}
             </div>

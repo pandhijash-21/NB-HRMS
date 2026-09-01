@@ -89,6 +89,12 @@ import '../../features/collaboration/presentation/screens/meet_invite_people_scr
 import '../../features/collaboration/presentation/screens/meet_room_screen.dart';
 import '../../features/collaboration/presentation/meet_helpers.dart';
 import '../../features/collaboration/presentation/screens/meet_recording_screen.dart';
+import '../../features/crm/presentation/screens/crm_dashboard_screen.dart';
+import '../../features/crm/presentation/screens/crm_pre_sales_screen.dart';
+import '../../features/crm/presentation/screens/crm_headers_screen.dart';
+import '../../features/crm/presentation/screens/crm_post_sales_screen.dart';
+import '../../features/crm/presentation/screens/crm_settings_screen.dart';
+import '../../features/crm/presentation/screens/crm_bin_screen.dart';
 import '../widgets/responsive_shell.dart';
 
 /// Listenable bridge so GoRouter refreshes when [AuthState] changes.
@@ -221,6 +227,46 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/home',
             builder: (context, state) => const HomeScreen(),
+          ),
+          GoRoute(
+            path: '/crm',
+            redirect: (context, state) => '/crm/dashboard',
+          ),
+          GoRoute(
+            path: '/crm/dashboard',
+            builder: (context, state) => const CrmDashboardScreen(),
+          ),
+          GoRoute(
+            path: '/crm/pre-sales',
+            builder: (context, state) => const CrmPreSalesScreen(),
+          ),
+          GoRoute(
+            path: '/crm/pre-sales/headers',
+            builder: (context, state) => const CrmHeadersScreen(),
+          ),
+          GoRoute(
+            path: '/crm/headers',
+            redirect: (context, state) => '/crm/pre-sales/headers',
+          ),
+          GoRoute(
+            path: '/crm/presales',
+            redirect: (context, state) => '/crm/pre-sales',
+          ),
+          GoRoute(
+            path: '/crm/post-sales',
+            builder: (context, state) => const CrmPostSalesScreen(),
+          ),
+          GoRoute(
+            path: '/crm/postsales',
+            redirect: (context, state) => '/crm/post-sales',
+          ),
+          GoRoute(
+            path: '/crm/bin',
+            builder: (context, state) => const CrmBinScreen(),
+          ),
+          GoRoute(
+            path: '/crm/settings',
+            builder: (context, state) => const CrmSettingsScreen(),
           ),
           GoRoute(
             path: '/org-tree',

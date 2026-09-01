@@ -3,10 +3,11 @@ class AppConfig {
   AppConfig._();
 
   /// Mirror of Next.js `NEXT_PUBLIC_API_URL` (includes `/api` suffix).
-  /// Local default talks to `npm run dev` on this machine.
+  /// Production Hostinger API. Override locally with
+  /// `--dart-define=API_BASE_URL=http://127.0.0.1:4000/api`
   static const String apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://127.0.0.1:4000/api',
+    defaultValue: 'https://crm.nbdeveloper.co.in/api',
   );
 
   /// Shared with backend `TRANSPORT_SECRET` for double AES-GCM JSON envelopes.

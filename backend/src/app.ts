@@ -32,6 +32,7 @@ import { recruitmentRouter } from './modules/recruitment';
 import { repositoryRouter } from './modules/repository';
 import { organizationRouter } from './modules/organization';
 import { orgTreeRouter } from './modules/org-tree';
+import { crmRouter } from './modules/crm/crm.routes';
 
 configureCloudinary();
 
@@ -139,6 +140,7 @@ app.use('/api/work-orders', workOrderRouter);
 app.use('/api/erp/activities', activityRouter);
 app.use('/api/erp/contractors', contractorRouter);
 app.use('/api/tracking', trackingRouter);
+app.use('/api/crm', crmRouter);
 app.use('/api/tasks', tasksRouter);
 app.use('/api/events', sseEventsRouter);
 app.use('/api/chat', chatRouter);

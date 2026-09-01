@@ -236,6 +236,10 @@ model Employee {
   ownedWorkOrders     ErpWorkOrder[] @relation("WorkOrderOwner")
   workOrdersToApprove ErpWorkOrder[] @relation("WorkOrderApprover")
 
+  crmAssignedLeads    CrmLead[]     @relation("CrmAssignedSales")
+  crmTelecallerLeads  CrmLead[]     @relation("CrmTelecaller")
+  crmFollowUps        CrmFollowUp[]
+
   @@map("employees")
 }
 
@@ -2419,4 +2423,162 @@ model MeetingChatMessage {
 
   @@index([meetingId, createdAt])
   @@map("meeting_chat_messages")
+}
+
+// =============================================================================
+// CRM — PRE-SALES
+// =============================================================================
+
+enum CrmLeadStatus {
+  NOT_STARTED
+  FOLLOW_UP
+  INTERESTED
+  NOT_INTERESTED
+}
+
+model CrmProject {
+  id          String    @id @default(uuid())
+  name        String
+  code        String    @unique
+  description String?
+  location    String?
+  startDate   DateTime? @map("start_date")
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  campaigns CrmCampaign[]
+
+  @@map("crm_projects")
+}
+
+model CrmCampaign {
+  id           String    @id @default(uuid())
+  projectId    String?   @map("project_id")
+  name         String
+  code         String    @unique
+  adId         String?   @map("ad_id")
+  webhookToken String?   @unique @map("webhook_token")
+  description  String?
+  startDate    DateTime? @map("start_date")
+  module       String    @default("PRE_SALES") @map("module")
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  project CrmProject?       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  columns CrmColumnConfig[]
+  leads   CrmLead[]
+
+  @@map("crm_campaigns")
+}
+
+model CrmColumnConfig {
+  id               String   @id @default(uuid())
+  module           String   @default("PRE_SALES") @map("module")
+  campaignId       String?  @map("campaign_id")
+  columnKey        String   @map("column_key")
+  label            String
+  dataType         String   @default("TEXT") @map("data_type")
+  options          String[] @default([])
+  isRequired       Boolean  @default(false) @map("is_required")
+  isSystem         Boolean  @default(false) @map("is_system")
+  isVisibleInTable Boolean  @default(true) @map("is_visible_in_table")
+  isMerged         Boolean  @default(false) @map("is_merged")
+  mergedIntoKey    String?  @map("merged_into_key")
+  displayOrder     Int      @default(0) @map("display_order")
+  isActive         Boolean  @default(true) @map("is_active")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  campaign CrmCampaign? @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([module, campaignId, columnKey])
+  @@map("crm_column_configs")
+}
+
+model CrmLead {
+  id              String        @id @default(uuid())
+  campaignId      String?       @map("campaign_id")
+  phone           String
+  name            String?
+  status          CrmLeadStatus @default(NOT_STARTED)
+  customFields    Json          @default("{}") @map("custom_fields")
+  assignedToId    Int?          @map("assigned_to_id")
+  telecallerId    Int?          @map("telecaller_id")
+  createdById     String?       @map("created_by_id")
+  lastCallAt      DateTime?     @map("last_call_at")
+  notInterestedAt DateTime?     @map("not_interested_at")
+  isDeleted       Boolean       @default(false) @map("is_deleted")
+  deletedAt       DateTime?     @map("deleted_at")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  campaign   CrmCampaign?  @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  assignedTo Employee?     @relation("CrmAssignedSales", fields: [assignedToId], references: [id], onDelete: SetNull)
+  telecaller Employee?     @relation("CrmTelecaller", fields: [telecallerId], references: [id], onDelete: SetNull)
+  followUps  CrmFollowUp[]
+  callLogs   CrmCallLog[]
+
+  @@index([campaignId])
+  @@index([status])
+  @@index([phone])
+  @@index([isDeleted])
+  @@index([assignedToId])
+  @@index([telecallerId])
+  @@map("crm_leads")
+}
+
+model CrmFollowUp {
+  id            String   @id @default(uuid())
+  leadId        String   @map("lead_id")
+  scheduledDate DateTime @map("scheduled_date")
+  scheduledTime String   @map("scheduled_time")
+  remarks       String?  @db.Text
+  status        String   @default("PENDING")
+  createdById   String?  @map("created_by_id")
+  assignedToId  Int?     @map("assigned_to_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  lead       CrmLead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  assignedTo Employee? @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  @@index([leadId])
+  @@index([scheduledDate])
+  @@index([status])
+  @@map("crm_follow_ups")
+}
+
+model CrmCallLog {
+  id             String    @id @default(uuid())
+  leadId         String?   @map("lead_id")
+  customerNumber String    @map("customer_number")
+  agentNumber    String?   @map("agent_number")
+  did            String?
+  callStatus     String?   @map("call_status")
+  duration       Int?      @default(0)
+  recordingUrl   String?   @map("recording_url")
+  callTime       DateTime? @map("call_time")
+  callId         String?   @map("call_id")
+  rawPayload     Json?     @map("raw_payload")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  lead CrmLead? @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([customerNumber])
+  @@index([leadId])
+  @@index([callStatus])
+  @@map("crm_call_logs")
+}
+
+model CrmSetting {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       String   @db.Text
+  description String?
+  updatedBy   String?  @map("updated_by")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("crm_settings")
 }

@@ -2,3 +2,6 @@ fastapi==0.115.12
 uvicorn[standard]==0.34.2
 python-multipart==0.0.20
 faster-whisper==1.1.1
+# faster-whisper downloads weights via huggingface_hub, which imports requests.
+huggingface-hub>=0.13,<1.0
+requests>=2.31.0,<3

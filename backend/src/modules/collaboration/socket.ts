@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 import { createClient } from 'redis';
 import { env } from '../../config/env';
 import { REDIS_URL } from '../../config/redis';
+import { isAllowedCorsOrigin } from '../../utils/corsOrigins';
 import { chatService } from './chat.service';
 import { meetService, type GuestActor, type UserActor } from './meet.service';
 import { getProfile } from './profiles';
@@ -272,7 +273,16 @@ async function authenticateSocket(token?: string): Promise<SocketUser | null> {
 
 export async function setupCollaborationSocket(httpServer: http.Server) {
   const io = new Server(httpServer, {
-    cors: { origin: true, credentials: true },
+    cors: {
+      origin: (origin, callback) => {
+        if (isAllowedCorsOrigin(origin)) {
+          callback(null, true);
+          return;
+        }
+        callback(new Error('CORS not allowed'), false);
+      },
+      credentials: true,
+    },
     path: '/socket.io',
   });
 

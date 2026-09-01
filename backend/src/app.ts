@@ -26,6 +26,8 @@ import { connectRedis } from './config/redis';
 import { fail, ok } from './utils/response';
 import { transportEncryptionMiddleware } from './middleware/transportEncryption';
 import { vpnBlockMiddleware } from './middleware/vpnBlock';
+import { collabUploadAuth } from './middleware/collabUploadAuth';
+import { isAllowedCorsOrigin } from './utils/corsOrigins';
 import { lettersRouter } from './modules/letters';
 import { reimbursementsRouter } from './modules/reimbursements';
 import { recruitmentRouter } from './modules/recruitment';
@@ -37,25 +39,6 @@ import { crmRouter } from './modules/crm/crm.routes';
 configureCloudinary();
 
 export const app = express();
-
-const configuredCorsOrigins = env.CORS_ALLOWED_ORIGINS?.split(',')
-  .map((o) => o.trim())
-  .filter(Boolean) ?? [
-  'http://localhost:3000',
-  'http://localhost:9695',
-];
-
-/** Allow configured origins, localhost (dev), Vercel, and Netlify hosts. */
-function isAllowedCorsOrigin(origin: string | undefined): boolean {
-  if (!origin) return true;
-  if (configuredCorsOrigins.includes(origin)) return true;
-  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return true;
-  if (/^https:\/\/([a-z0-9-]+\.)*vercel\.app$/i.test(origin)) return true;
-  // Netlify prod + deploy-preview URLs (e.g. abc--site.netlify.app)
-  if (/^https:\/\/([a-z0-9-]+\.)*netlify\.app$/i.test(origin)) return true;
-  if (/^https:\/\/crm\.nbdeveloper\.co\.in$/i.test(origin)) return true;
-  return false;
-}
 
 app.set('trust proxy', 1);
 
@@ -145,7 +128,11 @@ app.use('/api/tasks', tasksRouter);
 app.use('/api/events', sseEventsRouter);
 app.use('/api/chat', chatRouter);
 app.use('/api/meetings', meetingsRouter);
-app.use('/uploads/collab', express.static(path.join(process.cwd(), 'uploads', 'collab')));
+app.use(
+  '/uploads/collab',
+  collabUploadAuth,
+  express.static(path.join(process.cwd(), 'uploads', 'collab')),
+);
 
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);

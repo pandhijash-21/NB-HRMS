@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import jwt from 'jsonwebtoken';
 import { requireAuth } from '../../middleware/auth';
+import { requirePermission, type PermissionAction } from '../../middleware/rbac';
 import { env } from '../../config/env';
 import { ok, fail } from '../../utils/response';
 import { meetService, type GuestActor, type UserActor } from './meet.service';
@@ -99,7 +100,52 @@ meetingsRouter.post('/guest-enter', async (req: Request, res: Response) => {
   }
 });
 
+// In-meeting chat — guests use meet JWT (not user session); must stay before requireAuth.
+meetingsRouter.get('/:id/chat', async (req: Request, res: Response) => {
+  try {
+    const actor = await actorFromReq(req);
+    if (!actor) return res.status(401).json(fail('Unauthenticated'));
+    const data = await meetService.listChat(p(req.params.id), actor);
+    return res.json(ok(data));
+  } catch (e: unknown) {
+    return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+  }
+});
+
+meetingsRouter.post('/:id/chat', async (req: Request, res: Response) => {
+  try {
+    const actor = await actorFromReq(req);
+    if (!actor) return res.status(401).json(fail('Unauthenticated'));
+    const body = z
+      .object({
+        content: z.string().min(1),
+        scope: z.enum(['ROOM', 'DIRECT']).optional(),
+        recipientUserId: z.string().optional(),
+        recipientParticipantId: z.string().optional(),
+      })
+      .parse(req.body);
+    const data = await meetService.postChat({
+      meetingId: p(req.params.id),
+      actor,
+      content: body.content,
+      scope: body.scope,
+      recipientUserId: body.recipientUserId,
+      recipientParticipantId: body.recipientParticipantId,
+    });
+    emitMeetingChat(data);
+    return res.status(201).json(ok(data));
+  } catch (e: unknown) {
+    return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+  }
+});
+
 meetingsRouter.use(requireAuth);
+meetingsRouter.use((req, res, next) => {
+  const action: PermissionAction = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)
+    ? 'WRITE'
+    : 'READ';
+  return requirePermission('MEETINGS', action)(req, res, next);
+});
 
 meetingsRouter.get('/', async (req: Request, res: Response) => {
   try {
@@ -388,43 +434,5 @@ meetingsRouter.delete('/:id/recording', async (req: Request, res: Response) => {
     const message = e instanceof Error ? e.message : 'Failed to delete recording';
     const status = message.includes('Only an admin') ? 403 : 400;
     return res.status(status).json(fail(message));
-  }
-});
-
-meetingsRouter.get('/:id/chat', async (req: Request, res: Response) => {
-  try {
-    const actor = await actorFromReq(req);
-    if (!actor) return res.status(401).json(fail('Unauthenticated'));
-    const data = await meetService.listChat(p(req.params.id), actor);
-    return res.json(ok(data));
-  } catch (e: unknown) {
-    return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
-  }
-});
-
-meetingsRouter.post('/:id/chat', async (req: Request, res: Response) => {
-  try {
-    const actor = await actorFromReq(req);
-    if (!actor) return res.status(401).json(fail('Unauthenticated'));
-    const body = z
-      .object({
-        content: z.string().min(1),
-        scope: z.enum(['ROOM', 'DIRECT']).optional(),
-        recipientUserId: z.string().optional(),
-        recipientParticipantId: z.string().optional(),
-      })
-      .parse(req.body);
-    const data = await meetService.postChat({
-      meetingId: p(req.params.id),
-      actor,
-      content: body.content,
-      scope: body.scope,
-      recipientUserId: body.recipientUserId,
-      recipientParticipantId: body.recipientParticipantId,
-    });
-    emitMeetingChat(data);
-    return res.status(201).json(ok(data));
-  } catch (e: unknown) {
-    return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
   }
 });

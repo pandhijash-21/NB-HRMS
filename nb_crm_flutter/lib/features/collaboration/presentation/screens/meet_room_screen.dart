@@ -325,7 +325,10 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
       setState(() => _upsertChat(row, toast: true));
     });
     try {
-      final history = await ref.read(meetRepositoryProvider).listChat(meetingId);
+      final history = await ref.read(meetRepositoryProvider).listChat(
+            meetingId,
+            bearer: guestToken,
+          );
       if (mounted && history.isNotEmpty) {
         setState(() {
           for (final row in history) {

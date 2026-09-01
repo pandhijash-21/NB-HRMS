@@ -1,6 +1,10 @@
 # Hostinger VPS production stack (Traefik already owns :80/:443).
 # docker compose -f docker-compose.prod.yml --env-file backend/.env.production up -d --build
 # Optional OSRM: docker compose -f docker-compose.prod.yml --profile osrm up -d
+#
+# Traefik middlewares (shared labels):
+#   nbcrm-secure-headers — HSTS, nosniff, frame deny, referrer policy
+#   nbcrm-livekit-strip — strip /rtc prefix before LiveKit (public URL wss://host/rtc)
 services:
   postgres:
     image: postgres:15
@@ -55,7 +59,7 @@ services:
       PRISMA_CLIENT_ENGINE_TYPE: binary
       PRISMA_CLI_QUERY_ENGINE_TYPE: binary
       LIVEKIT_URL: http://livekit:7880
-      LIVEKIT_PUBLIC_URL: wss://crm.nbdeveloper.co.in
+      LIVEKIT_PUBLIC_URL: wss://crm.nbdeveloper.co.in/rtc
       MINIO_ENDPOINT: minio
       MINIO_PORT: "9000"
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
@@ -63,8 +67,9 @@ services:
       MINIO_EGRESS_ENDPOINT: http://minio:9000
       FRONTEND_URL: https://crm.nbdeveloper.co.in
       CORS_ALLOWED_ORIGINS: https://crm.nbdeveloper.co.in
+    # Localhost only — public traffic must go through Traefik (VPN gate on web, API middleware).
     ports:
-      - "4000:4000"
+      - "127.0.0.1:4000:4000"
     labels:
       - traefik.enable=true
       - traefik.http.routers.nbcrm-api.rule=Host(`crm.nbdeveloper.co.in`) && (PathPrefix(`/api`) || PathPrefix(`/health`) || PathPrefix(`/actions`) || PathPrefix(`/events`) || PathPrefix(`/socket.io`) || PathPrefix(`/uploads`))
@@ -72,9 +77,17 @@ services:
       - traefik.http.routers.nbcrm-api.tls.certresolver=letsencrypt
       - traefik.http.routers.nbcrm-api.tls=true
       - traefik.http.routers.nbcrm-api.priority=20
+      - traefik.http.routers.nbcrm-api.middlewares=nbcrm-secure-headers@docker
       - traefik.http.routers.nbcrm-api.service=nbcrm-api
       - traefik.http.services.nbcrm-api.loadbalancer.server.port=4000
       - traefik.http.services.nbcrm-api.loadbalancer.passHostHeader=true
+      - traefik.http.middlewares.nbcrm-secure-headers.headers.stsSeconds=31536000
+      - traefik.http.middlewares.nbcrm-secure-headers.headers.stsIncludeSubdomains=true
+      - traefik.http.middlewares.nbcrm-secure-headers.headers.forceSTSHeader=true
+      - traefik.http.middlewares.nbcrm-secure-headers.headers.contentTypeNosniff=true
+      - traefik.http.middlewares.nbcrm-secure-headers.headers.frameDeny=true
+      - traefik.http.middlewares.nbcrm-secure-headers.headers.referrerPolicy=strict-origin-when-cross-origin
+      - traefik.http.middlewares.nbcrm-secure-headers.headers.permissionsPolicy=geolocation=(), microphone=(self), camera=(self)
 
   frontend:
     image: nginx:alpine
@@ -90,6 +103,7 @@ services:
       - traefik.http.routers.nbcrm-web.tls.certresolver=letsencrypt
       - traefik.http.routers.nbcrm-web.tls=true
       - traefik.http.routers.nbcrm-web.priority=10
+      - traefik.http.routers.nbcrm-web.middlewares=nbcrm-secure-headers@docker
       - traefik.http.routers.nbcrm-web.service=nbcrm-web
       - traefik.http.services.nbcrm-web.loadbalancer.server.port=80
 
@@ -125,9 +139,9 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin_password}
     volumes:
       - miniodata:/data
-    ports:
-      - "9000:9000"
-      - "9001:9001"
+    expose:
+      - "9000"
+      - "9001"
 
   livekit:
     image: livekit/livekit-server:v1.8.4
@@ -147,8 +161,10 @@ services:
       - traefik.http.routers.nbcrm-livekit.tls.certresolver=letsencrypt
       - traefik.http.routers.nbcrm-livekit.tls=true
       - traefik.http.routers.nbcrm-livekit.priority=30
+      - traefik.http.routers.nbcrm-livekit.middlewares=nbcrm-livekit-strip@docker,nbcrm-secure-headers@docker
       - traefik.http.routers.nbcrm-livekit.service=nbcrm-livekit
       - traefik.http.services.nbcrm-livekit.loadbalancer.server.port=7880
+      - traefik.http.middlewares.nbcrm-livekit-strip.stripprefix.prefixes=/rtc
 
   livekit-egress:
     image: livekit/egress:v1.8.4
@@ -157,10 +173,12 @@ services:
       - livekit
       - redis
       - minio
+    env_file:
+      - ./backend/.env.production
     environment:
       EGRESS_CONFIG_BODY: |
-        api_key: devkey
-        api_secret: secret
+        api_key: ${LIVEKIT_API_KEY:-devkey}
+        api_secret: ${LIVEKIT_API_SECRET:-secret}
         ws_url: ws://livekit:7880
         redis:
           address: redis:6379

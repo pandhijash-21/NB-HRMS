@@ -13,7 +13,7 @@ rtc:
 redis:
   address: redis:6379
 keys:
-  # Matches LIVEKIT_API_KEY/SECRET defaults and egress config. Rotate in production.
+  # Must match LIVEKIT_API_KEY / LIVEKIT_API_SECRET in backend/.env.production
   devkey: secret
 logging:
   level: info

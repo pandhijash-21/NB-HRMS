@@ -2,6 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import { crmController } from './crm.controller';
 import { requireAuth } from '../../middleware/auth';
+import { requirePermission, type PermissionAction } from '../../middleware/rbac';
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -19,8 +20,14 @@ crmRouter.post('/campaigns/:token/webhook', crmController.handleCampaignWebhook)
 crmRouter.get('/webhook/:token', crmController.handleCampaignWebhookVerification);
 crmRouter.post('/webhook/:token', crmController.handleCampaignWebhook);
 
-// Apply auth to all protected CRM routes
+// Apply auth + RBAC to all protected CRM routes
 crmRouter.use(requireAuth);
+crmRouter.use((req, res, next) => {
+  const action: PermissionAction = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)
+    ? 'WRITE'
+    : 'READ';
+  return requirePermission('CRM', action)(req, res, next);
+});
 
 // Projects
 crmRouter.get('/projects', crmController.getProjects);

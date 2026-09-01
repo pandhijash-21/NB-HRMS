@@ -183,9 +183,10 @@ class MeetRepository {
     );
   }
 
-  Future<List<Map<String, dynamic>>> listChat(String meetingId) {
+  Future<List<Map<String, dynamic>>> listChat(String meetingId, {String? bearer}) {
     return _dio.getEnvelope(
       'meetings/$meetingId/chat',
+      bearer: bearer,
       parse: (raw) => (raw as List? ?? [])
           .whereType<Map>()
           .map((e) => Map<String, dynamic>.from(e))

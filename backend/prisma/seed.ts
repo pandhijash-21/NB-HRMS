@@ -30,6 +30,7 @@ const MODULES = [
   { key: 'WORK_ORDERS',   name: 'ERP Work Orders' },
   { key: 'CHAT',          name: 'Chat & Collaboration' },
   { key: 'MEETINGS',      name: 'Meetings' },
+  { key: 'CRM',           name: 'CRM Pre-Sales' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -66,6 +67,7 @@ const PERMISSION_MATRIX: PermissionMatrix = {
     WORK_ORDERS:   RO,
     CHAT:          RW,
     MEETINGS:      RW,
+    CRM:           RW,
   },
 };
 

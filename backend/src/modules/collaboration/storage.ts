@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto';
 import { Client as MinioClient } from 'minio';
 import { env } from '../../config/env';
 import { uploadService } from '../personal-education/upload.service';
+import { allowedCorsOriginList } from '../../utils/corsOrigins';
 
 export type StoredFile = {
   bucketKey: string;
@@ -394,7 +395,7 @@ export const collabStorage = {
       await client.setBucketCors(env.MINIO_BUCKET, {
         corsRules: [
           {
-            allowedOrigin: ['*'],
+            allowedOrigin: allowedCorsOriginList(),
             allowedMethod: ['GET', 'HEAD'],
             allowedHeader: ['*'],
             exposeHeader: ['ETag', 'Content-Type', 'Content-Length'],

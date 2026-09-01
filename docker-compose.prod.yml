@@ -87,7 +87,7 @@ services:
       - traefik.http.middlewares.nbcrm-secure-headers.headers.contentTypeNosniff=true
       - traefik.http.middlewares.nbcrm-secure-headers.headers.frameDeny=true
       - traefik.http.middlewares.nbcrm-secure-headers.headers.referrerPolicy=strict-origin-when-cross-origin
-      - traefik.http.middlewares.nbcrm-secure-headers.headers.permissionsPolicy=geolocation=(), microphone=(self), camera=(self)
+      - traefik.http.middlewares.nbcrm-secure-headers.headers.permissionsPolicy=geolocation=(self), microphone=(self), camera=(self)
 
   frontend:
     image: nginx:alpine

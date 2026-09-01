@@ -16,7 +16,7 @@ class WorkOrdersListScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(authNotifierProvider);
-    final canWrite = Permissions.hasPermission(auth.permissions, 'WORK_ORDERS', 'WRITE');
+    final canWrite = Permissions.canWriteWorkOrders(auth.permissions, auth.user?.role);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final async = ref.watch(workOrdersListProvider);
     final dateFmt = _formatDate;

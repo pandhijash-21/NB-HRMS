@@ -51,8 +51,8 @@ class _WorkOrderDetailScreenState extends ConsumerState<WorkOrderDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authNotifierProvider);
-    final canWrite = Permissions.hasPermission(auth.permissions, 'WORK_ORDERS', 'WRITE');
-    final canApprove = Permissions.hasPermission(auth.permissions, 'WORK_ORDERS', 'APPROVE');
+    final canWrite = Permissions.canWriteWorkOrders(auth.permissions, auth.user?.role);
+    final canApprove = Permissions.canApproveWorkOrders(auth.permissions, auth.user?.role);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final async = ref.watch(workOrderDetailProvider(widget.id));
     final dateFmt = _formatDate;

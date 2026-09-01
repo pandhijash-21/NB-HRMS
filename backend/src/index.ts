@@ -47,6 +47,13 @@ async function start() {
     console.warn('Collaboration socket failed to start:', err);
   }
 
+  try {
+    const { ensureErpModulePermissions } = require('./bootstrap/erpModules') as typeof import('./bootstrap/erpModules');
+    await ensureErpModulePermissions();
+  } catch (err) {
+    console.warn('ERP module permission bootstrap skipped:', err);
+  }
+
   if (redisReady) {
     try {
       startLeaveCreditWorker();

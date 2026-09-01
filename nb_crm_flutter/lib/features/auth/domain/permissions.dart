@@ -80,6 +80,21 @@ class Permissions {
     return r == 'ADMIN' || r == 'SUPERADMIN' || r == 'SYSTEMADMIN';
   }
 
+  static bool canWriteProjects(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    return hasPermission(perms, 'PROJECTS', 'WRITE');
+  }
+
+  static bool canWriteWorkOrders(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    return hasPermission(perms, 'WORK_ORDERS', 'WRITE');
+  }
+
+  static bool canApproveWorkOrders(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    return hasPermission(perms, 'WORK_ORDERS', 'APPROVE');
+  }
+
   static bool canManageUsers(PermissionMap? perms, [String? role]) {
     if (role != null && role.toUpperCase() == 'ADMIN') return true;
     return hasPermission(perms, 'USER_MGMT', 'READ');

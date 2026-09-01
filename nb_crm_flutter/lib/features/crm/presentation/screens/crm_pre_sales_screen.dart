@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:web/web.dart' as web;
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/utils/open_url.dart';
 import '../../../auth/presentation/auth_providers.dart';
 import '../../domain/crm_models.dart';
 import '../crm_providers.dart';
@@ -1514,9 +1514,7 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
           if (log.recordingUrl != null && log.recordingUrl!.isNotEmpty)
             ElevatedButton.icon(
               onPressed: () {
-                try {
-                  web.window.open(log.recordingUrl!, '_blank');
-                } catch (_) {}
+                openExternalUrl(log.recordingUrl!);
               },
               icon: const Icon(Icons.open_in_new_rounded, size: 16),
               label: const Text('Open / Listen Recording'),

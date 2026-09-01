@@ -37,7 +37,7 @@ dependencies:
   battery_plus: ^7.1.1
   connectivity_plus: ^7.3.1
   socket_io_client: ^3.1.2
-  livekit_client: ^2.5.0
+  livekit_client: ^2.11.0
   # 1.10+ requires Dart ^3.10 / Flutter >=3.38
   model_viewer_plus: ">=1.9.3 <1.10.0"
   # 6.8+ requires Flutter >=3.44; 6.7.x supports Flutter 3.35
@@ -61,5 +61,7 @@ flutter:
 
 dependency_overrides:
   latlong2: ^0.10.1
+  # livekit_client >=2.6.5 needs meta ^1.17; flutter_test pins 1.16 until SDK catches up.
+  meta: ^1.17.0
 
 

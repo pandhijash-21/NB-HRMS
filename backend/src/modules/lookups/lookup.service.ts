@@ -42,6 +42,8 @@ export const LOOKUP_CATEGORIES = [
   { key: 'PROJECT_UNIT_STATUS', label: 'Unit Status', description: 'Available, Booked, Sold, …' },
   { key: 'PROJECT_UNIT_FACING', label: 'Unit Facing', description: 'North, South, East, West, …' },
   { key: 'PROJECT_UNIT_CATEGORY', label: 'Unit Category', description: 'Standard, Corner, Premium, …' },
+  { key: 'WO_MEASUREMENT_UNIT', label: 'Work Order Unit', description: 'PCS, Sq Ft, Rmt, … for work order quantities' },
+  { key: 'WO_CATEGORY', label: 'Work Order Category', description: 'Work order category' },
 ] as const;
 
 export type LookupCategoryKey = (typeof LOOKUP_CATEGORIES)[number]['key'];

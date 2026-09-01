@@ -76,6 +76,11 @@ import '../../features/erp/presentation/screens/project_structure_screen.dart';
 import '../../features/erp/presentation/screens/tower_form_screen.dart';
 import '../../features/erp/presentation/screens/tower_units_screen.dart';
 import '../../features/erp/presentation/screens/unit_form_screen.dart';
+import '../../features/erp/presentation/screens/work_orders_list_screen.dart';
+import '../../features/erp/presentation/screens/work_order_detail_screen.dart';
+import '../../features/erp/presentation/screens/work_order_form_screen.dart';
+import '../../features/erp/presentation/screens/activities_config_screen.dart';
+import '../../features/erp/presentation/screens/contractors_config_screen.dart';
 import '../../features/collaboration/presentation/screens/chat_hub_screen.dart';
 import '../../features/collaboration/presentation/screens/meet_hub_screen.dart';
 import '../../features/collaboration/presentation/screens/meet_list_screen.dart';
@@ -84,6 +89,12 @@ import '../../features/collaboration/presentation/screens/meet_invite_people_scr
 import '../../features/collaboration/presentation/screens/meet_room_screen.dart';
 import '../../features/collaboration/presentation/meet_helpers.dart';
 import '../../features/collaboration/presentation/screens/meet_recording_screen.dart';
+import '../../features/crm/presentation/screens/crm_dashboard_screen.dart';
+import '../../features/crm/presentation/screens/crm_pre_sales_screen.dart';
+import '../../features/crm/presentation/screens/crm_headers_screen.dart';
+import '../../features/crm/presentation/screens/crm_post_sales_screen.dart';
+import '../../features/crm/presentation/screens/crm_settings_screen.dart';
+import '../../features/crm/presentation/screens/crm_bin_screen.dart';
 import '../widgets/responsive_shell.dart';
 
 /// Listenable bridge so GoRouter refreshes when [AuthState] changes.
@@ -218,6 +229,46 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const HomeScreen(),
           ),
           GoRoute(
+            path: '/crm',
+            redirect: (context, state) => '/crm/dashboard',
+          ),
+          GoRoute(
+            path: '/crm/dashboard',
+            builder: (context, state) => const CrmDashboardScreen(),
+          ),
+          GoRoute(
+            path: '/crm/pre-sales',
+            builder: (context, state) => const CrmPreSalesScreen(),
+          ),
+          GoRoute(
+            path: '/crm/pre-sales/headers',
+            builder: (context, state) => const CrmHeadersScreen(),
+          ),
+          GoRoute(
+            path: '/crm/headers',
+            redirect: (context, state) => '/crm/pre-sales/headers',
+          ),
+          GoRoute(
+            path: '/crm/presales',
+            redirect: (context, state) => '/crm/pre-sales',
+          ),
+          GoRoute(
+            path: '/crm/post-sales',
+            builder: (context, state) => const CrmPostSalesScreen(),
+          ),
+          GoRoute(
+            path: '/crm/postsales',
+            redirect: (context, state) => '/crm/post-sales',
+          ),
+          GoRoute(
+            path: '/crm/bin',
+            builder: (context, state) => const CrmBinScreen(),
+          ),
+          GoRoute(
+            path: '/crm/settings',
+            builder: (context, state) => const CrmSettingsScreen(),
+          ),
+          GoRoute(
             path: '/org-tree',
             builder: (context, state) => const EmployeeTreeScreen(),
           ),
@@ -298,6 +349,14 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const ErpConfigurationsScreen(),
           ),
           GoRoute(
+            path: '/erp/configurations/activities',
+            builder: (context, state) => const ActivitiesConfigScreen(),
+          ),
+          GoRoute(
+            path: '/erp/configurations/contractors',
+            builder: (context, state) => const ContractorsConfigScreen(),
+          ),
+          GoRoute(
             path: '/erp/configurations/lookups/:category',
             builder: (context, state) {
               final category = state.pathParameters['category'] ?? '';
@@ -305,6 +364,28 @@ final goRouterProvider = Provider<GoRouter>((ref) {
                 category: category,
                 fallbackLocation: '/erp/configurations',
               );
+            },
+          ),
+          GoRoute(
+            path: '/erp/work-orders',
+            builder: (context, state) => const WorkOrdersListScreen(),
+          ),
+          GoRoute(
+            path: '/erp/work-orders/new',
+            builder: (context, state) => const WorkOrderFormScreen(),
+          ),
+          GoRoute(
+            path: '/erp/work-orders/:id/edit',
+            builder: (context, state) {
+              final id = state.pathParameters['id'] ?? '';
+              return WorkOrderFormScreen(id: id);
+            },
+          ),
+          GoRoute(
+            path: '/erp/work-orders/:id',
+            builder: (context, state) {
+              final id = state.pathParameters['id'] ?? '';
+              return WorkOrderDetailScreen(id: id);
             },
           ),
           GoRoute(

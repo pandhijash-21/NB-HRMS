@@ -77,7 +77,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
           foregroundColor: itemFgColor,
           onTap: () {
             ref.read(appModuleProvider.notifier).setModule(AppModule.crm);
-            context.go('/chat');
+            context.go('/crm/dashboard');
           },
         ),
       ],
@@ -187,6 +187,13 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
           'Projects',
           section: 'ERP',
         ),
+        const _Destination(
+          '/erp/work-orders',
+          Icons.assignment_outlined,
+          Icons.assignment,
+          'Work Orders',
+          section: 'ERP',
+        ),
         if (canAccessAdmin)
           const _Destination(
             '/erp/configurations',
@@ -195,6 +202,50 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             'Configurations',
             section: 'ERP',
           ),
+      ] else if (module == AppModule.crm) ...[
+        const _Destination(
+          '/crm/dashboard',
+          Icons.dashboard_outlined,
+          Icons.dashboard,
+          'Dashboard',
+          section: 'CRM',
+        ),
+        const _Destination(
+          '/crm/pre-sales',
+          Icons.point_of_sale_outlined,
+          Icons.point_of_sale,
+          'Pre sales',
+          section: 'CRM',
+        ),
+        if (currentPath.startsWith('/crm/pre-sales'))
+          const _Destination(
+            '/crm/pre-sales/headers',
+            Icons.view_column_outlined,
+            Icons.view_column,
+            '  ↳ Headers',
+            section: 'CRM',
+          ),
+        const _Destination(
+          '/crm/post-sales',
+          Icons.support_agent_outlined,
+          Icons.support_agent,
+          'Post sales',
+          section: 'CRM',
+        ),
+        const _Destination(
+          '/crm/bin',
+          Icons.delete_outline,
+          Icons.delete,
+          'Bin',
+          section: 'CRM',
+        ),
+        const _Destination(
+          '/crm/settings',
+          Icons.settings_outlined,
+          Icons.settings,
+          'Settings',
+          section: 'CRM',
+        ),
       ],
       ...sharedCollab,
       if (module == AppModule.hrms) ...[
@@ -300,6 +351,14 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             currentPath.startsWith('/admin/leaves');
       }
       if (d.route == '/home') return currentPath == '/home';
+      if (d.route == '/crm/pre-sales/headers') {
+        return currentPath.startsWith('/crm/pre-sales/headers') ||
+            currentPath.startsWith('/crm/headers');
+      }
+      if (d.route == '/crm/pre-sales') {
+        return (currentPath == '/crm/pre-sales' || currentPath == '/crm/presales') &&
+            !currentPath.contains('/headers');
+      }
       return currentPath.startsWith(d.route);
     }
 
@@ -656,7 +715,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     required bool Function(_Destination) isSelected,
     required void Function(_Destination) onTap,
   }) {
-    const order = ['Main', 'Collaboration', 'HR', 'Organisation', 'Tracking'];
+    const order = ['Main', 'CRM', 'Collaboration', 'HR', 'Organisation', 'Tracking'];
     final grouped = <String, List<_Destination>>{};
     for (final d in destinations) {
       grouped.putIfAbsent(d.section, () => []).add(d);

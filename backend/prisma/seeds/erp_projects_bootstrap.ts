@@ -10,6 +10,12 @@ async function main() {
     create: { key: 'PROJECTS', name: 'ERP Projects' },
   });
 
+  await prisma.systemModule.upsert({
+    where: { key: 'WORK_ORDERS' },
+    update: { name: 'ERP Work Orders' },
+    create: { key: 'WORK_ORDERS', name: 'ERP Work Orders' },
+  });
+
   const admin = await prisma.role.findUnique({ where: { name: 'ADMIN' } });
   const emp = await prisma.role.findUnique({ where: { name: 'EMPLOYEE' } });
   const extra = await prisma.role.findMany({
@@ -25,33 +31,37 @@ async function main() {
   };
 
   for (const role of [admin, ...extra].filter(Boolean)) {
-    await prisma.rolePermission.upsert({
-      where: { roleId_moduleKey: { roleId: role!.id, moduleKey: 'PROJECTS' } },
-      update: full,
-      create: { roleId: role!.id, moduleKey: 'PROJECTS', ...full },
-    });
+    for (const moduleKey of ['PROJECTS', 'WORK_ORDERS']) {
+      await prisma.rolePermission.upsert({
+        where: { roleId_moduleKey: { roleId: role!.id, moduleKey } },
+        update: full,
+        create: { roleId: role!.id, moduleKey, ...full },
+      });
+    }
   }
 
   if (emp) {
-    await prisma.rolePermission.upsert({
-      where: { roleId_moduleKey: { roleId: emp.id, moduleKey: 'PROJECTS' } },
-      update: {
-        canRead: true,
-        canWrite: false,
-        canApprove: false,
-        canDelete: false,
-        canExport: false,
-      },
-      create: {
-        roleId: emp.id,
-        moduleKey: 'PROJECTS',
-        canRead: true,
-        canWrite: false,
-        canApprove: false,
-        canDelete: false,
-        canExport: false,
-      },
-    });
+    for (const moduleKey of ['PROJECTS', 'WORK_ORDERS']) {
+      await prisma.rolePermission.upsert({
+        where: { roleId_moduleKey: { roleId: emp.id, moduleKey } },
+        update: {
+          canRead: true,
+          canWrite: false,
+          canApprove: false,
+          canDelete: false,
+          canExport: false,
+        },
+        create: {
+          roleId: emp.id,
+          moduleKey,
+          canRead: true,
+          canWrite: false,
+          canApprove: false,
+          canDelete: false,
+          canExport: false,
+        },
+      });
+    }
   }
 
   await seedSystemLookups(prisma);

@@ -9,8 +9,17 @@ import {
 
 const SKIP_PATHS = new Set(['/', '/health', '/vpn-gate']);
 
+function isPublicCrmWebhook(path: string): boolean {
+  return (
+    path === '/api/crm/telephony/webhook' ||
+    /^\/api\/crm\/campaigns\/[^/]+\/webhook$/.test(path) ||
+    /^\/api\/crm\/webhook\/[^/]+$/.test(path)
+  );
+}
+
 export function transportEncryptionMiddleware(req: Request, res: Response, next: NextFunction) {
   if (SKIP_PATHS.has(req.path)) return next();
+  if (isPublicCrmWebhook(req.path)) return next();
   if (String(req.headers.accept ?? '').includes('text/event-stream')) return next();
 
   const isApiRoute = req.path.startsWith('/api/');

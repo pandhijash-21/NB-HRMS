@@ -17,7 +17,7 @@ class ProjectStructureScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(authNotifierProvider);
-    final canWrite = Permissions.hasPermission(auth.permissions, 'PROJECTS', 'WRITE');
+    final canWrite = Permissions.canWriteProjects(auth.permissions, auth.user?.role);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final projectAsync = ref.watch(projectDetailProvider(projectId));
     final towersAsync = ref.watch(projectTowersProvider(projectId));

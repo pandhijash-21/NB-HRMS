@@ -103,8 +103,24 @@ class AuthNotifier extends Notifier<AuthState> {
           },
         );
         final needs = me['needsEmailVerification'] == true;
-        if (needs != state.needsEmailVerification && !state.isFirstLogin) {
-          state = state.copyWith(needsEmailVerification: needs);
+        final permsRaw = me['permissions'];
+        Map<String, List<String>>? freshPermissions;
+        if (permsRaw is Map) {
+          freshPermissions = <String, List<String>>{};
+          permsRaw.forEach((key, value) {
+            if (value is List) {
+              freshPermissions![key.toString()] = value.map((e) => e.toString()).toList();
+            }
+          });
+        }
+        final permissionsChanged = freshPermissions != null &&
+            freshPermissions.toString() != state.permissions.toString();
+        if ((needs != state.needsEmailVerification && !state.isFirstLogin) ||
+            permissionsChanged) {
+          state = state.copyWith(
+            needsEmailVerification: needs,
+            permissions: freshPermissions ?? state.permissions,
+          );
           final repo = ref.read(authRepositoryProvider);
           final token = await ref.read(secureStorageProvider).readToken();
           if (token != null && state.user != null) {

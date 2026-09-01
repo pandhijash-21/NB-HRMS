@@ -45,6 +45,134 @@ class _WorkOrderFormScreenState extends ConsumerState<WorkOrderFormScreen> {
     super.dispose();
   }
 
+  InputDecoration _dec(String label, {bool required = false, String? hint, Widget? suffix}) {
+    return InputDecoration(
+      labelText: required ? '$label *' : label,
+      hintText: hint,
+      suffixIcon: suffix,
+      filled: true,
+      fillColor: Theme.of(context).brightness == Brightness.dark
+          ? const Color(0xFF252220)
+          : const Color(0xFFF8FAFC),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: BorderSide(
+          color: Theme.of(context).brightness == Brightness.dark
+              ? const Color(0xFF3D3834)
+              : const Color(0xFFE2E8F0),
+        ),
+      ),
+      isDense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+    );
+  }
+
+  Widget _fieldGrid(List<Widget> fields) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxW = constraints.maxWidth;
+        final cols = maxW >= 1100 ? 3 : maxW >= 720 ? 2 : 1;
+        const gap = 14.0;
+        final cellW = (maxW - gap * (cols - 1)) / cols;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: fields.map((f) => SizedBox(width: cellW, child: f)).toList(),
+        );
+      },
+    );
+  }
+
+  Widget _sectionCard(String title, String subtitle, List<Widget> fields) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E1B18) : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isDark
+              ? const Color(0xFFC5A059).withValues(alpha: 0.12)
+              : const Color(0xFFE2E8F0),
+        ),
+        boxShadow: isDark
+            ? null
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 4,
+                height: 22,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0d9488),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                    if (subtitle.isNotEmpty)
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark ? Colors.white54 : const Color(0xFF64748B),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _fieldGrid(fields),
+        ],
+      ),
+    );
+  }
+
+  Widget _dateField({
+    required String label,
+    required DateTime? value,
+    required VoidCallback onTap,
+    bool required = false,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: InputDecorator(
+        decoration: _dec(
+          label,
+          required: required,
+          suffix: const Icon(Icons.calendar_today_outlined, size: 20),
+        ),
+        child: Text(
+          value == null ? 'Select date' : _formatShortDate(value),
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            color: value == null ? Colors.grey : null,
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _pickDate({required bool due}) async {
     final initial = due ? (_dueDate ?? DateTime.now()) : _orderDate;
     final picked = await showDatePicker(
@@ -67,6 +195,10 @@ class _WorkOrderFormScreenState extends ConsumerState<WorkOrderFormScreen> {
     if (!_formKey.currentState!.validate()) return;
     if (_projectId == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Select a project')));
+      return;
+    }
+    if (_contractorId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Select a contractor')));
       return;
     }
     setState(() => _saving = true);
@@ -118,7 +250,7 @@ class _WorkOrderFormScreenState extends ConsumerState<WorkOrderFormScreen> {
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authNotifierProvider);
-    final dateFmt = _formatShortDate;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final projectsAsync = ref.watch(projectsListProvider);
     final contractorsAsync = ref.watch(erpContractorsProvider);
     final employeesAsync = ref.watch(projectEmployeesProvider);
@@ -132,175 +264,184 @@ class _WorkOrderFormScreenState extends ConsumerState<WorkOrderFormScreen> {
     }
 
     return Scaffold(
+      backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF1F5F9),
       appBar: AppBar(
-        title: Text(widget.isEdit ? 'Edit Work Order' : 'Add Work Order'),
+        backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
+        elevation: 0,
+        title: Text(
+          widget.isEdit ? 'Edit Work Order' : 'Add Work Order',
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
         leading: AppBackButton(
           fallbackLocation: widget.isEdit ? '/erp/work-orders/${widget.id}' : '/erp/work-orders',
         ),
       ),
       body: Form(
         key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
+        child: Column(
           children: [
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Basic Details', style: TextStyle(fontWeight: FontWeight.w800)),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _woIdCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Work Order Id *',
-                        border: OutlineInputBorder(),
-                      ),
-                      validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
-                    ),
-                    const SizedBox(height: 12),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text('Date * — ${dateFmt.format(_orderDate)}'),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.calendar_today),
-                        onPressed: () => _pickDate(due: false),
-                      ),
-                    ),
-                    employeesAsync.when(
-                      loading: () => const LinearProgressIndicator(),
-                      error: (e, _) => Text('$e'),
-                      data: (emps) => DropdownButtonFormField<int>(
-                        value: _ownerEmployeeId,
-                        decoration: const InputDecoration(
-                          labelText: 'Tender Created By *',
-                          border: OutlineInputBorder(),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1100),
+                    child: Column(
+                      children: [
+                        _sectionCard(
+                          'Basic Details',
+                          'Work order header — project, contractor, and dates',
+                          [
+                            TextFormField(
+                              controller: _woIdCtrl,
+                              decoration: _dec('Work Order Id', required: true, hint: 'e.g. WONBR00001'),
+                              validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                            ),
+                            _dateField(
+                              label: 'Date',
+                              value: _orderDate,
+                              required: true,
+                              onTap: () => _pickDate(due: false),
+                            ),
+                            _dateField(
+                              label: 'Due Date',
+                              value: _dueDate,
+                              onTap: () => _pickDate(due: true),
+                            ),
+                            employeesAsync.when(
+                              loading: () => const LinearProgressIndicator(),
+                              error: (e, _) => Text('$e'),
+                              data: (emps) => DropdownButtonFormField<int>(
+                                isExpanded: true,
+                                value: _ownerEmployeeId,
+                                decoration: _dec('Tender Created By', required: true),
+                                items: emps
+                                    .map((e) => DropdownMenuItem(value: e.id, child: Text(e.fullName)))
+                                    .toList(),
+                                onChanged: (v) => setState(() => _ownerEmployeeId = v),
+                              ),
+                            ),
+                            projectsAsync.when(
+                              loading: () => const LinearProgressIndicator(),
+                              error: (e, _) => Text('$e'),
+                              data: (projects) => DropdownButtonFormField<String>(
+                                isExpanded: true,
+                                value: _projectId,
+                                decoration: _dec('Project', required: true, hint: 'Select project'),
+                                items: projects
+                                    .map((p) => DropdownMenuItem(value: p.id, child: Text(p.name)))
+                                    .toList(),
+                                onChanged: (v) => setState(() {
+                                  _projectId = v;
+                                  _activities = [];
+                                }),
+                              ),
+                            ),
+                            contractorsAsync.when(
+                              loading: () => const LinearProgressIndicator(),
+                              error: (e, _) => Text('$e'),
+                              data: (items) => DropdownButtonFormField<String>(
+                                isExpanded: true,
+                                value: _contractorId,
+                                decoration: _dec('Contractor', required: true, hint: 'Select contractor'),
+                                items: items
+                                    .where((c) => c.isActive)
+                                    .map((c) => DropdownMenuItem(value: c.id, child: Text(c.name)))
+                                    .toList(),
+                                onChanged: (v) => setState(() => _contractorId = v),
+                              ),
+                            ),
+                            TextFormField(
+                              controller: _tenderCtrl,
+                              readOnly: true,
+                              decoration: _dec('Tender', hint: 'Coming soon'),
+                              onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Tender module will be added later.')),
+                              ),
+                            ),
+                            lookupDropdown(
+                              ref: ref,
+                              category: kWoCategory,
+                              value: _categoryCode,
+                              label: 'Category',
+                              onChanged: (v) => setState(() => _categoryCode = v),
+                            ),
+                            employeesAsync.when(
+                              loading: () => const SizedBox.shrink(),
+                              error: (_, __) => const SizedBox.shrink(),
+                              data: (emps) => DropdownButtonFormField<int>(
+                                isExpanded: true,
+                                value: _approverEmployeeId,
+                                decoration: _dec('Approver', hint: 'Who approves this WO'),
+                                items: emps
+                                    .map((e) => DropdownMenuItem(value: e.id, child: Text(e.fullName)))
+                                    .toList(),
+                                onChanged: (v) => setState(() => _approverEmployeeId = v),
+                              ),
+                            ),
+                          ],
                         ),
-                        items: emps
-                            .map((e) => DropdownMenuItem(value: e.id, child: Text(e.fullName)))
-                            .toList(),
-                        onChanged: (v) => setState(() => _ownerEmployeeId = v),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    projectsAsync.when(
-                      loading: () => const LinearProgressIndicator(),
-                      error: (e, _) => Text('$e'),
-                      data: (projects) => DropdownButtonFormField<String>(
-                        value: _projectId,
-                        decoration: const InputDecoration(
-                          labelText: 'Project *',
-                          border: OutlineInputBorder(),
+                        configActivitiesAsync.when(
+                          loading: () => const Padding(
+                            padding: EdgeInsets.all(24),
+                            child: Center(child: CircularProgressIndicator()),
+                          ),
+                          error: (e, _) => Text('$e'),
+                          data: (acts) => WorkDetailsEditor(
+                            projectId: _projectId,
+                            activities: _activities,
+                            configActivities: acts,
+                            onChanged: (groups) => setState(() => _activities = groups),
+                          ),
                         ),
-                        items: projects
-                            .map((p) => DropdownMenuItem(value: p.id, child: Text(p.name)))
-                            .toList(),
-                        onChanged: (v) => setState(() {
-                          _projectId = v;
-                          _activities = [];
-                        }),
-                      ),
+                      ],
                     ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _tenderCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Tender (approved tenders — coming soon)',
-                        hintText: 'Select Tender',
-                        border: OutlineInputBorder(),
-                      ),
-                      readOnly: true,
-                      onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Tender module will be added later.')),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    contractorsAsync.when(
-                      loading: () => const LinearProgressIndicator(),
-                      error: (e, _) => Text('$e'),
-                      data: (items) => DropdownButtonFormField<String>(
-                        value: _contractorId,
-                        decoration: const InputDecoration(
-                          labelText: 'Contractor *',
-                          border: OutlineInputBorder(),
-                        ),
-                        items: items
-                            .where((c) => c.isActive)
-                            .map((c) => DropdownMenuItem(value: c.id, child: Text(c.name)))
-                            .toList(),
-                        onChanged: (v) => setState(() => _contractorId = v),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(
-                        _dueDate == null ? 'Due Date' : 'Due Date — ${dateFmt.format(_dueDate!)}',
-                      ),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.calendar_today),
-                        onPressed: () => _pickDate(due: true),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    lookupDropdown(
-                      ref: ref,
-                      category: kWoCategory,
-                      value: _categoryCode,
-                      label: 'Category',
-                      onChanged: (v) => setState(() => _categoryCode = v),
-                    ),
-                    const SizedBox(height: 12),
-                    employeesAsync.when(
-                      loading: () => const SizedBox.shrink(),
-                      error: (_, __) => const SizedBox.shrink(),
-                      data: (emps) => DropdownButtonFormField<int>(
-                        value: _approverEmployeeId,
-                        decoration: const InputDecoration(
-                          labelText: 'Approver',
-                          border: OutlineInputBorder(),
-                        ),
-                        items: emps
-                            .map((e) => DropdownMenuItem(value: e.id, child: Text(e.fullName)))
-                            .toList(),
-                        onChanged: (v) => setState(() => _approverEmployeeId = v),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),
-            const SizedBox(height: 16),
-            configActivitiesAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Text('$e'),
-              data: (acts) => WorkDetailsEditor(
-                projectId: _projectId,
-                activities: _activities,
-                configActivities: acts,
-                onChanged: (groups) => setState(() => _activities = groups),
+            Container(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1A1816) : Colors.white,
+                border: Border(
+                  top: BorderSide(
+                    color: isDark ? const Color(0xFF3D3834) : const Color(0xFFE2E8F0),
+                  ),
+                ),
               ),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                FilledButton(
-                  onPressed: _saving ? null : _save,
-                  child: _saving
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Submit'),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1100),
+                  child: Row(
+                    children: [
+                      FilledButton.icon(
+                        onPressed: _saving ? null : _save,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF0d9488),
+                          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                        ),
+                        icon: _saving
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Icon(Icons.check_rounded),
+                        label: Text(widget.isEdit ? 'Save Changes' : 'Create Work Order'),
+                      ),
+                      const SizedBox(width: 12),
+                      OutlinedButton(
+                        onPressed: _saving ? null : () => context.pop(),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                        ),
+                        child: const Text('Cancel'),
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(width: 12),
-                OutlinedButton(
-                  onPressed: _saving ? null : () => context.pop(),
-                  child: const Text('Cancel'),
-                ),
-              ],
+              ),
             ),
           ],
         ),
@@ -311,4 +452,3 @@ class _WorkOrderFormScreenState extends ConsumerState<WorkOrderFormScreen> {
 
 String _formatShortDate(DateTime d) =>
     '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
-

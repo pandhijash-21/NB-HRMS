@@ -21,7 +21,7 @@ const SESSION_TTL = 8 * 60 * 60; // 8 hours in seconds
 // ---------------------------------------------------------------------------
 
 /** Build the { MODULE_KEY: ['READ','WRITE', ...] } permissions map from DB row. */
-function buildPermissionsMap(
+export function buildPermissionsMap(
   permissions: Array<{
     moduleKey: string;
     canRead: boolean;
@@ -336,12 +336,22 @@ export const authService = {
       user.id,
       user.employeeId ?? null,
     );
+
+    // Reload permissions from DB so new modules (e.g. WORK_ORDERS) appear without re-login.
+    const role = await prisma.role.findUnique({
+      where: { id: user.roleId },
+      include: { permissions: true },
+    });
+    const permissions = role ? buildPermissionsMap(role.permissions) : user.permissions;
+    const personalPerm = role?.permissions.find((p) => p.moduleKey === 'PERSONAL_INFO');
+    const employeeViewScope = personalPerm?.employeeViewScope ?? user.employeeViewScope ?? 'NONE';
+
     return {
       employeeId:  user.employeeId,
       roleId:      user.roleId,
       roleName:    user.roleName,
-      permissions: user.permissions,
-      employeeViewScope: user.employeeViewScope ?? 'NONE',
+      permissions,
+      employeeViewScope,
       subOrganization: user.subOrganization ?? null,
       needsEmailVerification: emailStatus.needsEmailVerification,
       pendingEmails: emailStatus.emails.filter((e) => !e.verified),

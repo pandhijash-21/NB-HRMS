@@ -108,28 +108,86 @@ class _WorkDetailsEditorState extends ConsumerState<WorkDetailsEditor> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final towersAsync = widget.projectId == null
         ? const AsyncValue<List<ErpProjectTower>>.data([])
         : ref.watch(projectTowersProvider(widget.projectId!));
 
-    return Card(
-      elevation: 0,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Add Work Details', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-            const SizedBox(height: 12),
-            Row(
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E1B18) : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isDark
+              ? const Color(0xFFC5A059).withValues(alpha: 0.12)
+              : const Color(0xFFE2E8F0),
+        ),
+        boxShadow: isDark
+            ? null
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 4,
+                height: 22,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2563eb),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Add Work Details', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                    Text(
+                      'Select activities, then fill quantity, unit, and rate per line',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF252220) : const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isDark ? const Color(0xFF3D3834) : const Color(0xFFE2E8F0),
+              ),
+            ),
+            child: Row(
               children: [
                 Expanded(
                   child: DropdownButtonFormField<String>(
+                    isExpanded: true,
                     value: _selectedActivityId,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Activity *',
-                      border: OutlineInputBorder(),
+                      filled: true,
+                      fillColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                     ),
+                    hint: const Text('Select activity'),
                     items: widget.configActivities
                         .where((a) => a.isActive)
                         .map((a) => DropdownMenuItem(value: a.id, child: Text(a.name)))
@@ -140,56 +198,136 @@ class _WorkDetailsEditorState extends ConsumerState<WorkDetailsEditor> {
                 const SizedBox(width: 12),
                 FilledButton.icon(
                   onPressed: _selectedActivityId == null ? null : _addActivity,
-                  icon: const Icon(Icons.add),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF2563eb),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  ),
+                  icon: const Icon(Icons.add_rounded),
                   label: const Text('Add'),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            if (_groups.isEmpty)
-              const Text('Add an activity to start entering work details.')
-            else
-              towersAsync.when(
-                loading: () => const CircularProgressIndicator(),
-                error: (e, _) => Text('$e'),
-                data: (towers) => SingleChildScrollView(
+          ),
+          const SizedBox(height: 16),
+          if (_groups.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 16),
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: isDark ? const Color(0xFF3D3834) : const Color(0xFFE2E8F0),
+                  style: BorderStyle.solid,
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
+                  Icon(Icons.table_rows_outlined, size: 40, color: Colors.grey.shade400),
+                  const SizedBox(height: 8),
+                  Text(
+                    'No work lines yet',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white70 : const Color(0xFF475569),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    widget.projectId == null
+                        ? 'Select a project first, then add an activity.'
+                        : 'Pick an activity above and tap Add.',
+                    style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            )
+          else
+            towersAsync.when(
+              loading: () => const Center(child: Padding(
+                padding: EdgeInsets.all(24),
+                child: CircularProgressIndicator(),
+              )),
+              error: (e, _) => Text('$e'),
+              data: (towers) => Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isDark ? const Color(0xFF3D3834) : const Color(0xFFE2E8F0),
+                  ),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: DataTable(
-                    headingRowColor: WidgetStateProperty.all(const Color(0xFFE8F4FC)),
+                    headingRowHeight: 44,
+                    dataRowMinHeight: 48,
+                    dataRowMaxHeight: 72,
+                    headingRowColor: WidgetStateProperty.all(
+                      isDark ? const Color(0xFF252220) : const Color(0xFFE8F4FC),
+                    ),
+                    columnSpacing: 16,
+                    horizontalMargin: 16,
                     columns: const [
-                      DataColumn(label: Text('SR#')),
-                      DataColumn(label: Text('ACTIVITY')),
-                      DataColumn(label: Text('WORK DETAILS')),
-                      DataColumn(label: Text('BLOCK')),
-                      DataColumn(label: Text('FLOOR')),
-                      DataColumn(label: Text('UNIT')),
-                      DataColumn(label: Text('QTY')),
-                      DataColumn(label: Text('UNIT')),
-                      DataColumn(label: Text('RATE')),
-                      DataColumn(label: Text('AMOUNT')),
+                      DataColumn(label: Text('SR#', style: TextStyle(fontWeight: FontWeight.w700))),
+                      DataColumn(label: Text('ACTIVITY', style: TextStyle(fontWeight: FontWeight.w700))),
+                      DataColumn(label: Text('WORK DETAILS', style: TextStyle(fontWeight: FontWeight.w700))),
+                      DataColumn(label: Text('BLOCK', style: TextStyle(fontWeight: FontWeight.w700))),
+                      DataColumn(label: Text('FLOOR', style: TextStyle(fontWeight: FontWeight.w700))),
+                      DataColumn(label: Text('UNIT', style: TextStyle(fontWeight: FontWeight.w700))),
+                      DataColumn(label: Text('QTY', style: TextStyle(fontWeight: FontWeight.w700))),
+                      DataColumn(label: Text('UNIT', style: TextStyle(fontWeight: FontWeight.w700))),
+                      DataColumn(label: Text('RATE', style: TextStyle(fontWeight: FontWeight.w700))),
+                      DataColumn(label: Text('AMOUNT', style: TextStyle(fontWeight: FontWeight.w700))),
                       DataColumn(label: Text('')),
                     ],
-                    rows: _buildRows(context, towers),
+                    rows: _buildRows(context, towers, isDark),
                   ),
                 ),
               ),
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerRight,
-              child: Text(
-                'Total: ₹ ${_total.toStringAsFixed(2)}',
-                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+            ),
+          if (_groups.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0d9488).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFF0d9488).withValues(alpha: 0.25)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Total Amount',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                  ),
+                  Text(
+                    '₹ ${_total.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 18,
+                      color: Color(0xFF0d9488),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
-        ),
+        ],
       ),
     );
   }
 
-  List<DataRow> _buildRows(BuildContext context, List<ErpProjectTower> towers) {
+  List<DataRow> _buildRows(BuildContext context, List<ErpProjectTower> towers, bool isDark) {
     final rows = <DataRow>[];
     var sr = 0;
+    final inputBorder = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: BorderSide(color: isDark ? const Color(0xFF3D3834) : const Color(0xFFE2E8F0)),
+    );
+
     for (var gi = 0; gi < _groups.length; gi++) {
       final g = _groups[gi];
       for (var li = 0; li < g.lines.length; li++) {
@@ -207,22 +345,38 @@ class _WorkDetailsEditorState extends ConsumerState<WorkDetailsEditor> {
         rows.add(
           DataRow(
             cells: [
-              DataCell(Text('$sr')),
+              DataCell(Text('$sr', style: const TextStyle(fontWeight: FontWeight.w600))),
               DataCell(
                 li == 0
                     ? Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(g.activityName),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2563eb).withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              g.activityName,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF2563eb),
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
                           IconButton(
                             icon: const Icon(Icons.add_circle_outline, size: 20),
                             tooltip: 'Add work line',
+                            color: const Color(0xFF2563eb),
                             onPressed: () => _addLine(gi),
                           ),
                           if (_groups.length > 1)
                             IconButton(
-                              icon: const Icon(Icons.delete_outline, size: 20, color: Colors.red),
+                              icon: const Icon(Icons.delete_outline, size: 20),
                               tooltip: 'Remove activity',
+                              color: Colors.red.shade400,
                               onPressed: () => _removeGroup(gi),
                             ),
                         ],
@@ -234,17 +388,23 @@ class _WorkDetailsEditorState extends ConsumerState<WorkDetailsEditor> {
                   width: 140,
                   child: TextField(
                     controller: detailCtrl,
-                    decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
-                    onChanged: (v) => _updateLine(
-                      gi,
-                      li,
-                      line.copyWith(workDetail: v),
+                    style: const TextStyle(fontSize: 13),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      hintText: 'Work detail',
+                      border: inputBorder,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                     ),
+                    onChanged: (v) => _updateLine(gi, li, line.copyWith(workDetail: v)),
                   ),
                 ),
               ),
               DataCell(
                 TextButton(
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xFF2563eb),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
                   onPressed: widget.projectId == null
                       ? null
                       : () async {
@@ -265,18 +425,23 @@ class _WorkDetailsEditorState extends ConsumerState<WorkDetailsEditor> {
                             );
                           }
                         },
-                  child: Text(loc.towerLabel(towers)),
+                  child: Text(loc.towerLabel(towers), style: const TextStyle(fontSize: 12)),
                 ),
               ),
-              DataCell(Text(loc.floorLabel())),
-              DataCell(Text(loc.unitLabel())),
+              DataCell(Text(loc.floorLabel(), style: const TextStyle(fontSize: 12))),
+              DataCell(Text(loc.unitLabel(), style: const TextStyle(fontSize: 12))),
               DataCell(
                 SizedBox(
-                  width: 70,
+                  width: 72,
                   child: TextField(
                     controller: qtyCtrl,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
+                    style: const TextStyle(fontSize: 13),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      border: inputBorder,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                    ),
                     onChanged: (v) {
                       final q = double.tryParse(v);
                       final amt = q != null && line.rate != null ? q * line.rate! : null;
@@ -303,7 +468,12 @@ class _WorkDetailsEditorState extends ConsumerState<WorkDetailsEditor> {
                   child: TextField(
                     controller: rateCtrl,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
+                    style: const TextStyle(fontSize: 13),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      border: inputBorder,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                    ),
                     onChanged: (v) {
                       final r = double.tryParse(v);
                       final amt = r != null && line.quantity != null ? r * line.quantity! : null;
@@ -312,10 +482,15 @@ class _WorkDetailsEditorState extends ConsumerState<WorkDetailsEditor> {
                   ),
                 ),
               ),
-              DataCell(Text((line.amount ?? 0).toStringAsFixed(2))),
+              DataCell(
+                Text(
+                  (line.amount ?? 0).toStringAsFixed(2),
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
               DataCell(
                 IconButton(
-                  icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
+                  icon: Icon(Icons.remove_circle_outline, color: Colors.red.shade400, size: 20),
                   onPressed: g.lines.length > 1 ? () => _removeLine(gi, li) : null,
                 ),
               ),

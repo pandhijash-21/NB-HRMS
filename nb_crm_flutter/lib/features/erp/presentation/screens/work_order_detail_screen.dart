@@ -80,8 +80,8 @@ class _WorkOrderDetailScreenState extends ConsumerState<WorkOrderDetailScreen> {
           children: [
             _section('Basic Details', [
               _kv('Work Order ID', wo.workOrderId),
-              _kv('Date', dateFmt.format(wo.orderDate)),
-              if (wo.dueDate != null) _kv('Due Date', dateFmt.format(wo.dueDate!)),
+              _kv('Date', dateFmt(wo.orderDate)),
+              if (wo.dueDate != null) _kv('Due Date', dateFmt(wo.dueDate!)),
               _kv('Project', wo.project?.name ?? '—'),
               _kv('Contractor', wo.contractor?.name ?? '—'),
               _kv('Total Amount', '₹ ${wo.totalAmount.toStringAsFixed(2)}'),

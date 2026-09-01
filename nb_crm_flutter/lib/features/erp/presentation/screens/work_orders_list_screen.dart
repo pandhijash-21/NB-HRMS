@@ -111,7 +111,7 @@ class WorkOrdersListScreen extends ConsumerWidget {
       cells: [
         DataCell(Text('$sr')),
         DataCell(Text(wo.workOrderId)),
-        DataCell(Text(fmt.format(wo.orderDate))),
+        DataCell(Text(fmt(wo.orderDate))),
         DataCell(
           Row(
             mainAxisSize: MainAxisSize.min,

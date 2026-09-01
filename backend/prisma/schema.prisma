@@ -2371,14 +2371,17 @@ model Meeting {
   recordingUrl   String?       @map("recording_url")
   recordingKey   String?       @map("recording_key")
   egressId       String?       @map("egress_id")
-  summaryText    String?       @map("summary_text") @db.Text
-  summarySentAt  DateTime?     @map("summary_sent_at")
-  createdAt      DateTime      @default(now()) @map("created_at")
-  updatedAt      DateTime      @updatedAt @map("updated_at")
+  summaryText         String?       @map("summary_text") @db.Text
+  summarySentAt       DateTime?     @map("summary_sent_at")
+  transcriptLanguage  String        @default("en") @map("transcript_language")
+  conversationText    String?       @map("conversation_text") @db.Text
+  createdAt           DateTime      @default(now()) @map("created_at")
+  updatedAt           DateTime      @updatedAt @map("updated_at")
 
   host         User                   @relation("MeetingHost", fields: [hostUserId], references: [id])
   participants MeetingParticipant[]
   chatMessages MeetingChatMessage[]
+  utterances   MeetingUtterance[]
 
   @@index([status, scheduledStart])
   @@index([hostUserId])
@@ -2427,6 +2430,25 @@ model MeetingChatMessage {
   @@index([recipientParticipantId])
   @@index([senderParticipantId])
   @@map("meeting_chat_messages")
+}
+
+model MeetingUtterance {
+  id                    String   @id @default(uuid())
+  meetingId             String   @map("meeting_id")
+  speakerUserId         String?  @map("speaker_user_id")
+  speakerParticipantId  String?  @map("speaker_participant_id")
+  speakerName           String   @map("speaker_name")
+  spokenAt              DateTime @map("spoken_at")
+  endedAt               DateTime? @map("ended_at")
+  text                  String   @db.Text
+  language              String   @default("en")
+  source                String   @default("BHASHINI")
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@index([meetingId, spokenAt])
+  @@map("meeting_utterances")
 }
 
 // =============================================================================

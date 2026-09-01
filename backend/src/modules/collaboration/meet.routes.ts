@@ -1,15 +1,20 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import jwt from 'jsonwebtoken';
+import multer from 'multer';
 import { requireAuth } from '../../middleware/auth';
 import { env } from '../../config/env';
 import { ok, fail } from '../../utils/response';
 import { meetService, type GuestActor, type UserActor } from './meet.service';
-import { emitJoinDecision, emitMeetingChat, emitMeetingEnded, emitMeetingInvites, emitMeetingRemoved, emitWaitingUpdate, getIo } from './socket';
+import { emitJoinDecision, emitMeetingChat, emitMeetingEnded, emitMeetingInvites, emitMeetingRemoved, emitMeetingTranscript, emitMeetingTranscriptLanguage, emitWaitingUpdate, getIo } from './socket';
 import { getProfile } from './profiles';
 
 export const meetingsRouter = Router();
 const p = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? '';
+const transcriptUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 2_000_000 },
+});
 
 async function actorFromReq(req: Request): Promise<UserActor | GuestActor | null> {
   if (req.user) {
@@ -96,6 +101,63 @@ meetingsRouter.post('/guest-enter', async (req: Request, res: Response) => {
     return res.json(ok(data));
   } catch (e: unknown) {
     return res.status(400).json(fail(e instanceof Error ? e.message : 'Unable to join'));
+  }
+});
+
+meetingsRouter.get('/stt-status', async (_req: Request, res: Response) => {
+  try {
+    const data = await meetService.sttStatus();
+    return res.json(ok(data));
+  } catch (e: unknown) {
+    return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+  }
+});
+
+meetingsRouter.get('/:id/transcript', optionalAuth, async (req: Request, res: Response) => {
+  try {
+    const actor = await actorFromReq(req);
+    if (!actor) return res.status(401).json(fail('Unauthenticated'));
+    const data = await meetService.listTranscript(p(req.params.id), actor);
+    return res.json(ok(data));
+  } catch (e: unknown) {
+    return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+  }
+});
+
+meetingsRouter.post(
+  '/:id/transcript',
+  optionalAuth,
+  transcriptUpload.single('audio'),
+  async (req: Request, res: Response) => {
+  try {
+    const actor = await actorFromReq(req);
+    if (!actor) return res.status(401).json(fail('Unauthenticated'));
+    const audioBase64 = req.file
+      ? req.file.buffer.toString('base64')
+      : String((req.body as { audioBase64?: string })?.audioBase64 || '');
+    const body = z
+      .object({
+        audioBase64: z.string().min(1),
+        audioFormat: z.string().optional(),
+        samplingRate: z.coerce.number().int().positive().optional(),
+        language: z.string().optional(),
+        startedAt: z.string().optional(),
+        endedAt: z.string().optional(),
+      })
+      .parse({
+        ...(req.body ?? {}),
+        audioBase64,
+        audioFormat:
+          (req.body as { audioFormat?: string })?.audioFormat ||
+          (req.file?.mimetype.includes('wav') ? 'wav' : undefined),
+      });
+    const data = await meetService.ingestSpeechChunk(p(req.params.id), actor, body);
+    if (!data.skipped && 'utterance' in data && data.utterance) {
+      emitMeetingTranscript({ meetingId: p(req.params.id), utterance: data.utterance });
+    }
+    return res.json(ok(data));
+  } catch (e: unknown) {
+    return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed to transcribe'));
   }
 });
 
@@ -189,6 +251,17 @@ meetingsRouter.patch('/:id', async (req: Request, res: Response) => {
     return res.json(ok(data));
   } catch (e: unknown) {
     return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed to update meeting'));
+  }
+});
+
+meetingsRouter.post('/:id/transcript-language', async (req: Request, res: Response) => {
+  try {
+    const body = z.object({ language: z.string().min(2).max(8) }).parse(req.body);
+    const data = await meetService.setTranscriptLanguage(p(req.params.id), req.user!.id, body.language);
+    emitMeetingTranscriptLanguage(p(req.params.id), data.language);
+    return res.json(ok(data));
+  } catch (e: unknown) {
+    return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
   }
 });
 

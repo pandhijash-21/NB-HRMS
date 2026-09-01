@@ -8,13 +8,18 @@ export async function generateMeetingSummary(input: {
   endedAt: Date | null;
   attendees: string[];
   transcript: { who: string; at: Date; text: string; scope: string }[];
+  spokenTranscript?: { who: string; at: Date; text: string }[];
 }): Promise<string> {
   const durationMin =
     input.startedAt && input.endedAt
       ? Math.max(1, Math.round((+input.endedAt - +input.startedAt) / 60000))
       : null;
 
-  const transcriptText = input.transcript
+  const spokenText = (input.spokenTranscript ?? [])
+    .map((t) => `[${t.at.toISOString()}] ${t.who}: ${t.text}`)
+    .join('\n');
+
+  const chatText = input.transcript
     .filter((t) => t.scope === 'ROOM')
     .map((t) => `[${t.at.toISOString()}] ${t.who}: ${t.text}`)
     .join('\n');
@@ -26,8 +31,9 @@ export async function generateMeetingSummary(input: {
     durationMin ? `Duration: ${durationMin} minutes` : null,
     `Attendees: ${input.attendees.join(', ') || 'None recorded'}`,
     '',
-    'Key discussion (from in-meet chat):',
-    transcriptText || 'No in-meet chat was captured.',
+    'Key discussion (from spoken conversation):',
+    spokenText || 'No spoken transcript was captured.',
+    chatText ? `\nIn-meet chat:\n${chatText}` : null,
     '',
     'Action items: Please follow up on any commitments made during the meeting.',
   ]
@@ -50,11 +56,11 @@ export async function generateMeetingSummary(input: {
           {
             role: 'system',
             content:
-              'You write concise professional meeting summaries for a CRM. Include: overview, decisions, action items (with owners if named), and open questions. Use short bullet lists. Do not invent attendees or facts.',
+              'You write concise professional meeting summaries for a CRM. Include: overview, decisions, action items (with owners if named), and open questions. Use short bullet lists. Do not invent attendees or facts. Prefer the spoken conversation transcript over in-meet chat.',
           },
           {
             role: 'user',
-            content: `Title: ${input.title}\nAgenda: ${input.agenda || '(none)'}\nHost: ${input.hostName}\nDuration: ${durationMin ?? 'unknown'} min\nAttendees: ${input.attendees.join(', ')}\n\nIn-meet chat transcript:\n${transcriptText || '(empty)'}`,
+            content: `Title: ${input.title}\nAgenda: ${input.agenda || '(none)'}\nHost: ${input.hostName}\nDuration: ${durationMin ?? 'unknown'} min\nAttendees: ${input.attendees.join(', ')}\n\nSpoken conversation (person and time):\n${spokenText || '(empty)'}\n\nIn-meet chat:\n${chatText || '(empty)'}`,
           },
         ],
       }),

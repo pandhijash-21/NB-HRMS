@@ -3,6 +3,17 @@
 import { useCallback, useEffect, useState } from "react";
 import api from "@/lib/axios";
 
+export type MeetingUtterance = {
+  id: string;
+  speakerName: string;
+  speakerUserId: string | null;
+  speakerParticipantId: string | null;
+  spokenAt: string;
+  endedAt: string | null;
+  text: string;
+  language: string;
+};
+
 export type MeetingPerson = {
   id: string;
   userId: string | null;
@@ -31,6 +42,11 @@ export type Meeting = {
   recordingUrl: string | null;
   hasRecording?: boolean;
   summaryText: string | null;
+  conversationText?: string | null;
+  transcriptLanguage?: string | null;
+  transcriptEnabled?: boolean;
+  whisperOnline?: boolean;
+  utterances?: MeetingUtterance[];
   isHost: boolean;
   joinUrl: string;
   host: { userId: string; name: string; photoUrl: string | null } | null;
@@ -147,6 +163,18 @@ export async function denyParticipant(meetingId: string, participantId: string) 
 export async function removeMeetingParticipant(meetingId: string, participantId: string) {
   return unwrap<{ meeting: Meeting; participant: MeetingPerson; identity: string }>(
     await api.post(`meetings/${meetingId}/remove`, { participantId }),
+  );
+}
+
+export async function setMeetingTranscriptLanguage(id: string, language: string) {
+  return unwrap<{ language: string }>(
+    await api.post(`meetings/${id}/transcript-language`, { language }),
+  );
+}
+
+export async function fetchSttStatus() {
+  return unwrap<{ enabled: boolean; online: boolean; whisperEnabled: boolean; source: string }>(
+    await api.get("meetings/stt-status"),
   );
 }
 

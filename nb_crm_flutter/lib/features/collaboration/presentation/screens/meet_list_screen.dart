@@ -438,8 +438,16 @@ class _MeetDetailsDialogState extends ConsumerState<_MeetDetailsDialog> {
                           ),
                         if ((m.summaryText ?? '').trim().isNotEmpty) ...[
                           const SizedBox(height: 12),
-                          Text('Summary', style: TextStyle(color: muted, fontWeight: FontWeight.w700)),
+                          Text('AI summary', style: TextStyle(color: muted, fontWeight: FontWeight.w700)),
                           Text(m.summaryText!.trim()),
+                        ],
+                        if ((m.conversationText ?? '').trim().isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          Text(
+                            'Conversation (person & time)',
+                            style: TextStyle(color: muted, fontWeight: FontWeight.w700),
+                          ),
+                          Text(m.conversationText!.trim()),
                         ],
                       ],
                     ),

@@ -105,12 +105,13 @@ if docker inspect --format='{{.Image}}' nb-crm-backend-1 >/dev/null 2>&1; then
   echo "Previous backend image id saved"
 fi
 
-echo "==> Rebuild backend + recreate frontend (postgres/redis stay up; volumes untouched)"
-compose build backend
+echo "==> Rebuild backend + whisper, recreate frontend (postgres/redis stay up; volumes untouched)"
+compose build backend whisper
 # Tag release for traceability (and keep :latest for compose)
 if docker image inspect "${BACKEND_IMAGE_REPO}:latest" >/dev/null 2>&1; then
   docker tag "${BACKEND_IMAGE_REPO}:latest" "${BACKEND_IMAGE_REPO}:${SHA}" || true
 fi
+compose up -d whisper
 compose up -d backend
 compose up -d --force-recreate frontend
 compose up -d minio livekit livekit-egress
@@ -143,6 +144,8 @@ for c in nb-crm-backend-1 nb-crm-frontend-1 nb-crm-postgres-1 nb-crm-redis-1; do
     rollback
   fi
 done
+whisper_st=$(docker inspect -f '{{.State.Status}}' nb-crm-whisper-1 2>/dev/null || echo missing)
+echo "nb-crm-whisper-1 status=$whisper_st (first boot may stay starting while the model loads)"
 
 echo "==> Public health: $PUBLIC_HEALTH_URL"
 if ! curl -fsS -k --max-time 25 "$PUBLIC_HEALTH_URL" >/dev/null; then

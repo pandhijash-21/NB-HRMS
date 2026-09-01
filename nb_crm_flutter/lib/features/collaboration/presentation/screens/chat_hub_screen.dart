@@ -840,12 +840,13 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
 
   Future<void> _forwardMessage(ChatMessage message) async {
     final me = ref.read(authNotifierProvider).user?.id;
-    final target = await showModalBottomSheet<ChatChannel>(
+    final selected = await showModalBottomSheet<List<ChatChannel>>(
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
       builder: (ctx) {
         var q = '';
+        final picked = <String>{};
         return SafeArea(
           child: StatefulBuilder(
             builder: (ctx, setLocal) {
@@ -854,7 +855,7 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
                 return _channelTitle(c, me).toLowerCase().contains(q);
               }).toList();
               return SizedBox(
-                height: MediaQuery.sizeOf(ctx).height * 0.62,
+                height: MediaQuery.sizeOf(ctx).height * 0.7,
                 child: Column(
                   children: [
                     const Padding(
@@ -870,7 +871,7 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
                         autofocus: true,
                         onChanged: (v) => setLocal(() => q = v.trim().toLowerCase()),
                         decoration: const InputDecoration(
-                          hintText: 'Search chats',
+                          hintText: 'Search people or chats',
                           prefixIcon: NbIcon(Icons.search_rounded),
                           isDense: true,
                         ),
@@ -881,8 +882,12 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
                         itemCount: filtered.length,
                         itemBuilder: (_, i) {
                           final c = filtered[i];
-                          return ListTile(
-                            leading: _Avatar(
+                          final on = picked.contains(c.id);
+                          return CheckboxListTile(
+                            value: on,
+                            dense: true,
+                            controlAffinity: ListTileControlAffinity.leading,
+                            secondary: _Avatar(
                               name: _channelTitle(c, me),
                               url: _channelPhoto(c, me),
                               identity: c.id,
@@ -890,9 +895,45 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
                               size: 36,
                             ),
                             title: Text(_channelTitle(c, me)),
-                            onTap: () => Navigator.pop(ctx, c),
+                            onChanged: (v) {
+                                    setLocal(() {
+                                      if (v == true) {
+                                        picked.add(c.id);
+                                      } else {
+                                        picked.remove(c.id);
+                                      }
+                                    });
+                                  },
                           );
                         },
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              picked.isEmpty
+                                  ? 'Select people, then send'
+                                  : '${picked.length} selected',
+                              style: TextStyle(
+                                color: Theme.of(ctx).hintColor,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                          FilledButton.icon(
+                            onPressed: picked.isEmpty
+                                ? null
+                                : () {
+                                    final targets = _channels.where((c) => picked.contains(c.id)).toList();
+                                    Navigator.pop(ctx, targets);
+                                  },
+                            icon: const NbIcon(Icons.send_rounded, size: 18),
+                            label: const Text('Send'),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -903,7 +944,7 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
         );
       },
     );
-    if (target == null || !mounted) return;
+    if (selected == null || selected.isEmpty || !mounted) return;
     try {
       final attachments = message.attachments
           .map((a) => a.toForwardJson())
@@ -916,17 +957,26 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
         );
         return;
       }
-      final sent = await ref.read(chatRepositoryProvider).send(
-        channelId: target.id,
-        content: content.isEmpty ? null : content,
-        attachments: attachments.isEmpty ? null : attachments,
-      );
-      if (!mounted) return;
-      if (_active?.id == target.id) {
-        _upsertMessage(sent, markReadIfOpen: true);
+      for (final target in selected) {
+        final sent = await ref.read(chatRepositoryProvider).send(
+          channelId: target.id,
+          content: content.isEmpty ? null : content,
+          attachments: attachments.isEmpty ? null : attachments,
+        );
+        if (!mounted) return;
+        if (_active?.id == target.id) {
+          _upsertMessage(sent, markReadIfOpen: true);
+        }
       }
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Forwarded to ${_channelTitle(target, me)}')),
+        SnackBar(
+          content: Text(
+            selected.length == 1
+                ? 'Forwarded to ${_channelTitle(selected.first, me)}'
+                : 'Forwarded to ${selected.length} chats',
+          ),
+        ),
       );
     } catch (e) {
       if (!mounted) return;

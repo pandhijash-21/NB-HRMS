@@ -196,6 +196,27 @@ class CollabSocket {
 
   void offUserTyping(void Function(String, String) cb) => _userTyping.remove(cb);
 
+  void onMeetingTranscript(void Function(MeetingUtterance row) cb) {
+    _socket?.off('meeting_transcript');
+    _socket?.on('meeting_transcript', (data) {
+      if (data is! Map) return;
+      final utterance = data['utterance'];
+      if (utterance is Map) {
+        cb(MeetingUtterance.fromJson(Map<String, dynamic>.from(utterance)));
+      }
+    });
+  }
+
+  void onMeetingTranscriptLang(void Function(String language) cb) {
+    _socket?.off('meeting_transcript_lang');
+    _socket?.on('meeting_transcript_lang', (data) {
+      if (data is Map) {
+        final language = data['language']?.toString();
+        if (language != null && language.isNotEmpty) cb(language);
+      }
+    });
+  }
+
   void onMeetingChat(void Function(Map<String, dynamic>) cb) {
     _socket?.off('meeting_chat');
     _socket?.on('meeting_chat', (data) {

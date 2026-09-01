@@ -12,6 +12,7 @@ git clone --depth 1 --branch main "$REPO" "$STAGE"
 
 echo "==> Sync backend + deploy scripts"
 rsync -a --delete "$STAGE/backend/" "$WORKDIR/backend/"
+rsync -a --delete "$STAGE/whisper/" "$WORKDIR/whisper/"
 rsync -a "$STAGE/deploy/remote_full_update.sh" "$WORKDIR/deploy/"
 rsync -a "$STAGE/docker-compose.prod.yml" "$WORKDIR/"
 

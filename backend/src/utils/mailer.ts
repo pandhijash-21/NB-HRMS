@@ -76,6 +76,17 @@ export function isSmtpConfigured(): boolean {
   return !!(env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASS);
 }
 
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function toHtmlBlock(value: string) {
+  return escapeHtml(value).replace(/\n/g, '<br/>');
+}
+
 export async function sendMeetingSummaryEmail(opts: {
   to: string[];
   title: string;
@@ -83,17 +94,24 @@ export async function sendMeetingSummaryEmail(opts: {
   when: string;
   agenda: string | null;
   summary: string;
+  conversation?: string | null;
   joinUrl: string;
 }) {
   const t = getTransporter();
   if (!t || opts.to.length === 0) return;
   const unique = [...new Set(opts.to.filter(Boolean))];
   if (unique.length === 0) return;
-  const htmlSummary = opts.summary
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/\n/g, '<br/>');
+  const conversation = (opts.conversation || '').trim();
+  const conversationHtml = conversation
+    ? conversation
+        .split('\n')
+        .map((line) => {
+          const match = line.match(/^\[([^\]]+)\]\s+([^:]+):\s*(.*)$/);
+          if (!match) return `<p style="margin:0 0 10px;line-height:1.45;">${escapeHtml(line)}</p>`;
+          return `<p style="margin:0 0 12px;line-height:1.45;"><span style="color:#64748b;font-size:12px;">${escapeHtml(match[1])}</span><br/><strong>${escapeHtml(match[2])}</strong> — ${escapeHtml(match[3])}</p>`;
+        })
+        .join('')
+    : '';
   await t.sendMail({
     from: `"NB CRM Meetings" <${env.SMTP_FROM ?? env.SMTP_USER}>`,
     to: unique.join(', '),
@@ -101,15 +119,23 @@ export async function sendMeetingSummaryEmail(opts: {
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 640px; margin: 0 auto;">
         <div style="background:#1d3459;color:#fff;padding:20px 24px;">
-          <h1 style="margin:0;font-size:20px;">${opts.title}</h1>
-          <p style="margin:8px 0 0;opacity:.9">Code ${opts.code} · ${opts.when}</p>
+          <h1 style="margin:0;font-size:20px;">${escapeHtml(opts.title)}</h1>
+          <p style="margin:8px 0 0;opacity:.9">Code ${escapeHtml(opts.code)} · ${escapeHtml(opts.when)}</p>
         </div>
         <div style="padding:24px;background:#f8fafc;color:#1e293b;">
-          ${opts.agenda ? `<p><strong>Agenda:</strong> ${opts.agenda}</p>` : ''}
-          <h2 style="font-size:16px;">AI summary</h2>
+          ${opts.agenda ? `<p><strong>Agenda:</strong> ${escapeHtml(opts.agenda)}</p>` : ''}
+          <h2 style="font-size:16px;margin:0 0 8px;">AI summary</h2>
           <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:16px;line-height:1.5;">
-            ${htmlSummary}
+            ${toHtmlBlock(opts.summary)}
           </div>
+          ${
+            conversation
+              ? `<h2 style="font-size:16px;margin:24px 0 8px;">Conversation (person &amp; time)</h2>
+          <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:16px;">
+            ${conversationHtml}
+          </div>`
+              : ''
+          }
           <p style="margin-top:20px;font-size:13px;color:#64748b;">
             Replay / details: <a href="${opts.joinUrl}">${opts.joinUrl}</a>
           </p>

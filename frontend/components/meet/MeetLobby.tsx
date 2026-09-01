@@ -205,9 +205,18 @@ export function MeetLobby() {
                     {m.agenda ? ` · ${m.agenda}` : ""}
                   </p>
                   {m.summaryText && (
-                    <p className="text-sm mt-2 whitespace-pre-wrap text-muted-foreground line-clamp-4">
-                      {m.summaryText}
-                    </p>
+                    <div className="text-sm mt-2 space-y-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">AI summary</p>
+                      <p className="whitespace-pre-wrap text-muted-foreground line-clamp-4">{m.summaryText}</p>
+                    </div>
+                  )}
+                  {m.conversationText && (
+                    <div className="text-sm mt-2 space-y-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Conversation (person & time)
+                      </p>
+                      <p className="whitespace-pre-wrap text-muted-foreground line-clamp-6">{m.conversationText}</p>
+                    </div>
                   )}
                 </div>
                 {(m.hasRecording || m.recordingUrl) && m.recordingUrl && (

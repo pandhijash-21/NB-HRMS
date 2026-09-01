@@ -26,10 +26,12 @@ import {
   SmilePlus,
   Maximize2,
   Minimize2,
+  Captions,
   ChevronLeft,
   ChevronRight,
   Users,
   UserX,
+  AudioLines,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "next-auth/react";
@@ -49,12 +51,16 @@ import {
   guestJoinMeeting,
   meetErrorMessage,
   removeMeetingParticipant,
+  setMeetingTranscriptLanguage,
+  fetchSttStatus,
   startRecording,
   stopRecording,
   type JoinPayload,
   type Meeting,
   type MeetingPerson,
+  type MeetingUtterance,
 } from "@/lib/hooks/useMeet";
+import { MEET_STT_LANGUAGES, MeetBhashiniStt } from "@/lib/meetBhashiniStt";
 
 function isValidIceUrl(url: string) {
   return /^(stuns?|turns?):[^:]+:\d+(\?.*)?$/i.test(url);
@@ -330,6 +336,12 @@ export function MeetRoom({ code }: { code: string }) {
   const [chatToasts, setChatToasts] = useState<ChatToast[]>([]);
   const [draft, setDraft] = useState("");
   const [endedSummary, setEndedSummary] = useState<string | null>(null);
+  const [endedConversation, setEndedConversation] = useState<string | null>(null);
+  const [captionsOn, setCaptionsOn] = useState(true);
+  const [captions, setCaptions] = useState<MeetingUtterance[]>([]);
+  const [transcriptLang, setTranscriptLang] = useState("en");
+  const [whisperOnline, setWhisperOnline] = useState(false);
+  const sttRef = useRef<MeetBhashiniStt | null>(null);
   const [handRaised, setHandRaised] = useState(false);
   const [hands, setHands] = useState<Record<string, string>>({});
   const [floatReactions, setFloatReactions] = useState<FloatReaction[]>([]);
@@ -387,6 +399,25 @@ export function MeetRoom({ code }: { code: string }) {
   }, [recording, room, mediaTick]);
 
   useEffect(() => {
+    if (!room && !joinData?.meeting.id) return;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const status = await fetchSttStatus();
+        if (!cancelled) setWhisperOnline(status.online);
+      } catch {
+        if (!cancelled) setWhisperOnline(false);
+      }
+    };
+    void tick();
+    const id = window.setInterval(() => void tick(), 12000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [room, joinData?.meeting.id]);
+
+  useEffect(() => {
     const timers = toastTimers.current;
     return () => {
       Object.values(timers).forEach((id) => window.clearTimeout(id));
@@ -421,6 +452,8 @@ export function MeetRoom({ code }: { code: string }) {
     sock.off("waiting_knock");
     sock.off("join_approved");
     sock.off("join_denied");
+    sock.off("meeting_transcript");
+    sock.off("meeting_transcript_lang");
     sock.on("meeting_chat", (row: ChatRow) => {
       setChatRows((prev) => (prev.some((x) => x.id === row.id) ? prev : [...prev, row]));
       if (!chatOpenRef.current) setUnreadChat((n) => n + 1);
@@ -463,6 +496,18 @@ export function MeetRoom({ code }: { code: string }) {
       setWaiting(false);
       waitingRef.current = false;
       toast.error("The host declined your request to join");
+    });
+    sock.on("meeting_transcript", (p: { utterance?: MeetingUtterance }) => {
+      if (!p.utterance?.id) return;
+      setCaptions((prev) => {
+        const next = [...prev.filter((row) => row.id !== p.utterance!.id), p.utterance!];
+        return next.slice(-40);
+      });
+    });
+    sock.on("meeting_transcript_lang", (p: { language?: string }) => {
+      if (!p.language) return;
+      setTranscriptLang(p.language);
+      sttRef.current?.setLanguage(p.language);
     });
     sock.off("meeting_hand");
     sock.off("meeting_reaction");
@@ -519,7 +564,10 @@ export function MeetRoom({ code }: { code: string }) {
     r.on(RoomEvent.TrackUnpublished, bump);
     r.on(RoomEvent.TrackMuted, bump);
     r.on(RoomEvent.TrackUnmuted, bump);
-    r.on(RoomEvent.LocalTrackPublished, bump);
+    r.on(RoomEvent.LocalTrackPublished, (pub) => {
+      bump();
+      if (pub.source === Track.Source.Microphone) sttRef.current?.attach(r);
+    });
     r.on(RoomEvent.LocalTrackUnpublished, bump);
     r.on(RoomEvent.Disconnected, () => setRoom(null));
     await r.connect(payload.livekit.url, payload.livekit.token, {
@@ -541,6 +589,13 @@ export function MeetRoom({ code }: { code: string }) {
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     });
     if (chat.data?.success) setChatRows(chat.data.data);
+    const lang = payload.meeting.transcriptLanguage || "en";
+    setTranscriptLang(lang);
+    setCaptions(payload.meeting.utterances ?? []);
+    setWhisperOnline(Boolean(payload.meeting.whisperOnline));
+    const stt = new MeetBhashiniStt();
+    sttRef.current = stt;
+    stt.start({ room: r, meetingId: payload.meeting.id, language: lang, token });
   }
 
   async function beginWait(payload: JoinPayload, token?: string) {
@@ -590,9 +645,11 @@ export function MeetRoom({ code }: { code: string }) {
     }
   }
 
-  async function finishCall(summary: string) {
+  async function finishCall(summary: string, conversation?: string | null) {
     setLeaving(true);
     setBusyLabel("Meeting ended. Cleaning up…");
+    await sttRef.current?.stop();
+    sttRef.current = null;
     if (document.fullscreenElement) {
       await document.exitFullscreen().catch(() => undefined);
     }
@@ -608,6 +665,7 @@ export function MeetRoom({ code }: { code: string }) {
     setLeaving(false);
     setBusyLabel(null);
     setEndedSummary(summary);
+    setEndedConversation(conversation?.trim() || null);
   }
 
   async function leave() {
@@ -615,6 +673,8 @@ export function MeetRoom({ code }: { code: string }) {
     const isHostNow = meeting?.isHost || meeting?.host?.userId === (session?.user as { id?: string })?.id;
     setLeaving(true);
     setBusyLabel(isHostNow ? "Ending meeting…" : "Leaving meeting…");
+    await sttRef.current?.stop();
+    sttRef.current = null;
     if (recordingRef.current) {
       try {
         await localRecorderRef.current?.stop({ download: true });
@@ -633,7 +693,8 @@ export function MeetRoom({ code }: { code: string }) {
     if (isHostNow && meeting && room) {
       try {
         const res = await api.post(`meetings/${meeting.id}/end`);
-        await finishCall(res.data?.data?.summaryText || "Meeting ended.");
+        const ended = res.data?.data as Meeting | undefined;
+        await finishCall(ended?.summaryText || "Meeting ended.", ended?.conversationText);
         return;
       } catch {
         /* still disconnect */
@@ -899,12 +960,23 @@ export function MeetRoom({ code }: { code: string }) {
 
   if (endedSummary) {
     return (
-      <div className="h-full overflow-y-auto p-6 max-w-3xl mx-auto space-y-4">
+      <div className="h-full overflow-y-auto p-4 sm:p-6 max-w-3xl mx-auto space-y-4">
         <h1 className="text-2xl font-bold">Meeting ended</h1>
         <p className="text-sm text-muted-foreground">
-          An AI summary was emailed to the host and attendees (when SMTP is configured).
+          Notes were emailed to the host and attendees (when SMTP is configured).
         </p>
-        <pre className="whitespace-pre-wrap rounded-xl border bg-card p-4 text-sm">{endedSummary}</pre>
+        <section className="space-y-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">AI summary</h2>
+          <pre className="whitespace-pre-wrap rounded-xl border bg-card p-4 text-sm">{endedSummary}</pre>
+        </section>
+        {endedConversation && (
+          <section className="space-y-2">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              Conversation (person & time)
+            </h2>
+            <pre className="whitespace-pre-wrap rounded-xl border bg-card p-4 text-sm">{endedConversation}</pre>
+          </section>
+        )}
       </div>
     );
   }
@@ -971,6 +1043,22 @@ export function MeetRoom({ code }: { code: string }) {
             <span className="font-mono">{code}</span>
             <span>
               {participants.length} in this call
+            </span>
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5",
+                whisperOnline ? "border-emerald-400/40 text-emerald-300" : "border-rose-400/40 text-rose-300",
+              )}
+              title={whisperOnline ? "Whisper is online" : "Whisper is offline"}
+            >
+              <AudioLines className="size-3 shrink-0" />
+              <span
+                className={cn(
+                  "size-1.5 rounded-full shrink-0",
+                  whisperOnline ? "bg-emerald-400" : "bg-rose-400",
+                )}
+              />
+              <span className="hidden xs:inline sm:inline">{whisperOnline ? "Whisper on" : "Whisper off"}</span>
             </span>
           </p>
         </div>
@@ -1325,6 +1413,26 @@ export function MeetRoom({ code }: { code: string }) {
           </aside>
         )}
 
+        {captionsOn && captions.length > 0 && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-4 z-10 px-3 sm:px-6">
+            <div className="mx-auto max-w-3xl rounded-xl bg-black/70 px-3 py-2 text-white shadow-lg backdrop-blur">
+              {captions.slice(-3).map((row) => (
+                <p key={row.id} className="text-xs sm:text-sm leading-snug">
+                  <span className="text-white/55 mr-1">
+                    {new Date(row.spokenAt).toLocaleTimeString("en-IN", {
+                      hour: "numeric",
+                      minute: "2-digit",
+                      second: "2-digit",
+                    })}
+                  </span>
+                  <span className="font-semibold mr-1">{row.speakerName}:</span>
+                  <span>{row.text}</span>
+                </p>
+              ))}
+            </div>
+          </div>
+        )}
+
         {floatReactions.length > 0 && (
           <div className="pointer-events-none absolute bottom-6 left-1/2 -translate-x-1/2 z-10 flex gap-3">
             {floatReactions.map((r) => (
@@ -1337,7 +1445,7 @@ export function MeetRoom({ code }: { code: string }) {
         )}
       </div>
 
-      <footer className="h-16 border-t border-white/10 flex items-center justify-center gap-2 px-3 shrink-0 relative overflow-x-auto">
+      <footer className="min-h-16 border-t border-white/10 flex flex-wrap items-center justify-center gap-2 px-3 py-2 shrink-0 relative overflow-x-auto">
         <Button
           size="icon"
           variant={mic ? "secondary" : "destructive"}
@@ -1345,6 +1453,8 @@ export function MeetRoom({ code }: { code: string }) {
             const next = !mic;
             await room.localParticipant.setMicrophoneEnabled(next);
             setMic(next);
+            sttRef.current?.setMicEnabled(next);
+            if (next) sttRef.current?.attach(room);
           }}
         >
           {mic ? <Mic className="size-4" /> : <MicOff className="size-4" />}
@@ -1423,6 +1533,43 @@ export function MeetRoom({ code }: { code: string }) {
         >
           <Users className="size-4" />
         </Button>
+        <Button
+          size="icon"
+          variant={captionsOn ? "default" : "secondary"}
+          title={captionsOn ? "Hide captions" : "Show captions"}
+          className="relative"
+          onClick={() => setCaptionsOn((v) => !v)}
+        >
+          <Captions className="size-4" />
+          <span
+            className={cn(
+              "absolute top-1 right-1 size-1.5 rounded-full",
+              whisperOnline ? "bg-emerald-400" : "bg-rose-400",
+            )}
+            title={whisperOnline ? "Whisper online" : "Whisper offline"}
+          />
+        </Button>
+        {isHost && (
+          <select
+            className="h-9 max-w-[7.5rem] rounded-md border border-white/15 bg-slate-800 px-2 text-xs text-white"
+            value={transcriptLang}
+            title="Speech-to-text language"
+            onChange={(e) => {
+              const language = e.target.value;
+              setTranscriptLang(language);
+              sttRef.current?.setLanguage(language);
+              if (joinData?.meeting.id) {
+                void setMeetingTranscriptLanguage(joinData.meeting.id, language).catch(() => undefined);
+              }
+            }}
+          >
+            {MEET_STT_LANGUAGES.map((lang) => (
+              <option key={lang.code} value={lang.code}>
+                {lang.label}
+              </option>
+            ))}
+          </select>
+        )}
         {canRecord && (
           <Button
             variant={recording ? "destructive" : "secondary"}

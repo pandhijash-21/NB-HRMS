@@ -165,6 +165,30 @@ export type MeetingChatPayload = {
   createdAt: Date | string;
 };
 
+export function emitMeetingTranscript(data: {
+  meetingId: string;
+  utterance: {
+    id: string;
+    speakerName: string;
+    speakerUserId: string | null;
+    speakerParticipantId: string | null;
+    spokenAt: Date | string;
+    endedAt: Date | string | null;
+    text: string;
+    language: string;
+  };
+}) {
+  const io = ioRef;
+  if (!io) return;
+  io.to(`meeting:${data.meetingId}`).emit('meeting_transcript', data);
+}
+
+export function emitMeetingTranscriptLanguage(meetingId: string, language: string) {
+  const io = ioRef;
+  if (!io) return;
+  io.to(`meeting:${meetingId}`).emit('meeting_transcript_lang', { meetingId, language });
+}
+
 export function emitMeetingChat(data: MeetingChatPayload) {
   const io = ioRef;
   if (!io) return;

@@ -21,11 +21,40 @@ String meetParticipantLabel({
 
 bool isMeetGuestIdentity(String identity) => identity.startsWith('guest:');
 
+String meetClock(DateTime? value) {
+  if (value == null) return '';
+  final d = value.toLocal();
+  String two(int n) => n.toString().padLeft(2, '0');
+  final hour = d.hour % 12 == 0 ? 12 : d.hour % 12;
+  final ampm = d.hour >= 12 ? 'PM' : 'AM';
+  return '$hour:${two(d.minute)}:${two(d.second)} $ampm';
+}
+
 String meetWhen(DateTime? value) {
   if (value == null) return '';
   final d = value.toLocal();
   String two(int n) => n.toString().padLeft(2, '0');
   return '${d.year}-${two(d.month)}-${two(d.day)} ${two(d.hour)}:${two(d.minute)}';
+}
+
+const meetSttLanguages = <({String code, String label})>[
+  (code: 'en', label: 'English'),
+  (code: 'hi', label: 'Hindi'),
+  (code: 'gu', label: 'Gujarati'),
+  (code: 'mr', label: 'Marathi'),
+  (code: 'bn', label: 'Bengali'),
+  (code: 'ta', label: 'Tamil'),
+  (code: 'te', label: 'Telugu'),
+  (code: 'kn', label: 'Kannada'),
+  (code: 'ml', label: 'Malayalam'),
+  (code: 'pa', label: 'Punjabi'),
+  (code: 'or', label: 'Odia'),
+  (code: 'as', label: 'Assamese'),
+  (code: 'ur', label: 'Urdu'),
+];
+
+String meetUtteranceLine(MeetingUtterance row) {
+  return '[${meetClock(row.spokenAt)}] ${row.speakerName}: ${row.text}';
 }
 
 String meetDurationLabel(DateTime? start, DateTime? end) {

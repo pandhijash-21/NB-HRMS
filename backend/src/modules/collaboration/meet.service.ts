@@ -11,6 +11,13 @@ import { issueLiveKitToken, livekitPublicUrl, stopRoomRecording, deleteLiveKitRo
 import { generateMeetingSummary } from './summary.service';
 import { sendMeetingInviteEmail, sendMeetingSummaryEmail } from '../../utils/mailer';
 import { collabStorage } from './storage';
+import {
+  formatConversationNotes,
+  getSttHealth,
+  isSttConfigured,
+  normalizeTranscriptLanguage,
+  transcribeSpeech,
+} from './stt.service';
 
 export type MeetEndProgress = {
   step: 'stop_recording' | 'save_cloud' | 'close_room' | 'summary';
@@ -288,6 +295,7 @@ async function serializeMeeting(meetingId: string, viewerUserId?: string | null)
   const host = profiles.get(meeting.hostUserId) ?? (await getProfile(meeting.hostUserId));
   const recordingUrl = meeting.recordingUrl || null;
     const hasRecording = Boolean(recordingUrl);
+  const stt = await getSttHealth();
   return {
     id: meeting.id,
     code: meeting.code,
@@ -304,6 +312,10 @@ async function serializeMeeting(meetingId: string, viewerUserId?: string | null)
     hasRecording,
     recordingUrl,
     summaryText: meeting.summaryText,
+    conversationText: meeting.conversationText,
+    transcriptLanguage: meeting.transcriptLanguage,
+    transcriptEnabled: stt.enabled,
+    whisperOnline: stt.online,
     livekitRoom: meeting.livekitRoom,
     host,
     hostUserId: meeting.hostUserId,
@@ -320,6 +332,51 @@ async function serializeMeeting(meetingId: string, viewerUserId?: string | null)
         serializeParticipant({ ...p, profile: p.userId ? profiles.get(p.userId) ?? null : null }),
       ),
   };
+}
+
+function serializeUtterance(row: {
+  id: string;
+  speakerName: string;
+  speakerUserId: string | null;
+  speakerParticipantId: string | null;
+  spokenAt: Date;
+  endedAt: Date | null;
+  text: string;
+  language: string;
+}) {
+  return {
+    id: row.id,
+    speakerName: row.speakerName,
+    speakerUserId: row.speakerUserId,
+    speakerParticipantId: row.speakerParticipantId,
+    spokenAt: row.spokenAt,
+    endedAt: row.endedAt,
+    text: row.text,
+    language: row.language,
+  };
+}
+
+async function listUtteranceRows(meetingId: string) {
+  const rows = await prisma.meetingUtterance.findMany({
+    where: { meetingId },
+    orderBy: { spokenAt: 'asc' },
+    take: 2000,
+  });
+  return rows.map(serializeUtterance);
+}
+
+async function refreshConversationText(meetingId: string) {
+  const rows = await prisma.meetingUtterance.findMany({
+    where: { meetingId },
+    orderBy: { spokenAt: 'asc' },
+    take: 2000,
+  });
+  const conversationText = formatConversationNotes(rows) || null;
+  await prisma.meeting.update({
+    where: { id: meetingId },
+    data: { conversationText },
+  });
+  return conversationText;
 }
 
 export type GuestActor = {
@@ -527,13 +584,15 @@ export const meetService = {
     if (meeting.status === 'LIVE') {
       await this.closeAbandonedLive(meeting.id);
     }
-    return serializeMeeting(meeting.id, viewerUserId);
+    const serialized = await serializeMeeting(meeting.id, viewerUserId);
+    if (!serialized) throw new Error('Meeting not found');
+    return { ...serialized, utterances: await listUtteranceRows(meeting.id) };
   },
 
   async getById(id: string, viewerUserId?: string | null) {
     const data = await serializeMeeting(id, viewerUserId);
     if (!data) throw new Error('Meeting not found');
-    return data;
+    return { ...data, utterances: await listUtteranceRows(id) };
   },
 
   async cancel(id: string, userId: string) {
@@ -1047,6 +1106,13 @@ export const meetService = {
       text: c.content,
       scope: c.scope,
     }));
+    const spokenRows = await listUtteranceRows(id).catch(() => []);
+    const spokenTranscript = spokenRows.map((row) => ({
+      who: row.speakerName,
+      at: row.spokenAt,
+      text: row.text,
+    }));
+    const conversationText = formatConversationNotes(spokenRows) || null;
 
     let summary = 'Meeting ended.';
     try {
@@ -1058,16 +1124,22 @@ export const meetService = {
         endedAt: new Date(),
         attendees,
         transcript,
+        spokenTranscript,
       });
       await prisma.meeting.update({
         where: { id },
         data: {
           summaryText: summary,
+          conversationText,
           summarySentAt: new Date(),
         },
       });
     } catch (err) {
       console.warn('Meeting summary failed:', err);
+      await prisma.meeting.update({
+        where: { id },
+        data: { conversationText },
+      }).catch(() => undefined);
     }
 
     const emails = [
@@ -1084,6 +1156,7 @@ export const meetService = {
         when,
         agenda: meeting.agenda,
         summary,
+        conversation: conversationText,
         joinUrl: meetingJoinUrl(meeting.code),
       });
     } catch (err) {
@@ -1091,7 +1164,8 @@ export const meetService = {
     }
 
     onProgress?.({ step: 'summary', status: 'done', label: 'All done' });
-    return serializeMeeting(id, userId);
+    const ended = await serializeMeeting(id, userId);
+    return ended ? { ...ended, utterances: await listUtteranceRows(id) } : ended;
   },
 
   async startRecording(
@@ -1183,6 +1257,8 @@ export const meetService = {
       code: meeting.code,
       agenda: meeting.agenda,
       summaryText: meeting.summaryText,
+      conversationText: meeting.conversationText,
+      utterances: await listUtteranceRows(id),
       startedAt: meeting.startedAt,
       endedAt: meeting.endedAt,
       hostName: host?.name || 'Host',
@@ -1311,6 +1387,137 @@ export const meetService = {
       senderPhotoUrl: opts.actor.photoUrl,
       recipientName,
     });
+  },
+
+  async sttStatus() {
+    return getSttHealth();
+  },
+
+  async listTranscript(meetingId: string, actor: UserActor | GuestActor) {
+    const meeting = await prisma.meeting.findUnique({
+      where: { id: meetingId },
+      include: { participants: true },
+    });
+    if (!meeting) throw new Error('Meeting not found');
+    const inMeeting =
+      actor.kind === 'guest'
+        ? actor.meetingId === meetingId &&
+          meeting.participants.some((p) => p.id === actor.participantId)
+        : meeting.hostUserId === actor.userId ||
+          meeting.participants.some((p) => p.userId === actor.userId);
+    if (!inMeeting) throw new Error('You are not in this meeting');
+    const stt = await getSttHealth();
+    return {
+      enabled: stt.enabled,
+      whisperOnline: stt.online,
+      language: meeting.transcriptLanguage,
+      conversationText: meeting.conversationText,
+      utterances: await listUtteranceRows(meetingId),
+    };
+  },
+
+  async setTranscriptLanguage(meetingId: string, userId: string, language: string) {
+    const meeting = await prisma.meeting.findUnique({ where: { id: meetingId } });
+    if (!meeting) throw new Error('Meeting not found');
+    if (meeting.hostUserId !== userId) throw new Error('Only the host can change transcript language');
+    if (meeting.status === 'ENDED' || meeting.status === 'CANCELLED') {
+      throw new Error('This meeting has already ended');
+    }
+    const transcriptLanguage = normalizeTranscriptLanguage(language);
+    await prisma.meeting.update({
+      where: { id: meetingId },
+      data: { transcriptLanguage },
+    });
+    return { language: transcriptLanguage };
+  },
+
+  async ingestSpeechChunk(
+    meetingId: string,
+    actor: UserActor | GuestActor,
+    input: {
+      audioBase64: string;
+      audioFormat?: string;
+      samplingRate?: number;
+      language?: string;
+      startedAt?: string;
+      endedAt?: string;
+    },
+  ) {
+    if (!isSttConfigured()) {
+      return { skipped: true as const, enabled: false };
+    }
+    const meeting = await prisma.meeting.findUnique({
+      where: { id: meetingId },
+      include: { participants: true },
+    });
+    if (!meeting) throw new Error('Meeting not found');
+    if (meeting.status !== 'LIVE') throw new Error('Meeting is not live');
+
+    const participant =
+      actor.kind === 'guest'
+        ? meeting.participants.find((p) => p.id === actor.participantId)
+        : meeting.participants.find((p) => p.userId === actor.userId);
+    if (!participant || participant.admission !== 'ADMITTED') {
+      throw new Error('You are not in this meeting');
+    }
+    if (actor.kind === 'guest' && actor.meetingId !== meetingId) {
+      throw new Error('You are not in this meeting');
+    }
+
+    const audio = (input.audioBase64 || '').replace(/\s/g, '');
+    if (audio.length < 80) return { skipped: true as const, enabled: true };
+    if (audio.length > 2_500_000) throw new Error('Audio chunk is too large');
+
+    const language = normalizeTranscriptLanguage(input.language || meeting.transcriptLanguage);
+    const spoken = await transcribeSpeech({
+      audioBase64: audio,
+      audioFormat: input.audioFormat,
+      samplingRate: input.samplingRate,
+      language,
+    });
+    const text = spoken.text.replace(/\s+/g, ' ').trim();
+    if (!text) return { skipped: true as const, enabled: true };
+
+    const spokenAt = input.startedAt ? new Date(input.startedAt) : new Date();
+    const endedAt = input.endedAt ? new Date(input.endedAt) : new Date();
+    const speakerName = actor.name || participant.guestName || 'Participant';
+    const speakerUserId = actor.kind === 'user' ? actor.userId : participant.userId;
+    const speakerParticipantId = participant.id;
+
+    const last = await prisma.meetingUtterance.findFirst({
+      where: { meetingId },
+      orderBy: { spokenAt: 'desc' },
+    });
+    const gapMs = last?.endedAt ? +spokenAt - +last.endedAt : Number.POSITIVE_INFINITY;
+    const sameSpeaker =
+      last &&
+      last.speakerParticipantId === speakerParticipantId &&
+      last.language === language;
+    const merged =
+      sameSpeaker && last && Number.isFinite(gapMs) && gapMs >= 0 && gapMs < 8000
+        ? await prisma.meetingUtterance.update({
+            where: { id: last.id },
+            data: {
+              text: `${last.text} ${text}`.trim(),
+              endedAt,
+            },
+          })
+        : await prisma.meetingUtterance.create({
+            data: {
+              meetingId,
+              speakerUserId,
+              speakerParticipantId,
+              speakerName,
+              spokenAt,
+              endedAt,
+              text,
+              language,
+              source: spoken.source,
+            },
+          });
+
+    await refreshConversationText(meetingId).catch(() => undefined);
+    return { skipped: false as const, enabled: true, utterance: serializeUtterance(merged) };
   },
 
   async listChat(meetingId: string, actor: UserActor | GuestActor) {

@@ -41,6 +41,7 @@ services:
     depends_on:
       - postgres
       - redis
+      - whisper
     ports:
       - "4000:4000"
     volumes:
@@ -65,7 +66,26 @@ services:
       - MINIO_USE_SSL=false
       - MINIO_PUBLIC_URL=http://127.0.0.1:9000
       - MINIO_EGRESS_ENDPOINT=http://minio:9000
+      - WHISPER_URL=http://whisper:9000
+      - WHISPER_ENABLED=true
     command: sh -c "npx prisma generate && nodemon -L --exec tsx src/index.ts"
+
+  whisper:
+    build: ./whisper
+    restart: unless-stopped
+    environment:
+      WHISPER_MODEL: ${WHISPER_MODEL:-base}
+      WHISPER_DEVICE: cpu
+      WHISPER_COMPUTE: int8
+    ports:
+      - "8095:9000"
+    volumes:
+      - whisper_cache:/root/.cache
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9000/health')"]
+      interval: 20s
+      timeout: 5s
+      retries: 30
 
   minio:
     image: minio/minio:latest
@@ -120,3 +140,4 @@ services:
 volumes:
   pgdata:
   minio_data:
+  whisper_cache:

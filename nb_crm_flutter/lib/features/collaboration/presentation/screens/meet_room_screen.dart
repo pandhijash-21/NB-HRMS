@@ -20,6 +20,7 @@ import '../collab_providers.dart';
 import '../end_meet_progress.dart';
 import '../meet_helpers.dart';
 import '../meet_local_recorder.dart';
+import '../meet_stt_capture.dart';
 import '../meet_android_share_stub.dart' if (dart.library.io) '../meet_android_share.dart';
 
 class MeetRoomScreen extends ConsumerStatefulWidget {
@@ -64,6 +65,14 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
   final _chatToasts = <Map<String, dynamic>>[];
   final _toastTimers = <String, Timer>{};
   String? _summary;
+  String? _conversation;
+  bool _captionsOn = true;
+  String _transcriptLang = 'en';
+  bool _whisperOnline = false;
+  Timer? _whisperPoll;
+  final _captions = <MeetingUtterance>[];
+  MeetBhashiniStt? _stt;
+  EventsListener<RoomEvent>? _roomEvents;
   MeetingItem? _lobbyMeeting;
   LocalVideoTrack? _previewCam;
   Timer? _admitPoll;
@@ -121,6 +130,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
   void dispose() {
     _admitPoll?.cancel();
     _hostWaitPoll?.cancel();
+    _whisperPoll?.cancel();
     for (final timer in _toastTimers.values) {
       timer.cancel();
     }
@@ -137,6 +147,8 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
     _previewCam?.stop();
     _name.dispose();
     _draft.dispose();
+    unawaited(_roomEvents?.dispose());
+    unawaited(_stt?.dispose());
     super.dispose();
   }
 
@@ -324,8 +336,26 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
       if (!mounted) return;
       setState(() => _upsertChat(row, toast: true));
     });
+    socket.onMeetingTranscript((row) {
+      if (!mounted) return;
+      setState(() {
+        _captions.removeWhere((e) => e.id == row.id);
+        _captions.add(row);
+        if (_captions.length > 40) {
+          _captions.removeRange(0, _captions.length - 40);
+        }
+      });
+    });
+    socket.onMeetingTranscriptLang((language) {
+      if (!mounted) return;
+      setState(() => _transcriptLang = language);
+      _stt?.setLanguage(language);
+    });
     try {
-      final history = await ref.read(meetRepositoryProvider).listChat(meetingId);
+      final history = await ref.read(meetRepositoryProvider).listChat(
+            meetingId,
+            bearer: guestToken,
+          );
       if (mounted && history.isNotEmpty) {
         setState(() {
           for (final row in history) {
@@ -569,6 +599,12 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
   }
 
   Future<void> _dropRoom(Room? room) async {
+    _whisperPoll?.cancel();
+    _whisperPoll = null;
+    await _stt?.stop();
+    _stt = null;
+    await _roomEvents?.dispose();
+    _roomEvents = null;
     if (_localRecorder.active) {
       try {
         await _localRecorder.discard().timeout(const Duration(seconds: 2));
@@ -639,6 +675,25 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
     }
   }
 
+  void _bindSttRoomEvents(Room room) {
+    unawaited(_roomEvents?.dispose());
+    final events = room.createListener();
+    _roomEvents = events;
+    events
+      ..on<LocalTrackPublishedEvent>((e) {
+        if (e.publication.source == TrackSource.microphone) {
+          _stt?.attach(room);
+        }
+      })
+      ..on<TrackUnmutedEvent>((e) {
+        if (e.participant is LocalParticipant &&
+            e.publication.source == TrackSource.microphone) {
+          _stt?.setMicEnabled(true);
+          _stt?.attach(room);
+        }
+      });
+  }
+
   Future<void> _connect(MeetJoinPayload payload, {String? guestToken}) async {
     _admitPoll?.cancel();
     setState(() {
@@ -694,7 +749,6 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
       _recording = false;
       _waitingFor = payload.meeting.waitingParticipants;
     });
-    unawaited(_publishLocalMedia(room));
     try {
       await _bindSocket(payload.meeting.id, guestToken: guestToken);
       await saveMeetSession(
@@ -704,6 +758,23 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
         guestName: _name.text.trim().isEmpty ? null : _name.text.trim(),
       );
     } catch (_) {}
+    await _publishLocalMedia(room);
+    if (!mounted) return;
+    _bindSttRoomEvents(room);
+    _transcriptLang = payload.meeting.transcriptLanguage ?? 'en';
+    _whisperOnline = payload.meeting.whisperOnline;
+    _captions
+      ..clear()
+      ..addAll(payload.meeting.utterances);
+    final stt = MeetBhashiniStt(repo: ref.read(meetRepositoryProvider));
+    _stt = stt;
+    unawaited(stt.start(
+      meetingId: payload.meeting.id,
+      language: _transcriptLang,
+      bearer: guestToken,
+      room: room,
+    ));
+    _startWhisperPoll(bearer: guestToken);
     if (payload.meeting.isHost) _startHostWaitingPoll();
   }
 
@@ -731,6 +802,23 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
     _hostWaitPoll = Timer.periodic(const Duration(seconds: 3), (_) {
       unawaited(_pollHostWaiting());
     });
+  }
+
+  void _startWhisperPoll({String? bearer}) {
+    _whisperPoll?.cancel();
+    Future<void> tick() async {
+      try {
+        final status = await ref.read(meetRepositoryProvider).sttStatus(bearer: bearer);
+        if (!mounted) return;
+        if (_whisperOnline != status.online) {
+          setState(() => _whisperOnline = status.online);
+        }
+      } catch (_) {
+        if (mounted && _whisperOnline) setState(() => _whisperOnline = false);
+      }
+    }
+    unawaited(tick());
+    _whisperPoll = Timer.periodic(const Duration(seconds: 12), (_) => unawaited(tick()));
   }
 
   Future<void> _pollAdmission() async {
@@ -953,6 +1041,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
     await _dropRoom(room);
     if (!mounted) return;
     setState(() => _summary = ended?.summaryText ?? 'Meeting ended.');
+    setState(() => _conversation = ended?.conversationText);
   }
 
   Future<void> _leave() async {
@@ -997,6 +1086,42 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
       ),
     );
     return stop == true;
+  }
+
+  Future<void> _pickTranscriptLanguage() async {
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: const Color(0xFF1E1E1E),
+      builder: (ctx) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            const ListTile(
+              title: Text(
+                'Speech-to-text language',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+              ),
+            ),
+            for (final lang in meetSttLanguages)
+              ListTile(
+                title: Text(lang.label, style: const TextStyle(color: Colors.white)),
+                trailing: lang.code == _transcriptLang
+                    ? const NbIcon(Icons.check, color: Color(0xFFC5A059))
+                    : null,
+                onTap: () => Navigator.pop(ctx, lang.code),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    setState(() => _transcriptLang = picked);
+    _stt?.setLanguage(picked);
+    final id = _join?.meeting.id;
+    if (id == null) return;
+    try {
+      await ref.read(meetRepositoryProvider).setTranscriptLanguage(id, picked);
+    } catch (_) {}
   }
 
   Future<void> _toggleScreenShare() async {
@@ -1294,9 +1419,25 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
     if (_summary != null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Meeting ended')),
-        body: Padding(
+        body: ListView(
           padding: const EdgeInsets.all(16),
-          child: Text(_summary!),
+          children: [
+            Text(
+              'AI summary',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 8),
+            Text(_summary!, style: const TextStyle(height: 1.45)),
+            if ((_conversation ?? '').trim().isNotEmpty) ...[
+              const SizedBox(height: 20),
+              Text(
+                'Conversation (person & time)',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 8),
+              Text(_conversation!.trim(), style: const TextStyle(height: 1.45)),
+            ],
+          ],
         ),
       );
     }
@@ -1737,6 +1878,59 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                       ),
                     ),
                   ),
+                if (_captionsOn && _captions.isNotEmpty)
+                  Align(
+                    alignment: Alignment.bottomCenter,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 640),
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.7),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                for (final row in _captions.length <= 3
+                                    ? _captions
+                                    : _captions.sublist(_captions.length - 3))
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 2),
+                                    child: Text.rich(
+                                      TextSpan(
+                                        children: [
+                                          TextSpan(
+                                            text: '${meetClock(row.spokenAt)} ',
+                                            style: const TextStyle(color: Colors.white54, fontSize: 11),
+                                          ),
+                                          TextSpan(
+                                            text: '${row.speakerName}: ',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                          TextSpan(
+                                            text: row.text,
+                                            style: const TextStyle(color: Colors.white, fontSize: 13, height: 1.3),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 if (_chatOpen)
                   Align(
                     alignment: Alignment.centerRight,
@@ -1789,6 +1983,8 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                   onPressed: () async {
                     final next = !_mic;
                     await _room!.localParticipant?.setMicrophoneEnabled(next);
+                    _stt?.setMicEnabled(next);
+                    if (next && _room != null) _stt?.attach(_room!);
                     setState(() => _mic = next);
                   },
                 ),
@@ -1856,6 +2052,26 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                   }),
                   accent: _peopleOpen,
                 ),
+                const SizedBox(width: 14),
+                _LobbyRoundButton(
+                  icon: Icons.closed_caption,
+                  on: !_captionsOn,
+                  tooltip: _whisperOnline
+                      ? (_captionsOn ? 'Hide captions · Whisper on' : 'Show captions · Whisper on')
+                      : (_captionsOn ? 'Hide captions · Whisper off' : 'Show captions · Whisper off'),
+                  onPressed: () => setState(() => _captionsOn = !_captionsOn),
+                  accent: _captionsOn,
+                  badge: _whisperOnline ? const Color(0xFF34D399) : const Color(0xFFF87171),
+                ),
+                if (_join?.meeting.isHost == true) ...[
+                  const SizedBox(width: 14),
+                  _LobbyRoundButton(
+                    icon: Icons.translate,
+                    on: true,
+                    tooltip: 'Speech-to-text language',
+                    onPressed: _pickTranscriptLanguage,
+                  ),
+                ],
                 if (_join?.meeting.isHost == true) ...[
                   const SizedBox(width: 14),
                   _LobbyRoundButton(
@@ -1910,6 +2126,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                   children: [
                     Text(_code, style: const TextStyle(color: Colors.white70, fontSize: 12)),
                     _peopleChip(participants),
+                    _WhisperStatusChip(online: _whisperOnline),
                     if (join?.meeting.isHost == true && _waitingFor.isNotEmpty)
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -2823,6 +3040,7 @@ class _LobbyRoundButton extends StatelessWidget {
     required this.onPressed,
     this.accent = false,
     this.danger = false,
+    this.badge,
   });
 
   final IconData icon;
@@ -2831,6 +3049,7 @@ class _LobbyRoundButton extends StatelessWidget {
   final VoidCallback onPressed;
   final bool accent;
   final bool danger;
+  final Color? badge;
 
   @override
   Widget build(BuildContext context) {
@@ -2857,9 +3076,63 @@ class _LobbyRoundButton extends StatelessWidget {
           child: SizedBox(
             width: 48,
             height: 48,
-            child: NbIcon(icon, color: fg),
+            child: Stack(
+              children: [
+                Center(child: NbIcon(icon, color: fg)),
+                if (badge != null)
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Container(
+                      width: 9,
+                      height: 9,
+                      decoration: BoxDecoration(
+                        color: badge,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 1.2),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _WhisperStatusChip extends StatelessWidget {
+  const _WhisperStatusChip({required this.online});
+
+  final bool online;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = online ? const Color(0xFF34D399) : const Color(0xFFF87171);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.55)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          NbIcon(Icons.graphic_eq_rounded, size: 13, color: color),
+          const SizedBox(width: 4),
+          Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            online ? 'Whisper on' : 'Whisper off',
+            style: TextStyle(color: color, fontWeight: FontWeight.w800, fontSize: 11),
+          ),
+        ],
       ),
     );
   }

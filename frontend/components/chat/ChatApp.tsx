@@ -31,7 +31,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useSession } from "next-auth/react";
 import { CHAT_EMOJIS } from "@/lib/chat-emojis";
 
@@ -184,6 +184,8 @@ export function ChatApp() {
   const [editFor, setEditFor] = useState<ChatMessage | null>(null);
   const [editText, setEditText] = useState("");
   const [forwardQ, setForwardQ] = useState("");
+  const [forwardIds, setForwardIds] = useState<string[]>([]);
+  const [forwardSending, setForwardSending] = useState(false);
   const draftsRef = useRef<Record<string, string>>(loadDrafts());
   const [drafts, setDrafts] = useState<Record<string, string>>(() => draftsRef.current);
   const draftRef = useRef(draft);
@@ -881,6 +883,8 @@ export function ChatApp() {
                   onClick={() => {
                     setForwardFor(actionFor);
                     setForwardQ("");
+                    setForwardIds([]);
+                    setForwardSending(false);
                     setActionFor(null);
                   }}
                 >
@@ -928,42 +932,85 @@ export function ChatApp() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!forwardFor} onOpenChange={() => setForwardFor(null)}>
-        <DialogContent>
+      <Dialog
+        open={!!forwardFor}
+        onOpenChange={(open) => {
+          if (!open) {
+            setForwardFor(null);
+            setForwardIds([]);
+            setForwardSending(false);
+          }
+        }}
+      >
+        <DialogContent className="max-w-md w-[calc(100vw-1.5rem)]">
           <DialogHeader>
             <DialogTitle>Forward to</DialogTitle>
           </DialogHeader>
           <Input
-            placeholder="Search chats"
+            placeholder="Search people or chats"
             value={forwardQ}
             onChange={(e) => setForwardQ(e.target.value)}
           />
-          <div className="max-h-72 overflow-y-auto space-y-1">
+          <div className="max-h-72 overflow-y-auto space-y-0.5">
             {chat.channels
               .filter((c) => {
                 const q = forwardQ.trim().toLowerCase();
                 if (!q) return true;
                 return (channelTitle(c) || "").toLowerCase().includes(q);
               })
-              .map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  className="w-full text-left px-3 py-2 rounded-lg hover:bg-accent text-sm"
-                  onClick={async () => {
-                    if (!forwardFor) return;
-                    const msg = forwardFor;
-                    setForwardFor(null);
-                    await chat.sendToChannel(c.id, {
+              .map((c) => {
+                const checked = forwardIds.includes(c.id);
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-accent text-sm cursor-pointer min-w-0 w-full text-left"
+                    onClick={() => {
+                      setForwardIds((prev) =>
+                        prev.includes(c.id) ? prev.filter((id) => id !== c.id) : [...prev, c.id],
+                      );
+                    }}
+                  >
+                    <Checkbox checked={checked} className="pointer-events-none" />
+                    <span className="truncate">{channelTitle(c)}</span>
+                  </button>
+                );
+              })}
+          </div>
+          <DialogFooter className="gap-2 sm:justify-between">
+            <p className="text-xs text-muted-foreground self-center">
+              {forwardIds.length === 0
+                ? "Select people, then send"
+                : `${forwardIds.length} selected`}
+            </p>
+            <Button
+              disabled={forwardIds.length === 0 || forwardSending || !forwardFor}
+              onClick={async () => {
+                if (!forwardFor || forwardIds.length === 0) return;
+                const msg = forwardFor;
+                const ids = [...forwardIds];
+                setForwardSending(true);
+                try {
+                  for (const id of ids) {
+                    await chat.sendToChannel(id, {
                       content: msg.content || "",
                       attachments: msg.attachments,
                     });
-                  }}
-                >
-                  {channelTitle(c)}
-                </button>
-              ))}
-          </div>
+                  }
+                  setForwardFor(null);
+                  setForwardIds([]);
+                  setForwardQ("");
+                } catch {
+                  /* keep picker open so they can retry */
+                } finally {
+                  setForwardSending(false);
+                }
+              }}
+            >
+              <Send className="size-4 mr-2" />
+              {forwardSending ? "Sending…" : "Send"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

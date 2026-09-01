@@ -343,6 +343,11 @@ class MeetingItem {
     this.startedAt,
     this.endedAt,
     this.summaryText,
+    this.conversationText,
+    this.transcriptLanguage,
+    this.transcriptEnabled = false,
+    this.whisperOnline = false,
+    this.utterances = const [],
     this.recordingUrl,
     this.hasRecording = false,
     this.isHost = false,
@@ -366,6 +371,11 @@ class MeetingItem {
   final DateTime? startedAt;
   final DateTime? endedAt;
   final String? summaryText;
+  final String? conversationText;
+  final String? transcriptLanguage;
+  final bool transcriptEnabled;
+  final bool whisperOnline;
+  final List<MeetingUtterance> utterances;
   final String? recordingUrl;
   final bool hasRecording;
   final bool isHost;
@@ -390,6 +400,14 @@ class MeetingItem {
       startedAt: DateTime.tryParse('${json['startedAt'] ?? ''}'),
       endedAt: DateTime.tryParse('${json['endedAt'] ?? ''}'),
       summaryText: json['summaryText'] as String?,
+      conversationText: json['conversationText'] as String?,
+      transcriptLanguage: json['transcriptLanguage'] as String?,
+      transcriptEnabled: json['transcriptEnabled'] == true,
+      whisperOnline: json['whisperOnline'] == true,
+      utterances: (json['utterances'] as List? ?? [])
+          .whereType<Map>()
+          .map((e) => MeetingUtterance.fromJson(Map<String, dynamic>.from(e)))
+          .toList(),
       recordingUrl: json['recordingUrl'] as String?,
       hasRecording: json['hasRecording'] == true ||
           ((json['recordingUrl'] as String?)?.trim().isNotEmpty ?? false),
@@ -412,6 +430,41 @@ class MeetingItem {
           .whereType<Map>()
           .map((e) => MeetingPerson.fromJson(Map<String, dynamic>.from(e)))
           .toList(),
+    );
+  }
+}
+
+class MeetingUtterance {
+  const MeetingUtterance({
+    required this.id,
+    required this.speakerName,
+    required this.text,
+    required this.spokenAt,
+    this.endedAt,
+    this.language,
+    this.speakerUserId,
+    this.speakerParticipantId,
+  });
+
+  final String id;
+  final String speakerName;
+  final String text;
+  final DateTime spokenAt;
+  final DateTime? endedAt;
+  final String? language;
+  final String? speakerUserId;
+  final String? speakerParticipantId;
+
+  factory MeetingUtterance.fromJson(Map<String, dynamic> json) {
+    return MeetingUtterance(
+      id: json['id']?.toString() ?? '',
+      speakerName: json['speakerName']?.toString() ?? 'Speaker',
+      text: json['text']?.toString() ?? '',
+      spokenAt: DateTime.tryParse('${json['spokenAt'] ?? ''}') ?? DateTime.now(),
+      endedAt: DateTime.tryParse('${json['endedAt'] ?? ''}'),
+      language: json['language']?.toString(),
+      speakerUserId: json['speakerUserId']?.toString(),
+      speakerParticipantId: json['speakerParticipantId']?.toString(),
     );
   }
 }
@@ -470,6 +523,8 @@ class MeetingRecording {
     this.agenda,
     this.hostName,
     this.summaryText,
+    this.conversationText,
+    this.utterances = const [],
     this.startedAt,
     this.endedAt,
     this.attendees = const [],
@@ -483,6 +538,8 @@ class MeetingRecording {
   final String? agenda;
   final String? hostName;
   final String? summaryText;
+  final String? conversationText;
+  final List<MeetingUtterance> utterances;
   final DateTime? startedAt;
   final DateTime? endedAt;
   final List<MeetingPerson> attendees;
@@ -497,6 +554,11 @@ class MeetingRecording {
       agenda: json['agenda'] as String?,
       hostName: json['hostName'] as String?,
       summaryText: json['summaryText'] as String?,
+      conversationText: json['conversationText'] as String?,
+      utterances: (json['utterances'] as List? ?? [])
+          .whereType<Map>()
+          .map((e) => MeetingUtterance.fromJson(Map<String, dynamic>.from(e)))
+          .toList(),
       startedAt: DateTime.tryParse('${json['startedAt'] ?? ''}'),
       endedAt: DateTime.tryParse('${json['endedAt'] ?? ''}'),
       attendees: (json['attendees'] as List? ?? [])

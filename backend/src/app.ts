@@ -78,7 +78,7 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
   crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
 }));
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '6mb' }));
 app.use(transportEncryptionMiddleware);
 
 app.get('/', (_req, res) => {
@@ -98,6 +98,13 @@ app.get('/health', async (_req, res) => {
   } catch {
     // health should still return ok even if redis is temporarily unavailable
   }
+  let whisper: 'online' | 'offline' | 'off' = 'off';
+  try {
+    const stt = await getSttHealth();
+    whisper = stt.whisperEnabled ? (stt.online ? 'online' : 'offline') : 'off';
+  } catch {
+    whisper = process.env.WHISPER_ENABLED === 'false' ? 'off' : 'offline';
+  }
   res.json(ok({
     status: 'ok',
     service: 'hrms-backend',
@@ -105,6 +112,7 @@ app.get('/health', async (_req, res) => {
     redis: redisOk ? 'up' : 'down',
     env: env.NODE_ENV ?? 'development',
     cloudinary: getCloudinaryCredentials() ? 'configured' : 'missing',
+    whisper,
   }));
 });
 
@@ -114,6 +122,7 @@ app.use('/events', eventsRouter);
 import { trackingRouter } from './modules/tracking/tracking.routes';
 import { tasksRouter } from './modules/tasks';
 import { chatRouter, meetingsRouter } from './modules/collaboration';
+import { getSttHealth } from './modules/collaboration/stt.service';
 
 // Generic /api prefix - personal-education module
 app.use('/api', personalEducationRouter);

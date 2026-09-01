@@ -302,9 +302,18 @@ class _DetailsCard extends StatelessWidget {
               ),
             if ((rec.summaryText ?? '').trim().isNotEmpty) ...[
               const SizedBox(height: 8),
-              Text('Summary', style: TextStyle(color: muted, fontWeight: FontWeight.w700, fontSize: 12)),
+              Text('AI summary', style: TextStyle(color: muted, fontWeight: FontWeight.w700, fontSize: 12)),
               const SizedBox(height: 4),
               Text(rec.summaryText!.trim(), style: const TextStyle(height: 1.45)),
+            ],
+            if ((rec.conversationText ?? '').trim().isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Conversation (person & time)',
+                style: TextStyle(color: muted, fontWeight: FontWeight.w700, fontSize: 12),
+              ),
+              const SizedBox(height: 4),
+              Text(rec.conversationText!.trim(), style: const TextStyle(height: 1.45)),
             ],
             if (isAdmin) ...[
               const SizedBox(height: 16),

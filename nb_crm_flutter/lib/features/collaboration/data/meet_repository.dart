@@ -183,9 +183,78 @@ class MeetRepository {
     );
   }
 
-  Future<List<Map<String, dynamic>>> listChat(String meetingId) {
+  Future<void> ingestTranscriptChunk(
+    String meetingId, {
+    required String audioBase64,
+    String audioFormat = 'wav',
+    int samplingRate = 16000,
+    String? language,
+    DateTime? startedAt,
+    DateTime? endedAt,
+    String? bearer,
+  }) async {
+    await _dio.postEnvelope<Object?>(
+      'meetings/$meetingId/transcript',
+      data: {
+        'audioBase64': audioBase64,
+        'audioFormat': audioFormat,
+        'samplingRate': samplingRate,
+        if (language != null) 'language': language,
+        if (startedAt != null) 'startedAt': startedAt.toUtc().toIso8601String(),
+        if (endedAt != null) 'endedAt': endedAt.toUtc().toIso8601String(),
+      },
+      bearer: bearer,
+      receiveTimeout: const Duration(seconds: 45),
+      parse: (_) => null,
+    );
+  }
+
+  Future<({bool enabled, String language, String? conversationText, List<MeetingUtterance> utterances})>
+      listTranscript(String meetingId, {String? bearer}) {
+    return _dio.getEnvelope(
+      'meetings/$meetingId/transcript',
+      bearer: bearer,
+      parse: (raw) {
+        final map = Map<String, dynamic>.from(raw as Map? ?? {});
+        return (
+          enabled: map['enabled'] == true,
+          language: map['language']?.toString() ?? 'en',
+          conversationText: map['conversationText'] as String?,
+          utterances: (map['utterances'] as List? ?? [])
+              .whereType<Map>()
+              .map((e) => MeetingUtterance.fromJson(Map<String, dynamic>.from(e)))
+              .toList(),
+        );
+      },
+    );
+  }
+
+  Future<void> setTranscriptLanguage(String meetingId, String language) async {
+    await _dio.postEnvelope<Object?>(
+      'meetings/$meetingId/transcript-language',
+      data: {'language': language},
+      parse: (_) => null,
+    );
+  }
+
+  Future<({bool enabled, bool online})> sttStatus({String? bearer}) {
+    return _dio.getEnvelope(
+      'meetings/stt-status',
+      bearer: bearer,
+      parse: (raw) {
+        final map = Map<String, dynamic>.from(raw as Map? ?? {});
+        return (
+          enabled: map['enabled'] == true,
+          online: map['online'] == true,
+        );
+      },
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> listChat(String meetingId, {String? bearer}) {
     return _dio.getEnvelope(
       'meetings/$meetingId/chat',
+      bearer: bearer,
       parse: (raw) => (raw as List? ?? [])
           .whereType<Map>()
           .map((e) => Map<String, dynamic>.from(e))

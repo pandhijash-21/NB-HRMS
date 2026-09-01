@@ -95,6 +95,24 @@ const envSchema = z.object({
   OPENAI_API_KEY: optionalNonEmptyString,
   OPENAI_MODEL: z.string().default('gpt-4o-mini'),
 
+  /** Bhashini / Dhruva ASR for in-meet speech-to-text notes. */
+  BHASHINI_API_KEY: optionalNonEmptyString,
+  BHASHINI_ASR_URL: optionalNonEmptyString,
+  BHASHINI_ASR_SERVICE_ID: optionalNonEmptyString,
+  BHASHINI_USER_ID: optionalNonEmptyString,
+  BHASHINI_ULCA_API_KEY: optionalNonEmptyString,
+  BHASHINI_PIPELINE_ID: optionalNonEmptyString,
+  BHASHINI_DEFAULT_LANGUAGE: z.string().default('en'),
+
+  /** Self-hosted Whisper for meet speech-to-text (browser + Flutter). */
+  WHISPER_ENABLED: z.preprocess((v) => {
+    if (v === false || v === 'false') return false;
+    if (v === true || v === 'true' || v === undefined || v === '') return true;
+    return true;
+  }, z.boolean()).default(true),
+  WHISPER_URL: optionalNonEmptyString,
+  WHISPER_MODEL: z.string().default('base'),
+
   CLAMAV_HOST: optionalNonEmptyString,
   CLAMAV_PORT: z.coerce.number().int().positive().default(3310),
 })

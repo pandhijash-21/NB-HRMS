@@ -20,6 +20,7 @@ on:
     paths:
       - backend/**
       - nb_crm_flutter/**
+      - whisper/**
       - docker-compose.prod.yml
       - deploy/**
       - .github/workflows/**
@@ -28,6 +29,7 @@ on:
     paths:
       - backend/**
       - nb_crm_flutter/**
+      - whisper/**
       - docker-compose.prod.yml
       - deploy/**
       - .github/workflows/**
@@ -298,12 +300,13 @@ jobs:
           ssh_common="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts"
           rsh="ssh -p ${port} ${ssh_common}"
 
-          $rsh "$remote" "mkdir -p /opt/nb-crm/backend /opt/nb-crm/deploy/nginx"
+          $rsh "$remote" "mkdir -p /opt/nb-crm/backend /opt/nb-crm/deploy/nginx /opt/nb-crm/whisper"
 
           # --delete only within these app dirs — never .env.production or Docker volumes
           rsync -az --delete -e "$rsh" backend/src/ "$remote:/opt/nb-crm/backend/src/"
           rsync -az --delete -e "$rsh" backend/prisma/ "$remote:/opt/nb-crm/backend/prisma/"
           rsync -az --delete -e "$rsh" backend/docker/ "$remote:/opt/nb-crm/backend/docker/"
+          rsync -az --delete -e "$rsh" whisper/ "$remote:/opt/nb-crm/whisper/"
           rsync -az --delete -e "$rsh" deploy/frontend/ "$remote:/opt/nb-crm/deploy/frontend/"
           rsync -az --delete -e "$rsh" deploy/nginx/ "$remote:/opt/nb-crm/deploy/nginx/"
 

@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import { z } from 'zod';
 import { requireAuth } from '../../middleware/auth';
+import { requirePermission, type PermissionAction } from '../../middleware/rbac';
 import { ok, fail } from '../../utils/response';
 import { chatService } from './chat.service';
 import { emitChatNewMessage, getIo, isOnline } from './socket';
@@ -15,6 +16,12 @@ const upload = multer({
 const p = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? '';
 
 chatRouter.use(requireAuth);
+chatRouter.use((req, res, next) => {
+  const action: PermissionAction = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)
+    ? 'WRITE'
+    : 'READ';
+  return requirePermission('CHAT', action)(req, res, next);
+});
 
 chatRouter.get('/directory', async (req: Request, res: Response) => {
   try {

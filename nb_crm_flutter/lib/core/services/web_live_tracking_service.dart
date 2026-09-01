@@ -70,14 +70,7 @@ class WebLiveTrackingService {
         return;
       }
 
-      var permission = await Geolocator.checkPermission();
-      if (permission != LocationPermission.always &&
-          permission != LocationPermission.whileInUse) {
-        return;
-      }
-
-      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) return;
+      final permission = await Geolocator.checkPermission();
 
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(

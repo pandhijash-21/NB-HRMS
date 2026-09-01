@@ -106,11 +106,31 @@ class _PermissionGuardState extends State<PermissionGuard> {
         permission == LocationPermission.whileInUse;
   }
 
+  /// On web, the only reliable grant check is an actual geolocation read.
+  /// Geolocator permission state and isLocationServiceEnabled are unreliable on desktop browsers.
+  Future<bool> _probeWebGeolocation({
+    Duration timeout = const Duration(seconds: 10),
+  }) async {
+    try {
+      await Geolocator.getCurrentPosition(
+        locationSettings: LocationSettings(
+          accuracy: LocationAccuracy.low,
+          timeLimit: timeout,
+        ),
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<bool> _isWebLocationReady() async {
-    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) return false;
     final permission = await Geolocator.checkPermission();
-    return _webLocationGranted(permission);
+    if (_webLocationGranted(permission)) {
+      return _probeWebGeolocation();
+    }
+    // Browser may show Allow while the plugin still reports denied/deniedForever.
+    return _probeWebGeolocation();
   }
 
   Future<void> _checkPermissions() async {
@@ -286,24 +306,14 @@ class _PermissionGuardState extends State<PermissionGuard> {
 
     if (kIsWeb) {
       try {
-        final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-        if (!serviceEnabled) {
-          if (mounted) {
-            setState(() {
-              _checking = false;
-              _hasPermissions = false;
-              _errorMsg = 'Turn on location/GPS on this device, then tap Enable again.';
-            });
-          }
-          return;
-        }
-
         var permission = await Geolocator.checkPermission();
         if (permission == LocationPermission.denied) {
           permission = await Geolocator.requestPermission();
         }
 
-        if (_webLocationGranted(permission)) {
+        final granted =
+            _webLocationGranted(permission) || await _probeWebGeolocation();
+        if (granted) {
           unawaited(WebLiveTrackingService.ensureRunning());
           if (mounted) {
             setState(() {

@@ -178,9 +178,7 @@ class DioClient {
       final response = await dio.get<Map<String, dynamic>>(
         path,
         queryParameters: queryParameters,
-        options: Options(
-          extra: {if (bearer != null) 'bearer': bearer},
-        ),
+        options: Options(extra: {if (bearer != null) 'bearer': bearer}),
       );
       return _unwrap(response.data, response.statusCode, parse);
     } on DioException catch (e) {

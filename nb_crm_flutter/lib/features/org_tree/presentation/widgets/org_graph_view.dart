@@ -307,6 +307,7 @@ class _OrgGraphViewState extends State<OrgGraphView> {
                       ),
                       for (final n in laid)
                         Positioned(
+                          key: ValueKey('org-chip-${n.node.id}'),
                           left: origin.dx + n.offset.dx,
                           top: origin.dy + n.offset.dy,
                           width: n.size.width,

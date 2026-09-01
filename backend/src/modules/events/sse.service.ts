@@ -30,6 +30,14 @@ export const sseService = {
     }
   },
 
+  /** Send an event to a specific logged-in user */
+  toUser(userId: string, event: string, data: unknown) {
+    const client = clients.get(userId);
+    if (!client) return;
+    const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+    try { client.res.write(payload); } catch { /* client disconnected */ }
+  },
+
   /** Send an event to a specific employee by their employeeId */
   toEmployee(employeeId: number, event: string, data: unknown) {
     const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;

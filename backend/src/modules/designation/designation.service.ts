@@ -4,6 +4,7 @@ import { prisma } from '../../config/prisma';
 import { resolveInstituteRef } from '../institute/institute.util';
 import { encryptPasswordForAdmin } from '../../utils/passwordCrypto';
 import { grantFullUniversityAccess } from '../user-management/universityAccess.util';
+import { passwordPolicyIssue } from '../../utils/passwordPolicy';
 
 function slugify(name: string): string {
   return name
@@ -374,6 +375,9 @@ export const designationService = {
 
     const existingUser = await prisma.user.findUnique({ where: { username: data.code } });
     if (existingUser) throw new Error('Username already in use');
+
+    const policyError = passwordPolicyIssue(data.password);
+    if (policyError) throw new Error(policyError);
 
     const passwordHash = await bcrypt.hash(data.password, 10);
     const instituteRef = await resolveInstituteRef({

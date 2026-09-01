@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Lock, Eye, EyeOff, Loader2, CheckCircle2 } from "lucide-react";
+import { passwordPolicyIssue, PASSWORD_POLICY_HINT } from "@/lib/passwordPolicy";
 
 export function ChangePasswordForm() {
   const router = useRouter();
@@ -44,8 +45,9 @@ export function ChangePasswordForm() {
       return;
     }
 
-    if (formData.newPassword.length < 6) {
-      alert("Password must be at least 6 characters.");
+    const policyError = passwordPolicyIssue(formData.newPassword);
+    if (policyError) {
+      alert(policyError);
       return;
     }
 
@@ -88,7 +90,7 @@ export function ChangePasswordForm() {
     <form onSubmit={handleSubmit} className="space-y-6">
       {isFirstLogin && (
         <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 mb-2 text-amber-200/80 text-xs leading-relaxed">
-          <strong>Security Requirement:</strong> This is your first time logging in. Please create a new personal password to secure your account.
+          <strong>Security Requirement:</strong> {PASSWORD_POLICY_HINT} You will sign in again afterward.
         </div>
       )}
 
@@ -104,6 +106,7 @@ export function ChangePasswordForm() {
             id="currentPassword"
             name="currentPassword"
             type={showCurrent ? "text" : "password"}
+            autoComplete="current-password"
             required
             className="w-full h-12 pl-12 pr-12 bg-white/5 border-white/10 focus:border-[#d9b557]/50 focus:ring-[#d9b557]/20 text-white placeholder:text-white/20 rounded-2xl transition-all"
             placeholder={isFirstLogin ? "Default password (DOB)" : "••••••••"}
@@ -134,9 +137,10 @@ export function ChangePasswordForm() {
             id="newPassword"
             name="newPassword"
             type={showNew ? "text" : "password"}
+            autoComplete="new-password"
             required
             className="w-full h-12 pl-12 pr-12 bg-white/5 border-white/10 focus:border-[#d9b557]/50 focus:ring-[#d9b557]/20 text-white placeholder:text-white/20 rounded-2xl transition-all"
-            placeholder="Min. 6 characters"
+            placeholder="At least 6 characters"
             value={formData.newPassword}
             onChange={(e) =>
               setFormData({ ...formData, newPassword: e.target.value })
@@ -164,6 +168,7 @@ export function ChangePasswordForm() {
             id="confirmPassword"
             name="confirmPassword"
             type={showConfirm ? "text" : "password"}
+            autoComplete="off"
             required
             className="w-full h-12 pl-12 pr-12 bg-white/5 border-white/10 focus:border-[#d9b557]/50 focus:ring-[#d9b557]/20 text-white placeholder:text-white/20 rounded-2xl transition-all"
             placeholder="Repeat new password"

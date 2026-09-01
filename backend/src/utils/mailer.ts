@@ -76,6 +76,86 @@ export function isSmtpConfigured(): boolean {
   return !!(env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASS);
 }
 
+export async function sendMeetingSummaryEmail(opts: {
+  to: string[];
+  title: string;
+  code: string;
+  when: string;
+  agenda: string | null;
+  summary: string;
+  joinUrl: string;
+}) {
+  const t = getTransporter();
+  if (!t || opts.to.length === 0) return;
+  const unique = [...new Set(opts.to.filter(Boolean))];
+  if (unique.length === 0) return;
+  const htmlSummary = opts.summary
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\n/g, '<br/>');
+  await t.sendMail({
+    from: `"NB CRM Meetings" <${env.SMTP_FROM ?? env.SMTP_USER}>`,
+    to: unique.join(', '),
+    subject: `Meeting summary: ${opts.title}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 640px; margin: 0 auto;">
+        <div style="background:#1d3459;color:#fff;padding:20px 24px;">
+          <h1 style="margin:0;font-size:20px;">${opts.title}</h1>
+          <p style="margin:8px 0 0;opacity:.9">Code ${opts.code} · ${opts.when}</p>
+        </div>
+        <div style="padding:24px;background:#f8fafc;color:#1e293b;">
+          ${opts.agenda ? `<p><strong>Agenda:</strong> ${opts.agenda}</p>` : ''}
+          <h2 style="font-size:16px;">AI summary</h2>
+          <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:16px;line-height:1.5;">
+            ${htmlSummary}
+          </div>
+          <p style="margin-top:20px;font-size:13px;color:#64748b;">
+            Replay / details: <a href="${opts.joinUrl}">${opts.joinUrl}</a>
+          </p>
+        </div>
+      </div>
+    `,
+  });
+}
+
+export async function sendMeetingInviteEmail(opts: {
+  to: string[];
+  title: string;
+  code: string;
+  when: string;
+  agenda: string | null;
+  hostName: string;
+  joinUrl: string;
+}) {
+  const t = getTransporter();
+  if (!t || opts.to.length === 0) return;
+  const unique = [...new Set(opts.to.filter(Boolean))];
+  if (unique.length === 0) return;
+  await t.sendMail({
+    from: `"NB CRM Meetings" <${env.SMTP_FROM ?? env.SMTP_USER}>`,
+    to: unique.join(', '),
+    subject: `Meeting invite: ${opts.title}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 640px; margin: 0 auto;">
+        <div style="background:#2563eb;color:#fff;padding:20px 24px;">
+          <h1 style="margin:0;font-size:20px;">You're invited</h1>
+          <p style="margin:8px 0 0;opacity:.9">${opts.title}</p>
+        </div>
+        <div style="padding:24px;background:#f8fafc;color:#1e293b;">
+          <p><strong>Host:</strong> ${opts.hostName}</p>
+          <p><strong>When:</strong> ${opts.when}</p>
+          <p><strong>Code:</strong> ${opts.code}</p>
+          ${opts.agenda ? `<p><strong>Agenda:</strong> ${opts.agenda}</p>` : ''}
+          <p style="margin-top:20px;">
+            <a href="${opts.joinUrl}" style="background:#2563eb;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;">Join meeting</a>
+          </p>
+        </div>
+      </div>
+    `,
+  });
+}
+
 export async function sendOtpEmail(to: string, otp: string): Promise<void> {
   const t = getTransporter();
   if (!t) {

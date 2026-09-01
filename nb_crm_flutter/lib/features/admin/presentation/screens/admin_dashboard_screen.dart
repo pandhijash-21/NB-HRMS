@@ -5,6 +5,7 @@ import 'package:syncfusion_flutter_charts/charts.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/widgets/header_action_button.dart';
+import '../../../../core/widgets/zoomable_photo.dart';
 import '../../../admin/presentation/admin_notifier.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/auth_providers.dart';
@@ -432,7 +433,6 @@ class AdminDashboardScreen extends ConsumerWidget {
   }
 
   Widget _recentRow(BuildContext context, EmployeeProfile emp, bool isDark) {
-    final initials = emp.generalInfo?.fullName.split(' ').map((e) => e[0]).take(2).join('').toUpperCase() ?? '#';
     return InkWell(
       onTap: () => context.push('/admin/employees/${emp.id}'),
       borderRadius: BorderRadius.circular(10),
@@ -440,17 +440,13 @@ class AdminDashboardScreen extends ConsumerWidget {
         padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
         child: Row(
           children: [
-            CircleAvatar(
+            NbProfilePhoto(
+              url: emp.photoUrl,
+              name: emp.generalInfo?.fullName,
+              identity: 'emp-${emp.id}',
               radius: 20,
               backgroundColor: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFE5ECF0),
-              child: Text(
-                initials,
-                style: TextStyle(
-                  color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13,
-                ),
-              ),
+              foregroundColor: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
             ),
             const SizedBox(width: 12),
             Expanded(

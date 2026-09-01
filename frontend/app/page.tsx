@@ -34,10 +34,10 @@ export default function Home() {
         </div>
 
         <h1 className="text-5xl font-extrabold tracking-tight text-foreground">
-          HRMS Portal
+          NB CRM
         </h1>
         <p className="mt-3 text-xl text-primary font-medium tracking-wide">
-          Gandhinagar University
+          CRM · HRMS · ERP
         </p>
         <p className="mt-5 text-base text-muted-foreground max-w-md mx-auto leading-relaxed">
           Human Resource Management System — manage employees, profiles, documents, and seamlessly orchestrate workflows.
@@ -75,7 +75,7 @@ export default function Home() {
       </div>
 
       <p className="mt-16 text-xs text-muted-foreground font-medium z-10">
-        &copy; {new Date().getFullYear()} Gandhinagar University · All rights reserved
+        &copy; {new Date().getFullYear()} NB CRM · All rights reserved
       </p>
     </div>
   );

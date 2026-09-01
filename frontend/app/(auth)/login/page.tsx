@@ -25,8 +25,8 @@ export default function LoginPage() {
               <div className="flex items-center gap-5 z-10">
                 <div className="relative h-20 w-20 overflow-hidden rounded-[1.5rem] bg-primary/10 border-2 border-primary/20 shadow-inner">
                   <Image
-                    src="/gu-logo.png"
-                    alt="Gandhinagar University"
+                    src="/nb-logo.png"
+                    alt="NB CRM"
                     fill
                     sizes="80px"
                     className="object-contain p-3"
@@ -35,10 +35,10 @@ export default function LoginPage() {
                 </div>
                 <div>
                   <p className="text-foreground text-2xl sm:text-3xl font-extrabold tracking-tight leading-none">
-                    Gandhinagar University
+                    NB CRM
                   </p>
                   <p className="mt-2 text-primary font-bold tracking-wide">
-                    HRMS Portal
+                    CRM · HRMS · ERP
                   </p>
                 </div>
               </div>
@@ -63,7 +63,7 @@ export default function LoginPage() {
                 </div>
 
                 <p className="mt-8 text-center text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
-                  &copy; {new Date().getFullYear()} Gandhinagar University
+                  &copy; {new Date().getFullYear()} NB CRM
                 </p>
               </div>
             </div>

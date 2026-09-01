@@ -12,8 +12,12 @@ const roboto = Roboto({
 });
 
 export const metadata: Metadata = {
-  title: "HRMS Portal – Gandhinagar University",
-  description: "Human Resource Management System",
+  title: "NB CRM",
+  description: "NB CRM — CRM, HRMS and ERP",
+  icons: {
+    icon: "/favicon.png",
+    apple: "/nb-logo.png",
+  },
 };
 
 import { LocationGuard } from "@/components/auth/LocationGuard";

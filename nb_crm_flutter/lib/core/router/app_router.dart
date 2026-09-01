@@ -17,6 +17,7 @@ import '../../features/admin/presentation/screens/admin_employees_screen.dart';
 import '../../features/admin/presentation/screens/admin_employee_detail_screen.dart';
 import '../../features/admin/presentation/screens/admin_approvals_screen.dart';
 import '../../features/admin/presentation/screens/admin_dashboard_screen.dart';
+import '../../features/admin/presentation/screens/admin_storage_screen.dart';
 import '../../features/admin/presentation/screens/admin_live_tracking_screen.dart';
 import '../../features/admin/presentation/screens/admin_employee_live_tracking_screen.dart';
 import '../../features/tracking_hub/presentation/screens/tracking_hub_screen.dart';
@@ -80,6 +81,14 @@ import '../../features/erp/presentation/screens/work_order_detail_screen.dart';
 import '../../features/erp/presentation/screens/work_order_form_screen.dart';
 import '../../features/erp/presentation/screens/activities_config_screen.dart';
 import '../../features/erp/presentation/screens/contractors_config_screen.dart';
+import '../../features/collaboration/presentation/screens/chat_hub_screen.dart';
+import '../../features/collaboration/presentation/screens/meet_hub_screen.dart';
+import '../../features/collaboration/presentation/screens/meet_list_screen.dart';
+import '../../features/collaboration/presentation/screens/meet_schedule_screen.dart';
+import '../../features/collaboration/presentation/screens/meet_invite_people_screen.dart';
+import '../../features/collaboration/presentation/screens/meet_room_screen.dart';
+import '../../features/collaboration/presentation/meet_helpers.dart';
+import '../../features/collaboration/presentation/screens/meet_recording_screen.dart';
 import '../widgets/responsive_shell.dart';
 
 /// Listenable bridge so GoRouter refreshes when [AuthState] changes.
@@ -109,7 +118,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
   final shellNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'shellNav');
 
   // Bump when route table changes so hot-restart rebuilds GoRouter cleanly.
-  const routerRevision = 16;
+  const routerRevision = 20;
 
   return GoRouter(
     navigatorKey: rootNavigatorKey,
@@ -132,11 +141,12 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       final changingPassword = loc == '/change-password';
       final verifyingEmails = loc == '/verify-emails';
       final trackingSetup = loc == '/tracking/setup';
+      final guestMeet = loc.startsWith('/meet/guest') || loc.startsWith('/meet/r/');
       final authenticated = auth.isAuthenticated;
 
       String? next;
       if (!authenticated) {
-        next = loggingIn ? null : '/login';
+        next = (loggingIn || guestMeet) ? null : '/login';
       } else if (auth.isFirstLogin) {
         next = changingPassword ? null : '/change-password';
       } else if (auth.needsEmailVerification) {
@@ -168,6 +178,35 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/tracking/setup',
         builder: (context, state) => const AutostartOnboardingScreen(),
+      ),
+      GoRoute(
+        path: '/meet/recording/:id',
+        builder: (context, state) => MeetRecordingScreen(
+          meetingId: state.pathParameters['id'] ?? '',
+        ),
+      ),
+      GoRoute(
+        path: '/meet/r/:code',
+        builder: (context, state) {
+          final flags = meetRouteFlags(state.uri);
+          return MeetRoomScreen(
+            code: sanitizeMeetCode(state.pathParameters['code']),
+            voiceOnly: flags.voice,
+            autoJoin: flags.auto,
+          );
+        },
+      ),
+      GoRoute(
+        path: '/meet/guest/:code',
+        builder: (context, state) {
+          final flags = meetRouteFlags(state.uri);
+          return MeetRoomScreen(
+            code: sanitizeMeetCode(state.pathParameters['code']),
+            asGuest: true,
+            voiceOnly: flags.voice,
+            autoJoin: flags.auto,
+          );
+        },
       ),
       ShellRoute(
         navigatorKey: shellNavigatorKey,
@@ -304,6 +343,49 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             },
           ),
           GoRoute(
+            path: '/chat',
+            builder: (context, state) => const ChatHubScreen(),
+          ),
+          GoRoute(
+            path: '/meet/invite-people',
+            builder: (context, state) {
+              final extra = state.extra;
+              if (extra is MeetInviteResult) {
+                return MeetInvitePeopleScreen(
+                  initialSelected: extra.ids,
+                  initialPeople: extra.people,
+                );
+              }
+              return const MeetInvitePeopleScreen();
+            },
+          ),
+          GoRoute(
+            path: '/meet/schedule/:id',
+            builder: (context, state) => MeetScheduleScreen(
+              meetingId: state.pathParameters['id'],
+            ),
+          ),
+          GoRoute(
+            path: '/meet/schedule',
+            builder: (context, state) => const MeetScheduleScreen(),
+          ),
+          GoRoute(
+            path: '/meet/scheduled',
+            builder: (context, state) => const MeetListScreen(kind: MeetListKind.scheduled),
+          ),
+          GoRoute(
+            path: '/meet/past',
+            builder: (context, state) => const MeetListScreen(kind: MeetListKind.past),
+          ),
+          GoRoute(
+            path: '/meet/org',
+            builder: (context, state) => const MeetListScreen(kind: MeetListKind.org),
+          ),
+          GoRoute(
+            path: '/meet',
+            builder: (context, state) => const MeetHubScreen(),
+          ),
+          GoRoute(
             path: '/leave',
             builder: (context, state) => const LeaveHubScreen(),
           ),
@@ -438,6 +520,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/admin/configurations/letters',
             builder: (context, state) => const AdminLettersConfigScreen(),
+          ),
+          GoRoute(
+            path: '/admin/storage',
+            builder: (context, state) => const AdminStorageScreen(),
           ),
           GoRoute(
             path: '/admin/configurations/lookups/:category',

@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Copy, KeyRound, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
+import { passwordPolicyIssue } from "@/lib/passwordPolicy";
 import {
   fetchUserCredentials,
   resetUserPassword,
@@ -70,6 +71,13 @@ export function AccountCredentialsDialog({
 
   const handleReset = async () => {
     if (!userId) return;
+    if (customPassword.trim()) {
+      const issue = passwordPolicyIssue(customPassword.trim());
+      if (issue) {
+        toast.error(issue);
+        return;
+      }
+    }
     setResetting(true);
     try {
       const result = await resetUserPassword(
@@ -159,7 +167,7 @@ export function AccountCredentialsDialog({
                 <p className="text-xs font-semibold text-slate-600">Reset password</p>
                 <Input
                   type="text"
-                  placeholder="Optional custom password (min 8 chars)"
+                  placeholder="Optional custom password (6+ chars, A-z and a number)"
                   value={customPassword}
                   onChange={(e) => setCustomPassword(e.target.value)}
                 />

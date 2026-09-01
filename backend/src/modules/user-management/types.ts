@@ -1,9 +1,10 @@
 import { z } from 'zod';
+import { PasswordPolicySchema } from '../../utils/passwordPolicy';
 
 export const CreateUserSchema = z.object({
   employeeId: z.coerce.number().int().positive().optional(),
   username: z.string().min(2).max(64).optional(),
-  password: z.string().min(8).optional(),
+  password: PasswordPolicySchema.optional(),
   subOrganization: z.string().min(1).max(64).optional(),
   roleId:     z.string().uuid(),
 }).refine((d) => d.employeeId !== undefined || d.username !== undefined, {

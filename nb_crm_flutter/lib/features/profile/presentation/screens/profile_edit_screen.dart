@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/utils/platform_file_picker.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/zoomable_photo.dart';
 import '../../../../core/utils/name_utils.dart';
 import '../../../admin/presentation/admin_notifier.dart';
 import '../../../admin/domain/admin_models.dart';
@@ -4723,7 +4724,11 @@ class _MediaUploadBox extends StatelessWidget {
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: isUploading ? null : onTap,
+      onTap: isUploading
+          ? null
+          : has
+              ? () => showZoomablePhotoOverlay(context, url: url!, label: label)
+              : onTap,
       child: Material(
         color: Theme.of(context).brightness == Brightness.dark
             ? Theme.of(context).colorScheme.surfaceContainerHighest
@@ -4752,7 +4757,9 @@ class _MediaUploadBox extends StatelessWidget {
                     Positioned(
                       right: 6,
                       bottom: 6,
-                      child: Container(
+                      child: GestureDetector(
+                        onTap: onTap,
+                        child: Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 8,
                           vertical: 4,
@@ -4765,6 +4772,7 @@ class _MediaUploadBox extends StatelessWidget {
                           'Replace',
                           style: TextStyle(color: Colors.white, fontSize: 10),
                         ),
+                      ),
                       ),
                     ),
                   ],

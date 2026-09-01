@@ -34,7 +34,7 @@ export default function ChangePasswordPage() {
         </div>
 
         <p className="mt-6 text-center text-xs text-white/40 tracking-wider font-light">
-          &copy; {new Date().getFullYear()} Gandhinagar University
+          &copy; {new Date().getFullYear()} NB CRM
         </p>
       </div>
     </div>

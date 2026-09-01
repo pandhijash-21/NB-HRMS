@@ -82,6 +82,7 @@ server {
         return 200 'ok\n';
     }
     location / {
+        add_header Cache-Control "no-store" always;
         try_files $uri $uri/ /index.html;
     }
 }
@@ -112,6 +113,7 @@ if docker image inspect "${BACKEND_IMAGE_REPO}:latest" >/dev/null 2>&1; then
 fi
 compose up -d backend
 compose up -d --force-recreate frontend
+compose up -d minio livekit livekit-egress
 
 echo "==> Wait for local API health"
 i=0

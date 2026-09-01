@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import path from 'path';
 
 import actionsRouter from './actions';
 import eventsRouter from './events';
@@ -20,7 +21,7 @@ import { workOrderRouter } from './modules/erp-work-orders';
 import { activityRouter } from './modules/erp-activities';
 import { contractorRouter } from './modules/erp-contractors';
 import { env } from './config/env';
-import { configureCloudinary } from './config/cloudinary';
+import { configureCloudinary, getCloudinaryCredentials } from './config/cloudinary';
 import { connectRedis } from './config/redis';
 import { fail, ok } from './utils/response';
 import { transportEncryptionMiddleware } from './middleware/transportEncryption';
@@ -51,6 +52,7 @@ function isAllowedCorsOrigin(origin: string | undefined): boolean {
   if (/^https:\/\/([a-z0-9-]+\.)*vercel\.app$/i.test(origin)) return true;
   // Netlify prod + deploy-preview URLs (e.g. abc--site.netlify.app)
   if (/^https:\/\/([a-z0-9-]+\.)*netlify\.app$/i.test(origin)) return true;
+  if (/^https:\/\/crm\.nbdeveloper\.co\.in$/i.test(origin)) return true;
   return false;
 }
 
@@ -101,6 +103,7 @@ app.get('/health', async (_req, res) => {
     port: env.PORT,
     redis: redisOk ? 'up' : 'down',
     env: env.NODE_ENV ?? 'development',
+    cloudinary: getCloudinaryCredentials() ? 'configured' : 'missing',
   }));
 });
 
@@ -109,6 +112,7 @@ app.use('/events', eventsRouter);
 
 import { trackingRouter } from './modules/tracking/tracking.routes';
 import { tasksRouter } from './modules/tasks';
+import { chatRouter, meetingsRouter } from './modules/collaboration';
 
 // Generic /api prefix - personal-education module
 app.use('/api', personalEducationRouter);
@@ -137,6 +141,9 @@ app.use('/api/erp/contractors', contractorRouter);
 app.use('/api/tracking', trackingRouter);
 app.use('/api/tasks', tasksRouter);
 app.use('/api/events', sseEventsRouter);
+app.use('/api/chat', chatRouter);
+app.use('/api/meetings', meetingsRouter);
+app.use('/uploads/collab', express.static(path.join(process.cwd(), 'uploads', 'collab')));
 
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);

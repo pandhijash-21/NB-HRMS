@@ -36,6 +36,9 @@ backend/list-routes.ts
 backend/src/modules/personal-education/index.ts.bak
 frontend/lib/hooks/useEmployee.ts.bak
 
+# Local Postgres/Redis when Docker Desktop cannot start
+.local-infra/
+
 # Docker
 docker-compose.override.yml
 

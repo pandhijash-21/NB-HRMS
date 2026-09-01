@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/utils/name_utils.dart';
 import '../../../../core/widgets/header_action_button.dart';
+import '../../../../core/widgets/zoomable_photo.dart';
 import '../../../auth/presentation/auth_providers.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../presentation/admin_notifier.dart';
@@ -193,7 +194,10 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminEmployeesScreen> {
                           itemCount: list.length,
                           itemBuilder: (context, index) {
                             final emp = list[index];
-                            return _buildEmployeeCard(context, emp);
+                            return KeyedSubtree(
+                              key: ValueKey('emp-card-${emp.id}'),
+                              child: _buildEmployeeCard(context, emp),
+                            );
                           },
                         ),
                       ),
@@ -347,7 +351,6 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminEmployeesScreen> {
   Widget _buildEmployeeCard(BuildContext context, EmployeeProfile emp) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final statusColor = _getStatusColor(emp.status);
-    final initials = emp.generalInfo?.fullName.split(' ').map((e) => e.isNotEmpty ? e[0] : '').join('') ?? '?';
 
     return Card(
       elevation: 0,
@@ -375,22 +378,13 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminEmployeesScreen> {
                     width: 1.5,
                   ),
                 ),
-                child: CircleAvatar(
+                child: NbProfilePhoto(
+                  url: emp.photoUrl,
+                  name: emp.generalInfo?.fullName,
+                  identity: 'emp-${emp.id}',
                   radius: 24,
                   backgroundColor: isDark ? const Color(0xFF2B2722) : const Color(0xFFECEFF1),
-                  backgroundImage: emp.photoUrl != null && emp.photoUrl!.isNotEmpty
-                      ? NetworkImage(emp.photoUrl!)
-                      : null,
-                  child: emp.photoUrl == null || emp.photoUrl!.isEmpty
-                      ? Text(
-                          initials.length > 2 ? initials.substring(0, 2).toUpperCase() : initials.toUpperCase(),
-                          style: TextStyle(
-                            color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238), 
-                            fontWeight: FontWeight.bold, 
-                            fontSize: 13,
-                          ),
-                        )
-                      : null,
+                  foregroundColor: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
                 ),
               ),
               const SizedBox(width: 16),

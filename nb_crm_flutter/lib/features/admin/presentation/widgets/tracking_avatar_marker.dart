@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/widgets/zoomable_photo.dart';
+
 /// Map pin: profile photo when available, otherwise a person icon.
 class TrackingAvatarMarker extends StatelessWidget {
   const TrackingAvatarMarker({
@@ -20,7 +22,7 @@ class TrackingAvatarMarker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final pin = Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
@@ -48,6 +50,7 @@ class TrackingAvatarMarker extends StatelessWidget {
             )
           : _fallback(),
     );
+    return ZoomablePhoto(url: photoUrl, child: pin);
   }
 
   Widget _fallback() {

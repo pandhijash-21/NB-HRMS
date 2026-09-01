@@ -28,6 +28,8 @@ const MODULES = [
   { key: 'FIELD_MGMT',    name: 'Dynamic Field Management' },
   { key: 'PROJECTS',      name: 'ERP Projects' },
   { key: 'WORK_ORDERS',   name: 'ERP Work Orders' },
+  { key: 'CHAT',          name: 'Chat & Collaboration' },
+  { key: 'MEETINGS',      name: 'Meetings' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -62,6 +64,8 @@ const PERMISSION_MATRIX: PermissionMatrix = {
     DOCUMENTS:     RW,
     PROJECTS:      RO,
     WORK_ORDERS:   RO,
+    CHAT:          RW,
+    MEETINGS:      RW,
   },
 };
 

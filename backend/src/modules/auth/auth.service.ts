@@ -7,42 +7,20 @@ import { sendPasswordResetEmail } from '../../utils/mailer';
 import { encryptPasswordForAdmin } from '../../utils/passwordCrypto';
 import { passwordFromBirthDate } from '../../utils/dobPassword';
 import type { LoginInput, ChangePasswordInput } from './auth.types';
+import { passwordMeetsPolicy, passwordPolicyIssue } from '../../utils/passwordPolicy';
 import {
   assertNotLocked,
   clearLoginLock,
   recordLoginFailure,
 } from './loginLock.service';
 import { otpService } from './otp.service';
+import { buildPermissionsMap } from './permissions-map';
 
 const SESSION_TTL = 8 * 60 * 60; // 8 hours in seconds
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/** Build the { MODULE_KEY: ['READ','WRITE', ...] } permissions map from DB row. */
-export function buildPermissionsMap(
-  permissions: Array<{
-    moduleKey: string;
-    canRead: boolean;
-    canWrite: boolean;
-    canApprove: boolean;
-    canDelete: boolean;
-    canExport: boolean;
-  }>
-): Record<string, string[]> {
-  const map: Record<string, string[]> = {};
-  for (const p of permissions) {
-    const actions: string[] = [];
-    if (p.canRead)    actions.push('READ');
-    if (p.canWrite)   actions.push('WRITE');
-    if (p.canApprove) actions.push('APPROVE');
-    if (p.canDelete)  actions.push('DELETE');
-    if (p.canExport)  actions.push('EXPORT');
-    map[p.moduleKey] = actions;
-  }
-  return map;
-}
 
 async function storeSession(userId: string, roleId: string, token: string) {
   await connectRedis();
@@ -175,14 +153,18 @@ export const authService = {
       data: { lastLoginAt: new Date() },
     });
 
-    // After first password change, gate on unverified personal/institute emails.
-    const emailStatus = user.isFirstLogin
+    // First login OR a password that no longer meets policy → force a change
+    // before email OTP. Clients already gate on `isFirstLogin`.
+    const mustChangePassword =
+      user.isFirstLogin || !passwordMeetsPolicy(input.password);
+
+    const emailStatus = mustChangePassword
       ? { needsEmailVerification: false, emails: [] as Awaited<ReturnType<typeof otpService.getEmailVerificationStatus>>['emails'] }
       : await otpService.getEmailVerificationStatus(user.id, user.employeeId ?? null);
 
     return {
       token,
-      isFirstLogin: user.isFirstLogin,
+      isFirstLogin: mustChangePassword,
       needsEmailVerification: emailStatus.needsEmailVerification,
       pendingEmails: emailStatus.emails.filter((e) => !e.verified),
       permissions,
@@ -212,15 +194,20 @@ export const authService = {
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) return { error: 'User not found', status: 404 } as const;
 
-    if (!user.isFirstLogin) {
+    const valid = await bcrypt.compare(input.currentPassword, user.passwordHash);
+    if (!valid) return { error: 'Current password is incorrect', status: 400 } as const;
+
+    const currentMeetsPolicy = passwordMeetsPolicy(input.currentPassword);
+    if (!user.isFirstLogin && currentMeetsPolicy) {
       return {
-        error: 'Password can only be changed on first login. Contact an administrator to reset your password.',
+        error: 'Password can only be changed on first login or when it no longer meets security rules. Contact an administrator to reset your password.',
         status: 403,
       } as const;
     }
 
-    const valid = await bcrypt.compare(input.currentPassword, user.passwordHash);
-    if (!valid) return { error: 'Current password is incorrect', status: 400 } as const;
+    if (input.newPassword === input.currentPassword) {
+      return { error: 'New password must be different from your current password', status: 400 } as const;
+    }
 
     const newHash = await bcrypt.hash(input.newPassword, 12);
 
@@ -304,8 +291,9 @@ export const authService = {
       include: { employee: { include: { generalInfo: true } } },
     });
     if (!user) return { error: 'User not found', status: 404 } as const;
-    if (newPassword.length < 8) {
-      return { error: 'Password must be at least 8 characters', status: 400 } as const;
+    const policyError = passwordPolicyIssue(newPassword);
+    if (policyError) {
+      return { error: policyError, status: 400 } as const;
     }
 
     const newHash = await bcrypt.hash(newPassword, 12);
@@ -336,22 +324,20 @@ export const authService = {
       user.id,
       user.employeeId ?? null,
     );
-
-    // Reload permissions from DB so new modules (e.g. WORK_ORDERS) appear without re-login.
-    const role = await prisma.role.findUnique({
-      where: { id: user.roleId },
-      include: { permissions: true },
+    const dbUser = await prisma.user.findUnique({
+      where: { id: user.id },
+      include: { role: { include: { permissions: true } } },
     });
-    const permissions = role ? buildPermissionsMap(role.permissions) : user.permissions;
-    const personalPerm = role?.permissions.find((p) => p.moduleKey === 'PERSONAL_INFO');
-    const employeeViewScope = personalPerm?.employeeViewScope ?? user.employeeViewScope ?? 'NONE';
-
+    const permissions = dbUser?.role
+      ? buildPermissionsMap(dbUser.role.permissions)
+      : user.permissions;
+    const personalPerm = dbUser?.role?.permissions.find((p) => p.moduleKey === 'PERSONAL_INFO');
     return {
-      employeeId:  user.employeeId,
-      roleId:      user.roleId,
-      roleName:    user.roleName,
+      employeeId: user.employeeId,
+      roleId: user.roleId,
+      roleName: dbUser?.role?.name ?? user.roleName,
       permissions,
-      employeeViewScope,
+      employeeViewScope: personalPerm?.employeeViewScope ?? user.employeeViewScope ?? 'NONE',
       subOrganization: user.subOrganization ?? null,
       needsEmailVerification: emailStatus.needsEmailVerification,
       pendingEmails: emailStatus.emails.filter((e) => !e.verified),

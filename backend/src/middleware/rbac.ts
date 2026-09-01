@@ -1,7 +1,8 @@
 import type { NextFunction, Request, Response } from 'express';
 import { prisma } from '../config/prisma';
-import { buildPermissionsMap } from '../modules/auth/auth.service';
+import { buildPermissionsMap } from '../modules/auth/permissions-map';
 import { fail } from '../utils/response';
+import { isAdminRole } from '../modules/auth/permissions-map';
 
 export type PermissionAction = 'READ' | 'WRITE' | 'APPROVE' | 'DELETE' | 'EXPORT';
 
@@ -24,6 +25,10 @@ async function refreshUserPermissions(req: Request): Promise<boolean> {
 export function requirePermission(moduleKey: string, action: PermissionAction) {
   return async (req: Request, res: Response, next: NextFunction) => {
     if (!req.user) return res.status(401).json(fail('Unauthenticated'));
+
+    if (isAdminRole(req.user.roleName ?? req.user.role)) {
+      return next();
+    }
 
     let actions = req.user.permissions?.[moduleKey] ?? [];
     if (!actions.includes(action)) {
@@ -54,6 +59,10 @@ export function requireSelfEmployeeOrPermission(
     const selfId = req.user.employeeId;
 
     if (Number.isFinite(targetId) && selfId != null && selfId === targetId) {
+      return next();
+    }
+
+    if (isAdminRole(req.user.roleName ?? req.user.role)) {
       return next();
     }
 

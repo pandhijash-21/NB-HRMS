@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
 import { redis, connectRedis } from '../config/redis';
 import { fail } from '../utils/response';
+import { permissionsForRole } from '../modules/auth/permissions-map';
 
 /** One active JWT per user id — newer login overwrites Redis and kicks older devices. */
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
@@ -35,6 +36,25 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       );
     }
 
+    const jwtPermissions = (decoded.permissions as Record<string, string[]>) ?? {};
+    let permissions = jwtPermissions;
+    let employeeViewScope =
+      (decoded.employeeViewScope as
+        | 'NONE'
+        | 'SELF'
+        | 'INSTITUTE'
+        | 'UNIVERSITY'
+        | undefined) ?? 'NONE';
+    try {
+      const live = await permissionsForRole(String(decoded.roleId ?? ''));
+      if (live) {
+        permissions = live.permissions;
+        employeeViewScope = live.employeeViewScope;
+      }
+    } catch (err) {
+      console.warn('Live role permissions lookup failed; using JWT permissions:', err);
+    }
+
     req.user = {
       id: userId,
       employeeId: decoded.employeeId as number | null | undefined,
@@ -42,14 +62,8 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       roleName: decoded.roleName as string,
       role: decoded.roleName as string,
       subOrganization: (decoded.subOrganization as string | null | undefined) ?? null,
-      employeeViewScope:
-        (decoded.employeeViewScope as
-          | 'NONE'
-          | 'SELF'
-          | 'INSTITUTE'
-          | 'UNIVERSITY'
-          | undefined) ?? 'NONE',
-      permissions: (decoded.permissions as Record<string, string[]>) ?? {},
+      employeeViewScope,
+      permissions,
     };
 
     return next();

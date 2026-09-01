@@ -1086,6 +1086,14 @@ model User {
   taskEvents         WorkTaskEvent[] @relation("TaskEventActor")
   orgTreesCreated    OrgTree[]
 
+  createdChatChannels ChatChannel[]       @relation("ChatChannelCreator")
+  chatChannelMembers  ChatChannelMember[]
+  chatMessages        ChatMessage[]
+  chatReactions       ChatReaction[]
+  hostedMeetings      Meeting[]           @relation("MeetingHost")
+  meetingParticipants MeetingParticipant[]
+  meetingChatSent     MeetingChatMessage[] @relation("MeetingChatSender")
+
   @@map("users")
 }
 
@@ -2209,4 +2217,206 @@ model ErpWorkOrderLine {
 
   @@index([groupId, sortOrder])
   @@map("erp_work_order_lines")
+}
+
+// =============================================================================
+// CHAT & MEET (Teams-style messaging + Google Meet-style rooms)
+// =============================================================================
+
+enum ChatChannelType {
+  DIRECT
+  GROUP
+}
+
+enum FileScanStatus {
+  PENDING
+  CLEAN
+  INFECTED
+  SKIPPED
+}
+
+enum MeetingStatus {
+  SCHEDULED
+  LIVE
+  ENDED
+  CANCELLED
+}
+
+enum MeetingParticipantRole {
+  HOST
+  COHOST
+  ATTENDEE
+  GUEST
+}
+
+enum MeetingChatScope {
+  ROOM
+  DIRECT
+}
+
+enum MeetingAdmission {
+  WAITING
+  ADMITTED
+  DENIED
+}
+
+model ChatChannel {
+  id          String          @id @default(uuid())
+  type        ChatChannelType @default(DIRECT)
+  name        String?
+  topic       String?
+  avatarUrl   String?         @map("avatar_url")
+  /// Sorted "userA:userB" key so 1:1 threads stay unique.
+  directKey   String?         @unique @map("direct_key")
+  createdById String          @map("created_by_id")
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+
+  createdBy User                @relation("ChatChannelCreator", fields: [createdById], references: [id])
+  members   ChatChannelMember[]
+  messages  ChatMessage[]
+
+  @@index([updatedAt])
+  @@map("chat_channels")
+}
+
+model ChatChannelMember {
+  id         String    @id @default(uuid())
+  channelId  String    @map("channel_id")
+  userId     String    @map("user_id")
+  role       String    @default("member")
+  isMuted    Boolean   @default(false) @map("is_muted")
+  lastReadAt DateTime? @map("last_read_at")
+  joinedAt   DateTime  @default(now()) @map("joined_at")
+  leftAt     DateTime? @map("left_at")
+
+  channel ChatChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user    User        @relation(fields: [userId], references: [id])
+
+  @@unique([channelId, userId])
+  @@index([userId])
+  @@map("chat_channel_members")
+}
+
+model ChatMessage {
+  id        String    @id @default(uuid())
+  channelId String    @map("channel_id")
+  senderId  String    @map("sender_id")
+  content   String?   @db.Text
+  replyToId String?   @map("reply_to_id")
+  createdAt DateTime  @default(now()) @map("created_at")
+  editedAt  DateTime? @map("edited_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  channel     ChatChannel      @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  sender      User             @relation(fields: [senderId], references: [id])
+  replyTo     ChatMessage?     @relation("ChatMessageReplies", fields: [replyToId], references: [id])
+  replies     ChatMessage[]    @relation("ChatMessageReplies")
+  attachments ChatAttachment[]
+  reactions   ChatReaction[]
+
+  @@index([channelId, createdAt])
+  @@map("chat_messages")
+}
+
+model ChatAttachment {
+  id         String         @id @default(uuid())
+  messageId  String         @map("message_id")
+  bucketKey  String         @map("bucket_key")
+  fileUrl    String?        @map("file_url")
+  fileName   String         @map("file_name")
+  mimeType   String         @map("mime_type")
+  sizeBytes  Int            @map("size_bytes")
+  scanStatus FileScanStatus @default(PENDING) @map("scan_status")
+  createdAt  DateTime       @default(now()) @map("created_at")
+
+  message ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@map("chat_attachments")
+}
+
+model ChatReaction {
+  id        String   @id @default(uuid())
+  messageId String   @map("message_id")
+  userId    String   @map("user_id")
+  emoji     String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  message ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User        @relation(fields: [userId], references: [id])
+
+  @@unique([messageId, userId, emoji])
+  @@map("chat_reactions")
+}
+
+model Meeting {
+  id             String        @id @default(uuid())
+  code           String        @unique
+  title          String
+  agenda         String?       @db.Text
+  hostUserId     String        @map("host_user_id")
+  scheduledStart DateTime?     @map("scheduled_start")
+  scheduledEnd   DateTime?     @map("scheduled_end")
+  startedAt      DateTime?     @map("started_at")
+  endedAt        DateTime?     @map("ended_at")
+  status         MeetingStatus @default(SCHEDULED)
+  livekitRoom    String        @unique @map("livekit_room")
+  allowGuests    Boolean       @default(true) @map("allow_guests")
+  waitingRoom    Boolean       @default(false) @map("waiting_room")
+  recordEnabled  Boolean       @default(false) @map("record_enabled")
+  recordingUrl   String?       @map("recording_url")
+  recordingKey   String?       @map("recording_key")
+  egressId       String?       @map("egress_id")
+  summaryText    String?       @map("summary_text") @db.Text
+  summarySentAt  DateTime?     @map("summary_sent_at")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  host         User                   @relation("MeetingHost", fields: [hostUserId], references: [id])
+  participants MeetingParticipant[]
+  chatMessages MeetingChatMessage[]
+
+  @@index([status, scheduledStart])
+  @@index([hostUserId])
+  @@map("meetings")
+}
+
+model MeetingParticipant {
+  id         String                 @id @default(uuid())
+  meetingId  String                 @map("meeting_id")
+  userId     String?                @map("user_id")
+  guestName  String?                @map("guest_name")
+  guestToken String?                @unique @map("guest_token")
+  role       MeetingParticipantRole @default(ATTENDEE)
+  admission  MeetingAdmission       @default(ADMITTED)
+  photoUrl   String?                @map("photo_url")
+  email      String?
+  joinedAt   DateTime?              @map("joined_at")
+  leftAt     DateTime?              @map("left_at")
+  createdAt  DateTime               @default(now()) @map("created_at")
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  user    User?   @relation(fields: [userId], references: [id])
+
+  @@index([meetingId])
+  @@index([userId])
+  @@map("meeting_participants")
+}
+
+model MeetingChatMessage {
+  id              String           @id @default(uuid())
+  meetingId       String           @map("meeting_id")
+  senderUserId    String?          @map("sender_user_id")
+  senderGuestName String?          @map("sender_guest_name")
+  senderPhotoUrl  String?          @map("sender_photo_url")
+  scope           MeetingChatScope @default(ROOM)
+  recipientUserId String?          @map("recipient_user_id")
+  content         String           @db.Text
+  createdAt       DateTime         @default(now()) @map("created_at")
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  sender  User?   @relation("MeetingChatSender", fields: [senderUserId], references: [id])
+
+  @@index([meetingId, createdAt])
+  @@map("meeting_chat_messages")
 }

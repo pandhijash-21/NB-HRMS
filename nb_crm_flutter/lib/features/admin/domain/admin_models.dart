@@ -205,3 +205,76 @@ String assignmentEventLabel(EmployeeAssignment current, EmployeeAssignment? prev
   if (desChanged) return 'Designation upgrade';
   return current.reason?.trim().isNotEmpty == true ? current.reason! : 'Assignment update';
 }
+
+int _asInt(Object? v) {
+  if (v is int) return v;
+  if (v is num) return v.round();
+  return int.tryParse('$v') ?? 0;
+}
+
+double _asDouble(Object? v) {
+  if (v is double) return v;
+  if (v is num) return v.toDouble();
+  return double.tryParse('$v') ?? 0;
+}
+
+class StorageUsage {
+  const StorageUsage({
+    required this.usedBytes,
+    required this.limitBytes,
+    required this.remainingBytes,
+    required this.remainingRatio,
+    required this.usedRatio,
+    required this.cloudinaryConfigured,
+    required this.cloudinaryPlan,
+    required this.collabBytes,
+    required this.collabObjects,
+    required this.chatMessages,
+    required this.chatAttachments,
+    required this.repositoryDocs,
+    required this.meetingChats,
+  });
+
+  final int usedBytes;
+  final int limitBytes;
+  final int remainingBytes;
+  final double remainingRatio;
+  final double usedRatio;
+  final bool cloudinaryConfigured;
+  final String? cloudinaryPlan;
+  final int collabBytes;
+  final int collabObjects;
+  final int chatMessages;
+  final int chatAttachments;
+  final int repositoryDocs;
+  final int meetingChats;
+
+  bool get hasLimit => limitBytes > 0;
+
+  factory StorageUsage.fromJson(Map<String, dynamic> json) {
+    final cloud = json['cloudinary'] is Map
+        ? Map<String, dynamic>.from(json['cloudinary'] as Map)
+        : const <String, dynamic>{};
+    final collab = json['collab'] is Map
+        ? Map<String, dynamic>.from(json['collab'] as Map)
+        : const <String, dynamic>{};
+    final counts = json['counts'] is Map
+        ? Map<String, dynamic>.from(json['counts'] as Map)
+        : const <String, dynamic>{};
+    return StorageUsage(
+      usedBytes: _asInt(json['usedBytes']),
+      limitBytes: _asInt(json['limitBytes']),
+      remainingBytes: _asInt(json['remainingBytes']),
+      remainingRatio: _asDouble(json['remainingRatio']),
+      usedRatio: _asDouble(json['usedRatio']),
+      cloudinaryConfigured: cloud['configured'] == true,
+      cloudinaryPlan: cloud['plan']?.toString(),
+      collabBytes: _asInt(collab['bytes']),
+      collabObjects: _asInt(collab['objectCount']),
+      chatMessages: _asInt(counts['chatMessages']),
+      chatAttachments: _asInt(counts['chatAttachments']),
+      repositoryDocs: _asInt(counts['repositoryDocs']),
+      meetingChats: _asInt(counts['meetingChats']),
+    );
+  }
+}

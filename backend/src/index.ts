@@ -1,7 +1,6 @@
 import dotenv from 'dotenv';
-if (!process.env.DOCKER) {
-  dotenv.config({ override: true });
-}
+// Load backend/.env even in Docker (Compose DB/Redis/MinIO hostnames must still win).
+dotenv.config({ override: !process.env.DOCKER });
 
 // IMPORTANT: load env AFTER dotenv.config() runs.
 // Using require here avoids ESM import hoisting ordering issues in tsx/nodemon.
@@ -36,6 +35,18 @@ async function start() {
     console.warn('Redis unavailable on startup — sessions will be JWT-only:', err);
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const http = require('http') as typeof import('http');
+  const server = http.createServer(app);
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { setupCollaborationSocket } = require('./modules/collaboration/socket') as typeof import('./modules/collaboration/socket');
+    await setupCollaborationSocket(server);
+    console.log('Chat & meet socket ready');
+  } catch (err) {
+    console.warn('Collaboration socket failed to start:', err);
+  }
+
   if (redisReady) {
     try {
       startLeaveCreditWorker();
@@ -59,7 +70,7 @@ async function start() {
     }
   }
 
-  app.listen(env.PORT, () => {
+  server.listen(env.PORT, () => {
     console.log(`Server running on port ${env.PORT}`);
   });
 }

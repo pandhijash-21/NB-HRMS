@@ -178,6 +178,28 @@ class AdminRepository {
     );
   }
 
+  Future<StorageUsage> getStorageUsage() {
+    return _dio.getEnvelope<StorageUsage>(
+      'admin/storage',
+      parse: (raw) {
+        if (raw is! Map) {
+          throw const FormatException('Invalid storage usage response');
+        }
+        return StorageUsage.fromJson(Map<String, dynamic>.from(raw));
+      },
+    );
+  }
+
+  Future<void> purgeStorage({required String password}) {
+    return _dio.postEnvelope<dynamic>(
+      'admin/storage/purge',
+      data: {'password': password},
+      sendTimeout: const Duration(minutes: 1),
+      receiveTimeout: const Duration(minutes: 3),
+      parse: (raw) => raw,
+    );
+  }
+
   Exception _mapDioException(DioException e) {
     final data = e.response?.data;
     if (data is Map) {

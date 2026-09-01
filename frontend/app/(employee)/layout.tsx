@@ -43,6 +43,8 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
           ),
         },
         ...(employeeId ? [{ label: "Attendance", href: "/attendance", icon: iconCalendar }] : []),
+  { label: "Chat", href: "/chat", icon: iconCalendar },
+        { label: "Meet", href: "/meet", icon: iconCalendar },
         { label: "Leave", href: "/leave", icon: iconCalendar },
         {
           label: "Leave History",

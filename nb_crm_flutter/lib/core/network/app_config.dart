@@ -19,4 +19,11 @@ class AppConfig {
     'TRANSPORT_SECRET',
     defaultValue: 'nb-crm-double-enc-v2-local',
   );
+
+  static String get socketOrigin {
+    final base = apiBaseUrl;
+    if (base.endsWith('/api')) return base.substring(0, base.length - 4);
+    if (base.endsWith('/api/')) return base.substring(0, base.length - 5);
+    return base;
+  }
 }

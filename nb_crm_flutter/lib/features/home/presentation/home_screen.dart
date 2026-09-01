@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:go_router/go_router.dart';
+import 'package:nb_crm_flutter/core/theme/nb_icon.dart';
 
 import '../../auth/presentation/auth_providers.dart';
 import '../../auth/domain/permissions.dart';
@@ -104,6 +105,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         enabled: true,
         category: ModuleCategory.mySpace,
         color: const Color(0xFF4f46e5),
+      ),
+      _ModuleCardData(
+        title: 'Chat',
+        subtitle: '1:1 and group chat, files, presence',
+        icon: Icons.chat,
+        route: '/chat',
+        enabled: true,
+        category: ModuleCategory.mySpace,
+        color: const Color(0xFF2563EB),
+      ),
+      _ModuleCardData(
+        title: 'Meet',
+        subtitle: 'Voice, video, screen share, guest codes, AI summary',
+        icon: Icons.videocam,
+        route: '/meet',
+        enabled: true,
+        category: ModuleCategory.mySpace,
+        color: const Color(0xFF0f766e),
       ),
       _ModuleCardData(
         title: 'Leave',
@@ -247,6 +266,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           category: ModuleCategory.system,
           color: const Color(0xFF0d9488),
         ),
+      if (Permissions.isAdmin(role))
+        _ModuleCardData(
+          title: 'Storage',
+          subtitle: 'Used space, remaining capacity & data wipe',
+          icon: Icons.cloud_rounded,
+          route: '/admin/storage',
+          enabled: true,
+          category: ModuleCategory.system,
+          color: const Color(0xFF7c3aed),
+        ),
       if (canAccessAdmin)
         _ModuleCardData(
           title: 'Audit',
@@ -287,7 +316,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       height: 56,
       child: Row(
         children: [
-          Icon(
+          NbIcon(
             Icons.search_rounded,
             color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4),
             size: 24,
@@ -326,7 +355,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
           if (_searchQuery.isNotEmpty)
             IconButton(
-              icon: Icon(
+              icon: NbIcon(
                 Icons.clear_rounded,
                 color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4),
                 size: 20,
@@ -425,7 +454,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   padding: const EdgeInsets.symmetric(vertical: 48),
                   child: Column(
                     children: [
-                      Icon(
+                      NbIcon(
                         Icons.search_off_rounded,
                         size: 64,
                         color: Theme.of(context).colorScheme.onSurface.withOpacity(0.2),
@@ -647,7 +676,7 @@ class _ModernModuleCardState extends State<_ModernModuleCard> {
                             : widget.data.color.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(16),
                       ),
-                      child: Icon(
+                      child: NbIcon(
                         widget.data.icon,
                         color: _isHovered ? Colors.white : widget.data.color,
                         size: 28,
@@ -689,7 +718,7 @@ class _ModernModuleCardState extends State<_ModernModuleCard> {
                       AnimatedContainer(
                         duration: const Duration(milliseconds: 200),
                         transform: Matrix4.identity()..translate(_isHovered ? 4.0 : 0.0, 0.0),
-                        child: Icon(
+                        child: NbIcon(
                           Icons.arrow_forward_rounded, 
                           color: _isHovered ? widget.data.color : Colors.grey.shade300,
                         ),

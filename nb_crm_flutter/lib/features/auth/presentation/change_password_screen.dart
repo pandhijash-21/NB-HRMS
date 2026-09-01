@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/theme/app_colors.dart';
 import 'auth_providers.dart';
 import 'widgets/auth_widgets.dart';
 
@@ -50,222 +49,124 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
   Widget build(BuildContext context) {
     final auth = ref.watch(authNotifierProvider);
     final submitting = auth.isSubmitting;
-    final wide = MediaQuery.sizeOf(context).width >= 720;
 
-    return PopScope(
+    return AuthScenicScaffold(
       canPop: false,
-      child: Scaffold(
-        body: DecoratedBox(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                AppColors.midnight,
-                AppColors.slate,
-                Color(0xFF314E5C),
-              ],
-            ),
-          ),
-          child: SafeArea(
-            child: Center(
-              child: SingleChildScrollView(
-                padding: EdgeInsets.symmetric(
-                  horizontal: wide ? 32 : 20,
-                  vertical: 24,
-                ),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 460),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                      Text(
-                        'NB Developer',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700,
-                            ),
-                      ),
-                      SizedBox(height: 8),
-                      Text(
-                        'First sign-in — set a new password to continue',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Theme.of(context).colorScheme.primary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                      ),
-                      SizedBox(height: 28),
-                      Material(
-                        color: AppColors.surface,
-                        elevation: 8,
-                        shadowColor: Colors.black.withValues(alpha: 0.28),
-                        borderRadius: BorderRadius.circular(20),
-                        child: Padding(
-                          padding: EdgeInsets.fromLTRB(28, 32, 28, 28),
-                          child: Form(
-                            key: _formKey,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Text(
-                                  'Set new password',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .headlineSmall
-                                      ?.copyWith(
-                                        fontWeight: FontWeight.w700,
-                                        color: Theme.of(context).colorScheme.onSurface,
-                                      ),
-                                ),
-                                SizedBox(height: 6),
-                                Text(
-                                  'Enter your temporary password (birth date as DDMMYYYY), then choose a new one. '
-                                  'You will sign in again afterward.',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodyMedium
-                                      ?.copyWith(color: AppColors.textSecondary),
-                                ),
-                                SizedBox(height: 24),
-                                _PasswordField(
-                                  controller: _currentController,
-                                  label: 'Temporary password (DOB)',
-                                  obscure: _obscureCurrent,
-                                  enabled: !submitting,
-                                  onToggle: () => setState(
-                                    () => _obscureCurrent = !_obscureCurrent,
-                                  ),
-                                  textInputAction: TextInputAction.next,
-                                  validator: (v) => (v == null || v.isEmpty)
-                                      ? 'Current password is required'
-                                      : null,
-                                ),
-                                SizedBox(height: 14),
-                                _PasswordField(
-                                  controller: _newController,
-                                  label: 'New password',
-                                  obscure: _obscureNew,
-                                  enabled: !submitting,
-                                  onToggle: () => setState(
-                                    () => _obscureNew = !_obscureNew,
-                                  ),
-                                  textInputAction: TextInputAction.next,
-                                  validator: validateNewPassword,
-                                ),
-                                SizedBox(height: 14),
-                                _PasswordField(
-                                  controller: _confirmController,
-                                  label: 'Confirm new password',
-                                  obscure: _obscureConfirm,
-                                  enabled: !submitting,
-                                  onToggle: () => setState(
-                                    () => _obscureConfirm = !_obscureConfirm,
-                                  ),
-                                  textInputAction: TextInputAction.done,
-                                  onSubmitted: (_) =>
-                                      submitting ? null : _submit(),
-                                  validator: (v) {
-                                    if (v == null || v.isEmpty) {
-                                      return 'Please confirm your new password';
-                                    }
-                                    if (v != _newController.text) {
-                                      return 'Passwords do not match';
-                                    }
-                                    return null;
-                                  },
-                                ),
-                                if (auth.errorMessage != null) ...[
-                                  SizedBox(height: 16),
-                                  InlineBanner.error(
-                                    message: auth.errorMessage!,
-                                  ),
-                                ],
-                                SizedBox(height: 24),
-                                FilledButton(
-                                  onPressed: submitting ? null : _submit,
-                                  child: submitting
-                                      ? SizedBox(
-                                          height: 22,
-                                          width: 22,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2.4,
-                                            color: AppColors.midnight,
-                                          ),
-                                        )
-                                      : Text('Set password'),
-                                ),
-                                SizedBox(height: 14),
-                                Text(
-                                  'This step is required before you can use the app.',
-                                  textAlign: TextAlign.center,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodySmall
-                                      ?.copyWith(
-                                        color: Theme.of(context).textTheme.bodySmall?.color,
-                                      ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const AuthBrandMark(subtitle: 'Update your password to continue'),
+          const SizedBox(height: 28),
+          AuthGlassCard(
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    'Set new password',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      letterSpacing: -0.4,
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 8),
+                  Text(
+                    passwordPolicyHint,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      height: 1.4,
+                      color: Colors.white.withValues(alpha: 0.62),
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  AuthPasswordField(
+                    key: const ValueKey('pwd-current'),
+                    controller: _currentController,
+                    label: 'Current password',
+                    hint: 'Temporary or existing password',
+                    obscure: _obscureCurrent,
+                    enabled: !submitting,
+                    onToggle: () => setState(() => _obscureCurrent = !_obscureCurrent),
+                    textInputAction: TextInputAction.next,
+                    autofillHints: const [AutofillHints.password],
+                    validator: (v) =>
+                        (v == null || v.isEmpty) ? 'Current password is required' : null,
+                  ),
+                  const SizedBox(height: 14),
+                  AuthPasswordField(
+                    key: const ValueKey('pwd-new'),
+                    controller: _newController,
+                    label: 'New password',
+                    obscure: _obscureNew,
+                    enabled: !submitting,
+                    onToggle: () => setState(() => _obscureNew = !_obscureNew),
+                    textInputAction: TextInputAction.next,
+                    autofillHints: const [],
+                    validator: (v) {
+                      final issue = validateNewPassword(v);
+                      if (issue != null) return issue;
+                      if (v == _currentController.text) {
+                        return 'New password must be different';
+                      }
+                      return null;
+                    },
+                  ),
+                  ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: _newController,
+                    builder: (context, value, _) =>
+                        PasswordPolicyChecklist(password: value.text),
+                  ),
+                  const SizedBox(height: 14),
+                  AuthPasswordField(
+                    key: const ValueKey('pwd-confirm'),
+                    controller: _confirmController,
+                    label: 'Confirm new password',
+                    obscure: _obscureConfirm,
+                    enabled: !submitting,
+                    onToggle: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                    textInputAction: TextInputAction.done,
+                    autofillHints: const [],
+                    onSubmitted: (_) => submitting ? null : _submit(),
+                    validator: (v) {
+                      if (v == null || v.isEmpty) {
+                        return 'Please confirm your new password';
+                      }
+                      if (v != _newController.text) {
+                        return 'Passwords do not match';
+                      }
+                      return null;
+                    },
+                  ),
+                  if (auth.errorMessage != null) ...[
+                    const SizedBox(height: 16),
+                    InlineBanner.error(message: auth.errorMessage!),
+                  ],
+                  const SizedBox(height: 24),
+                  AuthGoldButton(
+                    label: 'Set password',
+                    busy: submitting,
+                    onPressed: _submit,
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    'This step is required before you can use the app. You will sign in again afterward.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.white.withValues(alpha: 0.42),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
-        ),
+        ],
       ),
-    );
-  }
-}
-
-class _PasswordField extends StatelessWidget {
-  const _PasswordField({
-    required this.controller,
-    required this.label,
-    required this.obscure,
-    required this.onToggle,
-    required this.validator,
-    required this.enabled,
-    this.textInputAction,
-    this.onSubmitted,
-  });
-
-  final TextEditingController controller;
-  final String label;
-  final bool obscure;
-  final VoidCallback onToggle;
-  final FormFieldValidator<String> validator;
-  final bool enabled;
-  final TextInputAction? textInputAction;
-  final ValueChanged<String>? onSubmitted;
-
-  @override
-  Widget build(BuildContext context) {
-    return TextFormField(
-      controller: controller,
-      enabled: enabled,
-      obscureText: obscure,
-      textInputAction: textInputAction,
-      onFieldSubmitted: onSubmitted,
-      autofillHints: [AutofillHints.password],
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(Icons.lock_outline),
-        suffixIcon: IconButton(
-          tooltip: obscure ? 'Show password' : 'Hide password',
-          onPressed: enabled ? onToggle : null,
-          icon: Icon(
-            obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-          ),
-        ),
-      ),
-      validator: validator,
     );
   }
 }

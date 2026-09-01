@@ -1,6 +1,8 @@
 import { prisma } from '../../config/prisma';
 import { env } from '../../config/env';
 import nodemailer from 'nodemailer';
+import { sseService } from '../events/sse.service';
+import { emitPushNotify } from '../collaboration/socket';
 
 function createTransport() {
   if (!env.SMTP_HOST || !env.SMTP_USER || !env.SMTP_PASS) return null;
@@ -39,6 +41,25 @@ async function getEmployeeName(employeeId: number): Promise<string> {
     select: { fullName: true },
   });
   return row?.fullName ?? `Employee #${employeeId}`;
+}
+
+async function getUserIdByEmployeeId(employeeId: number): Promise<string | null> {
+  const row = await prisma.user.findFirst({
+    where: { employeeId },
+    select: { id: true },
+  });
+  return row?.id ?? null;
+}
+
+function pushLive(userId: string | null | undefined, payload: {
+  kind: string;
+  title: string;
+  body: string;
+  path?: string;
+}) {
+  if (!userId) return;
+  emitPushNotify([userId], payload);
+  sseService.toUser(userId, 'push_notify', payload);
 }
 
 async function send(to: string, subject: string, html: string) {
@@ -95,12 +116,19 @@ export const leaveNotificationService = {
       },
     });
     if (!step || !step.approverUserId) return;
+    const empName = await getEmployeeName(step.application.employeeId);
+    const typeName = step.application.leaveType.name;
+    pushLive(step.approverUserId, {
+      kind: 'leave',
+      title: 'Leave approval required',
+      body: `${empName} applied for ${typeName} leave`,
+      path: '/leave/approvals',
+    });
     const approverEmployeeId = await getUserEmployeeId(step.approverUserId);
     // Position accounts may not have an employeeId/email — skip email notifications for them.
     if (!approverEmployeeId) return;
     const approverEmail = await getEmployeeEmail(approverEmployeeId);
     const approverName = await getEmployeeName(approverEmployeeId);
-    const empName = await getEmployeeName(step.application.employeeId);
     if (!approverEmail) return;
     await send(
       approverEmail,
@@ -124,6 +152,15 @@ export const leaveNotificationService = {
       include: { leaveType: { select: { name: true } } },
     });
     if (!app) return;
+    const userId = await getUserIdByEmployeeId(app.employeeId);
+    const decisionPayload = {
+      kind: 'leave',
+      title: approved ? 'Leave approved' : 'Leave rejected',
+      body: `Your ${app.leaveType.name} leave was ${approved ? 'approved' : 'rejected'}`,
+      path: '/leave/history',
+    };
+    pushLive(userId, decisionPayload);
+    sseService.toEmployee(app.employeeId, 'push_notify', decisionPayload);
     const email = await getEmployeeEmail(app.employeeId);
     const name = await getEmployeeName(app.employeeId);
     if (!email) return;
@@ -144,6 +181,19 @@ export const leaveNotificationService = {
   },
 
   async notifyLwpConverted(employeeId: number, date: Date) {
+    const userId = await getUserIdByEmployeeId(employeeId);
+    pushLive(userId, {
+      kind: 'leave',
+      title: 'Leave without pay applied',
+      body: `LWP was recorded for ${date.toDateString()}`,
+      path: '/leave/history',
+    });
+    sseService.toEmployee(employeeId, 'push_notify', {
+      kind: 'leave',
+      title: 'Leave without pay applied',
+      body: `LWP was recorded for ${date.toDateString()}`,
+      path: '/leave/history',
+    });
     const email = await getEmployeeEmail(employeeId);
     const name = await getEmployeeName(employeeId);
     if (!email) return;
@@ -161,6 +211,19 @@ export const leaveNotificationService = {
   },
 
   async notifyAbsenceWindowExpiring(employeeId: number, date: Date, hoursLeft: number) {
+    const userId = await getUserIdByEmployeeId(employeeId);
+    pushLive(userId, {
+      kind: 'leave',
+      title: 'Apply leave for your absence',
+      body: `You have ${hoursLeft} hours left to apply leave for ${date.toDateString()}`,
+      path: '/leave/apply',
+    });
+    sseService.toEmployee(employeeId, 'push_notify', {
+      kind: 'leave',
+      title: 'Apply leave for your absence',
+      body: `You have ${hoursLeft} hours left to apply leave for ${date.toDateString()}`,
+      path: '/leave/apply',
+    });
     const email = await getEmployeeEmail(employeeId);
     const name = await getEmployeeName(employeeId);
     if (!email) return;

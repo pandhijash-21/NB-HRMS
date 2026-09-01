@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/widgets/zoomable_photo.dart';
 import '../../domain/org_tree_models.dart';
 
 Color orgKindColor(String kind, bool isDark) {
@@ -59,7 +60,8 @@ class OrgAvatar extends StatelessWidget {
     final color = orgKindColor(node.kind, isDark);
     final initials = _initials(node.title);
     final url = node.photoUrl;
-    return Container(
+    final avatar = Container(
+      key: ValueKey('org-avatar-${node.id}'),
       width: size,
       height: size,
       decoration: BoxDecoration(
@@ -81,11 +83,19 @@ class OrgAvatar extends StatelessWidget {
       child: url != null && url.isNotEmpty
           ? Image.network(
               url,
+              key: ValueKey('org-photo-${node.id}-$url'),
               fit: BoxFit.cover,
+              gaplessPlayback: false,
               errorBuilder: (_, __, ___) => _fallback(initials),
+              loadingBuilder: (context, child, progress) {
+                if (progress == null) return child;
+                return _fallback(initials);
+              },
             )
           : _fallback(initials),
     );
+    if (!node.isPerson) return avatar;
+    return ZoomablePhoto(url: url, label: node.title, child: avatar);
   }
 
   Widget _fallback(String initials) {

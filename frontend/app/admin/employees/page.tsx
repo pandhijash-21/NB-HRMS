@@ -8,6 +8,7 @@ import { canEditWorkforce } from "@/lib/auth/permissions";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { PhotoLightbox } from "@/components/ui/photo-lightbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { AddEmployeeDialog } from "@/components/employees/AddEmployeeDialog";
@@ -160,12 +161,14 @@ export default function EmployeeListPage() {
                     <tr key={emp.id} className="hover:bg-slate-50/50 transition-all group border-b border-slate-50 last:border-0">
                       <td className="px-8 py-5">
                         <div className="flex items-center gap-4">
-                          <Avatar className="h-11 w-11 shrink-0 border-2 border-white shadow-xl shadow-slate-200">
-                            <AvatarImage src={emp.photoUrl} />
-                            <AvatarFallback className="bg-[#1d3459] text-[#d9b557] text-[10px] font-extrabold">
-                              {initials}
-                            </AvatarFallback>
-                          </Avatar>
+                          <PhotoLightbox src={emp.photoUrl} alt={info.fullName || "Employee"}>
+                            <Avatar className="h-11 w-11 shrink-0 border-2 border-white shadow-xl shadow-slate-200">
+                              <AvatarImage src={emp.photoUrl} />
+                              <AvatarFallback className="bg-[#1d3459] text-[#d9b557] text-[10px] font-extrabold">
+                                {initials}
+                              </AvatarFallback>
+                            </Avatar>
+                          </PhotoLightbox>
                           <div className="space-y-1">
                             <p className="font-bold text-slate-800 text-sm group-hover:text-[#1d3459] transition-colors">{info.fullName || "Loading..."}</p>
                             <Badge variant="outline" className="text-[9px] font-extrabold text-slate-400 border-slate-200 uppercase tracking-widest px-2 py-0 h-4">

@@ -3,15 +3,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/router/app_router.dart';
+import 'core/services/app_sounds.dart';
 import 'core/services/background_tracking_service.dart';
 import 'core/services/location_alert_sound.dart';
 import 'core/theme/app_breakpoints.dart';
 import 'core/theme/app_theme.dart';
+import 'core/theme/icon_font_bootstrap.dart';
+import 'core/theme/material_icon_keep_alive.dart';
 import 'core/theme/theme_provider.dart';
 import 'features/auth/presentation/permission_guard.dart';
+import 'features/collaboration/presentation/notification_bell.dart';
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized(); 
+  WidgetsFlutterBinding.ensureInitialized();
+  retainMaterialIconGlyphs();
+  await loadFullMaterialIconsFont();
   if (!kIsWeb) {
     await initializeBackgroundService();
   }
@@ -27,7 +33,7 @@ class NbCrmApp extends ConsumerWidget {
     final themeMode = ref.watch(themeModeProvider);
 
     return MaterialApp.router(
-      title: 'NB Developer',
+      title: 'NB CRM',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
@@ -42,12 +48,27 @@ class NbCrmApp extends ConsumerWidget {
         );
         return MediaQuery(
           data: mq.copyWith(textScaler: capped),
-          child: Listener(
-            behavior: HitTestBehavior.translucent,
-            onPointerDown: (_) {
-              LocationAlertSound.unlock();
-            },
-            child: PermissionGuard(child: child ?? const SizedBox.shrink()),
+          child: Stack(
+            children: [
+              const MaterialIconKeepAlive(),
+              Positioned.fill(
+                child: Listener(
+                  behavior: HitTestBehavior.translucent,
+                  onPointerDown: (_) {
+                    LocationAlertSound.unlock();
+                    AppSounds.unlock();
+                  },
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: PermissionGuard(child: child ?? const SizedBox.shrink()),
+                      ),
+                      const IncomingCallHost(),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         );
       },

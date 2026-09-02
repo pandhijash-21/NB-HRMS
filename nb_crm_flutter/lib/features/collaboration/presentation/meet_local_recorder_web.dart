@@ -7,6 +7,7 @@ import 'package:web/web.dart' as web;
 class MeetLocalRecorder {
   web.MediaRecorder? _recorder;
   web.MediaStream? _stream;
+  web.AudioContext? _audioCtx;
   final List<web.Blob> _chunks = [];
   String _fileName = 'meeting.webm';
   Completer<void>? _stopCompleter;
@@ -67,14 +68,61 @@ class MeetLocalRecorder {
       }).toJS;
     }
 
+    // Mix Tab / Meeting audio + Local microphone audio together
+    web.MediaStream finalStream = stream;
+    try {
+      final audioTracks = stream.getAudioTracks().toDart;
+      final micPub = room.localParticipant?.getTrackPublicationBySource(TrackSource.microphone);
+      final micTrack = micPub?.track?.mediaStreamTrack;
+
+      web.MediaStreamTrack? jsMicTrack;
+      if (micTrack != null) {
+        try {
+          jsMicTrack = (micTrack as dynamic).jsTrack as web.MediaStreamTrack?;
+        } catch (_) {}
+      }
+
+      if (jsMicTrack != null) {
+        final ctx = web.AudioContext();
+        if (ctx.state == 'suspended') {
+          ctx.resume();
+        }
+        final mixDest = ctx.createMediaStreamDestination();
+
+        // 1. Tab audio (meeting sound / other participants)
+        if (audioTracks.isNotEmpty) {
+          final tabStream = web.MediaStream([audioTracks.first].toJS);
+          final tabSource = ctx.createMediaStreamSource(tabStream);
+          tabSource.connect(mixDest);
+        }
+
+        // 2. Microphone audio (host voice)
+        final micStream = web.MediaStream([jsMicTrack].toJS);
+        final micSource = ctx.createMediaStreamSource(micStream);
+        micSource.connect(mixDest);
+
+        _audioCtx = ctx;
+
+        final mixedAudioTracks = mixDest.stream.getAudioTracks().toDart;
+        final vTracks = stream.getVideoTracks().toDart;
+        final combined = <web.MediaStreamTrack>[
+          ...vTracks,
+          ...mixedAudioTracks,
+        ];
+        finalStream = web.MediaStream(combined.toJS);
+      }
+    } catch (_) {
+      finalStream = stream;
+    }
+
     web.MediaRecorder recorder;
     if (_mimeType.isNotEmpty) {
       recorder = web.MediaRecorder(
-        stream,
+        finalStream,
         web.MediaRecorderOptions(mimeType: _mimeType),
       );
     } else {
-      recorder = web.MediaRecorder(stream);
+      recorder = web.MediaRecorder(finalStream);
     }
 
     recorder.ondataavailable = ((web.BlobEvent event) {
@@ -147,6 +195,11 @@ class MeetLocalRecorder {
   }
 
   void _cleanupStream() {
+    try {
+      _audioCtx?.close();
+    } catch (_) {}
+    _audioCtx = null;
+
     final stream = _stream;
     _stream = null;
     if (stream != null) {

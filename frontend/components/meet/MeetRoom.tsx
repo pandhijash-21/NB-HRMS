@@ -736,6 +736,29 @@ export function MeetRoom({ code }: { code: string }) {
         }
       }
     });
+    sock.on("meeting_whisper_status", (p: { meetingId?: string; enabled?: boolean; by?: string }) => {
+      const next = Boolean(p.enabled);
+      setWhisperEnabled(next);
+      if (!next) {
+        sttRef.current?.setMicEnabled(false);
+        void sttRef.current?.stop();
+        if (!isHostRef.current) {
+          toast.info(p.by ? `${p.by} (Host) turned Whisper transcription OFF` : "Whisper transcription was turned OFF by the host");
+        }
+      } else {
+        if (roomRef.current?.localParticipant.isMicrophoneEnabled && roomRef.current && joinData?.meeting.id) {
+          sttRef.current?.start({
+            room: roomRef.current,
+            meetingId: joinData.meeting.id,
+            token: sessionStorage.getItem("meet_guest_token") || undefined,
+          });
+          sttRef.current?.setMicEnabled(true);
+        }
+        if (!isHostRef.current) {
+          toast.success(p.by ? `${p.by} (Host) turned Whisper transcription ON` : "Whisper transcription was turned ON by the host");
+        }
+      }
+    });
     return sock;
   };
 
@@ -943,13 +966,17 @@ export function MeetRoom({ code }: { code: string }) {
     sock.emit("meeting_hand", { meetingId: joinData.meeting.id, raised: next });
   }
 
-  function toggleWhisper() {
+  async function toggleWhisper() {
+    if (!isHost) {
+      toast.error("Only the meeting host can turn Whisper on or off");
+      return;
+    }
     const next = !whisperEnabled;
     setWhisperEnabled(next);
     if (!next) {
       sttRef.current?.setMicEnabled(false);
       void sttRef.current?.stop();
-      toast.info("Whisper live transcription paused");
+      toast.info("Whisper live transcription paused for everyone");
     } else {
       if (mic && room && joinData?.meeting.id) {
         sttRef.current?.start({
@@ -959,7 +986,11 @@ export function MeetRoom({ code }: { code: string }) {
         });
         sttRef.current?.setMicEnabled(true);
       }
-      toast.success("Whisper live transcription enabled");
+      toast.success("Whisper live transcription enabled for everyone");
+    }
+    if (joinData?.meeting.id) {
+      const sock = await getCollabSocket(sessionStorage.getItem("meet_guest_token") || undefined);
+      sock.emit("meeting_whisper_toggle", { meetingId: joinData.meeting.id, enabled: next });
     }
   }
 
@@ -1340,11 +1371,17 @@ export function MeetRoom({ code }: { code: string }) {
                   : "border-rose-400/40 bg-rose-950/40 text-rose-300 hover:border-rose-400",
               )}
               title={
-                !whisperEnabled
-                  ? "Whisper is paused · Click to turn ON"
+                !isHost
+                  ? !whisperEnabled
+                    ? "Whisper is turned off by host"
+                    : whisperOnline
+                    ? "Whisper is active (Controlled by host)"
+                    : "Whisper is offline"
+                  : !whisperEnabled
+                  ? "Whisper is paused · Click to turn ON for everyone"
                   : whisperOnline
-                  ? "Whisper is online · Click to pause"
-                  : "Whisper is offline · Click to toggle"
+                  ? "Whisper is active · Click to pause for everyone"
+                  : "Whisper is offline · Click to toggle for call"
               }
             >
               <AudioLines className="size-3 shrink-0" />

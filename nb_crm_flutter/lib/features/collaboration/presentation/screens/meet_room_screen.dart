@@ -575,6 +575,49 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
       }
       setState(() => _recording = active);
     });
+    socket.onWhisperStatus((payload) {
+      if (!mounted) return;
+      final enabled = payload['enabled'] == true;
+      setState(() => _whisperEnabled = enabled);
+      if (!enabled) {
+        _stt?.setMicEnabled(false);
+        unawaited(_stt?.stop());
+        _whisperPoll?.cancel();
+        if (_join?.meeting.isHost != true) {
+          final by = payload['by']?.toString();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(by != null ? '$by (Host) turned Whisper transcription OFF' : 'Whisper was turned OFF by the host'),
+              duration: const Duration(seconds: 3),
+              backgroundColor: const Color(0xFF1E293B),
+            ),
+          );
+        }
+      } else {
+        if (_mic && _room != null && _join?.meeting.id != null) {
+          _meetBearer(guestToken: _guestToken).then((bearer) {
+            unawaited(_stt?.start(
+              meetingId: _join!.meeting.id,
+              language: _transcriptLang,
+              bearer: bearer,
+              room: _room,
+            ));
+            _stt?.setMicEnabled(true);
+            _startWhisperPoll(bearer: bearer);
+          });
+        }
+        if (_join?.meeting.isHost != true) {
+          final by = payload['by']?.toString();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(by != null ? '$by (Host) turned Whisper transcription ON' : 'Whisper was turned ON by the host'),
+              duration: const Duration(seconds: 3),
+              backgroundColor: const Color(0xFF1E293B),
+            ),
+          );
+        }
+      }
+    });
   }
 
   void _upsertChat(Map<String, dynamic> row, {bool toast = false}) {
@@ -1209,6 +1252,16 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
   }
 
   Future<void> _toggleWhisper() async {
+    if (_join?.meeting.isHost != true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Only the meeting host can turn Whisper on or off'),
+          duration: Duration(seconds: 2),
+          backgroundColor: Color(0xFF1E293B),
+        ),
+      );
+      return;
+    }
     final next = !_whisperEnabled;
     setState(() => _whisperEnabled = next);
     if (!next) {
@@ -1218,7 +1271,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Whisper live transcription paused'),
+          content: Text('Whisper live transcription paused for everyone'),
           duration: Duration(seconds: 2),
           backgroundColor: Color(0xFF1E293B),
         ),
@@ -1240,11 +1293,15 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Whisper live transcription enabled'),
+          content: Text('Whisper live transcription enabled for everyone'),
           duration: Duration(seconds: 2),
           backgroundColor: Color(0xFF1E293B),
         ),
       );
+    }
+    final meetingId = _join?.meeting.id;
+    if (meetingId != null && meetingId.isNotEmpty) {
+      ref.read(collabSocketProvider).sendWhisperToggle(meetingId, next);
     }
   }
 

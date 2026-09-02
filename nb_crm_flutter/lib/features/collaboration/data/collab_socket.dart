@@ -317,6 +317,21 @@ class CollabSocket {
     _socket?.off('meeting_board_history');
   }
 
+  void sendWhisperToggle(String meetingId, bool enabled) {
+    _socket?.emit('meeting_whisper_toggle', {'meetingId': meetingId, 'enabled': enabled});
+  }
+
+  void onWhisperStatus(void Function(Map<String, dynamic>) cb) {
+    _socket?.off('meeting_whisper_status');
+    _socket?.on('meeting_whisper_status', (data) {
+      if (data is Map) cb(Map<String, dynamic>.from(data));
+    });
+  }
+
+  void offWhisperStatus() {
+    _socket?.off('meeting_whisper_status');
+  }
+
   void onRecording(void Function(bool active) cb) {
     _socket?.off('recording');
     _socket?.on('recording', (data) {

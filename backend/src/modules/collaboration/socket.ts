@@ -589,6 +589,16 @@ export async function setupCollaborationSocket(httpServer: http.Server) {
       socket.emit('meeting_board_history', { meetingId, strokes: history });
     });
 
+    socket.on('meeting_whisper_toggle', (payload: { meetingId: string; enabled: boolean }) => {
+      const meetingId = String(payload?.meetingId ?? '');
+      if (!meetingId) return;
+      io.to(`meeting:${meetingId}`).emit('meeting_whisper_status', {
+        meetingId,
+        enabled: Boolean(payload.enabled),
+        by: actor.name,
+      });
+    });
+
     socket.on('disconnect', async () => {
       if (actor.kind === 'user') {
         io.emit('presence', { userId: actor.userId, online: false });

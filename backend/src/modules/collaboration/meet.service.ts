@@ -981,7 +981,7 @@ export const meetService = {
   async removeFromMeeting(
     meetingId: string,
     hostUserId: string,
-    participantId: string,
+    participantIdOrIdentity: string,
     actor?: { roleName?: string; role?: string },
   ) {
     const meeting = await prisma.meeting.findUnique({ where: { id: meetingId } });
@@ -990,22 +990,102 @@ export const meetService = {
     if (!isHost && !isAdminRole(actor ?? {})) {
       throw new Error('Only the host can remove people from this meeting');
     }
-    const participant = await prisma.meetingParticipant.findUnique({ where: { id: participantId } });
-    if (!participant || participant.meetingId !== meetingId) throw new Error('Participant not found');
+
+    const raw = String(participantIdOrIdentity || '').trim();
+    const cleanId = raw.replace(/^guest:/, '').replace(/^user:/, '');
+
+    let participant = await prisma.meetingParticipant.findUnique({ where: { id: cleanId } });
+    if (!participant || participant.meetingId !== meetingId) {
+      participant = await prisma.meetingParticipant.findFirst({
+        where: {
+          meetingId,
+          OR: [
+            { id: cleanId },
+            { userId: cleanId },
+            { id: raw },
+            { userId: raw },
+          ],
+        },
+      });
+    }
+
+    if (!participant || participant.meetingId !== meetingId) {
+      // If DB record not found, still drop them from the LiveKit room if identity was supplied
+      const fallbackIdentity = raw.startsWith('user:') || raw.startsWith('guest:')
+        ? raw
+        : `user:${cleanId}`;
+      await removeLiveKitParticipant(meeting.livekitRoom, fallbackIdentity);
+      return {
+        meeting: await serializeMeeting(meetingId, hostUserId),
+        participant: {
+          id: cleanId,
+          userId: raw.startsWith('user:') ? cleanId : null,
+          name: 'Participant',
+          photoUrl: null,
+          role: 'MEMBER',
+          isGuest: raw.startsWith('guest:'),
+          admission: 'DENIED',
+        },
+        identity: fallbackIdentity,
+      };
+    }
+
     if (participant.userId === meeting.hostUserId || participant.role === 'HOST') {
       throw new Error('The host cannot be removed');
     }
     const updated = await prisma.meetingParticipant.update({
-      where: { id: participantId },
+      where: { id: participant.id },
       data: { admission: 'DENIED', leftAt: new Date() },
     });
     const identity = updated.userId ? `user:${updated.userId}` : `guest:${updated.id}`;
     await removeLiveKitParticipant(meeting.livekitRoom, identity);
+    if (raw.startsWith('user:') || raw.startsWith('guest:')) {
+      await removeLiveKitParticipant(meeting.livekitRoom, raw);
+    }
     const profile = updated.userId ? await getProfile(updated.userId) : null;
     return {
       meeting: await serializeMeeting(meetingId, hostUserId),
       participant: serializeParticipant({ ...updated, profile }),
       identity,
+    };
+  },
+
+  async moderateParticipant(
+    meetingId: string,
+    hostUserId: string,
+    opts: {
+      action: 'mute_mic' | 'unmute_mic' | 'stop_video' | 'allow_video' | 'stop_screen' | 'allow_screen' | 'mute_all';
+      targetIdentity?: string;
+      targetParticipantId?: string;
+      targetUserId?: string;
+      actor?: { roleName?: string; role?: string };
+    },
+  ) {
+    const meeting = await prisma.meeting.findUnique({ where: { id: meetingId } });
+    if (!meeting) throw new Error('Meeting not found');
+    const isHost = meeting.hostUserId === hostUserId;
+    if (!isHost && !isAdminRole(opts.actor ?? {})) {
+      throw new Error('Only the host can moderate participants in this meeting');
+    }
+    const hostProfile = await getProfile(hostUserId);
+    const hostName = hostProfile?.name || 'Host';
+
+    const payload = {
+      meetingId,
+      action: opts.action,
+      targetIdentity: opts.targetIdentity,
+      targetParticipantId: opts.targetParticipantId,
+      targetUserId: opts.targetUserId,
+      byHostUserId: hostUserId,
+      byHostName: hostName,
+    };
+
+    const { emitMeetingModeration } = await import('./socket');
+    emitMeetingModeration(payload);
+
+    return {
+      success: true,
+      ...payload,
     };
   },
   async closeAbandonedLive(meetingId: string) {

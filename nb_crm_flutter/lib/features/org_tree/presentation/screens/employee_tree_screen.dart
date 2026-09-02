@@ -876,7 +876,27 @@ class _ContactCard extends StatelessWidget {
                 if (contact.note != null && contact.note!.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
-                    child: Text(contact.note!, style: TextStyle(fontSize: 12, color: isDark ? const Color(0xFFD6CBB4) : const Color(0xFF64748B))),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.phone_outlined,
+                          size: 13,
+                          color: isDark ? const Color(0xFFC5A059) : const Color(0xFF64748B),
+                        ),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            contact.note!,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: isDark ? const Color(0xFFD6CBB4) : const Color(0xFF64748B),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
               ],
             ),
@@ -1104,9 +1124,12 @@ class _ContactsEditorState extends State<_ContactsEditor> {
                             TextFormField(
                               initialValue: _notes[m.key],
                               decoration: const InputDecoration(
-                                labelText: 'When to contact (optional)',
+                                labelText: 'Contact number (optional)',
+                                hintText: 'e.g. +91 98765 43210',
+                                prefixIcon: Icon(Icons.phone_outlined, size: 18),
                                 isDense: true,
                               ),
+                              keyboardType: TextInputType.phone,
                               onChanged: (v) => _notes[m.key] = v,
                             ),
                           ],

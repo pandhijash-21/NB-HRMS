@@ -160,10 +160,36 @@ export async function denyParticipant(meetingId: string, participantId: string) 
   );
 }
 
-export async function removeMeetingParticipant(meetingId: string, participantId: string) {
+export async function removeMeetingParticipant(meetingId: string, participantIdOrIdentity: string) {
   return unwrap<{ meeting: Meeting; participant: MeetingPerson; identity: string }>(
-    await api.post(`meetings/${meetingId}/remove`, { participantId }),
+    await api.post(`meetings/${meetingId}/remove`, {
+      participantId: participantIdOrIdentity.startsWith('user:') || participantIdOrIdentity.startsWith('guest:')
+        ? undefined
+        : participantIdOrIdentity,
+      identity: participantIdOrIdentity.startsWith('user:') || participantIdOrIdentity.startsWith('guest:')
+        ? participantIdOrIdentity
+        : undefined,
+    }),
   );
+}
+
+export async function moderateMeetingParticipant(
+  meetingId: string,
+  data: {
+    action: 'mute_mic' | 'unmute_mic' | 'stop_video' | 'allow_video' | 'stop_screen' | 'allow_screen' | 'mute_all';
+    targetIdentity?: string;
+    targetParticipantId?: string;
+    targetUserId?: string;
+  },
+) {
+  return unwrap<{
+    success: boolean;
+    meetingId: string;
+    action: string;
+    targetIdentity?: string;
+    targetParticipantId?: string;
+    targetUserId?: string;
+  }>(await api.post(`meetings/${meetingId}/moderation`, data));
 }
 
 export async function setMeetingTranscriptLanguage(id: string, language: string) {

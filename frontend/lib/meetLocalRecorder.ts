@@ -86,7 +86,12 @@ export class MeetLocalRecorder {
     this.mixDest = mixDest;
     this.syncAudioFromRoom(opts.room);
 
+    let tick = 0;
     const draw = () => {
+      tick++;
+      if (tick % 15 === 0) {
+        this.syncAudioFromRoom(opts.room);
+      }
       const videos = [...(opts.stage?.querySelectorAll("video") ?? [])].filter(
         (v): v is HTMLVideoElement => v instanceof HTMLVideoElement && v.videoWidth > 0,
       );

@@ -262,10 +262,34 @@ class MeetRepository {
     );
   }
 
-  Future<void> removeParticipant(String meetingId, String participantId) async {
+  Future<void> removeParticipant(String meetingId, String participantIdOrIdentity) async {
     await _dio.postEnvelope<Map<String, dynamic>>(
       'meetings/$meetingId/remove',
-      data: {'participantId': participantId},
+      data: {
+        if (participantIdOrIdentity.startsWith('user:') || participantIdOrIdentity.startsWith('guest:'))
+          'identity': participantIdOrIdentity
+        else
+          'participantId': participantIdOrIdentity,
+      },
+      parse: (raw) => Map<String, dynamic>.from(raw as Map? ?? {}),
+    );
+  }
+
+  Future<void> moderateParticipant(
+    String meetingId, {
+    required String action,
+    String? targetIdentity,
+    String? targetParticipantId,
+    String? targetUserId,
+  }) async {
+    await _dio.postEnvelope<Map<String, dynamic>>(
+      'meetings/$meetingId/moderation',
+      data: {
+        'action': action,
+        if (targetIdentity != null) 'targetIdentity': targetIdentity,
+        if (targetParticipantId != null) 'targetParticipantId': targetParticipantId,
+        if (targetUserId != null) 'targetUserId': targetUserId,
+      },
       parse: (raw) => Map<String, dynamic>.from(raw as Map? ?? {}),
     );
   }

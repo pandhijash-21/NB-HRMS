@@ -12,6 +12,7 @@ import { getProfile } from './profiles';
 
 let ioRef: Server | null = null;
 let presenceRedis: ReturnType<typeof createClient> | null = null;
+const meetingBoards = new Map<string, Array<unknown>>();
 
 export function getIo() {
   return ioRef;
@@ -79,6 +80,36 @@ export function emitMeetingRemoved(opts: {
   io.to(`participant:${opts.participantId}`).emit('meeting_removed', payload);
   if (opts.userId) io.to(`user:${opts.userId}`).emit('meeting_removed', payload);
   io.to(`meeting:${opts.meetingId}`).emit('meeting_peer_removed', payload);
+}
+
+export function emitMeetingModeration(opts: {
+  meetingId: string;
+  action: string;
+  targetIdentity?: string;
+  targetParticipantId?: string;
+  targetUserId?: string;
+  byHostUserId?: string;
+  byHostName?: string;
+}) {
+  const io = ioRef;
+  if (!io) return;
+  const payload = {
+    meetingId: opts.meetingId,
+    action: opts.action,
+    targetIdentity: opts.targetIdentity,
+    targetParticipantId: opts.targetParticipantId,
+    targetUserId: opts.targetUserId,
+    byHostUserId: opts.byHostUserId,
+    byHostName: opts.byHostName ?? 'Host',
+  };
+  io.to(`meeting:${opts.meetingId}`).emit('meeting_moderation', payload);
+  if (opts.targetParticipantId) {
+    io.to(`participant:${opts.targetParticipantId}`).emit('meeting_moderation', payload);
+    io.to(`waiting:${opts.targetParticipantId}`).emit('meeting_moderation', payload);
+  }
+  if (opts.targetUserId) {
+    io.to(`user:${opts.targetUserId}`).emit('meeting_moderation', payload);
+  }
 }
 
 export function emitChatNewMessage(
@@ -494,6 +525,77 @@ export async function setupCollaborationSocket(httpServer: http.Server) {
         identity: actor.kind === 'user' ? `user:${actor.userId}` : `guest:${actor.participantId}`,
         userId: actor.kind === 'user' ? actor.userId : null,
         participantId: actor.kind === 'guest' ? actor.participantId : null,
+      });
+    });
+
+    socket.on('meeting_moderation', async (payload: {
+      meetingId: string;
+      action: 'mute_mic' | 'unmute_mic' | 'stop_video' | 'allow_video' | 'stop_screen' | 'allow_screen' | 'mute_all';
+      targetIdentity?: string;
+      targetParticipantId?: string;
+      targetUserId?: string;
+    }) => {
+      const meetingId = String(payload?.meetingId ?? '');
+      if (!meetingId || !payload?.action) return;
+      if (actor.kind !== 'user') return;
+      try {
+        await meetService.moderateParticipant(meetingId, actor.userId, {
+          action: payload.action,
+          targetIdentity: payload.targetIdentity,
+          targetParticipantId: payload.targetParticipantId,
+          targetUserId: payload.targetUserId,
+        });
+      } catch (err) {
+        socket.emit('error_message', { error: err instanceof Error ? err.message : 'Moderation failed' });
+      }
+    });
+
+    socket.on('meeting_board_draw', (payload: { meetingId: string; stroke: unknown }) => {
+      const meetingId = String(payload?.meetingId ?? '');
+      if (!meetingId || !payload?.stroke) return;
+      if (!meetingBoards.has(meetingId)) {
+        meetingBoards.set(meetingId, []);
+      }
+      const strokes = meetingBoards.get(meetingId)!;
+      if (strokes.length > 2000) strokes.shift();
+      strokes.push(payload.stroke);
+      io.to(`meeting:${meetingId}`).emit('meeting_board_draw', {
+        meetingId,
+        stroke: payload.stroke,
+        sender: {
+          name: actor.name,
+          identity: actor.kind === 'user' ? `user:${actor.userId}` : `guest:${actor.participantId}`,
+        },
+      });
+    });
+
+    socket.on('meeting_board_clear', (payload: { meetingId: string }) => {
+      const meetingId = String(payload?.meetingId ?? '');
+      if (!meetingId) return;
+      meetingBoards.delete(meetingId);
+      io.to(`meeting:${meetingId}`).emit('meeting_board_clear', {
+        meetingId,
+        sender: {
+          name: actor.name,
+          identity: actor.kind === 'user' ? `user:${actor.userId}` : `guest:${actor.participantId}`,
+        },
+      });
+    });
+
+    socket.on('meeting_board_get_history', (payload: { meetingId: string }) => {
+      const meetingId = String(payload?.meetingId ?? '');
+      if (!meetingId) return;
+      const history = meetingBoards.get(meetingId) ?? [];
+      socket.emit('meeting_board_history', { meetingId, strokes: history });
+    });
+
+    socket.on('meeting_whisper_toggle', (payload: { meetingId: string; enabled: boolean }) => {
+      const meetingId = String(payload?.meetingId ?? '');
+      if (!meetingId) return;
+      io.to(`meeting:${meetingId}`).emit('meeting_whisper_status', {
+        meetingId,
+        enabled: Boolean(payload.enabled),
+        by: actor.name,
       });
     });
 

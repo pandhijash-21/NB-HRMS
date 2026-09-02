@@ -172,6 +172,22 @@ class CollabSocket {
     _socket?.emit('meeting_reaction', {'meetingId': meetingId, 'emoji': emoji});
   }
 
+  void meetingModeration({
+    required String meetingId,
+    required String action,
+    String? targetIdentity,
+    String? targetParticipantId,
+    String? targetUserId,
+  }) {
+    _socket?.emit('meeting_moderation', {
+      'meetingId': meetingId,
+      'action': action,
+      if (targetIdentity != null) 'targetIdentity': targetIdentity,
+      if (targetParticipantId != null) 'targetParticipantId': targetParticipantId,
+      if (targetUserId != null) 'targetUserId': targetUserId,
+    });
+  }
+
   void onNewMessage(void Function(ChatMessage) cb) {
     if (!_newMessage.contains(cb)) _newMessage.add(cb);
   }
@@ -243,6 +259,62 @@ class CollabSocket {
     _socket?.on('meeting_removed', (data) {
       if (data is Map) cb(Map<String, dynamic>.from(data));
     });
+  }
+
+  void onMeetingModeration(void Function(Map<String, dynamic>) cb) {
+    _socket?.off('meeting_moderation');
+    _socket?.on('meeting_moderation', (data) {
+      if (data is Map) cb(Map<String, dynamic>.from(data));
+    });
+  }
+
+  void offMeetingModeration() {
+    _socket?.off('meeting_moderation');
+  }
+
+  void sendBoardDraw(String meetingId, Map<String, dynamic> stroke) {
+    _socket?.emit('meeting_board_draw', {'meetingId': meetingId, 'stroke': stroke});
+  }
+
+  void sendBoardClear(String meetingId) {
+    _socket?.emit('meeting_board_clear', {'meetingId': meetingId});
+  }
+
+  void requestBoardHistory(String meetingId) {
+    _socket?.emit('meeting_board_get_history', {'meetingId': meetingId});
+  }
+
+  void onBoardDraw(void Function(Map<String, dynamic>) cb) {
+    _socket?.off('meeting_board_draw');
+    _socket?.on('meeting_board_draw', (data) {
+      if (data is Map) cb(Map<String, dynamic>.from(data));
+    });
+  }
+
+  void offBoardDraw() {
+    _socket?.off('meeting_board_draw');
+  }
+
+  void onBoardClear(void Function(Map<String, dynamic>) cb) {
+    _socket?.off('meeting_board_clear');
+    _socket?.on('meeting_board_clear', (data) {
+      if (data is Map) cb(Map<String, dynamic>.from(data));
+    });
+  }
+
+  void offBoardClear() {
+    _socket?.off('meeting_board_clear');
+  }
+
+  void onBoardHistory(void Function(Map<String, dynamic>) cb) {
+    _socket?.off('meeting_board_history');
+    _socket?.on('meeting_board_history', (data) {
+      if (data is Map) cb(Map<String, dynamic>.from(data));
+    });
+  }
+
+  void offBoardHistory() {
+    _socket?.off('meeting_board_history');
   }
 
   void onRecording(void Function(bool active) cb) {

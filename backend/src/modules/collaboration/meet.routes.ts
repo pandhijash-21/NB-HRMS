@@ -418,11 +418,20 @@ meetingsRouter.post('/:id/deny', async (req: Request, res: Response) => {
 
 meetingsRouter.post('/:id/remove', async (req: Request, res: Response) => {
   try {
-    const body = z.object({ participantId: z.string().min(1) }).parse(req.body);
+    const body = z
+      .object({
+        participantId: z.string().optional(),
+        identity: z.string().optional(),
+      })
+      .refine((data) => data.participantId || data.identity, {
+        message: 'participantId or identity is required',
+      })
+      .parse(req.body);
+    const target = (body.participantId || body.identity)!.trim();
     const data = await meetService.removeFromMeeting(
       p(req.params.id),
       req.user!.id,
-      body.participantId,
+      target,
       req.user,
     );
     emitMeetingRemoved({
@@ -435,6 +444,43 @@ meetingsRouter.post('/:id/remove', async (req: Request, res: Response) => {
     return res.json(ok(data));
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : 'Failed to remove';
+    const status = message.includes('Only the host') ? 403 : 400;
+    return res.status(status).json(fail(message));
+  }
+});
+
+meetingsRouter.post('/:id/moderation', async (req: Request, res: Response) => {
+  try {
+    const body = z
+      .object({
+        action: z.enum([
+          'mute_mic',
+          'unmute_mic',
+          'stop_video',
+          'allow_video',
+          'stop_screen',
+          'allow_screen',
+          'mute_all',
+        ]),
+        targetIdentity: z.string().optional(),
+        targetParticipantId: z.string().optional(),
+        targetUserId: z.string().optional(),
+      })
+      .parse(req.body);
+    const data = await meetService.moderateParticipant(
+      p(req.params.id),
+      req.user!.id,
+      {
+        action: body.action,
+        targetIdentity: body.targetIdentity,
+        targetParticipantId: body.targetParticipantId,
+        targetUserId: body.targetUserId,
+        actor: req.user,
+      },
+    );
+    return res.json(ok(data));
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : 'Moderation failed';
     const status = message.includes('Only the host') ? 403 : 400;
     return res.status(status).json(fail(message));
   }

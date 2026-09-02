@@ -32,6 +32,10 @@ import {
   Users,
   UserX,
   AudioLines,
+  Search,
+  Lock,
+  Unlock,
+  Shapes,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "next-auth/react";
@@ -39,6 +43,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { PhotoLightbox } from "@/components/ui/photo-lightbox";
+import { MeetCollaborationBoard } from "./MeetCollaborationBoard";
 import { cn } from "@/lib/utils";
 import api from "@/lib/axios";
 import { getCollabSocket } from "@/lib/socket";
@@ -51,6 +56,7 @@ import {
   guestJoinMeeting,
   meetErrorMessage,
   removeMeetingParticipant,
+  moderateMeetingParticipant,
   setMeetingTranscriptLanguage,
   fetchSttStatus,
   startRecording,
@@ -81,8 +87,8 @@ function installIceSanitizer() {
   const Ctor = window.RTCPeerConnection;
   if (!Ctor || (Ctor as typeof Ctor & { __nbIceSanitized?: boolean }).__nbIceSanitized) return;
   class SanitizedPeerConnection extends Ctor {
-    constructor(config?: RTCConfiguration, constraints?: unknown) {
-      super(sanitizeRtcConfig(config), constraints as never);
+    constructor(config?: RTCConfiguration) {
+      super(sanitizeRtcConfig(config));
     }
   }
   (SanitizedPeerConnection as typeof Ctor & { __nbIceSanitized?: boolean }).__nbIceSanitized = true;
@@ -257,23 +263,34 @@ function PersonTile({
   photoUrl,
   compact,
   handRaised,
-  canRemove,
+  canModerate,
+  isMicLocked,
+  isCamLocked,
+  onMuteToggle,
+  onVideoToggle,
+  onScreenToggle,
   onRemove,
 }: {
   participant: Participant;
   photoUrl?: string | null;
   compact?: boolean;
   handRaised?: boolean;
-  canRemove?: boolean;
+  canModerate?: boolean;
+  isMicLocked?: boolean;
+  isCamLocked?: boolean;
+  onMuteToggle?: () => void;
+  onVideoToggle?: () => void;
+  onScreenToggle?: () => void;
   onRemove?: () => void;
 }) {
   const cam = cameraPub(participant);
   const showVideo = Boolean(liveTrack(cam));
   const guest = isMeetGuest(participant.identity);
+  const isSharing = Boolean(liveTrack(screenPub(participant)));
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-2xl bg-slate-900 text-white h-full min-h-0",
+        "group relative overflow-hidden rounded-2xl bg-slate-900 text-white h-full min-h-0",
         compact ? "min-h-[88px] aspect-video" : "min-h-[160px]",
       )}
     >
@@ -290,23 +307,76 @@ function PersonTile({
         </div>
       )}
       {handRaised && (
-        <div className="absolute top-2 right-2 size-8 grid place-items-center rounded-full bg-amber-400 text-slate-900 shadow-lg">
+        <div className="absolute top-2 right-2 size-8 grid place-items-center rounded-full bg-amber-400 text-slate-900 shadow-lg z-10">
           <Hand className="size-4" />
         </div>
       )}
-      {canRemove && onRemove && (
-        <button
-          type="button"
-          className="absolute top-2 left-2 text-[11px] bg-black/70 hover:bg-rose-600 rounded-md px-2 py-1"
-          onClick={onRemove}
-        >
-          Remove
-        </button>
+
+      {/* Host Quick Actions on Tile */}
+      {canModerate && (
+        <div className="absolute top-2 left-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-black/80 rounded-lg p-1 backdrop-blur-sm z-10 shadow-lg">
+          {onMuteToggle && (
+            <button
+              type="button"
+              className={cn(
+                "p-1.5 rounded hover:bg-white/20 transition-colors text-xs",
+                isMicLocked ? "text-emerald-400" : "text-rose-400"
+              )}
+              title={isMicLocked ? "Allow microphone" : "Mute microphone"}
+              onClick={onMuteToggle}
+            >
+              {isMicLocked ? <Unlock className="size-3.5" /> : <MicOff className="size-3.5" />}
+            </button>
+          )}
+          {onVideoToggle && (
+            <button
+              type="button"
+              className={cn(
+                "p-1.5 rounded hover:bg-white/20 transition-colors text-xs",
+                isCamLocked ? "text-emerald-400" : "text-rose-400"
+              )}
+              title={isCamLocked ? "Allow video" : "Stop video"}
+              onClick={onVideoToggle}
+            >
+              {isCamLocked ? <Unlock className="size-3.5" /> : <VideoOff className="size-3.5" />}
+            </button>
+          )}
+          {isSharing && onScreenToggle && (
+            <button
+              type="button"
+              className="p-1.5 rounded hover:bg-white/20 text-amber-400 transition-colors text-xs"
+              title="Stop screen share"
+              onClick={onScreenToggle}
+            >
+              <MonitorUp className="size-3.5" />
+            </button>
+          )}
+          {onRemove && (
+            <button
+              type="button"
+              className="p-1.5 rounded hover:bg-rose-600 text-white transition-colors text-xs"
+              title="Remove from meeting"
+              onClick={onRemove}
+            >
+              <UserX className="size-3.5" />
+            </button>
+          )}
+        </div>
       )}
-      <div className="absolute bottom-2 left-2 text-xs bg-black/55 rounded-md px-2 py-0.5 flex items-center gap-1.5 max-w-[90%]">
+
+      <div className="absolute bottom-2 left-2 text-xs bg-black/60 backdrop-blur-sm rounded-md px-2 py-0.5 flex items-center gap-1.5 max-w-[90%]">
         <span className="truncate">{meetTileName(participant)}</span>
         {guest ? <GuestBadge /> : null}
-        {participant.isMicrophoneEnabled ? "" : " · muted"}
+        {isMicLocked ? (
+          <span className="text-rose-400 flex items-center gap-0.5" title="Microphone locked by host">
+            <Lock className="size-2.5" /> muted
+          </span>
+        ) : participant.isMicrophoneEnabled ? "" : " · muted"}
+        {isCamLocked ? (
+          <span className="text-rose-400 flex items-center gap-0.5" title="Camera locked by host">
+            <Lock className="size-2.5" /> no video
+          </span>
+        ) : null}
         {handRaised ? " · ✋" : ""}
       </div>
     </div>
@@ -327,6 +397,13 @@ export function MeetRoom({ code }: { code: string }) {
   const [mic, setMic] = useState(true);
   const [cam, setCam] = useState(true);
   const [sharing, setSharing] = useState(false);
+  const [micLocked, setMicLocked] = useState(false);
+  const [cameraLocked, setCameraLocked] = useState(false);
+  const [screenShareLocked, setScreenShareLocked] = useState(false);
+  const [peerModeration, setPeerModeration] = useState<
+    Record<string, { micLocked?: boolean; cameraLocked?: boolean; screenShareLocked?: boolean }>
+  >({});
+  const [peopleSearch, setPeopleSearch] = useState("");
   const [recording, setRecording] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [unreadChat, setUnreadChat] = useState(0);
@@ -341,6 +418,8 @@ export function MeetRoom({ code }: { code: string }) {
   const [captions, setCaptions] = useState<MeetingUtterance[]>([]);
   const [transcriptLang, setTranscriptLang] = useState("en");
   const [whisperOnline, setWhisperOnline] = useState(false);
+  const [whisperEnabled, setWhisperEnabled] = useState(true);
+  const [whiteboardOpen, setWhiteboardOpen] = useState(false);
   const sttRef = useRef<MeetBhashiniStt | null>(null);
   const [handRaised, setHandRaised] = useState(false);
   const [hands, setHands] = useState<Record<string, string>>({});
@@ -355,6 +434,7 @@ export function MeetRoom({ code }: { code: string }) {
   const stageRef = useRef<HTMLDivElement>(null);
   const localRecorderRef = useRef<MeetLocalRecorder | null>(null);
   const roomRef = useRef<Room | null>(null);
+  const isHostRef = useRef(false);
   const chatOpenRef = useRef(false);
   const chatModeRef = useRef<"ROOM" | "DIRECT">("ROOM");
   const waitingRef = useRef(false);
@@ -363,6 +443,15 @@ export function MeetRoom({ code }: { code: string }) {
   const toastTimers = useRef<Record<string, number>>({});
   const meRef = useRef<{ userId: string | null; participantId: string | null }>({ userId: null, participantId: null });
   const recordingRef = useRef(false);
+
+  const isHost = Boolean(
+    joinData?.meeting.isHost ||
+      preview?.isHost ||
+      joinData?.meeting.host?.userId === (session?.user as { id?: string } | undefined)?.id ||
+      preview?.host?.userId === (session?.user as { id?: string } | undefined)?.id,
+  );
+  isHostRef.current = isHost;
+
   chatOpenRef.current = chatOpen;
   chatModeRef.current = chatMode;
   waitingRef.current = waiting;
@@ -522,6 +611,7 @@ export function MeetRoom({ code }: { code: string }) {
     sock.off("meeting_hand");
     sock.off("meeting_reaction");
     sock.off("meeting_removed");
+    sock.off("meeting_moderation");
     sock.on("meeting_hand", (p: { identity?: string; name?: string; raised?: boolean }) => {
       const id = p.identity || "";
       if (!id) return;
@@ -556,6 +646,95 @@ export function MeetRoom({ code }: { code: string }) {
       await roomRef.current?.disconnect();
       setRoom(null);
       setEndedSummary("The host removed you from this meeting.");
+    });
+    sock.on("meeting_moderation", async (p: {
+      meetingId?: string;
+      action?: string;
+      targetIdentity?: string;
+      targetParticipantId?: string;
+      targetUserId?: string;
+      byHostName?: string;
+    }) => {
+      const mePart = participantIdRef.current;
+      const meUser = meRef.current.userId;
+      const meId = roomRef.current?.localParticipant.identity;
+      const isTarget =
+        (p.targetIdentity && meId && (p.targetIdentity === meId || p.targetIdentity === `user:${meUser}` || p.targetIdentity === `guest:${mePart}`)) ||
+        (p.targetParticipantId && mePart && p.targetParticipantId === mePart) ||
+        (p.targetUserId && meUser && p.targetUserId === meUser) ||
+        (p.action === "mute_all" && !isHostRef.current);
+
+      const targetKey = p.targetIdentity || p.targetParticipantId || (p.targetUserId ? `user:${p.targetUserId}` : "") || "";
+
+      if (targetKey) {
+        setPeerModeration((prev) => {
+          const cur = prev[targetKey] || {};
+          const updated = { ...cur };
+          if (p.action === "mute_mic") updated.micLocked = true;
+          if (p.action === "unmute_mic") updated.micLocked = false;
+          if (p.action === "stop_video") updated.cameraLocked = true;
+          if (p.action === "allow_video") updated.cameraLocked = false;
+          if (p.action === "stop_screen") updated.screenShareLocked = true;
+          if (p.action === "allow_screen") updated.screenShareLocked = false;
+          return { ...prev, [targetKey]: updated };
+        });
+      } else if (p.action === "mute_all") {
+        setPeerModeration((prev) => {
+          const next = { ...prev };
+          const remotes = roomRef.current?.remoteParticipants.values() ? Array.from(roomRef.current.remoteParticipants.values()) : [];
+          remotes.forEach((pt) => {
+            next[pt.identity] = { ...(next[pt.identity] || {}), micLocked: true };
+          });
+          return next;
+        });
+      }
+
+      if (isTarget) {
+        if (p.action === "mute_mic" || p.action === "mute_all") {
+          setMicLocked(true);
+          if (roomRef.current?.localParticipant) {
+            await roomRef.current.localParticipant.setMicrophoneEnabled(false);
+          }
+          setMic(false);
+          sttRef.current?.setMicEnabled(false);
+          toast.warning("The host muted your microphone. You cannot unmute until the host allows you.", {
+            duration: 5000,
+          });
+        } else if (p.action === "unmute_mic") {
+          setMicLocked(false);
+          toast.success("The host allowed you to unmute your microphone.", {
+            duration: 5000,
+          });
+        } else if (p.action === "stop_video") {
+          setCameraLocked(true);
+          if (roomRef.current?.localParticipant) {
+            await roomRef.current.localParticipant.setCameraEnabled(false);
+          }
+          setCam(false);
+          toast.warning("The host turned off your camera. You cannot turn it on until the host allows you.", {
+            duration: 5000,
+          });
+        } else if (p.action === "allow_video") {
+          setCameraLocked(false);
+          toast.success("The host allowed you to turn on your camera.", {
+            duration: 5000,
+          });
+        } else if (p.action === "stop_screen") {
+          setScreenShareLocked(true);
+          if (roomRef.current?.localParticipant) {
+            await roomRef.current.localParticipant.setScreenShareEnabled(false);
+          }
+          setSharing(false);
+          toast.warning("The host stopped your screen share. You cannot present until the host allows you.", {
+            duration: 5000,
+          });
+        } else if (p.action === "allow_screen") {
+          setScreenShareLocked(false);
+          toast.success("The host allowed you to share your screen.", {
+            duration: 5000,
+          });
+        }
+      }
     });
     return sock;
   };
@@ -764,6 +943,26 @@ export function MeetRoom({ code }: { code: string }) {
     sock.emit("meeting_hand", { meetingId: joinData.meeting.id, raised: next });
   }
 
+  function toggleWhisper() {
+    const next = !whisperEnabled;
+    setWhisperEnabled(next);
+    if (!next) {
+      sttRef.current?.setMicEnabled(false);
+      void sttRef.current?.stop();
+      toast.info("Whisper live transcription paused");
+    } else {
+      if (mic && room && joinData?.meeting.id) {
+        sttRef.current?.start({
+          room,
+          meetingId: joinData.meeting.id,
+          token: sessionStorage.getItem("meet_guest_token") || undefined,
+        });
+        sttRef.current?.setMicEnabled(true);
+      }
+      toast.success("Whisper live transcription enabled");
+    }
+  }
+
   async function toggleShareFullscreen() {
     const node = shareStageRef.current;
     if (!node) return;
@@ -782,13 +981,58 @@ export function MeetRoom({ code }: { code: string }) {
     }
   }
 
-  async function removePeer(personId: string) {
+  async function removePeer(personOrIdentity: string, name?: string) {
     if (!joinData) return;
+    const ok = window.confirm(
+      `Remove ${name || "this participant"} from the meeting? They will be disconnected immediately.`
+    );
+    if (!ok) return;
     try {
-      await removeMeetingParticipant(joinData.meeting.id, personId);
+      await removeMeetingParticipant(joinData.meeting.id, personOrIdentity);
       toast.success("Removed from the meeting");
     } catch (e) {
       toast.error(meetErrorMessage(e, "Unable to remove"));
+    }
+  }
+
+  async function handleModerate(
+    action: "mute_mic" | "unmute_mic" | "stop_video" | "allow_video" | "stop_screen" | "allow_screen" | "mute_all",
+    target?: { identity?: string; participantId?: string; userId?: string; name?: string },
+  ) {
+    if (!joinData) return;
+    try {
+      const sock = await getCollabSocket(sessionStorage.getItem("meet_guest_token") || undefined);
+      sock.emit("meeting_moderation", {
+        meetingId: joinData.meeting.id,
+        action,
+        targetIdentity: target?.identity,
+        targetParticipantId: target?.participantId,
+        targetUserId: target?.userId,
+      });
+      await moderateMeetingParticipant(joinData.meeting.id, {
+        action,
+        targetIdentity: target?.identity,
+        targetParticipantId: target?.participantId,
+        targetUserId: target?.userId,
+      }).catch(() => {});
+
+      if (action === "mute_all") {
+        toast.success("Muted all participants");
+      } else if (action === "mute_mic") {
+        toast.success(`Muted ${target?.name || "participant"}`);
+      } else if (action === "unmute_mic") {
+        toast.success(`Allowed ${target?.name || "participant"} to unmute`);
+      } else if (action === "stop_video") {
+        toast.success(`Turned off video for ${target?.name || "participant"}`);
+      } else if (action === "allow_video") {
+        toast.success(`Allowed ${target?.name || "participant"} to use video`);
+      } else if (action === "stop_screen") {
+        toast.success(`Stopped screen share for ${target?.name || "participant"}`);
+      } else if (action === "allow_screen") {
+        toast.success(`Allowed ${target?.name || "participant"} to present`);
+      }
+    } catch (e) {
+      toast.error(meetErrorMessage(e, "Moderation action failed"));
     }
   }
 
@@ -947,6 +1191,26 @@ export function MeetRoom({ code }: { code: string }) {
     );
   }
 
+  const filteredPeople = useMemo(() => {
+    const q = peopleSearch.trim().toLowerCase();
+    if (!q) return participants;
+    return participants.filter((p) => {
+      const name = (p.name || "").toLowerCase();
+      const tile = meetTileName(p).toLowerCase();
+      const person = rosterPerson(p);
+      const email = (person?.email || "").toLowerCase();
+      const guest = isMeetGuest(p.identity) ? "guest" : "member";
+      const role = (person?.role || "").toLowerCase();
+      return (
+        name.includes(q) ||
+        tile.includes(q) ||
+        email.includes(q) ||
+        guest.includes(q) ||
+        role.includes(q)
+      );
+    });
+  }, [participants, peopleSearch, joinData]);
+
   const gridCols =
     participants.length <= 1
       ? "grid-cols-1"
@@ -1052,7 +1316,6 @@ export function MeetRoom({ code }: { code: string }) {
     );
   }
 
-  const isHost = Boolean(joinData?.meeting.isHost);
   const canRecord = isHost;
 
   return (
@@ -1065,22 +1328,36 @@ export function MeetRoom({ code }: { code: string }) {
             <span>
               {participants.length} in this call
             </span>
-            <span
+            <button
+              type="button"
+              onClick={toggleWhisper}
               className={cn(
-                "inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5",
-                whisperOnline ? "border-emerald-400/40 text-emerald-300" : "border-rose-400/40 text-rose-300",
+                "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 transition-colors cursor-pointer text-[11px] font-medium",
+                !whisperEnabled
+                  ? "border-zinc-600 bg-zinc-800/80 text-zinc-400 hover:border-zinc-500"
+                  : whisperOnline
+                  ? "border-emerald-400/40 bg-emerald-950/40 text-emerald-300 hover:border-emerald-400"
+                  : "border-rose-400/40 bg-rose-950/40 text-rose-300 hover:border-rose-400",
               )}
-              title={whisperOnline ? "Whisper is online" : "Whisper is offline"}
+              title={
+                !whisperEnabled
+                  ? "Whisper is paused · Click to turn ON"
+                  : whisperOnline
+                  ? "Whisper is online · Click to pause"
+                  : "Whisper is offline · Click to toggle"
+              }
             >
               <AudioLines className="size-3 shrink-0" />
               <span
                 className={cn(
                   "size-1.5 rounded-full shrink-0",
-                  whisperOnline ? "bg-emerald-400" : "bg-rose-400",
+                  !whisperEnabled ? "bg-zinc-500" : whisperOnline ? "bg-emerald-400" : "bg-rose-400",
                 )}
               />
-              <span className="hidden xs:inline sm:inline">{whisperOnline ? "Whisper on" : "Whisper off"}</span>
-            </span>
+              <span className="hidden xs:inline sm:inline">
+                {!whisperEnabled ? "Whisper paused" : whisperOnline ? "Whisper on" : "Whisper off"}
+              </span>
+            </button>
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap justify-end">
@@ -1170,9 +1447,42 @@ export function MeetRoom({ code }: { code: string }) {
         </div>
       )}
 
-      <div className="flex-1 min-h-0 relative" ref={stageRef}>
-        <div className="h-full flex flex-col p-3 gap-3">
-          {presenter ? (
+      <div className="flex-1 min-h-0 relative flex overflow-hidden" ref={stageRef}>
+        <div className="flex-1 min-w-0 h-full flex flex-col p-3 gap-3 transition-all duration-300">
+          {whiteboardOpen ? (
+            <div className="flex-1 min-h-0 flex flex-col md:flex-row gap-3">
+              <div className="flex-1 min-h-0 min-w-0 h-full">
+                <MeetCollaborationBoard
+                  meetingId={joinData?.meeting.id || ""}
+                  currentUserName={(session?.user as { name?: string })?.name || guestName || "Guest"}
+                  onClose={() => setWhiteboardOpen(false)}
+                  guestToken={sessionStorage.getItem("meet_guest_token") || undefined}
+                />
+              </div>
+              <div className="shrink-0 flex md:flex-col gap-2 overflow-x-auto md:overflow-y-auto w-full md:w-48 lg:w-56 max-h-32 md:max-h-full">
+                {participants.map((p) => {
+                  const person = rosterPerson(p);
+                  const identityKey = p.identity || person?.id || "";
+                  const peerMod = peerModeration[identityKey] || peerModeration[person?.id || ""] || {};
+                  return (
+                    <div key={p.identity} className="h-24 md:h-32 shrink-0 aspect-video md:w-full">
+                      <PersonTile
+                        participant={p}
+                        photoUrl={photos.get(p.identity) || photos.get(p.name || "") || null}
+                        handRaised={Boolean(hands[p.identity])}
+                        canModerate={isHost && !p.isLocal}
+                        isMicLocked={Boolean(peerMod.micLocked)}
+                        isCamLocked={Boolean(peerMod.cameraLocked)}
+                        onMuteToggle={isHost && !p.isLocal ? () => void handleModerate(peerMod.micLocked ? "unmute_mic" : "mute_mic", { identity: p.identity, participantId: person?.id || undefined, userId: person?.userId || undefined, name: meetTileName(p) }) : undefined}
+                        onVideoToggle={isHost && !p.isLocal ? () => void handleModerate(peerMod.cameraLocked ? "allow_video" : "stop_video", { identity: p.identity, participantId: person?.id || undefined, userId: person?.userId || undefined, name: meetTileName(p) }) : undefined}
+                        onRemove={isHost && !p.isLocal ? () => void removePeer(p.identity || person?.id || "", meetTileName(p)) : undefined}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : presenter ? (
             <div className="flex-1 min-h-0 flex flex-col md:flex-row gap-3">
               <div className="flex-1 min-h-0 flex flex-col gap-2">
                 {presenters.length > 1 && (
@@ -1248,6 +1558,18 @@ export function MeetRoom({ code }: { code: string }) {
               <div className="h-28 shrink-0 flex gap-2 overflow-x-auto md:h-auto md:w-52 md:flex-col md:overflow-y-auto">
                 {participants.map((p) => {
                   const person = rosterPerson(p);
+                  const identityKey = p.identity || person?.id || "";
+                  const peerMod = peerModeration[identityKey] || peerModeration[person?.id || ""] || {};
+                  const isMicLocked = Boolean(peerMod.micLocked);
+                  const isCamLocked = Boolean(peerMod.cameraLocked);
+                  const isScreenLocked = Boolean(peerMod.screenShareLocked);
+                  const canModerate = isHost && !p.isLocal;
+                  const targetObj = {
+                    identity: p.identity,
+                    participantId: person?.id,
+                    userId: person?.userId || undefined,
+                    name: meetTileName(p),
+                  };
                   return (
                     <div key={p.identity} className="w-44 shrink-0 md:w-full">
                       <PersonTile
@@ -1255,8 +1577,13 @@ export function MeetRoom({ code }: { code: string }) {
                         participant={p}
                         photoUrl={photos.get(p.identity) || photos.get(p.name || "") || null}
                         handRaised={Boolean(hands[p.identity])}
-                        canRemove={isHost && !p.isLocal && Boolean(person?.id)}
-                        onRemove={person?.id ? () => void removePeer(person.id) : undefined}
+                        canModerate={canModerate}
+                        isMicLocked={isMicLocked}
+                        isCamLocked={isCamLocked}
+                        onMuteToggle={canModerate ? () => void handleModerate(isMicLocked ? "unmute_mic" : "mute_mic", targetObj) : undefined}
+                        onVideoToggle={canModerate ? () => void handleModerate(isCamLocked ? "allow_video" : "stop_video", targetObj) : undefined}
+                        onScreenToggle={canModerate ? () => void handleModerate(isScreenLocked ? "allow_screen" : "stop_screen", targetObj) : undefined}
+                        onRemove={canModerate ? () => void removePeer(p.identity || person?.id || "", meetTileName(p)) : undefined}
                       />
                     </div>
                   );
@@ -1274,6 +1601,18 @@ export function MeetRoom({ code }: { code: string }) {
             >
               {participants.map((p) => {
                 const person = rosterPerson(p);
+                const identityKey = p.identity || person?.id || "";
+                const peerMod = peerModeration[identityKey] || peerModeration[person?.id || ""] || {};
+                const isMicLocked = Boolean(peerMod.micLocked);
+                const isCamLocked = Boolean(peerMod.cameraLocked);
+                const isScreenLocked = Boolean(peerMod.screenShareLocked);
+                const canModerate = isHost && !p.isLocal;
+                const targetObj = {
+                  identity: p.identity,
+                  participantId: person?.id,
+                  userId: person?.userId || undefined,
+                  name: meetTileName(p),
+                };
                 return (
                   <div
                     key={p.identity}
@@ -1288,8 +1627,13 @@ export function MeetRoom({ code }: { code: string }) {
                       participant={p}
                       photoUrl={photos.get(p.identity) || photos.get(p.name || "") || null}
                       handRaised={Boolean(hands[p.identity])}
-                      canRemove={isHost && !p.isLocal && Boolean(person?.id)}
-                      onRemove={person?.id ? () => void removePeer(person.id) : undefined}
+                      canModerate={canModerate}
+                      isMicLocked={isMicLocked}
+                      isCamLocked={isCamLocked}
+                      onMuteToggle={canModerate ? () => void handleModerate(isMicLocked ? "unmute_mic" : "mute_mic", targetObj) : undefined}
+                      onVideoToggle={canModerate ? () => void handleModerate(isCamLocked ? "allow_video" : "stop_video", targetObj) : undefined}
+                      onScreenToggle={canModerate ? () => void handleModerate(isScreenLocked ? "allow_screen" : "stop_screen", targetObj) : undefined}
+                      onRemove={canModerate ? () => void removePeer(p.identity || person?.id || "", meetTileName(p)) : undefined}
                     />
                   </div>
                 );
@@ -1324,7 +1668,7 @@ export function MeetRoom({ code }: { code: string }) {
         )}
 
         {chatOpen && (
-          <aside className="absolute inset-y-0 right-0 w-full max-w-sm border-l border-white/10 bg-slate-900/95 backdrop-blur flex flex-col z-20 shadow-2xl">
+          <aside className="fixed inset-y-0 right-0 z-30 w-full max-w-sm border-l border-white/10 bg-slate-900/95 backdrop-blur flex flex-col shadow-2xl lg:static lg:z-auto lg:h-full lg:w-80 lg:shrink-0 transition-all duration-300">
             <div className="p-2 flex items-center gap-1 border-b border-white/10">
               <Button size="sm" variant={chatMode === "ROOM" ? "default" : "secondary"} onClick={() => setChatMode("ROOM")}>
                 Everyone
@@ -1411,40 +1755,213 @@ export function MeetRoom({ code }: { code: string }) {
         )}
 
         {peopleOpen && (
-          <aside className="absolute inset-y-0 right-0 w-full max-w-sm border-l border-white/10 bg-slate-900/95 backdrop-blur flex flex-col z-20 shadow-2xl">
-            <div className="p-3 flex items-center gap-2 border-b border-white/10">
-              <p className="font-semibold text-sm">People</p>
-              <Button size="icon" variant="ghost" className="ml-auto text-white" onClick={() => setPeopleOpen(false)}>
-                <X className="size-4" />
-              </Button>
+          <aside className="fixed inset-y-0 right-0 z-30 w-full max-w-sm border-l border-white/10 bg-slate-900/95 backdrop-blur flex flex-col shadow-2xl lg:static lg:z-auto lg:h-full lg:w-80 lg:shrink-0 transition-all duration-300">
+            <div className="p-3 flex items-center justify-between gap-2 border-b border-white/10 shrink-0">
+              <div className="flex items-center gap-2">
+                <p className="font-semibold text-sm">People</p>
+                <span className="text-xs bg-slate-800 text-white/70 px-2 py-0.5 rounded-full border border-white/10">
+                  {filteredPeople.length}
+                </span>
+              </div>
+              <div className="flex items-center gap-1">
+                {isHost && participants.length > 1 && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs border-rose-500/40 text-rose-300 hover:bg-rose-500/20 hover:text-rose-200"
+                    onClick={() => void handleModerate("mute_all")}
+                    title="Mute all other participants"
+                  >
+                    <MicOff className="size-3 mr-1" /> Mute all
+                  </Button>
+                )}
+                <Button size="icon" variant="ghost" className="h-7 w-7 text-white" onClick={() => setPeopleOpen(false)}>
+                  <X className="size-4" />
+                </Button>
+              </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-3 space-y-2">
-              {participants.map((p) => {
-                const person = rosterPerson(p);
-                return (
-                  <div key={p.identity} className="flex items-center gap-2 text-sm">
-                    <Avatar className="size-8">
-                      <AvatarImage src={photos.get(p.identity) || photos.get(p.name || "") || undefined} />
-                      <AvatarFallback>{initials(p.name)}</AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium flex items-center gap-1.5">
-                        <span className="truncate">{meetTileName(p)}</span>
-                        {isMeetGuest(p.identity) ? <GuestBadge /> : null}
-                        {hands[p.identity] ? " ✋" : ""}
-                      </p>
-                      <p className="text-[11px] text-white/50">
-                        {person?.role === "HOST" ? "Host" : person?.isGuest ? "Guest" : "In this call"}
-                      </p>
+            <div className="p-2 border-b border-white/10 shrink-0">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-white/40" />
+                <Input
+                  placeholder="Search people in call…"
+                  className="h-8 pl-8 pr-8 text-xs bg-slate-800/80 border-white/10 focus-visible:ring-1 focus-visible:ring-amber-400"
+                  value={peopleSearch}
+                  onChange={(e) => setPeopleSearch(e.target.value)}
+                />
+                {peopleSearch && (
+                  <button
+                    type="button"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 hover:text-white"
+                    onClick={() => setPeopleSearch("")}
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
+              {filteredPeople.length === 0 ? (
+                <div className="py-8 text-center text-xs text-white/50">
+                  No participants match &quot;{peopleSearch}&quot;
+                </div>
+              ) : (
+                filteredPeople.map((p) => {
+                  const person = rosterPerson(p);
+                  const isMe = p.isLocal;
+                  const identityKey = p.identity || person?.id || "";
+                  const peerMod = peerModeration[identityKey] || peerModeration[person?.id || ""] || {};
+                  const isMicLocked = Boolean(peerMod.micLocked);
+                  const isCamLocked = Boolean(peerMod.cameraLocked);
+                  const isScreenLocked = Boolean(peerMod.screenShareLocked);
+                  const isSharing = Boolean(liveTrack(screenPub(p)));
+                  const isCamOn = Boolean(liveTrack(cameraPub(p)));
+                  const isMicOn = p.isMicrophoneEnabled;
+                  const canModerate = isHost && !isMe;
+                  const targetObj = {
+                    identity: p.identity,
+                    participantId: person?.id,
+                    userId: person?.userId || undefined,
+                    name: meetTileName(p),
+                  };
+
+                  return (
+                    <div
+                      key={p.identity}
+                      className="p-2 rounded-xl bg-slate-800/40 hover:bg-slate-800/70 border border-white/5 flex flex-col gap-2 transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Avatar className="size-8 shrink-0">
+                          <AvatarImage src={photos.get(p.identity) || photos.get(p.name || "") || undefined} />
+                          <AvatarFallback className="text-xs">{initials(p.name)}</AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-medium text-xs flex items-center gap-1.5">
+                            <span className="truncate">{meetTileName(p)}</span>
+                            {isMe ? <span className="text-[10px] text-amber-300 font-bold">(You)</span> : null}
+                            {isMeetGuest(p.identity) ? <GuestBadge /> : null}
+                            {hands[p.identity] ? <span title="Hand raised">✋</span> : null}
+                          </p>
+                          <p className="text-[10px] text-white/50 flex items-center gap-1.5 mt-0.5">
+                            <span>{person?.role === "HOST" ? "Host" : person?.isGuest ? "Guest" : "Member"}</span>
+                            <span>·</span>
+                            <span className={isMicOn ? "text-emerald-400" : isMicLocked ? "text-rose-400 font-semibold" : "text-white/40"}>
+                              {isMicLocked ? "Muted by host" : isMicOn ? "Mic on" : "Mic off"}
+                            </span>
+                            {isSharing ? (
+                              <>
+                                <span>·</span>
+                                <span className="text-amber-400 font-semibold">Presenting</span>
+                              </>
+                            ) : null}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          {/* Status icons */}
+                          <span
+                            className={cn(
+                              "size-6 rounded-md grid place-items-center text-xs",
+                              isMicOn ? "text-emerald-400 bg-emerald-950/40" : isMicLocked ? "text-rose-400 bg-rose-950/40" : "text-white/40 bg-slate-800"
+                            )}
+                            title={isMicLocked ? "Microphone locked by host" : isMicOn ? "Microphone on" : "Microphone off"}
+                          >
+                            {isMicLocked ? <Lock className="size-3" /> : isMicOn ? <Mic className="size-3" /> : <MicOff className="size-3" />}
+                          </span>
+                          <span
+                            className={cn(
+                              "size-6 rounded-md grid place-items-center text-xs",
+                              isCamOn ? "text-emerald-400 bg-emerald-950/40" : isCamLocked ? "text-rose-400 bg-rose-950/40" : "text-white/40 bg-slate-800"
+                            )}
+                            title={isCamLocked ? "Camera locked by host" : isCamOn ? "Camera on" : "Camera off"}
+                          >
+                            {isCamLocked ? <Lock className="size-3" /> : isCamOn ? <Video className="size-3" /> : <VideoOff className="size-3" />}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Host Action Buttons for this participant */}
+                      {canModerate && (
+                        <div className="flex flex-wrap items-center gap-1 pt-1 border-t border-white/5">
+                          <Button
+                            size="sm"
+                            variant={isMicLocked ? "outline" : "secondary"}
+                            className={cn(
+                              "h-6 px-2 text-[10px] font-semibold",
+                              isMicLocked ? "border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/20" : "hover:bg-rose-500/20 hover:text-rose-300"
+                            )}
+                            onClick={() => void handleModerate(isMicLocked ? "unmute_mic" : "mute_mic", targetObj)}
+                            title={isMicLocked ? "Allow participant to unmute microphone" : "Mute participant and lock microphone"}
+                          >
+                            {isMicLocked ? (
+                              <>
+                                <Unlock className="size-2.5 mr-1 text-emerald-400" /> Allow mic
+                              </>
+                            ) : (
+                              <>
+                                <MicOff className="size-2.5 mr-1 text-rose-400" /> Mute
+                              </>
+                            )}
+                          </Button>
+
+                          <Button
+                            size="sm"
+                            variant={isCamLocked ? "outline" : "secondary"}
+                            className={cn(
+                              "h-6 px-2 text-[10px] font-semibold",
+                              isCamLocked ? "border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/20" : "hover:bg-rose-500/20 hover:text-rose-300"
+                            )}
+                            onClick={() => void handleModerate(isCamLocked ? "allow_video" : "stop_video", targetObj)}
+                            title={isCamLocked ? "Allow participant to turn on camera" : "Turn off camera and lock video"}
+                          >
+                            {isCamLocked ? (
+                              <>
+                                <Unlock className="size-2.5 mr-1 text-emerald-400" /> Allow video
+                              </>
+                            ) : (
+                              <>
+                                <VideoOff className="size-2.5 mr-1 text-rose-400" /> Stop video
+                              </>
+                            )}
+                          </Button>
+
+                          {isSharing || isScreenLocked ? (
+                            <Button
+                              size="sm"
+                              variant={isScreenLocked ? "outline" : "secondary"}
+                              className={cn(
+                                "h-6 px-2 text-[10px] font-semibold",
+                                isScreenLocked ? "border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/20" : "text-amber-300 hover:bg-rose-500/20 hover:text-rose-300"
+                              )}
+                              onClick={() => void handleModerate(isScreenLocked ? "allow_screen" : "stop_screen", targetObj)}
+                              title={isScreenLocked ? "Allow participant to share screen" : "Stop participant screen share and lock"}
+                            >
+                              {isScreenLocked ? (
+                                <>
+                                  <Unlock className="size-2.5 mr-1 text-emerald-400" /> Allow share
+                                </>
+                              ) : (
+                                <>
+                                  <MonitorUp className="size-2.5 mr-1 text-amber-400" /> Stop share
+                                </>
+                              )}
+                            </Button>
+                          ) : null}
+
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            className="h-6 px-2 text-[10px] ml-auto"
+                            onClick={() => void removePeer(p.identity || person?.id || "", meetTileName(p))}
+                            title="Remove participant from call"
+                          >
+                            <UserX className="size-2.5 mr-1" /> Remove
+                          </Button>
+                        </div>
+                      )}
                     </div>
-                    {isHost && !p.isLocal && person?.id && (
-                      <Button size="sm" variant="destructive" onClick={() => void removePeer(person.id)}>
-                        <UserX className="size-3.5 mr-1" /> Remove
-                      </Button>
-                    )}
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
           </aside>
         )}
@@ -1485,7 +2002,13 @@ export function MeetRoom({ code }: { code: string }) {
         <Button
           size="icon"
           variant={mic ? "secondary" : "destructive"}
+          className={cn(micLocked && "border border-rose-500 opacity-80")}
+          title={micLocked ? "Microphone muted by host (locked)" : mic ? "Turn off mic" : "Turn on mic"}
           onClick={async () => {
+            if (micLocked) {
+              toast.error("Your microphone was muted by the host. You cannot unmute until the host allows you.");
+              return;
+            }
             const next = !mic;
             await room.localParticipant.setMicrophoneEnabled(next);
             setMic(next);
@@ -1493,21 +2016,64 @@ export function MeetRoom({ code }: { code: string }) {
             if (next) sttRef.current?.attach(room);
           }}
         >
-          {mic ? <Mic className="size-4" /> : <MicOff className="size-4" />}
+          {micLocked ? (
+            <div className="relative flex items-center justify-center">
+              <MicOff className="size-4 text-rose-400" />
+              <Lock className="size-2.5 absolute -top-1 -right-1 text-rose-400" />
+            </div>
+          ) : mic ? (
+            <Mic className="size-4" />
+          ) : (
+            <MicOff className="size-4" />
+          )}
         </Button>
         <Button
           size="icon"
           variant={cam ? "secondary" : "destructive"}
+          className={cn(cameraLocked && "border border-rose-500 opacity-80")}
+          title={cameraLocked ? "Camera disabled by host (locked)" : cam ? "Turn off camera" : "Turn on camera"}
           onClick={async () => {
+            if (cameraLocked) {
+              toast.error("Your camera was turned off by the host. You cannot turn it on until the host allows you.");
+              return;
+            }
             const next = !cam;
             await room.localParticipant.setCameraEnabled(next);
             setCam(next);
           }}
         >
-          {cam ? <Video className="size-4" /> : <VideoOff className="size-4" />}
+          {cameraLocked ? (
+            <div className="relative flex items-center justify-center">
+              <VideoOff className="size-4 text-rose-400" />
+              <Lock className="size-2.5 absolute -top-1 -right-1 text-rose-400" />
+            </div>
+          ) : cam ? (
+            <Video className="size-4" />
+          ) : (
+            <VideoOff className="size-4" />
+          )}
         </Button>
-        <Button size="icon" variant={sharing ? "default" : "secondary"} onClick={toggleShare} title="Share screen">
-          <MonitorUp className="size-4" />
+        <Button
+          size="icon"
+          variant={sharing ? "default" : "secondary"}
+          className={cn(screenShareLocked && "border border-rose-500 opacity-80")}
+          title={screenShareLocked ? "Screen sharing disabled by host (locked)" : sharing ? "Stop sharing" : "Share screen"}
+          onClick={() => {
+            if (screenShareLocked) {
+              toast.error("Screen sharing was disabled by the host.");
+              return;
+            }
+            void toggleShare();
+          }}
+        >
+          {screenShareLocked ? (
+            <div className="relative flex items-center justify-center">
+              <MonitorUp className="size-4 text-rose-400" />
+              <Lock className="size-2.5 absolute -top-1 -right-1 text-rose-400" />
+            </div>
+          ) : (
+            <MonitorUp className="size-4" />
+          )}
         </Button>
         <div className="relative">
           <Button
@@ -1571,6 +2137,15 @@ export function MeetRoom({ code }: { code: string }) {
         </Button>
         <Button
           size="icon"
+          variant={whiteboardOpen ? "default" : "secondary"}
+          title={whiteboardOpen ? "Hide Collaboration Board" : "Teams Collaboration Board (Whiteboard)"}
+          onClick={() => setWhiteboardOpen((v) => !v)}
+          className={cn(whiteboardOpen && "bg-amber-400 text-slate-900 hover:bg-amber-300")}
+        >
+          <Shapes className="size-4" />
+        </Button>
+        <Button
+          size="icon"
           variant={captionsOn ? "default" : "secondary"}
           title={captionsOn ? "Hide captions" : "Show captions"}
           className="relative"
@@ -1580,32 +2155,11 @@ export function MeetRoom({ code }: { code: string }) {
           <span
             className={cn(
               "absolute top-1 right-1 size-1.5 rounded-full",
-              whisperOnline ? "bg-emerald-400" : "bg-rose-400",
+              !whisperEnabled ? "bg-zinc-500" : whisperOnline ? "bg-emerald-400" : "bg-rose-400",
             )}
-            title={whisperOnline ? "Whisper online" : "Whisper offline"}
+            title={!whisperEnabled ? "Whisper paused" : whisperOnline ? "Whisper online" : "Whisper offline"}
           />
         </Button>
-        {isHost && (
-          <select
-            className="h-9 max-w-[7.5rem] rounded-md border border-white/15 bg-slate-800 px-2 text-xs text-white"
-            value={transcriptLang}
-            title="Speech-to-text language"
-            onChange={(e) => {
-              const language = e.target.value;
-              setTranscriptLang(language);
-              sttRef.current?.setLanguage(language);
-              if (joinData?.meeting.id) {
-                void setMeetingTranscriptLanguage(joinData.meeting.id, language).catch(() => undefined);
-              }
-            }}
-          >
-            {MEET_STT_LANGUAGES.map((lang) => (
-              <option key={lang.code} value={lang.code}>
-                {lang.label}
-              </option>
-            ))}
-          </select>
-        )}
         {canRecord && (
           <Button
             variant={recording ? "destructive" : "secondary"}

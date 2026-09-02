@@ -2,7 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../data/collab_socket.dart';
 
-enum FlutterBoardTool { pen, highlighter, eraser, rectangle, circle, line }
+enum FlutterBoardTool { pen, highlighter, eraser, rectangle, circle, line, text, note }
 
 class FlutterBoardStroke {
   final String id;
@@ -123,6 +123,12 @@ class _MeetCollaborationBoardState extends State<MeetCollaborationBoard> {
   double _selectedSize = 4.0;
   bool _isMaximized = false;
 
+  // Textbox / Keyboard input state
+  Offset? _textInputPos;
+  bool _isNoteInput = false;
+  late final TextEditingController _textController;
+  late final FocusNode _textFocusNode;
+
   static const _palette = [
     Color(0xFFFFFFFF),
     Color(0xFFFBBF24),
@@ -144,6 +150,8 @@ class _MeetCollaborationBoardState extends State<MeetCollaborationBoard> {
   @override
   void initState() {
     super.initState();
+    _textController = TextEditingController();
+    _textFocusNode = FocusNode();
     _initSocket();
   }
 
@@ -193,6 +201,8 @@ class _MeetCollaborationBoardState extends State<MeetCollaborationBoard> {
 
   @override
   void dispose() {
+    _textController.dispose();
+    _textFocusNode.dispose();
     widget.collabSocket.offBoardHistory();
     widget.collabSocket.offBoardDraw();
     widget.collabSocket.offBoardClear();
@@ -201,6 +211,17 @@ class _MeetCollaborationBoardState extends State<MeetCollaborationBoard> {
 
   void _onPanStart(DragStartDetails details) {
     final localPos = details.localPosition;
+
+    if (_selectedTool == FlutterBoardTool.text || _selectedTool == FlutterBoardTool.note) {
+      setState(() {
+        _textInputPos = localPos;
+        _isNoteInput = (_selectedTool == FlutterBoardTool.note);
+        _textController.clear();
+      });
+      _textFocusNode.requestFocus();
+      return;
+    }
+
     final id = '${DateTime.now().millisecondsSinceEpoch}_${math.Random().nextInt(9999)}';
 
     setState(() {
@@ -251,6 +272,33 @@ class _MeetCollaborationBoardState extends State<MeetCollaborationBoard> {
     widget.collabSocket.sendBoardDraw(widget.meetingId, stroke.toJson());
   }
 
+  void _submitText() {
+    if (_textInputPos == null || _textController.text.trim().isEmpty) {
+      setState(() => _textInputPos = null);
+      return;
+    }
+
+    final id = '${DateTime.now().millisecondsSinceEpoch}_${math.Random().nextInt(9999)}';
+    final stroke = FlutterBoardStroke(
+      id: id,
+      tool: _isNoteInput ? FlutterBoardTool.note : FlutterBoardTool.text,
+      color: _selectedColor,
+      size: _selectedSize,
+      points: [],
+      start: _textInputPos,
+      end: _textInputPos,
+      text: _textController.text.trim(),
+    );
+
+    setState(() {
+      _strokes.add(stroke);
+      _textInputPos = null;
+      _textController.clear();
+    });
+
+    widget.collabSocket.sendBoardDraw(widget.meetingId, stroke.toJson());
+  }
+
   void _clearBoard() {
     showDialog(
       context: context,
@@ -287,215 +335,326 @@ class _MeetCollaborationBoardState extends State<MeetCollaborationBoard> {
 
   @override
   Widget build(BuildContext context) {
-    final boardContent = Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF0B0F19),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.6), blurRadius: 20, offset: const Offset(0, 8)),
-        ],
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        children: [
-          // Header
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1E293B).withValues(alpha: 0.9),
-              border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.1))),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFBBF24),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: const Text('🎨', style: TextStyle(fontSize: 12)),
-                ),
-                const SizedBox(width: 8),
-                const Text(
-                  'Teams Collaboration Board',
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13),
-                ),
-                const SizedBox(width: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFBBF24).withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: const Text(
-                    'Live',
-                    style: TextStyle(color: Color(0xFFFBBF24), fontSize: 10, fontWeight: FontWeight.bold),
-                  ),
-                ),
-                const Spacer(),
-                IconButton(
-                  icon: Icon(
-                    _isMaximized ? Icons.fullscreen_exit : Icons.fullscreen,
-                    size: 18,
-                    color: Colors.white70,
-                  ),
-                  onPressed: () => setState(() => _isMaximized = !_isMaximized),
-                  tooltip: _isMaximized ? 'Restore' : 'Fullscreen',
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close, size: 18, color: Colors.white70),
-                  onPressed: widget.onClose,
-                  tooltip: 'Close Board',
-                ),
-              ],
-            ),
+    final boardContent = LayoutBuilder(
+      builder: (context, constraints) {
+        return Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF0B0F19),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+            boxShadow: [
+              BoxShadow(color: Colors.black.withValues(alpha: 0.6), blurRadius: 20, offset: const Offset(0, 8)),
+            ],
           ),
-
-          // Interactive Canvas
-          Expanded(
-            child: Stack(
-              children: [
-                GestureDetector(
-                  onPanStart: _onPanStart,
-                  onPanUpdate: _onPanUpdate,
-                  onPanEnd: _onPanEnd,
-                  child: CustomPaint(
-                    painter: _WhiteboardPainter(
-                      strokes: _strokes,
-                      currentStroke: _currentStroke,
-                    ),
-                    size: Size.infinite,
-                  ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E293B).withValues(alpha: 0.9),
+                  border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.1))),
                 ),
-
-                // Left Floating Tools Palette
-                Positioned(
-                  left: 10,
-                  top: 10,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1E293B).withValues(alpha: 0.92),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
-                      boxShadow: [
-                        BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 10),
-                      ],
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _toolButton(FlutterBoardTool.pen, Icons.edit, 'Pen'),
-                        _toolButton(FlutterBoardTool.highlighter, Icons.brush, 'Highlighter'),
-                        _toolButton(FlutterBoardTool.rectangle, Icons.crop_square, 'Rectangle'),
-                        _toolButton(FlutterBoardTool.circle, Icons.circle_outlined, 'Circle'),
-                        _toolButton(FlutterBoardTool.line, Icons.horizontal_rule, 'Line'),
-                        _toolButton(FlutterBoardTool.eraser, Icons.cleaning_services_rounded, 'Eraser'),
-                        Divider(height: 8, thickness: 1, color: Colors.white.withValues(alpha: 0.1)),
-                        IconButton(
-                          icon: const Icon(Icons.undo, size: 16, color: Colors.white70),
-                          onPressed: _undo,
-                          tooltip: 'Undo',
-                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                          padding: EdgeInsets.zero,
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline, size: 16, color: Color(0xFFF87171)),
-                          onPressed: _clearBoard,
-                          tooltip: 'Clear Board',
-                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                          padding: EdgeInsets.zero,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                // Bottom Floating Color and Width Palette
-                Positioned(
-                  bottom: 12,
-                  left: 0,
-                  right: 0,
-                  child: Center(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(4),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF1E293B).withValues(alpha: 0.92),
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
-                        boxShadow: [
-                          BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 10),
-                        ],
+                        color: const Color(0xFFFBBF24),
+                        borderRadius: BorderRadius.circular(6),
                       ),
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
+                      child: const Text('🎨', style: TextStyle(fontSize: 12)),
+                    ),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Teams Collaboration Board',
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13),
+                    ),
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFBBF24).withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text(
+                        'Live',
+                        style: TextStyle(color: Color(0xFFFBBF24), fontSize: 10, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: Icon(
+                        _isMaximized ? Icons.fullscreen_exit : Icons.fullscreen,
+                        size: 18,
+                        color: Colors.white70,
+                      ),
+                      onPressed: () => setState(() => _isMaximized = !_isMaximized),
+                      tooltip: _isMaximized ? 'Restore' : 'Fullscreen',
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 18, color: Colors.white70),
+                      onPressed: widget.onClose,
+                      tooltip: 'Close Board',
+                    ),
+                  ],
+                ),
+              ),
+
+              // Interactive Canvas
+              Expanded(
+                child: Stack(
+                  children: [
+                    GestureDetector(
+                      onPanStart: _onPanStart,
+                      onPanUpdate: _onPanUpdate,
+                      onPanEnd: _onPanEnd,
+                      child: CustomPaint(
+                        painter: _WhiteboardPainter(
+                          strokes: _strokes,
+                          currentStroke: _currentStroke,
+                        ),
+                        size: Size.infinite,
+                      ),
+                    ),
+
+                    // Left Floating Tools Palette
+                    Positioned(
+                      left: 10,
+                      top: 10,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E293B).withValues(alpha: 0.92),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+                          boxShadow: [
+                            BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 10),
+                          ],
+                        ),
+                        child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            // Palette Colors
-                            for (final c in _palette)
-                              GestureDetector(
-                                onTap: () => setState(() => _selectedColor = c),
-                                child: Container(
-                                  margin: const EdgeInsets.symmetric(horizontal: 3),
-                                  width: 20,
-                                  height: 20,
-                                  decoration: BoxDecoration(
-                                    color: c,
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: _selectedColor == c ? Colors.white : Colors.black45,
-                                      width: _selectedColor == c ? 2.5 : 1,
-                                    ),
-                                    boxShadow: _selectedColor == c
-                                        ? [BoxShadow(color: c.withValues(alpha: 0.6), blurRadius: 6)]
-                                        : null,
-                                  ),
-                                ),
-                              ),
-                            Container(
-                              height: 16,
-                              width: 1,
-                              color: Colors.white.withValues(alpha: 0.15),
-                              margin: const EdgeInsets.symmetric(horizontal: 8),
+                            _toolButton(FlutterBoardTool.pen, Icons.edit, 'Pen'),
+                            _toolButton(FlutterBoardTool.highlighter, Icons.brush, 'Highlighter'),
+                            _toolButton(FlutterBoardTool.rectangle, Icons.crop_square, 'Rectangle'),
+                            _toolButton(FlutterBoardTool.circle, Icons.circle_outlined, 'Circle'),
+                            _toolButton(FlutterBoardTool.line, Icons.horizontal_rule, 'Line'),
+                            _toolButton(FlutterBoardTool.text, Icons.title, 'Text / Keyboard Textbox'),
+                            _toolButton(FlutterBoardTool.note, Icons.sticky_note_2_outlined, 'Sticky Note'),
+                            _toolButton(FlutterBoardTool.eraser, Icons.cleaning_services_rounded, 'Eraser'),
+                            Divider(height: 8, thickness: 1, color: Colors.white.withValues(alpha: 0.1)),
+                            IconButton(
+                              icon: const Icon(Icons.undo, size: 16, color: Colors.white70),
+                              onPressed: _undo,
+                              tooltip: 'Undo',
+                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                              padding: EdgeInsets.zero,
                             ),
-                            // Stroke sizes
-                            for (final s in _strokeSizes)
-                              GestureDetector(
-                                onTap: () => setState(() => _selectedSize = s['size'] as double),
-                                child: Container(
-                                  margin: const EdgeInsets.symmetric(horizontal: 2),
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: _selectedSize == s['size']
-                                        ? const Color(0xFFFBBF24)
-                                        : Colors.transparent,
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    s['label'] as String,
-                                    style: TextStyle(
-                                      color: _selectedSize == s['size']
-                                          ? const Color(0xFF0F172A)
-                                          : Colors.white60,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, size: 16, color: Color(0xFFF87171)),
+                              onPressed: _clearBoard,
+                              tooltip: 'Clear Board',
+                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                              padding: EdgeInsets.zero,
+                            ),
                           ],
                         ),
                       ),
                     ),
-                  ),
+
+                    // Textbox / Keyboard Typing Input Overlay
+                    if (_textInputPos != null)
+                      Positioned(
+                        left: math.min(_textInputPos!.dx, math.max(0.0, constraints.maxWidth - 240)),
+                        top: math.min(_textInputPos!.dy, math.max(0.0, constraints.maxHeight - 140)),
+                        child: Container(
+                          width: 220,
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1E293B),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: _selectedColor.withValues(alpha: 0.8), width: 1.5),
+                            boxShadow: [
+                              BoxShadow(color: Colors.black.withValues(alpha: 0.6), blurRadius: 16),
+                            ],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    _isNoteInput ? Icons.sticky_note_2_outlined : Icons.text_fields,
+                                    size: 13,
+                                    color: _selectedColor,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    _isNoteInput ? 'Add Sticky Note' : 'Add Text',
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(alpha: 0.9),
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  GestureDetector(
+                                    onTap: () => setState(() => _textInputPos = null),
+                                    child: const Icon(Icons.close, size: 14, color: Colors.white60),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              TextField(
+                                controller: _textController,
+                                focusNode: _textFocusNode,
+                                autofocus: true,
+                                maxLines: _isNoteInput ? 3 : 2,
+                                minLines: 1,
+                                style: TextStyle(
+                                  color: _isNoteInput ? const Color(0xFF0F172A) : Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                textInputAction: TextInputAction.done,
+                                onSubmitted: (_) => _submitText(),
+                                decoration: InputDecoration(
+                                  hintText: 'Type text here…',
+                                  hintStyle: TextStyle(
+                                    color: _isNoteInput ? Colors.black45 : Colors.white38,
+                                    fontSize: 11,
+                                  ),
+                                  filled: true,
+                                  fillColor: _isNoteInput ? _selectedColor : const Color(0xFF0F172A),
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                  isDense: true,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(6),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  TextButton(
+                                    onPressed: () => setState(() => _textInputPos = null),
+                                    style: TextButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      minimumSize: Size.zero,
+                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                    child: const Text('Cancel', style: TextStyle(color: Colors.white60, fontSize: 11)),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  ElevatedButton(
+                                    onPressed: _submitText,
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFFFBBF24),
+                                      foregroundColor: const Color(0xFF0F172A),
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                                      minimumSize: Size.zero,
+                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                    child: const Text('Place', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                    // Bottom Floating Color and Width Palette
+                    Positioned(
+                      bottom: 12,
+                      left: 0,
+                      right: 0,
+                      child: Center(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1E293B).withValues(alpha: 0.92),
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+                            boxShadow: [
+                              BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 10),
+                            ],
+                          ),
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // Palette Colors
+                                for (final c in _palette)
+                                  GestureDetector(
+                                    onTap: () => setState(() => _selectedColor = c),
+                                    child: Container(
+                                      margin: const EdgeInsets.symmetric(horizontal: 3),
+                                      width: 20,
+                                      height: 20,
+                                      decoration: BoxDecoration(
+                                        color: c,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: _selectedColor == c ? Colors.white : Colors.black45,
+                                          width: _selectedColor == c ? 2.5 : 1,
+                                        ),
+                                        boxShadow: _selectedColor == c
+                                            ? [BoxShadow(color: c.withValues(alpha: 0.6), blurRadius: 6)]
+                                            : null,
+                                      ),
+                                    ),
+                                  ),
+                                Container(
+                                  height: 16,
+                                  width: 1,
+                                  color: Colors.white.withValues(alpha: 0.15),
+                                  margin: const EdgeInsets.symmetric(horizontal: 8),
+                                ),
+                                // Stroke sizes
+                                for (final s in _strokeSizes)
+                                  GestureDetector(
+                                    onTap: () => setState(() => _selectedSize = s['size'] as double),
+                                    child: Container(
+                                      margin: const EdgeInsets.symmetric(horizontal: 2),
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: _selectedSize == s['size']
+                                            ? const Color(0xFFFBBF24)
+                                            : Colors.transparent,
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        s['label'] as String,
+                                        style: TextStyle(
+                                          color: _selectedSize == s['size']
+                                              ? const Color(0xFF0F172A)
+                                              : Colors.white60,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
 
     if (_isMaximized) {
@@ -529,7 +688,12 @@ class _MeetCollaborationBoardState extends State<MeetCollaborationBoard> {
           size: 16,
           color: isSelected ? const Color(0xFF0F172A) : Colors.white70,
         ),
-        onPressed: () => setState(() => _selectedTool = tool),
+        onPressed: () {
+          setState(() {
+            _selectedTool = tool;
+            _textInputPos = null;
+          });
+        },
         tooltip: tooltip,
         constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
         padding: EdgeInsets.zero,
@@ -599,6 +763,45 @@ class _WhiteboardPainter extends CustomPainter {
     } else if (stroke.tool == FlutterBoardTool.circle && stroke.start != null && stroke.end != null) {
       final rect = Rect.fromPoints(stroke.start!, stroke.end!);
       canvas.drawOval(rect, paint);
+    } else if (stroke.tool == FlutterBoardTool.text && stroke.text != null && stroke.start != null) {
+      final tp = TextPainter(
+        text: TextSpan(
+          text: stroke.text,
+          style: TextStyle(
+            color: stroke.color,
+            fontSize: math.max(14.0, stroke.size * 3.5),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      );
+      tp.layout();
+      tp.paint(canvas, stroke.start!);
+    } else if (stroke.tool == FlutterBoardTool.note && stroke.text != null && stroke.start != null) {
+      const boxW = 160.0;
+      const boxH = 90.0;
+      final noteRect = Rect.fromLTWH(stroke.start!.dx, stroke.start!.dy, boxW, boxH);
+      final bgPaint = Paint()
+        ..color = stroke.color
+        ..style = PaintingStyle.fill;
+      final rrect = RRect.fromRectAndRadius(noteRect, const Radius.circular(8));
+      canvas.drawRRect(rrect, bgPaint);
+
+      final tp = TextPainter(
+        text: TextSpan(
+          text: stroke.text,
+          style: const TextStyle(
+            color: Color(0xFF0F172A),
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            height: 1.3,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+        maxLines: 4,
+      );
+      tp.layout(maxWidth: boxW - 16);
+      tp.paint(canvas, stroke.start! + const Offset(8, 8));
     }
   }
 

@@ -499,19 +499,24 @@ export function MeetCollaborationBoard({
               value={textInput.value}
               onChange={(e) => setTextInput({ ...textInput, value: e.target.value })}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
+                if (e.key === "Escape") {
+                  setTextInput(null);
+                } else if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
                   void handleAddTextOrNote();
                 }
               }}
             />
-            <div className="flex justify-end gap-1.5">
-              <Button size="sm" variant="ghost" className="h-6 px-2 text-[11px]" onClick={() => setTextInput(null)}>
-                Cancel
-              </Button>
-              <Button size="sm" className="h-6 px-2 text-[11px] bg-amber-400 text-slate-900 font-bold" onClick={handleAddTextOrNote}>
-                Place
-              </Button>
+            <div className="flex items-center justify-between gap-1.5">
+              <span className="text-[10px] text-white/40">Press Enter ↵ to place</span>
+              <div className="flex items-center gap-1">
+                <Button size="sm" variant="ghost" className="h-6 px-2 text-[11px]" onClick={() => setTextInput(null)}>
+                  Cancel
+                </Button>
+                <Button size="sm" className="h-6 px-2 text-[11px] bg-amber-400 text-slate-900 font-bold" onClick={handleAddTextOrNote}>
+                  Place
+                </Button>
+              </div>
             </div>
           </div>
         )}

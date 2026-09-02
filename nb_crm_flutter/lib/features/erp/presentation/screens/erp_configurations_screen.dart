@@ -83,6 +83,41 @@ class ErpConfigurationsScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 24),
           Text(
+            'BOQ & Resources',
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 15,
+              color: isDark ? Colors.white : const Color(0xFF212F3D),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Materials, machines, labour for BOQ costing.',
+            style: TextStyle(
+              fontSize: 13,
+              color: isDark ? Colors.white54 : const Color(0xFF607D8B),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _CfgTile(
+            title: 'Materials',
+            subtitle: 'Stock, availability, and purchase logs',
+            onTap: () => context.go('/erp/configurations/materials'),
+          ),
+          const SizedBox(height: 10),
+          _CfgTile(
+            title: 'Machines',
+            subtitle: 'Equipment stock and project occupancy',
+            onTap: () => context.go('/erp/configurations/machines'),
+          ),
+          const SizedBox(height: 10),
+          _CfgTile(
+            title: 'Labour',
+            subtitle: 'Labour types and default rates (optional)',
+            onTap: () => context.go('/erp/configurations/labour'),
+          ),
+          const SizedBox(height: 24),
+          Text(
             'Work Orders',
             style: TextStyle(
               fontWeight: FontWeight.w800,

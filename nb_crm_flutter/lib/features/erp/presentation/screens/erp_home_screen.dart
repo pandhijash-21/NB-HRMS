@@ -63,6 +63,15 @@ class ErpHomeScreen extends ConsumerWidget {
             enabled: canReadWo,
             onTap: () => context.go('/erp/work-orders'),
           ),
+          const SizedBox(height: 10),
+          _ErpTile(
+            icon: Icons.receipt_long_outlined,
+            title: 'BOQ',
+            subtitle: 'Bill of quantities — activities, materials, machines & labour',
+            color: const Color(0xFF7c3aed),
+            enabled: canReadWo,
+            onTap: () => context.go('/erp/boq'),
+          ),
         ],
       ),
     );

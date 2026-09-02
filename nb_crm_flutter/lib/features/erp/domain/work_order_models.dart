@@ -5,6 +5,7 @@ class ErpActivitySubtask {
     required this.id,
     required this.activityId,
     required this.name,
+    this.description,
     this.isActive = true,
     this.sortOrder = 0,
   });
@@ -12,6 +13,7 @@ class ErpActivitySubtask {
   final String id;
   final String activityId;
   final String name;
+  final String? description;
   final bool isActive;
   final int sortOrder;
 
@@ -19,6 +21,7 @@ class ErpActivitySubtask {
         id: json['id']?.toString() ?? '',
         activityId: json['activityId']?.toString() ?? '',
         name: json['name']?.toString() ?? '',
+        description: json['description']?.toString(),
         isActive: json['isActive'] == true,
         sortOrder: int.tryParse('${json['sortOrder']}') ?? 0,
       );
@@ -26,6 +29,7 @@ class ErpActivitySubtask {
   Map<String, dynamic> toJson() => {
         if (id.isNotEmpty) 'id': id,
         'name': name,
+        if (description != null && description!.isNotEmpty) 'description': description,
         'isActive': isActive,
         'sortOrder': sortOrder,
       };

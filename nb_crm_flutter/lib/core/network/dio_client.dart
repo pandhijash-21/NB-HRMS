@@ -292,9 +292,9 @@ class DioClient {
         );
       default:
         final status = e.response?.statusCode;
-        if (status == 404 && path.contains('subtasks')) {
+        if (status == 404 && (path.contains('subtasks') || path.contains('boq') || path.contains('erp/resources'))) {
           return const ApiException(
-            'Subtasks API not found on this server. Use local API (127.0.0.1:4000) or deploy the latest backend to VPS.',
+            'API not found on this server. In debug, use local backend (127.0.0.1:4000) or deploy the latest backend.',
             statusCode: 404,
           );
         }

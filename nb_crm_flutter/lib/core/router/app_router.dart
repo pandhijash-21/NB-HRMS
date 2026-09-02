@@ -81,6 +81,11 @@ import '../../features/erp/presentation/screens/work_order_detail_screen.dart';
 import '../../features/erp/presentation/screens/work_order_form_screen.dart';
 import '../../features/erp/presentation/screens/activities_config_screen.dart';
 import '../../features/erp/presentation/screens/contractors_config_screen.dart';
+import '../../features/erp/presentation/screens/boq_list_screen.dart';
+import '../../features/erp/presentation/screens/boq_form_screen.dart';
+import '../../features/erp/presentation/screens/materials_config_screen.dart';
+import '../../features/erp/presentation/screens/machines_config_screen.dart';
+import '../../features/erp/presentation/screens/labour_config_screen.dart';
 import '../../features/collaboration/presentation/screens/chat_hub_screen.dart';
 import '../../features/collaboration/presentation/screens/meet_hub_screen.dart';
 import '../../features/collaboration/presentation/screens/meet_list_screen.dart';
@@ -387,6 +392,33 @@ final goRouterProvider = Provider<GoRouter>((ref) {
               final id = state.pathParameters['id'] ?? '';
               return WorkOrderDetailScreen(id: id);
             },
+          ),
+          GoRoute(
+            path: '/erp/boq',
+            builder: (context, state) => const BoqListScreen(),
+          ),
+          GoRoute(
+            path: '/erp/boq/new',
+            builder: (context, state) => const BoqFormScreen(),
+          ),
+          GoRoute(
+            path: '/erp/boq/:id/edit',
+            builder: (context, state) {
+              final id = state.pathParameters['id'] ?? '';
+              return BoqFormScreen(id: id);
+            },
+          ),
+          GoRoute(
+            path: '/erp/configurations/materials',
+            builder: (context, state) => const MaterialsConfigScreen(),
+          ),
+          GoRoute(
+            path: '/erp/configurations/machines',
+            builder: (context, state) => const MachinesConfigScreen(),
+          ),
+          GoRoute(
+            path: '/erp/configurations/labour',
+            builder: (context, state) => const LabourConfigScreen(),
           ),
           GoRoute(
             path: '/chat',

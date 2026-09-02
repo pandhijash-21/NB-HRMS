@@ -194,6 +194,13 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
           'Work Orders',
           section: 'ERP',
         ),
+        const _Destination(
+          '/erp/boq',
+          Icons.receipt_long_outlined,
+          Icons.receipt_long,
+          'BOQ',
+          section: 'ERP',
+        ),
         if (canAccessAdmin)
           const _Destination(
             '/erp/configurations',

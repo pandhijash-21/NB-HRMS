@@ -2005,6 +2005,9 @@ model ErpProject {
   documents    ErpProjectDocument[]
   towers       ErpProjectTower[]
   workOrders   ErpWorkOrder[]
+  boqs         ErpBoq[]
+  materialUses ErpMaterialProjectUse[]
+  machineUses  ErpMachineProjectUse[]
 
   @@index([isActive, createdAt])
   @@index([organizationId])
@@ -2134,21 +2137,28 @@ model ErpActivity {
 
   subtasks           ErpActivitySubtask[]
   workOrderGroups    ErpWorkOrderActivityGroup[]
+  materials          ErpMaterial[]
+  machines           ErpMachine[]
+  labourTypes        ErpLabour[]
 
   @@index([isActive, sortOrder])
   @@map("erp_activities")
 }
 
 model ErpActivitySubtask {
-  id         String   @id @default(uuid())
-  activityId String   @map("activity_id")
-  name       String
-  isActive   Boolean  @default(true) @map("is_active")
-  sortOrder  Int      @default(0) @map("sort_order")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  id          String   @id @default(uuid())
+  activityId  String   @map("activity_id")
+  name        String
+  description String?  @db.Text
+  isActive    Boolean  @default(true) @map("is_active")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
-  activity ErpActivity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  activity  ErpActivity  @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  materials ErpMaterial[]
+  machines  ErpMachine[]
+  labourTypes ErpLabour[]
 
   @@index([activityId, sortOrder])
   @@map("erp_activity_subtasks")
@@ -2221,6 +2231,220 @@ model ErpWorkOrderLine {
 
   @@index([groupId, sortOrder])
   @@map("erp_work_order_lines")
+}
+
+// =============================================================================
+// ERP BOQ — Bill of Quantities, materials, machines, labour
+// =============================================================================
+
+enum ErpBoqRateSource {
+  CURRENT_RATE
+  ESTIMATED_RATE
+}
+
+enum ErpBoqResourceType {
+  MATERIAL
+  MACHINE
+  LABOUR
+}
+
+enum ErpStockLogType {
+  PURCHASE
+  ADJUSTMENT
+  INITIAL
+}
+
+model ErpBoq {
+  id         String           @id @default(uuid())
+  boqNo      String           @unique @map("boq_no")
+  title      String
+  rateSource ErpBoqRateSource @default(ESTIMATED_RATE) @map("rate_source")
+  projectId  String           @map("project_id")
+  isActive   Boolean          @default(true) @map("is_active")
+  createdBy  String?          @map("created_by")
+  updatedBy  String?          @map("updated_by")
+  createdAt  DateTime         @default(now()) @map("created_at")
+  updatedAt  DateTime         @updatedAt @map("updated_at")
+
+  project ErpProject  @relation(fields: [projectId], references: [id])
+  tasks   ErpBoqTask[]
+
+  @@index([projectId, createdAt])
+  @@map("erp_boqs")
+}
+
+model ErpBoqTask {
+  id              String   @id @default(uuid())
+  boqId           String   @map("boq_id")
+  taskId          String   @map("task_id")
+  activityId      String?  @map("activity_id")
+  activityName    String   @map("activity_name")
+  subtaskId       String?  @map("subtask_id")
+  taskName        String   @map("task_name")
+  taskDescription String?  @map("task_description") @db.Text
+  isCustomSubtask Boolean  @default(false) @map("is_custom_subtask")
+  towerIds        String?  @map("tower_ids") @db.Text
+  floorNos        String?  @map("floor_nos") @db.Text
+  unitIds         String?  @map("unit_ids") @db.Text
+  quantity        Decimal? @db.Decimal(14, 4)
+  unitCode        String?  @map("unit_code")
+  rate            Decimal? @db.Decimal(14, 2)
+  amount          Decimal? @db.Decimal(14, 2)
+  materialAmount  Decimal  @default(0) @map("material_amount") @db.Decimal(14, 2)
+  machineAmount   Decimal  @default(0) @map("machine_amount") @db.Decimal(14, 2)
+  labourAmount    Decimal  @default(0) @map("labour_amount") @db.Decimal(14, 2)
+  sortOrder       Int      @default(0) @map("sort_order")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  boq       ErpBoq               @relation(fields: [boqId], references: [id], onDelete: Cascade)
+  resources ErpBoqTaskResource[]
+
+  @@index([boqId, sortOrder])
+  @@map("erp_boq_tasks")
+}
+
+model ErpBoqTaskResource {
+  id               String             @id @default(uuid())
+  boqTaskId        String             @map("boq_task_id")
+  resourceType     ErpBoqResourceType @map("resource_type")
+  configMaterialId String?            @map("config_material_id")
+  configMachineId  String?            @map("config_machine_id")
+  configLabourId   String?            @map("config_labour_id")
+  name             String
+  brand            String?
+  unitCode         String?            @map("unit_code")
+  size             String?
+  quantity         Decimal            @db.Decimal(14, 4)
+  unitPrice        Decimal            @map("unit_price") @db.Decimal(14, 2)
+  totalPrice       Decimal            @map("total_price") @db.Decimal(14, 2)
+  remarks          String?            @db.Text
+  sortOrder        Int                @default(0) @map("sort_order")
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+
+  task ErpBoqTask @relation(fields: [boqTaskId], references: [id], onDelete: Cascade)
+
+  @@index([boqTaskId, sortOrder])
+  @@map("erp_boq_task_resources")
+}
+
+model ErpMaterial {
+  id         String   @id @default(uuid())
+  brand      String?
+  name       String
+  unitCode   String?  @map("unit_code")
+  size       String?
+  activityId String?  @map("activity_id")
+  subtaskId  String?  @map("subtask_id")
+  qtyOnHand  Decimal  @default(0) @map("qty_on_hand") @db.Decimal(14, 4)
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  activity    ErpActivity?            @relation(fields: [activityId], references: [id], onDelete: SetNull)
+  subtask     ErpActivitySubtask?     @relation(fields: [subtaskId], references: [id], onDelete: SetNull)
+  stockLogs   ErpMaterialStockLog[]
+  projectUses ErpMaterialProjectUse[]
+
+  @@index([isActive, name])
+  @@map("erp_materials")
+}
+
+model ErpMaterialProjectUse {
+  id         String  @id @default(uuid())
+  materialId String  @map("material_id")
+  projectId  String  @map("project_id")
+  qtyUsed    Decimal @default(0) @map("qty_used") @db.Decimal(14, 4)
+
+  material ErpMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  project  ErpProject  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([materialId, projectId])
+  @@map("erp_material_project_uses")
+}
+
+model ErpMaterialStockLog {
+  id         String          @id @default(uuid())
+  materialId String          @map("material_id")
+  logType    ErpStockLogType @map("log_type")
+  quantity   Decimal         @db.Decimal(14, 4)
+  remarks    String?         @db.Text
+  createdBy  String?         @map("created_by")
+  createdAt  DateTime        @default(now()) @map("created_at")
+
+  material ErpMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
+
+  @@index([materialId, createdAt])
+  @@map("erp_material_stock_logs")
+}
+
+model ErpMachine {
+  id         String   @id @default(uuid())
+  brand      String?
+  name       String
+  unitCode   String?  @map("unit_code")
+  size       String?
+  activityId String?  @map("activity_id")
+  subtaskId  String?  @map("subtask_id")
+  qtyOnHand  Decimal  @default(0) @map("qty_on_hand") @db.Decimal(14, 4)
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  activity    ErpActivity?           @relation(fields: [activityId], references: [id], onDelete: SetNull)
+  subtask     ErpActivitySubtask?    @relation(fields: [subtaskId], references: [id], onDelete: SetNull)
+  stockLogs   ErpMachineStockLog[]
+  projectUses ErpMachineProjectUse[]
+
+  @@index([isActive, name])
+  @@map("erp_machines")
+}
+
+model ErpMachineProjectUse {
+  id        String  @id @default(uuid())
+  machineId String  @map("machine_id")
+  projectId String  @map("project_id")
+  qtyUsed   Decimal @default(0) @map("qty_used") @db.Decimal(14, 4)
+
+  machine ErpMachine @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  project ErpProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([machineId, projectId])
+  @@map("erp_machine_project_uses")
+}
+
+model ErpMachineStockLog {
+  id        String          @id @default(uuid())
+  machineId String          @map("machine_id")
+  logType   ErpStockLogType @map("log_type")
+  quantity  Decimal         @db.Decimal(14, 4)
+  remarks   String?         @db.Text
+  createdBy String?         @map("created_by")
+  createdAt DateTime        @default(now()) @map("created_at")
+
+  machine ErpMachine @relation(fields: [machineId], references: [id], onDelete: Cascade)
+
+  @@index([machineId, createdAt])
+  @@map("erp_machine_stock_logs")
+}
+
+model ErpLabour {
+  id          String   @id @default(uuid())
+  name        String
+  unitCode    String?  @map("unit_code")
+  defaultRate Decimal? @map("default_rate") @db.Decimal(14, 2)
+  activityId  String?  @map("activity_id")
+  subtaskId   String?  @map("subtask_id")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  activity ErpActivity?       @relation(fields: [activityId], references: [id], onDelete: SetNull)
+  subtask  ErpActivitySubtask? @relation(fields: [subtaskId], references: [id], onDelete: SetNull)
+
+  @@index([isActive, name])
+  @@map("erp_labour")
 }
 
 // =============================================================================

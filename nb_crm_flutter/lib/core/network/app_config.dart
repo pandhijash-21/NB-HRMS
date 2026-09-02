@@ -1,14 +1,20 @@
+import 'package:flutter/foundation.dart';
+
 /// Application configuration from compile-time `--dart-define` values.
 class AppConfig {
   AppConfig._();
 
-  /// Mirror of Next.js `NEXT_PUBLIC_API_URL` (includes `/api` suffix).
-  /// Production Hostinger API. Override locally with
-  /// `--dart-define=API_BASE_URL=http://127.0.0.1:4000/api`
-  static const String apiBaseUrl = String.fromEnvironment(
-    'API_BASE_URL',
-    defaultValue: 'https://crm.nbdeveloper.co.in/api',
-  );
+  /// API base URL (includes `/api` suffix).
+  ///
+  /// - Debug builds default to `http://127.0.0.1:4000/api` (local backend).
+  /// - Release builds default to production Hostinger.
+  /// - Override anytime: `--dart-define=API_BASE_URL=...`
+  static String get apiBaseUrl {
+    const fromEnv = String.fromEnvironment('API_BASE_URL');
+    if (fromEnv.isNotEmpty) return fromEnv;
+    if (kDebugMode) return 'http://127.0.0.1:4000/api';
+    return 'https://crm.nbdeveloper.co.in/api';
+  }
 
   /// Shared with backend `TRANSPORT_SECRET` for double AES-GCM JSON envelopes.
   ///

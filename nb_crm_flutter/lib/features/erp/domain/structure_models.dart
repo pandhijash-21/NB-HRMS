@@ -172,3 +172,17 @@ String floorLabel(int floorNo) {
   if (floorNo < 0) return 'Basement ${floorNo.abs()}';
   return 'Floor $floorNo';
 }
+
+/// Floor numbers for a tower — from units when present, else from tower config (matches backend).
+List<int> towerFloorNumbers(ErpProjectTower tower) {
+  if (tower.units.isNotEmpty) {
+    final floors = tower.units.map((u) => u.floorNo).toSet().toList();
+    floors.sort();
+    return floors;
+  }
+  if (tower.floorCount < 1) return [];
+  if (tower.hasGround) {
+    return List.generate(tower.floorCount, (i) => i);
+  }
+  return List.generate(tower.floorCount, (i) => i + 1);
+}

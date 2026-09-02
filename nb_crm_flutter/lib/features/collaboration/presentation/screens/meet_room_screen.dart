@@ -1282,7 +1282,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
       if (start) {
         await _localRecorder.start(room: _room!, code: _code);
         try {
-          await ref.read(meetRepositoryProvider).startRecording(id);
+        await ref.read(meetRepositoryProvider).startRecording(id);
         } catch (_) {}
         if (!mounted) return;
         setState(() => _recording = true);
@@ -1292,9 +1292,9 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
       } else {
         final saved = await _localRecorder.stopAndSave();
         try {
-          await ref.read(meetRepositoryProvider).stopRecording(id);
+        await ref.read(meetRepositoryProvider).stopRecording(id);
         } catch (_) {}
-        if (!mounted) return;
+      if (!mounted) return;
         setState(() => _recording = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(saved == null ? 'Recording discarded' : 'Recording saved on this device')),
@@ -1966,7 +1966,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                         ),
                       ),
                     ),
-                  ),
+                ),
                 if (_chatOpen)
                   Align(
                     alignment: Alignment.centerRight,
@@ -2641,7 +2641,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
           separatorBuilder: (_, __) => const SizedBox(height: 4),
           itemBuilder: (context, i) {
             final person = people[i];
-            final busy = person.id != null && _busyAdmit.contains(person.id);
+              final busy = person.id != null && _busyAdmit.contains(person.id);
             return SizedBox(
               height: 36,
               child: Row(
@@ -2658,7 +2658,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                   Expanded(
                     child: Text.rich(
                       TextSpan(
-                        children: [
+                      children: [
                           TextSpan(
                             text: person.name,
                             style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13),
@@ -2671,9 +2671,9 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                             const TextSpan(
                               text: ' · Guest',
                               style: TextStyle(color: Color(0xFFE8D5A8), fontSize: 12),
-                            ),
-                        ],
-                      ),
+                        ),
+                      ],
+                    ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -2698,9 +2698,9 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                       style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
                     ),
                   ),
-                ],
-              ),
-            );
+                        ],
+                      ),
+              );
           },
         ),
       ),
@@ -2714,10 +2714,10 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
         if (n == 0) return const SizedBox.shrink();
 
         Widget tile(Participant p) {
-          return _ParticipantTile(
-            participant: p,
+        return _ParticipantTile(
+          participant: p,
             label: _labelFor(p),
-            photoUrl: _photoForParticipant(p),
+          photoUrl: _photoForParticipant(p),
             handRaised: _hands.containsKey(p.identity),
             canRemove: _join?.meeting.isHost == true && !_isLocal(p),
             onRemove: () => _removeParticipant(p),
@@ -2818,7 +2818,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
           recipientParticipantId: _chatMode == 'DIRECT'
               ? (peer?.id ?? (_dmTo!.startsWith('user:') ? null : _dmTo))
               : null,
-        );
+    );
   }
 
   Widget _chatPane() {
@@ -3314,8 +3314,8 @@ class _ParticipantTile extends StatelessWidget {
                           ),
                           onPressed: onRemove,
                           child: const Text('Remove', style: TextStyle(fontSize: 11)),
-                        ),
                       ),
+                    ),
                   ],
                 );
               },

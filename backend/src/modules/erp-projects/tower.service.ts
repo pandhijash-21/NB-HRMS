@@ -97,6 +97,7 @@ const towerInclude = {
 };
 
 const towerListInclude = {
+  units: { orderBy: [{ floorNo: 'asc' as const }, { sortOrder: 'asc' as const }] },
   _count: { select: { units: true } },
 };
 

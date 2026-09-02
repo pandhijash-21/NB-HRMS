@@ -6,6 +6,11 @@ function str(v: unknown): string | null {
   return s.length ? s : null;
 }
 
+function sortIdx(v: unknown, fallback: number): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 export const activityService = {
   async list(opts?: { includeInactive?: boolean }) {
     const includeInactive = opts?.includeInactive === true;
@@ -58,11 +63,12 @@ export const activityService = {
               if (!n) return null;
               return {
                 name: n,
+                description: str(r.description),
                 isActive: r.isActive !== false,
-                sortOrder: Number(r.sortOrder) ?? i,
+                sortOrder: sortIdx(r.sortOrder, i),
               };
             })
-            .filter(Boolean) as { name: string; isActive: boolean; sortOrder: number }[],
+            .filter(Boolean) as { name: string; description: string | null; isActive: boolean; sortOrder: number }[],
         },
       },
       include: { subtasks: true },
@@ -87,13 +93,15 @@ export const activityService = {
             return {
               activityId: id,
               name: n,
+              description: str(r.description),
               isActive: r.isActive !== false,
-              sortOrder: Number(r.sortOrder) ?? i,
+              sortOrder: sortIdx(r.sortOrder, i),
             };
           })
           .filter(Boolean) as {
           activityId: string;
           name: string;
+          description: string | null;
           isActive: boolean;
           sortOrder: number;
         }[],

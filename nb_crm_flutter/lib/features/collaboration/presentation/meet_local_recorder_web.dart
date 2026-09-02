@@ -1,13 +1,18 @@
 import 'dart:async';
 import 'dart:js_interop';
 
+import 'package:flutter_webrtc/flutter_webrtc.dart' show MediaStreamTrack;
 import 'package:livekit_client/livekit_client.dart';
 import 'package:web/web.dart' as web;
 
 class MeetLocalRecorder {
   web.MediaRecorder? _recorder;
-  web.MediaStream? _stream;
+  web.MediaStream? _displayStream;
   web.AudioContext? _audioCtx;
+  web.MediaStreamAudioDestinationNode? _mixDest;
+  final Set<String> _attachedTrackIds = {};
+  Timer? _audioSyncTimer;
+  Room? _room;
   final List<web.Blob> _chunks = [];
   String _fileName = 'meeting.webm';
   Completer<void>? _stopCompleter;
@@ -30,9 +35,72 @@ class MeetLocalRecorder {
     return '';
   }
 
+  void _syncAudioTracks(Room room) {
+    final ctx = _audioCtx;
+    final mixDest = _mixDest;
+    if (ctx == null || mixDest == null) return;
+
+    final tracksToAttach = <web.MediaStreamTrack>[];
+
+    // 1. Host local microphone
+    for (final pub in room.localParticipant?.audioTrackPublications ?? const <TrackPublication<AudioTrack>>[]) {
+      final media = pub.track?.mediaStreamTrack;
+      if (media != null) {
+        final js = _asJsTrack(media);
+        if (js != null) {
+          final trackId = js.id;
+          if (!_attachedTrackIds.contains(trackId)) {
+            _attachedTrackIds.add(trackId);
+            tracksToAttach.add(js);
+          }
+        }
+      }
+    }
+
+    // 2. All remote attendees audio tracks
+    for (final remote in room.remoteParticipants.values) {
+      for (final pub in remote.audioTrackPublications) {
+        final media = pub.track?.mediaStreamTrack;
+        if (media != null) {
+          final js = _asJsTrack(media);
+          if (js != null) {
+            final trackId = js.id;
+            if (!_attachedTrackIds.contains(trackId)) {
+              _attachedTrackIds.add(trackId);
+              tracksToAttach.add(js);
+            }
+          }
+        }
+      }
+    }
+
+    // Connect tracks to Web Audio Graph
+    for (final jsTrack in tracksToAttach) {
+      try {
+        final stream = web.MediaStream([jsTrack].toJS);
+        final source = ctx.createMediaStreamSource(stream);
+        source.connect(mixDest);
+      } catch (_) {
+        // Track might not be graph-compatible
+      }
+    }
+  }
+
+  web.MediaStreamTrack? _asJsTrack(MediaStreamTrack track) {
+    try {
+      final raw = (track as dynamic).jsTrack;
+      if (raw == null) return null;
+      return raw as web.MediaStreamTrack;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> start({required Room room, required String code}) async {
     if (active) return;
     _chunks.clear();
+    _attachedTrackIds.clear();
+    _room = room;
 
     final safeCode = code.replaceAll(RegExp(r'[^a-zA-Z0-9_-]+'), '_');
     final stamp = DateTime.now().toIso8601String().replaceAll(RegExp(r'[:.]'), '-');
@@ -53,7 +121,7 @@ class MeetLocalRecorder {
       throw Exception('Screen recording permission was cancelled or not supported: $e');
     }
 
-    _stream = stream;
+    _displayStream = stream;
 
     // Listen for user stopping screen share from browser banner
     final videoTracks = stream.getVideoTracks().toDart;
@@ -68,61 +136,52 @@ class MeetLocalRecorder {
       }).toJS;
     }
 
-    // Mix Tab / Meeting audio + Local microphone audio together
-    web.MediaStream finalStream = stream;
-    try {
-      final audioTracks = stream.getAudioTracks().toDart;
-      final micPub = room.localParticipant?.getTrackPublicationBySource(TrackSource.microphone);
-      final micTrack = micPub?.track?.mediaStreamTrack;
-
-      web.MediaStreamTrack? jsMicTrack;
-      if (micTrack != null) {
-        try {
-          jsMicTrack = (micTrack as dynamic).jsTrack as web.MediaStreamTrack?;
-        } catch (_) {}
-      }
-
-      if (jsMicTrack != null) {
-        final ctx = web.AudioContext();
-        if (ctx.state == 'suspended') {
-          ctx.resume();
-        }
-        final mixDest = ctx.createMediaStreamDestination();
-
-        // 1. Tab audio (meeting sound / other participants)
-        if (audioTracks.isNotEmpty) {
-          final tabStream = web.MediaStream([audioTracks.first].toJS);
-          final tabSource = ctx.createMediaStreamSource(tabStream);
-          tabSource.connect(mixDest);
-        }
-
-        // 2. Microphone audio (host voice)
-        final micStream = web.MediaStream([jsMicTrack].toJS);
-        final micSource = ctx.createMediaStreamSource(micStream);
-        micSource.connect(mixDest);
-
-        _audioCtx = ctx;
-
-        final mixedAudioTracks = mixDest.stream.getAudioTracks().toDart;
-        final vTracks = stream.getVideoTracks().toDart;
-        final combined = <web.MediaStreamTrack>[
-          ...vTracks,
-          ...mixedAudioTracks,
-        ];
-        finalStream = web.MediaStream(combined.toJS);
-      }
-    } catch (_) {
-      finalStream = stream;
+    // Setup Web Audio Context and Destination Node for complete mixing
+    final ctx = web.AudioContext();
+    if (ctx.state == 'suspended') {
+      await ctx.resume().toDart;
     }
+    final mixDest = ctx.createMediaStreamDestination();
+    _audioCtx = ctx;
+    _mixDest = mixDest;
+
+    // 1. Tab / Screen audio (if captured by browser)
+    final displayAudio = stream.getAudioTracks().toDart;
+    if (displayAudio.isNotEmpty) {
+      try {
+        final firstAudio = displayAudio.first;
+        _attachedTrackIds.add(firstAudio.id);
+        final tabStream = web.MediaStream([firstAudio].toJS);
+        final tabSource = ctx.createMediaStreamSource(tabStream);
+        tabSource.connect(mixDest);
+      } catch (_) {}
+    }
+
+    // 2. Initial sync of all attendees & host mic
+    _syncAudioTracks(room);
+
+    // 3. Continuously sync audio for participants joining or unmuting during the meeting
+    _audioSyncTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (_room != null) _syncAudioTracks(_room!);
+    });
+
+    // Combine video from screen capture + complete mixed audio from all participants
+    final vTracks = stream.getVideoTracks().toDart;
+    final mixedAudioTracks = mixDest.stream.getAudioTracks().toDart;
+    final combined = <web.MediaStreamTrack>[
+      ...vTracks,
+      ...mixedAudioTracks,
+    ];
+    final recordStream = web.MediaStream(combined.toJS);
 
     web.MediaRecorder recorder;
     if (_mimeType.isNotEmpty) {
       recorder = web.MediaRecorder(
-        finalStream,
+        recordStream,
         web.MediaRecorderOptions(mimeType: _mimeType),
       );
     } else {
-      recorder = web.MediaRecorder(finalStream);
+      recorder = web.MediaRecorder(recordStream);
     }
 
     recorder.ondataavailable = ((web.BlobEvent event) {
@@ -152,7 +211,7 @@ class MeetLocalRecorder {
       );
     }
 
-    _cleanupStream();
+    _cleanup();
     _recorder = null;
 
     if (_chunks.isEmpty) {
@@ -189,19 +248,25 @@ class MeetLocalRecorder {
         if (recorder.state != 'inactive') recorder.stop();
       } catch (_) {}
     }
-    _cleanupStream();
+    _cleanup();
     _recorder = null;
     _chunks.clear();
   }
 
-  void _cleanupStream() {
+  void _cleanup() {
+    _audioSyncTimer?.cancel();
+    _audioSyncTimer = null;
+    _room = null;
+    _attachedTrackIds.clear();
+
     try {
       _audioCtx?.close();
     } catch (_) {}
     _audioCtx = null;
+    _mixDest = null;
 
-    final stream = _stream;
-    _stream = null;
+    final stream = _displayStream;
+    _displayStream = null;
     if (stream != null) {
       final tracks = stream.getTracks().toDart;
       for (final track in tracks) {

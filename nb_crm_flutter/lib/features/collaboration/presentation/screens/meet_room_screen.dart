@@ -4261,7 +4261,6 @@ class _ParticipantTile extends StatelessWidget {
                           ),
                         ),
                       ),
-                    ),
                   ],
                 );
               },

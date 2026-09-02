@@ -3683,6 +3683,11 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                               ),
                             ),
                             // Status icons
+                            if (p.connectionQuality == ConnectionQuality.poor ||
+                                p.connectionQuality == ConnectionQuality.lost) ...[
+                              const _BlinkingNetworkIssueBadge(compact: true),
+                              const SizedBox(width: 4),
+                            ],
                             NbIcon(
                               mod.micLocked
                                   ? Icons.lock
@@ -3971,6 +3976,76 @@ class _GuestBadge extends StatelessWidget {
   }
 }
 
+class _BlinkingNetworkIssueBadge extends StatefulWidget {
+  const _BlinkingNetworkIssueBadge({this.compact = false});
+  final bool compact;
+
+  @override
+  State<_BlinkingNetworkIssueBadge> createState() => _BlinkingNetworkIssueBadgeState();
+}
+
+class _BlinkingNetworkIssueBadgeState extends State<_BlinkingNetworkIssueBadge>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: Tween<double>(begin: 0.35, end: 1.0).animate(_controller),
+      child: Tooltip(
+        message: 'Weak or unstable network connection',
+        child: Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: widget.compact ? 4 : 6,
+            vertical: widget.compact ? 2 : 3,
+          ),
+          decoration: BoxDecoration(
+            color: const Color(0xFF7F1D1D).withValues(alpha: 0.88),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: const Color(0xFFF87171).withValues(alpha: 0.6)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.wifi_off_rounded,
+                size: widget.compact ? 11 : 13,
+                color: const Color(0xFFFCA5A5),
+              ),
+              if (!widget.compact) ...[
+                const SizedBox(width: 3),
+                const Text(
+                  'Network issue',
+                  style: TextStyle(
+                    color: Color(0xFFFCA5A5),
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ParticipantTile extends StatelessWidget {
   const _ParticipantTile({
     required this.participant,
@@ -4015,6 +4090,8 @@ class _ParticipantTile extends StatelessWidget {
         final track = _camera;
         final micOn = participant.isMicrophoneEnabled();
         final speaking = micOn && (participant.isSpeaking || participant.audioLevel > 0.08);
+        final hasNetworkIssue = participant.connectionQuality == ConnectionQuality.poor ||
+            participant.connectionQuality == ConnectionQuality.lost;
         Widget body = Center(
           child: NbProfilePhoto(
             url: photoUrl,
@@ -4033,7 +4110,9 @@ class _ParticipantTile extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: speaking ? const Color(0xFF8AB4F8) : Colors.transparent,
+              color: speaking
+                  ? const Color(0xFF8AB4F8)
+                  : (hasNetworkIssue ? const Color(0xFFF87171).withValues(alpha: 0.5) : Colors.transparent),
               width: 3,
             ),
           ),
@@ -4090,6 +4169,10 @@ class _ParticipantTile extends StatelessWidget {
                                 child: NbIcon(Icons.videocam_off, size: 12, color: Color(0xFFF87171)),
                               ),
                             ],
+                            if (hasNetworkIssue) ...[
+                              const SizedBox(width: 4),
+                              const _BlinkingNetworkIssueBadge(compact: true),
+                            ],
                             const SizedBox(width: 6),
                             _MeetMicBadge(
                               micOn: micOn,
@@ -4100,6 +4183,12 @@ class _ParticipantTile extends StatelessWidget {
                         ),
                       ),
                     ),
+                    if (hasNetworkIssue)
+                      Positioned(
+                        top: compact ? 8 : 10,
+                        right: handRaised ? (compact ? 42 : 46) : (compact ? 8 : 10),
+                        child: _BlinkingNetworkIssueBadge(compact: compact),
+                      ),
                     if (handRaised)
                       Positioned(
                         top: compact ? 8 : 10,

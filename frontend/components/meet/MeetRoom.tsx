@@ -5,6 +5,7 @@ import {
   Room,
   RoomEvent,
   Track,
+  ConnectionQuality,
   type Participant,
   type TrackPublication,
 } from "livekit-client";
@@ -36,6 +37,7 @@ import {
   Lock,
   Unlock,
   Shapes,
+  WifiOff,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "next-auth/react";
@@ -287,11 +289,16 @@ function PersonTile({
   const showVideo = Boolean(liveTrack(cam));
   const guest = isMeetGuest(participant.identity);
   const isSharing = Boolean(liveTrack(screenPub(participant)));
+  const hasNetworkIssue =
+    participant.connectionQuality === ConnectionQuality.Poor ||
+    participant.connectionQuality === ConnectionQuality.Lost;
+
   return (
     <div
       className={cn(
         "group relative overflow-hidden rounded-2xl bg-slate-900 text-white h-full min-h-0",
         compact ? "min-h-[88px] aspect-video" : "min-h-[160px]",
+        hasNetworkIssue && "ring-1 ring-rose-500/40",
       )}
     >
       {showVideo ? (
@@ -309,6 +316,20 @@ function PersonTile({
       {handRaised && (
         <div className="absolute top-2 right-2 size-8 grid place-items-center rounded-full bg-amber-400 text-slate-900 shadow-lg z-10">
           <Hand className="size-4" />
+        </div>
+      )}
+
+      {/* Blinking Network Issue Badge on Video Tile */}
+      {hasNetworkIssue && (
+        <div
+          className={cn(
+            "absolute top-2 z-10 flex items-center gap-1 rounded-md bg-rose-950/90 border border-rose-500/50 px-1.5 py-0.5 text-[10px] font-bold text-rose-300 shadow-lg animate-pulse",
+            handRaised ? "right-12" : "right-2",
+          )}
+          title="Weak or unstable network connection detected"
+        >
+          <WifiOff className="size-3 text-rose-400 shrink-0" />
+          {!compact && <span className="hidden sm:inline">Network issue</span>}
         </div>
       )}
 
@@ -375,6 +396,11 @@ function PersonTile({
         {isCamLocked ? (
           <span className="text-rose-400 flex items-center gap-0.5" title="Camera locked by host">
             <Lock className="size-2.5" /> no video
+          </span>
+        ) : null}
+        {hasNetworkIssue ? (
+          <span className="text-rose-400 flex items-center gap-0.5 animate-pulse font-medium" title="Unstable network connection">
+            <WifiOff className="size-2.5" /> network issue
           </span>
         ) : null}
         {handRaised ? " · ✋" : ""}
@@ -781,6 +807,9 @@ export function MeetRoom({ code }: { code: string }) {
       if (pub.source === Track.Source.Microphone) sttRef.current?.attach(r);
     });
     r.on(RoomEvent.LocalTrackUnpublished, bump);
+    r.on(RoomEvent.ConnectionQualityChanged, bump);
+    r.on(RoomEvent.Reconnecting, bump);
+    r.on(RoomEvent.Reconnected, bump);
     r.on(RoomEvent.Disconnected, () => setRoom(null));
     await r.connect(payload.livekit.url, payload.livekit.token, {
       rtcConfig: {
@@ -1854,6 +1883,9 @@ export function MeetRoom({ code }: { code: string }) {
                   const isSharing = Boolean(liveTrack(screenPub(p)));
                   const isCamOn = Boolean(liveTrack(cameraPub(p)));
                   const isMicOn = p.isMicrophoneEnabled;
+                  const hasNetworkIssue =
+                    p.connectionQuality === ConnectionQuality.Poor ||
+                    p.connectionQuality === ConnectionQuality.Lost;
                   const canModerate = isHost && !isMe;
                   const targetObj = {
                     identity: p.identity,
@@ -1865,7 +1897,10 @@ export function MeetRoom({ code }: { code: string }) {
                   return (
                     <div
                       key={p.identity}
-                      className="p-2 rounded-xl bg-slate-800/40 hover:bg-slate-800/70 border border-white/5 flex flex-col gap-2 transition-colors"
+                      className={cn(
+                        "p-2 rounded-xl bg-slate-800/40 hover:bg-slate-800/70 border flex flex-col gap-2 transition-colors",
+                        hasNetworkIssue ? "border-rose-500/30" : "border-white/5"
+                      )}
                     >
                       <div className="flex items-center gap-2">
                         <Avatar className="size-8 shrink-0">
@@ -1891,10 +1926,26 @@ export function MeetRoom({ code }: { code: string }) {
                                 <span className="text-amber-400 font-semibold">Presenting</span>
                               </>
                             ) : null}
+                            {hasNetworkIssue ? (
+                              <>
+                                <span>·</span>
+                                <span className="text-rose-400 font-semibold flex items-center gap-0.5 animate-pulse">
+                                  <WifiOff className="size-2.5" /> Poor network
+                                </span>
+                              </>
+                            ) : null}
                           </p>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
                           {/* Status icons */}
+                          {hasNetworkIssue ? (
+                            <span
+                              className="size-6 rounded-md grid place-items-center text-xs text-rose-400 bg-rose-950/60 animate-pulse border border-rose-500/40"
+                              title="Weak or unstable network connection"
+                            >
+                              <WifiOff className="size-3" />
+                            </span>
+                          ) : null}
                           <span
                             className={cn(
                               "size-6 rounded-md grid place-items-center text-xs",

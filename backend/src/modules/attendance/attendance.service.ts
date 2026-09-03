@@ -1,6 +1,8 @@
 import { prisma } from '../../config/prisma';
 import { randomUUID } from 'crypto';
 import { deriveDayInOut } from './dayPunch.rules';
+import { evaluateWebAttendanceGate } from './webAttendanceGate';
+import { notifyAdminsWebAttendance } from './webAttendanceNotify';
 
 const IST_OFFSET_MIN = 330;
 const IST_OFFSET_MS = IST_OFFSET_MIN * 60 * 1000;
@@ -972,9 +974,18 @@ export const attendanceService = {
     biometricVerified: boolean;
     biometricToken?: string | null;
     reason?: string;
+    userAgent?: string | null;
   }) {
     if (!params.biometricVerified && !params.deviceInfo) {
       throw new Error('Punch must be authenticated with biometrics or a trusted device fingerprint.');
+    }
+
+    const gate = evaluateWebAttendanceGate({
+      userAgent: params.userAgent,
+      deviceInfo: params.deviceInfo && typeof params.deviceInfo === 'object' ? params.deviceInfo : null,
+    });
+    if (!gate.allowed) {
+      throw new Error(gate.message ?? 'Web attendance is not allowed on this browser/device.');
     }
 
     // Biometric/Fingerprint Pinning Check
@@ -1047,22 +1058,39 @@ export const attendanceService = {
       }
     }
 
+    const enrichedDeviceInfo = {
+      ...(params.deviceInfo && typeof params.deviceInfo === 'object' ? params.deviceInfo : {}),
+      clientKind: gate.kind,
+      deviceLabel: gate.deviceLabel,
+      browserLabel: gate.browserLabel,
+      userAgent: gate.userAgent || params.userAgent || null,
+    };
+
     const row = await prisma.attendancePunch.create({
       data: {
         employeeId: params.employeeId,
         punchAt: dt,
         source: 'MOBILE_APP',
-        terminalId: 'APP',
+        terminalId: gate.kind === 'ios_safari' ? 'WEB_IOS_SAFARI' : 'APP',
         punchType: 'APP_PUNCH',
         externalKey: `APP-${params.employeeId}-${dt.getTime()}-${randomUUID()}`,
         latitude: params.latitude,
         longitude: params.longitude,
         locationId: matchedLocationId,
-        deviceInfo: params.deviceInfo ? params.deviceInfo : undefined,
+        deviceInfo: enrichedDeviceInfo,
         reason: params.reason ? params.reason.trim() : undefined,
       },
       select: { id: true, employeeId: true, punchAt: true, terminalId: true, punchType: true, source: true, latitude: true, longitude: true, locationId: true, location: true, reason: true },
     });
+
+    if (gate.kind === 'ios_safari') {
+      void notifyAdminsWebAttendance({
+        type: 'web_punch',
+        employeeId: params.employeeId,
+        gate,
+        punchAt: row.punchAt.toISOString(),
+      });
+    }
 
     return {
       ...row,
@@ -1071,9 +1099,22 @@ export const attendanceService = {
     };
   },
 
-  async registerBiometricToken(employeeId: number, biometricToken: string, updatedBy: string) {
+  async registerBiometricToken(
+    employeeId: number,
+    biometricToken: string,
+    updatedBy: string,
+    opts?: { userAgent?: string | null; deviceInfo?: Record<string, unknown> | null },
+  ) {
     const employee = await prisma.employee.findUnique({ where: { id: employeeId }, select: { id: true } });
     if (!employee) throw new Error('Employee not found');
+
+    const gate = evaluateWebAttendanceGate({
+      userAgent: opts?.userAgent,
+      deviceInfo: opts?.deviceInfo ?? null,
+    });
+    if (!gate.allowed) {
+      throw new Error(gate.message ?? 'Web attendance is not allowed on this browser/device.');
+    }
 
     const existing = await prisma.employeeAttendanceSettings.findUnique({
       where: { employeeId },
@@ -1097,6 +1138,14 @@ export const attendanceService = {
         updatedBy,
       },
     });
+
+    if (gate.kind === 'ios_safari') {
+      void notifyAdminsWebAttendance({
+        type: 'web_register',
+        employeeId,
+        gate,
+      });
+    }
 
     return { success: true };
   },

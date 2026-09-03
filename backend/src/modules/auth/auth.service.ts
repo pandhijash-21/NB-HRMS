@@ -85,7 +85,15 @@ export const authService = {
     }
 
     if (!user) {
+      // Keep rate-limit for unknown IDs, but tell the client clearly when no account exists.
       const fail = await recordLoginFailure({ identifier });
+      if (fail.status === 401) {
+        return {
+          error:
+            'Account does not exist. Check your employee ID or username, or contact Admin/HR.',
+          status: 404,
+        } as const;
+      }
       return { error: fail.error, status: fail.status } as const;
     }
 

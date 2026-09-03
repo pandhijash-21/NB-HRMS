@@ -8,6 +8,7 @@ import 'package:local_auth/local_auth.dart';
 
 import '../../../core/network/dio_client.dart';
 import '../../../core/storage/secure_storage_service.dart';
+import 'web_attendance_gate.dart';
 
 class GeofencedPunchService {
   GeofencedPunchService(this.dio, {SecureStorageService? storage})
@@ -29,11 +30,18 @@ class GeofencedPunchService {
   Future<void> registerBiometrics(BuildContext context, int employeeId) async {
     final messenger = ScaffoldMessenger.of(context);
     try {
+      if (kIsWeb) {
+        final gate = await WebAttendanceGate.evaluate();
+        if (!gate.allowed) {
+          throw Exception(gate.message ?? 'Web attendance is not allowed on this browser.');
+        }
+      }
+
       final verified = await _confirmIdentity(
         context,
-        title: kIsWeb ? 'Confirm device registration' : 'Authenticate',
+        title: kIsWeb ? 'Confirm Safari registration' : 'Authenticate',
         message: kIsWeb
-            ? 'Register this browser for attendance punches. Continue only on a trusted device.'
+            ? 'Register Safari on this iPhone/iPad for attendance punches.'
             : 'Please authenticate to set/register your Fingerprint, Face ID, or PIN for this account',
       );
       if (!verified) {
@@ -46,9 +54,14 @@ class GeofencedPunchService {
 
       await storage.writeBiometricToken(employeeId, token);
 
+      final deviceInfoMap = await _deviceInfo();
+
       await dio.postEnvelope(
         'attendance/my/register-biometrics',
-        data: {'biometricToken': token},
+        data: {
+          'biometricToken': token,
+          'deviceInfo': deviceInfoMap,
+        },
         parse: (r) => r,
       );
 
@@ -57,7 +70,7 @@ class GeofencedPunchService {
           SnackBar(
             content: Text(
               kIsWeb
-                  ? 'Browser registered for attendance successfully!'
+                  ? 'Safari registered for attendance successfully!'
                   : 'Fingerprint set and registered successfully!',
             ),
             backgroundColor: Colors.green,
@@ -78,11 +91,18 @@ class GeofencedPunchService {
     final messenger = ScaffoldMessenger.of(context);
 
     try {
+      if (kIsWeb) {
+        final gate = await WebAttendanceGate.evaluate();
+        if (!gate.allowed) {
+          throw Exception(gate.message ?? 'Web attendance is not allowed on this browser.');
+        }
+      }
+
       final token = await storage.readBiometricToken(employeeId);
       if (token == null || token.isEmpty) {
         throw Exception(
           kIsWeb
-              ? 'This browser is not registered. Tap “Set Fingerprint / Register device” first.'
+              ? 'Safari is not registered for attendance. Tap “Register Safari” first.'
               : 'Fingerprint is not set. Please set/register your fingerprint first.',
         );
       }
@@ -110,9 +130,13 @@ class GeofencedPunchService {
 
       if (context.mounted) {
         messenger.showSnackBar(
-          const SnackBar(
-            content: Text('Verifying location...'),
-            duration: Duration(seconds: 2),
+          SnackBar(
+            content: Text(
+              kIsWeb
+                  ? 'Checking location — you must be inside an attendance zone (iOS Safari)…'
+                  : 'Verifying location — you must be inside an attendance zone…',
+            ),
+            duration: const Duration(seconds: 3),
           ),
         );
       }
@@ -132,11 +156,21 @@ class GeofencedPunchService {
         parse: (r) => r,
       );
 
+      if (context.mounted) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('Location verified — inside attendance zone.'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+
       final biometricVerified = await _confirmIdentity(
         context,
-        title: kIsWeb ? 'Confirm punch' : 'Authenticate',
+        title: kIsWeb ? 'Confirm punch (iOS Safari)' : 'Authenticate',
         message: kIsWeb
-            ? 'Confirm this attendance punch from your current browser location.'
+            ? 'Location is within zone. Confirm this attendance punch from Safari on this iPhone/iPad.'
             : 'Please authenticate with Fingerprint, Face ID, or PIN to mark your attendance',
       );
 
@@ -271,11 +305,15 @@ class GeofencedPunchService {
     try {
       if (kIsWeb) {
         final web = await deviceInfoPlugin.webBrowserInfo;
+        final gate = await WebAttendanceGate.evaluate();
         return {
           'platform': 'web',
           'browser': web.browserName.name,
           'userAgent': web.userAgent,
           'vendor': web.vendor,
+          'deviceLabel': gate.deviceLabel,
+          'browserLabel': gate.browserLabel,
+          'isIosSafari': gate.allowed && gate.isIos && gate.isSafari,
         };
       }
       if (defaultTargetPlatform == TargetPlatform.android) {

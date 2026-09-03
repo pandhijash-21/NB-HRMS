@@ -10,6 +10,7 @@ import '../../domain/attendance_models.dart';
 import '../../../leave/presentation/widgets/leave_shared_widgets.dart';
 import '../attendance_providers.dart';
 import '../geofenced_punch_service.dart';
+import '../web_attendance_gate.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/router/app_back_button.dart';
 import 'package:flutter/foundation.dart';
@@ -18,6 +19,10 @@ final hasLocalBiometricTokenProvider = FutureProvider.autoDispose.family<bool, i
   final dio = ref.watch(dioClientProvider);
   final svc = GeofencedPunchService(dio);
   return svc.hasLocalToken(employeeId);
+});
+
+final webAttendanceGateProvider = FutureProvider.autoDispose<WebAttendanceStatus>((ref) {
+  return WebAttendanceGate.evaluate();
 });
 
 class AttendanceScreen extends ConsumerWidget {
@@ -33,6 +38,8 @@ class AttendanceScreen extends ConsumerWidget {
     final auth = ref.watch(authNotifierProvider);
     final settingsAsync = ref.watch(employeeAttendanceSettingsProvider(auth.user?.employeeId ?? 0));
     final hasLocalTokenAsync = ref.watch(hasLocalBiometricTokenProvider(auth.user?.employeeId ?? 0));
+    final webGateAsync = kIsWeb ? ref.watch(webAttendanceGateProvider) : null;
+    final webAllowed = !kIsWeb || (webGateAsync?.value?.allowed == true);
     final canAdmin = Permissions.canAdminAttendance(
       auth.permissions,
       auth.user?.role ?? '',
@@ -71,8 +78,24 @@ class AttendanceScreen extends ConsumerWidget {
           ),
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: webAllowed
+          ? FloatingActionButton.extended(
         onPressed: () async {
+          if (kIsWeb) {
+            final gate = await ref.read(webAttendanceGateProvider.future);
+            if (!gate.allowed) {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(gate.message ?? 'Web attendance is not allowed on this browser.'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+              return;
+            }
+          }
+
           if (!canPunchSelectedDay) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
@@ -103,7 +126,7 @@ class AttendanceScreen extends ConsumerWidget {
               SnackBar(
                 content: Text(
                   kIsWeb
-                      ? 'Register this browser first (Attendance → Register this browser).'
+                      ? 'Register Safari first (Attendance → Register Safari).'
                       : 'Fingerprint/Face ID not registered. Please register it first.',
                 ),
                 backgroundColor: Colors.orange,
@@ -118,7 +141,7 @@ class AttendanceScreen extends ConsumerWidget {
               SnackBar(
                 content: Text(
                   kIsWeb
-                      ? 'This browser is not linked yet. Tap “Register this browser” first.'
+                      ? 'Safari is not linked yet. Tap “Register Safari” first.'
                       : 'Fingerprint not set on this device. Please register it first.',
                 ),
                 backgroundColor: Colors.orange,
@@ -183,10 +206,13 @@ class AttendanceScreen extends ConsumerWidget {
             canPunchSelectedDay ? const Color(0xFFC5A059) : Colors.grey.shade500,
         icon: const Icon(Icons.fingerprint_rounded, color: Colors.white),
         label: Text(
-          canPunchSelectedDay ? 'Punch In/Out' : 'Today only',
+          kIsWeb
+              ? (canPunchSelectedDay ? 'Punch (iOS Safari)' : 'Today only')
+              : (canPunchSelectedDay ? 'Punch In/Out' : 'Today only'),
           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
-      ),
+      )
+          : null,
       body: TweenAnimationBuilder<double>(
         duration: const Duration(milliseconds: 500),
         curve: Curves.easeOutCubic,
@@ -203,8 +229,134 @@ class AttendanceScreen extends ConsumerWidget {
         child: ListView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
           children: [
+            if (kIsWeb)
+              webGateAsync!.when(
+                loading: () => const SizedBox.shrink(),
+                error: (_, __) => const SizedBox.shrink(),
+                data: (gate) {
+                  if (!gate.allowed) {
+                    return Card(
+                    color: isDark ? const Color(0xFF2A1A1A) : Colors.red.shade50,
+                    margin: const EdgeInsets.only(bottom: 20),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      side: BorderSide(
+                        color: isDark ? Colors.red.shade300.withOpacity(0.35) : Colors.red.shade200,
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.block_rounded, color: isDark ? Colors.red.shade300 : Colors.red.shade800, size: 28),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  'Browser attendance not available',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w800,
+                                    color: isDark ? Colors.white : const Color(0xFF212F3D),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            gate.message ??
+                                'Web attendance is only allowed in Safari on iPhone/iPad. Use the mobile app on other devices.',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: isDark ? Colors.white.withOpacity(0.7) : const Color(0xFF4A5568),
+                              height: 1.4,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Detected: ${gate.deviceLabel} · ${gate.browserLabel}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? Colors.white54 : Colors.black54,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          OutlinedButton.icon(
+                            onPressed: () {
+                              WebAttendanceGate.reevaluate();
+                              ref.invalidate(webAttendanceGateProvider);
+                            },
+                            icon: const Icon(Icons.refresh_rounded),
+                            label: const Text('Refresh Status'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                  }
+
+                  // Allowed: clear iOS browser attendance banner
+                  return Card(
+                    color: isDark ? const Color(0xFF1A2430) : const Color(0xFFEFF6FF),
+                    margin: const EdgeInsets.only(bottom: 20),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      side: BorderSide(
+                        color: isDark
+                            ? const Color(0xFF3B82F6).withOpacity(0.4)
+                            : const Color(0xFF93C5FD),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.phone_iphone_rounded,
+                                color: isDark ? const Color(0xFF93C5FD) : const Color(0xFF1D4ED8),
+                                size: 28,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  'Attendance from iOS browser',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w800,
+                                    color: isDark ? Colors.white : const Color(0xFF212F3D),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            'You are punching from Safari on an iPhone/iPad (${gate.deviceLabel}). '
+                            'Before each punch, your location is checked and must be inside an allowed attendance zone. '
+                            'Other browsers and desktop devices cannot mark attendance here — use the mobile app instead.',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: isDark ? Colors.white.withOpacity(0.75) : const Color(0xFF4A5568),
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
             // Biometric Registration Card
-            if (auth.user?.employeeId != null)
+            if (auth.user?.employeeId != null && webAllowed)
               settingsAsync.when(
                 loading: () => const SizedBox.shrink(),
                 error: (_, __) => const SizedBox.shrink(),
@@ -253,7 +405,7 @@ class AttendanceScreen extends ConsumerWidget {
                             const SizedBox(height: 10),
                             Text(
                               kIsWeb
-                                  ? 'Attendance is registered for another device/browser. Link this browser to punch from the web app (this replaces the previous device token).'
+                                  ? 'Attendance is registered for another device. On iPhone/iPad Safari you can link this browser after Admin/HR resets your registration (this replaces the previous token).'
                                   : 'Your fingerprint/Face ID is registered on the server, but not found on this device. '
                                       'If you reinstalled the app or switched phones, re-register here or ask Admin/HR to reset.',
                               style: TextStyle(
@@ -288,7 +440,7 @@ class AttendanceScreen extends ConsumerWidget {
                                 ),
                                 icon: Icon(kIsWeb ? Icons.link_rounded : Icons.fingerprint_rounded),
                                 label: Text(
-                                  kIsWeb ? 'Link this browser' : 'Re-register on this device',
+                                  kIsWeb ? 'Link Safari' : 'Re-register on this device',
                                   style: const TextStyle(fontWeight: FontWeight.bold),
                                 ),
                               ),
@@ -302,6 +454,10 @@ class AttendanceScreen extends ConsumerWidget {
                                   if (empId != null) {
                                     ref.invalidate(employeeAttendanceSettingsProvider(empId));
                                     ref.invalidate(hasLocalBiometricTokenProvider(empId));
+                                  }
+                                  if (kIsWeb) {
+                                    WebAttendanceGate.reevaluate();
+                                    ref.invalidate(webAttendanceGateProvider);
                                   }
                                 },
                                 style: OutlinedButton.styleFrom(
@@ -344,7 +500,7 @@ class AttendanceScreen extends ConsumerWidget {
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
-                                  'Fingerprint/Face ID Setup Required',
+                                  kIsWeb ? 'Safari Setup Required' : 'Fingerprint/Face ID Setup Required',
                                   style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.w800,
@@ -357,7 +513,7 @@ class AttendanceScreen extends ConsumerWidget {
                           const SizedBox(height: 10),
                           Text(
                             kIsWeb
-                                ? 'Register this browser once to enable geofenced punch in/out from the web app.'
+                                ? 'Register Safari once on this iPhone/iPad to enable geofenced punch in/out from the browser. Other browsers are blocked.'
                                 : 'To mark your attendance using the mobile app, you must first register your fingerprint or Face ID.',
                             style: TextStyle(
                               fontSize: 13,
@@ -392,7 +548,7 @@ class AttendanceScreen extends ConsumerWidget {
                               ),
                               icon: Icon(kIsWeb ? Icons.verified_user_rounded : Icons.fingerprint_rounded),
                               label: Text(
-                                kIsWeb ? 'Register this browser' : 'Set Fingerprint/Face ID Now',
+                                kIsWeb ? 'Register Safari' : 'Set Fingerprint/Face ID Now',
                                 style: const TextStyle(fontWeight: FontWeight.bold),
                               ),
                             ),

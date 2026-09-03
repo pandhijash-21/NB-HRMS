@@ -469,6 +469,7 @@ attendanceRouter.post('/my/punch', requireAuth, async (req: Request, res: Respon
       biometricVerified: Boolean(biometricVerified),
       biometricToken: biometricToken ? String(biometricToken) : null,
       reason: reason ? String(reason) : undefined,
+      userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
     });
     return res.json(ok(data));
   } catch (e: any) {
@@ -480,10 +481,18 @@ attendanceRouter.post('/my/register-biometrics', requireAuth, async (req: Reques
   try {
     const employeeId = Number(req.user!.employeeId);
     if (!employeeId) return res.status(400).json(fail('Employee ID not found in token'));
-    const { biometricToken } = req.body;
+    const { biometricToken, deviceInfo } = req.body;
     if (!biometricToken) return res.status(400).json(fail('biometricToken is required'));
     const updatedBy = String(req.user!.id ?? (req.user as any)?.userId ?? 'unknown');
-    const data = await attendanceService.registerBiometricToken(employeeId, String(biometricToken), updatedBy);
+    const data = await attendanceService.registerBiometricToken(
+      employeeId,
+      String(biometricToken),
+      updatedBy,
+      {
+        userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
+        deviceInfo: deviceInfo && typeof deviceInfo === 'object' ? deviceInfo : null,
+      },
+    );
     return res.json(ok(data));
   } catch (e: any) {
     return res.status(400).json(fail(e.message));

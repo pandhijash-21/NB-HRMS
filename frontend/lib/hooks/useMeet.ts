@@ -46,6 +46,7 @@ export type Meeting = {
   transcriptLanguage?: string | null;
   transcriptEnabled?: boolean;
   whisperOnline?: boolean;
+  whisperEnabled?: boolean;
   utterances?: MeetingUtterance[];
   isHost: boolean;
   joinUrl: string;

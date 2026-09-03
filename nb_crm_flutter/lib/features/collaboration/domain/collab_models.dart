@@ -347,6 +347,7 @@ class MeetingItem {
     this.transcriptLanguage,
     this.transcriptEnabled = false,
     this.whisperOnline = false,
+    this.whisperEnabled = true,
     this.utterances = const [],
     this.recordingUrl,
     this.hasRecording = false,
@@ -375,6 +376,7 @@ class MeetingItem {
   final String? transcriptLanguage;
   final bool transcriptEnabled;
   final bool whisperOnline;
+  final bool whisperEnabled;
   final List<MeetingUtterance> utterances;
   final String? recordingUrl;
   final bool hasRecording;
@@ -404,6 +406,7 @@ class MeetingItem {
       transcriptLanguage: json['transcriptLanguage'] as String?,
       transcriptEnabled: json['transcriptEnabled'] == true,
       whisperOnline: json['whisperOnline'] == true,
+      whisperEnabled: json['whisperEnabled'] != false,
       utterances: (json['utterances'] as List? ?? [])
           .whereType<Map>()
           .map((e) => MeetingUtterance.fromJson(Map<String, dynamic>.from(e)))

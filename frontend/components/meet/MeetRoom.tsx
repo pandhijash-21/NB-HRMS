@@ -445,6 +445,7 @@ export function MeetRoom({ code }: { code: string }) {
   const [transcriptLang, setTranscriptLang] = useState("en");
   const [whisperOnline, setWhisperOnline] = useState(false);
   const [whisperEnabled, setWhisperEnabled] = useState(true);
+  const whisperEnabledRef = useRef(true);
   const [whiteboardOpen, setWhiteboardOpen] = useState(false);
   const sttRef = useRef<MeetBhashiniStt | null>(null);
   const [handRaised, setHandRaised] = useState(false);
@@ -477,6 +478,7 @@ export function MeetRoom({ code }: { code: string }) {
       preview?.host?.userId === (session?.user as { id?: string } | undefined)?.id,
   );
   isHostRef.current = isHost;
+  whisperEnabledRef.current = whisperEnabled;
 
   chatOpenRef.current = chatOpen;
   chatModeRef.current = chatMode;
@@ -623,6 +625,7 @@ export function MeetRoom({ code }: { code: string }) {
       toast.error("The host declined your request to join");
     });
     sock.on("meeting_transcript", (p: { utterance?: MeetingUtterance }) => {
+      if (!whisperEnabledRef.current) return;
       if (!p.utterance?.id) return;
       setCaptions((prev) => {
         const next = [...prev.filter((row) => row.id !== p.utterance!.id), p.utterance!];
@@ -764,10 +767,13 @@ export function MeetRoom({ code }: { code: string }) {
     });
     sock.on("meeting_whisper_status", (p: { meetingId?: string; enabled?: boolean; by?: string }) => {
       const next = Boolean(p.enabled);
+      whisperEnabledRef.current = next;
       setWhisperEnabled(next);
       if (!next) {
         sttRef.current?.setMicEnabled(false);
         void sttRef.current?.stop();
+        setCaptionsOn(false);
+        setCaptions([]);
         if (!isHostRef.current) {
           toast.info(p.by ? `${p.by} (Host) turned Whisper transcription OFF` : "Whisper transcription was turned OFF by the host");
         }
@@ -833,10 +839,17 @@ export function MeetRoom({ code }: { code: string }) {
     const lang = payload.meeting.transcriptLanguage || "en";
     setTranscriptLang(lang);
     setCaptions(payload.meeting.utterances ?? []);
+    const roomWhisperOn = payload.meeting.whisperEnabled !== false;
+    whisperEnabledRef.current = roomWhisperOn;
+    setWhisperEnabled(roomWhisperOn);
     setWhisperOnline(Boolean(payload.meeting.whisperOnline));
     const stt = new MeetBhashiniStt();
     sttRef.current = stt;
-    stt.start({ room: r, meetingId: payload.meeting.id, language: lang, token });
+    if (roomWhisperOn) {
+      stt.start({ room: r, meetingId: payload.meeting.id, language: lang, token });
+    } else {
+      setCaptionsOn(false);
+    }
   }
 
   async function beginWait(payload: JoinPayload, token?: string) {
@@ -1001,10 +1014,13 @@ export function MeetRoom({ code }: { code: string }) {
       return;
     }
     const next = !whisperEnabled;
+    whisperEnabledRef.current = next;
     setWhisperEnabled(next);
     if (!next) {
       sttRef.current?.setMicEnabled(false);
       void sttRef.current?.stop();
+      setCaptionsOn(false);
+      setCaptions([]);
       toast.info("Whisper live transcription paused for everyone");
     } else {
       if (mic && room && joinData?.meeting.id) {
@@ -2054,7 +2070,7 @@ export function MeetRoom({ code }: { code: string }) {
           </aside>
         )}
 
-        {captionsOn && captions.length > 0 && (
+        {whisperEnabled && captionsOn && captions.length > 0 && (
           <div className="pointer-events-none absolute inset-x-0 bottom-4 z-10 px-3 sm:px-6">
             <div className="mx-auto max-w-3xl rounded-xl bg-black/70 px-3 py-2 text-white shadow-lg backdrop-blur">
               {captions.slice(-3).map((row) => (

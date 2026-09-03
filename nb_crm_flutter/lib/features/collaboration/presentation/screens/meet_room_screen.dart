@@ -354,6 +354,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
     });
     socket.onMeetingTranscript((row) {
       if (!mounted) return;
+      if (!_whisperEnabled) return;
       setState(() {
         _captions.removeWhere((e) => e.id == row.id);
         _captions.add(row);
@@ -578,7 +579,13 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
     socket.onWhisperStatus((payload) {
       if (!mounted) return;
       final enabled = payload['enabled'] == true;
-      setState(() => _whisperEnabled = enabled);
+      setState(() {
+        _whisperEnabled = enabled;
+        if (!enabled) {
+          _captionsOn = false;
+          _captions.clear();
+        }
+      });
       if (!enabled) {
         _stt?.setMicEnabled(false);
         unawaited(_stt?.stop());
@@ -843,11 +850,13 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
     _roomEvents = events;
     events
       ..on<LocalTrackPublishedEvent>((e) {
+        if (!_whisperEnabled) return;
         if (e.publication.source == TrackSource.microphone) {
           _stt?.attach(room);
         }
       })
       ..on<TrackUnmutedEvent>((e) {
+        if (!_whisperEnabled) return;
         if (e.participant is LocalParticipant &&
             e.publication.source == TrackSource.microphone) {
           _stt?.setMicEnabled(true);
@@ -925,19 +934,24 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
     _bindSttRoomEvents(room);
     _transcriptLang = payload.meeting.transcriptLanguage ?? 'en';
     _whisperOnline = payload.meeting.whisperOnline;
+    _whisperEnabled = payload.meeting.whisperEnabled;
     _captions
       ..clear()
       ..addAll(payload.meeting.utterances);
     final stt = MeetBhashiniStt(repo: ref.read(meetRepositoryProvider));
     _stt = stt;
     final bearer = await _meetBearer(guestToken: guestToken);
-    unawaited(stt.start(
-      meetingId: payload.meeting.id,
-      language: _transcriptLang,
-      bearer: bearer,
-      room: room,
-    ));
-    _startWhisperPoll(bearer: bearer);
+    if (_whisperEnabled) {
+      unawaited(stt.start(
+        meetingId: payload.meeting.id,
+        language: _transcriptLang,
+        bearer: bearer,
+        room: room,
+      ));
+      _startWhisperPoll(bearer: bearer);
+    } else {
+      _captionsOn = false;
+    }
     if (payload.meeting.isHost) _startHostWaitingPoll();
   }
 
@@ -1263,7 +1277,13 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
       return;
     }
     final next = !_whisperEnabled;
-    setState(() => _whisperEnabled = next);
+    setState(() {
+      _whisperEnabled = next;
+      if (!next) {
+        _captionsOn = false;
+        _captions.clear();
+      }
+    });
     if (!next) {
       _stt?.setMicEnabled(false);
       await _stt?.stop();
@@ -2105,7 +2125,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                                   ),
                                 ),
                               ),
-                            if (_captionsOn && _captions.isNotEmpty)
+                            if (_whisperEnabled && _captionsOn && _captions.isNotEmpty)
                               Align(
                                 alignment: Alignment.bottomCenter,
                                 child: Padding(
@@ -2292,7 +2312,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                           ),
                         ),
                       ),
-                    if (_captionsOn && _captions.isNotEmpty)
+                    if (_whisperEnabled && _captionsOn && _captions.isNotEmpty)
                       Align(
                         alignment: Alignment.bottomCenter,
                         child: Padding(
@@ -2389,8 +2409,12 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                     }
                     final next = !_mic;
                     await _room!.localParticipant?.setMicrophoneEnabled(next);
-                    _stt?.setMicEnabled(next);
-                    if (next && _room != null) _stt?.attach(_room!);
+                    if (_whisperEnabled) {
+                      _stt?.setMicEnabled(next);
+                      if (next && _room != null) _stt?.attach(_room!);
+                    } else {
+                      _stt?.setMicEnabled(false);
+                    }
                     setState(() => _mic = next);
                   },
                 ),

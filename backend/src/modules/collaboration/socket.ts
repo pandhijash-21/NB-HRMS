@@ -9,6 +9,12 @@ import { isAllowedCorsOrigin } from '../../utils/corsOrigins';
 import { chatService } from './chat.service';
 import { meetService, type GuestActor, type UserActor } from './meet.service';
 import { getProfile } from './profiles';
+import {
+  clearMeetingWhisperEnabled,
+  getMeetingWhisperEnabled,
+  setMeetingWhisperEnabled,
+} from './whisperRoomState';
+import { prisma } from '../../config/prisma';
 
 let ioRef: Server | null = null;
 let presenceRedis: ReturnType<typeof createClient> | null = null;
@@ -174,6 +180,7 @@ export function emitMeetingEnded(opts: {
   userIds?: string[];
 }) {
   const io = ioRef;
+  clearMeetingWhisperEnabled(opts.meetingId);
   if (!io) return;
   const payload = { meetingId: opts.meetingId, code: opts.code ?? '' };
   io.to(`meeting:${opts.meetingId}`).emit('meeting_ended', payload);
@@ -453,6 +460,12 @@ export async function setupCollaborationSocket(httpServer: http.Server) {
       } catch {
         /* ignore */
       }
+      // Sync room Whisper switch so late joiners match host state.
+      socket.emit('meeting_whisper_status', {
+        meetingId: id,
+        enabled: getMeetingWhisperEnabled(id),
+        by: null,
+      });
       if (actor.kind === 'guest') {
         socket.join(`waiting:${actor.participantId}`);
         socket.join(`participant:${actor.participantId}`);
@@ -589,14 +602,28 @@ export async function setupCollaborationSocket(httpServer: http.Server) {
       socket.emit('meeting_board_history', { meetingId, strokes: history });
     });
 
-    socket.on('meeting_whisper_toggle', (payload: { meetingId: string; enabled: boolean }) => {
+    socket.on('meeting_whisper_toggle', async (payload: { meetingId: string; enabled: boolean }) => {
       const meetingId = String(payload?.meetingId ?? '');
       if (!meetingId) return;
-      io.to(`meeting:${meetingId}`).emit('meeting_whisper_status', {
-        meetingId,
-        enabled: Boolean(payload.enabled),
-        by: actor.name,
-      });
+      try {
+        const meeting = await prisma.meeting.findUnique({
+          where: { id: meetingId },
+          select: { hostUserId: true, status: true },
+        });
+        if (!meeting || meeting.status === 'ENDED' || meeting.status === 'CANCELLED') return;
+        if (actor.kind !== 'user' || actor.userId !== meeting.hostUserId) {
+          socket.emit('error_message', { error: 'Only the host can turn Whisper on or off' });
+          return;
+        }
+        const enabled = setMeetingWhisperEnabled(meetingId, Boolean(payload.enabled));
+        io.to(`meeting:${meetingId}`).emit('meeting_whisper_status', {
+          meetingId,
+          enabled,
+          by: actor.name,
+        });
+      } catch {
+        /* ignore */
+      }
     });
 
     socket.on('disconnect', async () => {

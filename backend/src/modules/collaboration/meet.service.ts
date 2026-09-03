@@ -18,6 +18,7 @@ import {
   normalizeTranscriptLanguage,
   transcribeSpeech,
 } from './stt.service';
+import { clearMeetingWhisperEnabled, getMeetingWhisperEnabled } from './whisperRoomState';
 
 export type MeetEndProgress = {
   step: 'stop_recording' | 'save_cloud' | 'close_room' | 'summary';
@@ -316,6 +317,7 @@ async function serializeMeeting(meetingId: string, viewerUserId?: string | null)
     transcriptLanguage: meeting.transcriptLanguage,
     transcriptEnabled: stt.enabled,
     whisperOnline: stt.online,
+    whisperEnabled: getMeetingWhisperEnabled(meeting.id),
     livekitRoom: meeting.livekitRoom,
     host,
     hostUserId: meeting.hostUserId,
@@ -1089,6 +1091,7 @@ export const meetService = {
     };
   },
   async closeAbandonedLive(meetingId: string) {
+    clearMeetingWhisperEnabled(meetingId);
     const meeting = await prisma.meeting.findUnique({
       where: { id: meetingId },
       include: { participants: { select: { userId: true } } },
@@ -1146,6 +1149,8 @@ export const meetService = {
     if (!meeting) throw new Error('Meeting not found');
     if (meeting.hostUserId !== userId) throw new Error('Only the host can end the meeting');
     if (meeting.status === 'ENDED') return serializeMeeting(id, userId);
+
+    clearMeetingWhisperEnabled(id);
 
     await finalizeMeetingRecording(meeting, onProgress);
 
@@ -1525,6 +1530,9 @@ export const meetService = {
   ) {
     if (!isSttConfigured()) {
       return { skipped: true as const, enabled: false };
+    }
+    if (!getMeetingWhisperEnabled(meetingId)) {
+      return { skipped: true as const, enabled: false, whisperPaused: true as const };
     }
     const meeting = await prisma.meeting.findUnique({
       where: { id: meetingId },

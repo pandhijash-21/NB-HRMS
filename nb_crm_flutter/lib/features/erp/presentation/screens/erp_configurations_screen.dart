@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../lookups/presentation/lookup_providers.dart';
+import '../../domain/contractor_lookup_keys.dart';
 import '../../domain/project_lookup_keys.dart';
 import '../../domain/work_order_lookup_keys.dart';
 
@@ -142,7 +143,7 @@ class ErpConfigurationsScreen extends ConsumerWidget {
           const SizedBox(height: 10),
           _CfgTile(
             title: 'Contractors',
-            subtitle: 'Manage contractors for work orders',
+            subtitle: 'Company, locations, contacts and documents',
             onTap: () => context.go('/erp/configurations/contractors'),
           ),
           const SizedBox(height: 10),
@@ -150,9 +151,35 @@ class ErpConfigurationsScreen extends ConsumerWidget {
             loading: () => const SizedBox.shrink(),
             error: (_, __) => const SizedBox.shrink(),
             data: (groups) {
+              final contractorLookups =
+                  groups.where((g) => kContractorLookupKeys.contains(g.key)).toList();
               final wo = groups.where((g) => kWoLookupKeys.contains(g.key)).toList();
               return Column(
                 children: [
+                  if (contractorLookups.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Contractor lookups',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                          color: isDark ? Colors.white70 : const Color(0xFF475569),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    for (final g in contractorLookups) ...[
+                      _CfgTile(
+                        title: g.label,
+                        subtitle: g.description ??
+                            '${g.options.where((o) => o.isActive).length} active options',
+                        onTap: () => context.go('/erp/configurations/lookups/${g.key}'),
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+                  ],
                   for (final g in wo) ...[
                     _CfgTile(
                       title: g.label,

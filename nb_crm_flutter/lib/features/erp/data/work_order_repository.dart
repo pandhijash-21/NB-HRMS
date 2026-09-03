@@ -1,3 +1,5 @@
+import 'package:dio/dio.dart';
+
 import '../../../core/network/dio_client.dart';
 import '../domain/work_order_models.dart';
 
@@ -127,6 +129,13 @@ class WorkOrderRepository {
     );
   }
 
+  Future<ErpContractor> getContractor(String id) async {
+    return _dio.getEnvelope<ErpContractor>(
+      'erp/contractors/$id',
+      parse: (raw) => ErpContractor.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
   Future<ErpContractor> createContractor(Map<String, dynamic> body) async {
     return _dio.postEnvelope<ErpContractor>(
       'erp/contractors',
@@ -153,5 +162,24 @@ class WorkOrderRepository {
 
   Future<void> removeContractor(String id) async {
     await _dio.deleteEnvelope('erp/contractors/$id', parse: (_) => true);
+  }
+
+  Future<Map<String, dynamic>> uploadContractorFile({
+    required List<int> bytes,
+    required String filename,
+  }) async {
+    final multipart = MultipartFile.fromBytes(bytes, filename: filename);
+    final response = await _dio.dio.post<Map<String, dynamic>>(
+      'erp/contractors/upload',
+      data: FormData.fromMap({
+        'folder': 'erp/contractors',
+        'file': multipart,
+      }),
+    );
+    final body = response.data;
+    if (body == null || body['success'] != true) {
+      throw Exception(body?['message']?.toString() ?? 'Upload failed');
+    }
+    return Map<String, dynamic>.from(body['data'] as Map);
   }
 }

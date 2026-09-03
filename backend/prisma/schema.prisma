@@ -2006,6 +2006,7 @@ model ErpProject {
   towers       ErpProjectTower[]
   workOrders   ErpWorkOrder[]
   boqs         ErpBoq[]
+  tenders      ErpTender[]
   materialUses ErpMaterialProjectUse[]
   machineUses  ErpMachineProjectUse[]
 
@@ -2112,19 +2113,96 @@ enum ErpWorkOrderApprovalStatus {
 }
 
 model ErpContractor {
-  id            String   @id @default(uuid())
-  name          String
-  contactPerson String?  @map("contact_person")
-  phone         String?
-  email         String?
-  isActive      Boolean  @default(true) @map("is_active")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  id                 String   @id @default(uuid())
+  name               String
+  contactPerson      String?  @map("contact_person")
+  phone              String?
+  email              String?
+  mobileNo           String?  @map("mobile_no")
+  alternateMobileNo  String?  @map("alternate_mobile_no")
+  tdsCode            String?  @map("tds_code")
+  bankName           String?  @map("bank_name")
+  branchName         String?  @map("branch_name")
+  ifscCode           String?  @map("ifsc_code")
+  accountNo          String?  @map("account_no")
+  paymentTerms       String?  @map("payment_terms") @db.Text
+  contractorTypeCode String?  @map("contractor_type_code")
+  isActive           Boolean  @default(true) @map("is_active")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
 
   workOrders ErpWorkOrder[]
+  locations  ErpContractorLocation[]
+  contacts   ErpContractorContact[]
+  documents  ErpContractorDocument[]
+  tenderApplications ErpTenderApplication[]
 
   @@index([isActive, name])
   @@map("erp_contractors")
+}
+
+model ErpContractorLocation {
+  id              String   @id @default(uuid())
+  contractorId    String   @map("contractor_id")
+  locationName    String?  @map("location_name")
+  addressTypeCode String?  @map("address_type_code")
+  countryCode     String?  @map("country_code")
+  stateCode       String?  @map("state_code")
+  cityCode        String?  @map("city_code")
+  address1        String?  @db.Text
+  address2        String?  @db.Text
+  postCode        String?  @map("post_code")
+  panNo           String?  @map("pan_no")
+  gstNo           String?  @map("gst_no")
+  sortOrder       Int      @default(0) @map("sort_order")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  contractor ErpContractor @relation(fields: [contractorId], references: [id], onDelete: Cascade)
+
+  @@index([contractorId, sortOrder])
+  @@map("erp_contractor_locations")
+}
+
+model ErpContractorContact {
+  id                String   @id @default(uuid())
+  contractorId      String   @map("contractor_id")
+  name              String
+  email             String?
+  countryCode       String?  @map("country_code")
+  mobileNo          String?  @map("mobile_no")
+  altCountryCode    String?  @map("alt_country_code")
+  alternateMobileNo String?  @map("alternate_mobile_no")
+  designation       String?
+  locationName      String?  @map("location_name")
+  sortOrder         Int      @default(0) @map("sort_order")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  contractor ErpContractor @relation(fields: [contractorId], references: [id], onDelete: Cascade)
+
+  @@index([contractorId, sortOrder])
+  @@map("erp_contractor_contacts")
+}
+
+model ErpContractorDocument {
+  id           String   @id @default(uuid())
+  contractorId String   @map("contractor_id")
+  typeCode     String?  @map("type_code")
+  name         String?
+  remarks      String?  @db.Text
+  fileUrl      String?  @map("file_url")
+  fileName     String?  @map("file_name")
+  mimeType     String?  @map("mime_type")
+  fileSize     Int?     @map("file_size")
+  sortOrder    Int      @default(0) @map("sort_order")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  contractor ErpContractor @relation(fields: [contractorId], references: [id], onDelete: Cascade)
+
+  @@index([contractorId, sortOrder])
+  @@map("erp_contractor_documents")
 }
 
 model ErpActivity {
@@ -2268,6 +2346,7 @@ model ErpBoq {
 
   project ErpProject  @relation(fields: [projectId], references: [id])
   tasks   ErpBoqTask[]
+  tenders ErpTender[]
 
   @@index([projectId, createdAt])
   @@map("erp_boqs")
@@ -2445,6 +2524,108 @@ model ErpLabour {
 
   @@index([isActive, name])
   @@map("erp_labour")
+}
+
+// =============================================================================
+// ERP TENDERS — tenders + vendor applications
+// =============================================================================
+
+enum ErpTenderStatus {
+  DRAFT
+  OPEN
+  CLOSED
+  CANCELLED
+}
+
+enum ErpTenderApplicationStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  ACCEPTED
+  REJECTED
+}
+
+model ErpTender {
+  id            String          @id @default(uuid())
+  tenderNo      String          @unique @map("tender_no")
+  tenderDate    DateTime        @map("tender_date") @db.Date
+  createdByName String?         @map("created_by_name")
+  projectId     String          @map("project_id")
+  boqId         String?         @map("boq_id")
+  startDate     DateTime        @map("start_date") @db.Date
+  endDate       DateTime        @map("end_date") @db.Date
+  status        ErpTenderStatus @default(OPEN)
+  remarks       String?         @db.Text
+  isActive      Boolean         @default(true) @map("is_active")
+  createdBy     String?         @map("created_by")
+  updatedBy     String?         @map("updated_by")
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+
+  project      ErpProject             @relation(fields: [projectId], references: [id])
+  boq          ErpBoq?                @relation(fields: [boqId], references: [id], onDelete: SetNull)
+  lines        ErpTenderLine[]
+  applications ErpTenderApplication[]
+
+  @@index([projectId, createdAt])
+  @@index([boqId])
+  @@index([status, isActive])
+  @@map("erp_tenders")
+}
+
+model ErpTenderLine {
+  id              String   @id @default(uuid())
+  tenderId        String   @map("tender_id")
+  activityId      String?  @map("activity_id")
+  activityName    String   @map("activity_name")
+  boqTaskId       String?  @map("boq_task_id")
+  taskId          String?  @map("task_id")
+  taskName        String   @map("task_name")
+  taskDescription String?  @map("task_description") @db.Text
+  towerIds        String?  @map("tower_ids") @db.Text
+  floorNos        String?  @map("floor_nos") @db.Text
+  unitIds         String?  @map("unit_ids") @db.Text
+  quantity        Decimal? @db.Decimal(14, 4)
+  unitCode        String?  @map("unit_code")
+  rate            Decimal? @db.Decimal(14, 2)
+  amount          Decimal? @db.Decimal(14, 2)
+  sortOrder       Int      @default(0) @map("sort_order")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  tender ErpTender @relation(fields: [tenderId], references: [id], onDelete: Cascade)
+
+  @@index([tenderId, sortOrder])
+  @@map("erp_tender_lines")
+}
+
+model ErpTenderApplication {
+  id              String                      @id @default(uuid())
+  applicationNo   String                      @unique @map("application_no")
+  tenderId        String                      @map("tender_id")
+  projectId       String?                     @map("project_id")
+  activityId      String?                     @map("activity_id")
+  activityName    String?                     @map("activity_name")
+  contractorId    String?                     @map("contractor_id")
+  vendorName      String                      @map("vendor_name")
+  vendorContact   String?                     @map("vendor_contact")
+  applicationDate DateTime                    @default(now()) @map("application_date") @db.Date
+  quotedAmount    Decimal?                    @map("quoted_amount") @db.Decimal(14, 2)
+  status          ErpTenderApplicationStatus  @default(SUBMITTED)
+  remarks         String?                     @db.Text
+  createdByName   String?                     @map("created_by_name")
+  createdBy       String?                     @map("created_by")
+  updatedBy       String?                     @map("updated_by")
+  createdAt       DateTime                    @default(now()) @map("created_at")
+  updatedAt       DateTime                    @updatedAt @map("updated_at")
+
+  tender     ErpTender      @relation(fields: [tenderId], references: [id], onDelete: Cascade)
+  contractor ErpContractor? @relation(fields: [contractorId], references: [id], onDelete: SetNull)
+
+  @@index([tenderId, createdAt])
+  @@index([projectId])
+  @@index([contractorId])
+  @@index([status])
+  @@map("erp_tender_applications")
 }
 
 // =============================================================================

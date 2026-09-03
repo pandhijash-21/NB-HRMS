@@ -1,10 +1,17 @@
 import { Router, Request, Response } from 'express';
+import multer from 'multer';
 import { requireAuth } from '../../middleware/auth';
 import { requirePermission } from '../../middleware/rbac';
 import { ok, fail } from '../../utils/response';
+import { uploadService } from '../personal-education/upload.service';
 import { contractorService } from './contractor.service';
 
 export const contractorRouter = Router();
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
 
 const p = (v: string | string[]) => (Array.isArray(v) ? v[0] : v);
 
@@ -18,6 +25,43 @@ contractorRouter.get(
       return res.json(ok(await contractorService.list({ includeInactive })));
     } catch (e: unknown) {
       return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+    }
+  },
+);
+
+contractorRouter.post(
+  '/upload',
+  requireAuth,
+  requirePermission('WORK_ORDERS', 'WRITE'),
+  upload.single('file'),
+  async (req: Request, res: Response) => {
+    try {
+      if (!req.file) return res.status(400).json(fail('File is required'));
+      const folder = String(req.body?.folder ?? 'erp/contractors');
+      const url = await uploadService.uploadToCloudinary(req.file, folder);
+      return res.json(
+        ok({
+          url,
+          fileName: req.file.originalname || null,
+          mimeType: req.file.mimetype || null,
+          fileSize: req.file.size ?? null,
+        }),
+      );
+    } catch (e: unknown) {
+      return res.status(400).json(fail(e instanceof Error ? e.message : 'Upload failed'));
+    }
+  },
+);
+
+contractorRouter.get(
+  '/:id',
+  requireAuth,
+  requirePermission('WORK_ORDERS', 'READ'),
+  async (req: Request, res: Response) => {
+    try {
+      return res.json(ok(await contractorService.getById(p(req.params.id))));
+    } catch (e: unknown) {
+      return res.status(404).json(fail(e instanceof Error ? e.message : 'Not found'));
     }
   },
 );

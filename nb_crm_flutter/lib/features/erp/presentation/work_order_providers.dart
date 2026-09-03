@@ -28,3 +28,12 @@ final erpActivitiesAdminProvider = FutureProvider.autoDispose<List<ErpActivity>>
 final erpContractorsProvider = FutureProvider.autoDispose<List<ErpContractor>>((ref) {
   return ref.watch(workOrderRepositoryProvider).listContractors();
 });
+
+final erpContractorsAdminProvider = FutureProvider.autoDispose<List<ErpContractor>>((ref) {
+  return ref.watch(workOrderRepositoryProvider).listContractors(includeInactive: true);
+});
+
+final erpContractorDetailProvider =
+    FutureProvider.autoDispose.family<ErpContractor, String>((ref, id) {
+  return ref.watch(workOrderRepositoryProvider).getContractor(id);
+});

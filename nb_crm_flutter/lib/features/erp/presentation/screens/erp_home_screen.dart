@@ -72,6 +72,33 @@ class ErpHomeScreen extends ConsumerWidget {
             enabled: canReadWo,
             onTap: () => context.go('/erp/boq'),
           ),
+          const SizedBox(height: 10),
+          Text(
+            'Tenders',
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 15,
+              color: isDark ? Colors.white : const Color(0xFF212F3D),
+            ),
+          ),
+          const SizedBox(height: 10),
+          _ErpTile(
+            icon: Icons.gavel_outlined,
+            title: 'Tenders',
+            subtitle: 'Create tenders against projects / BOQ activities',
+            color: const Color(0xFFdc2626),
+            enabled: canReadWo,
+            onTap: () => context.go('/erp/tenders'),
+          ),
+          const SizedBox(height: 10),
+          _ErpTile(
+            icon: Icons.handshake_outlined,
+            title: 'Tender Applications',
+            subtitle: 'Vendor applications against open tenders',
+            color: const Color(0xFFea580c),
+            enabled: canReadWo,
+            onTap: () => context.go('/erp/tender-applications'),
+          ),
         ],
       ),
     );

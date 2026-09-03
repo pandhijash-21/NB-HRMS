@@ -73,6 +73,237 @@ class ErpActivity {
       };
 }
 
+class ErpContractorLocation {
+  const ErpContractorLocation({
+    this.id,
+    this.locationName,
+    this.addressTypeCode,
+    this.countryCode,
+    this.stateCode,
+    this.cityCode,
+    this.address1,
+    this.address2,
+    this.postCode,
+    this.panNo,
+    this.gstNo,
+    this.sortOrder = 0,
+  });
+
+  final String? id;
+  final String? locationName;
+  final String? addressTypeCode;
+  final String? countryCode;
+  final String? stateCode;
+  final String? cityCode;
+  final String? address1;
+  final String? address2;
+  final String? postCode;
+  final String? panNo;
+  final String? gstNo;
+  final int sortOrder;
+
+  factory ErpContractorLocation.fromJson(Map<String, dynamic> json) => ErpContractorLocation(
+        id: json['id']?.toString(),
+        locationName: json['locationName']?.toString(),
+        addressTypeCode: json['addressTypeCode']?.toString(),
+        countryCode: json['countryCode']?.toString(),
+        stateCode: json['stateCode']?.toString(),
+        cityCode: json['cityCode']?.toString(),
+        address1: json['address1']?.toString(),
+        address2: json['address2']?.toString(),
+        postCode: json['postCode']?.toString(),
+        panNo: json['panNo']?.toString(),
+        gstNo: json['gstNo']?.toString(),
+        sortOrder: int.tryParse('${json['sortOrder']}') ?? 0,
+      );
+
+  Map<String, dynamic> toJson() => {
+        if (id != null) 'id': id,
+        'locationName': locationName,
+        'addressTypeCode': addressTypeCode,
+        'countryCode': countryCode,
+        'stateCode': stateCode,
+        'cityCode': cityCode,
+        'address1': address1,
+        'address2': address2,
+        'postCode': postCode,
+        'panNo': panNo,
+        'gstNo': gstNo,
+        'sortOrder': sortOrder,
+      };
+
+  ErpContractorLocation copyWith({
+    String? locationName,
+    String? addressTypeCode,
+    String? countryCode,
+    String? stateCode,
+    String? cityCode,
+    String? address1,
+    String? address2,
+    String? postCode,
+    String? panNo,
+    String? gstNo,
+  }) =>
+      ErpContractorLocation(
+        id: id,
+        locationName: locationName ?? this.locationName,
+        addressTypeCode: addressTypeCode ?? this.addressTypeCode,
+        countryCode: countryCode ?? this.countryCode,
+        stateCode: stateCode ?? this.stateCode,
+        cityCode: cityCode ?? this.cityCode,
+        address1: address1 ?? this.address1,
+        address2: address2 ?? this.address2,
+        postCode: postCode ?? this.postCode,
+        panNo: panNo ?? this.panNo,
+        gstNo: gstNo ?? this.gstNo,
+        sortOrder: sortOrder,
+      );
+}
+
+class ErpContractorContact {
+  const ErpContractorContact({
+    this.id,
+    required this.name,
+    this.email,
+    this.countryCode = '+91',
+    this.mobileNo,
+    this.altCountryCode = '+91',
+    this.alternateMobileNo,
+    this.designation,
+    this.locationName,
+    this.sortOrder = 0,
+  });
+
+  final String? id;
+  final String name;
+  final String? email;
+  final String? countryCode;
+  final String? mobileNo;
+  final String? altCountryCode;
+  final String? alternateMobileNo;
+  final String? designation;
+  final String? locationName;
+  final int sortOrder;
+
+  factory ErpContractorContact.fromJson(Map<String, dynamic> json) => ErpContractorContact(
+        id: json['id']?.toString(),
+        name: json['name']?.toString() ?? '',
+        email: json['email']?.toString(),
+        countryCode: json['countryCode']?.toString() ?? '+91',
+        mobileNo: json['mobileNo']?.toString(),
+        altCountryCode: json['altCountryCode']?.toString() ?? '+91',
+        alternateMobileNo: json['alternateMobileNo']?.toString(),
+        designation: json['designation']?.toString(),
+        locationName: json['locationName']?.toString(),
+        sortOrder: int.tryParse('${json['sortOrder']}') ?? 0,
+      );
+
+  Map<String, dynamic> toJson() => {
+        if (id != null) 'id': id,
+        'name': name,
+        'email': email,
+        'countryCode': countryCode,
+        'mobileNo': mobileNo,
+        'altCountryCode': altCountryCode,
+        'alternateMobileNo': alternateMobileNo,
+        'designation': designation,
+        'locationName': locationName,
+        'sortOrder': sortOrder,
+      };
+
+  ErpContractorContact copyWith({
+    String? name,
+    String? email,
+    String? countryCode,
+    String? mobileNo,
+    String? altCountryCode,
+    String? alternateMobileNo,
+    String? designation,
+    String? locationName,
+  }) =>
+      ErpContractorContact(
+        id: id,
+        name: name ?? this.name,
+        email: email ?? this.email,
+        countryCode: countryCode ?? this.countryCode,
+        mobileNo: mobileNo ?? this.mobileNo,
+        altCountryCode: altCountryCode ?? this.altCountryCode,
+        alternateMobileNo: alternateMobileNo ?? this.alternateMobileNo,
+        designation: designation ?? this.designation,
+        locationName: locationName ?? this.locationName,
+        sortOrder: sortOrder,
+      );
+}
+
+class ErpContractorDocument {
+  const ErpContractorDocument({
+    this.id,
+    this.typeCode,
+    this.name,
+    this.remarks,
+    this.fileUrl,
+    this.fileName,
+    this.mimeType,
+    this.fileSize,
+    this.sortOrder = 0,
+  });
+
+  final String? id;
+  final String? typeCode;
+  final String? name;
+  final String? remarks;
+  final String? fileUrl;
+  final String? fileName;
+  final String? mimeType;
+  final int? fileSize;
+  final int sortOrder;
+
+  factory ErpContractorDocument.fromJson(Map<String, dynamic> json) => ErpContractorDocument(
+        id: json['id']?.toString(),
+        typeCode: json['typeCode']?.toString(),
+        name: json['name']?.toString(),
+        remarks: json['remarks']?.toString(),
+        fileUrl: json['fileUrl']?.toString(),
+        fileName: json['fileName']?.toString(),
+        mimeType: json['mimeType']?.toString(),
+        fileSize: int.tryParse('${json['fileSize']}'),
+        sortOrder: int.tryParse('${json['sortOrder']}') ?? 0,
+      );
+
+  Map<String, dynamic> toJson() => {
+        if (id != null) 'id': id,
+        'typeCode': typeCode,
+        'name': name,
+        'remarks': remarks,
+        'fileUrl': fileUrl,
+        'fileName': fileName,
+        'mimeType': mimeType,
+        'fileSize': fileSize,
+        'sortOrder': sortOrder,
+      };
+
+  ErpContractorDocument copyWith({
+    String? typeCode,
+    String? name,
+    String? remarks,
+    String? fileUrl,
+    String? fileName,
+    String? mimeType,
+    int? fileSize,
+  }) =>
+      ErpContractorDocument(
+        id: id,
+        typeCode: typeCode ?? this.typeCode,
+        name: name ?? this.name,
+        remarks: remarks ?? this.remarks,
+        fileUrl: fileUrl ?? this.fileUrl,
+        fileName: fileName ?? this.fileName,
+        mimeType: mimeType ?? this.mimeType,
+        fileSize: fileSize ?? this.fileSize,
+        sortOrder: sortOrder,
+      );
+}
+
 class ErpContractor {
   const ErpContractor({
     required this.id,
@@ -80,7 +311,22 @@ class ErpContractor {
     this.contactPerson,
     this.phone,
     this.email,
+    this.mobileNo,
+    this.alternateMobileNo,
+    this.tdsCode,
+    this.bankName,
+    this.branchName,
+    this.ifscCode,
+    this.accountNo,
+    this.paymentTerms,
+    this.contractorTypeCode,
     this.isActive = true,
+    this.locations = const [],
+    this.contacts = const [],
+    this.documents = const [],
+    this.locationCount,
+    this.contactCount,
+    this.documentCount,
   });
 
   final String id;
@@ -88,23 +334,81 @@ class ErpContractor {
   final String? contactPerson;
   final String? phone;
   final String? email;
+  final String? mobileNo;
+  final String? alternateMobileNo;
+  final String? tdsCode;
+  final String? bankName;
+  final String? branchName;
+  final String? ifscCode;
+  final String? accountNo;
+  final String? paymentTerms;
+  final String? contractorTypeCode;
   final bool isActive;
+  final List<ErpContractorLocation> locations;
+  final List<ErpContractorContact> contacts;
+  final List<ErpContractorDocument> documents;
+  final int? locationCount;
+  final int? contactCount;
+  final int? documentCount;
 
-  factory ErpContractor.fromJson(Map<String, dynamic> json) => ErpContractor(
-        id: json['id']?.toString() ?? '',
-        name: json['name']?.toString() ?? '',
-        contactPerson: json['contactPerson']?.toString(),
-        phone: json['phone']?.toString(),
-        email: json['email']?.toString(),
-        isActive: json['isActive'] != false,
-      );
+  factory ErpContractor.fromJson(Map<String, dynamic> json) {
+    final count = json['_count'];
+    return ErpContractor(
+      id: json['id']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      contactPerson: json['contactPerson']?.toString(),
+      phone: json['phone']?.toString(),
+      email: json['email']?.toString(),
+      mobileNo: json['mobileNo']?.toString() ?? json['phone']?.toString(),
+      alternateMobileNo: json['alternateMobileNo']?.toString(),
+      tdsCode: json['tdsCode']?.toString(),
+      bankName: json['bankName']?.toString(),
+      branchName: json['branchName']?.toString(),
+      ifscCode: json['ifscCode']?.toString(),
+      accountNo: json['accountNo']?.toString(),
+      paymentTerms: json['paymentTerms']?.toString(),
+      contractorTypeCode: json['contractorTypeCode']?.toString(),
+      isActive: json['isActive'] != false,
+      locations: json['locations'] is List
+          ? (json['locations'] as List)
+              .map((e) => ErpContractorLocation.fromJson(Map<String, dynamic>.from(e as Map)))
+              .toList()
+          : const [],
+      contacts: json['contacts'] is List
+          ? (json['contacts'] as List)
+              .map((e) => ErpContractorContact.fromJson(Map<String, dynamic>.from(e as Map)))
+              .toList()
+          : const [],
+      documents: json['documents'] is List
+          ? (json['documents'] as List)
+              .map((e) => ErpContractorDocument.fromJson(Map<String, dynamic>.from(e as Map)))
+              .toList()
+          : const [],
+      locationCount: count is Map ? int.tryParse('${count['locations']}') : null,
+      contactCount: count is Map ? int.tryParse('${count['contacts']}') : null,
+      documentCount: count is Map ? int.tryParse('${count['documents']}') : null,
+    );
+  }
 
   Map<String, dynamic> toJson() => {
         'name': name,
+        'companyName': name,
         'contactPerson': contactPerson,
-        'phone': phone,
+        'phone': mobileNo ?? phone,
+        'mobileNo': mobileNo ?? phone,
         'email': email,
+        'alternateMobileNo': alternateMobileNo,
+        'tdsCode': tdsCode,
+        'bankName': bankName,
+        'branchName': branchName,
+        'ifscCode': ifscCode,
+        'accountNo': accountNo,
+        'paymentTerms': paymentTerms,
+        'contractorTypeCode': contractorTypeCode,
         'isActive': isActive,
+        'locations': locations.map((e) => e.toJson()).toList(),
+        'contacts': contacts.map((e) => e.toJson()).toList(),
+        'documents': documents.map((e) => e.toJson()).toList(),
       };
 }
 

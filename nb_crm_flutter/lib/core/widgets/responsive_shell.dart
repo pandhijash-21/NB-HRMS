@@ -27,6 +27,8 @@ class ResponsiveShell extends ConsumerStatefulWidget {
 class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
   bool _isExpanded = true;
   final _navSearch = TextEditingController();
+  final Set<String> _expandedNavGroups = {};
+  final Set<String> _collapsedNavGroups = {};
 
   @override
   void dispose() {
@@ -201,6 +203,29 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
           'BOQ',
           section: 'ERP',
         ),
+        const _Destination(
+          '/erp/tenders',
+          Icons.gavel_outlined,
+          Icons.gavel,
+          'Tenders',
+          section: 'ERP',
+          children: [
+            _Destination(
+              '/erp/tenders',
+              Icons.gavel_outlined,
+              Icons.gavel,
+              'Tenders',
+              section: 'ERP',
+            ),
+            _Destination(
+              '/erp/tender-applications',
+              Icons.handshake_outlined,
+              Icons.handshake,
+              'Tender Applications',
+              section: 'ERP',
+            ),
+          ],
+        ),
         if (canAccessAdmin)
           const _Destination(
             '/erp/configurations',
@@ -352,6 +377,9 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     final chatUnread = ref.watch(chatUnreadProvider);
 
     bool isSelected(_Destination d) {
+      if (d.children != null && d.children!.isNotEmpty) {
+        return d.children!.any(isSelected);
+      }
       if (d.route == '/leave') {
         return currentPath.startsWith('/leave') ||
             currentPath.startsWith('/approvals') ||
@@ -366,19 +394,53 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
         return (currentPath == '/crm/pre-sales' || currentPath == '/crm/presales') &&
             !currentPath.contains('/headers');
       }
+      if (d.route == '/erp/tenders') {
+        return currentPath == '/erp/tenders' ||
+            currentPath.startsWith('/erp/tenders/');
+      }
       return currentPath.startsWith(d.route);
+    }
+
+    // Keep Tenders group open while on any tender route (unless user collapsed it).
+    if (currentPath.startsWith('/erp/tenders') || currentPath.startsWith('/erp/tender-applications')) {
+      // no-op during build; open state is derived below
     }
 
     final query = _navSearch.text.trim().toLowerCase();
     final visible = query.isEmpty
         ? destinations
-        : destinations
-            .where((d) =>
-                d.label.toLowerCase().contains(query) ||
-                d.section.toLowerCase().contains(query))
-            .toList();
+        : destinations.where((d) {
+            if (d.label.toLowerCase().contains(query) || d.section.toLowerCase().contains(query)) {
+              return true;
+            }
+            return d.children?.any((c) => c.label.toLowerCase().contains(query)) ?? false;
+          }).toList();
+
+    bool isGroupOpen(_Destination d) {
+      if (d.children == null || d.children!.isEmpty) return false;
+      if (query.isNotEmpty) return true;
+      if (_collapsedNavGroups.contains(d.route)) return false;
+      if (_expandedNavGroups.contains(d.route)) return true;
+      if (d.route == '/erp/tenders') {
+        return currentPath.startsWith('/erp/tenders') ||
+            currentPath.startsWith('/erp/tender-applications');
+      }
+      return false;
+    }
 
     void goTo(_Destination d, {bool closeDrawer = false}) {
+      if (d.children != null && d.children!.isNotEmpty) {
+        setState(() {
+          if (isGroupOpen(d)) {
+            _expandedNavGroups.remove(d.route);
+            _collapsedNavGroups.add(d.route);
+          } else {
+            _collapsedNavGroups.remove(d.route);
+            _expandedNavGroups.add(d.route);
+          }
+        });
+        return;
+      }
       if (closeDrawer) Navigator.pop(context);
       context.go(d.route);
     }
@@ -484,6 +546,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                       alertCount: alertCount,
                       chatUnread: chatUnread,
                       isSelected: isSelected,
+                      isGroupOpen: isGroupOpen,
                       onTap: (d) => goTo(d, closeDrawer: true),
                     ),
                   ],
@@ -599,6 +662,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                 context,
                 visible,
                 isSelected,
+                isGroupOpen,
                 goTo,
                 isDark,
                 brandTitle: brandTitle,
@@ -720,6 +784,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     required int alertCount,
     required int chatUnread,
     required bool Function(_Destination) isSelected,
+    required bool Function(_Destination) isGroupOpen,
     required void Function(_Destination) onTap,
   }) {
     const order = ['Main', 'CRM', 'Collaboration', 'HR', 'Organisation', 'Tracking'];
@@ -777,6 +842,8 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
         );
       }
       for (final d in items) {
+        final hasChildren = d.children != null && d.children!.isNotEmpty;
+        final groupOpen = hasChildren && isGroupOpen(d);
         widgets.add(_buildNavTile(
           d,
           isDark,
@@ -784,8 +851,26 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
           selected: isSelected(d),
           alertCount: alertCount,
           chatUnread: chatUnread,
+          isGroup: hasChildren,
+          groupExpanded: groupOpen,
           onTap: () => onTap(d),
+          childDestinations: hasChildren ? d.children : null,
+          onSelectChild: hasChildren ? onTap : null,
         ));
+        if (hasChildren && groupOpen && expanded) {
+          for (final child in d.children!) {
+            widgets.add(_buildNavTile(
+              child,
+              isDark,
+              expanded: expanded,
+              selected: isSelected(child),
+              alertCount: alertCount,
+              chatUnread: chatUnread,
+              isChild: true,
+              onTap: () => onTap(child),
+            ));
+          }
+        }
       }
     }
     return widgets;
@@ -799,6 +884,11 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     required int alertCount,
     required int chatUnread,
     required VoidCallback onTap,
+    bool isGroup = false,
+    bool groupExpanded = false,
+    bool isChild = false,
+    List<_Destination>? childDestinations,
+    void Function(_Destination child)? onSelectChild,
   }) {
     final badgeCount = d.route == '/chat' ? chatUnread : (d.alertBadge ? alertCount : 0);
     final iconColor = selected
@@ -814,17 +904,24 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
       _ => NbIcon(
           selected ? d.selectedIcon : d.icon,
           color: iconColor,
-          size: 22,
+          size: isChild ? 18 : 22,
         ),
     };
-    final tile = Padding(
-      padding: EdgeInsets.symmetric(horizontal: expanded ? 12 : 8, vertical: 2),
-      child: InkWell(
-          onTap: onTap,
+
+    Widget tileBody({required VoidCallback tap}) {
+      return Padding(
+        padding: EdgeInsets.only(
+          left: expanded ? (isChild ? 22 : 12) : 8,
+          right: expanded ? 12 : 8,
+          top: 2,
+          bottom: 2,
+        ),
+        child: InkWell(
+          onTap: tap,
           borderRadius: BorderRadius.circular(12),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
-            height: 48,
+            height: isChild ? 42 : 48,
             alignment: expanded ? Alignment.centerLeft : Alignment.center,
             decoration: BoxDecoration(
               color: selected
@@ -842,6 +939,15 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                 ? Row(
                     children: [
                       const SizedBox(width: 12),
+                      if (isChild)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: Icon(
+                            Icons.subdirectory_arrow_right_rounded,
+                            size: 14,
+                            color: isDark ? Colors.white38 : const Color(0xFF90A4AE),
+                          ),
+                        ),
                       icon,
                       const SizedBox(width: 12),
                       Expanded(
@@ -852,14 +958,24 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                                 ? (isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238))
                                 : (isDark ? Colors.white.withOpacity(0.5) : const Color(0xFF607D8B).withOpacity(0.8)),
                             fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                            fontSize: 14,
+                            fontSize: isChild ? 13 : 14,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       if (badgeCount > 0) _alertCountBadge(badgeCount),
-                      const SizedBox(width: 12),
+                      if (isGroup)
+                        AnimatedRotation(
+                          turns: groupExpanded ? 0.5 : 0,
+                          duration: const Duration(milliseconds: 180),
+                          child: Icon(
+                            Icons.keyboard_arrow_down_rounded,
+                            size: 20,
+                            color: isDark ? Colors.white54 : const Color(0xFF78909C),
+                          ),
+                        ),
+                      const SizedBox(width: 8),
                     ],
                   )
                 : Stack(
@@ -873,11 +989,47 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                           top: 6,
                           child: _alertCountBadge(badgeCount, compact: true),
                         ),
+                      if (isGroup)
+                        Positioned(
+                          right: 2,
+                          bottom: 2,
+                          child: Icon(
+                            Icons.arrow_drop_down,
+                            size: 14,
+                            color: isDark ? Colors.white54 : const Color(0xFF78909C),
+                          ),
+                        ),
                     ],
                   ),
           ),
         ),
-    );
+      );
+    }
+
+    // Collapsed rail with children: popup menu.
+    if (!expanded && isGroup && childDestinations != null && onSelectChild != null) {
+      return PopupMenuButton<_Destination>(
+        tooltip: d.label,
+        offset: const Offset(56, 0),
+        onSelected: onSelectChild,
+        itemBuilder: (context) => [
+          for (final child in childDestinations)
+            PopupMenuItem<_Destination>(
+              value: child,
+              child: Row(
+                children: [
+                  Icon(child.icon, size: 18),
+                  const SizedBox(width: 10),
+                  Text(child.label),
+                ],
+              ),
+            ),
+        ],
+        child: tileBody(tap: () {}),
+      );
+    }
+
+    final tile = tileBody(tap: onTap);
     if (!expanded) {
       return Tooltip(
         message: d.label,
@@ -950,6 +1102,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     BuildContext context,
     List<_Destination> destinations,
     bool Function(_Destination) isSelected,
+    bool Function(_Destination) isGroupOpen,
     void Function(_Destination d, {bool closeDrawer}) goTo,
     bool isDark, {
     required String brandTitle,
@@ -1078,6 +1231,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                 alertCount: alertCount,
                 chatUnread: chatUnread,
                 isSelected: isSelected,
+                isGroupOpen: isGroupOpen,
                 onTap: (d) => goTo(d),
               ),
             ),
@@ -1209,6 +1363,7 @@ class _Destination {
     this.label, {
     this.section = 'Main',
     this.alertBadge = false,
+    this.children,
   });
   final String route;
   final IconData icon;
@@ -1216,4 +1371,5 @@ class _Destination {
   final String label;
   final String section;
   final bool alertBadge;
+  final List<_Destination>? children;
 }

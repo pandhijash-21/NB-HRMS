@@ -210,6 +210,32 @@ const SEED: SeedOpt[] = [
   { category: 'WO_CATEGORY', code: 'ELECTRICAL', label: 'Electrical', sortOrder: 2 },
   { category: 'WO_CATEGORY', code: 'PLUMBING', label: 'Plumbing', sortOrder: 3 },
   { category: 'WO_CATEGORY', code: 'FINISHING', label: 'Finishing', sortOrder: 4 },
+
+  // Contractors
+  { category: 'CONTRACTOR_TDS', code: 'TDS_1', label: 'TDS 1%', sortOrder: 1 },
+  { category: 'CONTRACTOR_TDS', code: 'TDS_2', label: 'TDS 2%', sortOrder: 2 },
+  { category: 'CONTRACTOR_TDS', code: 'TCS_1', label: 'TCS 1%', sortOrder: 3 },
+  { category: 'CONTRACTOR_TDS', code: 'TCS_2', label: 'TCS 2%', sortOrder: 4 },
+  { category: 'CONTRACTOR_TDS', code: 'NIL', label: 'Nil', sortOrder: 5 },
+  { category: 'CONTRACTOR_TYPE', code: 'CIVIL', label: 'Civil', sortOrder: 1 },
+  { category: 'CONTRACTOR_TYPE', code: 'ELECTRICAL', label: 'Electrical', sortOrder: 2 },
+  { category: 'CONTRACTOR_TYPE', code: 'PLUMBING', label: 'Plumbing', sortOrder: 3 },
+  { category: 'CONTRACTOR_TYPE', code: 'FINISHING', label: 'Finishing', sortOrder: 4 },
+  { category: 'CONTRACTOR_TYPE', code: 'GENERAL', label: 'General', sortOrder: 5 },
+  { category: 'CONTRACTOR_ADDRESS_TYPE', code: 'BILLING', label: 'Billing Address', sortOrder: 1 },
+  { category: 'CONTRACTOR_ADDRESS_TYPE', code: 'OFFICE', label: 'Office Address', sortOrder: 2 },
+  { category: 'CONTRACTOR_ADDRESS_TYPE', code: 'SITE', label: 'Site Address', sortOrder: 3 },
+  { category: 'CONTRACTOR_ADDRESS_TYPE', code: 'REGISTERED', label: 'Registered Address', sortOrder: 4 },
+  { category: 'CONTRACTOR_COUNTRY', code: 'INDIA', label: 'India', sortOrder: 1 },
+  { category: 'CONTRACTOR_STATE', code: 'GUJARAT', label: 'Gujarat', sortOrder: 1 },
+  { category: 'CONTRACTOR_STATE', code: 'MAHARASHTRA', label: 'Maharashtra', sortOrder: 2 },
+  { category: 'CONTRACTOR_CITY', code: 'AHMEDABAD', label: 'Ahmedabad', sortOrder: 1 },
+  { category: 'CONTRACTOR_CITY', code: 'GANDHINAGAR', label: 'Gandhinagar', sortOrder: 2 },
+  { category: 'CONTRACTOR_CITY', code: 'SURAT', label: 'Surat', sortOrder: 3 },
+  { category: 'CONTRACTOR_DOCUMENT_TYPE', code: 'PAN', label: 'PAN Card', sortOrder: 1 },
+  { category: 'CONTRACTOR_DOCUMENT_TYPE', code: 'GST', label: 'GST Certificate', sortOrder: 2 },
+  { category: 'CONTRACTOR_DOCUMENT_TYPE', code: 'AGREEMENT', label: 'Agreement', sortOrder: 3 },
+  { category: 'CONTRACTOR_DOCUMENT_TYPE', code: 'OTHER', label: 'Other', sortOrder: 4 },
 ];
 
 export async function seedSystemLookups(prisma: PrismaClient) {

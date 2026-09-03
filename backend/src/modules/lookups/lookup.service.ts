@@ -44,6 +44,13 @@ export const LOOKUP_CATEGORIES = [
   { key: 'PROJECT_UNIT_CATEGORY', label: 'Unit Category', description: 'Standard, Corner, Premium, …' },
   { key: 'WO_MEASUREMENT_UNIT', label: 'Work Order Unit', description: 'PCS, Sq Ft, Rmt, … for work order quantities' },
   { key: 'WO_CATEGORY', label: 'Work Order Category', description: 'Work order category' },
+  { key: 'CONTRACTOR_TDS', label: 'Contractor TDS', description: 'TDS / TCS options for contractors' },
+  { key: 'CONTRACTOR_TYPE', label: 'Contractor Type', description: 'Civil, Electrical, Plumbing, …' },
+  { key: 'CONTRACTOR_ADDRESS_TYPE', label: 'Address Type', description: 'Billing, Office, Site, …' },
+  { key: 'CONTRACTOR_COUNTRY', label: 'Contractor Country', description: 'Country for contractor locations' },
+  { key: 'CONTRACTOR_STATE', label: 'Contractor State', description: 'State for contractor locations' },
+  { key: 'CONTRACTOR_CITY', label: 'Contractor City', description: 'City for contractor locations' },
+  { key: 'CONTRACTOR_DOCUMENT_TYPE', label: 'Contractor Document Type', description: 'PAN, GST, Agreement, …' },
 ] as const;
 
 export type LookupCategoryKey = (typeof LOOKUP_CATEGORIES)[number]['key'];

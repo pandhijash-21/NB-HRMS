@@ -91,6 +91,9 @@ import '../../features/erp/presentation/screens/tender_list_screen.dart';
 import '../../features/erp/presentation/screens/tender_form_screen.dart';
 import '../../features/erp/presentation/screens/tender_applications_screen.dart';
 import '../../features/erp/presentation/screens/tender_application_form_screen.dart';
+import '../../features/erp/presentation/screens/dpr_list_screen.dart';
+import '../../features/erp/presentation/screens/dpr_form_screen.dart';
+import '../../features/erp/presentation/screens/dpr_detail_screen.dart';
 import '../../features/collaboration/presentation/screens/chat_hub_screen.dart';
 import '../../features/collaboration/presentation/screens/meet_hub_screen.dart';
 import '../../features/collaboration/presentation/screens/meet_list_screen.dart';
@@ -446,6 +449,21 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/erp/tender-applications/new',
             builder: (context, state) => const TenderApplicationFormScreen(),
+          ),
+          GoRoute(
+            path: '/erp/dpr',
+            builder: (context, state) => const DprListScreen(),
+          ),
+          GoRoute(
+            path: '/erp/dpr/new',
+            builder: (context, state) => const DprFormScreen(),
+          ),
+          GoRoute(
+            path: '/erp/dpr/:id',
+            builder: (context, state) {
+              final id = state.pathParameters['id'] ?? '';
+              return DprDetailScreen(id: id);
+            },
           ),
           GoRoute(
             path: '/erp/configurations/materials',

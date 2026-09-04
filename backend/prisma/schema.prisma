@@ -2007,6 +2007,7 @@ model ErpProject {
   workOrders   ErpWorkOrder[]
   boqs         ErpBoq[]
   tenders      ErpTender[]
+  dprs         ErpDpr[]
   materialUses ErpMaterialProjectUse[]
   machineUses  ErpMachineProjectUse[]
 
@@ -2136,6 +2137,7 @@ model ErpContractor {
   contacts   ErpContractorContact[]
   documents  ErpContractorDocument[]
   tenderApplications ErpTenderApplication[]
+  dprLines   ErpDprLine[]
 
   @@index([isActive, name])
   @@map("erp_contractors")
@@ -2330,6 +2332,7 @@ enum ErpStockLogType {
   PURCHASE
   ADJUSTMENT
   INITIAL
+  CONSUMPTION
 }
 
 model ErpBoq {
@@ -2626,6 +2629,124 @@ model ErpTenderApplication {
   @@index([contractorId])
   @@index([status])
   @@map("erp_tender_applications")
+}
+
+// =============================================================================
+// ERP DPR — Daily Progress Reports
+// =============================================================================
+
+model ErpDpr {
+  id            String   @id @default(uuid())
+  dprNo         String   @unique @map("dpr_no")
+  reportDate    DateTime @map("report_date") @db.Date
+  projectId     String   @map("project_id")
+  createdByName String?  @map("created_by_name")
+  remarks       String?  @db.Text
+  createdBy     String?  @map("created_by")
+  updatedBy     String?  @map("updated_by")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  project ErpProject  @relation(fields: [projectId], references: [id])
+  lines   ErpDprLine[]
+
+  @@index([projectId, reportDate])
+  @@index([createdAt])
+  @@map("erp_dprs")
+}
+
+model ErpDprLine {
+  id               String    @id @default(uuid())
+  dprId            String    @map("dpr_id")
+  contractorId     String?   @map("contractor_id")
+  contractorName   String?   @map("contractor_name")
+  activityId       String?   @map("activity_id")
+  activityName     String?   @map("activity_name")
+  subtaskId        String?   @map("subtask_id")
+  taskName         String?   @map("task_name")
+  towerId          String?   @map("tower_id")
+  towerName        String?   @map("tower_name")
+  floorNo          Int?      @map("floor_no")
+  unitId           String?   @map("unit_id")
+  unitLabel        String?   @map("unit_label")
+  unitCode         String?   @map("unit_code")
+  consumedQty      Decimal   @default(0) @map("consumed_qty") @db.Decimal(14, 4)
+  gradeCode        String?   @map("grade_code")
+  remarks          String?   @db.Text
+  statusCode       String?   @map("status_code")
+  completionPct    Decimal?  @map("completion_pct") @db.Decimal(5, 2)
+  actualStartDate  DateTime? @map("actual_start_date") @db.Date
+  actualEndDate    DateTime? @map("actual_end_date") @db.Date
+  materialRateText String?   @map("material_rate_text")
+  labourRateText   String?   @map("labour_rate_text")
+  machineRateText  String?   @map("machine_rate_text")
+  sortOrder        Int       @default(0) @map("sort_order")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  dpr        ErpDpr               @relation(fields: [dprId], references: [id], onDelete: Cascade)
+  contractor ErpContractor?       @relation(fields: [contractorId], references: [id], onDelete: SetNull)
+  materials  ErpDprMaterialLine[]
+  labour     ErpDprLabourLine[]
+  machines   ErpDprMachineLine[]
+
+  @@index([dprId, sortOrder])
+  @@index([contractorId])
+  @@map("erp_dpr_lines")
+}
+
+model ErpDprMaterialLine {
+  id             String  @id @default(uuid())
+  dprLineId      String  @map("dpr_line_id")
+  materialId     String? @map("material_id")
+  itemCode       String? @map("item_code")
+  category       String?
+  itemName       String
+  brand          String?
+  unitCode       String? @map("unit_code")
+  size           String?
+  consumedQty    Decimal @default(0) @map("consumed_qty") @db.Decimal(14, 4)
+  remarks        String? @db.Text
+  sortOrder      Int     @default(0) @map("sort_order")
+
+  dprLine ErpDprLine @relation(fields: [dprLineId], references: [id], onDelete: Cascade)
+
+  @@index([dprLineId, sortOrder])
+  @@map("erp_dpr_material_lines")
+}
+
+model ErpDprLabourLine {
+  id          String  @id @default(uuid())
+  dprLineId   String  @map("dpr_line_id")
+  labourId    String? @map("labour_id")
+  name        String
+  unitCode    String? @map("unit_code")
+  consumedQty Decimal @default(0) @map("consumed_qty") @db.Decimal(14, 4)
+  remarks     String? @db.Text
+  sortOrder   Int     @default(0) @map("sort_order")
+
+  dprLine ErpDprLine @relation(fields: [dprLineId], references: [id], onDelete: Cascade)
+
+  @@index([dprLineId, sortOrder])
+  @@map("erp_dpr_labour_lines")
+}
+
+model ErpDprMachineLine {
+  id          String  @id @default(uuid())
+  dprLineId   String  @map("dpr_line_id")
+  machineId   String? @map("machine_id")
+  itemName    String  @map("item_name")
+  brand       String?
+  unitCode    String? @map("unit_code")
+  size        String?
+  consumedQty Decimal @default(0) @map("consumed_qty") @db.Decimal(14, 4)
+  remarks     String? @db.Text
+  sortOrder   Int     @default(0) @map("sort_order")
+
+  dprLine ErpDprLine @relation(fields: [dprLineId], references: [id], onDelete: Cascade)
+
+  @@index([dprLineId, sortOrder])
+  @@map("erp_dpr_machine_lines")
 }
 
 // =============================================================================

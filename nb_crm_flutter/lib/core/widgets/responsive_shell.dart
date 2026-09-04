@@ -226,6 +226,13 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             ),
           ],
         ),
+        const _Destination(
+          '/erp/dpr',
+          Icons.assignment_turned_in_outlined,
+          Icons.assignment_turned_in,
+          'DPR',
+          section: 'ERP',
+        ),
         if (canAccessAdmin)
           const _Destination(
             '/erp/configurations',

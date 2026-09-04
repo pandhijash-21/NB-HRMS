@@ -99,6 +99,24 @@ class ErpHomeScreen extends ConsumerWidget {
             enabled: canReadWo,
             onTap: () => context.go('/erp/tender-applications'),
           ),
+          const SizedBox(height: 10),
+          Text(
+            'Progress',
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 15,
+              color: isDark ? Colors.white : const Color(0xFF212F3D),
+            ),
+          ),
+          const SizedBox(height: 10),
+          _ErpTile(
+            icon: Icons.assignment_turned_in_outlined,
+            title: 'DPR',
+            subtitle: 'Daily progress reports — tasks, materials, labour & machinery',
+            color: const Color(0xFF1e3a5f),
+            enabled: canReadWo,
+            onTap: () => context.go('/erp/dpr'),
+          ),
         ],
       ),
     );

@@ -51,6 +51,8 @@ export const LOOKUP_CATEGORIES = [
   { key: 'CONTRACTOR_STATE', label: 'Contractor State', description: 'State for contractor locations' },
   { key: 'CONTRACTOR_CITY', label: 'Contractor City', description: 'City for contractor locations' },
   { key: 'CONTRACTOR_DOCUMENT_TYPE', label: 'Contractor Document Type', description: 'PAN, GST, Agreement, …' },
+  { key: 'DPR_GRADE', label: 'DPR Grade', description: 'Grade options for daily progress report lines' },
+  { key: 'DPR_STATUS', label: 'DPR Status', description: 'Not Started, In Progress, Completed, …' },
 ] as const;
 
 export type LookupCategoryKey = (typeof LOOKUP_CATEGORIES)[number]['key'];

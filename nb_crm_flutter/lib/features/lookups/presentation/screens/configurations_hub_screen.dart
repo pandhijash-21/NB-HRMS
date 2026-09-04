@@ -7,6 +7,7 @@ import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/auth_providers.dart';
 import '../../../erp/domain/project_lookup_keys.dart';
 import '../lookup_providers.dart';
+import '../widgets/config_square_tiles.dart';
 
 /// Hub for institutes, designations, and all dropdown masters.
 class ConfigurationsHubScreen extends ConsumerStatefulWidget {
@@ -66,40 +67,40 @@ class _ConfigurationsHubScreenState
     final groupsAsync = ref.watch(lookupGroupsProvider);
     final q = _query.trim();
 
-    final orgTiles = <_StaticHubItem>[
-      _StaticHubItem(
+    final orgTiles = <ConfigSquareItem>[
+      ConfigSquareItem(
         icon: Icons.account_balance_rounded,
         title: 'Organizations',
-        subtitle: 'Companies with contact, tax, address & bank details',
+        subtitle: 'Companies',
         color: const Color(0xFF0369a1),
         onTap: () => context.go('/admin/configurations/organizations'),
       ),
-      _StaticHubItem(
+      ConfigSquareItem(
         icon: Icons.business_rounded,
         title: 'Institutes',
-        subtitle: 'Campuses / sub-organizations (child company optional)',
+        subtitle: 'Campuses',
         color: const Color(0xFFc2410c),
         onTap: () => context.go('/admin/institutes'),
       ),
-      _StaticHubItem(
+      ConfigSquareItem(
         icon: Icons.badge_rounded,
         title: 'Designations',
-        subtitle: 'Job titles for employees',
+        subtitle: 'Job titles',
         color: const Color(0xFFdb2777),
         onTap: () => context.go('/admin/designations'),
       ),
-      _StaticHubItem(
+      ConfigSquareItem(
         icon: Icons.description_outlined,
         title: 'Letters',
-        subtitle: 'Offer letter, LOR, exit templates',
+        subtitle: 'Templates',
         color: const Color(0xFF0d9488),
         onTap: () => context.go('/admin/configurations/letters'),
       ),
       if (Permissions.isAdmin(role))
-        _StaticHubItem(
+        ConfigSquareItem(
           icon: Icons.cloud_rounded,
           title: 'Storage',
-          subtitle: 'Used space, remaining capacity, and wipe documents',
+          subtitle: 'Capacity',
           color: const Color(0xFF7c3aed),
           onTap: () => context.go('/admin/storage'),
         ),
@@ -136,69 +137,14 @@ class _ConfigurationsHubScreenState
             ),
           ),
           const SizedBox(height: 16),
-          TextField(
+          ConfigSearchField(
             controller: _searchCtrl,
+            query: q,
             onChanged: (v) => setState(() => _query = v),
-            decoration: InputDecoration(
-              hintText: 'Search configurations…',
-              hintStyle: TextStyle(
-                color: isDark
-                    ? Colors.white30
-                    : const Color(0xFF607D8B).withValues(alpha: 0.6),
-              ),
-              prefixIcon: const Icon(
-                Icons.search_rounded,
-                color: Color(0xFFC5A059),
-                size: 20,
-              ),
-              suffixIcon: q.isEmpty
-                  ? null
-                  : IconButton(
-                      tooltip: 'Clear',
-                      icon: Icon(
-                        Icons.clear_rounded,
-                        size: 18,
-                        color: isDark ? Colors.white54 : const Color(0xFF607D8B),
-                      ),
-                      onPressed: () {
-                        _searchCtrl.clear();
-                        setState(() => _query = '');
-                      },
-                    ),
-              filled: true,
-              fillColor: isDark ? const Color(0xFF1A1816) : Colors.white,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(
-                  color: isDark
-                      ? const Color(0xFFC5A059).withValues(alpha: 0.2)
-                      : const Color(0xFFCFD8DC),
-                ),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(
-                  color: isDark
-                      ? const Color(0xFFC5A059).withValues(alpha: 0.15)
-                      : const Color(0xFFCFD8DC),
-                ),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(
-                  color: Color(0xFFC5A059),
-                  width: 1.5,
-                ),
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                vertical: 12,
-                horizontal: 16,
-              ),
-            ),
-            style: TextStyle(
-              color: isDark ? Colors.white : const Color(0xFF212F3D),
-              fontSize: 14,
-            ),
+            onClear: () {
+              _searchCtrl.clear();
+              setState(() => _query = '');
+            },
           ),
           const SizedBox(height: 20),
           if (orgTiles.isNotEmpty) ...[
@@ -211,16 +157,7 @@ class _ConfigurationsHubScreenState
               ),
             ),
             const SizedBox(height: 10),
-            for (final t in orgTiles) ...[
-              _HubTile(
-                icon: t.icon,
-                title: t.title,
-                subtitle: t.subtitle,
-                color: t.color,
-                onTap: t.onTap,
-              ),
-              const SizedBox(height: 10),
-            ],
+            ConfigSquareGrid(tiles: orgTiles),
           ],
           groupsAsync.when(
             loading: () => const Padding(
@@ -233,7 +170,6 @@ class _ConfigurationsHubScreenState
                   .where((g) => _recruitmentKeys.contains(g.key))
                   .where((g) => _matches(q, [g.label, g.description, g.key]))
                   .toList();
-              // ORGANIZATION is managed under Organization masters now — hide legacy lookup.
               final project = groups
                   .where((g) => kProjectLookupKeys.contains(g.key))
                   .where((g) => _matches(q, [g.label, g.description, g.key]))
@@ -268,7 +204,7 @@ class _ConfigurationsHubScreenState
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (project.isNotEmpty) ...[
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 24),
                     Text(
                       'Projects',
                       style: TextStyle(
@@ -278,23 +214,24 @@ class _ConfigurationsHubScreenState
                       ),
                     ),
                     const SizedBox(height: 10),
-                    for (final g in project) ...[
-                      _HubTile(
-                        icon: Icons.apartment_outlined,
-                        title: g.label,
-                        subtitle: g.description ??
-                            '${g.options.where((o) => o.isActive).length} active options',
-                        color: const Color(0xFF2563eb),
-                        onTap: () =>
-                            context.go('/admin/configurations/lookups/${g.key}'),
-                      ),
-                      const SizedBox(height: 10),
-                    ],
+                    ConfigSquareGrid(
+                      tiles: [
+                        for (final g in project)
+                          ConfigSquareItem(
+                            icon: Icons.apartment_outlined,
+                            title: g.label,
+                            subtitle:
+                                '${g.options.where((o) => o.isActive).length} options',
+                            color: const Color(0xFF2563eb),
+                            onTap: () => context.go(
+                              '/admin/configurations/lookups/${g.key}',
+                            ),
+                          ),
+                      ],
+                    ),
                   ] else if (q.isEmpty &&
-                      groups
-                          .where((g) => kProjectLookupKeys.contains(g.key))
-                          .isEmpty) ...[
-                    const SizedBox(height: 14),
+                      groups.where((g) => kProjectLookupKeys.contains(g.key)).isEmpty) ...[
+                    const SizedBox(height: 24),
                     Text(
                       'Projects',
                       style: TextStyle(
@@ -309,7 +246,7 @@ class _ConfigurationsHubScreenState
                     ),
                   ],
                   if (recruitment.isNotEmpty) ...[
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 24),
                     Text(
                       'Recruitment',
                       style: TextStyle(
@@ -319,23 +256,24 @@ class _ConfigurationsHubScreenState
                       ),
                     ),
                     const SizedBox(height: 10),
-                    for (final g in recruitment) ...[
-                      _HubTile(
-                        icon: Icons.work_outline_rounded,
-                        title: g.label,
-                        subtitle: g.description ??
-                            '${g.options.where((o) => o.isActive).length} active options',
-                        color: const Color(0xFF2563eb),
-                        onTap: () =>
-                            context.go('/admin/configurations/lookups/${g.key}'),
-                      ),
-                      const SizedBox(height: 10),
-                    ],
+                    ConfigSquareGrid(
+                      tiles: [
+                        for (final g in recruitment)
+                          ConfigSquareItem(
+                            icon: Icons.work_outline_rounded,
+                            title: g.label,
+                            subtitle:
+                                '${g.options.where((o) => o.isActive).length} options',
+                            color: const Color(0xFF2563eb),
+                            onTap: () => context.go(
+                              '/admin/configurations/lookups/${g.key}',
+                            ),
+                          ),
+                      ],
+                    ),
                   ] else if (q.isEmpty &&
-                      groups
-                          .where((g) => _recruitmentKeys.contains(g.key))
-                          .isEmpty) ...[
-                    const SizedBox(height: 14),
+                      groups.where((g) => _recruitmentKeys.contains(g.key)).isEmpty) ...[
+                    const SizedBox(height: 24),
                     Text(
                       'Recruitment',
                       style: TextStyle(
@@ -350,7 +288,7 @@ class _ConfigurationsHubScreenState
                     ),
                   ],
                   if (other.isNotEmpty) ...[
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 24),
                     Text(
                       'Dropdown options',
                       style: TextStyle(
@@ -360,20 +298,23 @@ class _ConfigurationsHubScreenState
                       ),
                     ),
                     const SizedBox(height: 10),
-                    for (final g in other) ...[
-                      _HubTile(
-                        icon: Icons.list_alt_rounded,
-                        title: g.label,
-                        subtitle: g.description ??
-                            '${g.options.where((o) => o.isActive).length} active options',
-                        color: const Color(0xFF0d9488),
-                        onTap: () =>
-                            context.go('/admin/configurations/lookups/${g.key}'),
-                      ),
-                      const SizedBox(height: 10),
-                    ],
+                    ConfigSquareGrid(
+                      tiles: [
+                        for (final g in other)
+                          ConfigSquareItem(
+                            icon: Icons.list_alt_rounded,
+                            title: g.label,
+                            subtitle:
+                                '${g.options.where((o) => o.isActive).length} options',
+                            color: const Color(0xFF0d9488),
+                            onTap: () => context.go(
+                              '/admin/configurations/lookups/${g.key}',
+                            ),
+                          ),
+                      ],
+                    ),
                   ] else if (q.isEmpty) ...[
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 24),
                     Text(
                       'Dropdown options',
                       style: TextStyle(
@@ -390,102 +331,6 @@ class _ConfigurationsHubScreenState
             },
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _StaticHubItem {
-  const _StaticHubItem({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.color,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Color color;
-  final VoidCallback onTap;
-}
-
-class _HubTile extends StatelessWidget {
-  const _HubTile({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.color,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Color color;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Material(
-      color: isDark ? const Color(0xFF1E1B18) : Colors.white,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: isDark
-                  ? const Color(0xFFC5A059).withValues(alpha: 0.15)
-                  : const Color(0xFFCFD8DC),
-            ),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(icon, color: color, size: 22),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: isDark ? Colors.white : const Color(0xFF212F3D),
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark ? Colors.white54 : const Color(0xFF607D8B),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(
-                Icons.chevron_right_rounded,
-                color: isDark ? Colors.white24 : Colors.grey,
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

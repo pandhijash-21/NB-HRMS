@@ -236,6 +236,19 @@ const SEED: SeedOpt[] = [
   { category: 'CONTRACTOR_DOCUMENT_TYPE', code: 'GST', label: 'GST Certificate', sortOrder: 2 },
   { category: 'CONTRACTOR_DOCUMENT_TYPE', code: 'AGREEMENT', label: 'Agreement', sortOrder: 3 },
   { category: 'CONTRACTOR_DOCUMENT_TYPE', code: 'OTHER', label: 'Other', sortOrder: 4 },
+
+  // DPR
+  { category: 'DPR_GRADE', code: 'A', label: 'A', sortOrder: 1 },
+  { category: 'DPR_GRADE', code: 'B', label: 'B', sortOrder: 2 },
+  { category: 'DPR_GRADE', code: 'C', label: 'C', sortOrder: 3 },
+  { category: 'DPR_GRADE', code: 'M20', label: 'M20', sortOrder: 4 },
+  { category: 'DPR_GRADE', code: 'M25', label: 'M25', sortOrder: 5 },
+  { category: 'DPR_GRADE', code: 'M30', label: 'M30', sortOrder: 6 },
+  { category: 'DPR_STATUS', code: 'NOT_STARTED', label: 'Not Started', sortOrder: 1 },
+  { category: 'DPR_STATUS', code: 'IN_PROGRESS', label: 'In Progress', sortOrder: 2 },
+  { category: 'DPR_STATUS', code: 'COMPLETED', label: 'Completed', sortOrder: 3 },
+  { category: 'DPR_STATUS', code: 'ON_HOLD', label: 'On Hold', sortOrder: 4 },
+  { category: 'DPR_STATUS', code: 'DELAYED', label: 'Delayed', sortOrder: 5 },
 ];
 
 export async function seedSystemLookups(prisma: PrismaClient) {

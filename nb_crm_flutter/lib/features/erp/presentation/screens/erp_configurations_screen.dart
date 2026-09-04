@@ -4,17 +4,43 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../lookups/presentation/lookup_providers.dart';
+import '../../../lookups/presentation/widgets/config_square_tiles.dart';
 import '../../domain/contractor_lookup_keys.dart';
+import '../../domain/dpr_lookup_keys.dart';
 import '../../domain/project_lookup_keys.dart';
 import '../../domain/work_order_lookup_keys.dart';
 
-class ErpConfigurationsScreen extends ConsumerWidget {
+class ErpConfigurationsScreen extends ConsumerStatefulWidget {
   const ErpConfigurationsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ErpConfigurationsScreen> createState() => _ErpConfigurationsScreenState();
+}
+
+class _ErpConfigurationsScreenState extends ConsumerState<ErpConfigurationsScreen> {
+  final _searchCtrl = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  bool _matches(List<String?> haystacks) {
+    final q = _query.trim().toLowerCase();
+    if (q.isEmpty) return true;
+    for (final h in haystacks) {
+      if (h != null && h.toLowerCase().contains(q)) return true;
+    }
+    return false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final groupsAsync = ref.watch(lookupGroupsProvider);
+    final q = _query.trim();
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
@@ -33,23 +59,16 @@ class ErpConfigurationsScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
         children: [
-          Text(
-            'Projects',
-            style: TextStyle(
-              fontWeight: FontWeight.w800,
-              fontSize: 15,
-              color: isDark ? Colors.white : const Color(0xFF212F3D),
-            ),
+          ConfigSearchField(
+            controller: _searchCtrl,
+            query: q,
+            onChanged: (v) => setState(() => _query = v),
+            onClear: () {
+              _searchCtrl.clear();
+              setState(() => _query = '');
+            },
           ),
-          const SizedBox(height: 6),
-          Text(
-            'Manage every dropdown used on Add Project.',
-            style: TextStyle(
-              fontSize: 13,
-              color: isDark ? Colors.white54 : const Color(0xFF607D8B),
-            ),
-          ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 20),
           groupsAsync.when(
             loading: () => const Padding(
               padding: EdgeInsets.all(24),
@@ -59,135 +78,162 @@ class ErpConfigurationsScreen extends ConsumerWidget {
             data: (groups) {
               final project = groups
                   .where((g) => kProjectLookupKeys.contains(g.key))
+                  .where((g) => _matches([g.label, g.description, g.key]))
                   .toList();
-              if (project.isEmpty) {
-                return const Text(
-                  'Project lookups not seeded yet. Restart backend after seed.',
+              final contractorLookups = groups
+                  .where((g) => kContractorLookupKeys.contains(g.key))
+                  .where((g) => _matches([g.label, g.description, g.key]))
+                  .toList();
+              final wo = groups
+                  .where((g) => kWoLookupKeys.contains(g.key))
+                  .where((g) => _matches([g.label, g.description, g.key]))
+                  .toList();
+              final dpr = groups
+                  .where((g) => g.key == DprLookupKeys.grade || g.key == DprLookupKeys.status)
+                  .where((g) => _matches([g.label, g.description, g.key]))
+                  .toList();
+
+              final resourceTiles = [
+                if (_matches(['Materials', 'Stock', 'materials']))
+                  ConfigSquareItem(
+                    title: 'Materials',
+                    subtitle: 'Stock & logs',
+                    icon: Icons.inventory_2_outlined,
+                    color: const Color(0xFF0d9488),
+                    onTap: () => context.go('/erp/configurations/materials'),
+                  ),
+                if (_matches(['Machines', 'Equipment', 'machines']))
+                  ConfigSquareItem(
+                    title: 'Machines',
+                    subtitle: 'Equipment',
+                    icon: Icons.precision_manufacturing_outlined,
+                    color: const Color(0xFF7c3aed),
+                    onTap: () => context.go('/erp/configurations/machines'),
+                  ),
+                if (_matches(['Labour', 'Labor', 'rates', 'labour']))
+                  ConfigSquareItem(
+                    title: 'Labour',
+                    subtitle: 'Types & rates',
+                    icon: Icons.groups_outlined,
+                    color: const Color(0xFFea580c),
+                    onTap: () => context.go('/erp/configurations/labour'),
+                  ),
+              ];
+
+              final woStatic = [
+                if (_matches(['Activities', 'Work activities', 'activities']))
+                  ConfigSquareItem(
+                    title: 'Activities',
+                    subtitle: 'Work activities',
+                    icon: Icons.timeline_outlined,
+                    color: const Color(0xFF1e3a5f),
+                    onTap: () => context.go('/erp/configurations/activities'),
+                  ),
+                if (_matches(['Contractors', 'Vendors', 'contractors']))
+                  ConfigSquareItem(
+                    title: 'Contractors',
+                    subtitle: 'Vendors',
+                    icon: Icons.handshake_outlined,
+                    color: const Color(0xFFdc2626),
+                    onTap: () => context.go('/erp/configurations/contractors'),
+                  ),
+                for (final g in wo)
+                  ConfigSquareItem(
+                    title: g.label,
+                    subtitle: '${g.options.where((o) => o.isActive).length} options',
+                    icon: Icons.straighten_outlined,
+                    color: const Color(0xFF64748b),
+                    onTap: () => context.go('/erp/configurations/lookups/${g.key}'),
+                  ),
+              ];
+
+              final any = project.isNotEmpty ||
+                  resourceTiles.isNotEmpty ||
+                  woStatic.isNotEmpty ||
+                  contractorLookups.isNotEmpty ||
+                  dpr.isNotEmpty;
+
+              if (!any) {
+                return Padding(
+                  padding: const EdgeInsets.only(top: 24),
+                  child: Text(
+                    q.isEmpty ? 'No configurations found.' : 'No configurations match “$q”.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: isDark ? Colors.white54 : const Color(0xFF607D8B)),
+                  ),
                 );
               }
+
               return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  for (final g in project) ...[
-                    _CfgTile(
-                      title: g.label,
-                      subtitle: g.description ??
-                          '${g.options.where((o) => o.isActive).length} active options',
-                      onTap: () => context.go(
-                        '/erp/configurations/lookups/${g.key}',
-                      ),
+                  if (project.isNotEmpty) ...[
+                    _sectionTitle(isDark, 'Projects'),
+                    _sectionHint(isDark, 'Manage every dropdown used on Add Project.'),
+                    const SizedBox(height: 12),
+                    ConfigSquareGrid(
+                      tiles: [
+                        for (final g in project)
+                          ConfigSquareItem(
+                            title: g.label,
+                            subtitle: '${g.options.where((o) => o.isActive).length} options',
+                            icon: Icons.apartment_rounded,
+                            color: const Color(0xFF2563eb),
+                            onTap: () => context.go('/erp/configurations/lookups/${g.key}'),
+                          ),
+                      ],
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 28),
                   ],
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: 24),
-          Text(
-            'BOQ & Resources',
-            style: TextStyle(
-              fontWeight: FontWeight.w800,
-              fontSize: 15,
-              color: isDark ? Colors.white : const Color(0xFF212F3D),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Materials, machines, labour for BOQ costing.',
-            style: TextStyle(
-              fontSize: 13,
-              color: isDark ? Colors.white54 : const Color(0xFF607D8B),
-            ),
-          ),
-          const SizedBox(height: 12),
-          _CfgTile(
-            title: 'Materials',
-            subtitle: 'Stock, availability, and purchase logs',
-            onTap: () => context.go('/erp/configurations/materials'),
-          ),
-          const SizedBox(height: 10),
-          _CfgTile(
-            title: 'Machines',
-            subtitle: 'Equipment stock and project occupancy',
-            onTap: () => context.go('/erp/configurations/machines'),
-          ),
-          const SizedBox(height: 10),
-          _CfgTile(
-            title: 'Labour',
-            subtitle: 'Labour types and default rates (optional)',
-            onTap: () => context.go('/erp/configurations/labour'),
-          ),
-          const SizedBox(height: 24),
-          Text(
-            'Work Orders',
-            style: TextStyle(
-              fontWeight: FontWeight.w800,
-              fontSize: 15,
-              color: isDark ? Colors.white : const Color(0xFF212F3D),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Activities, contractors, and measurement units.',
-            style: TextStyle(
-              fontSize: 13,
-              color: isDark ? Colors.white54 : const Color(0xFF607D8B),
-            ),
-          ),
-          const SizedBox(height: 12),
-          _CfgTile(
-            title: 'Activities',
-            subtitle: 'Work order activities — add and toggle active/inactive',
-            onTap: () => context.go('/erp/configurations/activities'),
-          ),
-          const SizedBox(height: 10),
-          _CfgTile(
-            title: 'Contractors',
-            subtitle: 'Company, locations, contacts and documents',
-            onTap: () => context.go('/erp/configurations/contractors'),
-          ),
-          const SizedBox(height: 10),
-          groupsAsync.when(
-            loading: () => const SizedBox.shrink(),
-            error: (_, __) => const SizedBox.shrink(),
-            data: (groups) {
-              final contractorLookups =
-                  groups.where((g) => kContractorLookupKeys.contains(g.key)).toList();
-              final wo = groups.where((g) => kWoLookupKeys.contains(g.key)).toList();
-              return Column(
-                children: [
-                  if (contractorLookups.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'Contractor lookups',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 13,
-                          color: isDark ? Colors.white70 : const Color(0xFF475569),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    for (final g in contractorLookups) ...[
-                      _CfgTile(
-                        title: g.label,
-                        subtitle: g.description ??
-                            '${g.options.where((o) => o.isActive).length} active options',
-                        onTap: () => context.go('/erp/configurations/lookups/${g.key}'),
-                      ),
+                  if (resourceTiles.isNotEmpty) ...[
+                    _sectionTitle(isDark, 'BOQ & Resources'),
+                    _sectionHint(isDark, 'Materials, machines, labour for BOQ costing.'),
+                    const SizedBox(height: 12),
+                    ConfigSquareGrid(tiles: resourceTiles),
+                    const SizedBox(height: 28),
+                  ],
+                  if (woStatic.isNotEmpty || contractorLookups.isNotEmpty) ...[
+                    _sectionTitle(isDark, 'Work Orders'),
+                    _sectionHint(isDark, 'Activities, contractors, and measurement units.'),
+                    const SizedBox(height: 12),
+                    if (woStatic.isNotEmpty) ConfigSquareGrid(tiles: woStatic),
+                    if (contractorLookups.isNotEmpty) ...[
+                      const SizedBox(height: 20),
+                      _sectionTitle(isDark, 'Contractor lookups', small: true),
                       const SizedBox(height: 10),
+                      ConfigSquareGrid(
+                        tiles: [
+                          for (final g in contractorLookups)
+                            ConfigSquareItem(
+                              title: g.label,
+                              subtitle: '${g.options.where((o) => o.isActive).length} options',
+                              icon: Icons.list_alt_rounded,
+                              color: const Color(0xFF0891b2),
+                              onTap: () => context.go('/erp/configurations/lookups/${g.key}'),
+                            ),
+                        ],
+                      ),
                     ],
+                    const SizedBox(height: 28),
                   ],
-                  for (final g in wo) ...[
-                    _CfgTile(
-                      title: g.label,
-                      subtitle: g.description ??
-                          '${g.options.where((o) => o.isActive).length} active options',
-                      onTap: () => context.go('/erp/configurations/lookups/${g.key}'),
+                  if (dpr.isNotEmpty) ...[
+                    _sectionTitle(isDark, 'DPR'),
+                    _sectionHint(isDark, 'Grade and status options for daily progress reports.'),
+                    const SizedBox(height: 12),
+                    ConfigSquareGrid(
+                      tiles: [
+                        for (final g in dpr)
+                          ConfigSquareItem(
+                            title: g.label,
+                            subtitle: '${g.options.where((o) => o.isActive).length} options',
+                            icon: g.key == DprLookupKeys.grade
+                                ? Icons.grade_outlined
+                                : Icons.flag_outlined,
+                            color: const Color(0xFF1e3a5f),
+                            onTap: () => context.go('/erp/configurations/lookups/${g.key}'),
+                          ),
+                      ],
                     ),
-                    const SizedBox(height: 10),
                   ],
                 ],
               );
@@ -197,78 +243,26 @@ class ErpConfigurationsScreen extends ConsumerWidget {
       ),
     );
   }
-}
 
-class _CfgTile extends StatelessWidget {
-  const _CfgTile({
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
+  Widget _sectionTitle(bool isDark, String text, {bool small = false}) {
+    return Text(
+      text,
+      style: TextStyle(
+        fontWeight: FontWeight.w800,
+        fontSize: small ? 13 : 15,
+        color: isDark ? (small ? Colors.white70 : Colors.white) : const Color(0xFF212F3D),
+      ),
+    );
+  }
 
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Material(
-      color: isDark ? const Color(0xFF1E1B18) : Colors.white,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: isDark
-                  ? const Color(0xFFC5A059).withValues(alpha: 0.15)
-                  : const Color(0xFFCFD8DC),
-            ),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF2563eb).withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.tune_rounded, color: Color(0xFF2563eb), size: 22),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: isDark ? Colors.white : const Color(0xFF212F3D),
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark ? Colors.white54 : const Color(0xFF607D8B),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(
-                Icons.chevron_right_rounded,
-                color: isDark ? Colors.white24 : Colors.grey,
-              ),
-            ],
-          ),
+  Widget _sectionHint(bool isDark, String text) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 13,
+          color: isDark ? Colors.white54 : const Color(0xFF607D8B),
         ),
       ),
     );

@@ -177,9 +177,21 @@ jobs:
       github.ref == 'refs/heads/main' &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
+    # Docker build + npm ci on a small VPS often exceeds default idle SSH timeouts.
+    timeout-minutes: 90
     concurrency:
       group: deploy-hostinger
       cancel-in-progress: false
+    env:
+      # Keep the control channel alive during long remote builds (avoids Broken pipe).
+      SSH_OPTS: >-
+        -o IdentitiesOnly=yes
+        -o StrictHostKeyChecking=yes
+        -o UserKnownHostsFile=/home/runner/.ssh/known_hosts
+        -o ServerAliveInterval=20
+        -o ServerAliveCountMax=180
+        -o TCPKeepAlive=yes
+        -o ConnectTimeout=30
     steps:
       - uses: actions/checkout@v4
 
@@ -271,9 +283,8 @@ jobs:
           USER: ${{ secrets.HOSTINGER_USER }}
           PORT: ${{ secrets.HOSTINGER_PORT }}
         run: |
-          ssh -i ~/.ssh/deploy_key -p "${PORT:-22}" -o IdentitiesOnly=yes \
-            -o StrictHostKeyChecking=yes \
-            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+          # shellcheck disable=SC2086
+          ssh -i ~/.ssh/deploy_key -p "${PORT:-22}" $SSH_OPTS \
             "${USER}@${HOST}" 'bash -s' <<'EOS'
           set -e
           cd /opt/nb-crm
@@ -297,8 +308,8 @@ jobs:
         run: |
           port="${PORT:-22}"
           remote="${USER}@${HOST}"
-          ssh_common="-i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts"
-          rsh="ssh -p ${port} ${ssh_common}"
+          # shellcheck disable=SC2086
+          rsh="ssh -p ${port} -i $HOME/.ssh/deploy_key $SSH_OPTS"
 
           $rsh "$remote" "mkdir -p /opt/nb-crm/backend /opt/nb-crm/deploy/nginx /opt/nb-crm/whisper"
 
@@ -311,19 +322,22 @@ jobs:
           rsync -az --delete -e "$rsh" deploy/nginx/ "$remote:/opt/nb-crm/deploy/nginx/"
 
           # scp uses -P for port (-p means preserve timestamps)
-          scp -P "$port" $ssh_common \
+          # shellcheck disable=SC2086
+          scp -P "$port" -i "$HOME/.ssh/deploy_key" $SSH_OPTS \
             backend/package.json \
             backend/package-lock.json \
             backend/tsconfig.json \
             backend/Dockerfile.prod \
             "$remote:/opt/nb-crm/backend/"
 
-          scp -P "$port" $ssh_common \
+          # shellcheck disable=SC2086
+          scp -P "$port" -i "$HOME/.ssh/deploy_key" $SSH_OPTS \
             docker-compose.prod.yml \
             livekit.prod.yaml \
             "$remote:/opt/nb-crm/"
 
-          scp -P "$port" $ssh_common \
+          # shellcheck disable=SC2086
+          scp -P "$port" -i "$HOME/.ssh/deploy_key" $SSH_OPTS \
             deploy/hostinger-apply.sh \
             deploy/ci-check-migrations.sh \
             "$remote:/opt/nb-crm/deploy/"
@@ -333,9 +347,70 @@ jobs:
           HOST: ${{ secrets.HOSTINGER_HOST }}
           USER: ${{ secrets.HOSTINGER_USER }}
           PORT: ${{ secrets.HOSTINGER_PORT }}
+          DEPLOY_SHA: ${{ github.sha }}
         run: |
-          ssh -i ~/.ssh/deploy_key -p "${PORT:-22}" -o IdentitiesOnly=yes \
-            -o StrictHostKeyChecking=yes \
-            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
-            "${USER}@${HOST}" \
-            "chmod +x /opt/nb-crm/deploy/hostinger-apply.sh && DEPLOY_SHA='${{ github.sha }}' sh /opt/nb-crm/deploy/hostinger-apply.sh"
+          set -euo pipefail
+          port="${PORT:-22}"
+          remote="${USER}@${HOST}"
+          # shellcheck disable=SC2086
+          ssh_cmd() { ssh -i "$HOME/.ssh/deploy_key" -p "$port" $SSH_OPTS "$remote" "$@"; }
+
+          log="/tmp/nb-crm-deploy-${DEPLOY_SHA}.log"
+          status="/tmp/nb-crm-deploy-${DEPLOY_SHA}.status"
+          pidf="/tmp/nb-crm-deploy-${DEPLOY_SHA}.pid"
+
+          # Detach apply so a mid-build SSH drop does not kill docker compose / npm ci.
+          ssh_cmd "chmod +x /opt/nb-crm/deploy/hostinger-apply.sh && \
+            rm -f '$status' && \
+            nohup env DEPLOY_SHA='$DEPLOY_SHA' sh -c \
+              \"sh /opt/nb-crm/deploy/hostinger-apply.sh >'$log' 2>&1; echo \\\$? >'$status'\" \
+              >/dev/null 2>&1 & echo \$! >'$pidf' && cat '$pidf'"
+
+          echo "Remote apply started (log=$log). Polling…"
+          # ~75 min of polling (keep under job timeout-minutes: 90)
+          for i in $(seq 1 150); do
+            # Short SSH probes — if one fails, retry a few times before giving up.
+            out=""
+            for attempt in 1 2 3; do
+              if out=$(ssh_cmd "\
+                if [ -f '$status' ]; then echo DONE:\$(cat '$status'); \
+                elif [ -f '$pidf' ] && kill -0 \"\$(cat '$pidf')\" 2>/dev/null; then echo RUNNING; \
+                else echo DEAD; fi; \
+                echo '---LOG---'; \
+                tail -n 40 '$log' 2>/dev/null || true"); then
+                break
+              fi
+              echo "poll SSH attempt $attempt failed; retrying…"
+              sleep 5
+              out=""
+            done
+            if [ -z "$out" ]; then
+              echo "ERROR: lost SSH to VPS while polling deploy"
+              exit 255
+            fi
+
+            echo "$out"
+            first=$(printf '%s\n' "$out" | head -1)
+            case "$first" in
+              DONE:0)
+                echo "Remote apply succeeded"
+                exit 0
+                ;;
+              DONE:*)
+                code=${first#DONE:}
+                echo "Remote apply failed with exit $code"
+                exit "${code:-1}"
+                ;;
+              DEAD)
+                echo "ERROR: remote apply process died without writing status"
+                exit 1
+                ;;
+              RUNNING) ;;
+              *)
+                echo "Unexpected poll status: $first"
+                ;;
+            esac
+            sleep 30
+          done
+          echo "ERROR: remote apply timed out"
+          exit 1

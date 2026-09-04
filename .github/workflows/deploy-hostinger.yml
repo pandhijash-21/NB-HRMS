@@ -352,24 +352,31 @@ jobs:
           set -euo pipefail
           port="${PORT:-22}"
           remote="${USER}@${HOST}"
+          # -n/-T: never wait on stdin/tty (avoids silent hangs in $(ssh …) polls)
           # shellcheck disable=SC2086
-          ssh_cmd() { ssh -i "$HOME/.ssh/deploy_key" -p "$port" $SSH_OPTS "$remote" "$@"; }
+          ssh_cmd() {
+            ssh -n -T -i "$HOME/.ssh/deploy_key" -p "$port" $SSH_OPTS \
+              -o BatchMode=yes \
+              -o ConnectTimeout=20 \
+              "$remote" "$@"
+          }
 
           log="/tmp/nb-crm-deploy-${DEPLOY_SHA}.log"
           status="/tmp/nb-crm-deploy-${DEPLOY_SHA}.status"
           pidf="/tmp/nb-crm-deploy-${DEPLOY_SHA}.pid"
 
+          echo "$(date -u +%H:%M:%S) starting remote apply (detached)…"
           # Detach apply so a mid-build SSH drop does not kill docker compose / npm ci.
-          ssh_cmd "chmod +x /opt/nb-crm/deploy/hostinger-apply.sh && \
+          start_out=$(ssh_cmd "chmod +x /opt/nb-crm/deploy/hostinger-apply.sh && \
             rm -f '$status' && \
             nohup env DEPLOY_SHA='$DEPLOY_SHA' sh -c \
               \"sh /opt/nb-crm/deploy/hostinger-apply.sh >'$log' 2>&1; echo \\\$? >'$status'\" \
-              >/dev/null 2>&1 & echo \$! >'$pidf' && cat '$pidf'"
+              >/dev/null 2>&1 & echo \$! >'$pidf' && cat '$pidf'")
+          echo "$(date -u +%H:%M:%S) remote pid=${start_out} log=${log}"
 
-          echo "Remote apply started (log=$log). Polling…"
           # ~75 min of polling (keep under job timeout-minutes: 90)
           for i in $(seq 1 150); do
-            # Short SSH probes — if one fails, retry a few times before giving up.
+            echo "$(date -u +%H:%M:%S) poll ${i}/150…"
             out=""
             for attempt in 1 2 3; do
               if out=$(ssh_cmd "\
@@ -377,10 +384,10 @@ jobs:
                 elif [ -f '$pidf' ] && kill -0 \"\$(cat '$pidf')\" 2>/dev/null; then echo RUNNING; \
                 else echo DEAD; fi; \
                 echo '---LOG---'; \
-                tail -n 40 '$log' 2>/dev/null || true"); then
+                tail -n 30 '$log' 2>/dev/null || echo '(log not ready yet)'"); then
                 break
               fi
-              echo "poll SSH attempt $attempt failed; retrying…"
+              echo "$(date -u +%H:%M:%S) poll SSH attempt ${attempt} failed; retrying…"
               sleep 5
               out=""
             done
@@ -405,12 +412,14 @@ jobs:
                 echo "ERROR: remote apply process died without writing status"
                 exit 1
                 ;;
-              RUNNING) ;;
+              RUNNING)
+                echo "(still building/applying on VPS)"
+                ;;
               *)
                 echo "Unexpected poll status: $first"
                 ;;
             esac
-            sleep 30
+            sleep 20
           done
           echo "ERROR: remote apply timed out"
           exit 1

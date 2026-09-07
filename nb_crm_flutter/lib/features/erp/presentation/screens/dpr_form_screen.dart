@@ -150,6 +150,29 @@ class _DprFormScreenState extends ConsumerState<DprFormScreen> {
     });
   }
 
+  Future<void> _fetchContractorResources(String? contractorId, DateTime date) async {
+    if (contractorId == null) {
+      setState(() {
+        _draftMaterials = [];
+        _draftMachines = [];
+      });
+      return;
+    }
+    try {
+      final res = await ref.read(dprRepositoryProvider).getContractorResources(contractorId, date: date);
+      final mats = (res['materials'] as List<ErpDprMaterialLine>?) ?? [];
+      final macs = (res['machines'] as List<ErpDprMachineLine>?) ?? [];
+      if (mounted) {
+        setState(() {
+          _draftMaterials = mats;
+          _draftMachines = macs;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching contractor resources for DPR: $e');
+    }
+  }
+
   Future<void> _pickDate({required void Function(DateTime) apply, DateTime? initial}) async {
     final picked = await showDatePicker(
       context: context,
@@ -494,16 +517,24 @@ class _DprFormScreenState extends ConsumerState<DprFormScreen> {
                           spacing: 12,
                           runSpacing: 12,
                           children: [
-                            SizedBox(
-                              width: 200,
-                              child: InkWell(
-                                onTap: () => _pickDate(apply: (d) => _reportDate = d, initial: _reportDate),
-                                child: InputDecorator(
-                                  decoration: _dec('Date'),
-                                  child: Text(_df.format(_reportDate)),
+                              SizedBox(
+                                width: 200,
+                                child: InkWell(
+                                  onTap: () => _pickDate(
+                                    apply: (d) {
+                                      _reportDate = d;
+                                      if (_contractorId != null) {
+                                        _fetchContractorResources(_contractorId, d);
+                                      }
+                                    },
+                                    initial: _reportDate,
+                                  ),
+                                  child: InputDecorator(
+                                    decoration: _dec('Date'),
+                                    child: Text(_df.format(_reportDate)),
+                                  ),
                                 ),
                               ),
-                            ),
                             SizedBox(
                               width: 320,
                               child: projectsAsync.when(
@@ -555,7 +586,10 @@ class _DprFormScreenState extends ConsumerState<DprFormScreen> {
                                       .where((c) => c.isActive)
                                       .map((c) => DropdownMenuItem(value: c.id, child: Text(c.name, overflow: TextOverflow.ellipsis)))
                                       .toList(),
-                                  onChanged: (v) => setState(() => _contractorId = v),
+                                  onChanged: (v) {
+                                    setState(() => _contractorId = v);
+                                    _fetchContractorResources(v, _reportDate);
+                                  },
                                 ),
                               ),
                               activitiesAsync.when(
@@ -775,16 +809,13 @@ class _DprFormScreenState extends ConsumerState<DprFormScreen> {
               const SizedBox(width: 8),
               _tabChip('Machinery', 2),
               const Spacer(),
-              FilledButton.icon(
-                onPressed: () {
-                  if (_resourceTab == 0) _addMaterialDialog();
-                  if (_resourceTab == 1) _addLabourDialog();
-                  if (_resourceTab == 2) _addMachineDialog();
-                },
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('Add'),
-                style: FilledButton.styleFrom(backgroundColor: const Color(0xFF1e3a5f)),
-              ),
+              if (_resourceTab == 1)
+                FilledButton.icon(
+                  onPressed: _addLabourDialog,
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Add Labour'),
+                  style: FilledButton.styleFrom(backgroundColor: const Color(0xFF1e3a5f)),
+                ),
             ],
           ),
           const SizedBox(height: 12),
@@ -888,7 +919,10 @@ class _DprFormScreenState extends ConsumerState<DprFormScreen> {
 
   Widget _machineTable() {
     if (_draftMachines.isEmpty) {
-      return const Padding(padding: EdgeInsets.all(12), child: Text('No machinery added for this task draft.'));
+      return const Padding(
+        padding: EdgeInsets.all(12),
+        child: Text('No machinery currently checked out by this contractor in Store.'),
+      );
     }
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -898,7 +932,8 @@ class _DprFormScreenState extends ConsumerState<DprFormScreen> {
           DataColumn(label: Text('NAME')),
           DataColumn(label: Text('BRAND')),
           DataColumn(label: Text('UOM')),
-          DataColumn(label: Text('CONSUMED QTY')),
+          DataColumn(label: Text('USAGE TYPE')),
+          DataColumn(label: Text('QTY IN USE')),
           DataColumn(label: Text('REMARKS')),
           DataColumn(label: Text('ACTION')),
         ],
@@ -910,6 +945,30 @@ class _DprFormScreenState extends ConsumerState<DprFormScreen> {
                 DataCell(Text(_draftMachines[i].itemName)),
                 DataCell(Text(_draftMachines[i].brand ?? '—')),
                 DataCell(Text(_draftMachines[i].unitCode ?? '—')),
+                DataCell(
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF7C3AED).withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.all_inclusive_rounded, size: 14, color: Color(0xFF7C3AED)),
+                        SizedBox(width: 4),
+                        Text(
+                          'Cumulative use',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF7C3AED),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
                 DataCell(Text(_draftMachines[i].consumedQty.toStringAsFixed(2))),
                 DataCell(Text(_draftMachines[i].remarks ?? '—')),
                 DataCell(IconButton(

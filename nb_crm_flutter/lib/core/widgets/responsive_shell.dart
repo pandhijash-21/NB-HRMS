@@ -204,6 +204,13 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
           section: 'ERP',
         ),
         const _Destination(
+          '/erp/store',
+          Icons.storefront_outlined,
+          Icons.storefront,
+          'Store',
+          section: 'ERP',
+        ),
+        const _Destination(
           '/erp/tenders',
           Icons.gavel_outlined,
           Icons.gavel,

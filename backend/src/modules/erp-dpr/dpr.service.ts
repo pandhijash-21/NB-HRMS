@@ -222,30 +222,14 @@ async function applyResourceConsumption(
   tx: Prisma.TransactionClient,
   lines: LineInput[],
   projectId: string,
-  userId?: string,
+  _userId?: string,
 ) {
   for (const line of lines) {
     for (const m of line.materials ?? []) {
       const qty = Number(m.consumedQty ?? 0);
       if (!m.materialId || qty <= 0) continue;
-      const mat = await tx.erpMaterial.findUnique({ where: { id: m.materialId } });
-      if (!mat) throw new Error(`Material not found: ${m.itemName}`);
-      if (Number(mat.qtyOnHand) < qty) {
-        throw new Error(`Insufficient stock for material "${mat.name}". Available: ${mat.qtyOnHand}`);
-      }
-      await tx.erpMaterial.update({
-        where: { id: m.materialId },
-        data: { qtyOnHand: { decrement: qty } },
-      });
-      await tx.erpMaterialStockLog.create({
-        data: {
-          materialId: m.materialId,
-          logType: 'CONSUMPTION',
-          quantity: new Prisma.Decimal(qty),
-          remarks: `DPR consumption${m.remarks ? `: ${m.remarks}` : ''}`,
-          createdBy: userId ?? null,
-        },
-      });
+      // Store outward already decremented qtyOnHand from Store inventory.
+      // We only update erpMaterialProjectUse to track cumulative usage against Project BOQ.
       await tx.erpMaterialProjectUse.upsert({
         where: { materialId_projectId: { materialId: m.materialId, projectId } },
         create: { materialId: m.materialId, projectId, qtyUsed: new Prisma.Decimal(qty) },
@@ -255,24 +239,7 @@ async function applyResourceConsumption(
     for (const m of line.machines ?? []) {
       const qty = Number(m.consumedQty ?? 0);
       if (!m.machineId || qty <= 0) continue;
-      const mac = await tx.erpMachine.findUnique({ where: { id: m.machineId } });
-      if (!mac) throw new Error(`Machine not found: ${m.itemName}`);
-      if (Number(mac.qtyOnHand) < qty) {
-        throw new Error(`Insufficient stock for machine "${mac.name}". Available: ${mac.qtyOnHand}`);
-      }
-      await tx.erpMachine.update({
-        where: { id: m.machineId },
-        data: { qtyOnHand: { decrement: qty } },
-      });
-      await tx.erpMachineStockLog.create({
-        data: {
-          machineId: m.machineId,
-          logType: 'CONSUMPTION',
-          quantity: new Prisma.Decimal(qty),
-          remarks: `DPR consumption${m.remarks ? `: ${m.remarks}` : ''}`,
-          createdBy: userId ?? null,
-        },
-      });
+      // Store equipment issue tracks in-use machines. We update erpMachineProjectUse for BOQ tracking.
       await tx.erpMachineProjectUse.upsert({
         where: { machineId_projectId: { machineId: m.machineId, projectId } },
         create: { machineId: m.machineId, projectId, qtyUsed: new Prisma.Decimal(qty) },
@@ -427,5 +394,121 @@ export const dprService = {
     await this.getById(id);
     await prisma.erpDpr.delete({ where: { id } });
     return { ok: true };
+  },
+
+  async getContractorResourcesForDpr(contractorId: string, dateStr?: string) {
+    if (!contractorId) throw new Error('Contractor ID is required');
+
+    const target = dateStr ? new Date(String(dateStr)) : new Date();
+    const localY = target.getFullYear();
+    const localM = target.getMonth();
+    const localD = target.getDate();
+    const dayStart = new Date(localY, localM, localD, 0, 0, 0, 0);
+    const dayEnd = new Date(localY, localM, localD, 23, 59, 59, 999);
+
+    const [materialLogs, activeIssues] = await Promise.all([
+      prisma.erpMaterialStockLog.findMany({
+        where: {
+          contractorId,
+          logType: 'CONSUMPTION',
+          createdAt: {
+            gte: new Date(dayStart.getTime() - 4 * 3600 * 1000),
+            lte: new Date(dayEnd.getTime() + 4 * 3600 * 1000),
+          },
+        },
+        include: {
+          material: true,
+        },
+        orderBy: { createdAt: 'asc' },
+      }),
+      prisma.erpMachineIssue.findMany({
+        where: {
+          contractorId,
+          status: { in: ['ACTIVE', 'PARTIALLY_RETURNED'] },
+          quantityInUse: { gt: 0 },
+          issueDate: { lte: dayEnd },
+        },
+        include: {
+          machine: true,
+        },
+        orderBy: { issueDate: 'asc' },
+      }),
+    ]);
+
+    // Aggregate materials by materialId
+    const materialMap = new Map<string, {
+      materialId: string;
+      itemCode: string | null;
+      category: string | null;
+      itemName: string;
+      brand: string | null;
+      unitCode: string | null;
+      size: string | null;
+      consumedQty: number;
+      remarks: string | null;
+    }>();
+
+    for (const log of materialLogs) {
+      const m = log.material;
+      const qty = Number(log.quantity);
+      const existing = materialMap.get(log.materialId);
+      if (existing) {
+        existing.consumedQty += qty;
+        if (log.remarks && !existing.remarks?.includes(log.remarks)) {
+          existing.remarks = existing.remarks ? `${existing.remarks}; ${log.remarks}` : log.remarks;
+        }
+      } else {
+        materialMap.set(log.materialId, {
+          materialId: m.id,
+          itemCode: null,
+          category: null,
+          itemName: m.name,
+          brand: m.brand,
+          unitCode: m.unitCode,
+          size: m.size,
+          consumedQty: qty,
+          remarks: log.remarks ?? 'Store outward dispatch',
+        });
+      }
+    }
+
+    // Aggregate machines by machineId
+    const machineMap = new Map<string, {
+      machineId: string;
+      itemName: string;
+      brand: string | null;
+      unitCode: string | null;
+      size: string | null;
+      consumedQty: number;
+      remarks: string;
+      isCumulative: boolean;
+    }>();
+
+    for (const issue of activeIssues) {
+      const mac = issue.machine;
+      const inUse = Number(issue.quantityInUse);
+      const taken = Number(issue.quantityTaken);
+      const existing = machineMap.get(issue.machineId);
+      if (existing) {
+        existing.consumedQty += inUse;
+        existing.remarks = `Cumulative use (Total in use: ${existing.consumedQty} ${mac.unitCode ?? 'units'})`;
+      } else {
+        machineMap.set(issue.machineId, {
+          machineId: mac.id,
+          itemName: mac.name,
+          brand: mac.brand,
+          unitCode: mac.unitCode,
+          size: mac.size,
+          consumedQty: inUse,
+          remarks: `Cumulative use (Taken: ${taken}, In use: ${inUse} ${mac.unitCode ?? 'units'})`,
+          isCumulative: true,
+        });
+      }
+    }
+
+    return {
+      materials: Array.from(materialMap.values()),
+      machines: Array.from(machineMap.values()),
+    };
   },
 };

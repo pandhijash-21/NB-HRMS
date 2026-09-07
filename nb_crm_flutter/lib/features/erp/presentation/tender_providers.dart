@@ -20,3 +20,19 @@ final tenderApplicationListProvider =
     FutureProvider.autoDispose<List<ErpTenderApplication>>((ref) async {
   return ref.watch(tenderRepositoryProvider).listApplications();
 });
+
+final approvedTenderApplicationsProvider =
+    FutureProvider.autoDispose.family<List<ErpTenderApplication>, String?>((ref, projectId) async {
+  return ref.watch(tenderRepositoryProvider).listApplications(
+    projectId: projectId,
+    status: 'APPROVED',
+  );
+});
+
+final allApprovedTenderApplicationsProvider =
+    FutureProvider.autoDispose<List<ErpTenderApplication>>((ref) async {
+  return ref.watch(tenderRepositoryProvider).listApplications(
+    status: 'APPROVED',
+  );
+});
+

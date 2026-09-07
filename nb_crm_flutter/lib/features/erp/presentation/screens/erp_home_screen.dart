@@ -73,6 +73,15 @@ class ErpHomeScreen extends ConsumerWidget {
             onTap: () => context.go('/erp/boq'),
           ),
           const SizedBox(height: 10),
+          _ErpTile(
+            icon: Icons.storefront_outlined,
+            title: 'Store',
+            subtitle: 'Material inward/outward inventory & machine equipment',
+            color: const Color(0xFF0d9488),
+            enabled: canReadWo,
+            onTap: () => context.go('/erp/store'),
+          ),
+          const SizedBox(height: 10),
           Text(
             'Tenders',
             style: TextStyle(

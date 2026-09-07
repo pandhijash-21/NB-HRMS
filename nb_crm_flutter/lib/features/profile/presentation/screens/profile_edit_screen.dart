@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/utils/platform_file_picker.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/mobile_input_formatter.dart';
 import '../../../../core/widgets/zoomable_photo.dart';
 import '../../../../core/utils/name_utils.dart';
 import '../../../admin/presentation/admin_notifier.dart';
@@ -1752,8 +1753,8 @@ class _EditAddressTabState extends ConsumerState<EditAddressTab> {
     ).text = (local?.country != null && local!.country!.trim().isNotEmpty)
         ? local.country!
         : 'India';
-    _c('l_phone').text = local?.phoneNo ?? '';
-    _c('l_mobile').text = local?.mobileNo ?? '';
+    _c('l_phone').text = cleanMobile10(local?.phoneNo);
+    _c('l_mobile').text = cleanMobile10(local?.mobileNo);
     _c('l_email').text = local?.personalEmail ?? '';
     _c('l_inst_email').text = local?.instituteEmail ?? '';
     _originalPersonalEmail = local?.personalEmail?.trim() ?? '';
@@ -1772,8 +1773,8 @@ class _EditAddressTabState extends ConsumerState<EditAddressTab> {
     ).text = (perm?.country != null && perm!.country!.trim().isNotEmpty)
         ? perm.country!
         : 'India';
-    _c('p_phone').text = perm?.phoneNo ?? '';
-    _c('p_mobile').text = perm?.mobileNo ?? '';
+    _c('p_phone').text = cleanMobile10(perm?.phoneNo);
+    _c('p_mobile').text = cleanMobile10(perm?.mobileNo);
 
     _sameAsLocal = _addressesMatch();
     if (_sameAsLocal) _copyLocalToPermanent();
@@ -3272,7 +3273,7 @@ class _FamilyMemberDialogState extends ConsumerState<FamilyMemberDialog> {
     final m = widget.member;
     _nameCtrl.text = m?.name ?? '';
     _cityCtrl.text = m?.city ?? '';
-    _mobileCtrl.text = m?.mobileNo ?? '';
+    _mobileCtrl.text = cleanMobile10(m?.mobileNo);
     _emailCtrl.text = m?.personalEmail ?? '';
     _aadhaarNoCtrl.text = m?.aadhaarNo ?? '';
     _employerCtrl.text = m?.employerName ?? '';
@@ -4818,6 +4819,11 @@ Widget _buildTextField(
   bool readOnly = false,
   String? hint,
 }) {
+  final isPhone = label.toLowerCase() == 'mobile' ||
+      label.toLowerCase() == 'phone' ||
+      label.toLowerCase() == 'phone number' ||
+      label.toLowerCase().contains('mobile no');
+
   return Builder(
     builder: (context) {
       final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -4826,10 +4832,17 @@ Widget _buildTextField(
         child: TextFormField(
           controller: controller,
           readOnly: readOnly,
-          keyboardType: isNumber ? TextInputType.number : TextInputType.text,
+          keyboardType: isPhone
+              ? TextInputType.phone
+              : isNumber
+                  ? TextInputType.number
+                  : TextInputType.text,
+          inputFormatters: isPhone ? mobileInputFormatters : null,
           decoration: InputDecoration(
             labelText: required ? '$label *' : label,
-            hintText: hint,
+            hintText: hint ?? (isPhone ? '10-digit number' : null),
+            prefixIcon: isPhone ? buildMobilePrefix(isDark: isDark) : null,
+            prefixIconConstraints: isPhone ? const BoxConstraints(minWidth: 0, minHeight: 0) : null,
             filled: readOnly,
             fillColor: readOnly
                 ? (isDark
@@ -4837,13 +4850,16 @@ Widget _buildTextField(
                       : Colors.grey.shade100)
                 : null,
           ),
-          validator: required
-              ? (v) {
-                  if (v == null || v.trim().isEmpty)
-                    return '$label is required';
-                  return null;
-                }
-              : null,
+          validator: (v) {
+            final trimmed = (v ?? '').trim();
+            if (required && trimmed.isEmpty) {
+              return '$label is required';
+            }
+            if (isPhone && trimmed.isNotEmpty && trimmed.length != 10) {
+              return '$label must be exactly 10 digits';
+            }
+            return null;
+          },
         ),
       );
     },

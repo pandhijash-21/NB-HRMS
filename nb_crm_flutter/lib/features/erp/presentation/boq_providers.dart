@@ -28,3 +28,19 @@ final erpMachinesProvider = FutureProvider.autoDispose<List<ErpMachine>>((ref) a
 final erpLabourProvider = FutureProvider.autoDispose<List<ErpLabour>>((ref) async {
   return ref.watch(boqRepositoryProvider).listLabour();
 });
+
+final materialStockLogsProvider =
+    FutureProvider.autoDispose.family<List<ErpMaterialStockLog>, String>((ref, id) async {
+  return ref.watch(boqRepositoryProvider).getMaterialLogs(id);
+});
+
+final activeMachineIssuesProvider =
+    FutureProvider.autoDispose<List<ErpMachineIssue>>((ref) async {
+  return ref.watch(boqRepositoryProvider).listActiveMachineIssues();
+});
+
+final machineLogsProvider =
+    FutureProvider.autoDispose.family<Map<String, dynamic>, String>((ref, id) async {
+  return ref.watch(boqRepositoryProvider).getMachineLogs(id);
+});
+

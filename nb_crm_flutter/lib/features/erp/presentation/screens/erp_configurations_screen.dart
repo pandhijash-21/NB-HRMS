@@ -94,22 +94,6 @@ class _ErpConfigurationsScreenState extends ConsumerState<ErpConfigurationsScree
                   .toList();
 
               final resourceTiles = [
-                if (_matches(['Materials', 'Stock', 'materials']))
-                  ConfigSquareItem(
-                    title: 'Materials',
-                    subtitle: 'Stock & logs',
-                    icon: Icons.inventory_2_outlined,
-                    color: const Color(0xFF0d9488),
-                    onTap: () => context.go('/erp/configurations/materials'),
-                  ),
-                if (_matches(['Machines', 'Equipment', 'machines']))
-                  ConfigSquareItem(
-                    title: 'Machines',
-                    subtitle: 'Equipment',
-                    icon: Icons.precision_manufacturing_outlined,
-                    color: const Color(0xFF7c3aed),
-                    onTap: () => context.go('/erp/configurations/machines'),
-                  ),
                 if (_matches(['Labour', 'Labor', 'rates', 'labour']))
                   ConfigSquareItem(
                     title: 'Labour',

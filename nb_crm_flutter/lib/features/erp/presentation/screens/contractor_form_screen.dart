@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/utils/platform_file_picker.dart';
+import '../../../../core/widgets/mobile_input_formatter.dart';
 import '../../../lookups/presentation/lookup_dropdown.dart';
 import '../../domain/contractor_lookup_keys.dart';
 import '../../domain/work_order_models.dart';
@@ -98,9 +99,9 @@ class _ContractorFormScreenState extends ConsumerState<ContractorFormScreen> {
 
   void _hydrate(ErpContractor c) {
     _nameCtrl.text = c.name;
-    _mobileCtrl.text = c.mobileNo ?? c.phone ?? '';
+    _mobileCtrl.text = cleanMobile10(c.mobileNo ?? c.phone);
     _emailCtrl.text = c.email ?? '';
-    _altMobileCtrl.text = c.alternateMobileNo ?? '';
+    _altMobileCtrl.text = cleanMobile10(c.alternateMobileNo);
     _bankCtrl.text = c.bankName ?? '';
     _branchCtrl.text = c.branchName ?? '';
     _ifscCtrl.text = c.ifscCode ?? '';
@@ -110,7 +111,14 @@ class _ContractorFormScreenState extends ConsumerState<ContractorFormScreen> {
     _contractorTypeCode = c.contractorTypeCode;
     _isActive = c.isActive;
     _locations = List.of(c.locations);
-    _contacts = c.contacts.isEmpty ? [const ErpContractorContact(name: '')] : List.of(c.contacts);
+    _contacts = c.contacts.isEmpty
+        ? [const ErpContractorContact(name: '')]
+        : c.contacts
+            .map((ct) => ct.copyWith(
+                  mobileNo: cleanMobile10(ct.mobileNo),
+                  alternateMobileNo: cleanMobile10(ct.alternateMobileNo),
+                ))
+            .toList();
     _documents = List.of(c.documents);
     _hydrated = true;
   }
@@ -352,19 +360,11 @@ class _ContractorFormScreenState extends ConsumerState<ContractorFormScreen> {
                       decoration: _dec('Company Name', required: true, hint: 'Enter Company Name'),
                       validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
                     ),
-                    TextFormField(
+                    MobileNumberFormField(
                       controller: _mobileCtrl,
-                      keyboardType: TextInputType.phone,
-                      decoration: _dec(
-                        'Mobile No',
-                        required: true,
-                        hint: 'Enter Mobile No',
-                        prefix: const Padding(
-                          padding: EdgeInsets.only(left: 12, top: 12),
-                          child: Text('+91', style: TextStyle(fontWeight: FontWeight.w600)),
-                        ),
-                      ),
-                      validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                      label: 'Mobile No',
+                      required: true,
+                      decoration: _dec('Mobile No', required: true),
                     ),
                     TextFormField(
                       controller: _emailCtrl,
@@ -372,17 +372,11 @@ class _ContractorFormScreenState extends ConsumerState<ContractorFormScreen> {
                       decoration: _dec('Email', required: true, hint: 'Enter Email'),
                       validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
                     ),
-                    TextFormField(
+                    MobileNumberFormField(
                       controller: _altMobileCtrl,
-                      keyboardType: TextInputType.phone,
-                      decoration: _dec(
-                        'Alternate Mobile No',
-                        hint: 'Alternate Mobile No',
-                        prefix: const Padding(
-                          padding: EdgeInsets.only(left: 12, top: 12),
-                          child: Text('+91', style: TextStyle(fontWeight: FontWeight.w600)),
-                        ),
-                      ),
+                      label: 'Alternate Mobile No',
+                      required: false,
+                      decoration: _dec('Alternate Mobile No'),
                     ),
                     lookupNullableDropdown(
                       ref: ref,
@@ -572,18 +566,19 @@ class _ContractorFormScreenState extends ConsumerState<ContractorFormScreen> {
                           decoration: _dec('Email', hint: 'Enter Email'),
                           onChanged: (v) => _contacts[i] = _contacts[i].copyWith(email: v),
                         ),
-                        TextFormField(
+                        MobileNumberFormField(
                           key: ValueKey('cmobile-$i'),
-                          initialValue: _contacts[i].mobileNo ?? '',
-                          decoration: _dec('Mobile No', hint: 'Enter Mobile No', prefix: const Padding(
-                            padding: EdgeInsets.only(left: 12, top: 12),
-                            child: Text('+91', style: TextStyle(fontWeight: FontWeight.w600)),
-                          )),
+                          initialValue: cleanMobile10(_contacts[i].mobileNo),
+                          label: 'Mobile No',
+                          required: false,
+                          decoration: _dec('Mobile No', hint: 'Enter Mobile No'),
                           onChanged: (v) => _contacts[i] = _contacts[i].copyWith(mobileNo: v),
                         ),
-                        TextFormField(
+                        MobileNumberFormField(
                           key: ValueKey('calt-$i'),
-                          initialValue: _contacts[i].alternateMobileNo ?? '',
+                          initialValue: cleanMobile10(_contacts[i].alternateMobileNo),
+                          label: 'Alternate Mobile',
+                          required: false,
                           decoration: _dec('Alternate Mobile', hint: 'Enter Alternate Mobile'),
                           onChanged: (v) => _contacts[i] = _contacts[i].copyWith(alternateMobileNo: v),
                         ),

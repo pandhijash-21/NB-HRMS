@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/widgets/mobile_input_formatter.dart';
 import '../../domain/crm_models.dart';
 import '../crm_providers.dart';
 
@@ -68,7 +69,7 @@ class _CrmSettingsScreenState extends ConsumerState<CrmSettingsScreen>
       _userIdController.text = settings.elisionUserId.isNotEmpty ? settings.elisionUserId : '634550';
       _didController.text = settings.elisionDid.isNotEmpty ? settings.elisionDid : '9484700070';
       _routeNumberController.text = settings.elisionRouteNumber.isNotEmpty ? settings.elisionRouteNumber : '98';
-      _defaultAgentController.text = settings.elisionDefaultAgentNumber.isNotEmpty ? settings.elisionDefaultAgentNumber : '8511139384';
+      _defaultAgentController.text = cleanMobile10(settings.elisionDefaultAgentNumber.isNotEmpty ? settings.elisionDefaultAgentNumber : '8511139384');
       _notInterestedDaysController.text = settings.notInterestedRetentionDays.toString();
       _binDaysController.text = settings.binRetentionDays.toString();
       _telephonyLoaded = true;
@@ -386,9 +387,11 @@ class _CrmSettingsScreenState extends ConsumerState<CrmSettingsScreen>
                       TextField(
                         controller: _defaultAgentController,
                         keyboardType: TextInputType.phone,
+                        inputFormatters: mobileInputFormatters,
                         decoration: InputDecoration(
-                          hintText: 'e.g. 9327056272',
-                          prefixIcon: const Icon(Icons.headset_mic_outlined, size: 20),
+                          hintText: '10-digit number',
+                          prefixIcon: buildMobilePrefix(isDark: isDark),
+                          prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                         ),
                       ),

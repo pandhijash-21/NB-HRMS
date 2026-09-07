@@ -35,6 +35,7 @@ class _TenderApplicationFormScreenState extends ConsumerState<TenderApplicationF
   bool _loadingTenders = false;
   bool _loadingActivities = false;
   bool _saving = false;
+  String _status = 'APPROVED';
 
   @override
   void initState() {
@@ -166,6 +167,7 @@ class _TenderApplicationFormScreenState extends ConsumerState<TenderApplicationF
         'activityId': _activityId,
         'activityName': _activityName,
         'contractorId': _contractorId,
+        'status': _status,
       });
       ref.invalidate(tenderApplicationListProvider);
       ref.invalidate(tenderListProvider);
@@ -324,6 +326,19 @@ class _TenderApplicationFormScreenState extends ConsumerState<TenderApplicationF
                                 );
                               },
                             ),
+                            DropdownButtonFormField<String>(
+                              isExpanded: true,
+                              value: _status,
+                              decoration: _dec('Status', required: true),
+                              items: const [
+                                DropdownMenuItem(value: 'APPROVED', child: Text('APPROVED')),
+                                DropdownMenuItem(value: 'SUBMITTED', child: Text('SUBMITTED')),
+                                DropdownMenuItem(value: 'UNDER_REVIEW', child: Text('UNDER REVIEW')),
+                                DropdownMenuItem(value: 'ACCEPTED', child: Text('ACCEPTED')),
+                                DropdownMenuItem(value: 'REJECTED', child: Text('REJECTED')),
+                              ],
+                              onChanged: (v) => setState(() => _status = v ?? 'APPROVED'),
+                            ),
                           ];
 
                           if (!wide) {
@@ -361,7 +376,7 @@ class _TenderApplicationFormScreenState extends ConsumerState<TenderApplicationF
                                   SizedBox(width: gap),
                                   Expanded(child: children[6]),
                                   SizedBox(width: gap),
-                                  const Expanded(child: SizedBox()),
+                                  Expanded(child: children[7]),
                                 ],
                               ),
                             ],

@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/utils/open_url.dart';
+import '../../../../core/widgets/mobile_input_formatter.dart';
 import '../../../auth/presentation/auth_providers.dart';
 import '../../domain/crm_models.dart';
 import '../crm_providers.dart';
@@ -2218,11 +2219,23 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
                             if (val != null) controllers[col.columnKey]?.text = val;
                           },
                         )
+                      else if (col.dataType == 'PHONE' || col.columnKey == 'phone' || col.label.toLowerCase().contains('phone') || col.label.toLowerCase().contains('mobile'))
+                        TextField(
+                          controller: controllers[col.columnKey],
+                          keyboardType: TextInputType.phone,
+                          inputFormatters: mobileInputFormatters,
+                          decoration: InputDecoration(
+                            hintText: '10-digit number',
+                            prefixIcon: buildMobilePrefix(isDark: Theme.of(context).brightness == Brightness.dark),
+                            prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+                            border: const OutlineInputBorder(),
+                          ),
+                        )
                       else
                         TextField(
                           controller: controllers[col.columnKey],
-                          keyboardType: col.dataType == 'NUMBER' || col.dataType == 'PHONE'
-                              ? TextInputType.phone
+                          keyboardType: col.dataType == 'NUMBER'
+                              ? TextInputType.number
                               : TextInputType.text,
                           decoration: InputDecoration(
                             hintText: 'Enter ${col.label.toLowerCase()}',
@@ -2269,9 +2282,9 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
                     '';
               }
 
-              if (phone.isEmpty) {
+              if (phone.isEmpty || phone.length != 10) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Phone number is required.')),
+                  const SnackBar(content: Text('Phone number must be exactly 10 digits.')),
                 );
                 return;
               }
@@ -2333,7 +2346,7 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
       final initialVal = col.columnKey == 'client_name' || col.columnKey == 'name'
           ? lead.name
           : (col.columnKey == 'phone'
-              ? lead.phone
+              ? cleanMobile10(lead.phone)
               : (lead.customFields[col.columnKey]?.toString() ?? ''));
       controllers[col.columnKey] = TextEditingController(text: initialVal);
     }
@@ -2454,16 +2467,32 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
                         children: [
                           Text(col.label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                           const SizedBox(height: 6),
-                          TextField(
-                            controller: controllers[col.columnKey],
-                            readOnly: isReadOnly,
-                            decoration: InputDecoration(
-                              hintText: 'Enter ${col.label.toLowerCase()}',
-                              border: const OutlineInputBorder(),
-                              filled: isReadOnly,
-                              fillColor: isReadOnly ? Colors.grey.withOpacity(0.08) : null,
+                          if (col.dataType == 'PHONE' || col.columnKey == 'phone' || col.label.toLowerCase().contains('phone') || col.label.toLowerCase().contains('mobile'))
+                            TextField(
+                              controller: controllers[col.columnKey],
+                              readOnly: isReadOnly,
+                              keyboardType: TextInputType.phone,
+                              inputFormatters: mobileInputFormatters,
+                              decoration: InputDecoration(
+                                hintText: '10-digit number',
+                                prefixIcon: buildMobilePrefix(isDark: Theme.of(context).brightness == Brightness.dark),
+                                prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+                                border: const OutlineInputBorder(),
+                                filled: isReadOnly,
+                                fillColor: isReadOnly ? Colors.grey.withOpacity(0.08) : null,
+                              ),
+                            )
+                          else
+                            TextField(
+                              controller: controllers[col.columnKey],
+                              readOnly: isReadOnly,
+                              decoration: InputDecoration(
+                                hintText: 'Enter ${col.label.toLowerCase()}',
+                                border: const OutlineInputBorder(),
+                                filled: isReadOnly,
+                                fillColor: isReadOnly ? Colors.grey.withOpacity(0.08) : null,
+                              ),
                             ),
-                          ),
                         ],
                       ),
                     );
@@ -2489,6 +2518,13 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
                     if (col.columnKey == 'phone') phone = val;
                     if (col.columnKey == 'client_name') name = val;
                     customFields[col.columnKey] = val;
+                  }
+
+                  if (phone.isNotEmpty && phone.length != 10) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Phone number must be exactly 10 digits.')),
+                    );
+                    return;
                   }
 
                   Navigator.pop(dialogCtx);

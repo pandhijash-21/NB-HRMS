@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../domain/company_profile.dart';
+import '../../../../core/widgets/mobile_input_formatter.dart';
 import '../../domain/org_models.dart';
 
 /// Owns its [TextEditingController]s and disposes them safely on unmount.
@@ -10,8 +10,8 @@ class CompanyProfileFormController {
     registrationNo = _c(initial?.registrationNo);
     establishmentYear = _c(initial?.establishmentYear?.toString());
     contactPerson = _c(initial?.contactPerson);
-    mobileNo = _c(initial?.mobileNo);
-    contactNo = _c(initial?.contactNo);
+    mobileNo = _c(cleanMobile10(initial?.mobileNo));
+    contactNo = _c(cleanMobile10(initial?.contactNo));
     email = _c(initial?.email);
     webAddress = _c(initial?.webAddress);
     panNo = _c(initial?.panNo);
@@ -99,8 +99,14 @@ class CompanyProfileFormController {
     req(city, 'City');
     req(address1, 'Address 1');
     req(pinCode, 'Pin Code');
-    if (missing.isEmpty) return null;
-    return 'Missing required fields: ${missing.join(', ')}';
+    if (missing.isNotEmpty) return 'Missing required fields: ${missing.join(', ')}';
+    if (mobileNo.text.trim().isNotEmpty && mobileNo.text.trim().length != 10) {
+      return 'Mobile No. must be exactly 10 digits';
+    }
+    if (contactNo.text.trim().isNotEmpty && contactNo.text.trim().length != 10) {
+      return 'Contact No. must be exactly 10 digits';
+    }
+    return null;
   }
 
   Map<String, dynamic> toPayload() {
@@ -172,8 +178,20 @@ class CompanyDetailsFormSections extends StatelessWidget {
         const SizedBox(height: 12),
         _sectionTitle('Contact', isDark),
         _field(controller.contactPerson, 'Contact Person *'),
-        _field(controller.mobileNo, 'Mobile No. *', keyboard: TextInputType.phone),
-        _field(controller.contactNo, 'Contact No.', keyboard: TextInputType.phone),
+        _field(
+          controller.mobileNo,
+          'Mobile No. *',
+          keyboard: TextInputType.phone,
+          inputFormatters: mobileInputFormatters,
+          prefixIcon: buildMobilePrefix(isDark: isDark),
+        ),
+        _field(
+          controller.contactNo,
+          'Contact No.',
+          keyboard: TextInputType.phone,
+          inputFormatters: mobileInputFormatters,
+          prefixIcon: buildMobilePrefix(isDark: isDark),
+        ),
         _field(controller.email, 'Email *', keyboard: TextInputType.emailAddress),
         _field(controller.webAddress, 'Web Address', keyboard: TextInputType.url),
         const SizedBox(height: 12),
@@ -229,6 +247,7 @@ class CompanyDetailsFormSections extends StatelessWidget {
     TextInputType? keyboard,
     int maxLines = 1,
     List<TextInputFormatter>? inputFormatters,
+    Widget? prefixIcon,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -242,6 +261,8 @@ class CompanyDetailsFormSections extends StatelessWidget {
           labelText: label,
           border: const OutlineInputBorder(),
           isDense: true,
+          prefixIcon: prefixIcon,
+          prefixIconConstraints: prefixIcon != null ? const BoxConstraints(minWidth: 0, minHeight: 0) : null,
         ),
       ),
     );

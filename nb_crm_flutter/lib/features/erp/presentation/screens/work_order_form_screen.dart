@@ -8,6 +8,7 @@ import '../../../lookups/presentation/lookup_dropdown.dart';
 import '../../domain/work_order_lookup_keys.dart';
 import '../../domain/work_order_models.dart';
 import '../project_providers.dart';
+import '../tender_providers.dart';
 import '../work_order_providers.dart';
 import '../widgets/work_details_editor.dart';
 
@@ -255,6 +256,7 @@ class _WorkOrderFormScreenState extends ConsumerState<WorkOrderFormScreen> {
     final contractorsAsync = ref.watch(erpContractorsProvider);
     final employeesAsync = ref.watch(projectEmployeesProvider);
     final configActivitiesAsync = ref.watch(erpActivitiesProvider);
+    final approvedTendersAsync = ref.watch(allApprovedTenderApplicationsProvider);
 
     if (widget.isEdit) {
       ref.watch(workOrderDetailProvider(widget.id!)).whenData(_hydrate);
@@ -351,13 +353,63 @@ class _WorkOrderFormScreenState extends ConsumerState<WorkOrderFormScreen> {
                                 onChanged: (v) => setState(() => _contractorId = v),
                               ),
                             ),
-                            TextFormField(
-                              controller: _tenderCtrl,
-                              readOnly: true,
-                              decoration: _dec('Tender', hint: 'Coming soon'),
-                              onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Tender module will be added later.')),
+                            approvedTendersAsync.when(
+                              loading: () => const LinearProgressIndicator(),
+                              error: (e, _) => DropdownButtonFormField<String>(
+                                isExpanded: true,
+                                decoration: _dec('Tender', hint: 'Error loading tenders'),
+                                items: const [],
+                                onChanged: null,
                               ),
+                              data: (allApps) {
+                                final projectApps = _projectId != null
+                                    ? allApps.where((a) => a.projectId == _projectId || a.tenderNo == _tenderCtrl.text).toList()
+                                    : allApps;
+                                final displayApps = projectApps.isNotEmpty ? projectApps : allApps;
+                                final currentVal = _tenderCtrl.text.trim().isNotEmpty ? _tenderCtrl.text.trim() : null;
+                                final matchingApp = displayApps.where((a) => (a.tenderNo ?? a.applicationNo) == currentVal).firstOrNull;
+
+                                return DropdownButtonFormField<String>(
+                                  isExpanded: true,
+                                  value: matchingApp != null ? (matchingApp.tenderNo ?? matchingApp.applicationNo) : currentVal,
+                                  decoration: _dec('Tender', hint: displayApps.isEmpty ? 'No approved tenders' : 'Select approved tender'),
+                                  items: [
+                                    if (currentVal != null && matchingApp == null)
+                                      DropdownMenuItem(
+                                        value: currentVal,
+                                        child: Text(currentVal, overflow: TextOverflow.ellipsis),
+                                      ),
+                                    ...displayApps.map((a) {
+                                      final val = a.tenderNo ?? a.applicationNo;
+                                      final title = [
+                                        if (a.tenderNo != null) a.tenderNo!,
+                                        a.applicationNo,
+                                        if (a.contractorName != null || a.vendorName.isNotEmpty)
+                                          '(${a.contractorName ?? a.vendorName})',
+                                      ].join(' · ');
+                                      return DropdownMenuItem(
+                                        value: val,
+                                        child: Text(title, overflow: TextOverflow.ellipsis),
+                                      );
+                                    }),
+                                  ],
+                                  onChanged: (selectedVal) {
+                                    if (selectedVal == null) return;
+                                    final selectedApp = displayApps.where((a) => (a.tenderNo ?? a.applicationNo) == selectedVal).firstOrNull;
+                                    setState(() {
+                                      _tenderCtrl.text = selectedVal;
+                                      if (selectedApp != null) {
+                                        if (selectedApp.projectId != null && selectedApp.projectId!.isNotEmpty) {
+                                          _projectId = selectedApp.projectId;
+                                        }
+                                        if (selectedApp.contractorId != null && selectedApp.contractorId!.isNotEmpty) {
+                                          _contractorId = selectedApp.contractorId;
+                                        }
+                                      }
+                                    });
+                                  },
+                                );
+                              },
                             ),
                             lookupDropdown(
                               ref: ref,

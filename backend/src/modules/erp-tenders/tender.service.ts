@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client';
+import { Prisma, ErpTenderApplicationStatus } from '@prisma/client';
 import { prisma } from '../../config/prisma';
 
 function str(v: unknown): string | null {
@@ -342,9 +342,19 @@ export const tenderService = {
   },
 
   // ── Applications ──────────────────────────────────────────────────────────
-  async listApplications(opts?: { tenderId?: string }) {
+  async listApplications(opts?: { tenderId?: string; projectId?: string; status?: string }) {
+    const statusFilter = opts?.status
+      ? opts.status.toUpperCase() === 'APPROVED'
+        ? { in: [ErpTenderApplicationStatus.APPROVED, ErpTenderApplicationStatus.ACCEPTED] }
+        : (opts.status as ErpTenderApplicationStatus)
+      : undefined;
+
     return prisma.erpTenderApplication.findMany({
-      where: opts?.tenderId ? { tenderId: opts.tenderId } : undefined,
+      where: {
+        ...(opts?.tenderId ? { tenderId: opts.tenderId } : {}),
+        ...(opts?.projectId ? { projectId: opts.projectId } : {}),
+        ...(statusFilter ? { status: statusFilter } : {}),
+      },
       orderBy: [{ createdAt: 'desc' }],
       include: applicationInclude,
     });
@@ -394,8 +404,8 @@ export const tenderService = {
         applicationDate: dateOnly(body.applicationDate) ?? todayUtc(),
         quotedAmount: dec(body.quotedAmount),
         status:
-          (str(body.status) as 'SUBMITTED' | 'UNDER_REVIEW' | 'ACCEPTED' | 'REJECTED' | null) ??
-          'SUBMITTED',
+          (str(body.status) as 'SUBMITTED' | 'UNDER_REVIEW' | 'ACCEPTED' | 'APPROVED' | 'REJECTED' | null) ??
+          'APPROVED',
         remarks: str(body.remarks),
         createdByName: str(body.createdByName),
         createdBy: userId ?? null,
@@ -448,12 +458,27 @@ export const tenderService = {
         ...(body.status != null
           ? {
               status:
-                (str(body.status) as 'SUBMITTED' | 'UNDER_REVIEW' | 'ACCEPTED' | 'REJECTED') ??
+                (str(body.status) as 'SUBMITTED' | 'UNDER_REVIEW' | 'ACCEPTED' | 'APPROVED' | 'REJECTED') ??
                 undefined,
             }
           : {}),
         ...(body.remarks !== undefined ? { remarks: str(body.remarks) } : {}),
         ...(body.createdByName !== undefined ? { createdByName: str(body.createdByName) } : {}),
+        updatedBy: userId ?? null,
+      },
+      include: applicationInclude,
+    });
+  },
+
+  async updateApplicationStatus(id: string, status: string, userId?: string) {
+    const s = str(status)?.toUpperCase();
+    if (!s || !['SUBMITTED', 'UNDER_REVIEW', 'ACCEPTED', 'APPROVED', 'REJECTED'].includes(s)) {
+      throw new Error('Invalid status');
+    }
+    return prisma.erpTenderApplication.update({
+      where: { id },
+      data: {
+        status: s as 'SUBMITTED' | 'UNDER_REVIEW' | 'ACCEPTED' | 'APPROVED' | 'REJECTED',
         updatedBy: userId ?? null,
       },
       include: applicationInclude,

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/network/api_envelope.dart';
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/widgets/header_action_button.dart';
+import '../../../../core/widgets/mobile_input_formatter.dart';
 import '../../../admin/domain/admin_models.dart';
 import '../../../admin/presentation/admin_notifier.dart';
 import '../../../auth/domain/permissions.dart';
@@ -1122,14 +1123,16 @@ class _ContactsEditorState extends State<_ContactsEditor> {
                             ),
                             const SizedBox(height: 8),
                             TextFormField(
-                              initialValue: _notes[m.key],
-                              decoration: const InputDecoration(
+                              initialValue: cleanMobile10(_notes[m.key]),
+                              decoration: InputDecoration(
                                 labelText: 'Contact number (optional)',
-                                hintText: 'e.g. +91 98765 43210',
-                                prefixIcon: Icon(Icons.phone_outlined, size: 18),
+                                hintText: '10-digit number',
+                                prefixIcon: buildMobilePrefix(isDark: Theme.of(context).brightness == Brightness.dark),
+                                prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
                                 isDense: true,
                               ),
                               keyboardType: TextInputType.phone,
+                              inputFormatters: mobileInputFormatters,
                               onChanged: (v) => _notes[m.key] = v,
                             ),
                           ],

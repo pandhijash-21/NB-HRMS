@@ -78,7 +78,9 @@ export const tenderApplicationRouter = Router();
 tenderApplicationRouter.get('/', requireAuth, requirePermission('WORK_ORDERS', 'READ'), async (req, res) => {
   try {
     const tenderId = String(req.query.tenderId ?? '') || undefined;
-    return res.json(ok(await tenderService.listApplications({ tenderId })));
+    const projectId = String(req.query.projectId ?? '') || undefined;
+    const status = String(req.query.status ?? '') || undefined;
+    return res.json(ok(await tenderService.listApplications({ tenderId, projectId, status })));
   } catch (e: unknown) {
     return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
   }
@@ -103,6 +105,15 @@ tenderApplicationRouter.post('/', requireAuth, requirePermission('WORK_ORDERS', 
 tenderApplicationRouter.patch('/:id', requireAuth, requirePermission('WORK_ORDERS', 'WRITE'), async (req: Request, res: Response) => {
   try {
     return res.json(ok(await tenderService.updateApplication(p(req.params.id), req.body ?? {}, req.user?.id)));
+  } catch (e: unknown) {
+    return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+  }
+});
+
+tenderApplicationRouter.patch('/:id/status', requireAuth, requirePermission('WORK_ORDERS', 'WRITE'), async (req: Request, res: Response) => {
+  try {
+    const status = String(req.body?.status ?? '');
+    return res.json(ok(await tenderService.updateApplicationStatus(p(req.params.id), status, req.user?.id)));
   } catch (e: unknown) {
     return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
   }

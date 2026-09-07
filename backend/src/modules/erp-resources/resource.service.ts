@@ -62,12 +62,42 @@ function withStockFields<T extends { id: string; qtyOnHand: Prisma.Decimal }>(
   };
 }
 
+async function machineInUseMap(): Promise<Map<string, number>> {
+  const activeIssues = await prisma.erpMachineIssue.findMany({
+    where: { status: { in: ['ACTIVE', 'PARTIALLY_RETURNED'] } },
+    select: { machineId: true, quantityInUse: true },
+  });
+  const map = new Map<string, number>();
+  for (const issue of activeIssues) {
+    const qty = Number(issue.quantityInUse) || 0;
+    map.set(issue.machineId, (map.get(issue.machineId) ?? 0) + qty);
+  }
+  return map;
+}
+
+function withMachineStockFields<T extends { id: string; qtyOnHand: Prisma.Decimal }>(
+  row: T,
+  boqUsed: number,
+  inUse: number,
+): T & { qtyTotal: number; qtyUsed: number; qtyInUse: number; qtyAvailable: number } {
+  const total = Number(row.qtyOnHand);
+  const totalUsed = boqUsed + inUse;
+  return {
+    ...row,
+    qtyTotal: total,
+    qtyInUse: inUse,
+    qtyUsed: totalUsed,
+    qtyAvailable: Math.max(0, total - inUse - boqUsed),
+  };
+}
+
 async function stockSummary(
   kind: 'material' | 'machine',
   projectId?: string,
 ) {
   const globalUsage = await boqUsageMaps();
   const projectUsage = projectId ? await boqUsageMaps(projectId) : null;
+  const inUseMap = kind === 'machine' ? await machineInUseMap() : new Map<string, number>();
 
   if (kind === 'material') {
     const rows = await prisma.erpMaterial.findMany({
@@ -97,11 +127,12 @@ async function stockSummary(
     },
   });
   return rows.map((m) => {
-    const used = globalUsage.machines.get(m.id) ?? 0;
-    const occupied = projectId ? (projectUsage?.machines.get(m.id) ?? 0) : used;
+    const boqUsed = globalUsage.machines.get(m.id) ?? 0;
+    const inUse = inUseMap.get(m.id) ?? 0;
+    const occupied = projectId ? (projectUsage?.machines.get(m.id) ?? 0) : boqUsed;
     return {
-      ...withStockFields(m, used),
-      qtyOccupiedOnProject: occupied,
+      ...withMachineStockFields(m, boqUsed, inUse),
+      qtyOccupiedOnProject: occupied + inUse,
     };
   });
 }
@@ -117,7 +148,11 @@ export const resourceService = {
       include: {
         activity: { select: { id: true, name: true } },
         subtask: { select: { id: true, name: true } },
-        stockLogs: { orderBy: { createdAt: 'desc' }, take: 5 },
+        stockLogs: {
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+          include: { contractor: { select: { id: true, name: true, phone: true } } },
+        },
       },
     });
     return rows.map((m) => withStockFields(m, usage.materials.get(m.id) ?? 0));
@@ -214,6 +249,72 @@ export const resourceService = {
     return material;
   },
 
+  async dispatchMaterialOutward(
+    id: string,
+    body: Record<string, unknown>,
+    userId?: string,
+  ) {
+    const qty = dec(body.quantity);
+    const numQty = Number(qty);
+    if (numQty <= 0) throw new Error('Quantity must be positive');
+    const contractorId = str(body.contractorId);
+    if (!contractorId) throw new Error('Contractor (used by) is required');
+
+    const contractor = await prisma.erpContractor.findUnique({
+      where: { id: contractorId },
+      select: { id: true, name: true },
+    });
+    if (!contractor) throw new Error('Contractor not found');
+
+    const material = await prisma.erpMaterial.findUniqueOrThrow({
+      where: { id },
+    });
+
+    const currentOnHand = Number(material.qtyOnHand);
+    const usage = await boqUsageMaps();
+    const boqUsed = usage.materials.get(id) ?? 0;
+    const available = Math.max(0, currentOnHand - boqUsed);
+
+    if (numQty > available) {
+      throw new Error(`Insufficient available stock. Requested: ${numQty}, Available: ${available}`);
+    }
+
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.erpMaterial.update({
+        where: { id },
+        data: { qtyOnHand: { decrement: qty } },
+      });
+
+      const log = await tx.erpMaterialStockLog.create({
+        data: {
+          materialId: id,
+          logType: 'CONSUMPTION',
+          quantity: qty,
+          contractorId: contractor.id,
+          contractorName: contractor.name,
+          remarks: str(body.remarks),
+          createdBy: userId ?? null,
+        },
+        include: {
+          contractor: { select: { id: true, name: true, phone: true } },
+        },
+      });
+
+      return { material: updated, log };
+    });
+  },
+
+  async getMaterialLogs(materialId: string) {
+    await prisma.erpMaterial.findUniqueOrThrow({ where: { id: materialId } });
+    return prisma.erpMaterialStockLog.findMany({
+      where: { materialId },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        contractor: { select: { id: true, name: true, phone: true } },
+      },
+    });
+  },
+
   async removeMaterial(id: string) {
     await prisma.erpMaterial.delete({ where: { id } });
     return { ok: true };
@@ -222,16 +323,35 @@ export const resourceService = {
   // ── Machines ────────────────────────────────────────────────────────────────
   async listMachines(opts?: { includeInactive?: boolean; projectId?: string }) {
     const usage = await boqUsageMaps();
+    const inUseMap = await machineInUseMap();
     const rows = await prisma.erpMachine.findMany({
       where: opts?.includeInactive ? undefined : { isActive: true },
       orderBy: [{ name: 'asc' }],
       include: {
         activity: { select: { id: true, name: true } },
         subtask: { select: { id: true, name: true } },
-        stockLogs: { orderBy: { createdAt: 'desc' }, take: 5 },
+        stockLogs: {
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+          include: { contractor: { select: { id: true, name: true, phone: true } } },
+        },
+        issues: {
+          where: { status: { in: ['ACTIVE', 'PARTIALLY_RETURNED'] } },
+          include: {
+            contractor: { select: { id: true, name: true, phone: true } },
+            returnLogs: { orderBy: { returnDate: 'desc' } },
+          },
+          orderBy: { issueDate: 'desc' },
+        },
       },
     });
-    return rows.map((m) => withStockFields(m, usage.machines.get(m.id) ?? 0));
+    return rows.map((m) =>
+      withMachineStockFields(
+        m,
+        usage.machines.get(m.id) ?? 0,
+        inUseMap.get(m.id) ?? 0,
+      ),
+    );
   },
 
   async machineStockSummary(projectId?: string) {
@@ -316,6 +436,187 @@ export const resourceService = {
       });
       return updated;
     });
+  },
+
+  async issueMachine(
+    id: string,
+    body: Record<string, unknown>,
+    userId?: string,
+  ) {
+    const qty = dec(body.quantity);
+    const numQty = Number(qty);
+    if (numQty <= 0) throw new Error('Quantity must be positive');
+    const contractorId = str(body.contractorId);
+    if (!contractorId) throw new Error('Contractor (Used by) is required');
+
+    const contractor = await prisma.erpContractor.findUnique({
+      where: { id: contractorId },
+      select: { id: true, name: true },
+    });
+    if (!contractor) throw new Error('Contractor not found');
+
+    const machine = await prisma.erpMachine.findUniqueOrThrow({
+      where: { id },
+    });
+
+    const currentOnHand = Number(machine.qtyOnHand);
+    const inUseMap = await machineInUseMap();
+    const inUse = inUseMap.get(id) ?? 0;
+    const usage = await boqUsageMaps();
+    const boqUsed = usage.machines.get(id) ?? 0;
+    const available = Math.max(0, currentOnHand - inUse - boqUsed);
+
+    if (numQty > available) {
+      throw new Error(`Cannot issue more than available machines (Requested: ${numQty}, Available: ${available})`);
+    }
+
+    const issueDate = body.issueDate ? new Date(String(body.issueDate)) : new Date();
+
+    return prisma.$transaction(async (tx) => {
+      const issue = await tx.erpMachineIssue.create({
+        data: {
+          machineId: id,
+          contractorId: contractor.id,
+          contractorName: contractor.name,
+          quantityTaken: qty,
+          quantityReturned: new Prisma.Decimal(0),
+          quantityInUse: qty,
+          issueDate,
+          status: 'ACTIVE',
+          remarks: str(body.remarks),
+          createdBy: userId ?? null,
+        },
+        include: {
+          contractor: { select: { id: true, name: true, phone: true } },
+        },
+      });
+
+      await tx.erpMachineStockLog.create({
+        data: {
+          machineId: id,
+          logType: 'CONSUMPTION',
+          quantity: qty,
+          contractorId: contractor.id,
+          contractorName: contractor.name,
+          remarks: `Issued to ${contractor.name}: ${numQty} ${machine.unitCode ?? 'units'}${body.remarks ? ` (${body.remarks})` : ''}`,
+          createdBy: userId ?? null,
+        },
+      });
+
+      return issue;
+    });
+  },
+
+  async returnMachine(
+    issueId: string,
+    body: Record<string, unknown>,
+    userId?: string,
+  ) {
+    const qty = dec(body.quantity);
+    const numQty = Number(qty);
+    if (numQty <= 0) throw new Error('Return quantity must be positive');
+
+    const issue = await prisma.erpMachineIssue.findUniqueOrThrow({
+      where: { id: issueId },
+      include: {
+        machine: true,
+        contractor: { select: { id: true, name: true } },
+      },
+    });
+
+    if (issue.status === 'RETURNED') {
+      throw new Error('This equipment issue is already fully returned');
+    }
+
+    const currentInUse = Number(issue.quantityInUse);
+    if (numQty > currentInUse) {
+      throw new Error(`Cannot return more than quantity currently in use (In use: ${currentInUse}, Returned: ${numQty})`);
+    }
+
+    const returnDate = body.returnDate ? new Date(String(body.returnDate)) : new Date();
+    const newReturned = Number(issue.quantityReturned) + numQty;
+    const newInUse = currentInUse - numQty;
+    const newStatus = newInUse <= 0 ? 'RETURNED' : 'PARTIALLY_RETURNED';
+
+    return prisma.$transaction(async (tx) => {
+      const returnLog = await tx.erpMachineReturnLog.create({
+        data: {
+          machineIssueId: issue.id,
+          machineId: issue.machineId,
+          contractorId: issue.contractorId,
+          quantityReturned: qty,
+          returnDate,
+          remarks: str(body.remarks),
+          createdBy: userId ?? null,
+        },
+      });
+
+      const updatedIssue = await tx.erpMachineIssue.update({
+        where: { id: issue.id },
+        data: {
+          quantityReturned: new Prisma.Decimal(newReturned),
+          quantityInUse: new Prisma.Decimal(newInUse),
+          status: newStatus,
+        },
+        include: {
+          contractor: { select: { id: true, name: true, phone: true } },
+          returnLogs: { orderBy: { returnDate: 'desc' } },
+        },
+      });
+
+      await tx.erpMachineStockLog.create({
+        data: {
+          machineId: issue.machineId,
+          logType: 'ADJUSTMENT',
+          quantity: qty,
+          contractorId: issue.contractorId,
+          contractorName: issue.contractorName,
+          remarks: `Returned by ${issue.contractorName}: ${numQty} ${issue.machine.unitCode ?? 'units'}${body.remarks ? ` (${body.remarks})` : ''}`,
+          createdBy: userId ?? null,
+        },
+      });
+
+      return { issue: updatedIssue, returnLog };
+    });
+  },
+
+  async listActiveMachineIssues(opts?: { contractorId?: string; machineId?: string }) {
+    return prisma.erpMachineIssue.findMany({
+      where: {
+        status: { in: ['ACTIVE', 'PARTIALLY_RETURNED'] },
+        quantityInUse: { gt: 0 },
+        ...(opts?.contractorId ? { contractorId: opts.contractorId } : {}),
+        ...(opts?.machineId ? { machineId: opts.machineId } : {}),
+      },
+      orderBy: { issueDate: 'desc' },
+      include: {
+        machine: { select: { id: true, name: true, brand: true, unitCode: true, size: true } },
+        contractor: { select: { id: true, name: true, phone: true } },
+        returnLogs: { orderBy: { returnDate: 'desc' } },
+      },
+    });
+  },
+
+  async getMachineLogs(machineId: string) {
+    await prisma.erpMachine.findUniqueOrThrow({ where: { id: machineId } });
+    const [issues, stockLogs] = await Promise.all([
+      prisma.erpMachineIssue.findMany({
+        where: { machineId },
+        orderBy: { issueDate: 'desc' },
+        include: {
+          contractor: { select: { id: true, name: true, phone: true } },
+          returnLogs: { orderBy: { returnDate: 'desc' } },
+        },
+      }),
+      prisma.erpMachineStockLog.findMany({
+        where: { machineId },
+        orderBy: { createdAt: 'desc' },
+        include: {
+          contractor: { select: { id: true, name: true, phone: true } },
+        },
+      }),
+    ]);
+    return { issues, stockLogs };
   },
 
   async removeMachine(id: string) {

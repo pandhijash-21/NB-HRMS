@@ -72,6 +72,35 @@ class BoqRepository {
     );
   }
 
+  Future<void> dispatchMaterialOutward(
+    String id, {
+    required double quantity,
+    required String contractorId,
+    String? remarks,
+  }) async {
+    await _dio.postEnvelope(
+      'erp/resources/materials/$id/outward',
+      data: {
+        'quantity': quantity,
+        'contractorId': contractorId,
+        if (remarks != null && remarks.isNotEmpty) 'remarks': remarks,
+      },
+      parse: (_) => true,
+    );
+  }
+
+  Future<List<ErpMaterialStockLog>> getMaterialLogs(String id) async {
+    return _dio.getEnvelope<List<ErpMaterialStockLog>>(
+      'erp/resources/materials/$id/logs',
+      parse: (raw) {
+        if (raw is! List) return [];
+        return raw
+            .map((e) => ErpMaterialStockLog.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList();
+      },
+    );
+  }
+
   Future<void> removeMaterial(String id) async {
     await _dio.deleteEnvelope('erp/resources/materials/$id', parse: (_) => true);
   }
@@ -100,6 +129,79 @@ class BoqRepository {
       'erp/resources/machines/$id/stock',
       data: body,
       parse: (raw) => ErpMachine.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
+  Future<void> issueMachine(
+    String id, {
+    required double quantity,
+    required String contractorId,
+    DateTime? issueDate,
+    String? remarks,
+  }) async {
+    await _dio.postEnvelope(
+      'erp/resources/machines/$id/issue',
+      data: {
+        'quantity': quantity,
+        'contractorId': contractorId,
+        if (issueDate != null) 'issueDate': issueDate.toIso8601String(),
+        if (remarks != null && remarks.isNotEmpty) 'remarks': remarks,
+      },
+      parse: (_) => true,
+    );
+  }
+
+  Future<void> returnMachine(
+    String issueId, {
+    required double quantity,
+    DateTime? returnDate,
+    String? remarks,
+  }) async {
+    await _dio.postEnvelope(
+      'erp/resources/machines/issues/$issueId/return',
+      data: {
+        'quantity': quantity,
+        if (returnDate != null) 'returnDate': returnDate.toIso8601String(),
+        if (remarks != null && remarks.isNotEmpty) 'remarks': remarks,
+      },
+      parse: (_) => true,
+    );
+  }
+
+  Future<List<ErpMachineIssue>> listActiveMachineIssues({String? contractorId, String? machineId}) async {
+    return _dio.getEnvelope<List<ErpMachineIssue>>(
+      'erp/resources/machines/issues/active',
+      queryParameters: {
+        if (contractorId != null && contractorId.isNotEmpty) 'contractorId': contractorId,
+        if (machineId != null && machineId.isNotEmpty) 'machineId': machineId,
+      },
+      parse: (raw) {
+        if (raw is! List) return [];
+        return raw
+            .map((e) => ErpMachineIssue.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList();
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> getMachineLogs(String id) async {
+    return _dio.getEnvelope<Map<String, dynamic>>(
+      'erp/resources/machines/$id/logs',
+      parse: (raw) {
+        if (raw is! Map) return {'issues': <ErpMachineIssue>[], 'stockLogs': <ErpMachineStockLog>[]};
+        final m = Map<String, dynamic>.from(raw);
+        final issues = m['issues'] is List
+            ? (m['issues'] as List)
+                .map((e) => ErpMachineIssue.fromJson(Map<String, dynamic>.from(e as Map)))
+                .toList()
+            : <ErpMachineIssue>[];
+        final stockLogs = m['stockLogs'] is List
+            ? (m['stockLogs'] as List)
+                .map((e) => ErpMachineStockLog.fromJson(Map<String, dynamic>.from(e as Map)))
+                .toList()
+            : <ErpMachineStockLog>[];
+        return {'issues': issues, 'stockLogs': stockLogs};
+      },
     );
   }
 

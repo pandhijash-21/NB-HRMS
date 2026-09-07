@@ -32,6 +32,39 @@ class DprRepository {
     );
   }
 
+  Future<Map<String, dynamic>> getContractorResources(
+    String contractorId, {
+    DateTime? date,
+  }) async {
+    return _dio.getEnvelope<Map<String, dynamic>>(
+      'dpr/contractor-resources',
+      queryParameters: {
+        'contractorId': contractorId,
+        if (date != null) 'date': date.toIso8601String(),
+      },
+      parse: (raw) {
+        if (raw is! Map) {
+          return {
+            'materials': <ErpDprMaterialLine>[],
+            'machines': <ErpDprMachineLine>[],
+          };
+        }
+        final m = Map<String, dynamic>.from(raw);
+        final materials = m['materials'] is List
+            ? (m['materials'] as List)
+                .map((e) => ErpDprMaterialLine.fromJson(Map<String, dynamic>.from(e as Map)))
+                .toList()
+            : <ErpDprMaterialLine>[];
+        final machines = m['machines'] is List
+            ? (m['machines'] as List)
+                .map((e) => ErpDprMachineLine.fromJson(Map<String, dynamic>.from(e as Map)))
+                .toList()
+            : <ErpDprMachineLine>[];
+        return {'materials': materials, 'machines': machines};
+      },
+    );
+  }
+
   Future<void> remove(String id) async {
     await _dio.deleteEnvelope('dpr/$id', parse: (_) => true);
   }

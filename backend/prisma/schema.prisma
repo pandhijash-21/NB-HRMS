@@ -2138,6 +2138,10 @@ model ErpContractor {
   documents  ErpContractorDocument[]
   tenderApplications ErpTenderApplication[]
   dprLines   ErpDprLine[]
+  materialStockLogs  ErpMaterialStockLog[]
+  machineStockLogs   ErpMachineStockLog[]
+  machineIssues      ErpMachineIssue[]
+  machineReturnLogs  ErpMachineReturnLog[]
 
   @@index([isActive, name])
   @@map("erp_contractors")
@@ -2447,17 +2451,21 @@ model ErpMaterialProjectUse {
 }
 
 model ErpMaterialStockLog {
-  id         String          @id @default(uuid())
-  materialId String          @map("material_id")
-  logType    ErpStockLogType @map("log_type")
-  quantity   Decimal         @db.Decimal(14, 4)
-  remarks    String?         @db.Text
-  createdBy  String?         @map("created_by")
-  createdAt  DateTime        @default(now()) @map("created_at")
+  id             String          @id @default(uuid())
+  materialId     String          @map("material_id")
+  logType        ErpStockLogType @map("log_type")
+  quantity       Decimal         @db.Decimal(14, 4)
+  contractorId   String?         @map("contractor_id")
+  contractorName String?         @map("contractor_name")
+  remarks        String?         @db.Text
+  createdBy      String?         @map("created_by")
+  createdAt      DateTime        @default(now()) @map("created_at")
 
-  material ErpMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  material   ErpMaterial    @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  contractor ErpContractor? @relation(fields: [contractorId], references: [id], onDelete: SetNull)
 
   @@index([materialId, createdAt])
+  @@index([contractorId])
   @@map("erp_material_stock_logs")
 }
 
@@ -2478,6 +2486,8 @@ model ErpMachine {
   subtask     ErpActivitySubtask?    @relation(fields: [subtaskId], references: [id], onDelete: SetNull)
   stockLogs   ErpMachineStockLog[]
   projectUses ErpMachineProjectUse[]
+  issues      ErpMachineIssue[]
+  returnLogs  ErpMachineReturnLog[]
 
   @@index([isActive, name])
   @@map("erp_machines")
@@ -2497,18 +2507,67 @@ model ErpMachineProjectUse {
 }
 
 model ErpMachineStockLog {
-  id        String          @id @default(uuid())
-  machineId String          @map("machine_id")
-  logType   ErpStockLogType @map("log_type")
-  quantity  Decimal         @db.Decimal(14, 4)
-  remarks   String?         @db.Text
-  createdBy String?         @map("created_by")
-  createdAt DateTime        @default(now()) @map("created_at")
+  id             String          @id @default(uuid())
+  machineId      String          @map("machine_id")
+  logType        ErpStockLogType @map("log_type")
+  quantity       Decimal         @db.Decimal(14, 4)
+  contractorId   String?         @map("contractor_id")
+  contractorName String?         @map("contractor_name")
+  remarks        String?         @db.Text
+  createdBy      String?         @map("created_by")
+  createdAt      DateTime        @default(now()) @map("created_at")
 
-  machine ErpMachine @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  machine    ErpMachine     @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  contractor ErpContractor? @relation(fields: [contractorId], references: [id], onDelete: SetNull)
 
   @@index([machineId, createdAt])
+  @@index([contractorId])
   @@map("erp_machine_stock_logs")
+}
+
+model ErpMachineIssue {
+  id               String   @id @default(uuid())
+  machineId        String   @map("machine_id")
+  contractorId     String   @map("contractor_id")
+  contractorName   String?  @map("contractor_name")
+  quantityTaken    Decimal  @map("quantity_taken") @db.Decimal(14, 4)
+  quantityReturned Decimal  @default(0) @map("quantity_returned") @db.Decimal(14, 4)
+  quantityInUse    Decimal  @default(0) @map("quantity_in_use") @db.Decimal(14, 4)
+  issueDate        DateTime @default(now()) @map("issue_date")
+  status           String   @default("ACTIVE") @map("status")
+  remarks          String?  @db.Text
+  createdBy        String?  @map("created_by")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  machine    ErpMachine            @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  contractor ErpContractor         @relation(fields: [contractorId], references: [id], onDelete: Cascade)
+  returnLogs ErpMachineReturnLog[]
+
+  @@index([machineId, status])
+  @@index([contractorId, status])
+  @@map("erp_machine_issues")
+}
+
+model ErpMachineReturnLog {
+  id               String   @id @default(uuid())
+  machineIssueId   String   @map("machine_issue_id")
+  machineId        String   @map("machine_id")
+  contractorId     String   @map("contractor_id")
+  quantityReturned Decimal  @map("quantity_returned") @db.Decimal(14, 4)
+  returnDate       DateTime @default(now()) @map("return_date")
+  remarks          String?  @db.Text
+  createdBy        String?  @map("created_by")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  issue      ErpMachineIssue @relation(fields: [machineIssueId], references: [id], onDelete: Cascade)
+  machine    ErpMachine      @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  contractor ErpContractor   @relation(fields: [contractorId], references: [id], onDelete: Cascade)
+
+  @@index([machineIssueId, returnDate])
+  @@index([machineId])
+  @@index([contractorId])
+  @@map("erp_machine_return_logs")
 }
 
 model ErpLabour {
@@ -2544,6 +2603,7 @@ enum ErpTenderApplicationStatus {
   SUBMITTED
   UNDER_REVIEW
   ACCEPTED
+  APPROVED
   REJECTED
 }
 

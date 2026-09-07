@@ -88,7 +88,15 @@ class TenderApplicationsScreen extends ConsumerWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                                ),
+                                const SizedBox(width: 8),
+                                _statusBadge(context, a.status),
+                              ],
+                            ),
                             const SizedBox(height: 6),
                             Text(
                               [
@@ -98,7 +106,6 @@ class TenderApplicationsScreen extends ConsumerWidget {
                                 if (a.projectName != null) a.projectName!,
                                 if (a.activityName != null) a.activityName!,
                                 df.format(a.applicationDate),
-                                a.status,
                               ].join(' · '),
                               style: TextStyle(
                                 fontSize: 13,
@@ -108,14 +115,38 @@ class TenderApplicationsScreen extends ConsumerWidget {
                           ],
                         ),
                       ),
-                      if (canWrite)
+                      if (canWrite) ...[
+                        PopupMenuButton<String>(
+                          icon: const Icon(Icons.more_vert, size: 20),
+                          tooltip: 'Change Status',
+                          onSelected: (newStatus) async {
+                            try {
+                              await ref.read(tenderRepositoryProvider).updateApplicationStatus(a.id, newStatus);
+                              ref.invalidate(tenderApplicationListProvider);
+                              ref.invalidate(allApprovedTenderApplicationsProvider);
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+                              }
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            const PopupMenuItem(value: 'APPROVED', child: Text('Mark Approved')),
+                            const PopupMenuItem(value: 'UNDER_REVIEW', child: Text('Mark Under Review')),
+                            const PopupMenuItem(value: 'ACCEPTED', child: Text('Mark Accepted')),
+                            const PopupMenuItem(value: 'REJECTED', child: Text('Mark Rejected')),
+                            const PopupMenuItem(value: 'SUBMITTED', child: Text('Mark Submitted')),
+                          ],
+                        ),
                         IconButton(
                           icon: const Icon(Icons.delete_outline),
                           onPressed: () async {
                             await ref.read(tenderRepositoryProvider).removeApplication(a.id);
                             ref.invalidate(tenderApplicationListProvider);
+                            ref.invalidate(allApprovedTenderApplicationsProvider);
                           },
                         ),
+                      ],
                     ],
                   ),
                 ),
@@ -123,6 +154,37 @@ class TenderApplicationsScreen extends ConsumerWidget {
             },
           );
         },
+      ),
+    );
+  }
+
+  Widget _statusBadge(BuildContext context, String status) {
+    final s = status.toUpperCase();
+    Color bg;
+    Color fg;
+    if (s == 'APPROVED' || s == 'ACCEPTED') {
+      bg = const Color(0xFFDCFCE7);
+      fg = const Color(0xFF166534);
+    } else if (s == 'REJECTED') {
+      bg = const Color(0xFFFEE2E2);
+      fg = const Color(0xFF991B1B);
+    } else if (s == 'UNDER_REVIEW') {
+      bg = const Color(0xFFFEF3C7);
+      fg = const Color(0xFF92400E);
+    } else {
+      bg = const Color(0xFFE0F2FE);
+      fg = const Color(0xFF075985);
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        s,
+        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: fg),
       ),
     );
   }

@@ -53,6 +53,22 @@ resourceRouter.post('/materials/:id/stock', requireAuth, requirePermission('WORK
   }
 });
 
+resourceRouter.post('/materials/:id/outward', requireAuth, requirePermission('WORK_ORDERS', 'WRITE'), async (req: Request, res: Response) => {
+  try {
+    return res.json(ok(await resourceService.dispatchMaterialOutward(p(req.params.id), req.body ?? {}, req.user?.id)));
+  } catch (e: unknown) {
+    return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+  }
+});
+
+resourceRouter.get('/materials/:id/logs', requireAuth, requirePermission('WORK_ORDERS', 'READ'), async (req: Request, res: Response) => {
+  try {
+    return res.json(ok(await resourceService.getMaterialLogs(p(req.params.id))));
+  } catch (e: unknown) {
+    return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+  }
+});
+
 resourceRouter.delete('/materials/:id', requireAuth, requirePermission('WORK_ORDERS', 'WRITE'), async (req: Request, res: Response) => {
   try {
     return res.json(ok(await resourceService.removeMaterial(p(req.params.id))));
@@ -83,6 +99,24 @@ resourceRouter.get('/machines/stock-summary', requireAuth, requirePermission('WO
   }
 });
 
+resourceRouter.get('/machines/issues/active', requireAuth, requirePermission('WORK_ORDERS', 'READ'), async (req, res) => {
+  try {
+    const contractorId = String(req.query.contractorId ?? '') || undefined;
+    const machineId = String(req.query.machineId ?? '') || undefined;
+    return res.json(ok(await resourceService.listActiveMachineIssues({ contractorId, machineId })));
+  } catch (e: unknown) {
+    return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+  }
+});
+
+resourceRouter.post('/machines/issues/:issueId/return', requireAuth, requirePermission('WORK_ORDERS', 'WRITE'), async (req: Request, res: Response) => {
+  try {
+    return res.json(ok(await resourceService.returnMachine(p(req.params.issueId), req.body ?? {}, req.user?.id)));
+  } catch (e: unknown) {
+    return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+  }
+});
+
 resourceRouter.post('/machines', requireAuth, requirePermission('WORK_ORDERS', 'WRITE'), async (req: Request, res: Response) => {
   try {
     return res.status(201).json(ok(await resourceService.createMachine(req.body ?? {}, req.user?.id)));
@@ -102,6 +136,22 @@ resourceRouter.patch('/machines/:id', requireAuth, requirePermission('WORK_ORDER
 resourceRouter.post('/machines/:id/stock', requireAuth, requirePermission('WORK_ORDERS', 'WRITE'), async (req: Request, res: Response) => {
   try {
     return res.json(ok(await resourceService.addMachineStock(p(req.params.id), req.body ?? {}, req.user?.id)));
+  } catch (e: unknown) {
+    return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+  }
+});
+
+resourceRouter.post('/machines/:id/issue', requireAuth, requirePermission('WORK_ORDERS', 'WRITE'), async (req: Request, res: Response) => {
+  try {
+    return res.json(ok(await resourceService.issueMachine(p(req.params.id), req.body ?? {}, req.user?.id)));
+  } catch (e: unknown) {
+    return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+  }
+});
+
+resourceRouter.get('/machines/:id/logs', requireAuth, requirePermission('WORK_ORDERS', 'READ'), async (req: Request, res: Response) => {
+  try {
+    return res.json(ok(await resourceService.getMachineLogs(p(req.params.id))));
   } catch (e: unknown) {
     return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
   }

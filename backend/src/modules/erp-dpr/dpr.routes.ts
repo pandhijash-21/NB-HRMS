@@ -17,6 +17,16 @@ dprRouter.get('/', requireAuth, requirePermission('WORK_ORDERS', 'READ'), async 
   }
 });
 
+dprRouter.get('/contractor-resources', requireAuth, requirePermission('WORK_ORDERS', 'READ'), async (req, res) => {
+  try {
+    const contractorId = String(req.query.contractorId ?? '');
+    const date = String(req.query.date ?? '') || undefined;
+    return res.json(ok(await dprService.getContractorResourcesForDpr(contractorId, date)));
+  } catch (e: unknown) {
+    return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed'));
+  }
+});
+
 dprRouter.get('/:id', requireAuth, requirePermission('WORK_ORDERS', 'READ'), async (req, res) => {
   try {
     return res.json(ok(await dprService.getById(p(req.params.id))));

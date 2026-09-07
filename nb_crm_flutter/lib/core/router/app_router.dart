@@ -84,8 +84,7 @@ import '../../features/erp/presentation/screens/contractors_config_screen.dart';
 import '../../features/erp/presentation/screens/contractor_form_screen.dart';
 import '../../features/erp/presentation/screens/boq_list_screen.dart';
 import '../../features/erp/presentation/screens/boq_form_screen.dart';
-import '../../features/erp/presentation/screens/materials_config_screen.dart';
-import '../../features/erp/presentation/screens/machines_config_screen.dart';
+import '../../features/erp/presentation/screens/store_config_screen.dart';
 import '../../features/erp/presentation/screens/labour_config_screen.dart';
 import '../../features/erp/presentation/screens/tender_list_screen.dart';
 import '../../features/erp/presentation/screens/tender_form_screen.dart';
@@ -466,12 +465,20 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             },
           ),
           GoRoute(
+            path: '/erp/store',
+            builder: (context, state) => const StoreConfigScreen(),
+          ),
+          GoRoute(
+            path: '/erp/configurations/store',
+            builder: (context, state) => const StoreConfigScreen(),
+          ),
+          GoRoute(
             path: '/erp/configurations/materials',
-            builder: (context, state) => const MaterialsConfigScreen(),
+            builder: (context, state) => const StoreConfigScreen(initialTab: 0),
           ),
           GoRoute(
             path: '/erp/configurations/machines',
-            builder: (context, state) => const MachinesConfigScreen(),
+            builder: (context, state) => const StoreConfigScreen(initialTab: 1),
           ),
           GoRoute(
             path: '/erp/configurations/labour',

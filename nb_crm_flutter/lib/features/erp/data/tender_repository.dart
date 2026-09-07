@@ -71,10 +71,18 @@ class TenderRepository {
     );
   }
 
-  Future<List<ErpTenderApplication>> listApplications({String? tenderId}) async {
+  Future<List<ErpTenderApplication>> listApplications({
+    String? tenderId,
+    String? projectId,
+    String? status,
+  }) async {
     return _dio.getEnvelope<List<ErpTenderApplication>>(
       'tender-applications',
-      queryParameters: tenderId != null ? {'tenderId': tenderId} : null,
+      queryParameters: {
+        if (tenderId != null && tenderId.isNotEmpty) 'tenderId': tenderId,
+        if (projectId != null && projectId.isNotEmpty) 'projectId': projectId,
+        if (status != null && status.isNotEmpty) 'status': status,
+      },
       parse: (raw) {
         if (raw is! List) return [];
         return raw
@@ -88,6 +96,14 @@ class TenderRepository {
     return _dio.postEnvelope<ErpTenderApplication>(
       'tender-applications',
       data: body,
+      parse: (raw) => ErpTenderApplication.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
+  Future<ErpTenderApplication> updateApplicationStatus(String id, String status) async {
+    return _dio.patchEnvelope<ErpTenderApplication>(
+      'tender-applications/$id/status',
+      data: {'status': status},
       parse: (raw) => ErpTenderApplication.fromJson(Map<String, dynamic>.from(raw as Map)),
     );
   }

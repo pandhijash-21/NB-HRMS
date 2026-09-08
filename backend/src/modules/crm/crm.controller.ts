@@ -378,11 +378,25 @@ export const crmController = {
 
   async handleTelephonyWebhook(req: Request, res: Response) {
     try {
+      console.log('[GREETER WEBHOOK RECEIVED]:', JSON.stringify({ body: req.body, query: req.query, headers: req.headers }, null, 2));
       const payload = { ...req.body, ...req.query };
       const result = await crmService.handleTelephonyWebhook(payload);
+      console.log('[GREETER WEBHOOK RESULT]:', result);
       res.json(result);
     } catch (err: any) {
+      console.error('[GREETER WEBHOOK ERROR]:', err);
       res.status(400).json({ status: 'error', message: err.message || 'Webhook processing failed' });
+    }
+  },
+
+  async streamCallAudio(req: Request, res: Response) {
+    try {
+      const id = String(req.params.id);
+      await crmService.streamCallAudio(id, req, res);
+    } catch (err: any) {
+      if (!res.headersSent) {
+        res.status(404).json({ status: 'error', message: err.message || 'Recording not found' });
+      }
     }
   },
 
@@ -392,6 +406,16 @@ export const crmController = {
       res.json(ok(logs));
     } catch (err: any) {
       res.status(500).json(fail(err.message || 'Failed to fetch call logs'));
+    }
+  },
+
+  async updateCallLog(req: Request, res: Response) {
+    try {
+      const id = String(req.params.id);
+      const log = await crmService.updateCallLog(id, req.body);
+      res.json(ok(log));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to update call log'));
     }
   },
 };

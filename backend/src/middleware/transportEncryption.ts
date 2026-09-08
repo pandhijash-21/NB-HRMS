@@ -12,6 +12,7 @@ const SKIP_PATHS = new Set(['/', '/health', '/vpn-gate']);
 function isPublicCrmWebhook(path: string): boolean {
   return (
     path === '/api/crm/telephony/webhook' ||
+    /^\/api\/crm\/telephony\/recordings\/[^/]+\/audio$/.test(path) ||
     /^\/api\/crm\/campaigns\/[^/]+\/webhook$/.test(path) ||
     /^\/api\/crm\/webhook\/[^/]+$/.test(path)
   );

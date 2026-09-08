@@ -1,3 +1,4 @@
+import type { Request, Response } from 'express';
 import { CrmLeadStatus } from '@prisma/client';
 import { prisma } from '../../config/prisma';
 import * as crypto from 'crypto';
@@ -1413,6 +1414,9 @@ export const crmService = {
 
     const duration = parseInt(
       String(
+        payload.AnsDur ||
+        payload.ansdur ||
+        payload.ans_dur ||
         payload.duration ||
         payload.talk_time ||
         payload.Duration ||
@@ -1427,9 +1431,13 @@ export const crmService = {
 
     let recordingUrl =
       payload.recording_url ||
+      payload.recording_path ||
+      payload.Recording_Path ||
+      payload.RecordingPath ||
+      payload.recording ||
+      payload.Recording ||
       payload.Audio_URL ||
       payload.audio_url ||
-      payload.recording ||
       payload.record_url ||
       payload.recording_file ||
       payload.record_file ||
@@ -1437,7 +1445,6 @@ export const crmService = {
       payload.RecordingUrl ||
       payload.filename ||
       payload.file_url ||
-      payload.recording_path ||
       payload.call_recording ||
       payload.rec_path ||
       payload.call_audio ||
@@ -1554,6 +1561,72 @@ export const crmService = {
     };
   },
 
+  async streamCallAudio(logId: string, req: Request, res: Response) {
+    const log = await prisma.crmCallLog.findUnique({
+      where: { id: logId },
+      select: { id: true, recordingUrl: true, customerNumber: true },
+    });
+
+    if (!log || !log.recordingUrl) {
+      return res.status(404).send('Recording not found');
+    }
+
+    let audioUrl = log.recordingUrl.trim();
+    if (!audioUrl.startsWith('http://') && !audioUrl.startsWith('https://')) {
+      if (audioUrl.startsWith('/')) {
+        audioUrl = `https://greeter.co.in${audioUrl}`;
+      } else {
+        audioUrl = `https://greeter.co.in/recordings/${audioUrl}`;
+      }
+    }
+
+
+    try {
+      const headers: Record<string, string> = {
+        'User-Agent': 'NB-CRM-Audio-Streamer/1.0',
+      };
+      if (req.headers.range) {
+        headers['Range'] = req.headers.range;
+      }
+
+      const upstreamRes = await fetch(audioUrl, {
+        method: 'GET',
+        headers,
+      });
+
+      const contentType = upstreamRes.headers.get('content-type') || 'audio/mpeg';
+
+      // If PBX returned HTML (such as 404 page or login redirect), do not stream as audio
+      if (contentType.includes('text/html')) {
+        return res.status(404).send('Audio recording file not found on PBX server');
+      }
+
+      res.status(upstreamRes.status);
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Accept-Ranges', 'bytes');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Headers', 'Range, Authorization, Content-Type');
+
+      const cl = upstreamRes.headers.get('content-length');
+      if (cl) res.setHeader('Content-Length', cl);
+      const cr = upstreamRes.headers.get('content-range');
+      if (cr) res.setHeader('Content-Range', cr);
+
+      if (upstreamRes.body) {
+        // @ts-ignore
+        const { Readable } = await import('stream');
+        // @ts-ignore
+        Readable.fromWeb(upstreamRes.body).pipe(res);
+      } else {
+        res.end();
+      }
+    } catch (err: any) {
+      if (!res.headersSent) {
+        res.status(502).send(`Error streaming recording: ${err.message}`);
+      }
+    }
+  },
+
   async getCallLogs(query: {
     leadId?: string;
     hasRecording?: boolean | string;
@@ -1632,6 +1705,32 @@ export const crmService = {
     });
 
     return logs;
+  },
+
+  async updateCallLog(
+    id: string,
+    data: {
+      recordingUrl?: string;
+      duration?: number;
+      callStatus?: string;
+    }
+  ) {
+    const updateData: any = {};
+    if (data.recordingUrl !== undefined) updateData.recordingUrl = data.recordingUrl;
+    if (data.duration !== undefined) updateData.duration = Number(data.duration);
+    if (data.callStatus !== undefined) updateData.callStatus = data.callStatus.toUpperCase();
+
+    const updated = await prisma.crmCallLog.update({
+      where: { id },
+      data: updateData,
+      include: {
+        lead: {
+          select: { id: true, name: true, phone: true, status: true },
+        },
+      },
+    });
+
+    return updated;
   },
 
   // ---------------------------------------------------------------------------

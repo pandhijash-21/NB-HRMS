@@ -413,6 +413,24 @@ class CrmRepository {
     );
   }
 
+  Future<CrmCallLog> updateCallLog(
+    String id, {
+    String? recordingUrl,
+    int? duration,
+    String? callStatus,
+  }) async {
+    final body = <String, dynamic>{};
+    if (recordingUrl != null) body['recordingUrl'] = recordingUrl;
+    if (duration != null) body['duration'] = duration;
+    if (callStatus != null) body['callStatus'] = callStatus;
+
+    return _dio.patchEnvelope<CrmCallLog>(
+      'crm/telephony/call-logs/$id',
+      data: body,
+      parse: (raw) => CrmCallLog.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // HRMS Employee Lookup for Sales Assignment
   // ---------------------------------------------------------------------------

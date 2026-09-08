@@ -14,6 +14,9 @@ export const crmRouter = Router();
 // Public Webhook for Greeter / Elision Call Logs (No auth required)
 crmRouter.post('/telephony/webhook', crmController.handleTelephonyWebhook);
 
+// Audio stream proxy for in-app call recording playback (supports browser audio elements)
+crmRouter.get('/telephony/recordings/:id/audio', crmController.streamCallAudio);
+
 // Public Webhook for Campaign Lead Ingestion (No auth required)
 crmRouter.get('/campaigns/:token/webhook', crmController.handleCampaignWebhookVerification);
 crmRouter.post('/campaigns/:token/webhook', crmController.handleCampaignWebhook);
@@ -50,6 +53,7 @@ crmRouter.get('/settings', requireCrmSubmodule('CRM_SETTINGS'), crmController.ge
 crmRouter.put('/settings', requireCrmSubmodule('CRM_SETTINGS'), crmController.updateSettings);
 crmRouter.post('/telephony/click-to-call', requireCrmSubmodule('CRM_SETTINGS'), crmController.clickToCall);
 crmRouter.get('/telephony/call-logs', requireCrmSubmodule('CRM_SETTINGS'), crmController.getCallLogs);
+crmRouter.patch('/telephony/call-logs/:id', requireCrmSubmodule('CRM_SETTINGS'), crmController.updateCallLog);
 
 // KPI Metrics & Dashboard
 crmRouter.get('/kpi', requireCrmSubmodule('CRM_DASHBOARD'), crmController.getKpiMetrics);

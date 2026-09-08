@@ -5,11 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/router/app_back_button.dart';
-import '../../../../core/utils/open_url.dart';
 import '../../../../core/widgets/mobile_input_formatter.dart';
 import '../../../auth/presentation/auth_providers.dart';
 import '../../domain/crm_models.dart';
 import '../crm_providers.dart';
+import '../widgets/crm_audio_player_dialog.dart';
 
 class CrmPreSalesScreen extends ConsumerStatefulWidget {
   const CrmPreSalesScreen({super.key});
@@ -1540,13 +1540,24 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
                                 ),
                               )
                             else
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: isDark ? Colors.white10 : Colors.black12,
-                                  borderRadius: BorderRadius.circular(6),
+                              InkWell(
+                                onTap: () => _showRecordingPlayerModal(context, log),
+                                borderRadius: BorderRadius.circular(6),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: isDark ? Colors.white10 : Colors.black12,
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.add_link_rounded, size: 14, color: textMuted),
+                                      const SizedBox(width: 4),
+                                      Text('Attach Audio', style: TextStyle(fontSize: 11, color: textMuted)),
+                                    ],
+                                  ),
                                 ),
-                                child: Text('No Audio', style: TextStyle(fontSize: 11, color: textMuted)),
                               ),
                           ],
                         ),
@@ -1574,75 +1585,7 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
   }
 
   void _showRecordingPlayerModal(BuildContext context, CrmCallLog log) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Row(
-          children: [
-            const Icon(Icons.mic_rounded, color: Color(0xFF16A34A)),
-            const SizedBox(width: 10),
-            Expanded(child: Text('Call Audio: ${log.customerNumber ?? 'Customer'}')),
-          ],
-        ),
-        content: Container(
-          constraints: const BoxConstraints(maxWidth: 460),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Call Date: ${_formatDateTime(log.callTime)}'),
-              const SizedBox(height: 4),
-              Text('Duration: ${_formatDuration(log.duration)} | Status: ${log.callStatus}'),
-              const SizedBox(height: 16),
-              const Text('Recording URL:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-              const SizedBox(height: 6),
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.black12,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: SelectableText(
-                        log.recordingUrl ?? '',
-                        style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.copy_rounded, size: 16),
-                      tooltip: 'Copy Audio URL',
-                      onPressed: () {
-                        Clipboard.setData(ClipboardData(text: log.recordingUrl ?? ''));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Audio URL copied to clipboard!')),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
-          if (log.recordingUrl != null && log.recordingUrl!.isNotEmpty)
-            ElevatedButton.icon(
-              onPressed: () {
-                openExternalUrl(log.recordingUrl!);
-              },
-              icon: const Icon(Icons.open_in_new_rounded, size: 16),
-              label: const Text('Open / Listen Recording'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF16A34A),
-                foregroundColor: Colors.white,
-              ),
-            ),
-        ],
-      ),
-    );
+    CrmAudioPlayerDialog.show(context, log);
   }
 
   String _formatDuration(int seconds) {

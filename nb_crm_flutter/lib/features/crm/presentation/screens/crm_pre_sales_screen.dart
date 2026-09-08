@@ -266,17 +266,61 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
                   return DropdownButtonFormField<String>(
                     isExpanded: true,
                     value: _selectedStatusFilter,
+                    dropdownColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
                     decoration: InputDecoration(
                       isDense: true,
                       contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                     ),
-                    items: const [
-                      DropdownMenuItem(value: 'ALL', child: Text('All Statuses', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13))),
-                      DropdownMenuItem(value: 'NOT_STARTED', child: Text('Not started', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13))),
-                      DropdownMenuItem(value: 'FOLLOW_UP', child: Text('Follow up', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13))),
-                      DropdownMenuItem(value: 'INTERESTED', child: Text('Interested', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13))),
-                      DropdownMenuItem(value: 'NOT_INTERESTED', child: Text('Not interested', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13))),
+                    items: [
+                      DropdownMenuItem(
+                        value: 'ALL',
+                        child: Text('All Statuses', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: isDark ? Colors.white : const Color(0xFF1E293B))),
+                      ),
+                      DropdownMenuItem(
+                        value: 'NOT_STARTED',
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(width: 8, height: 8, decoration: BoxDecoration(color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B), shape: BoxShape.circle)),
+                            const SizedBox(width: 8),
+                            Text('Not started', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: isDark ? Colors.white : const Color(0xFF1E293B))),
+                          ],
+                        ),
+                      ),
+                      DropdownMenuItem(
+                        value: 'FOLLOW_UP',
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(width: 8, height: 8, decoration: BoxDecoration(color: isDark ? const Color(0xFFFB923C) : const Color(0xFFEA580C), shape: BoxShape.circle)),
+                            const SizedBox(width: 8),
+                            Text('Follow up', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: isDark ? Colors.white : const Color(0xFF1E293B))),
+                          ],
+                        ),
+                      ),
+                      DropdownMenuItem(
+                        value: 'INTERESTED',
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(width: 8, height: 8, decoration: BoxDecoration(color: isDark ? const Color(0xFF4ADE80) : const Color(0xFF16A34A), shape: BoxShape.circle)),
+                            const SizedBox(width: 8),
+                            Text('Interested', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: isDark ? Colors.white : const Color(0xFF1E293B))),
+                          ],
+                        ),
+                      ),
+                      DropdownMenuItem(
+                        value: 'NOT_INTERESTED',
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(width: 8, height: 8, decoration: BoxDecoration(color: isDark ? const Color(0xFFF87171) : const Color(0xFFEF4444), shape: BoxShape.circle)),
+                            const SizedBox(width: 8),
+                            Text('Not interested', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: isDark ? Colors.white : const Color(0xFF1E293B))),
+                          ],
+                        ),
+                      ),
                     ],
                     onChanged: (val) {
                       if (val != null) {
@@ -691,26 +735,30 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
             : (isDark ? Colors.white.withOpacity(0.05) : const Color(0xFFF1F5F9)),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: isAssigned ? primaryColor.withOpacity(0.3) : Colors.transparent,
+          color: isAssigned
+              ? primaryColor.withOpacity(0.3)
+              : (isDark ? Colors.white.withOpacity(0.15) : const Color(0xFFCBD5E1)),
         ),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<int?>(
           value: selectedValue,
           isDense: true,
-          icon: Icon(Icons.arrow_drop_down_rounded, size: 18, color: isAssigned ? primaryColor : textMuted),
+          dropdownColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          icon: Icon(Icons.arrow_drop_down_rounded, size: 18, color: isAssigned ? primaryColor : (isDark ? Colors.white70 : textMuted)),
           hint: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.person_outline_rounded, size: 14, color: textMuted),
+              Icon(Icons.person_outline_rounded, size: 14, color: isDark ? Colors.white70 : textMuted),
               const SizedBox(width: 4),
-              Text('Unassigned', style: TextStyle(fontSize: 12, color: textMuted)),
+              Text('Unassigned', style: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : textMuted)),
             ],
           ),
           items: [
             DropdownMenuItem<int?>(
               value: null,
-              child: Text('Unassigned', style: TextStyle(fontSize: 12, color: textMuted)),
+              child: Text('Unassigned', style: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : textMuted)),
             ),
             ...uniqueUsers.values.map((u) {
               return DropdownMenuItem<int?>(
@@ -775,25 +823,32 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
   // Status Dropdown with Modal Triggers (With Telecaller Lock)
   // ---------------------------------------------------------------------------
   Widget _buildStatusDropdown(BuildContext context, CrmLead lead, bool canAlter) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     Color badgeBg;
     Color badgeFg;
+    Color badgeBorder;
 
     switch (lead.status) {
       case CrmStatus.notStarted:
-        badgeBg = Colors.grey.withOpacity(0.15);
-        badgeFg = Colors.grey.shade700;
+        badgeBg = isDark ? Colors.white.withOpacity(0.08) : const Color(0xFFF1F5F9);
+        badgeFg = isDark ? const Color(0xFFE2E8F0) : const Color(0xFF475569);
+        badgeBorder = isDark ? Colors.white.withOpacity(0.20) : const Color(0xFFCBD5E1);
         break;
       case CrmStatus.followUp:
-        badgeBg = const Color(0xFFEA580C).withOpacity(0.15);
-        badgeFg = const Color(0xFFEA580C);
+        badgeBg = const Color(0xFFEA580C).withOpacity(isDark ? 0.22 : 0.12);
+        badgeFg = isDark ? const Color(0xFFFB923C) : const Color(0xFFC2410C);
+        badgeBorder = const Color(0xFFEA580C).withOpacity(isDark ? 0.45 : 0.35);
         break;
       case CrmStatus.interested:
-        badgeBg = const Color(0xFF16A34A).withOpacity(0.15);
-        badgeFg = const Color(0xFF16A34A);
+        badgeBg = const Color(0xFF16A34A).withOpacity(isDark ? 0.22 : 0.12);
+        badgeFg = isDark ? const Color(0xFF4ADE80) : const Color(0xFF15803D);
+        badgeBorder = const Color(0xFF16A34A).withOpacity(isDark ? 0.45 : 0.35);
         break;
       case CrmStatus.notInterested:
-        badgeBg = const Color(0xFFEF4444).withOpacity(0.15);
-        badgeFg = const Color(0xFFEF4444);
+        badgeBg = const Color(0xFFEF4444).withOpacity(isDark ? 0.22 : 0.12);
+        badgeFg = isDark ? const Color(0xFFF87171) : const Color(0xFFB91C1C);
+        badgeBorder = const Color(0xFFEF4444).withOpacity(isDark ? 0.45 : 0.35);
         break;
     }
 
@@ -806,6 +861,7 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
           decoration: BoxDecoration(
             color: badgeBg,
             borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: badgeBorder, width: 1),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -827,19 +883,79 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
       decoration: BoxDecoration(
         color: badgeBg,
         borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: badgeBorder, width: 1),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<CrmStatus>(
           value: lead.status,
           isDense: true,
+          dropdownColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+          borderRadius: BorderRadius.circular(10),
           icon: Icon(Icons.arrow_drop_down_rounded, size: 18, color: badgeFg),
           style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: badgeFg),
+          selectedItemBuilder: (BuildContext ctx) {
+            return const [
+              CrmStatus.notStarted,
+              CrmStatus.followUp,
+              CrmStatus.interested,
+              CrmStatus.notInterested,
+            ].map((s) {
+              return Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  s.displayName,
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: badgeFg),
+                ),
+              );
+            }).toList();
+          },
           items: const [
-            DropdownMenuItem(value: CrmStatus.notStarted, child: Text('Not started')),
-            DropdownMenuItem(value: CrmStatus.followUp, child: Text('Follow up')),
-            DropdownMenuItem(value: CrmStatus.interested, child: Text('Interested')),
-            DropdownMenuItem(value: CrmStatus.notInterested, child: Text('Not interested')),
-          ],
+            CrmStatus.notStarted,
+            CrmStatus.followUp,
+            CrmStatus.interested,
+            CrmStatus.notInterested,
+          ].map((s) {
+            Color dotColor;
+            switch (s) {
+              case CrmStatus.notStarted:
+                dotColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+                break;
+              case CrmStatus.followUp:
+                dotColor = isDark ? const Color(0xFFFB923C) : const Color(0xFFEA580C);
+                break;
+              case CrmStatus.interested:
+                dotColor = isDark ? const Color(0xFF4ADE80) : const Color(0xFF16A34A);
+                break;
+              case CrmStatus.notInterested:
+                dotColor = isDark ? const Color(0xFFF87171) : const Color(0xFFEF4444);
+                break;
+            }
+            return DropdownMenuItem<CrmStatus>(
+              value: s,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: dotColor,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    s.displayName,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white : const Color(0xFF1E293B),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
           onChanged: (newStatus) {
             if (newStatus == null || newStatus == lead.status) return;
 

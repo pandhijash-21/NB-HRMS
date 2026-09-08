@@ -105,10 +105,17 @@ class AuthNotifier extends Notifier<AuthState> {
       final permissions = Permissions.mapFromJson(me['permissions']);
       final permsChanged = !Permissions.mapsEqual(permissions, state.permissions);
       final needsChanged = needs != state.needsEmailVerification && !state.isFirstLogin;
-      if (!permsChanged && !needsChanged) return;
+      final roleName = me['roleName'] as String?;
+      final roleChanged = roleName != null &&
+          roleName.trim().isNotEmpty &&
+          roleName.trim() != state.user?.role;
+      if (!permsChanged && !needsChanged && !roleChanged) return;
       state = state.copyWith(
         permissions: permsChanged ? permissions : state.permissions,
         needsEmailVerification: needsChanged ? needs : state.needsEmailVerification,
+        user: roleChanged && state.user != null
+            ? state.user!.copyWith(role: roleName.trim())
+            : state.user,
       );
       final repo = ref.read(authRepositoryProvider);
       final token = await ref.read(secureStorageProvider).readToken();

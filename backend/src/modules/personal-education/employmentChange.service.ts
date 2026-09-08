@@ -1,6 +1,7 @@
 import { prisma } from '../../config/prisma';
 import { resolveInstituteRef } from '../institute/institute.util';
 import { assignmentService } from './assignment.service';
+import { syncEmployeeRoleFromDesignation } from '../designation/designationRole.util';
 
 function toUtcDateOnly(d: Date | string) {
   const src = new Date(d);
@@ -141,7 +142,7 @@ export const employmentChangeService = {
   async designationUpgrade(params: { employeeId: number; newDesignation: string; effectiveFrom: Date | string; reason?: string | null; changedBy: string }) {
     const effectiveFrom = toUtcDateOnly(params.effectiveFrom);
 
-    return prisma.$transaction(async (tx) => {
+    const res = await prisma.$transaction(async (tx) => {
       const current = await tx.employeeAssignment.findFirst({
         where: { employeeId: params.employeeId, effectiveTo: null },
         orderBy: { effectiveFrom: 'desc' },
@@ -200,6 +201,13 @@ export const employmentChangeService = {
         employeeId: params.employeeId,
       };
     });
+
+    const today = toUtcDateOnly(new Date());
+    if (effectiveFrom <= today) {
+      await syncEmployeeRoleFromDesignation(params.employeeId, params.newDesignation, params.changedBy);
+    }
+
+    return res;
   },
 
   async resolveAssignmentIdForLeave(params: { employeeId: number; fromDate: Date }) {

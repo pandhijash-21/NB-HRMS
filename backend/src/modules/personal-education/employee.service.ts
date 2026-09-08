@@ -2,6 +2,7 @@ import { prisma } from '../../config/prisma';
 import type { EmployeeStatus } from '@prisma/client';
 import { resolveInstituteRef } from '../institute/institute.util';
 import { loadPositionMapByRoleId, resolveRoleIdForPosition, resolveRoleIdDirect } from '../designation/position.util';
+import { resolveOrCreateRoleForDesignation } from '../designation/designationRole.util';
 import { encryptPasswordForAdmin } from '../../utils/passwordCrypto';
 import { passwordFromBirthDate, parseBirthDateInput } from '../../utils/dobPassword';
 import bcrypt from 'bcryptjs';
@@ -114,11 +115,19 @@ export const employeeService = {
       subOrganization: input.subOrganization,
     });
 
-    const assignedRoleId = input.roleId
-      ? await resolveRoleIdDirect(input.roleId)
-      : await resolveRoleIdForPosition(input.positionDesignationId ?? null);
-
     return prisma.$transaction(async (tx) => {
+      const { role: matchedRole, designation: designationRef } =
+        await resolveOrCreateRoleForDesignation(tx, input.designation, creatorId);
+
+      let assignedRoleId: string;
+      if (input.roleId) {
+        assignedRoleId = await resolveRoleIdDirect(input.roleId);
+      } else if (input.positionDesignationId) {
+        assignedRoleId = await resolveRoleIdForPosition(input.positionDesignationId);
+      } else {
+        assignedRoleId = matchedRole.id;
+      }
+
       const tempUserId = `pending-${Math.random().toString(36).substring(2, 11)}`;
       const employee = await tx.employee.create({
         data: {
@@ -129,16 +138,12 @@ export const employeeService = {
         },
       });
 
-      const designationRef = await tx.designation.findFirst({
-        where: { name: input.designation, isAlias: false },
-      });
-
       await tx.employeeGeneralInfo.create({
         data: {
           employeeId: employee.id,
           fullName: input.fullName,
           designation: input.designation,
-          designationId: designationRef?.id ?? null,
+          designationId: designationRef.id,
           department: input.department,
           joiningDate: input.joiningDate,
           originalJoiningDate: input.joiningDate,

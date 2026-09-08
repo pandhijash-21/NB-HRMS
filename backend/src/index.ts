@@ -54,6 +54,13 @@ async function start() {
     console.warn('ERP module permission bootstrap skipped:', err);
   }
 
+  try {
+    const { syncAllEmployeeRolesWithDesignations } = require('./modules/designation/designationRole.util') as typeof import('./modules/designation/designationRole.util');
+    await syncAllEmployeeRolesWithDesignations();
+  } catch (err) {
+    console.warn('Designation role sync bootstrap skipped:', err);
+  }
+
   if (redisReady) {
     try {
       startLeaveCreditWorker();

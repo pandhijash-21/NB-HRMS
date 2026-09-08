@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
 import { redis, connectRedis } from '../config/redis';
 import { fail } from '../utils/response';
-import { permissionsForRole } from '../modules/auth/permissions-map';
+import { permissionsForRole, getLiveUserRole } from '../modules/auth/permissions-map';
 
 /** One active JWT per user id — newer login overwrites Redis and kicks older devices. */
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
@@ -36,6 +36,16 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       );
     }
 
+    let activeRoleId = String(decoded.roleId ?? '');
+    let activeRoleName = String(decoded.roleName ?? '');
+    try {
+      const liveUserRole = await getLiveUserRole(userId);
+      if (liveUserRole) {
+        activeRoleId = liveUserRole.roleId;
+        activeRoleName = liveUserRole.roleName;
+      }
+    } catch {}
+
     const jwtPermissions = (decoded.permissions as Record<string, string[]>) ?? {};
     let permissions = jwtPermissions;
     let employeeViewScope =
@@ -46,7 +56,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
         | 'UNIVERSITY'
         | undefined) ?? 'NONE';
     try {
-      const live = await permissionsForRole(String(decoded.roleId ?? ''));
+      const live = await permissionsForRole(activeRoleId);
       if (live) {
         permissions = live.permissions;
         employeeViewScope = live.employeeViewScope;
@@ -58,9 +68,9 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     req.user = {
       id: userId,
       employeeId: decoded.employeeId as number | null | undefined,
-      roleId: decoded.roleId as string,
-      roleName: decoded.roleName as string,
-      role: decoded.roleName as string,
+      roleId: activeRoleId,
+      roleName: activeRoleName,
+      role: activeRoleName,
       subOrganization: (decoded.subOrganization as string | null | undefined) ?? null,
       employeeViewScope,
       permissions,

@@ -1,6 +1,7 @@
 import { prisma } from '../../config/prisma';
 import { diffAndAudit } from './audit.helpers';
 import type { Request } from 'express';
+import { syncEmployeeRoleFromDesignation } from '../designation/designationRole.util';
 
 type GeneralInfoInput = {
   fullName?: string;
@@ -40,7 +41,7 @@ export const generalService = {
   },
 
   async create(employeeId: number, input: GeneralInfoInput, createdBy: string) {
-    return prisma.employeeGeneralInfo.create({
+    const created = await prisma.employeeGeneralInfo.create({
       data: {
         employeeId,
         fullName:             input.fullName!,
@@ -68,6 +69,12 @@ export const generalService = {
         updatedBy:            createdBy,
       },
     });
+
+    if (input.designation?.trim()) {
+      await syncEmployeeRoleFromDesignation(employeeId, input.designation.trim(), createdBy);
+    }
+
+    return created;
   },
 
   async update(employeeId: number, input: GeneralInfoInput, updatedBy: string, req: Request) {
@@ -91,6 +98,10 @@ export const generalService = {
       where: { employeeId },
       data,
     });
+
+    if (input.designation?.trim()) {
+      await syncEmployeeRoleFromDesignation(employeeId, input.designation.trim(), updatedBy);
+    }
 
     diffAndAudit(req, {
       tableName:  'employee_general_info',

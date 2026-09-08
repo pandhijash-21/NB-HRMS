@@ -65,3 +65,27 @@ export async function permissionsForRole(roleId: string): Promise<{
   rolePermCache.set(roleId, { at: Date.now(), perms, employeeViewScope });
   return { permissions: perms, employeeViewScope };
 }
+
+const userRoleCache = new Map<string, { roleId: string; roleName: string; at: number }>();
+const USER_ROLE_TTL_MS = 15_000;
+
+export function invalidateUserRoleCache(userId?: string) {
+  if (userId) userRoleCache.delete(userId);
+  else userRoleCache.clear();
+}
+
+/** Resolves live user role so designation/role switches apply immediately. */
+export async function getLiveUserRole(userId: string): Promise<{ roleId: string; roleName: string } | null> {
+  const hit = userRoleCache.get(userId);
+  if (hit && Date.now() - hit.at < USER_ROLE_TTL_MS) {
+    return { roleId: hit.roleId, roleName: hit.roleName };
+  }
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { roleId: true, role: { select: { name: true } } },
+  });
+  if (!user) return null;
+  const res = { roleId: user.roleId, roleName: user.role?.name ?? 'EMPLOYEE' };
+  userRoleCache.set(userId, { ...res, at: Date.now() });
+  return res;
+}

@@ -5,6 +5,8 @@ import { resolveInstituteRef } from '../institute/institute.util';
 import { encryptPasswordForAdmin } from '../../utils/passwordCrypto';
 import { grantFullUniversityAccess } from '../user-management/universityAccess.util';
 import { passwordPolicyIssue } from '../../utils/passwordPolicy';
+import { invalidateRoleSessions } from '../user-management/permission.service';
+import { invalidateRolePermissionCache } from '../auth/permissions-map';
 
 function slugify(name: string): string {
   return name
@@ -135,12 +137,11 @@ export const designationService = {
     if (data.name) updateData.slug = slugify(data.name);
 
     const roleChanged =
-      current.isAlias &&
       data.linkedRoleId !== undefined &&
       data.linkedRoleId !== current.linkedRoleId &&
       data.linkedRoleId !== null;
 
-    return prisma.$transaction(async (tx) => {
+    const res = await prisma.$transaction(async (tx) => {
       const updated = await tx.designation.update({
         where: { id },
         data: updateData,
@@ -148,25 +149,55 @@ export const designationService = {
       });
 
       if (roleChanged && data.linkedRoleId) {
-        const slots = await tx.positionSlot.findMany({
-          where: { designationId: id },
-          select: { id: true, userId: true },
-        });
-        await tx.positionSlot.updateMany({
-          where: { designationId: id },
-          data: { linkedRoleId: data.linkedRoleId },
-        });
-        const userIds = slots.map((s) => s.userId).filter((uid): uid is string => !!uid);
-        if (userIds.length) {
-          await tx.user.updateMany({
-            where: { id: { in: userIds } },
-            data: { roleId: data.linkedRoleId },
+        if (current.isAlias) {
+          const slots = await tx.positionSlot.findMany({
+            where: { designationId: id },
+            select: { id: true, userId: true },
           });
+          await tx.positionSlot.updateMany({
+            where: { designationId: id },
+            data: { linkedRoleId: data.linkedRoleId },
+          });
+          const userIds = slots.map((s) => s.userId).filter((uid): uid is string => !!uid);
+          if (userIds.length) {
+            await tx.user.updateMany({
+              where: { id: { in: userIds } },
+              data: { roleId: data.linkedRoleId },
+            });
+          }
+        } else {
+          // Standard job designation: update all employees holding this designation
+          const emps = await tx.employee.findMany({
+            where: {
+              OR: [
+                { generalInfo: { designationId: id } },
+                { generalInfo: { designation: current.name } },
+              ],
+              user: { isNot: null },
+            },
+            select: { user: { select: { id: true } } },
+          });
+          const empUserIds = emps.map((e) => e.user?.id).filter((uid): uid is string => !!uid);
+          if (empUserIds.length) {
+            await tx.user.updateMany({
+              where: { id: { in: empUserIds } },
+              data: { roleId: data.linkedRoleId },
+            });
+          }
         }
       }
 
       return updated;
     });
+
+    if (roleChanged && data.linkedRoleId) {
+      invalidateRolePermissionCache(data.linkedRoleId);
+      if (current.linkedRoleId) invalidateRolePermissionCache(current.linkedRoleId);
+      await invalidateRoleSessions(data.linkedRoleId);
+      if (current.linkedRoleId) await invalidateRoleSessions(current.linkedRoleId);
+    }
+
+    return res;
   },
 
   async remove(id: string) {

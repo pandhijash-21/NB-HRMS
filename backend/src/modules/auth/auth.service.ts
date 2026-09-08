@@ -342,7 +342,7 @@ export const authService = {
     const personalPerm = dbUser?.role?.permissions.find((p) => p.moduleKey === 'PERSONAL_INFO');
     return {
       employeeId: user.employeeId,
-      roleId: user.roleId,
+      roleId: dbUser?.roleId ?? user.roleId,
       roleName: dbUser?.role?.name ?? user.roleName,
       permissions,
       employeeViewScope: personalPerm?.employeeViewScope ?? user.employeeViewScope ?? 'NONE',

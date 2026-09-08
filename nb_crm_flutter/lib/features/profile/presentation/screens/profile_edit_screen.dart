@@ -11,7 +11,6 @@ import '../../../admin/presentation/admin_notifier.dart';
 import '../../../admin/domain/admin_models.dart';
 import '../../../admin/presentation/widgets/hr_employment_change_actions.dart';
 import '../../../auth/presentation/auth_providers.dart';
-import '../../../auth/presentation/auth_notifier.dart';
 import '../../../org/presentation/org_providers.dart';
 import '../../../org/domain/org_models.dart';
 import '../../../salary/domain/salary_models.dart';
@@ -39,20 +38,6 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen>
     with SingleTickerProviderStateMixin {
   TabController? _tabController;
   int _tabCount = 0;
-
-  List<String> get _tabs => const [
-    'General',
-    'Personal',
-    'Address',
-    'Other',
-    'Family',
-    'Academic',
-    'Experience',
-    'Documents',
-    'Bank',
-    'Salary',
-    'Attendance',
-  ];
 
   void _syncTabController(int count) {
     if (_tabController != null && _tabCount == count) return;
@@ -111,89 +96,113 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen>
           authState.user?.role,
         ) &&
         (sessionEmployeeId == null || widget.employeeId != sessionEmployeeId);
-    final tabs = _tabs;
-    _syncTabController(tabs.length);
-    final tabController = _tabController!;
+    final canReadBank = Permissions.isAdmin(authState.user?.role) ||
+        Permissions.canReadBank(authState.permissions, authState.user?.role);
+    final canReadAcademic = Permissions.isAdmin(authState.user?.role) ||
+        Permissions.canReadEducation(authState.permissions, authState.user?.role);
+    final canReadExperience = Permissions.isAdmin(authState.user?.role) ||
+        Permissions.canReadExperience(authState.permissions, authState.user?.role);
+    final canReadSalary = Permissions.isAdmin(authState.user?.role) ||
+        Permissions.canReadSalary(authState.permissions);
+    final canReadDocs = Permissions.isAdmin(authState.user?.role) ||
+        Permissions.canReadDocuments(authState.permissions);
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: AppBar(
-        title: Text('Edit Profile'),
-        bottom: TabBar(
-          controller: tabController,
-          isScrollable: true,
-          indicatorColor: isDark
-              ? Theme.of(context).colorScheme.primary
-              : Colors.black,
-          labelColor: isDark
-              ? Theme.of(context).colorScheme.primary
-              : Colors.black,
-          unselectedLabelColor: isDark
-              ? Colors.white70
-              : const Color(0xFF607D8B),
-          labelStyle: const TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: 13,
-            letterSpacing: 0.3,
-          ),
-          unselectedLabelStyle: const TextStyle(
-            fontWeight: FontWeight.w500,
-            fontSize: 13,
-          ),
-          tabs: tabs.map((tab) => Tab(text: tab)).toList(),
-        ),
-      ),
-      body: profileAsyncVal.when(
-        data: (profile) => TabBarView(
-          controller: tabController,
-          children: [
-            EditGeneralTab(profile: profile, isPrivileged: isPrivileged),
-            EditPersonalTab(profile: profile, isPrivileged: isPrivileged),
-            EditAddressTab(
-              key: ValueKey('edit-address-${profile.id}'),
-              profile: profile,
-              isPrivileged: isPrivileged,
-            ),
-            EditOtherTab(profile: profile, isPrivileged: isPrivileged),
-            EditFamilyTab(profile: profile),
-            EditAcademicTab(profile: profile),
-            EditExperienceTab(employeeId: targetEmployeeId),
-            DocumentsViewTab(
+    return profileAsyncVal.when(
+      data: (profile) {
+        final tabItems = <(String, Widget)>[
+          ('General', EditGeneralTab(profile: profile, isPrivileged: isPrivileged)),
+          ('Personal', EditPersonalTab(profile: profile, isPrivileged: isPrivileged)),
+          ('Address', EditAddressTab(
+            key: ValueKey('edit-address-${profile.id}'),
+            profile: profile,
+            isPrivileged: isPrivileged,
+          )),
+          ('Other', EditOtherTab(profile: profile, isPrivileged: isPrivileged)),
+          ('Family', EditFamilyTab(profile: profile)),
+          if (canReadAcademic)
+            ('Academic', EditAcademicTab(profile: profile)),
+          if (canReadExperience)
+            ('Experience', EditExperienceTab(employeeId: targetEmployeeId)),
+          if (canReadDocs)
+            ('Documents', DocumentsViewTab(
               profile: profile,
               canManageLetters: Permissions.canManageLetters(
                 authState.permissions,
                 authState.user?.role,
               ),
+            )),
+          if (canReadBank)
+            ('Bank', EditBankTab(profile: profile, isPrivileged: isPrivileged)),
+          if (canReadSalary)
+            ('Salary', EditSalaryTab(profile: profile, isPrivileged: isPrivileged)),
+          ('Attendance', EmployeeAttendanceTab(
+            employeeId: targetEmployeeId,
+            canManageSettings: isAdminEditingEmployee,
+          )),
+        ];
+        _syncTabController(tabItems.length);
+        final tabController = _tabController!;
+
+        return Scaffold(
+          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+          appBar: AppBar(
+            title: const Text('Edit Profile'),
+            bottom: TabBar(
+              controller: tabController,
+              isScrollable: true,
+              indicatorColor: isDark
+                  ? Theme.of(context).colorScheme.primary
+                  : Colors.black,
+              labelColor: isDark
+                  ? Theme.of(context).colorScheme.primary
+                  : Colors.black,
+              unselectedLabelColor: isDark
+                  ? Colors.white70
+                  : const Color(0xFF607D8B),
+              labelStyle: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+                letterSpacing: 0.3,
+              ),
+              unselectedLabelStyle: const TextStyle(
+                fontWeight: FontWeight.w500,
+                fontSize: 13,
+              ),
+              tabs: tabItems.map((item) => Tab(text: item.$1)).toList(),
             ),
-            EditBankTab(profile: profile, isPrivileged: isPrivileged),
-            EditSalaryTab(profile: profile, isPrivileged: isPrivileged),
-            EmployeeAttendanceTab(
-              employeeId: targetEmployeeId,
-              canManageSettings: isAdminEditingEmployee,
-            ),
-          ],
-        ),
-        loading: () => Center(
+          ),
+          body: TabBarView(
+            controller: tabController,
+            children: tabItems.map((item) => item.$2).toList(),
+          ),
+        );
+      },
+      loading: () => Scaffold(
+        appBar: AppBar(title: const Text('Edit Profile')),
+        body: Center(
           child: CircularProgressIndicator(
             color: Theme.of(context).colorScheme.primary,
           ),
         ),
-        error: (err, stack) => Center(
+      ),
+      error: (err, stack) => Scaffold(
+        appBar: AppBar(title: const Text('Edit Profile')),
+        body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.error_outline, size: 48, color: AppColors.error),
-              SizedBox(height: 12),
+              const Icon(Icons.error_outline, size: 48, color: AppColors.error),
+              const SizedBox(height: 12),
               Text(
                 'Failed to load profile for editing\n$err',
                 textAlign: TextAlign.center,
               ),
-              SizedBox(height: 12),
+              const SizedBox(height: 12),
               FilledButton(
                 onPressed: () => ref.read(profileProvider.notifier).refresh(),
-                child: Text('Retry'),
+                child: const Text('Retry'),
               ),
             ],
           ),
@@ -544,7 +553,7 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
               ref: ref,
               employeeId: widget.profile.id,
               onDone: () {
-                final info = ref.read(profileProvider).asData?.value?.generalInfo;
+                final info = ref.read(profileProvider).asData?.value.generalInfo;
                 if (info == null) return;
                 _designationCtrl.text = info.designation;
                 _instituteId = info.instituteId;
@@ -2503,6 +2512,11 @@ class _EditBankTabState extends ConsumerState<EditBankTab> {
 
   @override
   Widget build(BuildContext context) {
+    final authState = ref.watch(authNotifierProvider);
+    final canWriteBank = Permissions.isAdmin(authState.user?.role) ||
+        Permissions.canWriteBank(authState.permissions, authState.user?.role);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     final bank =
         ref.watch(profileProvider).asData?.value.bankInfo ??
         widget.profile.bankInfo;
@@ -2512,45 +2526,93 @@ class _EditBankTabState extends ConsumerState<EditBankTab> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: [
-          lookupLabelDropdown(
-            ref: ref,
-            category: 'BANK_NAME',
-            label: 'Bank Name',
-            value: _bankName.isEmpty ? null : _bankName,
-            required: true,
-            fallbackLabels: const [
-              'State Bank of India',
-              'HDFC Bank',
-              'ICICI Bank',
-              'Axis Bank',
-              'Bank of Baroda',
-            ],
-            onChanged: (v) => setState(() => _bankName = v),
-          ),
-          _buildTextField('Account Number', _accountNoCtrl, required: true),
-          _buildTextField('Branch Code', _branchCodeCtrl),
-          _buildTextField('IFSC Code', _ifscCtrl, required: true),
-          const SizedBox(height: 8),
-          BankDocumentUploadZone(
-            employeeId: widget.profile.id,
-            cancelledChequeUrl: bank?.cancelledChequeUrl,
-            passbookUrl: bank?.passbookUrl,
-          ),
-          const SizedBox(height: 16),
-          FilledButton(
-            onPressed: _save,
-            child: Text(
-              widget.isPrivileged
-                  ? 'Save Bank Info'
-                  : 'Submit Bank Info for Approval',
+          if (!canWriteBank)
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.amber.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.amber.withOpacity(0.4)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.lock_outline_rounded, color: Colors.amber[800], size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Editing bank details is restricted for your role. Contact an administrator to request changes.',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.amber[200] : Colors.amber[900],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          IgnorePointer(
+            ignoring: !canWriteBank,
+            child: Opacity(
+              opacity: canWriteBank ? 1.0 : 0.65,
+              child: lookupLabelDropdown(
+                ref: ref,
+                category: 'BANK_NAME',
+                label: 'Bank Name',
+                value: _bankName.isEmpty ? null : _bankName,
+                required: true,
+                fallbackLabels: const [
+                  'State Bank of India',
+                  'HDFC Bank',
+                  'ICICI Bank',
+                  'Axis Bank',
+                  'Bank of Baroda',
+                ],
+                onChanged: (v) => setState(() => _bankName = v),
+              ),
             ),
           ),
+          _buildTextField('Account Number', _accountNoCtrl, required: true, readOnly: !canWriteBank),
+          _buildTextField('Branch Code', _branchCodeCtrl, readOnly: !canWriteBank),
+          _buildTextField('IFSC Code', _ifscCtrl, required: true, readOnly: !canWriteBank),
+          const SizedBox(height: 8),
+          if (canWriteBank)
+            BankDocumentUploadZone(
+              employeeId: widget.profile.id,
+              cancelledChequeUrl: bank?.cancelledChequeUrl,
+              passbookUrl: bank?.passbookUrl,
+            ),
+          const SizedBox(height: 16),
+          if (canWriteBank)
+            FilledButton(
+              onPressed: _save,
+              child: Text(
+                widget.isPrivileged
+                    ? 'Save Bank Info'
+                    : 'Submit Bank Info for Approval',
+              ),
+            ),
         ],
       ),
     );
   }
 
   Future<void> _save() async {
+    final authState = ref.read(authNotifierProvider);
+    final canWriteBank = Permissions.isAdmin(authState.user?.role) ||
+        Permissions.canWriteBank(authState.permissions, authState.user?.role);
+    if (!canWriteBank) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('You do not have permission to edit bank details.'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+      return;
+    }
     if (!_formKey.currentState!.validate()) return;
     final payload = {
       'bankName': _bankName.trim(),

@@ -992,6 +992,8 @@ model SystemModule {
   key         String   @unique
   name        String
   description String?
+  category    String   @default("HRMS") @map("category")
+  sortOrder   Int      @default(0) @map("sort_order")
   isActive    Boolean  @default(true) @map("is_active")
   createdAt   DateTime @default(now()) @map("created_at")
 

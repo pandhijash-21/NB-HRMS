@@ -7,7 +7,7 @@ import { tenderService } from './tender.service';
 export const tenderRouter = Router();
 const p = (v: string | string[]) => (Array.isArray(v) ? v[0] : v);
 
-tenderRouter.get('/helpers/boq-activities', requireAuth, requirePermission('WORK_ORDERS', 'READ'), async (req, res) => {
+tenderRouter.get('/helpers/boq-activities', requireAuth, requirePermission('TENDERS', 'READ'), async (req, res) => {
   try {
     const boqId = String(req.query.boqId ?? '');
     if (!boqId) return res.status(400).json(fail('boqId is required'));
@@ -17,7 +17,7 @@ tenderRouter.get('/helpers/boq-activities', requireAuth, requirePermission('WORK
   }
 });
 
-tenderRouter.get('/helpers/preview-lines', requireAuth, requirePermission('WORK_ORDERS', 'READ'), async (req, res) => {
+tenderRouter.get('/helpers/preview-lines', requireAuth, requirePermission('TENDERS', 'READ'), async (req, res) => {
   try {
     const boqId = String(req.query.boqId ?? '') || undefined;
     const activityId = String(req.query.activityId ?? '') || undefined;
@@ -31,7 +31,7 @@ tenderRouter.get('/helpers/preview-lines', requireAuth, requirePermission('WORK_
   }
 });
 
-tenderRouter.get('/', requireAuth, requirePermission('WORK_ORDERS', 'READ'), async (req, res) => {
+tenderRouter.get('/', requireAuth, requirePermission('TENDERS', 'READ'), async (req, res) => {
   try {
     const projectId = String(req.query.projectId ?? '') || undefined;
     return res.json(ok(await tenderService.list({ projectId })));
@@ -40,7 +40,7 @@ tenderRouter.get('/', requireAuth, requirePermission('WORK_ORDERS', 'READ'), asy
   }
 });
 
-tenderRouter.get('/:id', requireAuth, requirePermission('WORK_ORDERS', 'READ'), async (req, res) => {
+tenderRouter.get('/:id', requireAuth, requirePermission('TENDERS', 'READ'), async (req, res) => {
   try {
     return res.json(ok(await tenderService.getById(p(req.params.id))));
   } catch (e: unknown) {
@@ -48,7 +48,7 @@ tenderRouter.get('/:id', requireAuth, requirePermission('WORK_ORDERS', 'READ'), 
   }
 });
 
-tenderRouter.post('/', requireAuth, requirePermission('WORK_ORDERS', 'WRITE'), async (req: Request, res: Response) => {
+tenderRouter.post('/', requireAuth, requirePermission('TENDERS', 'WRITE'), async (req: Request, res: Response) => {
   try {
     return res.status(201).json(ok(await tenderService.create(req.body ?? {}, req.user?.id)));
   } catch (e: unknown) {
@@ -56,7 +56,7 @@ tenderRouter.post('/', requireAuth, requirePermission('WORK_ORDERS', 'WRITE'), a
   }
 });
 
-tenderRouter.patch('/:id', requireAuth, requirePermission('WORK_ORDERS', 'WRITE'), async (req: Request, res: Response) => {
+tenderRouter.patch('/:id', requireAuth, requirePermission('TENDERS', 'WRITE'), async (req: Request, res: Response) => {
   try {
     return res.json(ok(await tenderService.update(p(req.params.id), req.body ?? {}, req.user?.id)));
   } catch (e: unknown) {
@@ -64,7 +64,7 @@ tenderRouter.patch('/:id', requireAuth, requirePermission('WORK_ORDERS', 'WRITE'
   }
 });
 
-tenderRouter.delete('/:id', requireAuth, requirePermission('WORK_ORDERS', 'WRITE'), async (req: Request, res: Response) => {
+tenderRouter.delete('/:id', requireAuth, requirePermission('TENDERS', 'WRITE'), async (req: Request, res: Response) => {
   try {
     return res.json(ok(await tenderService.remove(p(req.params.id))));
   } catch (e: unknown) {
@@ -75,7 +75,7 @@ tenderRouter.delete('/:id', requireAuth, requirePermission('WORK_ORDERS', 'WRITE
 // Applications nested under /api/tenders/applications via separate mount — see index
 export const tenderApplicationRouter = Router();
 
-tenderApplicationRouter.get('/', requireAuth, requirePermission('WORK_ORDERS', 'READ'), async (req, res) => {
+tenderApplicationRouter.get('/', requireAuth, requirePermission('TENDER_APPLICATIONS', 'READ'), async (req, res) => {
   try {
     const tenderId = String(req.query.tenderId ?? '') || undefined;
     const projectId = String(req.query.projectId ?? '') || undefined;
@@ -86,7 +86,7 @@ tenderApplicationRouter.get('/', requireAuth, requirePermission('WORK_ORDERS', '
   }
 });
 
-tenderApplicationRouter.get('/:id', requireAuth, requirePermission('WORK_ORDERS', 'READ'), async (req, res) => {
+tenderApplicationRouter.get('/:id', requireAuth, requirePermission('TENDER_APPLICATIONS', 'READ'), async (req, res) => {
   try {
     return res.json(ok(await tenderService.getApplication(p(req.params.id))));
   } catch (e: unknown) {
@@ -94,7 +94,7 @@ tenderApplicationRouter.get('/:id', requireAuth, requirePermission('WORK_ORDERS'
   }
 });
 
-tenderApplicationRouter.post('/', requireAuth, requirePermission('WORK_ORDERS', 'WRITE'), async (req: Request, res: Response) => {
+tenderApplicationRouter.post('/', requireAuth, requirePermission('TENDER_APPLICATIONS', 'WRITE'), async (req: Request, res: Response) => {
   try {
     return res.status(201).json(ok(await tenderService.createApplication(req.body ?? {}, req.user?.id)));
   } catch (e: unknown) {
@@ -102,7 +102,7 @@ tenderApplicationRouter.post('/', requireAuth, requirePermission('WORK_ORDERS', 
   }
 });
 
-tenderApplicationRouter.patch('/:id', requireAuth, requirePermission('WORK_ORDERS', 'WRITE'), async (req: Request, res: Response) => {
+tenderApplicationRouter.patch('/:id', requireAuth, requirePermission('TENDER_APPLICATIONS', 'WRITE'), async (req: Request, res: Response) => {
   try {
     return res.json(ok(await tenderService.updateApplication(p(req.params.id), req.body ?? {}, req.user?.id)));
   } catch (e: unknown) {
@@ -110,7 +110,7 @@ tenderApplicationRouter.patch('/:id', requireAuth, requirePermission('WORK_ORDER
   }
 });
 
-tenderApplicationRouter.patch('/:id/status', requireAuth, requirePermission('WORK_ORDERS', 'WRITE'), async (req: Request, res: Response) => {
+tenderApplicationRouter.patch('/:id/status', requireAuth, requirePermission('TENDER_APPLICATIONS', 'WRITE'), async (req: Request, res: Response) => {
   try {
     const status = String(req.body?.status ?? '');
     return res.json(ok(await tenderService.updateApplicationStatus(p(req.params.id), status, req.user?.id)));
@@ -119,7 +119,7 @@ tenderApplicationRouter.patch('/:id/status', requireAuth, requirePermission('WOR
   }
 });
 
-tenderApplicationRouter.delete('/:id', requireAuth, requirePermission('WORK_ORDERS', 'WRITE'), async (req: Request, res: Response) => {
+tenderApplicationRouter.delete('/:id', requireAuth, requirePermission('TENDER_APPLICATIONS', 'WRITE'), async (req: Request, res: Response) => {
   try {
     return res.json(ok(await tenderService.removeApplication(p(req.params.id))));
   } catch (e: unknown) {

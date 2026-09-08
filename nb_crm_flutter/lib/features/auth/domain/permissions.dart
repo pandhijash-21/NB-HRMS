@@ -80,9 +80,19 @@ class Permissions {
     return r == 'ADMIN' || r == 'SUPERADMIN' || r == 'SYSTEMADMIN';
   }
 
+  static bool canReadProjects(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    return hasPermission(perms, 'PROJECTS', 'READ');
+  }
+
   static bool canWriteProjects(PermissionMap? perms, [String? role]) {
     if (isAdmin(role)) return true;
     return hasPermission(perms, 'PROJECTS', 'WRITE');
+  }
+
+  static bool canReadWorkOrders(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    return hasPermission(perms, 'WORK_ORDERS', 'READ');
   }
 
   static bool canWriteWorkOrders(PermissionMap? perms, [String? role]) {
@@ -93,6 +103,130 @@ class Permissions {
   static bool canApproveWorkOrders(PermissionMap? perms, [String? role]) {
     if (isAdmin(role)) return true;
     return hasPermission(perms, 'WORK_ORDERS', 'APPROVE');
+  }
+
+  static bool canReadBank(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    return hasPermission(perms, 'BANK_DETAILS', 'READ');
+  }
+
+  static bool canWriteBank(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    return hasPermission(perms, 'BANK_DETAILS', 'WRITE');
+  }
+
+  static bool canReadEducation(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    return hasPermission(perms, 'EDUCATION', 'READ');
+  }
+
+  static bool canWriteEducation(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    return hasPermission(perms, 'EDUCATION', 'WRITE');
+  }
+
+  static bool canReadExperience(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    return hasPermission(perms, 'EXPERIENCE', 'READ');
+  }
+
+  static bool canWriteExperience(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    return hasPermission(perms, 'EXPERIENCE', 'WRITE');
+  }
+
+  static bool canReadDpr(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    if (perms?.containsKey('DPR') == true) return hasPermission(perms, 'DPR', 'READ');
+    return hasPermission(perms, 'WORK_ORDERS', 'READ');
+  }
+
+  static bool canWriteDpr(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    if (perms?.containsKey('DPR') == true) return hasPermission(perms, 'DPR', 'WRITE');
+    return hasPermission(perms, 'WORK_ORDERS', 'WRITE');
+  }
+
+  static bool canReadStore(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    if (perms?.containsKey('STORE') == true) return hasPermission(perms, 'STORE', 'READ');
+    return hasPermission(perms, 'WORK_ORDERS', 'READ');
+  }
+
+  static bool canWriteStore(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    if (perms?.containsKey('STORE') == true) return hasPermission(perms, 'STORE', 'WRITE');
+    return hasPermission(perms, 'WORK_ORDERS', 'WRITE');
+  }
+
+  static bool canReadBoq(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    if (perms?.containsKey('BOQ') == true) return hasPermission(perms, 'BOQ', 'READ');
+    return hasPermission(perms, 'WORK_ORDERS', 'READ');
+  }
+
+  static bool canWriteBoq(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    if (perms?.containsKey('BOQ') == true) return hasPermission(perms, 'BOQ', 'WRITE');
+    return hasPermission(perms, 'WORK_ORDERS', 'WRITE');
+  }
+
+  static bool canReadTenders(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    if (perms?.containsKey('TENDERS') == true) return hasPermission(perms, 'TENDERS', 'READ');
+    return hasPermission(perms, 'WORK_ORDERS', 'READ');
+  }
+
+  static bool canWriteTenders(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    if (perms?.containsKey('TENDERS') == true) return hasPermission(perms, 'TENDERS', 'WRITE');
+    return hasPermission(perms, 'WORK_ORDERS', 'WRITE');
+  }
+
+  static bool canReadContractors(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    if (perms?.containsKey('CONTRACTORS') == true) return hasPermission(perms, 'CONTRACTORS', 'READ');
+    return hasPermission(perms, 'WORK_ORDERS', 'READ');
+  }
+
+  static bool canWriteContractors(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    if (perms?.containsKey('CONTRACTORS') == true) return hasPermission(perms, 'CONTRACTORS', 'WRITE');
+    return hasPermission(perms, 'WORK_ORDERS', 'WRITE');
+  }
+
+  static bool canReadCrm(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    return hasPermission(perms, 'CRM', 'READ');
+  }
+
+  static bool canWriteCrm(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    return hasPermission(perms, 'CRM', 'WRITE');
+  }
+
+  static bool canReadCrmDashboard(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    if (perms?.containsKey('CRM_DASHBOARD') == true) return hasPermission(perms, 'CRM_DASHBOARD', 'READ');
+    return hasPermission(perms, 'CRM', 'READ');
+  }
+
+  static bool canReadCrmHeaders(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    if (perms?.containsKey('CRM_HEADERS') == true) return hasPermission(perms, 'CRM_HEADERS', 'READ');
+    return hasPermission(perms, 'CRM', 'READ');
+  }
+
+  static bool canReadCrmSettings(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    if (perms?.containsKey('CRM_SETTINGS') == true) return hasPermission(perms, 'CRM_SETTINGS', 'READ');
+    return hasPermission(perms, 'CRM', 'READ');
+  }
+
+  static bool canReadCrmBin(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    if (perms?.containsKey('CRM_BIN') == true) return hasPermission(perms, 'CRM_BIN', 'READ');
+    return hasPermission(perms, 'CRM', 'READ');
   }
 
   static bool canManageUsers(PermissionMap? perms, [String? role]) {

@@ -64,6 +64,32 @@ export const approvalController = {
         return res.status(403).json(fail('No employee linked to this account. Please log out and log back in.'));
       }
 
+      const modUpper = body.data.module.toUpperCase();
+      const moduleMap: Record<string, string> = {
+        BANK: 'BANK_DETAILS',
+        BANK_DETAILS: 'BANK_DETAILS',
+        ACADEMIC: 'EDUCATION',
+        EDUCATION: 'EDUCATION',
+        EXPERIENCE: 'EXPERIENCE',
+        DOCUMENTS: 'DOCUMENTS',
+        PERSONAL: 'PERSONAL_INFO',
+        ADDRESS_LOCAL: 'PERSONAL_INFO',
+        ADDRESS_PERMANENT: 'PERSONAL_INFO',
+        OTHER: 'PERSONAL_INFO',
+        FAMILY: 'PERSONAL_INFO',
+      };
+      const requiredKey = moduleMap[modUpper] ?? 'PERSONAL_INFO';
+      const role = String((req.user as any)?.roleName ?? (req.user as any)?.role ?? '').toUpperCase();
+      const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'SUPERADMIN', 'SYSTEMADMIN'].includes(role);
+      if (!isAdmin) {
+        const canWrite = req.user?.permissions?.[requiredKey]?.includes('WRITE');
+        if (!canWrite) {
+          return res
+            .status(403)
+            .json(fail(`You do not have WRITE permission on ${requiredKey} to submit change requests`));
+        }
+      }
+
       const result = await approvalService.requestChange(
         employeeId,
         body.data.module,

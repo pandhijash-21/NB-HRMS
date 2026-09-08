@@ -23,26 +23,19 @@ class ProfileScreen extends ConsumerStatefulWidget {
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen>
     with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+  TabController? _tabController;
+  int _tabCount = 0;
 
-  final List<String> _tabs = [
-    'General',
-    'Personal',
-    'Address',
-    'Other',
-    'Family',
-    'Academic',
-    'Experience',
-    'Documents',
-    'Bank',
-    'Salary',
-    'Attendance',
-  ];
+  void _syncTabController(int count) {
+    if (_tabController != null && _tabCount == count) return;
+    _tabController?.dispose();
+    _tabController = TabController(length: count, vsync: this);
+    _tabCount = count;
+  }
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: _tabs.length, vsync: this);
     Future.microtask(() {
       final auth = ref.read(authNotifierProvider);
       final empId = widget.employeeId ?? auth.user?.employeeId;
@@ -58,7 +51,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
 
   @override
   void dispose() {
-    _tabController.dispose();
+    _tabController?.dispose();
     super.dispose();
   }
 
@@ -189,35 +182,53 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
               child: Opacity(opacity: animValue, child: child),
             );
           },
-          child: Column(
-            children: [
-              _buildProfileHeader(context, profile, isDark),
-              _buildTabBar(context, isDark),
-              Expanded(
-                child: TabBarView(
-                  controller: _tabController,
-                  children: [
-                    GeneralViewTab(profile: profile),
-                    PersonalViewTab(profile: profile),
-                    AddressViewTab(profile: profile),
-                    OtherViewTab(profile: profile),
-                    FamilyViewTab(profile: profile),
-                    AcademicViewTab(profile: profile),
-                    EditExperienceTab(employeeId: profile.id, canEdit: false),
-                    DocumentsViewTab(
-                      profile: profile,
-                      canManageLetters: canManageLetters,
+          child: Builder(
+            builder: (context) {
+              final canReadBank = Permissions.isAdmin(authState.user?.role) ||
+                  Permissions.canReadBank(authState.permissions, authState.user?.role);
+              final canReadAcademic = Permissions.isAdmin(authState.user?.role) ||
+                  Permissions.canReadEducation(authState.permissions, authState.user?.role);
+              final canReadExperience = Permissions.isAdmin(authState.user?.role) ||
+                  Permissions.canReadExperience(authState.permissions, authState.user?.role);
+              final canReadSalary = Permissions.isAdmin(authState.user?.role) ||
+                  Permissions.canReadSalary(authState.permissions);
+              final canReadDocs = Permissions.isAdmin(authState.user?.role) ||
+                  Permissions.canReadDocuments(authState.permissions);
+
+              final tabItems = <(String, Widget)>[
+                ('General', GeneralViewTab(profile: profile)),
+                ('Personal', PersonalViewTab(profile: profile)),
+                ('Address', AddressViewTab(profile: profile)),
+                ('Other', OtherViewTab(profile: profile)),
+                ('Family', FamilyViewTab(profile: profile)),
+                if (canReadAcademic)
+                  ('Academic', AcademicViewTab(profile: profile)),
+                if (canReadExperience)
+                  ('Experience', EditExperienceTab(employeeId: profile.id, canEdit: false)),
+                if (canReadDocs)
+                  ('Documents', DocumentsViewTab(profile: profile, canManageLetters: canManageLetters)),
+                if (canReadBank)
+                  ('Bank', BankViewTab(profile: profile)),
+                if (canReadSalary)
+                  ('Salary', SalaryViewTab(profile: profile)),
+                ('Attendance', EmployeeAttendanceTab(employeeId: profile.id, canManageSettings: canManageAttendanceSettings)),
+              ];
+              _syncTabController(tabItems.length);
+              final tabController = _tabController!;
+
+              return Column(
+                children: [
+                  _buildProfileHeader(context, profile, isDark),
+                  _buildTabBar(context, isDark, tabItems, tabController),
+                  Expanded(
+                    child: TabBarView(
+                      controller: tabController,
+                      children: tabItems.map((item) => item.$2).toList(),
                     ),
-                    BankViewTab(profile: profile),
-                    SalaryViewTab(profile: profile),
-                    EmployeeAttendanceTab(
-                      employeeId: profile.id,
-                      canManageSettings: canManageAttendanceSettings,
-                    ),
-                  ],
-                ),
-              ),
-            ],
+                  ),
+                ],
+              );
+            },
           ),
         ),
         loading: () => Center(
@@ -415,7 +426,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     );
   }
 
-  Widget _buildTabBar(BuildContext context, bool isDark) {
+  Widget _buildTabBar(
+    BuildContext context,
+    bool isDark,
+    List<(String, Widget)> tabItems,
+    TabController tabController,
+  ) {
     return Container(
       alignment: Alignment.centerLeft,
       decoration: BoxDecoration(
@@ -430,7 +446,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         ),
       ),
       child: TabBar(
-        controller: _tabController,
+        controller: tabController,
         isScrollable: true,
         indicatorColor: isDark ? const Color(0xFFC5A059) : Colors.black,
         indicatorWeight: 3,
@@ -445,7 +461,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           fontWeight: FontWeight.w500,
           fontSize: 13,
         ),
-        tabs: _tabs.map((tab) => Tab(text: tab)).toList(),
+        tabs: tabItems.map((item) => Tab(text: item.$1)).toList(),
       ),
     );
   }

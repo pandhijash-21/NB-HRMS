@@ -18,7 +18,7 @@ const p = (v: string | string[]) => (Array.isArray(v) ? v[0] : v);
 contractorRouter.get(
   '/',
   requireAuth,
-  requirePermission('WORK_ORDERS', 'READ'),
+  requirePermission('CONTRACTORS', 'READ'),
   async (req: Request, res: Response) => {
     try {
       const includeInactive = String(req.query.includeInactive ?? '') === 'true';
@@ -32,7 +32,7 @@ contractorRouter.get(
 contractorRouter.post(
   '/upload',
   requireAuth,
-  requirePermission('WORK_ORDERS', 'WRITE'),
+  requirePermission('CONTRACTORS', 'WRITE'),
   upload.single('file'),
   async (req: Request, res: Response) => {
     try {
@@ -56,7 +56,7 @@ contractorRouter.post(
 contractorRouter.get(
   '/:id',
   requireAuth,
-  requirePermission('WORK_ORDERS', 'READ'),
+  requirePermission('CONTRACTORS', 'READ'),
   async (req: Request, res: Response) => {
     try {
       return res.json(ok(await contractorService.getById(p(req.params.id))));
@@ -69,7 +69,7 @@ contractorRouter.get(
 contractorRouter.post(
   '/',
   requireAuth,
-  requirePermission('WORK_ORDERS', 'WRITE'),
+  requirePermission('CONTRACTORS', 'WRITE'),
   async (req: Request, res: Response) => {
     try {
       return res.status(201).json(ok(await contractorService.create(req.body ?? {})));
@@ -82,7 +82,7 @@ contractorRouter.post(
 contractorRouter.patch(
   '/:id',
   requireAuth,
-  requirePermission('WORK_ORDERS', 'WRITE'),
+  requirePermission('CONTRACTORS', 'WRITE'),
   async (req: Request, res: Response) => {
     try {
       return res.json(ok(await contractorService.update(p(req.params.id), req.body ?? {})));
@@ -95,7 +95,7 @@ contractorRouter.patch(
 contractorRouter.post(
   '/:id/toggle',
   requireAuth,
-  requirePermission('WORK_ORDERS', 'WRITE'),
+  requirePermission('CONTRACTORS', 'WRITE'),
   async (req: Request, res: Response) => {
     try {
       return res.json(ok(await contractorService.toggleActive(p(req.params.id))));
@@ -108,7 +108,7 @@ contractorRouter.post(
 contractorRouter.delete(
   '/:id',
   requireAuth,
-  requirePermission('WORK_ORDERS', 'WRITE'),
+  requirePermission('CONTRACTORS', 'DELETE'),
   async (req: Request, res: Response) => {
     try {
       return res.json(ok(await contractorService.remove(p(req.params.id))));

@@ -88,6 +88,12 @@ export function emitMeetingRemoved(opts: {
   io.to(`meeting:${opts.meetingId}`).emit('meeting_peer_removed', payload);
 }
 
+export function emitPermissionsUpdated(payload: { roleId?: string; moduleKey?: string | null }) {
+  const io = ioRef;
+  if (!io) return;
+  io.emit('permissions_updated', { ...payload, at: Date.now() });
+}
+
 export function emitMeetingModeration(opts: {
   meetingId: string;
   action: string;

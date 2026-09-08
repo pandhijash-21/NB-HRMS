@@ -165,6 +165,7 @@ class AppNotifications extends Notifier<AppNotificationsState> {
     socket.onPushNotify(_onPush);
     socket.onIncomingCall(_onIncoming);
     socket.onMeetingEnded(_onEnded);
+    socket.onPermissionsUpdated(_onPermissionsUpdated);
   }
 
   void _detach() {
@@ -173,6 +174,7 @@ class AppNotifications extends Notifier<AppNotificationsState> {
     _socket?.offPushNotify(_onPush);
     _socket?.offIncomingCall(_onIncoming);
     _socket?.offMeetingEnded(_onEnded);
+    _socket?.offPermissionsUpdated(_onPermissionsUpdated);
     _socket = null;
   }
 
@@ -242,6 +244,10 @@ class AppNotifications extends Notifier<AppNotificationsState> {
     if (ended.isNotEmpty && ended == incoming.code) {
       unawaited(dismissCall());
     }
+  }
+
+  void _onPermissionsUpdated(Map<String, dynamic> data) {
+    ref.read(authNotifierProvider.notifier).refreshPermissions();
   }
 
   Future<void> markAllRead() async {

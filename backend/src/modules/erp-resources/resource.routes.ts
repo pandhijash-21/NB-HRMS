@@ -8,7 +8,7 @@ export const resourceRouter = Router();
 const p = (v: string | string[]) => (Array.isArray(v) ? v[0] : v);
 
 // Materials
-resourceRouter.get('/materials', requireAuth, requirePermission('WORK_ORDERS', 'READ'), async (req, res) => {
+resourceRouter.get('/materials', requireAuth, requirePermission('STORE', 'READ'), async (req, res) => {
   try {
     const data = await resourceService.listMaterials({
       includeInactive: String(req.query.includeInactive ?? '') === 'true',
@@ -20,7 +20,7 @@ resourceRouter.get('/materials', requireAuth, requirePermission('WORK_ORDERS', '
   }
 });
 
-resourceRouter.get('/materials/stock-summary', requireAuth, requirePermission('WORK_ORDERS', 'READ'), async (req, res) => {
+resourceRouter.get('/materials/stock-summary', requireAuth, requirePermission('STORE', 'READ'), async (req, res) => {
   try {
     const projectId = String(req.query.projectId ?? '') || undefined;
     return res.json(ok(await resourceService.materialStockSummary(projectId)));
@@ -29,7 +29,7 @@ resourceRouter.get('/materials/stock-summary', requireAuth, requirePermission('W
   }
 });
 
-resourceRouter.post('/materials', requireAuth, requirePermission('WORK_ORDERS', 'WRITE'), async (req: Request, res: Response) => {
+resourceRouter.post('/materials', requireAuth, requirePermission('STORE', 'WRITE'), async (req: Request, res: Response) => {
   try {
     return res.status(201).json(ok(await resourceService.createMaterial(req.body ?? {}, req.user?.id)));
   } catch (e: unknown) {
@@ -37,7 +37,7 @@ resourceRouter.post('/materials', requireAuth, requirePermission('WORK_ORDERS', 
   }
 });
 
-resourceRouter.patch('/materials/:id', requireAuth, requirePermission('WORK_ORDERS', 'WRITE'), async (req: Request, res: Response) => {
+resourceRouter.patch('/materials/:id', requireAuth, requirePermission('STORE', 'WRITE'), async (req: Request, res: Response) => {
   try {
     return res.json(ok(await resourceService.updateMaterial(p(req.params.id), req.body ?? {})));
   } catch (e: unknown) {
@@ -45,7 +45,7 @@ resourceRouter.patch('/materials/:id', requireAuth, requirePermission('WORK_ORDE
   }
 });
 
-resourceRouter.post('/materials/:id/stock', requireAuth, requirePermission('WORK_ORDERS', 'WRITE'), async (req: Request, res: Response) => {
+resourceRouter.post('/materials/:id/stock', requireAuth, requirePermission('STORE', 'WRITE'), async (req: Request, res: Response) => {
   try {
     return res.json(ok(await resourceService.addMaterialStock(p(req.params.id), req.body ?? {}, req.user?.id)));
   } catch (e: unknown) {
@@ -53,7 +53,7 @@ resourceRouter.post('/materials/:id/stock', requireAuth, requirePermission('WORK
   }
 });
 
-resourceRouter.post('/materials/:id/outward', requireAuth, requirePermission('WORK_ORDERS', 'WRITE'), async (req: Request, res: Response) => {
+resourceRouter.post('/materials/:id/outward', requireAuth, requirePermission('STORE', 'WRITE'), async (req: Request, res: Response) => {
   try {
     return res.json(ok(await resourceService.dispatchMaterialOutward(p(req.params.id), req.body ?? {}, req.user?.id)));
   } catch (e: unknown) {
@@ -61,7 +61,7 @@ resourceRouter.post('/materials/:id/outward', requireAuth, requirePermission('WO
   }
 });
 
-resourceRouter.get('/materials/:id/logs', requireAuth, requirePermission('WORK_ORDERS', 'READ'), async (req: Request, res: Response) => {
+resourceRouter.get('/materials/:id/logs', requireAuth, requirePermission('STORE', 'READ'), async (req: Request, res: Response) => {
   try {
     return res.json(ok(await resourceService.getMaterialLogs(p(req.params.id))));
   } catch (e: unknown) {
@@ -69,7 +69,7 @@ resourceRouter.get('/materials/:id/logs', requireAuth, requirePermission('WORK_O
   }
 });
 
-resourceRouter.delete('/materials/:id', requireAuth, requirePermission('WORK_ORDERS', 'WRITE'), async (req: Request, res: Response) => {
+resourceRouter.delete('/materials/:id', requireAuth, requirePermission('STORE', 'WRITE'), async (req: Request, res: Response) => {
   try {
     return res.json(ok(await resourceService.removeMaterial(p(req.params.id))));
   } catch (e: unknown) {
@@ -78,7 +78,7 @@ resourceRouter.delete('/materials/:id', requireAuth, requirePermission('WORK_ORD
 });
 
 // Machines
-resourceRouter.get('/machines', requireAuth, requirePermission('WORK_ORDERS', 'READ'), async (req, res) => {
+resourceRouter.get('/machines', requireAuth, requirePermission('STORE', 'READ'), async (req, res) => {
   try {
     const data = await resourceService.listMachines({
       includeInactive: String(req.query.includeInactive ?? '') === 'true',
@@ -90,7 +90,7 @@ resourceRouter.get('/machines', requireAuth, requirePermission('WORK_ORDERS', 'R
   }
 });
 
-resourceRouter.get('/machines/stock-summary', requireAuth, requirePermission('WORK_ORDERS', 'READ'), async (req, res) => {
+resourceRouter.get('/machines/stock-summary', requireAuth, requirePermission('STORE', 'READ'), async (req, res) => {
   try {
     const projectId = String(req.query.projectId ?? '') || undefined;
     return res.json(ok(await resourceService.machineStockSummary(projectId)));
@@ -99,7 +99,7 @@ resourceRouter.get('/machines/stock-summary', requireAuth, requirePermission('WO
   }
 });
 
-resourceRouter.get('/machines/issues/active', requireAuth, requirePermission('WORK_ORDERS', 'READ'), async (req, res) => {
+resourceRouter.get('/machines/issues/active', requireAuth, requirePermission('STORE', 'READ'), async (req, res) => {
   try {
     const contractorId = String(req.query.contractorId ?? '') || undefined;
     const machineId = String(req.query.machineId ?? '') || undefined;
@@ -109,7 +109,7 @@ resourceRouter.get('/machines/issues/active', requireAuth, requirePermission('WO
   }
 });
 
-resourceRouter.post('/machines/issues/:issueId/return', requireAuth, requirePermission('WORK_ORDERS', 'WRITE'), async (req: Request, res: Response) => {
+resourceRouter.post('/machines/issues/:issueId/return', requireAuth, requirePermission('STORE', 'WRITE'), async (req: Request, res: Response) => {
   try {
     return res.json(ok(await resourceService.returnMachine(p(req.params.issueId), req.body ?? {}, req.user?.id)));
   } catch (e: unknown) {
@@ -117,7 +117,7 @@ resourceRouter.post('/machines/issues/:issueId/return', requireAuth, requirePerm
   }
 });
 
-resourceRouter.post('/machines', requireAuth, requirePermission('WORK_ORDERS', 'WRITE'), async (req: Request, res: Response) => {
+resourceRouter.post('/machines', requireAuth, requirePermission('STORE', 'WRITE'), async (req: Request, res: Response) => {
   try {
     return res.status(201).json(ok(await resourceService.createMachine(req.body ?? {}, req.user?.id)));
   } catch (e: unknown) {
@@ -125,7 +125,7 @@ resourceRouter.post('/machines', requireAuth, requirePermission('WORK_ORDERS', '
   }
 });
 
-resourceRouter.patch('/machines/:id', requireAuth, requirePermission('WORK_ORDERS', 'WRITE'), async (req: Request, res: Response) => {
+resourceRouter.patch('/machines/:id', requireAuth, requirePermission('STORE', 'WRITE'), async (req: Request, res: Response) => {
   try {
     return res.json(ok(await resourceService.updateMachine(p(req.params.id), req.body ?? {})));
   } catch (e: unknown) {
@@ -133,7 +133,7 @@ resourceRouter.patch('/machines/:id', requireAuth, requirePermission('WORK_ORDER
   }
 });
 
-resourceRouter.post('/machines/:id/stock', requireAuth, requirePermission('WORK_ORDERS', 'WRITE'), async (req: Request, res: Response) => {
+resourceRouter.post('/machines/:id/stock', requireAuth, requirePermission('STORE', 'WRITE'), async (req: Request, res: Response) => {
   try {
     return res.json(ok(await resourceService.addMachineStock(p(req.params.id), req.body ?? {}, req.user?.id)));
   } catch (e: unknown) {
@@ -141,7 +141,7 @@ resourceRouter.post('/machines/:id/stock', requireAuth, requirePermission('WORK_
   }
 });
 
-resourceRouter.post('/machines/:id/issue', requireAuth, requirePermission('WORK_ORDERS', 'WRITE'), async (req: Request, res: Response) => {
+resourceRouter.post('/machines/:id/issue', requireAuth, requirePermission('STORE', 'WRITE'), async (req: Request, res: Response) => {
   try {
     return res.json(ok(await resourceService.issueMachine(p(req.params.id), req.body ?? {}, req.user?.id)));
   } catch (e: unknown) {
@@ -149,7 +149,7 @@ resourceRouter.post('/machines/:id/issue', requireAuth, requirePermission('WORK_
   }
 });
 
-resourceRouter.get('/machines/:id/logs', requireAuth, requirePermission('WORK_ORDERS', 'READ'), async (req: Request, res: Response) => {
+resourceRouter.get('/machines/:id/logs', requireAuth, requirePermission('STORE', 'READ'), async (req: Request, res: Response) => {
   try {
     return res.json(ok(await resourceService.getMachineLogs(p(req.params.id))));
   } catch (e: unknown) {
@@ -157,7 +157,7 @@ resourceRouter.get('/machines/:id/logs', requireAuth, requirePermission('WORK_OR
   }
 });
 
-resourceRouter.delete('/machines/:id', requireAuth, requirePermission('WORK_ORDERS', 'WRITE'), async (req: Request, res: Response) => {
+resourceRouter.delete('/machines/:id', requireAuth, requirePermission('STORE', 'WRITE'), async (req: Request, res: Response) => {
   try {
     return res.json(ok(await resourceService.removeMachine(p(req.params.id))));
   } catch (e: unknown) {
@@ -166,7 +166,7 @@ resourceRouter.delete('/machines/:id', requireAuth, requirePermission('WORK_ORDE
 });
 
 // Labour
-resourceRouter.get('/labour', requireAuth, requirePermission('WORK_ORDERS', 'READ'), async (_req, res) => {
+resourceRouter.get('/labour', requireAuth, requirePermission('ERP_CONFIGURATIONS', 'READ'), async (_req, res) => {
   try {
     return res.json(ok(await resourceService.listLabour()));
   } catch (e: unknown) {
@@ -174,7 +174,7 @@ resourceRouter.get('/labour', requireAuth, requirePermission('WORK_ORDERS', 'REA
   }
 });
 
-resourceRouter.post('/labour', requireAuth, requirePermission('WORK_ORDERS', 'WRITE'), async (req: Request, res: Response) => {
+resourceRouter.post('/labour', requireAuth, requirePermission('ERP_CONFIGURATIONS', 'WRITE'), async (req: Request, res: Response) => {
   try {
     return res.status(201).json(ok(await resourceService.createLabour(req.body ?? {})));
   } catch (e: unknown) {
@@ -182,7 +182,7 @@ resourceRouter.post('/labour', requireAuth, requirePermission('WORK_ORDERS', 'WR
   }
 });
 
-resourceRouter.patch('/labour/:id', requireAuth, requirePermission('WORK_ORDERS', 'WRITE'), async (req: Request, res: Response) => {
+resourceRouter.patch('/labour/:id', requireAuth, requirePermission('ERP_CONFIGURATIONS', 'WRITE'), async (req: Request, res: Response) => {
   try {
     return res.json(ok(await resourceService.updateLabour(p(req.params.id), req.body ?? {})));
   } catch (e: unknown) {
@@ -190,7 +190,7 @@ resourceRouter.patch('/labour/:id', requireAuth, requirePermission('WORK_ORDERS'
   }
 });
 
-resourceRouter.delete('/labour/:id', requireAuth, requirePermission('WORK_ORDERS', 'WRITE'), async (req: Request, res: Response) => {
+resourceRouter.delete('/labour/:id', requireAuth, requirePermission('ERP_CONFIGURATIONS', 'WRITE'), async (req: Request, res: Response) => {
   try {
     return res.json(ok(await resourceService.removeLabour(p(req.params.id))));
   } catch (e: unknown) {

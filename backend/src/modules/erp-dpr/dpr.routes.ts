@@ -8,7 +8,7 @@ export const dprRouter = Router();
 
 const p = (v: string | string[]) => (Array.isArray(v) ? v[0] : v);
 
-dprRouter.get('/', requireAuth, requirePermission('WORK_ORDERS', 'READ'), async (req, res) => {
+dprRouter.get('/', requireAuth, requirePermission('DPR', 'READ'), async (req, res) => {
   try {
     const projectId = String(req.query.projectId ?? '') || undefined;
     return res.json(ok(await dprService.list({ projectId })));
@@ -17,7 +17,7 @@ dprRouter.get('/', requireAuth, requirePermission('WORK_ORDERS', 'READ'), async 
   }
 });
 
-dprRouter.get('/contractor-resources', requireAuth, requirePermission('WORK_ORDERS', 'READ'), async (req, res) => {
+dprRouter.get('/contractor-resources', requireAuth, requirePermission('DPR', 'READ'), async (req, res) => {
   try {
     const contractorId = String(req.query.contractorId ?? '');
     const date = String(req.query.date ?? '') || undefined;
@@ -27,7 +27,7 @@ dprRouter.get('/contractor-resources', requireAuth, requirePermission('WORK_ORDE
   }
 });
 
-dprRouter.get('/:id', requireAuth, requirePermission('WORK_ORDERS', 'READ'), async (req, res) => {
+dprRouter.get('/:id', requireAuth, requirePermission('DPR', 'READ'), async (req, res) => {
   try {
     return res.json(ok(await dprService.getById(p(req.params.id))));
   } catch (e: unknown) {
@@ -35,7 +35,7 @@ dprRouter.get('/:id', requireAuth, requirePermission('WORK_ORDERS', 'READ'), asy
   }
 });
 
-dprRouter.post('/', requireAuth, requirePermission('WORK_ORDERS', 'WRITE'), async (req: Request, res: Response) => {
+dprRouter.post('/', requireAuth, requirePermission('DPR', 'WRITE'), async (req: Request, res: Response) => {
   try {
     return res.status(201).json(ok(await dprService.create(req.body ?? {}, req.user?.id)));
   } catch (e: unknown) {
@@ -43,7 +43,7 @@ dprRouter.post('/', requireAuth, requirePermission('WORK_ORDERS', 'WRITE'), asyn
   }
 });
 
-dprRouter.delete('/:id', requireAuth, requirePermission('WORK_ORDERS', 'WRITE'), async (req: Request, res: Response) => {
+dprRouter.delete('/:id', requireAuth, requirePermission('DPR', 'DELETE'), async (req: Request, res: Response) => {
   try {
     return res.json(ok(await dprService.remove(p(req.params.id))));
   } catch (e: unknown) {

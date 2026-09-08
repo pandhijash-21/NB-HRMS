@@ -107,6 +107,17 @@ export async function assertMayDirectWriteProfile(
   targetEmployeeId: number,
   module?: ProfileWriteModule,
 ) {
+  const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'SUPERADMIN', 'SYSTEMADMIN'].includes(roleOf(req));
+  if (!isAdmin && module) {
+    const requiredModuleKey = module === 'BANK' ? 'BANK_DETAILS' : 'PERSONAL_INFO';
+    const canWrite = req.user?.permissions?.[requiredModuleKey]?.includes('WRITE');
+    if (!canWrite) {
+      const err: any = new Error(`You do not have WRITE permission on ${requiredModuleKey}`);
+      err.status = 403;
+      throw err;
+    }
+  }
+
   if (isPrivilegedProfileEditor(req)) return;
 
   const tokenEmployeeId = req.user?.employeeId != null ? Number(req.user.employeeId) : null;

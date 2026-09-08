@@ -89,44 +89,48 @@ class AuthNotifier extends Notifier<AuthState> {
     _sessionWatch = null;
   }
 
-  /// Polls auth/me so a displaced device is kicked even when idle.
+  /// Forces an immediate refresh of permissions and profile flags from the server.
+  Future<void> refreshPermissions() async {
+    if (state.status != AuthStatus.authenticated) return;
+    try {
+      final dio = ref.read(dioClientProvider);
+      final me = await dio.getEnvelope<Map<String, dynamic>>(
+        'auth/me',
+        parse: (raw) {
+          if (raw is Map) return Map<String, dynamic>.from(raw);
+          return <String, dynamic>{};
+        },
+      );
+      final needs = me['needsEmailVerification'] == true;
+      final permissions = Permissions.mapFromJson(me['permissions']);
+      final permsChanged = !Permissions.mapsEqual(permissions, state.permissions);
+      final needsChanged = needs != state.needsEmailVerification && !state.isFirstLogin;
+      if (!permsChanged && !needsChanged) return;
+      state = state.copyWith(
+        permissions: permsChanged ? permissions : state.permissions,
+        needsEmailVerification: needsChanged ? needs : state.needsEmailVerification,
+      );
+      final repo = ref.read(authRepositoryProvider);
+      final token = await ref.read(secureStorageProvider).readToken();
+      if (token != null && state.user != null) {
+        await repo.persistSession(
+          token: token,
+          user: state.user!,
+          permissions: state.permissions,
+          isFirstLogin: state.isFirstLogin,
+          needsEmailVerification: state.needsEmailVerification,
+        );
+      }
+    } catch (_) {
+      // 401 is handled by UnauthorizedGate → _handleUnauthorized.
+    }
+  }
+
+  /// Polls auth/me so a displaced device is kicked even when idle and permissions stay fresh.
   void _startSessionWatch() {
     _stopSessionWatch();
-    _sessionWatch = Timer.periodic(const Duration(seconds: 15), (_) async {
-      if (state.status != AuthStatus.authenticated) return;
-      try {
-        final dio = ref.read(dioClientProvider);
-        final me = await dio.getEnvelope<Map<String, dynamic>>(
-          'auth/me',
-          parse: (raw) {
-            if (raw is Map) return Map<String, dynamic>.from(raw);
-            return <String, dynamic>{};
-          },
-        );
-        final needs = me['needsEmailVerification'] == true;
-        final permissions = Permissions.mapFromJson(me['permissions']);
-        final permsChanged =
-            permissions.isNotEmpty && !Permissions.mapsEqual(permissions, state.permissions);
-        final needsChanged = needs != state.needsEmailVerification && !state.isFirstLogin;
-        if (!permsChanged && !needsChanged) return;
-        state = state.copyWith(
-          permissions: permsChanged ? permissions : state.permissions,
-          needsEmailVerification: needsChanged ? needs : state.needsEmailVerification,
-        );
-        final repo = ref.read(authRepositoryProvider);
-        final token = await ref.read(secureStorageProvider).readToken();
-        if (token != null && state.user != null) {
-          await repo.persistSession(
-            token: token,
-            user: state.user!,
-            permissions: state.permissions,
-            isFirstLogin: state.isFirstLogin,
-            needsEmailVerification: state.needsEmailVerification,
-          );
-        }
-      } catch (_) {
-        // 401 is handled by UnauthorizedGate → _handleUnauthorized.
-      }
+    _sessionWatch = Timer.periodic(const Duration(seconds: 5), (_) async {
+      await refreshPermissions();
     });
   }
 
@@ -145,6 +149,7 @@ class AuthNotifier extends Notifier<AuthState> {
       needsEmailVerification: restored.needsEmailVerification,
     );
     _startSessionWatch();
+    unawaited(refreshPermissions());
     // Refresh gate from server (emails may have been verified elsewhere).
     if (!restored.isFirstLogin) {
       try {

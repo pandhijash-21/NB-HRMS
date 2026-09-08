@@ -11,7 +11,7 @@ const p = (v: string | string[]) => (Array.isArray(v) ? v[0] : v);
 activityRouter.get(
   '/',
   requireAuth,
-  requirePermission('WORK_ORDERS', 'READ'),
+  requirePermission('ERP_CONFIGURATIONS', 'READ'),
   async (req: Request, res: Response) => {
     try {
       const includeInactive = String(req.query.includeInactive ?? '') === 'true';
@@ -26,7 +26,7 @@ activityRouter.get(
 activityRouter.get(
   '/admin',
   requireAuth,
-  requirePermission('WORK_ORDERS', 'WRITE'),
+  requirePermission('ERP_CONFIGURATIONS', 'WRITE'),
   async (_req: Request, res: Response) => {
     try {
       return res.json(ok(await activityService.adminList()));
@@ -39,7 +39,7 @@ activityRouter.get(
 activityRouter.get(
   '/:id',
   requireAuth,
-  requirePermission('WORK_ORDERS', 'READ'),
+  requirePermission('ERP_CONFIGURATIONS', 'READ'),
   async (req: Request, res: Response) => {
     try {
       return res.json(ok(await activityService.getById(p(req.params.id))));
@@ -52,7 +52,7 @@ activityRouter.get(
 activityRouter.post(
   '/',
   requireAuth,
-  requirePermission('WORK_ORDERS', 'WRITE'),
+  requirePermission('ERP_CONFIGURATIONS', 'WRITE'),
   async (req: Request, res: Response) => {
     try {
       return res.status(201).json(ok(await activityService.create(req.body ?? {})));
@@ -65,7 +65,7 @@ activityRouter.post(
 activityRouter.patch(
   '/:id',
   requireAuth,
-  requirePermission('WORK_ORDERS', 'WRITE'),
+  requirePermission('ERP_CONFIGURATIONS', 'WRITE'),
   async (req: Request, res: Response) => {
     try {
       return res.json(ok(await activityService.update(p(req.params.id), req.body ?? {})));
@@ -78,7 +78,7 @@ activityRouter.patch(
 activityRouter.post(
   '/:id/toggle',
   requireAuth,
-  requirePermission('WORK_ORDERS', 'WRITE'),
+  requirePermission('ERP_CONFIGURATIONS', 'WRITE'),
   async (req: Request, res: Response) => {
     try {
       return res.json(ok(await activityService.toggleActive(p(req.params.id))));
@@ -91,7 +91,7 @@ activityRouter.post(
 activityRouter.delete(
   '/:id',
   requireAuth,
-  requirePermission('WORK_ORDERS', 'WRITE'),
+  requirePermission('ERP_CONFIGURATIONS', 'WRITE'),
   async (req: Request, res: Response) => {
     try {
       return res.json(ok(await activityService.remove(p(req.params.id))));

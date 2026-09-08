@@ -20,60 +20,72 @@ crmRouter.post('/campaigns/:token/webhook', crmController.handleCampaignWebhook)
 crmRouter.get('/webhook/:token', crmController.handleCampaignWebhookVerification);
 crmRouter.post('/webhook/:token', crmController.handleCampaignWebhook);
 
-// Apply auth + RBAC to all protected CRM routes
+// Apply auth to all protected CRM routes
 crmRouter.use(requireAuth);
-crmRouter.use((req, res, next) => {
-  const action: PermissionAction = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)
-    ? 'WRITE'
-    : 'READ';
-  return requirePermission('CRM', action)(req, res, next);
-});
 
-// Projects
-crmRouter.get('/projects', crmController.getProjects);
-crmRouter.post('/projects', crmController.createProject);
-crmRouter.put('/projects/:id', crmController.updateProject);
-crmRouter.delete('/projects/:id', crmController.deleteProject);
+function actionFor(method: string): PermissionAction {
+  return ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) ? 'WRITE' : 'READ';
+}
 
-// Campaigns
-crmRouter.get('/campaigns', crmController.getCampaigns);
-crmRouter.post('/campaigns', crmController.createCampaign);
-crmRouter.put('/campaigns/:id', crmController.updateCampaign);
-crmRouter.delete('/campaigns/:id', crmController.deleteCampaign);
+function requireCrmSubmodule(submodule: string) {
+  return (req: any, res: any, next: any) => {
+    return requirePermission(submodule, actionFor(req.method))(req, res, next);
+  };
+}
 
 // Columns & Headers Management
-crmRouter.get('/columns', crmController.getColumns);
-crmRouter.post('/columns', crmController.createColumn);
-crmRouter.patch('/columns/:id/visibility', crmController.toggleColumnVisibility);
-crmRouter.post('/columns/merge', crmController.mergeColumns);
-crmRouter.put('/columns/:id', crmController.updateColumn);
-crmRouter.delete('/columns/:id', crmController.deleteColumn);
-
-// Leads & Excel
-crmRouter.get('/leads', crmController.getLeads);
-crmRouter.post('/leads', crmController.createLead);
-crmRouter.post('/leads/import-excel', upload.single('file'), crmController.importExcel);
-crmRouter.patch('/leads/:id/status', crmController.updateLeadStatus);
-crmRouter.patch('/leads/:id', crmController.updateLead);
-crmRouter.delete('/leads/:id', crmController.moveToBin);
-crmRouter.patch('/leads/:id/restore', crmController.restoreFromBin);
+crmRouter.get('/columns', requireCrmSubmodule('CRM_HEADERS'), crmController.getColumns);
+crmRouter.post('/columns', requireCrmSubmodule('CRM_HEADERS'), crmController.createColumn);
+crmRouter.patch('/columns/:id/visibility', requireCrmSubmodule('CRM_HEADERS'), crmController.toggleColumnVisibility);
+crmRouter.post('/columns/merge', requireCrmSubmodule('CRM_HEADERS'), crmController.mergeColumns);
+crmRouter.put('/columns/:id', requireCrmSubmodule('CRM_HEADERS'), crmController.updateColumn);
+crmRouter.delete('/columns/:id', requireCrmSubmodule('CRM_HEADERS'), crmController.deleteColumn);
 
 // Bin (Recycle Bin / Archive)
-crmRouter.get('/bin', crmController.getBin);
-crmRouter.post('/bin/restore/:id', crmController.restoreFromBin);
-
-// Follow-ups
-crmRouter.get('/follow-ups', crmController.getFollowUps);
-crmRouter.post('/follow-ups', crmController.createFollowUp);
-crmRouter.patch('/follow-ups/:id/complete', crmController.completeFollowUp);
+crmRouter.get('/bin', requireCrmSubmodule('CRM_BIN'), crmController.getBin);
+crmRouter.post('/bin/restore/:id', requireCrmSubmodule('CRM_BIN'), crmController.restoreFromBin);
 
 // Settings & Telephony
-crmRouter.get('/settings', crmController.getSettings);
-crmRouter.put('/settings', crmController.updateSettings);
-crmRouter.post('/telephony/click-to-call', crmController.clickToCall);
-crmRouter.get('/telephony/call-logs', crmController.getCallLogs);
+crmRouter.get('/settings', requireCrmSubmodule('CRM_SETTINGS'), crmController.getSettings);
+crmRouter.put('/settings', requireCrmSubmodule('CRM_SETTINGS'), crmController.updateSettings);
+crmRouter.post('/telephony/click-to-call', requireCrmSubmodule('CRM_SETTINGS'), crmController.clickToCall);
+crmRouter.get('/telephony/call-logs', requireCrmSubmodule('CRM_SETTINGS'), crmController.getCallLogs);
 
-// KPI Metrics & HRMS Sales Users
-crmRouter.get('/kpi', crmController.getKpiMetrics);
-crmRouter.get('/sales-users', crmController.getSalesUsers);
+// KPI Metrics & Dashboard
+crmRouter.get('/kpi', requireCrmSubmodule('CRM_DASHBOARD'), crmController.getKpiMetrics);
+
+// General CRM (Leads, Campaigns, Follow-ups, Projects) - gated on CRM
+const generalCrmGuard = (req: any, res: any, next: any) => {
+  return requirePermission('CRM', actionFor(req.method))(req, res, next);
+};
+
+// Projects
+crmRouter.get('/projects', generalCrmGuard, crmController.getProjects);
+crmRouter.post('/projects', generalCrmGuard, crmController.createProject);
+crmRouter.put('/projects/:id', generalCrmGuard, crmController.updateProject);
+crmRouter.delete('/projects/:id', generalCrmGuard, crmController.deleteProject);
+
+// Campaigns
+crmRouter.get('/campaigns', generalCrmGuard, crmController.getCampaigns);
+crmRouter.post('/campaigns', generalCrmGuard, crmController.createCampaign);
+crmRouter.put('/campaigns/:id', generalCrmGuard, crmController.updateCampaign);
+crmRouter.delete('/campaigns/:id', generalCrmGuard, crmController.deleteCampaign);
+
+// Leads & Excel
+crmRouter.get('/leads', generalCrmGuard, crmController.getLeads);
+crmRouter.post('/leads', generalCrmGuard, crmController.createLead);
+crmRouter.post('/leads/import-excel', generalCrmGuard, upload.single('file'), crmController.importExcel);
+crmRouter.patch('/leads/:id/status', generalCrmGuard, crmController.updateLeadStatus);
+crmRouter.patch('/leads/:id', generalCrmGuard, crmController.updateLead);
+crmRouter.delete('/leads/:id', generalCrmGuard, crmController.moveToBin);
+crmRouter.patch('/leads/:id/restore', generalCrmGuard, crmController.restoreFromBin);
+
+// Follow-ups
+crmRouter.get('/follow-ups', generalCrmGuard, crmController.getFollowUps);
+crmRouter.post('/follow-ups', generalCrmGuard, crmController.createFollowUp);
+crmRouter.patch('/follow-ups/:id/complete', generalCrmGuard, crmController.completeFollowUp);
+
+// HRMS Sales Users
+crmRouter.get('/sales-users', generalCrmGuard, crmController.getSalesUsers);
+
 

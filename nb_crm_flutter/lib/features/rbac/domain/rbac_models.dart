@@ -245,19 +245,63 @@ class SystemModule {
     required this.key,
     required this.name,
     this.description,
+    this.category = 'HRMS',
+    this.sortOrder = 0,
     this.isActive = true,
   });
 
   final String key;
   final String name;
   final String? description;
+  final String category;
+  final int sortOrder;
   final bool isActive;
 
+  static String inferCategory(String key, String? raw) {
+    final up = raw?.trim().toUpperCase();
+    if (up == 'HRMS' || up == 'CRM' || up == 'ERP') return up!;
+    if (up != null && up.isNotEmpty && up != 'GENERAL' && up != 'SYSTEM') {
+      return up;
+    }
+    final k = key.trim().toUpperCase();
+    if (k.startsWith('ERP_') ||
+        const [
+          'PROJECTS',
+          'WORK_ORDERS',
+          'BOQ',
+          'STORE',
+          'DPR',
+          'TENDERS',
+          'TENDER_APPLICATIONS',
+          'CONTRACTORS',
+          'ERP_CONFIGURATIONS',
+        ].contains(k)) {
+      return 'ERP';
+    }
+    if (k.startsWith('CRM_') ||
+        const [
+          'CRM',
+          'CRM_PRE_SALES',
+          'CRM_POST_SALES',
+          'CRM_HEADERS',
+          'CRM_BIN',
+          'CRM_SETTINGS',
+          'CRM_DASHBOARD',
+        ].contains(k)) {
+      return 'CRM';
+    }
+    return 'HRMS';
+  }
+
   factory SystemModule.fromJson(Map<String, dynamic> json) {
+    final key = json['key']?.toString() ?? '';
+    final catRaw = json['category']?.toString();
     return SystemModule(
-      key: json['key']?.toString() ?? '',
+      key: key,
       name: json['name']?.toString() ?? json['moduleName']?.toString() ?? '',
       description: json['description']?.toString(),
+      category: inferCategory(key, catRaw),
+      sortOrder: _parseInt(json['sortOrder'] ?? json['sort_order']) ?? 0,
       isActive: json['isActive'] != false,
     );
   }
@@ -267,6 +311,7 @@ class ModulePermission {
   const ModulePermission({
     this.id,
     required this.moduleKey,
+    this.category = 'HRMS',
     required this.canRead,
     required this.canWrite,
     required this.canApprove,
@@ -278,6 +323,7 @@ class ModulePermission {
 
   final String? id;
   final String moduleKey;
+  final String category;
   final bool canRead;
   final bool canWrite;
   final bool canApprove;
@@ -287,6 +333,7 @@ class ModulePermission {
   final SystemModule? module;
 
   ModulePermission copyWith({
+    String? category,
     bool? canRead,
     bool? canWrite,
     bool? canApprove,
@@ -297,6 +344,7 @@ class ModulePermission {
     return ModulePermission(
       id: id,
       moduleKey: moduleKey,
+      category: category ?? this.category,
       canRead: canRead ?? this.canRead,
       canWrite: canWrite ?? this.canWrite,
       canApprove: canApprove ?? this.canApprove,
@@ -312,10 +360,13 @@ class ModulePermission {
     final key = json['moduleKey']?.toString() ??
         (moduleRaw is Map ? moduleRaw['key']?.toString() : null) ??
         '';
+    final rawCategory = json['category']?.toString() ??
+        (moduleRaw is Map ? moduleRaw['category']?.toString() : null);
 
     return ModulePermission(
       id: json['id']?.toString(),
       moduleKey: key,
+      category: SystemModule.inferCategory(key, rawCategory),
       canRead: json['canRead'] == true,
       canWrite: json['canWrite'] == true,
       canApprove: json['canApprove'] == true,
@@ -330,6 +381,7 @@ class ModulePermission {
               ? SystemModule(
                   key: key,
                   name: json['moduleName']?.toString() ?? key,
+                  category: SystemModule.inferCategory(key, rawCategory),
                 )
               : null),
     );

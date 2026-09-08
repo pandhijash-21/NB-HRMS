@@ -20,6 +20,7 @@ class CollabSocket {
   final _presence = <void Function(String userId, bool online)>[];
   final _pushNotify = <void Function(Map<String, dynamic>)>[];
   final _incomingCall = <void Function(Map<String, dynamic>)>[];
+  final _permissionsUpdated = <void Function(Map<String, dynamic>)>[];
 
   io.Socket connect({required String token}) {
     if (_socket != null && _token == token) {
@@ -109,6 +110,12 @@ class CollabSocket {
       if (data is! Map) return;
       final row = Map<String, dynamic>.from(data);
       for (final cb in List.of(_incomingCall)) {
+        cb(row);
+      }
+    });
+    socket.on('permissions_updated', (data) {
+      final row = data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{};
+      for (final cb in List.of(_permissionsUpdated)) {
         cb(row);
       }
     });
@@ -402,6 +409,13 @@ class CollabSocket {
 
   void offIncomingCall(void Function(Map<String, dynamic>) cb) => _incomingCall.remove(cb);
 
+  void onPermissionsUpdated(void Function(Map<String, dynamic>) cb) {
+    if (!_permissionsUpdated.contains(cb)) _permissionsUpdated.add(cb);
+  }
+
+  void offPermissionsUpdated(void Function(Map<String, dynamic>) cb) =>
+      _permissionsUpdated.remove(cb);
+
   void onMeetingEndProgress(void Function(Map<String, dynamic> row) cb) {
     _socket?.off('meeting_end_progress');
     _socket?.on('meeting_end_progress', (data) {
@@ -423,6 +437,7 @@ class CollabSocket {
     _presence.clear();
     _pushNotify.clear();
     _incomingCall.clear();
+    _permissionsUpdated.clear();
     _socket?.dispose();
     _socket = null;
   }

@@ -2,8 +2,27 @@ import { prisma } from '../../config/prisma';
 import { redis, connectRedis } from '../../config/redis';
 import type { UpdatePermissionsInput, PatchPermissionInput } from './types';
 
-/** Invalidate all active sessions for every user assigned to a given role. */
-export async function invalidateRoleSessions(roleId: string) {
+import { invalidateRolePermissionCache } from '../auth/permissions-map';
+import { sseService } from '../events/sse.service';
+import { emitPermissionsUpdated } from '../collaboration/socket';
+
+/** Invalidate all active sessions for every user assigned to a given role and clear permission caches. */
+export async function invalidateRoleSessions(roleId: string, moduleKey?: string) {
+  invalidateRolePermissionCache(roleId);
+  try {
+    sseService.broadcast('permissions_updated', {
+      roleId,
+      moduleKey: moduleKey ?? null,
+      at: Date.now(),
+    });
+  } catch {
+    // SSE broadcast skipped if error
+  }
+  try {
+    emitPermissionsUpdated({ roleId, moduleKey: moduleKey ?? null });
+  } catch {
+    // Socket broadcast skipped if error
+  }
   try {
     await connectRedis();
     const userIds = await redis.sMembers(`role_users:${roleId}`);
@@ -14,6 +33,48 @@ export async function invalidateRoleSessions(roleId: string) {
   } catch {
     // Redis unavailable — sessions will expire naturally
   }
+}
+
+export function inferCategory(
+  key: string,
+  explicitCategory?: string | null,
+): 'HRMS' | 'CRM' | 'ERP' {
+  if (explicitCategory) {
+    const up = explicitCategory.trim().toUpperCase();
+    if (up === 'HRMS' || up === 'CRM' || up === 'ERP') return up;
+  }
+  const k = key.trim().toUpperCase();
+  if (
+    k.startsWith('ERP_') ||
+    [
+      'PROJECTS',
+      'WORK_ORDERS',
+      'BOQ',
+      'STORE',
+      'DPR',
+      'TENDERS',
+      'TENDER_APPLICATIONS',
+      'CONTRACTORS',
+      'ERP_CONFIGURATIONS',
+    ].includes(k)
+  ) {
+    return 'ERP';
+  }
+  if (
+    k.startsWith('CRM_') ||
+    [
+      'CRM',
+      'CRM_PRE_SALES',
+      'CRM_POST_SALES',
+      'CRM_HEADERS',
+      'CRM_BIN',
+      'CRM_SETTINGS',
+      'CRM_DASHBOARD',
+    ].includes(k)
+  ) {
+    return 'CRM';
+  }
+  return 'HRMS';
 }
 
 export const permissionService = {
@@ -30,11 +91,13 @@ export const permissionService = {
     const existing = await prisma.rolePermission.findMany({ where: { roleId } });
     const permMap = new Map(existing.map((p) => [p.moduleKey, p]));
 
-    return modules.map((mod) => {
+    return modules.map((mod: any) => {
       const p = permMap.get(mod.key);
       return {
         moduleKey:  mod.key,
         moduleName: mod.name,
+        category:   inferCategory(mod.key, mod.category),
+        sortOrder:  mod.sortOrder ?? 0,
         canRead:    p?.canRead    ?? false,
         canWrite:   p?.canWrite   ?? false,
         canApprove: p?.canApprove ?? false,
@@ -109,16 +172,51 @@ export const permissionService = {
       },
     });
 
-    await invalidateRoleSessions(roleId);
+    await invalidateRoleSessions(roleId, moduleKey);
 
     return permissionService.getForRole(roleId);
   },
 
   async listModules() {
-    return prisma.systemModule.findMany({
-      where:   { isActive: true },
-      select:  { key: true, name: true, description: true, isActive: true },
-      orderBy: { key: 'asc' },
-    });
+    try {
+      const rows = await prisma.$queryRawUnsafe<
+        Array<{
+          key: string;
+          name: string;
+          description: string | null;
+          category: string;
+          sort_order: number;
+          is_active: boolean;
+        }>
+      >(`
+        SELECT key, name, description, category, sort_order, is_active
+        FROM system_modules
+        WHERE is_active = true
+        ORDER BY category ASC, sort_order ASC, name ASC
+      `);
+
+      return rows.map((r) => ({
+        key: r.key,
+        name: r.name,
+        description: r.description,
+        category: inferCategory(r.key, r.category),
+        sortOrder: r.sort_order ?? 0,
+        isActive: r.is_active,
+      }));
+    } catch {
+      const modules = await prisma.systemModule.findMany({
+        where:   { isActive: true },
+        select:  { key: true, name: true, description: true, isActive: true },
+        orderBy: { key: 'asc' },
+      });
+      return modules.map((m: any) => ({
+        key: m.key,
+        name: m.name,
+        description: m.description,
+        category: inferCategory(m.key, m.category),
+        sortOrder: m.sortOrder ?? 0,
+        isActive: m.isActive,
+      }));
+    }
   },
 };

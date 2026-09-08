@@ -45,7 +45,43 @@ export function requirePermission(moduleKey: string, action: PermissionAction) {
   };
 }
 
-/** Allow access when the route employeeId matches the logged-in employee, else require module permission. */
+/**
+ * Check if the user has permission on ANY of the specified module keys.
+ * Allows checking granular submodule keys with fallback to parent module keys (e.g. ['DPR', 'WORK_ORDERS']).
+ */
+export function requireAnyPermission(moduleKeys: string[], action: PermissionAction) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    if (!req.user) return res.status(401).json(fail('Unauthenticated'));
+
+    if (isAdminRole(req.user.roleName ?? req.user.role)) {
+      return next();
+    }
+
+    const hasAny = (keys: string[]) => {
+      for (const k of keys) {
+        const actions = req.user?.permissions?.[k] ?? [];
+        if (actions.includes(action)) return true;
+      }
+      return false;
+    };
+
+    if (hasAny(moduleKeys)) {
+      return next();
+    }
+
+    await refreshUserPermissions(req);
+
+    if (hasAny(moduleKeys)) {
+      return next();
+    }
+
+    return res
+      .status(403)
+      .json(fail(`You do not have ${action} permission on ${moduleKeys.join(' or ')}`));
+  };
+}
+
+/** Enforce that the user has module permission, and either accesses their own record or has elevated role/scope. */
 export function requireSelfEmployeeOrPermission(
   paramName: string,
   moduleKey: string,
@@ -54,18 +90,11 @@ export function requireSelfEmployeeOrPermission(
   return async (req: Request, res: Response, next: NextFunction) => {
     if (!req.user) return res.status(401).json(fail('Unauthenticated'));
 
-    const raw = req.params[paramName];
-    const targetId = Number(Array.isArray(raw) ? raw[0] : raw);
-    const selfId = req.user.employeeId;
-
-    if (Number.isFinite(targetId) && selfId != null && selfId === targetId) {
-      return next();
-    }
-
     if (isAdminRole(req.user.roleName ?? req.user.role)) {
       return next();
     }
 
+    // 1. User MUST have the action permission on moduleKey
     let actions = req.user.permissions?.[moduleKey] ?? [];
     if (!actions.includes(action)) {
       await refreshUserPermissions(req);
@@ -77,7 +106,28 @@ export function requireSelfEmployeeOrPermission(
         .json(fail(`You do not have ${action} permission on ${moduleKey}`));
     }
 
-    return next();
+    const raw = req.params[paramName];
+    const targetId = Number(Array.isArray(raw) ? raw[0] : raw);
+    const selfId = req.user.employeeId;
+
+    // 2. If it's self-access, permitted since user holds the permission
+    if (Number.isFinite(targetId) && selfId != null && selfId === targetId) {
+      return next();
+    }
+
+    // 3. Accessing another employee's record requires elevated role or workforce view scope
+    const elevatedRoles = ['HR', 'HR_MANAGER', 'HOI', 'REGISTRAR', 'VC'];
+    const roleName = String(req.user.roleName ?? req.user.role ?? '').toUpperCase();
+    if (elevatedRoles.includes(roleName)) {
+      return next();
+    }
+
+    const scope = req.user.employeeViewScope;
+    if (scope === 'INSTITUTE' || scope === 'UNIVERSITY') {
+      return next();
+    }
+
+    return res.status(403).json(fail('You can only access your own profile record.'));
   };
 }
 

@@ -592,33 +592,31 @@ class _BrandHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Container(
-          width: compact ? 64 : 76,
-          height: compact ? 64 : 76,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Color(0xFFE2C481),
-                Color(0xFFC5A059),
-                Color(0xFF8C6D2D),
-              ],
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFFC5A059).withValues(alpha: 0.3),
-                blurRadius: 20,
-                spreadRadius: 2,
+        Image.asset(
+          'assets/images/nbdeveloperlogo.png',
+          height: compact ? 72 : 96,
+          fit: BoxFit.contain,
+          errorBuilder: (_, __, ___) => Container(
+            width: compact ? 64 : 76,
+            height: compact ? 64 : 76,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFFE2C481),
+                  Color(0xFFC5A059),
+                  Color(0xFF8C6D2D),
+                ],
               ),
-            ],
-          ),
-          child: Center(
-            child: Icon(
-              Icons.domain_rounded,
-              size: compact ? 34 : 40,
-              color: const Color(0xFF1A1816),
+            ),
+            child: Center(
+              child: Icon(
+                Icons.domain_rounded,
+                size: compact ? 34 : 40,
+                color: const Color(0xFF1A1816),
+              ),
             ),
           ),
         ),

@@ -618,6 +618,70 @@ export const platformService = {
 
     return { success: true, message: 'Trash bin emptied successfully.' };
   },
+
+  /** Permanently purge ALL non-superadmin client and tenant data (Fresh Clean Database Reset) */
+  async purgeAllData(superadminPassword?: string, superadminUserId?: string) {
+    await verifySuperAdminPassword(superadminUserId, superadminPassword);
+
+    // 1. Find all non-superadmin users
+    const nonSuperadminUsers = await prisma.user.findMany({
+      where: {
+        role: { name: { not: 'SUPERADMIN' } },
+        username: { not: 'superadmin' },
+      },
+      select: { id: true },
+    });
+    if (nonSuperadminUsers.length > 0) {
+      await safelyDeleteUserIds(nonSuperadminUsers.map((u) => u.id));
+    }
+
+    // 2. Find all organizations
+    const allOrgs = await prisma.organization.findMany({
+      select: { id: true, name: true },
+    });
+    for (const org of allOrgs) {
+      await safelyDeleteOrg(org.id, org.name);
+    }
+
+    // 3. Clear any remaining non-superadmin employee records
+    const remainingEmployees = await prisma.employee.findMany({
+      where: {
+        id: { not: 1 },
+      },
+      select: { id: true },
+    });
+    if (remainingEmployees.length) {
+      const empIds = remainingEmployees.map((e) => e.id);
+      await prisma.employeeGeneralInfo.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.employeePersonalInfo.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.employeeAddress.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.employeeOtherInfo.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.familyMember.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.academicQualification.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.employeeExperience.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.employeeSalaryInfo.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.employeeBankInfo.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.employeeAttendanceSettings.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.employeeAssignment.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.employeeSalaryRecord.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.positionAssignment.deleteMany({ where: { holderEmployeeId: { in: empIds } } });
+      await prisma.locationHistory.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.trip.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.trackingEvent.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.leaveBalance.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.leaveAuditLog.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.leaveApplication.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.monthlyLWPRecord.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.absenceRecord.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.attendancePunch.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.reimbursementClaim.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.employeeLetterDocument.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.changeRequest.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.employee.deleteMany({ where: { id: { in: empIds } } });
+    }
+
+    return { success: true, message: 'All tenant and client data purged successfully. Fresh clean database active.' };
+  },
 };
 
 /** Superadmin Password Verification Helper */

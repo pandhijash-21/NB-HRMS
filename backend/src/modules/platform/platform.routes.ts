@@ -205,3 +205,17 @@ platformRouter.delete('/trash/empty', async (req: Request, res: Response) => {
     return res.status(500).json(fail(err instanceof Error ? err.message : 'Failed to empty trash'));
   }
 });
+
+/**
+ * Purge all tenant / client data for clean database state
+ */
+platformRouter.post('/purge-all', async (req: Request, res: Response) => {
+  try {
+    const superadminPassword = req.body?.superadminPassword || req.headers['x-superadmin-password'] || req.query.superadminPassword;
+    const result = await platformService.purgeAllData(superadminPassword ? String(superadminPassword) : undefined, req.user?.id);
+    return res.json(ok(result));
+  } catch (err: unknown) {
+    return res.status(400).json(fail(err instanceof Error ? err.message : 'Failed to purge database data'));
+  }
+});
+

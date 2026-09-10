@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "deleted_at" TIMESTAMP(3);
+ALTER TABLE "position_slots" ADD COLUMN IF NOT EXISTS "deleted_at" TIMESTAMP(3);
+ALTER TABLE "designations" ADD COLUMN IF NOT EXISTS "deleted_at" TIMESTAMP(3);
+ALTER TABLE "trash_bins" ADD COLUMN IF NOT EXISTS "deleted_at" TIMESTAMP(3);

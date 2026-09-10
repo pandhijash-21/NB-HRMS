@@ -1,8 +1,8 @@
 -- Bhashini speech-to-text: per-speaker, time-stamped meeting conversation notes.
-ALTER TABLE "meetings" ADD COLUMN "transcript_language" TEXT NOT NULL DEFAULT 'en';
-ALTER TABLE "meetings" ADD COLUMN "conversation_text" TEXT;
+ALTER TABLE "meetings" ADD COLUMN IF NOT EXISTS "transcript_language" TEXT NOT NULL DEFAULT 'en';
+ALTER TABLE "meetings" ADD COLUMN IF NOT EXISTS "conversation_text" TEXT;
 
-CREATE TABLE "meeting_utterances" (
+CREATE TABLE IF NOT EXISTS "meeting_utterances" (
     "id" TEXT NOT NULL,
     "meeting_id" TEXT NOT NULL,
     "speaker_user_id" TEXT,
@@ -18,6 +18,13 @@ CREATE TABLE "meeting_utterances" (
     CONSTRAINT "meeting_utterances_pkey" PRIMARY KEY ("id")
 );
 
-CREATE INDEX "meeting_utterances_meeting_id_spoken_at_idx" ON "meeting_utterances"("meeting_id", "spoken_at");
+CREATE INDEX IF NOT EXISTS "meeting_utterances_meeting_id_spoken_at_idx" ON "meeting_utterances"("meeting_id", "spoken_at");
 
-ALTER TABLE "meeting_utterances" ADD CONSTRAINT "meeting_utterances_meeting_id_fkey" FOREIGN KEY ("meeting_id") REFERENCES "meetings"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'meeting_utterances_meeting_id_fkey'
+  ) THEN
+    ALTER TABLE "meeting_utterances" ADD CONSTRAINT "meeting_utterances_meeting_id_fkey" FOREIGN KEY ("meeting_id") REFERENCES "meetings"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+END $$;

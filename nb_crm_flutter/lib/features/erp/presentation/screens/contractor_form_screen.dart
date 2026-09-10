@@ -1,26 +1,27 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/utils/platform_file_picker.dart';
 import '../../../../core/widgets/mobile_input_formatter.dart';
 import '../../../lookups/presentation/lookup_dropdown.dart';
+import '../../data/work_order_repository.dart';
 import '../../domain/contractor_lookup_keys.dart';
 import '../../domain/work_order_models.dart';
-import '../work_order_providers.dart';
+import '../bloc/erp_work_orders_bloc.dart';
 
-class ContractorFormScreen extends ConsumerStatefulWidget {
+class ContractorFormScreen extends StatefulWidget {
   const ContractorFormScreen({super.key, this.id});
 
   final String? id;
   bool get isEdit => id != null && id!.isNotEmpty;
 
   @override
-  ConsumerState<ContractorFormScreen> createState() => _ContractorFormScreenState();
+  State<ContractorFormScreen> createState() => _ContractorFormScreenState();
 }
 
-class _ContractorFormScreenState extends ConsumerState<ContractorFormScreen> {
+class _ContractorFormScreenState extends State<ContractorFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
   final _mobileCtrl = TextEditingController();
@@ -55,6 +56,28 @@ class _ContractorFormScreenState extends ConsumerState<ContractorFormScreen> {
 
   bool _hydrated = false;
   bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.isEdit) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _loadContractor();
+      });
+    }
+  }
+
+  Future<void> _loadContractor() async {
+    if (_hydrated) return;
+    try {
+      final c = await context.read<WorkOrderRepository>().getContractor(widget.id!);
+      if (!mounted) return;
+      setState(() => _hydrate(c));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
 
   @override
   void dispose() {
@@ -161,10 +184,11 @@ class _ContractorFormScreenState extends ConsumerState<ContractorFormScreen> {
   }
 
   Future<void> _uploadDoc(int index) async {
+    final repo = context.read<WorkOrderRepository>();
     final picked = await pickFileFromDevice(imagesOnly: false, extensions: ['pdf', 'png', 'jpg', 'jpeg', 'doc', 'docx']);
     if (picked == null) return;
     try {
-      final uploaded = await ref.read(workOrderRepositoryProvider).uploadContractorFile(
+      final uploaded = await repo.uploadContractorFile(
             bytes: picked.bytes,
             filename: picked.name,
           );
@@ -217,14 +241,15 @@ class _ContractorFormScreenState extends ConsumerState<ContractorFormScreen> {
         }).toList(),
       };
 
-      final repo = ref.read(workOrderRepositoryProvider);
+      final repo = context.read<WorkOrderRepository>();
       if (widget.isEdit) {
         await repo.updateContractor(widget.id!, body);
       } else {
         await repo.createContractor(body);
       }
-      ref.invalidate(erpContractorsAdminProvider);
-      ref.invalidate(erpContractorsProvider);
+      if (mounted) {
+        context.read<ErpWorkOrdersBloc>().add(const ErpContractorsRequested(includeInactive: true));
+      }
       if (!mounted) return;
       if (andNew) {
         context.go('/erp/configurations/contractors/new');
@@ -325,18 +350,6 @@ class _ContractorFormScreenState extends ConsumerState<ContractorFormScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.isEdit) {
-      ref.listen(erpContractorDetailProvider(widget.id!), (prev, next) {
-        next.whenData((c) {
-          if (_hydrated || !mounted) return;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted || _hydrated) return;
-            setState(() => _hydrate(c));
-          });
-        });
-      });
-    }
-
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
@@ -379,7 +392,7 @@ class _ContractorFormScreenState extends ConsumerState<ContractorFormScreen> {
                       decoration: _dec('Alternate Mobile No'),
                     ),
                     lookupNullableDropdown(
-                      ref: ref,
+                      context: context,
                       category: kContractorTds,
                       label: 'TDS',
                       value: _tdsCode,
@@ -407,7 +420,7 @@ class _ContractorFormScreenState extends ConsumerState<ContractorFormScreen> {
                       decoration: _dec('Payment Terms', hint: 'Enter Payment Terms'),
                     ),
                     lookupNullableDropdown(
-                      ref: ref,
+                      context: context,
                       category: kContractorType,
                       label: 'Contractor Type',
                       value: _contractorTypeCode,
@@ -435,7 +448,7 @@ class _ContractorFormScreenState extends ConsumerState<ContractorFormScreen> {
                       decoration: _dec('Location Name', hint: 'Enter Location Name'),
                     ),
                     lookupDropdown(
-                      ref: ref,
+                      context: context,
                       category: kContractorAddressType,
                       label: 'Address Type',
                       value: _draftAddressType,
@@ -443,7 +456,7 @@ class _ContractorFormScreenState extends ConsumerState<ContractorFormScreen> {
                       onChanged: (v) => setState(() => _draftAddressType = v),
                     ),
                     lookupDropdown(
-                      ref: ref,
+                      context: context,
                       category: kContractorCountry,
                       label: 'Country',
                       value: _draftCountry,
@@ -451,7 +464,7 @@ class _ContractorFormScreenState extends ConsumerState<ContractorFormScreen> {
                       onChanged: (v) => setState(() => _draftCountry = v),
                     ),
                     lookupDropdown(
-                      ref: ref,
+                      context: context,
                       category: kContractorState,
                       label: 'State',
                       value: _draftState,
@@ -459,7 +472,7 @@ class _ContractorFormScreenState extends ConsumerState<ContractorFormScreen> {
                       onChanged: (v) => setState(() => _draftState = v),
                     ),
                     lookupDropdown(
-                      ref: ref,
+                      context: context,
                       category: kContractorCity,
                       label: 'City',
                       value: _draftCity,
@@ -630,7 +643,7 @@ class _ContractorFormScreenState extends ConsumerState<ContractorFormScreen> {
                                 label: Text(_documents[i].fileName ?? 'Upload'),
                               ),
                               lookupNullableDropdown(
-                                ref: ref,
+                                context: context,
                                 category: kContractorDocumentType,
                                 label: 'Type',
                                 value: _documents[i].typeCode,

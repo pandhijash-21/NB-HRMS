@@ -100,10 +100,10 @@ class _RadialMenuState extends State<RadialMenu> with SingleTickerProviderStateM
   }
 
   Widget _buildItem(RadialMenuItem item, int index, int total, BuildContext context) {
-    final double startAngle = pi + 0.25; 
-    final double endAngle = 1.5 * pi;
+    const double startAngle = pi + 0.25; 
+    const double endAngle = 1.5 * pi;
     final double angle = startAngle + (endAngle - startAngle) * (index / (total > 1 ? total - 1 : 1));
-    final double distance = 140.0;
+    const double distance = 140.0;
 
     return AnimatedBuilder(
       animation: _controller,
@@ -131,18 +131,18 @@ class _RadialMenuState extends State<RadialMenu> with SingleTickerProviderStateM
                       gradient: LinearGradient(
                         colors: [
                           item.backgroundColor ?? Theme.of(context).colorScheme.surface,
-                          (item.backgroundColor ?? Theme.of(context).colorScheme.surface).withOpacity(0.9),
+                          (item.backgroundColor ?? Theme.of(context).colorScheme.surface).withValues(alpha: 0.9),
                         ],
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.12),
+                          color: Colors.black.withValues(alpha: 0.12),
                           blurRadius: 10,
                           offset: const Offset(0, 5),
                         ),
                       ],
                       border: Border.all(
-                        color: Theme.of(context).dividerColor.withOpacity(0.08),
+                        color: Theme.of(context).dividerColor.withValues(alpha: 0.08),
                         width: 1.5,
                       ),
                     ),
@@ -183,13 +183,13 @@ class _RadialMenuState extends State<RadialMenu> with SingleTickerProviderStateM
                           borderRadius: BorderRadius.circular(12),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.08),
+                              color: Colors.black.withValues(alpha: 0.08),
                               blurRadius: 6,
                               offset: const Offset(0, 3),
                             ),
                           ],
                           border: Border.all(
-                            color: Theme.of(context).dividerColor.withOpacity(0.05),
+                            color: Theme.of(context).dividerColor.withValues(alpha: 0.05),
                             width: 1,
                           ),
                         ),
@@ -199,7 +199,7 @@ class _RadialMenuState extends State<RadialMenu> with SingleTickerProviderStateM
                             fontWeight: FontWeight.w600,
                             fontSize: 11,
                             letterSpacing: 0.3,
-                            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.8),
+                            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.8),
                           ),
                         ),
                       ),
@@ -235,8 +235,8 @@ class _RadialMenuState extends State<RadialMenu> with SingleTickerProviderStateM
                     filter: ImageFilter.blur(sigmaX: 5 * value, sigmaY: 5 * value),
                     child: Container(
                       color: Theme.of(context).brightness == Brightness.dark
-                              ? Colors.black.withOpacity(0.4 * value)
-                              : Colors.white.withOpacity(0.3 * value),
+                              ? Colors.black.withValues(alpha: 0.4 * value)
+                              : Colors.white.withValues(alpha: 0.3 * value),
                     ),
                   );
                 },
@@ -272,13 +272,13 @@ class _RadialMenuState extends State<RadialMenu> with SingleTickerProviderStateM
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: themeColor.withOpacity(0.3),
+                    color: themeColor.withValues(alpha: 0.3),
                     blurRadius: 8,
                     offset: const Offset(-2, 2),
                   ),
                 ],
                 border: Border.all(
-                  color: Colors.white.withOpacity(0.12),
+                  color: Colors.white.withValues(alpha: 0.12),
                   width: 1,
                 ),
               ),
@@ -309,20 +309,20 @@ class _RadialMenuState extends State<RadialMenu> with SingleTickerProviderStateM
                   gradient: LinearGradient(
                     colors: [
                       themeColor,
-                      themeColor.withOpacity(0.9),
+                      themeColor.withValues(alpha: 0.9),
                     ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: themeColor.withOpacity(0.35),
+                      color: themeColor.withValues(alpha: 0.35),
                       blurRadius: 12,
                       offset: const Offset(0, 5),
                     ),
                   ],
                   border: Border.all(
-                    color: Colors.white.withOpacity(0.15),
+                    color: Colors.white.withValues(alpha: 0.15),
                     width: 1.5,
                   ),
                 ),

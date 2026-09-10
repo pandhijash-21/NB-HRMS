@@ -1,25 +1,36 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/bloc/load_status.dart';
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/widgets/header_action_button.dart';
 import '../../../auth/domain/permissions.dart';
-import '../../../auth/presentation/auth_providers.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../domain/work_order_models.dart';
-import '../work_order_providers.dart';
+import '../bloc/erp_work_orders_bloc.dart';
 import '../widgets/work_order_info_dialogs.dart';
 
-class WorkOrdersListScreen extends ConsumerWidget {
+class WorkOrdersListScreen extends StatefulWidget {
   const WorkOrdersListScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final auth = ref.watch(authNotifierProvider);
+  State<WorkOrdersListScreen> createState() => _WorkOrdersListScreenState();
+}
+
+class _WorkOrdersListScreenState extends State<WorkOrdersListScreen> {
+  @override
+  void initState() {
+    super.initState();
+    context.read<ErpWorkOrdersBloc>().add(const ErpWorkOrdersListRequested());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthBloc>().state;
     final canWrite = Permissions.canWriteWorkOrders(auth.permissions, auth.user?.role);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final async = ref.watch(workOrdersListProvider);
-    final dateFmt = _formatDate;
+    const dateFmt = _formatDate;
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
@@ -33,7 +44,7 @@ class WorkOrdersListScreen extends ConsumerWidget {
             tooltip: 'Refresh',
             icon: const Icon(Icons.refresh_rounded),
             label: 'Refresh',
-            onPressed: () => ref.invalidate(workOrdersListProvider),
+            onPressed: () => context.read<ErpWorkOrdersBloc>().add(const ErpWorkOrdersListRequested()),
           ),
         ],
       ),
@@ -44,59 +55,72 @@ class WorkOrdersListScreen extends ConsumerWidget {
               label: const Text('Add Work Order'),
             )
           : null,
-      body: async.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('$e')),
-        data: (items) {
+      body: BlocBuilder<ErpWorkOrdersBloc, ErpWorkOrdersState>(
+        builder: (context, state) {
+          if (state.status == LoadStatus.loading && state.workOrders.isEmpty) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (state.status == LoadStatus.failure && state.workOrders.isEmpty) {
+            return Center(child: Text(state.errorMessage ?? 'Error loading work orders'));
+          }
+          final items = state.workOrders;
           if (items.isEmpty) {
             return const Center(child: Text('No work orders yet.'));
           }
-          return SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 88),
-            child: Card(
-              elevation: 0,
+          return RefreshIndicator(
+            onRefresh: () async {
+              context.read<ErpWorkOrdersBloc>().add(const ErpWorkOrdersListRequested());
+            },
+            child: RepaintBoundary(
               child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: DataTable(
-                  headingRowColor: WidgetStateProperty.all(const Color(0xFFE8F4FC)),
-                  columns: [
-                    const DataColumn(label: Text('SR#')),
-                    const DataColumn(label: Text('WORK ORDER ID')),
-                    const DataColumn(label: Text('DATE')),
-                    const DataColumn(label: Text('PROJECT')),
-                    const DataColumn(label: Text('CONTRACTOR')),
-                    const DataColumn(label: Text('TOTAL AMOUNT(₹)')),
-                    const DataColumn(label: Text('WO OWNER')),
-                    DataColumn(
-                      label: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Text('STATUS'),
-                          IconButton(
-                            icon: const Icon(Icons.info_outline, size: 18),
-                            onPressed: () => showWorkOrderStatusInfo(context),
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 88),
+                child: Card(
+                  elevation: 0,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: DataTable(
+                      headingRowColor: WidgetStateProperty.all(const Color(0xFFE8F4FC)),
+                      columns: [
+                        const DataColumn(label: Text('SR#')),
+                        const DataColumn(label: Text('WORK ORDER ID')),
+                        const DataColumn(label: Text('DATE')),
+                        const DataColumn(label: Text('PROJECT')),
+                        const DataColumn(label: Text('CONTRACTOR')),
+                        const DataColumn(label: Text('TOTAL AMOUNT(₹)')),
+                        const DataColumn(label: Text('WO OWNER')),
+                        DataColumn(
+                          label: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text('STATUS'),
+                              IconButton(
+                                icon: const Icon(Icons.info_outline, size: 18),
+                                onPressed: () => showWorkOrderStatusInfo(context),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                    ),
-                    DataColumn(
-                      label: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Text('APPROVAL'),
-                          IconButton(
-                            icon: const Icon(Icons.info_outline, size: 18),
-                            onPressed: () => showWorkOrderApprovalInfo(context),
+                        ),
+                        DataColumn(
+                          label: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text('APPROVAL'),
+                              IconButton(
+                                icon: const Icon(Icons.info_outline, size: 18),
+                                onPressed: () => showWorkOrderApprovalInfo(context),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
+                        ),
+                        const DataColumn(label: Text('ACTION')),
+                      ],
+                      rows: [
+                        for (var i = 0; i < items.length; i++)
+                          _row(context, items[i], i + 1, dateFmt),
+                      ],
                     ),
-                    const DataColumn(label: Text('ACTION')),
-                  ],
-                  rows: [
-                    for (var i = 0; i < items.length; i++)
-                      _row(context, items[i], i + 1, dateFmt),
-                  ],
+                  ),
                 ),
               ),
             ),

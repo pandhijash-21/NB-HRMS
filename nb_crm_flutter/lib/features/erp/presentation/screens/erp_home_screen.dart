@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../auth/domain/permissions.dart';
-import '../../../auth/presentation/auth_providers.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
 
-class ErpHomeScreen extends ConsumerWidget {
+class ErpHomeScreen extends StatelessWidget {
   const ErpHomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final auth = ref.watch(authNotifierProvider);
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthBloc>().state;
     final canRead = Permissions.hasPermission(auth.permissions, 'PROJECTS', 'READ') ||
         Permissions.hasPermission(auth.permissions, 'WORK_ORDERS', 'READ') ||
         Permissions.canAccessAdminPortal(auth.permissions, auth.user?.employeeViewScope);

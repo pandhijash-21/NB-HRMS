@@ -1,32 +1,91 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../data/lookup_repository.dart';
 import '../domain/lookup_models.dart';
-import 'lookup_providers.dart';
 
 /// Resolves active lookup options for [category], with optional hardcoded fallbacks.
 List<LookupOption> resolveLookupOptions(
-  WidgetRef ref,
+  dynamic refOrContext,
   String category, {
   List<LookupOption> fallback = const [],
 }) {
-  final async = ref.watch(activeLookupsByCategoryProvider(category));
-  final fromApi = async.asData?.value ?? const <LookupOption>[];
-  if (fromApi.isNotEmpty) return fromApi;
+  if (refOrContext is BuildContext) {
+    try {
+      final cached = refOrContext.read<LookupRepository>().getCached(category);
+      if (cached.isNotEmpty) return cached;
+    } catch (_) {}
+  }
   return fallback;
 }
 
-bool lookupsLoading(WidgetRef ref, String category) {
-  return ref.watch(activeLookupsByCategoryProvider(category)).isLoading;
-}
+bool lookupsLoading([dynamic refOrContext, String? category]) => false;
 
 void _defer(VoidCallback fn) {
   WidgetsBinding.instance.addPostFrameCallback((_) => fn());
 }
 
+class _LookupContextWrapper extends StatefulWidget {
+  const _LookupContextWrapper({
+    required this.category,
+    required this.builder,
+    this.fallback = const [],
+  });
+
+  final String category;
+  final Widget Function(BuildContext context, List<LookupOption> options, bool isLoading) builder;
+  final List<LookupOption> fallback;
+
+  @override
+  State<_LookupContextWrapper> createState() => _LookupContextWrapperState();
+}
+
+class _LookupContextWrapperState extends State<_LookupContextWrapper> {
+  List<LookupOption>? _options;
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  Future<void> _load() async {
+    final repo = context.read<LookupRepository>();
+    final cached = repo.getCached(widget.category);
+    if (cached.isNotEmpty) {
+      if (mounted) setState(() => _options = cached);
+      return;
+    }
+    if (mounted) setState(() => _isLoading = true);
+    try {
+      final res = await repo.listByCategory(widget.category);
+      if (mounted) {
+        setState(() {
+          _options = res.isNotEmpty ? res : widget.fallback;
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _options = widget.fallback;
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return widget.builder(context, _options ?? widget.fallback, _isLoading);
+  }
+}
+
 /// Required dropdown bound to a lookup category (stores [LookupOption.code]).
 Widget lookupDropdown({
-  required WidgetRef ref,
+  dynamic ref,
+  BuildContext? context,
   required String category,
   required String label,
   required String? value,
@@ -34,85 +93,93 @@ Widget lookupDropdown({
   List<LookupOption> fallback = const [],
   bool required = false,
 }) {
-  if (lookupsLoading(ref, category) &&
-      resolveLookupOptions(ref, category, fallback: fallback).isEmpty) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: InputDecorator(
-        decoration: InputDecoration(
-          labelText: required ? '$label *' : label,
-          border: const OutlineInputBorder(),
-        ),
-        child: const SizedBox(
-          height: 24,
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
+  return _LookupContextWrapper(
+    category: category,
+    fallback: fallback,
+    builder: (ctx, options, isLoading) {
+      if (isLoading && options.isEmpty) {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: InputDecorator(
+            decoration: InputDecoration(
+              labelText: required ? '$label *' : label,
+              border: const OutlineInputBorder(),
+            ),
+            child: const SizedBox(
+              height: 24,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
             ),
           ),
-        ),
-      ),
-    );
-  }
-  return _LookupCodeDropdown(
-    category: category,
-    label: label,
-    value: value,
-    required: required,
-    options: List<LookupOption>.from(
-      resolveLookupOptions(ref, category, fallback: fallback),
-    ),
-    onChanged: onChanged,
+        );
+      }
+      return _LookupCodeDropdown(
+        category: category,
+        label: label,
+        value: value,
+        required: required,
+        options: List<LookupOption>.from(options),
+        onChanged: onChanged,
+      );
+    },
   );
 }
 
 /// Multi-select chips bound to a lookup category (stores codes as a set).
 Widget lookupMultiCheckbox({
-  required WidgetRef ref,
+  dynamic ref,
+  BuildContext? context,
   required String category,
   required String label,
   required Set<String> selected,
   required ValueChanged<Set<String>> onChanged,
 }) {
-  final options = resolveLookupOptions(ref, category);
-  if (lookupsLoading(ref, category) && options.isEmpty) {
-    return InputDecorator(
-      decoration: InputDecoration(
-        labelText: label,
-        border: const OutlineInputBorder(),
-      ),
-      child: const SizedBox(
-        height: 24,
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: SizedBox(
-            width: 20,
-            height: 20,
-            child: CircularProgressIndicator(strokeWidth: 2),
+  return _LookupContextWrapper(
+    category: category,
+    builder: (ctx, options, isLoading) {
+      if (isLoading && options.isEmpty) {
+        return InputDecorator(
+          decoration: InputDecoration(
+            labelText: label,
+            border: const OutlineInputBorder(),
           ),
-        ),
-      ),
-    );
-  }
-  if (options.isEmpty) {
-    return InputDecorator(
-      decoration: InputDecoration(
-        labelText: label,
-        border: const OutlineInputBorder(),
-        helperText: 'Add options under Configurations → Projects → Amenities.',
-      ),
-      child: const Text('No amenities configured yet'),
-    );
-  }
+          child: const SizedBox(
+            height: 24,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          ),
+        );
+      }
+      if (options.isEmpty) {
+        return InputDecorator(
+          decoration: InputDecoration(
+            labelText: label,
+            border: const OutlineInputBorder(),
+            helperText: 'Add options under Configurations → Projects → Amenities.',
+          ),
+          child: const Text('No amenities configured yet'),
+        );
+      }
 
-  return _LookupMultiChipField(
-    label: label,
-    options: options,
-    selected: selected,
-    onChanged: onChanged,
+      return _LookupMultiChipField(
+        label: label,
+        options: options,
+        selected: selected,
+        onChanged: onChanged,
+      );
+    },
   );
 }
 
@@ -287,13 +354,29 @@ class _AmenityChip extends StatelessWidget {
 
 /// Nullable dropdown (includes "Not set").
 Widget lookupNullableDropdown({
-  required WidgetRef ref,
+  dynamic ref,
+  BuildContext? context,
   required String category,
   required String label,
   required String? value,
   required ValueChanged<String?> onChanged,
   List<LookupOption> fallback = const [],
 }) {
+  if (context != null || ref == null) {
+    return _LookupContextWrapper(
+      category: category,
+      fallback: fallback,
+      builder: (ctx, options, isLoading) {
+        return _LookupNullableCodeDropdown(
+          category: category,
+          label: label,
+          value: value,
+          options: List<LookupOption>.from(options),
+          onChanged: onChanged,
+        );
+      },
+    );
+  }
   return _LookupNullableCodeDropdown(
     category: category,
     label: label,
@@ -307,7 +390,8 @@ Widget lookupNullableDropdown({
 
 /// Dropdown that stores the **label** (for fields historically free-text like bank/org).
 Widget lookupLabelDropdown({
-  required WidgetRef ref,
+  dynamic ref,
+  BuildContext? context,
   required String category,
   required String label,
   required String? value,
@@ -315,6 +399,26 @@ Widget lookupLabelDropdown({
   List<String> fallbackLabels = const [],
   bool required = false,
 }) {
+  if (context != null || ref == null) {
+    return _LookupContextWrapper(
+      category: category,
+      fallback: const [],
+      builder: (ctx, options, isLoading) {
+        final labels = List<String>.from(
+          options.isNotEmpty ? options.map((o) => o.label) : fallbackLabels,
+        );
+        return _LookupLabelDropdown(
+          category: category,
+          label: label,
+          value: value,
+          required: required,
+          labels: labels,
+          options: options,
+          onChanged: onChanged,
+        );
+      },
+    );
+  }
   final options = resolveLookupOptions(ref, category);
   final labels = List<String>.from(
     options.isNotEmpty ? options.map((o) => o.label) : fallbackLabels,
@@ -332,13 +436,33 @@ Widget lookupLabelDropdown({
 
 /// Nullable label dropdown (includes "Not set").
 Widget lookupNullableLabelDropdown({
-  required WidgetRef ref,
+  dynamic ref,
+  BuildContext? context,
   required String category,
   required String label,
   required String? value,
   required ValueChanged<String?> onChanged,
   List<String> fallbackLabels = const [],
 }) {
+  if (context != null || ref == null) {
+    return _LookupContextWrapper(
+      category: category,
+      fallback: const [],
+      builder: (ctx, options, isLoading) {
+        final labels = List<String>.from(
+          options.isNotEmpty ? options.map((o) => o.label) : fallbackLabels,
+        );
+        return _LookupNullableLabelDropdown(
+          category: category,
+          label: label,
+          value: value,
+          labels: labels,
+          options: options,
+          onChanged: onChanged,
+        );
+      },
+    );
+  }
   final options = resolveLookupOptions(ref, category);
   final labels = List<String>.from(
     options.isNotEmpty ? options.map((o) => o.label) : fallbackLabels,

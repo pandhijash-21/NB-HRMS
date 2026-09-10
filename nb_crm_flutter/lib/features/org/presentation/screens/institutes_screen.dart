@@ -1,24 +1,62 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/widgets/header_action_button.dart';
 import '../../../auth/domain/permissions.dart';
-import '../../../auth/presentation/auth_providers.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
+import '../../data/org_repository.dart';
 import '../../domain/org_models.dart';
-import '../org_providers.dart';
 import '../widgets/company_details_form.dart';
 
-class InstitutesScreen extends ConsumerWidget {
+class InstitutesScreen extends StatefulWidget {
   const InstitutesScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final auth = ref.watch(authNotifierProvider);
-    final role = auth.user?.role ?? '';
-    final hasAccess = Permissions.canManageUsers(auth.permissions, role) ||
-        Permissions.canManageInstitutes(auth.permissions, role);
+  State<InstitutesScreen> createState() => _InstitutesScreenState();
+}
+
+class _InstitutesScreenState extends State<InstitutesScreen> {
+  bool _loading = false;
+  String? _error;
+  List<Institute> _institutes = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadInstitutes();
+  }
+
+  Future<void> _loadInstitutes() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final list = await context.read<OrgRepository>().listInstitutes(includeInactive: true);
+      if (mounted) {
+        setState(() {
+          _institutes = list;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final authState = context.watch<AuthBloc>().state;
+    final role = authState.user?.role ?? '';
+    final hasAccess = Permissions.canManageUsers(authState.permissions, role) ||
+        Permissions.canManageInstitutes(authState.permissions, role);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     if (!hasAccess) {
@@ -31,8 +69,6 @@ class InstitutesScreen extends ConsumerWidget {
         ),
       );
     }
-
-    final institutesAsync = ref.watch(institutesListProvider);
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
@@ -55,7 +91,7 @@ class InstitutesScreen extends ConsumerWidget {
             tooltip: 'Refresh',
             label: 'Refresh',
             icon: const Icon(Icons.refresh_rounded, size: 18, color: Color(0xFFC5A059)),
-            onPressed: () => ref.invalidate(institutesListProvider),
+            onPressed: _loadInstitutes,
           ),
           const SizedBox(width: 8),
         ],
@@ -70,47 +106,48 @@ class InstitutesScreen extends ConsumerWidget {
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openEditor(context, ref),
+        onPressed: () => _openEditor(),
         icon: const Icon(Icons.add_business_rounded),
         label: const Text('Add institute'),
         backgroundColor: const Color(0xFFc2410c),
         foregroundColor: Colors.white,
       ),
-      body: institutesAsync.when(
-        data: (institutes) {
-          if (institutes.isEmpty) {
-            return const Center(child: Text('No institutes configured yet.'));
-          }
-          return ListView.builder(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 88),
-            itemCount: institutes.length,
-            itemBuilder: (context, index) =>
-                _instituteRow(context, ref, institutes[index], isDark),
-          );
-        },
-        loading: () => const Center(
-          child: CircularProgressIndicator(color: Color(0xFFC5A059)),
+      body: _buildBody(isDark),
+    );
+  }
+
+  Widget _buildBody(bool isDark) {
+    if (_loading && _institutes.isEmpty) {
+      return const Center(child: CircularProgressIndicator(color: Color(0xFFC5A059)));
+    }
+    if (_error != null && _institutes.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Failed to load institutes\n$_error', textAlign: TextAlign.center),
+            const SizedBox(height: 12),
+            FilledButton(
+              onPressed: _loadInstitutes,
+              child: const Text('Retry'),
+            ),
+          ],
         ),
-        error: (err, _) => Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Failed to load institutes\n$err', textAlign: TextAlign.center),
-              const SizedBox(height: 12),
-              FilledButton(
-                onPressed: () => ref.invalidate(institutesListProvider),
-                child: const Text('Retry'),
-              ),
-            ],
-          ),
-        ),
-      ),
+      );
+    }
+    if (_institutes.isEmpty) {
+      return const Center(child: Text('No institutes configured yet.'));
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 88),
+      itemCount: _institutes.length,
+      itemBuilder: (context, index) =>
+          _instituteRow(_institutes[index], isDark),
     );
   }
 
   Widget _instituteRow(
-    BuildContext context,
-    WidgetRef ref,
     Institute inst,
     bool isDark,
   ) {
@@ -182,16 +219,16 @@ class InstitutesScreen extends ConsumerWidget {
                 IconButton(
                   tooltip: 'Edit',
                   icon: const Icon(Icons.edit_outlined, size: 20),
-                  onPressed: () => _openEditor(context, ref, existing: inst),
+                  onPressed: () => _openEditor(existing: inst),
                 ),
                 Switch(
                   value: inst.isActive,
-                  onChanged: (checked) => _toggleActive(context, ref, inst.id, checked),
+                  onChanged: (checked) => _toggleActive(inst.id, checked),
                 ),
                 IconButton(
                   tooltip: 'Delete',
                   icon: Icon(Icons.delete_outline, color: Colors.red.shade400, size: 20),
-                  onPressed: () => _confirmDelete(context, ref, inst),
+                  onPressed: () => _confirmDelete(inst),
                 ),
                 Icon(
                   Icons.chevron_right_rounded,
@@ -207,17 +244,14 @@ class InstitutesScreen extends ConsumerWidget {
   }
 
   Future<void> _toggleActive(
-    BuildContext context,
-    WidgetRef ref,
     String id,
     bool isActive,
   ) async {
     try {
-      await ref.read(orgRepositoryProvider).updateInstitute(id, {'isActive': isActive});
-      ref.invalidate(institutesListProvider);
-      ref.invalidate(activeInstitutesProvider);
+      await context.read<OrgRepository>().updateInstitute(id, {'isActive': isActive});
+      _loadInstitutes();
     } catch (e) {
-      if (!context.mounted) return;
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to update institute: $e'), backgroundColor: Colors.red),
       );
@@ -225,8 +259,6 @@ class InstitutesScreen extends ConsumerWidget {
   }
 
   Future<void> _confirmDelete(
-    BuildContext context,
-    WidgetRef ref,
     Institute inst,
   ) async {
     final ok = await showDialog<bool>(
@@ -244,18 +276,17 @@ class InstitutesScreen extends ConsumerWidget {
         ],
       ),
     );
-    if (ok != true || !context.mounted) return;
+    if (ok != true || !mounted) return;
     try {
-      await ref.read(orgRepositoryProvider).deleteInstitute(inst.id);
-      ref.invalidate(institutesListProvider);
-      ref.invalidate(activeInstitutesProvider);
-      if (context.mounted) {
+      await context.read<OrgRepository>().deleteInstitute(inst.id);
+      _loadInstitutes();
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Institute removed')),
         );
       }
     } catch (e) {
-      if (context.mounted) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('$e'), backgroundColor: Colors.red),
         );
@@ -263,24 +294,23 @@ class InstitutesScreen extends ConsumerWidget {
     }
   }
 
-  Future<void> _openEditor(
-    BuildContext context,
-    WidgetRef ref, {
+  Future<void> _openEditor({
     Institute? existing,
   }) async {
+    final repo = context.read<OrgRepository>();
     List<Organization> orgs = const [];
     String? orgsError;
     try {
-      orgs = await ref.read(activeOrganizationsProvider.future);
+      orgs = await repo.listActiveOrganizations();
     } catch (e) {
       try {
-        final all = await ref.read(organizationsListProvider.future);
+        final all = await repo.listOrganizations();
         orgs = all.where((o) => o.isActive).toList();
       } catch (e2) {
         orgsError = '$e2';
       }
     }
-    if (!context.mounted) return;
+    if (!mounted) return;
 
     final result = await showInstituteEditorDialog(
       context,
@@ -288,17 +318,16 @@ class InstitutesScreen extends ConsumerWidget {
       organizations: orgs,
       organizationsError: orgsError,
     );
-    if (result == null || !context.mounted) return;
+    if (result == null || !mounted) return;
 
     try {
       if (existing == null) {
-        await ref.read(orgRepositoryProvider).createInstitute(result.body);
+        await context.read<OrgRepository>().createInstitute(result.body);
       } else {
-        await ref.read(orgRepositoryProvider).updateInstitute(existing.id, result.body);
+        await context.read<OrgRepository>().updateInstitute(existing.id, result.body);
       }
-      ref.invalidate(institutesListProvider);
-      ref.invalidate(activeInstitutesProvider);
-      if (context.mounted) {
+      _loadInstitutes();
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(existing == null ? 'Institute created' : 'Institute updated'),
@@ -306,7 +335,7 @@ class InstitutesScreen extends ConsumerWidget {
         );
       }
     } catch (e) {
-      if (context.mounted) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('$e'), backgroundColor: Colors.red),
         );

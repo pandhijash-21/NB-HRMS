@@ -1,4 +1,5 @@
 /// IST (+05:30) helpers for recruitment date/time (no Flutter UI deps).
+library;
 
 const Duration kIstOffset = Duration(hours: 5, minutes: 30);
 

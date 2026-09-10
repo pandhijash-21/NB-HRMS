@@ -113,7 +113,7 @@ class _AdminSalaryEntryScreenState extends ConsumerState<AdminSalaryEntryScreen>
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1.5),
           child: Container(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
             height: 1.5,
           ),
         ),
@@ -140,7 +140,7 @@ class _AdminSalaryEntryScreenState extends ConsumerState<AdminSalaryEntryScreen>
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
                 side: BorderSide(
-                  color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                  color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
                   width: 1.5,
                 ),
               ),
@@ -169,11 +169,11 @@ class _AdminSalaryEntryScreenState extends ConsumerState<AdminSalaryEntryScreen>
                           color: isDark ? Colors.white : const Color(0xFF212F3D),
                           fontWeight: FontWeight.w700,
                         ),
-                        decoration: InputDecoration(
+                        decoration: const InputDecoration(
                           labelText: 'Employee',
-                          labelStyle: const TextStyle(fontWeight: FontWeight.w600),
-                          prefixIcon: const Icon(Icons.person_rounded, color: Color(0xFFC5A059)),
-                          border: const OutlineInputBorder(),
+                          labelStyle: TextStyle(fontWeight: FontWeight.w600),
+                          prefixIcon: Icon(Icons.person_rounded, color: Color(0xFFC5A059)),
+                          border: OutlineInputBorder(),
                         ),
                         items: employees
                             .map(
@@ -236,7 +236,7 @@ class _AdminSalaryEntryScreenState extends ConsumerState<AdminSalaryEntryScreen>
                         color: isDark ? const Color(0xFF2B2722) : const Color(0xFFF1F5F9),
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
-                          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
                         ),
                       ),
                       child: Row(
@@ -266,9 +266,9 @@ class _AdminSalaryEntryScreenState extends ConsumerState<AdminSalaryEntryScreen>
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   decoration: BoxDecoration(
-                    color: Colors.red.withOpacity(0.1),
+                    color: Colors.red.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.red.withOpacity(0.2)),
+                    border: Border.all(color: Colors.red.withValues(alpha: 0.2)),
                   ),
                   child: const Row(
                     children: [
@@ -290,9 +290,9 @@ class _AdminSalaryEntryScreenState extends ConsumerState<AdminSalaryEntryScreen>
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.12),
+                    color: Colors.orange.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.orange.withOpacity(0.2)),
+                    border: Border.all(color: Colors.orange.withValues(alpha: 0.2)),
                   ),
                   child: Row(
                     children: [
@@ -346,7 +346,7 @@ class _AdminSalaryEntryScreenState extends ConsumerState<AdminSalaryEntryScreen>
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
                   side: BorderSide(
-                    color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                    color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
                     width: 1.5,
                   ),
                 ),
@@ -392,7 +392,7 @@ class _AdminSalaryEntryScreenState extends ConsumerState<AdminSalaryEntryScreen>
                                   style: OutlinedButton.styleFrom(
                                     foregroundColor: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
                                     side: BorderSide(
-                                      color: isDark ? const Color(0xFFC5A059).withOpacity(0.4) : const Color(0xFFCFD8DC),
+                                      color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.4) : const Color(0xFFCFD8DC),
                                       width: 1.2,
                                     ),
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -550,9 +550,9 @@ class _OverrideSection extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
                         decoration: BoxDecoration(
-                          color: Colors.orange.withOpacity(0.12),
+                          color: Colors.orange.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: Colors.orange.withOpacity(0.2)),
+                          border: Border.all(color: Colors.orange.withValues(alpha: 0.2)),
                         ),
                         child: const Text(
                           'OVERRIDDEN',

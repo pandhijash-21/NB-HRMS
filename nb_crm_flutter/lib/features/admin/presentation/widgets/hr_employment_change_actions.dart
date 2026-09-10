@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../auth/domain/permissions.dart';
 import '../../../org/domain/org_models.dart';
 import '../../../org/presentation/org_providers.dart';
 import '../../../profile/presentation/profile_notifier.dart';
 import '../admin_notifier.dart';
 
-bool isAdminRole(String? role) => (role ?? '').toUpperCase() == 'ADMIN';
+bool isAdminRole(String? role) => Permissions.isAdmin(role);
 
 String _fmtDate(DateTime d) =>
     '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
@@ -43,7 +44,7 @@ Future<void> showInstituteTransferDialog({
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 isExpanded: true,
-                value: selectedId,
+                initialValue: selectedId,
                 decoration: const InputDecoration(
                   labelText: 'Transfer to institute *',
                   border: OutlineInputBorder(),
@@ -151,7 +152,7 @@ Future<void> showDesignationUpgradeDialog({
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 isExpanded: true,
-                value: selectedName,
+                initialValue: selectedName,
                 decoration: const InputDecoration(
                   labelText: 'New designation *',
                   border: OutlineInputBorder(),

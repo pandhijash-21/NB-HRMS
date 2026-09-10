@@ -270,7 +270,7 @@ class _ClaimCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: _statusColor().withOpacity(0.12),
+                    color: _statusColor().withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
@@ -287,7 +287,7 @@ class _ClaimCard extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               claim.claimNo,
-              style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+              style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
             ),
             if (claim.employeeName != null) ...[
               const SizedBox(height: 6),
@@ -298,7 +298,7 @@ class _ClaimCard extends StatelessWidget {
               if (claim.designation != null || claim.department != null)
                 Text(
                   [claim.designation, claim.department].whereType<String>().join(' · '),
-                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                  style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
                 ),
             ],
             const SizedBox(height: 8),
@@ -306,7 +306,7 @@ class _ClaimCard extends StatelessWidget {
             if (claim.openingKm != null || claim.closingKm != null)
               Text(
                 'Km: ${claim.openingKm?.toStringAsFixed(1) ?? '—'} → ${claim.closingKm?.toStringAsFixed(1) ?? '—'}',
-                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
               ),
             const SizedBox(height: 6),
             Text(claim.description, style: const TextStyle(fontSize: 13)),
@@ -336,7 +336,7 @@ class _ClaimCard extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 'Current approval step: ${claim.currentStepNumber}',
-                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
               ),
             ],
             if (showActions) ...[

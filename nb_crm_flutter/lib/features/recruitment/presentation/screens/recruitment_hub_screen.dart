@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
-import '../../../../core/theme/app_colors.dart';
 import '../../../admin/domain/admin_models.dart';
 import '../../../admin/presentation/admin_notifier.dart';
 import '../../../auth/domain/permissions.dart';
@@ -389,13 +388,13 @@ class _MyInterviewsTabState extends ConsumerState<_MyInterviewsTab>
                                 ],
                                 if (r.isLocked) ...[
                                   const SizedBox(height: 6),
-                                  _MetaRow(
+                                  const _MetaRow(
                                     icon: Icons.lock_outline,
                                     text: 'Confirmed by Admin — view only',
                                   ),
                                 ] else if (r.awaitsAdminConfirm) ...[
                                   const SizedBox(height: 6),
-                                  _MetaRow(
+                                  const _MetaRow(
                                     icon: Icons.hourglass_top,
                                     text: 'Awaiting Admin confirmation',
                                   ),
@@ -636,7 +635,7 @@ class _CandidatesTabState extends ConsumerState<_CandidatesTab>
                 Icon(
                   Icons.people_outline_rounded,
                   size: 64,
-                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.2),
+                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.2),
                 ),
                 const SizedBox(height: 16),
                 Text(
@@ -644,7 +643,7 @@ class _CandidatesTabState extends ConsumerState<_CandidatesTab>
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
-                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.8),
+                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.8),
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -652,7 +651,7 @@ class _CandidatesTabState extends ConsumerState<_CandidatesTab>
                   'Start building your talent pool by adding candidates.',
                   style: TextStyle(
                     fontSize: 13,
-                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4),
+                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4),
                   ),
                 ),
                 const SizedBox(height: 24),
@@ -779,7 +778,7 @@ class _RequirementFormSheetState extends ConsumerState<_RequirementFormSheet> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _instituteId,
+              initialValue: _instituteId,
               decoration: const InputDecoration(labelText: 'Institute', border: OutlineInputBorder()),
               items: institutes
                   .map((i) => DropdownMenuItem(value: i.id, child: Text(i.name)))
@@ -793,7 +792,7 @@ class _RequirementFormSheetState extends ConsumerState<_RequirementFormSheet> {
             ),
             const SizedBox(height: 10),
             DropdownButtonFormField<String>(
-              value: _designationId,
+              initialValue: _designationId,
               decoration: const InputDecoration(
                 labelText: 'Designation',
                 border: OutlineInputBorder(),
@@ -831,7 +830,7 @@ class _RequirementFormSheetState extends ConsumerState<_RequirementFormSheet> {
             ),
             const SizedBox(height: 10),
             DropdownButtonFormField<String?>(
-              value: _managerUserId,
+              initialValue: _managerUserId,
               decoration: const InputDecoration(
                 labelText: 'Reporting manager',
                 border: OutlineInputBorder(),
@@ -997,7 +996,7 @@ class _CandidateFormDialogState extends ConsumerState<_CandidateFormDialog> {
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
         borderSide: BorderSide(
-          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
         ),
       ),
       focusedBorder: OutlineInputBorder(
@@ -1034,7 +1033,7 @@ class _CandidateFormDialogState extends ConsumerState<_CandidateFormDialog> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               DropdownButtonFormField<String>(
-                value: _requirementId,
+                initialValue: _requirementId,
                 decoration: _styledInput('Open job requirement *', isDark),
                 dropdownColor: isDark ? const Color(0xFF2B2722) : Colors.white,
                 items: openJobs
@@ -1091,7 +1090,7 @@ class _CandidateFormDialogState extends ConsumerState<_CandidateFormDialog> {
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   side: BorderSide(
-                    color: isDark ? const Color(0xFFC5A059).withOpacity(0.3) : const Color(0xFFCFD8DC),
+                    color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.3) : const Color(0xFFCFD8DC),
                   ),
                 ),
                 icon: const Icon(Icons.upload_file_rounded, size: 18),
@@ -1119,7 +1118,7 @@ class _CandidateFormDialogState extends ConsumerState<_CandidateFormDialog> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: _interviewerUserId,
+                initialValue: _interviewerUserId,
                 decoration: _styledInput('Interviewer *', isDark),
                 dropdownColor: isDark ? const Color(0xFF2B2722) : Colors.white,
                 items: names

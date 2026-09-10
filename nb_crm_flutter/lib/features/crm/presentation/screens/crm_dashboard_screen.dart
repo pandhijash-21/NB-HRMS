@@ -1,16 +1,32 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/bloc/load_status.dart';
 import '../../../../core/router/app_back_button.dart';
-import '../crm_providers.dart';
-import '../../domain/crm_models.dart';
+import '../../data/crm_repository.dart';
+import '../bloc/crm_dashboard_bloc.dart';
 
-class CrmDashboardScreen extends ConsumerWidget {
+class CrmDashboardScreen extends StatelessWidget {
   const CrmDashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
+    return BlocProvider<CrmDashboardBloc>(
+      create: (ctx) => CrmDashboardBloc(
+        crmRepository: ctx.read<CrmRepository>(),
+      )..add(const CrmDashboardLoadRequested()),
+      child: const _CrmDashboardView(),
+    );
+  }
+}
+
+class _CrmDashboardView extends StatelessWidget {
+  const _CrmDashboardView();
+
+  @override
+  Widget build(BuildContext context) {
+    final bloc = context.read<CrmDashboardBloc>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final width = MediaQuery.sizeOf(context).width;
     final wide = width >= 900;
@@ -19,59 +35,61 @@ class CrmDashboardScreen extends ConsumerWidget {
     final primaryGold = isDark ? const Color(0xFFC5A059) : const Color(0xFF2563EB);
     final cardBg = isDark ? const Color(0xFF1E1B18) : Colors.white;
     final borderColor = isDark
-        ? const Color(0xFFC5A059).withOpacity(0.18)
+        ? const Color(0xFFC5A059).withValues(alpha: 0.18)
         : const Color(0xFFE2E8F0);
-    final textMuted = isDark ? Colors.white.withOpacity(0.6) : const Color(0xFF64748B);
+    final textMuted = isDark ? Colors.white.withValues(alpha: 0.6) : const Color(0xFF64748B);
 
-    final kpiAsync = ref.watch(crmKpiProvider);
-    final todayFollowUpsAsync = ref.watch(crmFollowUpsProvider('today'));
-    final settingsAsync = ref.watch(crmSettingsProvider);
-
-    return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF141210) : const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        title: const Text('NB CRM Workspace'),
-        leading: const AppBackButton(),
-        backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        actions: [
-          IconButton(
-            tooltip: 'Bin / Archive',
-            icon: const Icon(Icons.delete_outline_rounded),
-            onPressed: () => context.go('/crm/bin'),
+    return BlocConsumer<CrmDashboardBloc, CrmDashboardState>(
+      listener: (context, state) {
+        if (state.actionSuccessMessage != null && state.actionSuccessMessage!.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(state.actionSuccessMessage!)),
+          );
+        }
+      },
+      builder: (context, state) {
+        return Scaffold(
+          backgroundColor: isDark ? const Color(0xFF141210) : const Color(0xFFF8FAFC),
+          appBar: AppBar(
+            title: const Text('NB CRM Workspace'),
+            leading: const AppBackButton(),
+            backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            actions: [
+              IconButton(
+                tooltip: 'Bin / Archive',
+                icon: const Icon(Icons.delete_outline_rounded),
+                onPressed: () => context.go('/crm/bin'),
+              ),
+              IconButton(
+                tooltip: 'Settings',
+                icon: const Icon(Icons.settings_outlined),
+                onPressed: () => context.go('/crm/settings'),
+              ),
+              IconButton(
+                tooltip: 'Refresh',
+                icon: const Icon(Icons.refresh_rounded),
+                onPressed: () {
+                  bloc.add(const CrmDashboardRefreshRequested());
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('CRM data refreshed'),
+                      duration: Duration(seconds: 1),
+                    ),
+                  );
+                },
+              ),
+            ],
           ),
-          IconButton(
-            tooltip: 'Settings',
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: () => context.go('/crm/settings'),
-          ),
-          IconButton(
-            tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: () {
-              ref.invalidate(crmKpiProvider);
-              ref.invalidate(crmFollowUpsProvider);
-              ref.invalidate(crmSettingsProvider);
-              ref.read(crmLeadsProvider.notifier).refresh();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('CRM data refreshed'),
-                  duration: Duration(seconds: 1),
-                ),
-              );
-            },
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: EdgeInsets.symmetric(
-          horizontal: wide ? 24 : 14,
-          vertical: 16,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+          body: SingleChildScrollView(
+            padding: EdgeInsets.symmetric(
+              horizontal: wide ? 24 : 14,
+              vertical: 16,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
             // Welcome & Header Banner
             Container(
               width: double.infinity,
@@ -92,7 +110,7 @@ class CrmDashboardScreen extends ConsumerWidget {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: primaryGold.withOpacity(0.12),
+                      color: primaryGold.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
@@ -131,11 +149,12 @@ class CrmDashboardScreen extends ConsumerWidget {
             const SizedBox(height: 16),
 
             // KPI Grid (Fully Responsive on All Screen Sizes, Admin Toggleable)
-            kpiAsync.when(
-              loading: () => const Center(child: Padding(padding: EdgeInsets.all(16), child: LinearProgressIndicator())),
-              error: (_, __) => const SizedBox.shrink(),
-              data: (kpi) {
-                final settings = settingsAsync.value;
+            if (state.status == LoadStatus.loading && state.kpiMetrics == null)
+              const Center(child: Padding(padding: EdgeInsets.all(16), child: LinearProgressIndicator()))
+            else if (state.kpiMetrics != null) ...[
+              (() {
+                final kpi = state.kpiMetrics!;
+                final settings = state.settings;
                 final List<Widget> cards = [];
 
                 if (settings?.kpiShowActiveLeads ?? true) {
@@ -318,8 +337,8 @@ class CrmDashboardScreen extends ConsumerWidget {
                     );
                   },
                 );
-              },
-            ),
+              })(),
+            ],
             const SizedBox(height: 20),
 
             // TODAY'S SCHEDULED FOLLOW-UPS SECTION HEADER
@@ -335,7 +354,7 @@ class CrmDashboardScreen extends ConsumerWidget {
                     Container(
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFEA580C).withOpacity(0.12),
+                        color: const Color(0xFFEA580C).withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: const Icon(Icons.alarm_on_rounded, size: 16, color: Color(0xFFEA580C)),
@@ -351,136 +370,110 @@ class CrmDashboardScreen extends ConsumerWidget {
                     ),
                   ],
                 ),
-                todayFollowUpsAsync.when(
-                  data: (items) => Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: items.isNotEmpty
-                          ? const Color(0xFFEA580C).withOpacity(0.12)
-                          : (isDark ? Colors.white10 : Colors.black12),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      '${items.length} Pending Today',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: items.isNotEmpty ? const Color(0xFFEA580C) : textMuted,
-                      ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: state.todayFollowUps.isNotEmpty
+                        ? const Color(0xFFEA580C).withValues(alpha: 0.12)
+                        : (isDark ? Colors.white10 : Colors.black12),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '${state.todayFollowUps.length} Pending Today',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: state.todayFollowUps.isNotEmpty ? const Color(0xFFEA580C) : textMuted,
                     ),
                   ),
-                  loading: () => const SizedBox.shrink(),
-                  error: (_, __) => const SizedBox.shrink(),
                 ),
               ],
             ),
             const SizedBox(height: 12),
 
             // Today's Follow-up Calls List
-            todayFollowUpsAsync.when(
-              loading: () => const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator())),
-              error: (err, _) => Container(
-                padding: const EdgeInsets.all(16),
+            if (state.todayFollowUps.isEmpty)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
                   color: cardBg,
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: borderColor),
                 ),
-                child: Text('Error loading follow-ups: $err', style: const TextStyle(color: Colors.red)),
-              ),
-              data: (followUps) {
-                if (followUps.isEmpty) {
-                  return Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: cardBg,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: borderColor),
-                    ),
-                    child: Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.check_circle_outline_rounded, size: 40, color: Colors.green.withOpacity(0.7)),
-                          const SizedBox(height: 8),
-                          Text(
-                            'No pending calls scheduled for today!',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: isDark ? Colors.white : const Color(0xFF1E293B),
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'All follow-ups are up to date.',
-                            style: TextStyle(fontSize: 12, color: textMuted),
-                          ),
-                        ],
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.check_circle_outline_rounded, size: 40, color: Colors.green.withValues(alpha: 0.7)),
+                      const SizedBox(height: 8),
+                      Text(
+                        'No pending calls scheduled for today!',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white : const Color(0xFF1E293B),
+                        ),
                       ),
-                    ),
-                  );
-                }
-
-                return Container(
-                  decoration: BoxDecoration(
-                    color: cardBg,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: borderColor),
+                      const SizedBox(height: 4),
+                      Text(
+                        'All follow-ups are up to date.',
+                        style: TextStyle(fontSize: 12, color: textMuted),
+                      ),
+                    ],
                   ),
-                  child: ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: followUps.length > 5 ? 5 : followUps.length,
-                    separatorBuilder: (_, __) => Divider(height: 1, color: borderColor),
-                    itemBuilder: (context, index) {
-                      final item = followUps[index];
-                      return ListTile(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                        leading: CircleAvatar(
-                          radius: 18,
-                          backgroundColor: const Color(0xFFEA580C).withOpacity(0.12),
-                          child: const Icon(Icons.phone_in_talk_rounded, size: 18, color: Color(0xFFEA580C)),
+                ),
+              )
+            else
+              Container(
+                decoration: BoxDecoration(
+                  color: cardBg,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: borderColor),
+                ),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: state.todayFollowUps.length > 5 ? 5 : state.todayFollowUps.length,
+                  separatorBuilder: (_, __) => Divider(height: 1, color: borderColor),
+                  itemBuilder: (context, index) {
+                    final item = state.todayFollowUps[index];
+                    return ListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                      leading: CircleAvatar(
+                        radius: 18,
+                        backgroundColor: const Color(0xFFEA580C).withValues(alpha: 0.12),
+                        child: const Icon(Icons.phone_in_talk_rounded, size: 18, color: Color(0xFFEA580C)),
+                      ),
+                      title: Text(
+                        item.leadName ?? 'Unnamed Lead',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white : const Color(0xFF1E293B),
                         ),
-                        title: Text(
-                          item.leadName ?? 'Unnamed Lead',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: isDark ? Colors.white : const Color(0xFF1E293B),
-                          ),
+                      ),
+                      subtitle: Text(
+                        '${item.leadPhone ?? "No phone"} • Time: ${item.scheduledTime}${item.remarks != null ? " • ${item.remarks}" : ""}',
+                        style: TextStyle(fontSize: 12, color: textMuted),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: ElevatedButton(
+                        onPressed: () => bloc.add(CrmDashboardFollowUpCompleted(item.id, remarks: 'Completed from Dashboard')),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          minimumSize: const Size(60, 32),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         ),
-                        subtitle: Text(
-                          '${item.leadPhone ?? "No phone"} • Time: ${item.scheduledTime}${item.remarks != null ? " • ${item.remarks}" : ""}',
-                          style: TextStyle(fontSize: 12, color: textMuted),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        trailing: ElevatedButton(
-                          onPressed: () async {
-                            await ref.read(crmRepositoryProvider).completeFollowUp(
-                                  item.id,
-                                  remarks: 'Completed from Dashboard',
-                                );
-                            ref.invalidate(crmFollowUpsProvider);
-                            ref.invalidate(crmKpiProvider);
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            minimumSize: const Size(60, 32),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          ),
-                          child: const Text('Done', style: TextStyle(fontSize: 12)),
-                        ),
-                      );
-                    },
-                  ),
-                );
-              },
-            ),
+                        child: const Text('Done', style: TextStyle(fontSize: 12)),
+                      ),
+                    );
+                  },
+                ),
+              ),
             const SizedBox(height: 24),
 
             // Quick Navigation Shortcuts
@@ -634,7 +627,9 @@ class CrmDashboardScreen extends ConsumerWidget {
         ),
       ),
     );
-  }
+  },
+);
+}
 
   Widget _buildKpiCard(
     BuildContext context, {
@@ -676,7 +671,7 @@ class CrmDashboardScreen extends ConsumerWidget {
               Container(
                 padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.12),
+                  color: color.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(icon, size: 14, color: color),
@@ -743,7 +738,7 @@ class CrmDashboardScreen extends ConsumerWidget {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.12),
+                color: color.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(icon, color: color, size: 22),

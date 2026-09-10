@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/bloc/load_status.dart';
 import '../../../../core/router/app_back_button.dart';
 import '../../domain/work_order_models.dart';
-import '../work_order_providers.dart';
+import '../bloc/erp_work_orders_bloc.dart';
 
-class ActivitiesConfigScreen extends ConsumerStatefulWidget {
+class ActivitiesConfigScreen extends StatefulWidget {
   const ActivitiesConfigScreen({super.key});
 
   @override
-  ConsumerState<ActivitiesConfigScreen> createState() => _ActivitiesConfigScreenState();
+  State<ActivitiesConfigScreen> createState() => _ActivitiesConfigScreenState();
 }
 
 class _SubtaskDraft {
@@ -18,11 +19,17 @@ class _SubtaskDraft {
   String description;
 }
 
-class _ActivitiesConfigScreenState extends ConsumerState<ActivitiesConfigScreen> {
+class _ActivitiesConfigScreenState extends State<ActivitiesConfigScreen> {
   final _nameCtrl = TextEditingController();
   final List<_SubtaskDraft> _subtasks = [];
   String? _editingId;
   final Set<String> _expanded = {};
+
+  @override
+  void initState() {
+    super.initState();
+    context.read<ErpWorkOrdersBloc>().add(const ErpActivitiesRequested(isAdmin: true));
+  }
 
   @override
   void dispose() {
@@ -37,11 +44,10 @@ class _ActivitiesConfigScreenState extends ConsumerState<ActivitiesConfigScreen>
     setState(() {});
   }
 
-  Future<void> _save() async {
+  void _save() {
     final name = _nameCtrl.text.trim();
     if (name.isEmpty) return;
     final validSubtasks = _subtasks.where((s) => s.name.trim().isNotEmpty).toList();
-    final repo = ref.read(workOrderRepositoryProvider);
     final body = {
       'name': name,
       'subtasks': validSubtasks
@@ -51,28 +57,16 @@ class _ActivitiesConfigScreenState extends ConsumerState<ActivitiesConfigScreen>
               })
           .toList(),
     };
-    try {
-      if (_editingId != null) {
-        await repo.updateActivity(_editingId!, body);
-      } else {
-        await repo.createActivity(body);
-      }
-      ref.invalidate(erpActivitiesAdminProvider);
-      ref.invalidate(erpActivitiesProvider);
-      _resetForm();
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    if (_editingId != null) {
+      context.read<ErpWorkOrdersBloc>().add(ErpActivityUpdated(id: _editingId!, body: body));
+    } else {
+      context.read<ErpWorkOrdersBloc>().add(ErpActivityCreated(body));
     }
+    _resetForm();
   }
 
-  Future<void> _toggle(String id) async {
-    try {
-      await ref.read(workOrderRepositoryProvider).toggleActivity(id);
-      ref.invalidate(erpActivitiesAdminProvider);
-      ref.invalidate(erpActivitiesProvider);
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
-    }
+  void _toggle(String id) {
+    context.read<ErpWorkOrdersBloc>().add(ErpActivityToggled(id));
   }
 
   Future<void> _delete(String id) async {
@@ -88,13 +82,9 @@ class _ActivitiesConfigScreenState extends ConsumerState<ActivitiesConfigScreen>
       ),
     );
     if (ok != true) return;
-    try {
-      await ref.read(workOrderRepositoryProvider).removeActivity(id);
-      ref.invalidate(erpActivitiesAdminProvider);
-      ref.invalidate(erpActivitiesProvider);
+    if (mounted) {
+      context.read<ErpWorkOrdersBloc>().add(ErpActivityDeleted(id));
       if (_editingId == id) _resetForm();
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     }
   }
 
@@ -223,170 +213,191 @@ class _ActivitiesConfigScreenState extends ConsumerState<ActivitiesConfigScreen>
 
   @override
   Widget build(BuildContext context) {
-    final async = ref.watch(erpActivitiesAdminProvider);
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Activities'),
-        leading: const AppBackButton(fallbackLocation: '/erp/configurations'),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _editingId == null ? 'Add Activity' : 'Edit Activity',
-                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _nameCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Activity Name *',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  _subtaskEditorTable(),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      FilledButton(onPressed: _save, child: Text(_editingId == null ? 'Save activity' : 'Update activity')),
-                      if (_editingId != null) ...[
-                        const SizedBox(width: 8),
-                        TextButton(onPressed: _resetForm, child: const Text('Cancel edit')),
-                      ],
-                    ],
-                  ),
-                ],
-              ),
-            ),
+    return BlocConsumer<ErpWorkOrdersBloc, ErpWorkOrdersState>(
+      listener: (context, state) {
+        if (state.actionMessage != null) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.actionMessage!)));
+        } else if (state.errorMessage != null) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.errorMessage!)));
+        }
+      },
+      builder: (context, state) {
+        final items = state.activities;
+        final isBusy = state.status == LoadStatus.loading && items.isEmpty;
+
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('Activities'),
+            leading: const AppBackButton(fallbackLocation: '/erp/configurations'),
           ),
-          const SizedBox(height: 16),
-          async.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Text('$e'),
-            data: (items) => Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Configured activities (${items.length})',
-                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-                const SizedBox(height: 8),
-                if (items.isEmpty)
-                  const Card(
-                    child: Padding(
-                      padding: EdgeInsets.all(24),
-                      child: Center(child: Text('No activities configured yet.')),
-                    ),
-                  )
-                else
-                  ...items.map((item) {
-                    final expanded = _expanded.contains(item.id);
-                    final activeSubs = item.subtasks.where((s) => s.isActive).toList();
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      child: Column(
-                        children: [
-                          ListTile(
-                            title: Text(item.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                            subtitle: Text(
-                              '${activeSubs.length} sub-activit${activeSubs.length == 1 ? 'y' : 'ies'}',
+          body: isBusy
+              ? const Center(child: CircularProgressIndicator())
+              : ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _editingId == null ? 'Add Activity' : 'Edit Activity',
+                              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
                             ),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: _nameCtrl,
+                              decoration: const InputDecoration(
+                                labelText: 'Activity Name *',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            _subtaskEditorTable(),
+                            const SizedBox(height: 16),
+                            Row(
                               children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: item.isActive ? Colors.green : Colors.grey,
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    item.isActive ? 'Active' : 'Inactive',
-                                    style: const TextStyle(color: Colors.white, fontSize: 12),
-                                  ),
+                                FilledButton(
+                                  onPressed: state.isActing ? null : _save,
+                                  child: state.isActing
+                                      ? const SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                        )
+                                      : Text(_editingId == null ? 'Save activity' : 'Update activity'),
                                 ),
-                                IconButton(
-                                  tooltip: 'Edit',
-                                  icon: const Icon(Icons.edit_outlined),
-                                  onPressed: () => _edit(item),
-                                ),
-                                IconButton(
-                                  tooltip: item.isActive ? 'Deactivate' : 'Activate',
-                                  icon: Icon(item.isActive ? Icons.toggle_on : Icons.toggle_off),
-                                  onPressed: () => _toggle(item.id),
-                                ),
-                                IconButton(
-                                  tooltip: 'Delete',
-                                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                                  onPressed: () => _delete(item.id),
-                                ),
-                                IconButton(
-                                  tooltip: expanded ? 'Collapse' : 'Expand sub-activities',
-                                  icon: Icon(expanded ? Icons.expand_less : Icons.expand_more),
-                                  onPressed: () => _toggleExpanded(item.id),
-                                ),
+                                if (_editingId != null) ...[
+                                  const SizedBox(width: 8),
+                                  TextButton(onPressed: _resetForm, child: const Text('Cancel edit')),
+                                ],
                               ],
                             ),
-                          ),
-                          if (expanded)
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                              child: activeSubs.isEmpty
-                                  ? Text(
-                                      'No sub-activities. Click Edit to add them.',
-                                      style: TextStyle(color: Theme.of(context).hintColor),
-                                    )
-                                  : Table(
-                                      columnWidths: const {
-                                        0: FixedColumnWidth(40),
-                                        1: FlexColumnWidth(2),
-                                        2: FlexColumnWidth(3),
-                                      },
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Configured activities (${items.length})',
+                            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                        const SizedBox(height: 8),
+                        if (items.isEmpty)
+                          const Card(
+                            child: Padding(
+                              padding: EdgeInsets.all(24),
+                              child: Center(child: Text('No activities configured yet.')),
+                            ),
+                          )
+                        else
+                          ...items.map((item) {
+                            final expanded = _expanded.contains(item.id);
+                            final activeSubs = item.subtasks.where((s) => s.isActive).toList();
+                            return Card(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              child: Column(
+                                children: [
+                                  ListTile(
+                                    title: Text(item.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                                    subtitle: Text(
+                                      '${activeSubs.length} sub-activit${activeSubs.length == 1 ? 'y' : 'ies'}',
+                                    ),
+                                    trailing: Row(
+                                      mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        const TableRow(
-                                          children: [
-                                            Padding(padding: EdgeInsets.all(8), child: Text('SR', style: TextStyle(fontWeight: FontWeight.w700))),
-                                            Padding(padding: EdgeInsets.all(8), child: Text('SUB-ACTIVITY', style: TextStyle(fontWeight: FontWeight.w700))),
-                                            Padding(padding: EdgeInsets.all(8), child: Text('DESCRIPTION', style: TextStyle(fontWeight: FontWeight.w700))),
-                                          ],
-                                        ),
-                                        for (var i = 0; i < activeSubs.length; i++)
-                                          TableRow(
-                                            children: [
-                                              Padding(padding: const EdgeInsets.all(8), child: Text('${i + 1}')),
-                                              Padding(padding: const EdgeInsets.all(8), child: Text(activeSubs[i].name)),
-                                              Padding(
-                                                padding: const EdgeInsets.all(8),
-                                                child: Text(
-                                                  activeSubs[i].description?.isNotEmpty == true
-                                                      ? activeSubs[i].description!
-                                                      : '—',
-                                                  style: TextStyle(
-                                                    color: activeSubs[i].description?.isNotEmpty == true
-                                                        ? null
-                                                        : Theme.of(context).hintColor,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: item.isActive ? Colors.green : Colors.grey,
+                                            borderRadius: BorderRadius.circular(6),
                                           ),
+                                          child: Text(
+                                            item.isActive ? 'Active' : 'Inactive',
+                                            style: const TextStyle(color: Colors.white, fontSize: 12),
+                                          ),
+                                        ),
+                                        IconButton(
+                                          tooltip: 'Edit',
+                                          icon: const Icon(Icons.edit_outlined),
+                                          onPressed: () => _edit(item),
+                                        ),
+                                        IconButton(
+                                          tooltip: item.isActive ? 'Deactivate' : 'Activate',
+                                          icon: Icon(item.isActive ? Icons.toggle_on : Icons.toggle_off),
+                                          onPressed: () => _toggle(item.id),
+                                        ),
+                                        IconButton(
+                                          tooltip: 'Delete',
+                                          icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                                          onPressed: () => _delete(item.id),
+                                        ),
+                                        IconButton(
+                                          tooltip: expanded ? 'Collapse' : 'Expand sub-activities',
+                                          icon: Icon(expanded ? Icons.expand_less : Icons.expand_more),
+                                          onPressed: () => _toggleExpanded(item.id),
+                                        ),
                                       ],
                                     ),
-                            ),
-                        ],
-                      ),
-                    );
-                  }),
-              ],
-            ),
-          ),
-        ],
-      ),
+                                  ),
+                                  if (expanded)
+                                    Padding(
+                                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                                      child: activeSubs.isEmpty
+                                          ? Text(
+                                              'No sub-activities. Click Edit to add them.',
+                                              style: TextStyle(color: Theme.of(context).hintColor),
+                                            )
+                                          : Table(
+                                              columnWidths: const {
+                                                0: FixedColumnWidth(40),
+                                                1: FlexColumnWidth(2),
+                                                2: FlexColumnWidth(3),
+                                              },
+                                              children: [
+                                                const TableRow(
+                                                  children: [
+                                                    Padding(padding: EdgeInsets.all(8), child: Text('SR', style: TextStyle(fontWeight: FontWeight.w700))),
+                                                    Padding(padding: EdgeInsets.all(8), child: Text('SUB-ACTIVITY', style: TextStyle(fontWeight: FontWeight.w700))),
+                                                    Padding(padding: EdgeInsets.all(8), child: Text('DESCRIPTION', style: TextStyle(fontWeight: FontWeight.w700))),
+                                                  ],
+                                                ),
+                                                for (var i = 0; i < activeSubs.length; i++)
+                                                  TableRow(
+                                                    children: [
+                                                      Padding(padding: const EdgeInsets.all(8), child: Text('${i + 1}')),
+                                                      Padding(padding: const EdgeInsets.all(8), child: Text(activeSubs[i].name)),
+                                                      Padding(
+                                                        padding: const EdgeInsets.all(8),
+                                                        child: Text(
+                                                          activeSubs[i].description?.isNotEmpty == true
+                                                              ? activeSubs[i].description!
+                                                              : '—',
+                                                          style: TextStyle(
+                                                            color: activeSubs[i].description?.isNotEmpty == true
+                                                                ? null
+                                                                : Theme.of(context).hintColor,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                              ],
+                                            ),
+                                    ),
+                                ],
+                              ),
+                            );
+                          }),
+                      ],
+                    ),
+                  ],
+                ),
+        );
+      },
     );
   }
 }
+

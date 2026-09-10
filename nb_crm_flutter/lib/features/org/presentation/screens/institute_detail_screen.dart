@@ -1,26 +1,64 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/domain/permissions.dart';
-import '../../../auth/presentation/auth_providers.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
+import '../../data/org_repository.dart';
 import '../../domain/org_models.dart';
-import '../org_providers.dart';
 
-class InstituteDetailScreen extends ConsumerWidget {
+class InstituteDetailScreen extends StatefulWidget {
   const InstituteDetailScreen({super.key, required this.instituteId});
 
   final String instituteId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final auth = ref.watch(authNotifierProvider);
-    final role = auth.user?.role ?? '';
-    final hasAccess = Permissions.canManageUsers(auth.permissions, role) ||
-        Permissions.canManageInstitutes(auth.permissions, role) ||
-        Permissions.canViewWorkforce(auth.permissions, auth.user?.employeeViewScope);
+  State<InstituteDetailScreen> createState() => _InstituteDetailScreenState();
+}
+
+class _InstituteDetailScreenState extends State<InstituteDetailScreen> {
+  bool _loading = false;
+  String? _error;
+  InstituteMembersPayload? _data;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMembers();
+  }
+
+  Future<void> _loadMembers() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final payload = await context.read<OrgRepository>().getInstituteMembers(widget.instituteId);
+      if (mounted) {
+        setState(() {
+          _data = payload;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final authState = context.watch<AuthBloc>().state;
+    final role = authState.user?.role ?? '';
+    final hasAccess = Permissions.canManageUsers(authState.permissions, role) ||
+        Permissions.canManageInstitutes(authState.permissions, role) ||
+        Permissions.canViewWorkforce(authState.permissions, authState.user?.employeeViewScope);
 
     if (!hasAccess) {
       return const Scaffold(
@@ -28,50 +66,57 @@ class InstituteDetailScreen extends ConsumerWidget {
       );
     }
 
-    final membersAsync = ref.watch(instituteMembersProvider(instituteId));
-
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        title: Text('Institute Detail'),
+        title: const Text('Institute Detail'),
         leading: const AppBackButton(fallbackLocation: '/admin/institutes'),
         actions: [
           IconButton(
-            icon: Icon(Icons.refresh),
-            onPressed: () => ref.invalidate(instituteMembersProvider(instituteId)),
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadMembers,
           ),
         ],
       ),
-      body: membersAsync.when(
-        data: (data) => _buildContent(context, data),
-        loading: () => Center(
-          child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary),
-        ),
-        error: (err, _) => Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Failed to load institute\n$err', textAlign: TextAlign.center),
-              SizedBox(height: 12),
-              TextButton(
-                onPressed: () => context.go('/admin/institutes'),
-                child: Text('← Back to institutes'),
-              ),
-              SizedBox(height: 8),
-              FilledButton(
-                onPressed: () => ref.invalidate(instituteMembersProvider(instituteId)),
-                child: Text('Retry'),
-              ),
-            ],
-          ),
-        ),
-      ),
+      body: _buildBody(),
     );
   }
 
-  Widget _buildContent(BuildContext context, InstituteMembersPayload data) {
+  Widget _buildBody() {
+    if (_loading && _data == null) {
+      return Center(
+        child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary),
+      );
+    }
+    if (_error != null && _data == null) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Failed to load institute\n$_error', textAlign: TextAlign.center),
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: () => context.go('/admin/institutes'),
+              child: const Text('← Back to institutes'),
+            ),
+            const SizedBox(height: 8),
+            FilledButton(
+              onPressed: _loadMembers,
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      );
+    }
+    if (_data == null) {
+      return const SizedBox.shrink();
+    }
+    return _buildContent(_data!);
+  }
+
+  Widget _buildContent(InstituteMembersPayload data) {
     return ListView(
-      padding: EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
       children: [
         TextButton(
           onPressed: () => context.go('/admin/institutes'),
@@ -94,30 +139,29 @@ class InstituteDetailScreen extends ConsumerWidget {
             color: Theme.of(context).textTheme.bodySmall?.color,
           ),
         ),
-        SizedBox(height: 16),
+        const SizedBox(height: 16),
         Row(
           children: [
-            Expanded(child: _statCard(context, 'Employees', '${data.employees.length}')),
+            Expanded(child: _statCard('Employees', '${data.employees.length}')),
           ],
         ),
-        SizedBox(height: 16),
+        const SizedBox(height: 16),
         _sectionCard(
-          context,
           title: 'Employees',
           child: data.employees.isEmpty
-              ? Text(
+              ? const Text(
                   'No employees assigned to this institute.',
                   style: TextStyle(color: AppColors.textSecondary),
                 )
               : Column(
-                  children: data.employees.map((emp) => _employeeRow(context, emp)).toList(),
+                  children: data.employees.map((emp) => _employeeRow(emp)).toList(),
                 ),
         ),
       ],
     );
   }
 
-  Widget _statCard(BuildContext context, String label, String value) {
+  Widget _statCard(String label, String value) {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
@@ -125,7 +169,7 @@ class InstituteDetailScreen extends ConsumerWidget {
         side: const BorderSide(color: AppColors.border),
       ),
       child: Padding(
-        padding: EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         child: Column(
           children: [
             Text(
@@ -136,7 +180,7 @@ class InstituteDetailScreen extends ConsumerWidget {
                 color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
-            SizedBox(height: 4),
+            const SizedBox(height: 4),
             Text(
               label.toUpperCase(),
               style: TextStyle(
@@ -152,8 +196,7 @@ class InstituteDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _sectionCard(
-    BuildContext context, {
+  Widget _sectionCard({
     required String title,
     String? subtitle,
     required Widget child,
@@ -165,7 +208,7 @@ class InstituteDetailScreen extends ConsumerWidget {
         side: const BorderSide(color: AppColors.border),
       ),
       child: Padding(
-        padding: EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -174,13 +217,13 @@ class InstituteDetailScreen extends ConsumerWidget {
               style: TextStyle(fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface),
             ),
             if (subtitle != null) ...[
-              SizedBox(height: 4),
+              const SizedBox(height: 4),
               Text(
                 subtitle,
                 style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
               ),
             ],
-            SizedBox(height: 12),
+            const SizedBox(height: 12),
             child,
           ],
         ),
@@ -188,12 +231,12 @@ class InstituteDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _employeeRow(BuildContext context, InstituteMember emp) {
+  Widget _employeeRow(InstituteMember emp) {
     final name = emp.generalInfo?.fullName ?? 'Employee #${emp.id}';
     return InkWell(
       onTap: () => context.push('/admin/employees/${emp.id}'),
       child: Padding(
-        padding: EdgeInsets.symmetric(vertical: 10),
+        padding: const EdgeInsets.symmetric(vertical: 10),
         child: Row(
           children: [
             Expanded(

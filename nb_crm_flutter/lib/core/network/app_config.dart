@@ -4,16 +4,32 @@ import 'package:flutter/foundation.dart';
 class AppConfig {
   AppConfig._();
 
+  static String? _runtimeOverride;
+
+  static void setApiBaseUrl(String? url) {
+    if (kReleaseMode) return;
+    _runtimeOverride = url;
+  }
+
+  static bool get isUsingLocalBackend {
+    if (kReleaseMode) return false;
+    return apiBaseUrl.contains('127.0.0.1') || apiBaseUrl.contains('localhost');
+  }
+
+  static const String localApiBaseUrl = 'http://127.0.0.1:4000/api';
+  static const String liveApiBaseUrl = 'https://crm.nbdeveloper.co.in/api';
+
   /// API base URL (includes `/api` suffix).
   ///
-  /// - Debug builds default to `http://127.0.0.1:4000/api` (local backend).
-  /// - Release builds default to production Hostinger.
-  /// - Override anytime: `--dart-define=API_BASE_URL=...`
+  /// - In local debug mode, allows runtime switching between local dev and live database.
+  /// - In release / production builds, strictly defaults to the live database.
   static String get apiBaseUrl {
+    if (!kReleaseMode && _runtimeOverride != null && _runtimeOverride!.isNotEmpty) {
+      return _runtimeOverride!;
+    }
     const fromEnv = String.fromEnvironment('API_BASE_URL');
     if (fromEnv.isNotEmpty) return fromEnv;
-    if (kDebugMode) return 'http://127.0.0.1:4000/api';
-    return 'https://crm.nbdeveloper.co.in/api';
+    return liveApiBaseUrl;
   }
 
   /// Shared with backend `TRANSPORT_SECRET` for double AES-GCM JSON envelopes.

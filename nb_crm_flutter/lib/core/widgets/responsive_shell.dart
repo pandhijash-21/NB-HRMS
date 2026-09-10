@@ -2,18 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:nb_crm_flutter/core/theme/nb_icon.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'radial_menu.dart';
 
 import '../../features/auth/domain/permissions.dart';
-import '../../features/auth/presentation/auth_providers.dart';
+import '../../features/auth/presentation/bloc/auth_bloc.dart';
 import '../../features/collaboration/presentation/chat_inbox.dart';
 import '../../features/collaboration/presentation/notification_bell.dart';
 import '../../features/tracking_hub/presentation/location_alert_watch.dart';
 import '../app_module.dart';
+import '../bloc/app_module_cubit.dart' as bloc_module;
 import '../logging/app_logger.dart';
 import '../services/location_alert_sound.dart';
-import '../theme/theme_provider.dart';
+import '../theme/theme_cubit.dart';
 
 class ResponsiveShell extends ConsumerStatefulWidget {
   const ResponsiveShell({super.key, required this.child});
@@ -48,17 +50,18 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     final itemBgColor = isDark ? const Color(0xFF1E1B18) : Colors.white;
     final itemFgColor = isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238);
     
-    return RadialMenu(
-      primaryColor: mainBgColor,
-      onPrimaryColor: mainIconColor,
-      items: [
+    return RepaintBoundary(
+      child: RadialMenu(
+        primaryColor: mainBgColor,
+        onPrimaryColor: mainIconColor,
+        items: [
         RadialMenuItem(
           icon: Icons.groups_rounded,
           label: 'HRMS',
           backgroundColor: itemBgColor,
           foregroundColor: itemFgColor,
           onTap: () {
-            ref.read(appModuleProvider.notifier).setModule(AppModule.hrms);
+            context.read<bloc_module.AppModuleCubit>().setModule(bloc_module.AppModule.hrms);
             context.go('/home');
           },
         ),
@@ -68,7 +71,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
           backgroundColor: itemBgColor,
           foregroundColor: itemFgColor,
           onTap: () {
-            ref.read(appModuleProvider.notifier).setModule(AppModule.erp);
+            context.read<bloc_module.AppModuleCubit>().setModule(bloc_module.AppModule.erp);
             context.go('/erp/home');
           },
         ),
@@ -78,17 +81,17 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
           backgroundColor: itemBgColor,
           foregroundColor: itemFgColor,
           onTap: () {
-            ref.read(appModuleProvider.notifier).setModule(AppModule.crm);
+            context.read<bloc_module.AppModuleCubit>().setModule(bloc_module.AppModule.crm);
             context.go('/crm/dashboard');
           },
         ),
       ],
-    );
+    ),);
   }
 
   @override
   Widget build(BuildContext context) {
-    final auth = ref.watch(authNotifierProvider);
+    final auth = context.watch<AuthBloc>().state;
     final width = MediaQuery.sizeOf(context).width;
     // Sidebar from tablet up; phones keep the drawer.
     final useSidebar = width >= 720;
@@ -118,16 +121,22 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
       auth.user?.role ?? '',
     );
     final isAdmin = Permissions.isAdmin(auth.user?.role);
+    final isSuperAdmin = Permissions.isSuperAdmin(auth.user?.role);
+
+    // Superadmin has a dedicated full-screen SaaS Platform Console — no sidebar needed.
+    if (isSuperAdmin) {
+      return widget.child;
+    }
 
     final currentPath = GoRouterState.of(context).matchedLocation;
-    final module = ref.watch(appModuleProvider);
-    final brandTitle = shellBrandTitle(module);
+    final module = context.watch<bloc_module.AppModuleCubit>().state;
+    final brandTitle = bloc_module.shellBrandTitle(module);
 
-    final inferred = inferAppModule(currentPath, module);
+    final inferred = bloc_module.inferAppModule(currentPath, module);
     if (inferred != module) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        ref.read(appModuleProvider.notifier).syncFromPath(currentPath);
+        context.read<bloc_module.AppModuleCubit>().syncFromPath(currentPath);
       });
     }
 
@@ -163,7 +172,44 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     ];
 
     final destinations = <_Destination>[
-      if (module == AppModule.hrms) ...[
+      if (isSuperAdmin) ...[
+        const _Destination(
+          '/platform',
+          Icons.hub_outlined,
+          Icons.hub_rounded,
+          'Platform Overview',
+          section: 'SaaS Console',
+        ),
+        const _Destination(
+          '/platform?tab=0',
+          Icons.business_outlined,
+          Icons.business_rounded,
+          'Client Companies',
+          section: 'SaaS Console',
+        ),
+        const _Destination(
+          '/platform?tab=1',
+          Icons.admin_panel_settings_outlined,
+          Icons.admin_panel_settings_rounded,
+          'Company Admins',
+          section: 'SaaS Console',
+        ),
+        const _Destination(
+          '/platform?tab=2',
+          Icons.apps_outlined,
+          Icons.apps_rounded,
+          'Module Licensing',
+          section: 'SaaS Console',
+        ),
+        const _Destination(
+          '/platform?tab=3',
+          Icons.monitor_heart_outlined,
+          Icons.monitor_heart_rounded,
+          'Engine Diagnostics',
+          section: 'SaaS Console',
+        ),
+      ] else ...[
+        if (module == AppModule.hrms) ...[
         if (canAccessAdmin)
           const _Destination(
             '/admin/dashboard',
@@ -383,6 +429,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             section: 'Tracking',
             alertBadge: true,
           ),
+        ],
       ],
     ];
 
@@ -391,6 +438,14 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     final chatUnread = ref.watch(chatUnreadProvider);
 
     bool isSelected(_Destination d) {
+      if (isSuperAdmin && d.route.startsWith('/platform')) {
+        final dUri = Uri.parse(d.route);
+        final dTab = dUri.queryParameters['tab'] ?? '';
+        final curUri = GoRouterState.of(context).uri;
+        final curTab = curUri.queryParameters['tab'] ?? '';
+        if (dTab.isEmpty && curTab.isEmpty) return curUri.path == '/platform';
+        return curUri.path == '/platform' && curTab == dTab;
+      }
       if (d.children != null && d.children!.isNotEmpty) {
         return d.children!.any(isSelected);
       }
@@ -466,20 +521,21 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
         appBar: AppBar(
           title: Text(brandTitle),
           actions: [
-            IconButton(
-              tooltip: 'Employee tree',
-              icon: const NbIcon(Icons.account_tree_rounded),
-              onPressed: () => context.go('/org-tree'),
-            ),
-            const NotificationBellButton(),
+            if (!isSuperAdmin)
+              IconButton(
+                tooltip: 'Employee tree',
+                icon: const NbIcon(Icons.account_tree_rounded),
+                onPressed: () => context.go('/org-tree'),
+              ),
+            if (!isSuperAdmin) const NotificationBellButton(),
             IconButton(
               icon: NbIcon(isDark ? Icons.light_mode : Icons.dark_mode),
               onPressed: () =>
-                  ref.read(themeModeProvider.notifier).toggleTheme(),
+                  context.read<ThemeCubit>().toggleTheme(),
             ),
             IconButton(
               icon: const NbIcon(Icons.logout),
-              onPressed: () => ref.read(authNotifierProvider.notifier).logout(),
+              onPressed: () => context.read<AuthBloc>().add(const AuthLogoutRequested()),
             ),
           ],
         ),
@@ -499,7 +555,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                 decoration: BoxDecoration(
                   border: Border(
                     bottom: BorderSide(
-                      color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                      color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
                       width: 1.5,
                     ),
                   ),
@@ -526,7 +582,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                     Text(
                       auth.user?.name ?? '',
                       style: TextStyle(
-                        color: isDark ? Colors.white.withOpacity(0.9) : const Color(0xFF263238),
+                        color: isDark ? Colors.white.withValues(alpha: 0.9) : const Color(0xFF263238),
                         fontWeight: FontWeight.w600,
                         fontSize: 15,
                       ),
@@ -571,10 +627,10 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                 margin: const EdgeInsets.all(16),
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFFC5A059).withOpacity(0.08) : const Color(0xFFE5ECF0),
+                  color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.08) : const Color(0xFFE5ECF0),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: isDark ? const Color(0xFFC5A059).withOpacity(0.18) : const Color(0xFFCCD6DD),
+                    color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.18) : const Color(0xFFCCD6DD),
                   ),
                 ),
                 child: Column(
@@ -583,17 +639,17 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                     InkWell(
                       onTap: () {
                         Navigator.pop(context);
-                        ref.read(themeModeProvider.notifier).toggleTheme();
+                        context.read<ThemeCubit>().toggleTheme();
                       },
                       borderRadius: BorderRadius.circular(12),
-                      child: Container(
+                      child: SizedBox(
                         height: 44,
                         child: Row(
                           children: [
                             const SizedBox(width: 12),
                             NbIcon(
                               isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                              color: isDark ? Colors.white.withOpacity(0.7) : const Color(0xFF263238),
+                              color: isDark ? Colors.white.withValues(alpha: 0.7) : const Color(0xFF263238),
                               size: 22,
                             ),
                             const SizedBox(width: 12),
@@ -601,7 +657,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                               child: Text(
                                 isDark ? 'Light Mode' : 'Dark Mode',
                                 style: TextStyle(
-                                  color: isDark ? Colors.white.withOpacity(0.8) : const Color(0xFF263238),
+                                  color: isDark ? Colors.white.withValues(alpha: 0.8) : const Color(0xFF263238),
                                   fontWeight: FontWeight.w600,
                                   fontSize: 13,
                                 ),
@@ -615,30 +671,30 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       child: Divider(
                         height: 8,
-                        color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCCD6DD),
+                        color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCCD6DD),
                       ),
                     ),
                     InkWell(
                       onTap: () {
                         Navigator.pop(context);
-                        ref.read(authNotifierProvider.notifier).logout();
+                        context.read<AuthBloc>().add(const AuthLogoutRequested());
                       },
                       borderRadius: BorderRadius.circular(12),
-                      child: Container(
+                      child: SizedBox(
                         height: 44,
                         child: Row(
                           children: [
                             const SizedBox(width: 12),
                             NbIcon(
                               Icons.logout_rounded,
-                              color: const Color(0xFFEF4444).withOpacity(0.9),
+                              color: const Color(0xFFEF4444).withValues(alpha: 0.9),
                               size: 22,
                             ),
                             const SizedBox(width: 12),
-                            Expanded(
+                            const Expanded(
                               child: Text(
                                 'Sign out',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   color: Color(0xFFEF4444),
                                   fontWeight: FontWeight.w700,
                                   fontSize: 13,
@@ -658,7 +714,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
         body: Stack(
           children: [
             widget.child,
-            _buildSpeedDial(context),
+            if (!isSuperAdmin) _buildSpeedDial(context),
           ],
         ),
       ),
@@ -687,7 +743,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
               Expanded(child: widget.child),
             ],
           ),
-          _buildSpeedDial(context),
+          if (!isSuperAdmin) _buildSpeedDial(context),
         ],
       ),
     ),
@@ -771,13 +827,13 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
           ),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
           ),
         ),
         focusedBorder: OutlineInputBorder(
@@ -801,7 +857,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     required bool Function(_Destination) isGroupOpen,
     required void Function(_Destination) onTap,
   }) {
-    const order = ['Main', 'CRM', 'Collaboration', 'HR', 'Organisation', 'Tracking'];
+    const order = ['SaaS Console', 'Main', 'CRM', 'Collaboration', 'HR', 'Organisation', 'Tracking'];
     final grouped = <String, List<_Destination>>{};
     for (final d in destinations) {
       grouped.putIfAbsent(d.section, () => []).add(d);
@@ -839,7 +895,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                 fontSize: 10,
                 fontWeight: FontWeight.w800,
                 letterSpacing: 1.1,
-                color: isDark ? const Color(0xFFE2D6BE).withOpacity(0.55) : const Color(0xFF78909C),
+                color: isDark ? const Color(0xFFE2D6BE).withValues(alpha: 0.55) : const Color(0xFF78909C),
               ),
             ),
           ),
@@ -850,7 +906,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
             child: Divider(
               height: 8,
-              color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+              color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
             ),
           ),
         );
@@ -907,7 +963,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     final badgeCount = d.route == '/chat' ? chatUnread : (d.alertBadge ? alertCount : 0);
     final iconColor = selected
         ? (isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238))
-        : (isDark ? Colors.white.withOpacity(0.4) : const Color(0xFF607D8B).withOpacity(0.7));
+        : (isDark ? Colors.white.withValues(alpha: 0.4) : const Color(0xFF607D8B).withValues(alpha: 0.7));
     final icon = switch (d.route) {
       '/chat' => selected
           ? NbIcon(Icons.chat, color: iconColor, size: 22)
@@ -939,12 +995,12 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             alignment: expanded ? Alignment.centerLeft : Alignment.center,
             decoration: BoxDecoration(
               color: selected
-                  ? (isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFDFE6E9))
+                  ? (isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFDFE6E9))
                   : Colors.transparent,
               borderRadius: BorderRadius.circular(12),
               border: selected
                   ? Border.all(
-                      color: isDark ? const Color(0xFFC5A059).withOpacity(0.25) : const Color(0xFFB0BEC5),
+                      color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.25) : const Color(0xFFB0BEC5),
                       width: 1.2,
                     )
                   : null,
@@ -970,7 +1026,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                           style: TextStyle(
                             color: selected
                                 ? (isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238))
-                                : (isDark ? Colors.white.withOpacity(0.5) : const Color(0xFF607D8B).withOpacity(0.8)),
+                                : (isDark ? Colors.white.withValues(alpha: 0.5) : const Color(0xFF607D8B).withValues(alpha: 0.8)),
                             fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
                             fontSize: isChild ? 13 : 14,
                           ),
@@ -1062,7 +1118,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
             blurRadius: 8,
             offset: const Offset(0, 4),
           )
@@ -1133,7 +1189,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
         color: isDark ? const Color(0xFF1A1816) : const Color(0xFFECEFF1),
         border: Border(
           right: BorderSide(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
             width: 1.5,
           ),
         ),
@@ -1167,8 +1223,8 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                         icon: NbIcon(
                           Icons.menu_open_rounded,
                           color: isDark
-                              ? Colors.white.withOpacity(0.5)
-                              : const Color(0xFF607D8B).withOpacity(0.7),
+                              ? Colors.white.withValues(alpha: 0.5)
+                              : const Color(0xFF607D8B).withValues(alpha: 0.7),
                         ),
                         onPressed: () {
                           setState(() => _isExpanded = false);
@@ -1200,8 +1256,8 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                             Icons.menu_rounded,
                             size: 20,
                             color: isDark
-                                ? Colors.white.withOpacity(0.5)
-                                : const Color(0xFF607D8B).withOpacity(0.7),
+                                ? Colors.white.withValues(alpha: 0.5)
+                                : const Color(0xFF607D8B).withValues(alpha: 0.7),
                           ),
                           onPressed: () {
                             setState(() => _isExpanded = true);
@@ -1258,10 +1314,10 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             margin: EdgeInsets.fromLTRB(expanded ? 16 : 10, 8, expanded ? 16 : 10, 16),
             padding: const EdgeInsets.symmetric(vertical: 8),
             decoration: BoxDecoration(
-              color: isDark ? const Color(0xFFC5A059).withOpacity(0.08) : const Color(0xFFE5ECF0),
+              color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.08) : const Color(0xFFE5ECF0),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: isDark ? const Color(0xFFC5A059).withOpacity(0.18) : const Color(0xFFCCD6DD),
+                color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.18) : const Color(0xFFCCD6DD),
               ),
             ),
             child: Column(
@@ -1274,7 +1330,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                 Tooltip(
                   message: isDark ? 'Light Mode' : 'Dark Mode',
                   child: InkWell(
-                    onTap: () => ref.read(themeModeProvider.notifier).toggleTheme(),
+                    onTap: () => context.read<ThemeCubit>().toggleTheme(),
                     borderRadius: BorderRadius.circular(12),
                     child: SizedBox(
                       height: 44,
@@ -1284,7 +1340,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                                 const SizedBox(width: 12),
                                 NbIcon(
                                   isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                                  color: isDark ? Colors.white.withOpacity(0.7) : const Color(0xFF263238),
+                                  color: isDark ? Colors.white.withValues(alpha: 0.7) : const Color(0xFF263238),
                                   size: 22,
                                 ),
                                 const SizedBox(width: 12),
@@ -1294,7 +1350,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
-                                      color: isDark ? Colors.white.withOpacity(0.8) : const Color(0xFF263238),
+                                      color: isDark ? Colors.white.withValues(alpha: 0.8) : const Color(0xFF263238),
                                       fontWeight: FontWeight.w600,
                                       fontSize: 13,
                                     ),
@@ -1305,7 +1361,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                           : Center(
                               child: NbIcon(
                                 isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                                color: isDark ? Colors.white.withOpacity(0.7) : const Color(0xFF263238),
+                                color: isDark ? Colors.white.withValues(alpha: 0.7) : const Color(0xFF263238),
                                 size: 22,
                               ),
                             ),
@@ -1316,13 +1372,13 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Divider(
                     height: 8,
-                    color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCCD6DD),
+                    color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCCD6DD),
                   ),
                 ),
                 Tooltip(
                   message: 'Sign out',
                   child: InkWell(
-                    onTap: () => ref.read(authNotifierProvider.notifier).logout(),
+                    onTap: () => context.read<AuthBloc>().add(const AuthLogoutRequested()),
                     borderRadius: BorderRadius.circular(12),
                     child: SizedBox(
                       height: 44,
@@ -1332,7 +1388,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                                 const SizedBox(width: 12),
                                 NbIcon(
                                   Icons.logout_rounded,
-                                  color: const Color(0xFFEF4444).withOpacity(0.9),
+                                  color: const Color(0xFFEF4444).withValues(alpha: 0.9),
                                   size: 22,
                                 ),
                                 const SizedBox(width: 12),
@@ -1353,7 +1409,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                           : Center(
                               child: NbIcon(
                                 Icons.logout_rounded,
-                                color: const Color(0xFFEF4444).withOpacity(0.9),
+                                color: const Color(0xFFEF4444).withValues(alpha: 0.9),
                                 size: 22,
                               ),
                             ),

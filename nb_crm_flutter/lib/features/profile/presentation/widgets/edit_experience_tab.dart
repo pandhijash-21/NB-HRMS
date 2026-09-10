@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/platform_file_picker.dart';
+import '../../data/profile_repository.dart';
 import '../../domain/experience_models.dart';
-import '../profile_notifier.dart';
 
-class EditExperienceTab extends ConsumerStatefulWidget {
+class EditExperienceTab extends StatefulWidget {
   const EditExperienceTab({
     super.key,
     required this.employeeId,
@@ -17,10 +17,10 @@ class EditExperienceTab extends ConsumerStatefulWidget {
   final bool canEdit;
 
   @override
-  ConsumerState<EditExperienceTab> createState() => _EditExperienceTabState();
+  State<EditExperienceTab> createState() => _EditExperienceTabState();
 }
 
-class _EditExperienceTabState extends ConsumerState<EditExperienceTab> {
+class _EditExperienceTabState extends State<EditExperienceTab> {
   late Future<List<EmployeeExperience>> _future;
 
   @override
@@ -30,8 +30,8 @@ class _EditExperienceTabState extends ConsumerState<EditExperienceTab> {
   }
 
   void _reload() {
-    _future = ref
-        .read(profileRepositoryProvider)
+    _future = context
+        .read<ProfileRepository>()
         .listExperiences(widget.employeeId);
   }
 
@@ -41,6 +41,7 @@ class _EditExperienceTabState extends ConsumerState<EditExperienceTab> {
       '${value.day.toString().padLeft(2, '0')}/${value.month.toString().padLeft(2, '0')}/${value.year}';
 
   Future<void> _edit([EmployeeExperience? current]) async {
+    final repo = context.read<ProfileRepository>();
     final designation = TextEditingController(text: current?.designation);
     final organization = TextEditingController(text: current?.organizationName);
     final description = TextEditingController(text: current?.jobDescription);
@@ -64,7 +65,7 @@ class _EditExperienceTabState extends ConsumerState<EditExperienceTab> {
       required String experienceId,
       required PickedFileData file,
     }) {
-      return ref.read(profileRepositoryProvider).uploadFile(
+      return repo.uploadFile(
             employeeId: widget.employeeId,
             kebabType: kebabType,
             bytes: file.bytes,
@@ -118,7 +119,7 @@ class _EditExperienceTabState extends ConsumerState<EditExperienceTab> {
                   } else if (kebabType == 'recommendation') {
                     patch['recommendationLetters'] = [...recommendations, url];
                   }
-                  await ref.read(profileRepositoryProvider).updateExperience(
+                  await repo.updateExperience(
                         widget.employeeId,
                         current.id,
                         patch,
@@ -193,7 +194,7 @@ class _EditExperienceTabState extends ConsumerState<EditExperienceTab> {
                                   : (widget.canEdit
                                       ? 'Click to upload (PDF/Image)'
                                       : 'Not uploaded'),
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontSize: 11,
                                 color: AppColors.textSecondary,
                               ),
@@ -436,7 +437,7 @@ class _EditExperienceTabState extends ConsumerState<EditExperienceTab> {
                       if (recommendations.isNotEmpty)
                         'recommendationLetters': recommendations,
                     };
-                    final repo = ref.read(profileRepositoryProvider);
+                    final repo = context.read<ProfileRepository>();
                     try {
                       EmployeeExperience savedItem;
                       if (current == null) {
@@ -512,6 +513,7 @@ class _EditExperienceTabState extends ConsumerState<EditExperienceTab> {
   }
 
   Future<void> _remove(EmployeeExperience item) async {
+    final repo = context.read<ProfileRepository>();
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -532,9 +534,7 @@ class _EditExperienceTabState extends ConsumerState<EditExperienceTab> {
     );
     if (confirmed != true) return;
     try {
-      await ref
-          .read(profileRepositoryProvider)
-          .deleteExperience(widget.employeeId, item.id);
+      await repo.deleteExperience(widget.employeeId, item.id);
       _refresh();
     } catch (e) {
       if (mounted) {

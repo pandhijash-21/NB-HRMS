@@ -118,6 +118,12 @@ class DioClient {
 
   late final Dio dio;
 
+  String get baseUrl => dio.options.baseUrl;
+
+  void updateBaseUrl(String url) {
+    dio.options.baseUrl = _normalizeBaseUrl(url);
+  }
+
   static String _normalizeBaseUrl(String url) {
     // Trailing slash so relative paths like `auth/login` resolve under `/api/`.
     if (url.endsWith('/')) return url;
@@ -143,7 +149,8 @@ class DioClient {
           extra: {if (bearer != null) 'bearer': bearer},
         ),
       );
-      return _unwrap(response.data, response.statusCode, parse);
+      final result = _unwrap(response.data, response.statusCode, parse);
+      return result;
     } on DioException catch (e) {
       throw _mapDio(e);
     }
@@ -162,7 +169,8 @@ class DioClient {
         data: data,
         options: _timeoutOptions(sendTimeout: sendTimeout, receiveTimeout: receiveTimeout),
       );
-      return _unwrap(response.data, response.statusCode, parse);
+      final result = _unwrap(response.data, response.statusCode, parse);
+      return result;
     } on DioException catch (e) {
       throw _mapDio(e);
     }
@@ -185,7 +193,8 @@ class DioClient {
         queryParameters: queryParameters,
         options: Options(extra: {if (bearer != null) 'bearer': bearer}),
       );
-      return _unwrap(response.data, response.statusCode, parse);
+      final result = _unwrap(response.data, response.statusCode, parse);
+      return result;
     } on DioException catch (e) {
       throw _mapDio(e);
     }
@@ -203,7 +212,8 @@ class DioClient {
         data: data,
         queryParameters: queryParameters,
       );
-      return _unwrap(response.data, response.statusCode, parse);
+      final result = _unwrap(response.data, response.statusCode, parse);
+      return result;
     } on DioException catch (e) {
       throw _mapDio(e);
     }
@@ -221,7 +231,8 @@ class DioClient {
         data: data,
         queryParameters: queryParameters,
       );
-      return _unwrap(response.data, response.statusCode, parse);
+      final result = _unwrap(response.data, response.statusCode, parse);
+      return result;
     } on DioException catch (e) {
       throw _mapDio(e);
     }
@@ -229,11 +240,18 @@ class DioClient {
 
   Future<T> deleteEnvelope<T>(
     String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
     required T Function(Object? raw) parse,
   }) async {
     try {
-      final response = await dio.delete<Map<String, dynamic>>(path);
-      return _unwrap(response.data, response.statusCode, parse);
+      final response = await dio.delete<Map<String, dynamic>>(
+        path,
+        data: data,
+        queryParameters: queryParameters,
+      );
+      final result = _unwrap(response.data, response.statusCode, parse);
+      return result;
     } on DioException catch (e) {
       throw _mapDio(e);
     }
@@ -287,8 +305,9 @@ class DioClient {
           'Connection timed out. Check that the API server is running.',
         );
       case DioExceptionType.connectionError:
-        return const ApiException(
-          'Unable to reach the server. Check your network and API URL.',
+        final url = dio.options.baseUrl;
+        return ApiException(
+          'Unable to reach server at $url. If running locally, check that the backend is started, or switch to the Live Server.',
         );
       default:
         final status = e.response?.statusCode;

@@ -152,10 +152,10 @@ class ScrollDockTitle extends StatelessWidget {
               height: 28,
               margin: const EdgeInsets.only(right: 10),
               decoration: BoxDecoration(
-                color: accentColor.withOpacity(isDark ? 0.18 : 0.12),
+                color: accentColor.withValues(alpha: isDark ? 0.18 : 0.12),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: accentColor.withOpacity(isDark ? 0.35 : 0.28),
+                  color: accentColor.withValues(alpha: isDark ? 0.35 : 0.28),
                 ),
               ),
               child: Icon(icon, size: 16, color: accentColor),
@@ -314,7 +314,7 @@ class _ScrollAnimatedScaffoldState extends State<ScrollAnimatedScaffold> {
               preferredSize: const Size.fromHeight(1.5),
               child: Container(
                 color: isDark
-                    ? widget.accentColor.withOpacity(0.15)
+                    ? widget.accentColor.withValues(alpha: 0.15)
                     : const Color(0xFFCFD8DC),
                 height: 1.5,
               ),

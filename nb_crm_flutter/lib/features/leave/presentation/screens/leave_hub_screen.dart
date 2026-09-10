@@ -1,26 +1,43 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/widgets/bloc_async_body.dart';
 import '../../../../core/widgets/header_action_button.dart';
 import '../../../auth/domain/permissions.dart';
-import '../../../auth/presentation/auth_providers.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
+import '../../data/leave_repository.dart';
 import '../../domain/leave_models.dart';
-import '../leave_providers.dart';
+import '../bloc/leave_bloc.dart';
 import '../widgets/leave_shared_widgets.dart';
 
-class LeaveHubScreen extends ConsumerWidget {
+class LeaveHubScreen extends StatelessWidget {
   const LeaveHubScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final year = ref.watch(leaveYearFilterProvider);
-    final balances = ref.watch(leaveBalancesProvider);
-    final recentApps = ref.watch(myApplicationsProvider);
+  Widget build(BuildContext context) {
+    return BlocProvider(
+      create: (context) => LeaveBloc(
+        leaveRepository: context.read<LeaveRepository>(),
+      )..add(const LeaveLoadRequested()),
+      child: const _LeaveHubView(),
+    );
+  }
+}
+
+class _LeaveHubView extends StatelessWidget {
+  const _LeaveHubView();
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<LeaveBloc>().state;
+    final year = state.year == 0 ? DateTime.now().year : state.year;
+    final balances = state.balances;
+    final recentApps = state.applications;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final auth = ref.watch(authNotifierProvider);
+    final auth = context.watch<AuthBloc>().state;
     final canApprove = Permissions.canApproveLeave(auth.permissions) ||
         Permissions.canReadLeave(auth.permissions);
     final canAdmin = Permissions.canAdminLeave(
@@ -52,11 +69,10 @@ class LeaveHubScreen extends ConsumerWidget {
             icon: Icon(
               Icons.refresh_rounded,
               size: 18,
-              color: isDark ? Colors.white.withOpacity(0.8) : const Color(0xFF212F3D),
+              color: isDark ? Colors.white.withValues(alpha: 0.8) : const Color(0xFF212F3D),
             ),
             onPressed: () {
-              ref.invalidate(leaveBalancesProvider);
-              ref.invalidate(myApplicationsProvider);
+              context.read<LeaveBloc>().add(const LeaveRefreshRequested());
             },
           ),
           const SizedBox(width: 8),
@@ -64,7 +80,7 @@ class LeaveHubScreen extends ConsumerWidget {
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1.5),
           child: Container(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
             height: 1.5,
           ),
         ),
@@ -102,7 +118,7 @@ class LeaveHubScreen extends ConsumerWidget {
                     color: isDark ? const Color(0xFF1E1B18) : Colors.white,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC),
+                      color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
                       width: 1.2,
                     ),
                   ),
@@ -126,7 +142,7 @@ class LeaveHubScreen extends ConsumerWidget {
                           return DropdownMenuItem(value: y, child: Text('$y'));
                         }),
                         onChanged: (v) {
-                          if (v != null) ref.read(leaveYearFilterProvider.notifier).set(v);
+                          if (v != null) context.read<LeaveBloc>().add(LeaveYearChanged(v));
                         },
                       ),
                     ],
@@ -164,7 +180,7 @@ class LeaveHubScreen extends ConsumerWidget {
                       style: OutlinedButton.styleFrom(
                         foregroundColor: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
                         side: BorderSide(
-                          color: isDark ? const Color(0xFFC5A059).withOpacity(0.4) : const Color(0xFF263238).withOpacity(0.5),
+                          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.4) : const Color(0xFF263238).withValues(alpha: 0.5),
                           width: 1.2,
                         ),
                         shape: RoundedRectangleBorder(
@@ -246,10 +262,11 @@ class LeaveHubScreen extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 16),
-            LeaveAsyncBody<List<LeaveBalance>>(
-              value: balances,
+            BlocAsyncBody<List<LeaveBalance>>(
+              status: state.status,
+              data: balances,
               emptyMessage: 'No leave balances for $year.',
-              onRetry: () => ref.invalidate(leaveBalancesProvider),
+              onRetry: () => context.read<LeaveBloc>().add(const LeaveRefreshRequested()),
               builder: (items) {
                 // Map to chart items
                 final chartItems = items.map((b) {
@@ -273,102 +290,104 @@ class LeaveHubScreen extends ConsumerWidget {
                   return a.actualAvailable.compareTo(b.actualAvailable);
                 });
 
-                return Card(
-                  elevation: 0,
-                  color: isDark ? const Color(0xFF1E1B18) : Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    side: BorderSide(
-                      color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
-                      width: 1.5,
+                return RepaintBoundary(
+                  child: Card(
+                    elevation: 0,
+                    color: isDark ? const Color(0xFF1E1B18) : Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      side: BorderSide(
+                        color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
+                        width: 1.5,
+                      ),
                     ),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-                    child: SizedBox(
-                      height: chartItems.length * 56.0 + 60.0, // Dynamic height based on data points
-                      child: SfCartesianChart(
-                        plotAreaBorderWidth: 0,
-                        margin: const EdgeInsets.all(0),
-                        primaryXAxis: CategoryAxis(
-                          labelStyle: TextStyle(
-                            color: isDark ? Colors.white70 : const Color(0xFF263238),
-                            fontWeight: FontWeight.w700,
-                            fontSize: 11,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+                      child: SizedBox(
+                        height: chartItems.length * 56.0 + 60.0, // Dynamic height based on data points
+                        child: SfCartesianChart(
+                          plotAreaBorderWidth: 0,
+                          margin: const EdgeInsets.all(0),
+                          primaryXAxis: CategoryAxis(
+                            labelStyle: TextStyle(
+                              color: isDark ? Colors.white70 : const Color(0xFF263238),
+                              fontWeight: FontWeight.w700,
+                              fontSize: 11,
+                            ),
+                            majorGridLines: const MajorGridLines(width: 0),
+                            axisLine: const AxisLine(width: 0),
+                            majorTickLines: const MajorTickLines(width: 0),
                           ),
-                          majorGridLines: const MajorGridLines(width: 0),
-                          axisLine: const AxisLine(width: 0),
-                          majorTickLines: const MajorTickLines(width: 0),
-                        ),
-                        primaryYAxis: NumericAxis(
-                          labelStyle: TextStyle(
-                            color: isDark ? Colors.white54 : const Color(0xFF607D8B),
-                            fontWeight: FontWeight.w600,
-                            fontSize: 10,
+                          primaryYAxis: NumericAxis(
+                            labelStyle: TextStyle(
+                              color: isDark ? Colors.white54 : const Color(0xFF607D8B),
+                              fontWeight: FontWeight.w600,
+                              fontSize: 10,
+                            ),
+                            majorGridLines: MajorGridLines(
+                              color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.04),
+                              width: 1,
+                            ),
+                            axisLine: const AxisLine(width: 0),
+                            majorTickLines: const MajorTickLines(width: 0),
                           ),
-                          majorGridLines: MajorGridLines(
-                            color: isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.04),
-                            width: 1,
-                          ),
-                          axisLine: const AxisLine(width: 0),
-                          majorTickLines: const MajorTickLines(width: 0),
-                        ),
-                        series: <CartesianSeries<LeaveChartData, String>>[
-                          BarSeries<LeaveChartData, String>(
-                            dataSource: chartItems,
-                            xValueMapper: (LeaveChartData data, _) => data.label,
-                            yValueMapper: (LeaveChartData data, _) => data.chartValue,
-                            // Map colors based on zero status
-                            pointColorMapper: (LeaveChartData data, _) {
-                              if (data.isZero) {
-                                return Colors.red.withOpacity(0.15);
-                              }
-                              return isDark ? const Color(0xFFC5A059).withOpacity(0.85) : const Color(0xFF263238).withOpacity(0.85);
-                            },
-                            borderColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
-                            borderWidth: 1.5,
-                            borderRadius: const BorderRadius.all(Radius.circular(8)),
-                            dataLabelSettings: DataLabelSettings(
-                              isVisible: true,
-                              labelAlignment: ChartDataLabelAlignment.outer,
-                              textStyle: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w800,
-                                color: isDark ? Colors.white : const Color(0xFF212F3D),
-                              ),
-                              builder: (dynamic data, dynamic point, dynamic series, int index, int seriesIndex) {
-                                final LeaveChartData item = data as LeaveChartData;
-                                final valStr = item.actualAvailable.toStringAsFixed(item.actualAvailable % 1 == 0 ? 0 : 1);
-                                if (item.isZero) {
-                                  return Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: Colors.red.withOpacity(0.12),
-                                      border: Border.all(color: Colors.red, width: 1),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: const Text(
-                                      '0 Days',
-                                      style: TextStyle(
-                                        color: Colors.red,
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.w800,
+                          series: <CartesianSeries<LeaveChartData, String>>[
+                            BarSeries<LeaveChartData, String>(
+                              dataSource: chartItems,
+                              xValueMapper: (LeaveChartData data, _) => data.label,
+                              yValueMapper: (LeaveChartData data, _) => data.chartValue,
+                              // Map colors based on zero status
+                              pointColorMapper: (LeaveChartData data, _) {
+                                if (data.isZero) {
+                                  return Colors.red.withValues(alpha: 0.15);
+                                }
+                                return isDark ? const Color(0xFFC5A059).withValues(alpha: 0.85) : const Color(0xFF263238).withValues(alpha: 0.85);
+                              },
+                              borderColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+                              borderWidth: 1.5,
+                              borderRadius: const BorderRadius.all(Radius.circular(8)),
+                              dataLabelSettings: DataLabelSettings(
+                                isVisible: true,
+                                labelAlignment: ChartDataLabelAlignment.outer,
+                                textStyle: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  color: isDark ? Colors.white : const Color(0xFF212F3D),
+                                ),
+                                builder: (dynamic data, dynamic point, dynamic series, int index, int seriesIndex) {
+                                  final LeaveChartData item = data as LeaveChartData;
+                                  final valStr = item.actualAvailable.toStringAsFixed(item.actualAvailable % 1 == 0 ? 0 : 1);
+                                  if (item.isZero) {
+                                    return Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.red.withValues(alpha: 0.12),
+                                        border: Border.all(color: Colors.red, width: 1),
+                                        borderRadius: BorderRadius.circular(6),
                                       ),
+                                      child: const Text(
+                                        '0 Days',
+                                        style: TextStyle(
+                                          color: Colors.red,
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                  return Text(
+                                    '$valStr Days',
+                                    style: TextStyle(
+                                      color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w800,
                                     ),
                                   );
-                                }
-                                return Text(
-                                  '$valStr Days',
-                                  style: TextStyle(
-                                    color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                );
-                              },
+                                },
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -399,12 +418,13 @@ class LeaveHubScreen extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 16),
-            LeaveAsyncBody<LeaveApplicationsPage>(
-              value: recentApps,
+            BlocAsyncBody<List<LeaveApplication>>(
+              status: state.status,
+              data: recentApps,
               emptyMessage: 'No recent applications.',
-              onRetry: () => ref.invalidate(myApplicationsProvider),
-              builder: (page) {
-                final items = page.items.take(5).toList();
+              onRetry: () => context.read<LeaveBloc>().add(const LeaveRefreshRequested()),
+              builder: (apps) {
+                final items = apps.take(5).toList();
                 if (items.isEmpty) {
                   return Center(
                     child: Padding(
@@ -412,7 +432,7 @@ class LeaveHubScreen extends ConsumerWidget {
                       child: Text(
                         'No recent applications.',
                         style: TextStyle(
-                          color: isDark ? Colors.white30 : const Color(0xFF607D8B).withOpacity(0.6),
+                          color: isDark ? Colors.white30 : const Color(0xFF607D8B).withValues(alpha: 0.6),
                           fontWeight: FontWeight.w500,
                           fontSize: 14,
                         ),
@@ -479,7 +499,7 @@ class _LeaveWorkspaceTile extends StatelessWidget {
             color: isDark ? const Color(0xFF1E1B18) : Colors.white,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+              color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
               width: 1.5,
             ),
           ),
@@ -489,7 +509,7 @@ class _LeaveWorkspaceTile extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.12),
+                  color: color.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(icon, color: color, size: 22),

@@ -82,7 +82,7 @@ class AdminTripsScreen extends ConsumerWidget {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                               decoration: BoxDecoration(
-                                color: end == null ? Colors.orange.withOpacity(0.1) : Colors.green.withOpacity(0.1),
+                                color: end == null ? Colors.orange.withValues(alpha: 0.1) : Colors.green.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(20),
                                 border: Border.all(
                                   color: end == null ? Colors.orange : Colors.green,

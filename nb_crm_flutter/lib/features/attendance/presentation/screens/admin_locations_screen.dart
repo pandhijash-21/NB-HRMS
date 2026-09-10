@@ -3,10 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:go_router/go_router.dart';
-import '../../../../core/network/dio_client.dart';
 import '../../../auth/presentation/auth_providers.dart';
-import '../attendance_providers.dart';
 
 // ---------------------------------------------------------
 // NOTE: This screen requires flutter_map and latlong2.
@@ -111,7 +108,7 @@ class _AdminLocationsScreenState extends ConsumerState<AdminLocationsScreen> {
                       child: TextField(
                         controller: latCtrl,
                         decoration: const InputDecoration(labelText: 'Latitude'),
-                        keyboardType: TextInputType.numberWithOptions(decimal: true),
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -119,7 +116,7 @@ class _AdminLocationsScreenState extends ConsumerState<AdminLocationsScreen> {
                       child: TextField(
                         controller: lngCtrl,
                         decoration: const InputDecoration(labelText: 'Longitude'),
-                        keyboardType: TextInputType.numberWithOptions(decimal: true),
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       ),
                     ),
                   ],
@@ -128,7 +125,7 @@ class _AdminLocationsScreenState extends ConsumerState<AdminLocationsScreen> {
                 TextField(
                   controller: radCtrl,
                   decoration: const InputDecoration(labelText: 'Radius (in km, e.g. 0.1 for 100m)'),
-                  keyboardType: TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 ),
                 const SizedBox(height: 12),
                 SwitchListTile(
@@ -137,7 +134,7 @@ class _AdminLocationsScreenState extends ConsumerState<AdminLocationsScreen> {
                   value: isUnique,
                   onChanged: (val) => setDialogState(() => isUnique = val),
                   contentPadding: EdgeInsets.zero,
-                  activeColor: Colors.blue.shade900,
+                  activeThumbColor: Colors.blue.shade900,
                 ),
                 const SizedBox(height: 12),
                 const Text(
@@ -259,7 +256,7 @@ class _AdminLocationsScreenState extends ConsumerState<AdminLocationsScreen> {
                           final baseColor = isUnique ? Colors.blue.shade900 : Colors.blue;
                           return CircleMarker(
                             point: LatLng(loc['latitude'], loc['longitude']),
-                            color: isSelected ? Colors.orange.withOpacity(0.3) : baseColor.withOpacity(0.3),
+                            color: isSelected ? Colors.orange.withValues(alpha: 0.3) : baseColor.withValues(alpha: 0.3),
                             borderColor: isSelected ? Colors.orange : baseColor,
                             borderStrokeWidth: isSelected ? 3 : (isUnique ? 3 : 2),
                             useRadiusInMeter: true,

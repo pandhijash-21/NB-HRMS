@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../attendance/data/attendance_repository.dart';
 import '../../../attendance/domain/attendance_models.dart';
-import '../../../attendance/presentation/attendance_providers.dart';
 import '../../../leave/presentation/widgets/employee_leave_tab.dart';
 
 const _monthLabels = [
@@ -29,7 +29,7 @@ String _formatHours(int minutes) {
   return '${h}h ${m}m';
 }
 
-class EmployeeAttendanceTab extends ConsumerStatefulWidget {
+class EmployeeAttendanceTab extends StatefulWidget {
   const EmployeeAttendanceTab({
     super.key,
     required this.employeeId,
@@ -40,43 +40,102 @@ class EmployeeAttendanceTab extends ConsumerStatefulWidget {
   final bool canManageSettings;
 
   @override
-  ConsumerState<EmployeeAttendanceTab> createState() => _EmployeeAttendanceTabState();
+  State<EmployeeAttendanceTab> createState() => _EmployeeAttendanceTabState();
 }
 
-class _EmployeeAttendanceTabState extends ConsumerState<EmployeeAttendanceTab> {
+class _EmployeeAttendanceTabState extends State<EmployeeAttendanceTab> {
   bool _showLeavePanel = false;
+  int _year = DateTime.now().year;
+  int _month = DateTime.now().month;
+  bool _loadingSettings = true;
+  bool _loadingSummary = true;
+  EmployeeAttendanceSettings? _settings;
+  AttendanceMonthlySummary? _summary;
+  String? _settingsError;
+  String? _summaryError;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadSettings();
+      _loadSummary();
+    });
+  }
+
+  Future<void> _loadSettings() async {
+    setState(() {
+      _loadingSettings = true;
+      _settingsError = null;
+    });
+    try {
+      final s = await context.read<AttendanceRepository>().getEmployeeSettings(widget.employeeId);
+      if (mounted) {
+        setState(() {
+          _settings = s;
+          _loadingSettings = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _settingsError = e.toString();
+          _loadingSettings = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadSummary() async {
+    setState(() {
+      _loadingSummary = true;
+      _summaryError = null;
+    });
+    try {
+      final s = await context.read<AttendanceRepository>().getEmployeeMonthlySummary(
+        employeeId: widget.employeeId,
+        year: _year,
+        month: _month,
+      );
+      if (mounted) {
+        setState(() {
+          _summary = s;
+          _loadingSummary = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _summaryError = e.toString();
+          _loadingSummary = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final monthFilter = ref.watch(profileAttendanceMonthProvider);
-    final settingsAsync = ref.watch(employeeAttendanceSettingsProvider(widget.employeeId));
-    final summaryAsync = ref.watch(
-      employeeMonthlyAttendanceProvider((
-        employeeId: widget.employeeId,
-        year: monthFilter.year,
-        month: monthFilter.month,
-      )),
-    );
-
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        settingsAsync.when(
-          loading: () => const LinearProgressIndicator(),
-          error: (e, _) => Text('Could not load punch timings: $e'),
-          data: (settings) => _PolicyCard(
-            settings: settings,
+        if (_loadingSettings)
+          const LinearProgressIndicator()
+        else if (_settingsError != null)
+          Text('Could not load punch timings: $_settingsError')
+        else if (_settings != null)
+          _PolicyCard(
+            settings: _settings!,
             canEdit: widget.canManageSettings,
-            onEdit: () => _showEditSettings(context, settings),
-            onResetBiometrics: () => _showResetBiometrics(context),
+            onEdit: () => _showEditSettings(_settings!),
+            onResetBiometrics: () => _showResetBiometrics(),
           ),
-        ),
         const SizedBox(height: 16),
-        summaryAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Text('Could not load attendance: $e'),
-          data: (summary) => _StatsCard(summary: summary.stats),
-        ),
+        if (_loadingSummary)
+          const Center(child: CircularProgressIndicator())
+        else if (_summaryError != null)
+          Text('Could not load attendance: $_summaryError')
+        else if (_summary != null)
+          _StatsCard(summary: _summary!.stats),
         const SizedBox(height: 12),
         OutlinedButton.icon(
           onPressed: () => setState(() => _showLeavePanel = !_showLeavePanel),
@@ -92,26 +151,26 @@ class _EmployeeAttendanceTabState extends ConsumerState<EmployeeAttendanceTab> {
         ],
         const SizedBox(height: 16),
         _MonthPicker(
-          year: monthFilter.year,
-          month: monthFilter.month,
-          onYearChanged: (y) => ref
-              .read(profileAttendanceMonthProvider.notifier)
-              .setMonth(y, monthFilter.month),
-          onMonthChanged: (m) => ref
-              .read(profileAttendanceMonthProvider.notifier)
-              .setMonth(monthFilter.year, m),
+          year: _year,
+          month: _month,
+          onYearChanged: (y) {
+            setState(() => _year = y);
+            _loadSummary();
+          },
+          onMonthChanged: (m) {
+            setState(() => _month = m);
+            _loadSummary();
+          },
         ),
         const SizedBox(height: 12),
-        summaryAsync.when(
-          loading: () => const SizedBox.shrink(),
-          error: (_, __) => const SizedBox.shrink(),
-          data: (summary) => _DailyLogList(days: summary.days),
-        ),
+        if (_summary != null)
+          _DailyLogList(days: _summary!.days),
       ],
     );
   }
 
-  Future<void> _showEditSettings(BuildContext context, EmployeeAttendanceSettings settings) async {
+  Future<void> _showEditSettings(EmployeeAttendanceSettings settings) async {
+    final repo = context.read<AttendanceRepository>();
     var useGlobal = settings.useGlobalPolicy;
     final inCtrl = TextEditingController(text: settings.punchInTime ?? settings.effective['punchInTime']?.toString() ?? '09:00');
     final outCtrl = TextEditingController(text: settings.punchOutTime ?? settings.effective['punchOutTime']?.toString() ?? '15:30');
@@ -125,57 +184,62 @@ class _EmployeeAttendanceTabState extends ConsumerState<EmployeeAttendanceTab> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) => AlertDialog(
-          title: const Text('Punch timings'),
-          content: SizedBox(
-            width: 400,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Use global policy'),
-                    subtitle: const Text(
-                      'Off = this employee’s punch in/out and buffers override global policy for late / half-day.',
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Edit Punch Timings'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Use global policy'),
+                  subtitle: const Text('Reset to institute-level punch rules'),
+                  value: useGlobal,
+                  onChanged: (v) => setDialogState(() => useGlobal = v),
+                ),
+                if (!useGlobal) ...[
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: inCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Punch In (HH:MM)',
+                      hintText: '09:00',
+                      border: OutlineInputBorder(),
                     ),
-                    value: useGlobal,
-                    onChanged: (v) => setLocal(() => useGlobal = v),
                   ),
-                  if (!useGlobal) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      'Personal timings apply only to this employee.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Theme.of(ctx).textTheme.bodySmall?.color,
-                      ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: inBufCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'In Buffer (minutes)',
+                      hintText: '10',
+                      helperText: 'Late only after Punch-In + buffer',
+                      border: OutlineInputBorder(),
                     ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: inCtrl,
-                      decoration: const InputDecoration(labelText: 'Punch in (HH:MM)', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: outCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Punch Out (HH:MM)',
+                      hintText: '15:30',
+                      border: OutlineInputBorder(),
                     ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: outCtrl,
-                      decoration: const InputDecoration(labelText: 'Punch out (HH:MM)', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: outBufCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Out Buffer (minutes)',
+                      hintText: '10',
+                      border: OutlineInputBorder(),
                     ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: inBufCtrl,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'In buffer (minutes)', border: OutlineInputBorder()),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: outBufCtrl,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Out buffer (minutes)', border: OutlineInputBorder()),
-                    ),
-                  ],
+                  ),
                 ],
-              ),
+              ],
             ),
           ),
           actions: [
@@ -189,7 +253,7 @@ class _EmployeeAttendanceTabState extends ConsumerState<EmployeeAttendanceTab> {
     if (ok != true || !mounted) return;
 
     try {
-      await ref.read(attendanceRepositoryProvider).updateEmployeeSettings(
+      await repo.updateEmployeeSettings(
         widget.employeeId,
         {
           'useGlobalPolicy': useGlobal,
@@ -201,12 +265,12 @@ class _EmployeeAttendanceTabState extends ConsumerState<EmployeeAttendanceTab> {
           },
         },
       );
-      ref.invalidate(employeeAttendanceSettingsProvider(widget.employeeId));
-      ref.invalidate(employeeMonthlyAttendanceProvider);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Punch timings updated')),
         );
+        _loadSettings();
+        _loadSummary();
       }
     } catch (e) {
       if (mounted) {
@@ -217,7 +281,8 @@ class _EmployeeAttendanceTabState extends ConsumerState<EmployeeAttendanceTab> {
     }
   }
 
-  Future<void> _showResetBiometrics(BuildContext context) async {
+  Future<void> _showResetBiometrics() async {
+    final repo = context.read<AttendanceRepository>();
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -240,12 +305,12 @@ class _EmployeeAttendanceTabState extends ConsumerState<EmployeeAttendanceTab> {
     if (confirm != true || !mounted) return;
 
     try {
-      await ref.read(attendanceRepositoryProvider).resetEmployeeBiometrics(widget.employeeId);
-      ref.invalidate(employeeAttendanceSettingsProvider(widget.employeeId));
+      await repo.resetEmployeeBiometrics(widget.employeeId);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Fingerprint registration reset successfully.'), backgroundColor: Colors.green),
         );
+        _loadSettings();
       }
     } catch (e) {
       if (mounted) {
@@ -445,7 +510,7 @@ class _StatsCard extends StatelessWidget {
         style: TextStyle(
           fontWeight: FontWeight.w600,
           fontSize: 12,
-          color: isDark ? Colors.white.withOpacity(0.9) : const Color(0xFF374151),
+          color: isDark ? Colors.white.withValues(alpha: 0.9) : const Color(0xFF374151),
         ),
       ),
       backgroundColor: isDark 

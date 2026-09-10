@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/widgets/bloc_async_body.dart';
 import '../../../../core/widgets/header_action_button.dart';
 import '../../../auth/domain/permissions.dart';
-import '../../../auth/presentation/auth_providers.dart';
-import '../salary_providers.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
+import '../../data/salary_repository.dart';
+import '../bloc/salary_bloc.dart';
 import '../widgets/salary_shared_widgets.dart';
 
 const _monthLabels = [
@@ -14,15 +16,29 @@ const _monthLabels = [
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
 ];
 
-class AdminPayrollMonthScreen extends ConsumerWidget {
+class AdminPayrollMonthScreen extends StatelessWidget {
   const AdminPayrollMonthScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final filter = ref.watch(payrollMonthFilterProvider);
-    final payrollAsync = ref.watch(payrollMonthProvider(filter));
-    final auth = ref.watch(authNotifierProvider);
-    final canWrite = Permissions.canWriteSalary(auth.permissions);
+  Widget build(BuildContext context) {
+    return BlocProvider<SalaryBloc>(
+      create: (ctx) => SalaryBloc(
+        salaryRepository: ctx.read<SalaryRepository>(),
+      )..add(const SalaryLoadRequested()),
+      child: const _AdminPayrollMonthView(),
+    );
+  }
+}
+
+class _AdminPayrollMonthView extends StatelessWidget {
+  const _AdminPayrollMonthView();
+
+  @override
+  Widget build(BuildContext context) {
+    final bloc = context.read<SalaryBloc>();
+    final canWrite = context.select<AuthBloc, bool>(
+      (b) => Permissions.canWriteSalary(b.state.permissions),
+    );
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
@@ -73,56 +89,63 @@ class AdminPayrollMonthScreen extends ConsumerWidget {
           const SizedBox(width: 8),
         ],
       ),
-      body: Column(
-        children: [
-          _MonthBar(
-            year: filter.year,
-            month: filter.month,
-            onYearChanged: (y) =>
-                ref.read(payrollMonthFilterProvider.notifier).setMonth(y, filter.month),
-            onMonthChanged: (m) =>
-                ref.read(payrollMonthFilterProvider.notifier).setMonth(filter.year, m),
-          ),
-          Expanded(
-            child: SalaryAsyncBody<Map<String, dynamic>>(
-              value: payrollAsync,
-              emptyMessage: 'No employees found.',
-              onRetry: () => ref.invalidate(payrollMonthProvider(filter)),
-              builder: (data) {
-                final kpis = Map<String, dynamic>.from(
-                  (data['kpis'] as Map?) ?? const {},
-                );
-                final employees = (data['employees'] as List? ?? [])
-                    .map((e) => Map<String, dynamic>.from(e as Map))
-                    .toList();
-                return ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                  children: [
-                    _KpiRow(kpis: kpis),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Employees · ${_monthLabels[filter.month - 1]} ${filter.year}',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 15,
-                        color: isDark ? Colors.white : const Color(0xFF212F3D),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    ...employees.map(
-                      (row) => _EmployeePayrollTile(
-                        row: row,
-                        canWrite: canWrite,
-                        year: filter.year,
-                        month: filter.month,
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
-        ],
+      body: BlocBuilder<SalaryBloc, SalaryState>(
+        builder: (context, state) {
+          final year = state.payrollYear == 0 ? DateTime.now().year : state.payrollYear;
+          final month = state.payrollMonth == 0 ? DateTime.now().month : state.payrollMonth;
+
+          return Column(
+            children: [
+              _MonthBar(
+                year: year,
+                month: month,
+                onYearChanged: (y) => bloc.add(PayrollMonthChanged(year: y, month: month)),
+                onMonthChanged: (m) => bloc.add(PayrollMonthChanged(year: year, month: m)),
+              ),
+              Expanded(
+                child: BlocAsyncBody<Map<String, dynamic>>(
+                  status: state.status,
+                  data: state.payrollData,
+                  errorMessage: state.errorMessage,
+                  emptyMessage: 'No employees found.',
+                  onRetry: () => bloc.add(PayrollMonthChanged(year: year, month: month)),
+                  builder: (data) {
+                    final kpis = Map<String, dynamic>.from(
+                      (data['kpis'] as Map?) ?? const {},
+                    );
+                    final employees = (data['employees'] as List? ?? [])
+                        .map((e) => Map<String, dynamic>.from(e as Map))
+                        .toList();
+                    return ListView(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                      children: [
+                        _KpiRow(kpis: kpis),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Employees · ${_monthLabels[month - 1]} $year',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 15,
+                            color: isDark ? Colors.white : const Color(0xFF212F3D),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        ...employees.map(
+                          (row) => _EmployeePayrollTile(
+                            row: row,
+                            canWrite: canWrite,
+                            year: year,
+                            month: month,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -226,7 +249,7 @@ class _KpiRow extends StatelessWidget {
         color: isDark ? const Color(0xFF1E1B18) : Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC),
+          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
         ),
       ),
       child: Column(
@@ -255,7 +278,7 @@ class _KpiRow extends StatelessWidget {
   }
 }
 
-class _EmployeePayrollTile extends ConsumerStatefulWidget {
+class _EmployeePayrollTile extends StatefulWidget {
   const _EmployeePayrollTile({
     required this.row,
     required this.canWrite,
@@ -269,10 +292,10 @@ class _EmployeePayrollTile extends ConsumerStatefulWidget {
   final int month;
 
   @override
-  ConsumerState<_EmployeePayrollTile> createState() => _EmployeePayrollTileState();
+  State<_EmployeePayrollTile> createState() => _EmployeePayrollTileState();
 }
 
-class _EmployeePayrollTileState extends ConsumerState<_EmployeePayrollTile> {
+class _EmployeePayrollTileState extends State<_EmployeePayrollTile> {
   bool _busy = false;
 
   @override
@@ -341,15 +364,16 @@ class _EmployeePayrollTileState extends ConsumerState<_EmployeePayrollTile> {
   Future<void> _togglePaid(String recordId, {required bool paid}) async {
     setState(() => _busy = true);
     try {
-      final repo = ref.read(salaryRepositoryProvider);
+      final repo = context.read<SalaryRepository>();
       if (paid) {
         await repo.markRecordPaid(recordId);
       } else {
         await repo.markRecordUnpaid(recordId);
       }
-      ref.invalidate(payrollMonthProvider(PayrollMonthFilter(year: widget.year, month: widget.month)));
-      invalidateSalaryRecords(ref);
       if (!mounted) return;
+      context.read<SalaryBloc>().add(
+        PayrollMonthChanged(year: widget.year, month: widget.month),
+      );
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(paid ? 'Marked paid' : 'Marked unpaid')),
       );

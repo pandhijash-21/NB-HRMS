@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/utils/platform_file_picker.dart';
 import '../../../lookups/presentation/lookup_dropdown.dart';
-import '../../../org/presentation/org_providers.dart';
+import '../../../org/data/org_repository.dart';
+import '../../../org/domain/org_models.dart';
+import '../../data/project_repository.dart';
 import '../../domain/project_models.dart';
-import '../project_providers.dart';
 
 class _DocDraft {
   _DocDraft({
@@ -33,16 +34,16 @@ class _DocDraft {
   bool uploading = false;
 }
 
-class ProjectFormScreen extends ConsumerStatefulWidget {
+class ProjectFormScreen extends StatefulWidget {
   const ProjectFormScreen({super.key, this.projectId});
 
   final String? projectId;
 
   @override
-  ConsumerState<ProjectFormScreen> createState() => _ProjectFormScreenState();
+  State<ProjectFormScreen> createState() => _ProjectFormScreenState();
 }
 
-class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
+class _ProjectFormScreenState extends State<ProjectFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _projectId = TextEditingController();
   final _name = TextEditingController();
@@ -84,7 +85,56 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
   bool _saving = false;
   bool _hydrated = false;
 
+  List<Organization> _orgs = const [];
+  List<Institute> _institutes = const [];
+  List<ProjectEmployeeOption> _owners = const [];
+  bool _loadingInitial = true;
+
   bool get _isEdit => widget.projectId != null;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadInitialData());
+  }
+
+  Future<void> _loadInitialData() async {
+    try {
+      final projectRepo = context.read<ProjectRepository>();
+      final orgRepo = context.read<OrgRepository>();
+
+      final futures = await Future.wait([
+        orgRepo.listActiveOrganizations(),
+        orgRepo.listInstitutes(includeInactive: false),
+        projectRepo.listEmployees(),
+        if (_isEdit)
+          projectRepo.getById(widget.projectId!)
+        else
+          projectRepo.nextNumber(),
+      ]);
+
+      if (!mounted) return;
+      setState(() {
+        _orgs = futures[0] as List<Organization>;
+        _institutes = futures[1] as List<Institute>;
+        _owners = futures[2] as List<ProjectEmployeeOption>;
+        if (_isEdit) {
+          _hydrate(futures[3] as ErpProject);
+        } else {
+          final next = futures[3] as ({int projectNo, String displayId});
+          _projectId.text = next.displayId;
+        }
+        _loadingInitial = false;
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() => _loadingInitial = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load project details: $e')),
+        );
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -167,11 +217,12 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
   }
 
   Future<void> _uploadImage() async {
+    final projectRepo = context.read<ProjectRepository>();
     final picked = await pickFileFromDevice(imagesOnly: true);
-    if (picked == null) return;
+    if (picked == null || !mounted) return;
     setState(() => _imageUploading = true);
     try {
-      final uploaded = await ref.read(projectRepositoryProvider).uploadFile(
+      final uploaded = await projectRepo.uploadFile(
             bytes: picked.bytes,
             filename: picked.name,
             folder: 'erp/projects/images',
@@ -189,14 +240,15 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
   }
 
   Future<void> _uploadDoc(_DocDraft row) async {
+    final projectRepo = context.read<ProjectRepository>();
     final picked = await pickFileFromDevice(
       imagesOnly: false,
       extensions: const ['pdf', 'png', 'jpg', 'jpeg', 'doc', 'docx'],
     );
-    if (picked == null) return;
+    if (picked == null || !mounted) return;
     setState(() => row.uploading = true);
     try {
-      final uploaded = await ref.read(projectRepositoryProvider).uploadFile(
+      final uploaded = await projectRepo.uploadFile(
             bytes: picked.bytes,
             filename: picked.name,
             folder: 'erp/projects/docs',
@@ -286,13 +338,12 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
           .toList(),
     };
     try {
-      final repo = ref.read(projectRepositoryProvider);
+      final repo = context.read<ProjectRepository>();
       if (_isEdit) {
         await repo.update(widget.projectId!, body);
       } else {
         await repo.create(body);
       }
-      ref.invalidate(projectsListProvider);
       if (!mounted) return;
       context.go('/erp/projects');
     } catch (e) {
@@ -382,17 +433,22 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    if (_isEdit) {
-      ref.listen(projectDetailProvider(widget.projectId!), (prev, next) {
-        next.whenData((p) {
-          if (!_hydrated) setState(() => _hydrate(p));
-        });
-      });
+    if (_loadingInitial) {
+      return Scaffold(
+        backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
+        appBar: AppBar(
+          backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
+          elevation: 0,
+          title: Text(_isEdit ? 'Edit Project' : 'Add Projects'),
+          leading: const AppBackButton(fallbackLocation: '/erp/projects'),
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+      );
     }
 
-    final orgs = ref.watch(activeOrganizationsProvider).asData?.value ?? const [];
-    final institutes = ref.watch(pickerInstitutesProvider).asData?.value ?? const [];
-    final owners = ref.watch(projectEmployeesProvider).asData?.value ?? const [];
+    final orgs = _orgs;
+    final institutes = _institutes;
+    final owners = _owners;
     final filteredInstitutes = _organizationId == null
         ? institutes
         : institutes
@@ -496,7 +552,7 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
                   onChanged: (v) => setState(() => _instituteId = v),
                 ),
                 lookupDropdown(
-                  ref: ref,
+                  context: context,
                   category: 'PROJECT_CATEGORY',
                   label: 'Project Category',
                   value: _categoryCode,
@@ -504,7 +560,7 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
                   onChanged: (v) => setState(() => _categoryCode = v),
                 ),
                 lookupDropdown(
-                  ref: ref,
+                  context: context,
                   category: 'PROJECT_SUB_CATEGORY',
                   label: 'Project Sub Category',
                   value: _subCategoryCode,
@@ -512,7 +568,7 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
                   onChanged: (v) => setState(() => _subCategoryCode = v),
                 ),
                 lookupDropdown(
-                  ref: ref,
+                  context: context,
                   category: 'PROJECT_STRUCTURE',
                   label: 'Project Structure',
                   value: _structureCode,
@@ -520,7 +576,7 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
                   onChanged: (v) => setState(() => _structureCode = v),
                 ),
                 lookupNullableDropdown(
-                  ref: ref,
+                  context: context,
                   category: 'PROJECT_SEGMENT',
                   label: 'Project Segment',
                   value: _segmentCode,
@@ -545,7 +601,7 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
                   ),
                 ),
                 lookupDropdown(
-                  ref: ref,
+                  context: context,
                   category: 'PROJECT_STATUS',
                   label: 'Status',
                   value: _statusCode,
@@ -580,7 +636,7 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
                   decoration: _dec('Total Project Area'),
                 ),
                 lookupNullableDropdown(
-                  ref: ref,
+                  context: context,
                   category: 'PROJECT_AREA_UNIT',
                   label: 'Area Unit',
                   value: _areaUnitCode,
@@ -618,7 +674,7 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
                 decoration: _dec('Landmark', hint: 'Enter Landmark'),
               ),
               lookupDropdown(
-                ref: ref,
+                context: context,
                 category: 'PROJECT_COUNTRY',
                 label: 'Country',
                 value: _countryCode,
@@ -626,7 +682,7 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
                 onChanged: (v) => setState(() => _countryCode = v),
               ),
               lookupDropdown(
-                ref: ref,
+                context: context,
                 category: 'PROJECT_STATE',
                 label: 'State',
                 value: _stateCode,
@@ -634,7 +690,7 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
                 onChanged: (v) => setState(() => _stateCode = v),
               ),
               lookupDropdown(
-                ref: ref,
+                context: context,
                 category: 'PROJECT_CITY',
                 label: 'City',
                 value: _cityCode,
@@ -642,7 +698,7 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
                 onChanged: (v) => setState(() => _cityCode = v),
               ),
               lookupDropdown(
-                ref: ref,
+                context: context,
                 category: 'PROJECT_LOCATION_AREA',
                 label: 'Area',
                 value: _areaCode,
@@ -668,28 +724,28 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
                   decoration: _dec('Total Plot Area'),
                 ),
                 lookupNullableDropdown(
-                  ref: ref,
+                  context: context,
                   category: 'PROJECT_AREA_UNIT',
                   label: 'Plot Area Unit',
                   value: _areaUnitCode,
                   onChanged: (v) => setState(() => _areaUnitCode = v),
                 ),
                 lookupNullableDropdown(
-                  ref: ref,
+                  context: context,
                   category: 'PROJECT_LIVABILITY',
                   label: 'Livability',
                   value: _livabilityCode,
                   onChanged: (v) => setState(() => _livabilityCode = v),
                 ),
                 lookupNullableDropdown(
-                  ref: ref,
+                  context: context,
                   category: 'PROJECT_BANK_TIE_UP',
                   label: 'Bank Tie-Ups for Customer Loan',
                   value: _bankTieUpCode,
                   onChanged: (v) => setState(() => _bankTieUpCode = v),
                 ),
                 lookupDropdown(
-                  ref: ref,
+                  context: context,
                   category: 'PROJECT_DEV_AUTHORITY',
                   label: 'Development Authority',
                   value: _devAuthorityCode,
@@ -697,7 +753,7 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
                   onChanged: (v) => setState(() => _devAuthorityCode = v),
                 ),
                 lookupDropdown(
-                  ref: ref,
+                  context: context,
                   category: 'PROJECT_ELEC_PROVIDER',
                   label: 'Electricity Provider',
                   value: _elecProviderCode,
@@ -709,7 +765,7 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   lookupMultiCheckbox(
-                    ref: ref,
+                    context: context,
                     category: 'PROJECT_AMENITY',
                     label: 'Amenities',
                     selected: _amenitiesCodes,
@@ -857,7 +913,7 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
               SizedBox(
                 width: cellW,
                 child: lookupNullableDropdown(
-                  ref: ref,
+                  context: context,
                   category: 'PROJECT_DOCUMENT_TYPE',
                   label: 'Type',
                   value: row.typeCode,

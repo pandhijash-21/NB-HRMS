@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/bloc/load_status.dart';
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/widgets/header_action_button.dart';
 import '../../../auth/domain/permissions.dart';
-import '../../../auth/presentation/auth_providers.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../domain/rbac_models.dart';
-import '../rbac_providers.dart';
+import '../bloc/admin_role_detail_bloc.dart';
 
-class AdminRoleDetailScreen extends ConsumerWidget {
+class AdminRoleDetailScreen extends StatefulWidget {
   const AdminRoleDetailScreen({super.key, required this.roleId});
 
   final String roleId;
@@ -22,11 +24,205 @@ class AdminRoleDetailScreen extends ConsumerWidget {
   ];
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final auth = ref.watch(authNotifierProvider);
+  State<AdminRoleDetailScreen> createState() => _AdminRoleDetailScreenState();
+}
+
+class _AdminRoleDetailScreenState extends State<AdminRoleDetailScreen> {
+  @override
+  void initState() {
+    super.initState();
+    final bloc = context.read<AdminRoleDetailBloc>();
+    if (bloc.state.status == LoadStatus.initial || bloc.state.role?.id != widget.roleId) {
+      bloc.add(RoleDetailLoadRequested(widget.roleId));
+    }
+  }
+
+  Future<void> _showAddModuleDialog() async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final keyController = TextEditingController();
+    final nameController = TextEditingController();
+    final descController = TextEditingController();
+    String selectedCategory = 'HRMS';
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(
+              color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
+              width: 1.5,
+            ),
+          ),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFE0E7FF),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(Icons.add_box_rounded, color: isDark ? const Color(0xFFC5A059) : const Color(0xFF4338CA), size: 20),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Register System Module',
+                style: TextStyle(
+                  color: isDark ? Colors.white : const Color(0xFF212F3D),
+                  fontWeight: FontWeight.w800,
+                  fontSize: 18,
+                ),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 480,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    margin: const EdgeInsets.only(bottom: 14),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.12) : const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.3) : const Color(0xFFBFDBFE),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.security_rounded,
+                          size: 16,
+                          color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF2563EB),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'System Admin has full RBAC authority to register new custom modules. Once created, granular permissions can be configured across all roles.',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF1E40AF),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  TextField(
+                    controller: keyController,
+                    textCapitalization: TextCapitalization.characters,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9_]')),
+                    ],
+                    decoration: const InputDecoration(
+                      labelText: 'Module Key (Identifier) *',
+                      hintText: 'e.g. LOGISTICS_FLEET',
+                      helperText: 'Upper snake-case identifier. Used for permission mapping.',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: nameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Module Name *',
+                      hintText: 'e.g. Logistics & Fleet Management',
+                      helperText: 'Human-readable module title displayed across the app.',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  DropdownButtonFormField<String>(
+                    initialValue: selectedCategory,
+                    dropdownColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+                    style: TextStyle(color: isDark ? Colors.white : const Color(0xFF212F3D), fontWeight: FontWeight.w600),
+                    decoration: const InputDecoration(
+                      labelText: 'Category',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'HRMS', child: Text('HRMS (Human Resources)')),
+                      DropdownMenuItem(value: 'CRM', child: Text('CRM (Customer Relations)')),
+                      DropdownMenuItem(value: 'ERP', child: Text('ERP (Enterprise Resource Planning)')),
+                      DropdownMenuItem(value: 'COLLABORATION', child: Text('COLLABORATION (Chat, Meets, Tasks)')),
+                      DropdownMenuItem(value: 'SYSTEM', child: Text('SYSTEM (Core Settings & Audit)')),
+                    ],
+                    onChanged: (v) => setLocal(() => selectedCategory = v ?? 'HRMS'),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: descController,
+                    maxLines: 2,
+                    decoration: const InputDecoration(
+                      labelText: 'Description (Optional)',
+                      hintText: 'Purpose of this module and data scope',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(
+                'Cancel',
+                style: TextStyle(color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF607D8B), fontWeight: FontWeight.w700),
+              ),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFC5A059),
+                foregroundColor: const Color(0xFF1A1816),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              icon: const Icon(Icons.check_rounded, size: 18),
+              label: const Text('Register Module', style: TextStyle(fontWeight: FontWeight.w800)),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (ok != true || !mounted) return;
+
+    final key = keyController.text.trim().toUpperCase().replaceAll(' ', '_');
+    final name = nameController.text.trim();
+    final desc = descController.text.trim();
+
+    if (key.isEmpty || name.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Module Key and Module Name are required.')),
+      );
+      return;
+    }
+
+    context.read<AdminRoleDetailBloc>().add(CustomModuleCreated(
+      roleId: widget.roleId,
+      data: {
+        'key': key,
+        'name': name,
+        'category': selectedCategory,
+        'description': desc.isNotEmpty ? desc : null,
+      },
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final authState = context.watch<AuthBloc>().state;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    if (!Permissions.canManageRoles(auth.permissions)) {
+    if (!Permissions.canManageRoles(authState.permissions)) {
       return Scaffold(
         backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
         body: Center(
@@ -57,9 +253,7 @@ class AdminRoleDetailScreen extends ConsumerWidget {
       );
     }
 
-    final roleAsync = ref.watch(roleDetailProvider(roleId));
-    final modulesAsync = ref.watch(systemModulesProvider);
-    final permsAsync = ref.watch(rolePermissionsProvider(roleId));
+    final detailState = context.watch<AdminRoleDetailBloc>().state;
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
@@ -87,12 +281,27 @@ class AdminRoleDetailScreen extends ConsumerWidget {
               color: isDark ? Colors.white.withValues(alpha: 0.8) : const Color(0xFF212F3D),
             ),
             onPressed: () {
-              ref.invalidate(roleDetailProvider(roleId));
-              ref.invalidate(systemModulesProvider);
-              ref.read(rolePermissionsProvider(roleId).notifier).refresh();
+              context.read<AdminRoleDetailBloc>().add(RoleDetailLoadRequested(widget.roleId));
             },
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 4),
+          Padding(
+            padding: const EdgeInsets.only(right: 16.0),
+            child: SizedBox(
+              height: 38,
+              child: FilledButton.icon(
+                onPressed: _showAddModuleDialog,
+                style: FilledButton.styleFrom(
+                  backgroundColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+                  foregroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                ),
+                icon: const Icon(Icons.add_box_outlined, size: 16),
+                label: const Text('Add Module', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+              ),
+            ),
+          ),
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1.5),
@@ -104,61 +313,67 @@ class AdminRoleDetailScreen extends ConsumerWidget {
           ),
         ),
       ),
-      body: roleAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFFC5A059))),
-        error: (err, _) => Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.error_outline_rounded, size: 48, color: Colors.red),
-              const SizedBox(height: 12),
-              Text('Failed to load role: $err', style: const TextStyle(fontWeight: FontWeight.w600)),
-              const SizedBox(height: 16),
-              FilledButton(
-                onPressed: () => ref.invalidate(roleDetailProvider(roleId)),
-                child: const Text('Retry'),
-              ),
-            ],
-          ),
-        ),
-        data: (role) {
-          return modulesAsync.when(
-            loading: () =>
-                const Center(child: CircularProgressIndicator(color: Color(0xFFC5A059))),
-            error: (err, _) => Center(child: Text('Failed to load modules: $err')),
-            data: (modules) {
-              final permissions = permsAsync.asData?.value;
-              if (permissions == null) {
-                if (permsAsync.hasError) {
-                  return Center(child: Text('Failed to load permissions: ${permsAsync.error}'));
-                }
-                return const Center(
-                  child: CircularProgressIndicator(color: Color(0xFFC5A059)),
-                );
-              }
-
-              final permByKey = {
-                for (final p in permissions) p.moduleKey: p,
-              };
-
-              return SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+      body: BlocListener<AdminRoleDetailBloc, AdminRoleDetailState>(
+        listenWhen: (prev, curr) =>
+            prev.actionMessage != curr.actionMessage ||
+            prev.errorMessage != curr.errorMessage,
+        listener: (context, state) {
+          if (state.actionMessage != null) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.actionMessage!)));
+          } else if (state.errorMessage != null) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.errorMessage!.replaceFirst('Exception: ', ''))));
+          }
+        },
+        child: Builder(
+          builder: (context) {
+            if (detailState.status == LoadStatus.loading && detailState.role == null) {
+              return const Center(child: CircularProgressIndicator(color: Color(0xFFC5A059)));
+            }
+            if (detailState.status == LoadStatus.failure && detailState.role == null) {
+              return Center(
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    _RoleHeader(role: role),
+                    const Icon(Icons.error_outline_rounded, size: 48, color: Colors.red),
+                    const SizedBox(height: 12),
+                    Text('Failed to load role: ${detailState.errorMessage ?? "Unknown error"}', style: const TextStyle(fontWeight: FontWeight.w600)),
                     const SizedBox(height: 16),
-                    _ModularMatrixTable(
-                      modules: modules,
-                      permByKey: permByKey,
-                      roleId: roleId,
+                    FilledButton(
+                      onPressed: () => context.read<AdminRoleDetailBloc>().add(RoleDetailLoadRequested(widget.roleId)),
+                      child: const Text('Retry'),
                     ),
                   ],
                 ),
               );
-            },
-          );
-        },
+            }
+            final role = detailState.role;
+            if (role == null) {
+              return const Center(child: Text('Role not found'));
+            }
+            final modules = detailState.modules;
+            final permissions = detailState.permissions;
+            final permByKey = {
+              for (final p in permissions) p.moduleKey: p,
+            };
+
+            return SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _RoleHeader(role: role),
+                  const SizedBox(height: 16),
+                  _ModularMatrixTable(
+                    modules: modules,
+                    permByKey: permByKey,
+                    roleId: widget.roleId,
+                    roleName: role.name,
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
       ),
     );
   }
@@ -256,28 +471,89 @@ class _RoleHeader extends StatelessWidget {
               ),
             ],
           ),
+          if (Permissions.isSuperAdmin(role.name)) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF7C3AED).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFF7C3AED).withValues(alpha: 0.3)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.workspace_premium_rounded, size: 20, color: Color(0xFF7C3AED)),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Superadmin holds permanent, unrestricted full access across all system modules. Permissions are non-restrictable.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF7C3AED),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ] else if (Permissions.isSystemAdmin(role.name)) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.12) : const Color(0xFFFFF8E1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.3) : const Color(0xFFFFD54F),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.admin_panel_settings_rounded,
+                    size: 20,
+                    color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFFF57F17),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'System Admin possesses full administrative authority across all modules. Operates directly under Superadmin.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF795548),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 }
 
-class _ModularMatrixTable extends ConsumerStatefulWidget {
+class _ModularMatrixTable extends StatefulWidget {
   const _ModularMatrixTable({
     required this.modules,
     required this.permByKey,
     required this.roleId,
+    required this.roleName,
   });
 
   final List<SystemModule> modules;
   final Map<String, ModulePermission> permByKey;
   final String roleId;
+  final String roleName;
 
   @override
-  ConsumerState<_ModularMatrixTable> createState() => _ModularMatrixTableState();
+  State<_ModularMatrixTable> createState() => _ModularMatrixTableState();
 }
 
-class _ModularMatrixTableState extends ConsumerState<_ModularMatrixTable> {
+class _ModularMatrixTableState extends State<_ModularMatrixTable> {
   final Set<String> _updating = {};
   final Set<String> _expandedCategories = {'HRMS', 'CRM', 'ERP'};
   String _selectedFilter = 'ALL'; // 'ALL', 'HRMS', 'CRM', 'ERP'
@@ -291,22 +567,25 @@ class _ModularMatrixTableState extends ConsumerState<_ModularMatrixTable> {
   }
 
   Future<void> _patch(String moduleKey, Map<String, dynamic> data) async {
+    if (Permissions.isSuperAdmin(widget.roleName)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Superadmin holds permanent full access across all modules.')),
+        );
+      }
+      return;
+    }
     final trackKey = '$moduleKey-${data.keys.join()}';
     if (_updating.contains(trackKey)) return;
     setState(() => _updating.add(trackKey));
     try {
-      await ref.read(rolePermissionsProvider(widget.roleId).notifier).patch(
-            moduleKey,
-            data,
-          );
+      context.read<AdminRoleDetailBloc>().add(RolePermissionPatched(
+            roleId: widget.roleId,
+            moduleKey: moduleKey,
+            data: data,
+          ));
       if (mounted) {
-        ref.read(authNotifierProvider.notifier).refreshPermissions();
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-        );
+        context.read<AuthBloc>().add(const AuthPermissionsRefreshRequested());
       }
     } finally {
       if (mounted) setState(() => _updating.remove(trackKey));
@@ -324,6 +603,14 @@ class _ModularMatrixTableState extends ConsumerState<_ModularMatrixTable> {
   }
 
   Future<void> _batchAction(List<SystemModule> targetModules, String actionType) async {
+    if (Permissions.isSuperAdmin(widget.roleName)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Superadmin holds permanent full access across all modules.')),
+        );
+      }
+      return;
+    }
     for (final mod in targetModules) {
       if (actionType == 'grant_all') {
         await _patch(mod.key, {
@@ -1017,7 +1304,7 @@ class _ModularMatrixTableState extends ConsumerState<_ModularMatrixTable> {
                                           child: Text('Scope: University', style: TextStyle(fontSize: 11)),
                                         ),
                                       ],
-                                      onChanged: isRowUpdating
+                                      onChanged: (isRowUpdating || Permissions.isSuperAdmin(widget.roleName))
                                           ? null
                                           : (scope) {
                                               if (scope == null) return;
@@ -1036,7 +1323,8 @@ class _ModularMatrixTableState extends ConsumerState<_ModularMatrixTable> {
                         // 2-6: Individual 5 Action Toggles
                         ...AdminRoleDetailScreen._columns.map((col) {
                           final fieldKey = col.key;
-                          final value = _boolForField(perm, fieldKey);
+                          final isSuperAdminRole = Permissions.isSuperAdmin(widget.roleName);
+                          final value = isSuperAdminRole ? true : _boolForField(perm, fieldKey);
                           final isUpdating = _updating.contains('${module.key}-$fieldKey') ||
                               _updating.contains('${module.key}-canReadcanWritecanApprovecanDeletecanExport');
 
@@ -1050,7 +1338,7 @@ class _ModularMatrixTableState extends ConsumerState<_ModularMatrixTable> {
                                 activeTrackColor: isDark
                                     ? const Color(0xFFC5A059).withValues(alpha: 0.35)
                                     : const Color(0xFF212F3D).withValues(alpha: 0.25),
-                                onChanged: isUpdating
+                                onChanged: (isUpdating || isSuperAdminRole)
                                     ? null
                                     : (next) => _patch(module.key, {fieldKey: next}),
                               ),
@@ -1062,7 +1350,9 @@ class _ModularMatrixTableState extends ConsumerState<_ModularMatrixTable> {
                         DataCell(
                           Center(
                             child: Tooltip(
-                              message: allGranted ? 'Revoke all actions' : 'Grant all 5 actions',
+                              message: Permissions.isSuperAdmin(widget.roleName)
+                                  ? 'Superadmin access is permanent'
+                                  : (allGranted ? 'Revoke all actions' : 'Grant all 5 actions'),
                               child: IconButton(
                                 icon: isRowUpdating
                                     ? const SizedBox(
@@ -1071,19 +1361,19 @@ class _ModularMatrixTableState extends ConsumerState<_ModularMatrixTable> {
                                         child: CircularProgressIndicator(strokeWidth: 2),
                                       )
                                     : Icon(
-                                        allGranted
+                                        (allGranted || Permissions.isSuperAdmin(widget.roleName))
                                             ? Icons.check_circle_rounded
                                             : (perm.canRead
                                                 ? Icons.radio_button_checked_rounded
                                                 : Icons.radio_button_unchecked_rounded),
                                         size: 22,
-                                        color: allGranted
+                                        color: (allGranted || Permissions.isSuperAdmin(widget.roleName))
                                             ? const Color(0xFF10B981) // Emerald green
                                             : (perm.canRead
                                                 ? (isDark ? const Color(0xFFC5A059) : const Color(0xFF212F3D))
                                                 : (isDark ? Colors.white24 : Colors.black26)),
                                       ),
-                                onPressed: isRowUpdating
+                                onPressed: (isRowUpdating || Permissions.isSuperAdmin(widget.roleName))
                                     ? null
                                     : () => _toggleAllForModule(module, !allGranted),
                               ),

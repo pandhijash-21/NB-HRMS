@@ -452,7 +452,7 @@ class CandidateDetailScreen extends ConsumerWidget {
                       )
                     else
                       DropdownButtonFormField<String>(
-                        value: interviewerUserId,
+                        initialValue: interviewerUserId,
                         decoration: const InputDecoration(
                           labelText: 'Interviewer',
                           border: OutlineInputBorder(),

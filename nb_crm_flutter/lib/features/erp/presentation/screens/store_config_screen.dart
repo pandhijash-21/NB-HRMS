@@ -1,28 +1,37 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../lookups/presentation/lookup_dropdown.dart';
+import '../../data/boq_repository.dart';
+import '../../data/work_order_repository.dart';
 import '../../domain/resource_models.dart';
 import '../../domain/work_order_lookup_keys.dart';
-import '../boq_providers.dart';
-import '../work_order_providers.dart';
+import '../../domain/work_order_models.dart';
 
-class StoreConfigScreen extends ConsumerStatefulWidget {
+class StoreConfigScreen extends StatefulWidget {
   const StoreConfigScreen({super.key, this.initialTab = 0});
 
   /// 0 for Material, 1 for Machine
   final int initialTab;
 
   @override
-  ConsumerState<StoreConfigScreen> createState() => _StoreConfigScreenState();
+  State<StoreConfigScreen> createState() => _StoreConfigScreenState();
 }
 
-class _StoreConfigScreenState extends ConsumerState<StoreConfigScreen>
+class _StoreConfigScreenState extends State<StoreConfigScreen>
     with TickerProviderStateMixin {
   late TabController _storeTabController;
   late TabController _materialTabController;
   late TabController _machineTabController;
+
+  List<ErpMaterial> _materials = [];
+  List<ErpMachine> _machines = [];
+  List<ErpActivity> _activities = [];
+  List<ErpContractor> _contractors = [];
+  List<ErpMachineIssue> _activeIssues = [];
+  bool _loading = true;
+  String? _loadError;
 
   // ── Material Inward Form Controllers ──
   final _matBrandCtrl = TextEditingController();
@@ -67,6 +76,38 @@ class _StoreConfigScreenState extends ConsumerState<StoreConfigScreen>
     );
     _materialTabController = TabController(length: 2, vsync: this);
     _machineTabController = TabController(length: 2, vsync: this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadAll();
+    });
+  }
+
+  Future<void> _loadAll() async {
+    try {
+      final boqRepo = context.read<BoqRepository>();
+      final workRepo = context.read<WorkOrderRepository>();
+      final res = await Future.wait([
+        boqRepo.listMaterials(),
+        boqRepo.listMachines(),
+        workRepo.listActivities(),
+        workRepo.listContractors(),
+        boqRepo.listActiveMachineIssues(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _materials = res[0] as List<ErpMaterial>;
+        _machines = res[1] as List<ErpMachine>;
+        _activities = res[2] as List<ErpActivity>;
+        _contractors = res[3] as List<ErpContractor>;
+        _activeIssues = res[4] as List<ErpMachineIssue>;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loadError = e.toString();
+        _loading = false;
+      });
+    }
   }
 
   @override
@@ -106,7 +147,7 @@ class _StoreConfigScreenState extends ConsumerState<StoreConfigScreen>
       return;
     }
     try {
-      await ref.read(boqRepositoryProvider).createMaterial({
+      await context.read<BoqRepository>().createMaterial({
         'brand': _matBrandCtrl.text.trim(),
         'name': name,
         'unitCode': _matUnitCode,
@@ -115,7 +156,7 @@ class _StoreConfigScreenState extends ConsumerState<StoreConfigScreen>
         'subtaskId': _matSubtaskId,
         'qtyOnHand': double.tryParse(_matQtyCtrl.text) ?? 0,
       });
-      ref.invalidate(erpMaterialsProvider);
+      _loadAll();
       _matBrandCtrl.clear();
       _matNameCtrl.clear();
       _matSizeCtrl.clear();
@@ -179,12 +220,12 @@ class _StoreConfigScreenState extends ConsumerState<StoreConfigScreen>
     );
     if (ok != true) return;
     try {
-      await ref.read(boqRepositoryProvider).addMaterialStock(id, {
+      await context.read<BoqRepository>().addMaterialStock(id, {
         'quantity': double.tryParse(qtyCtrl.text) ?? 0,
         'logType': 'PURCHASE',
         'remarks': remarksCtrl.text.trim(),
       });
-      ref.invalidate(erpMaterialsProvider);
+      _loadAll();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Stock updated successfully')),
@@ -239,13 +280,13 @@ class _StoreConfigScreenState extends ConsumerState<StoreConfigScreen>
 
     setState(() => _isDispatching = true);
     try {
-      await ref.read(boqRepositoryProvider).dispatchMaterialOutward(
+      await context.read<BoqRepository>().dispatchMaterialOutward(
             _outwardMaterialId!,
             quantity: qty,
             contractorId: _outwardContractorId!,
             remarks: _outwardRemarksCtrl.text.trim(),
           );
-      ref.invalidate(erpMaterialsProvider);
+      _loadAll();
       _outwardQtyCtrl.clear();
       _outwardRemarksCtrl.clear();
       setState(() {
@@ -283,7 +324,7 @@ class _StoreConfigScreenState extends ConsumerState<StoreConfigScreen>
       return;
     }
     try {
-      await ref.read(boqRepositoryProvider).createMachine({
+      await context.read<BoqRepository>().createMachine({
         'brand': _macBrandCtrl.text.trim(),
         'name': name,
         'unitCode': _macUnitCode,
@@ -292,7 +333,7 @@ class _StoreConfigScreenState extends ConsumerState<StoreConfigScreen>
         'subtaskId': _macSubtaskId,
         'qtyOnHand': double.tryParse(_macQtyCtrl.text) ?? 0,
       });
-      ref.invalidate(erpMachinesProvider);
+      _loadAll();
       _macBrandCtrl.clear();
       _macNameCtrl.clear();
       _macSizeCtrl.clear();
@@ -356,12 +397,12 @@ class _StoreConfigScreenState extends ConsumerState<StoreConfigScreen>
     );
     if (ok != true) return;
     try {
-      await ref.read(boqRepositoryProvider).addMachineStock(id, {
+      await context.read<BoqRepository>().addMachineStock(id, {
         'quantity': double.tryParse(qtyCtrl.text) ?? 0,
         'logType': 'PURCHASE',
         'remarks': remarksCtrl.text.trim(),
       });
-      ref.invalidate(erpMachinesProvider);
+      _loadAll();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Machine stock updated')),
@@ -427,15 +468,14 @@ class _StoreConfigScreenState extends ConsumerState<StoreConfigScreen>
     }
     setState(() => _isIssuingMachine = true);
     try {
-      await ref.read(boqRepositoryProvider).issueMachine(
+      await context.read<BoqRepository>().issueMachine(
             _issueMachineId!,
             quantity: qty,
             contractorId: _issueContractorId!,
             issueDate: _issueDate,
             remarks: _issueRemarksCtrl.text.trim(),
           );
-      ref.invalidate(erpMachinesProvider);
-      ref.invalidate(activeMachineIssuesProvider);
+      _loadAll();
       _issueQtyCtrl.clear();
       _issueRemarksCtrl.clear();
       setState(() {
@@ -486,7 +526,7 @@ class _StoreConfigScreenState extends ConsumerState<StoreConfigScreen>
                 Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF7C3AED).withOpacity(0.12),
+                    color: const Color(0xFF7C3AED).withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: const Icon(Icons.assignment_return_rounded, color: Color(0xFF7C3AED), size: 20),
@@ -510,9 +550,9 @@ class _StoreConfigScreenState extends ConsumerState<StoreConfigScreen>
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF7C3AED).withOpacity(0.08),
+                      color: const Color(0xFF7C3AED).withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFF7C3AED).withOpacity(0.2)),
+                      border: Border.all(color: const Color(0xFF7C3AED).withValues(alpha: 0.2)),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -603,14 +643,13 @@ class _StoreConfigScreenState extends ConsumerState<StoreConfigScreen>
 
     final returnQty = double.tryParse(qtyCtrl.text.trim()) ?? 0;
     try {
-      await ref.read(boqRepositoryProvider).returnMachine(
+      await context.read<BoqRepository>().returnMachine(
             issue.id,
             quantity: returnQty,
             returnDate: returnDate,
             remarks: remarksCtrl.text.trim(),
           );
-      ref.invalidate(activeMachineIssuesProvider);
-      ref.invalidate(erpMachinesProvider);
+      _loadAll();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -655,11 +694,7 @@ class _StoreConfigScreenState extends ConsumerState<StoreConfigScreen>
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
             tooltip: 'Refresh Store',
-            onPressed: () {
-              ref.invalidate(erpMaterialsProvider);
-              ref.invalidate(erpMachinesProvider);
-              ref.invalidate(erpContractorsProvider);
-            },
+            onPressed: _loadAll,
           ),
         ],
         bottom: PreferredSize(
@@ -686,13 +721,27 @@ class _StoreConfigScreenState extends ConsumerState<StoreConfigScreen>
           ),
         ),
       ),
-      body: TabBarView(
-        controller: _storeTabController,
-        children: [
-          _buildMaterialSection(isDark),
-          _buildMachineSection(isDark),
-        ],
-      ),
+      body: _loadError != null && _materials.isEmpty && _machines.isEmpty
+          ? Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Error loading store data: $_loadError'),
+                  const SizedBox(height: 12),
+                  FilledButton(
+                    onPressed: _loadAll,
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            )
+          : TabBarView(
+              controller: _storeTabController,
+              children: [
+                _buildMaterialSection(isDark),
+                _buildMachineSection(isDark),
+              ],
+            ),
     );
   }
 
@@ -737,9 +786,6 @@ class _StoreConfigScreenState extends ConsumerState<StoreConfigScreen>
 
   // ── Material Inward Tab ──
   Widget _buildMaterialInwardTab(bool isDark) {
-    final materialsAsync = ref.watch(erpMaterialsProvider);
-    final activitiesAsync = ref.watch(erpActivitiesAdminProvider);
-
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -756,7 +802,7 @@ class _StoreConfigScreenState extends ConsumerState<StoreConfigScreen>
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF0D9488).withOpacity(0.12),
+                        color: const Color(0xFF0D9488).withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: const Icon(
@@ -790,7 +836,7 @@ class _StoreConfigScreenState extends ConsumerState<StoreConfigScreen>
                 ),
                 const SizedBox(height: 10),
                 lookupDropdown(
-                  ref: ref,
+                  context: context,
                   category: kWoMeasurementUnit,
                   value: _matUnitCode,
                   label: 'Unit',
@@ -814,33 +860,29 @@ class _StoreConfigScreenState extends ConsumerState<StoreConfigScreen>
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 ),
                 const SizedBox(height: 10),
-                activitiesAsync.when(
-                  loading: () => const SizedBox.shrink(),
-                  error: (_, __) => const SizedBox.shrink(),
-                  data: (acts) => DropdownButtonFormField<String>(
-                    value: _matActivityId,
-                    decoration: const InputDecoration(
-                      labelText: 'Activity (optional)',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: acts
-                        .map((a) => DropdownMenuItem(value: a.id, child: Text(a.name)))
-                        .toList(),
-                    onChanged: (v) => setState(() {
-                      _matActivityId = v;
-                      _matSubtaskId = null;
-                    }),
+                DropdownButtonFormField<String>(
+                  initialValue: _matActivityId,
+                  decoration: const InputDecoration(
+                    labelText: 'Activity (optional)',
+                    border: OutlineInputBorder(),
                   ),
+                  items: _activities
+                      .map((a) => DropdownMenuItem(value: a.id, child: Text(a.name)))
+                      .toList(),
+                  onChanged: (v) => setState(() {
+                    _matActivityId = v;
+                    _matSubtaskId = null;
+                  }),
                 ),
-                if (_matActivityId != null)
-                  activitiesAsync.maybeWhen(
-                    data: (acts) {
-                      final act = acts.where((a) => a.id == _matActivityId).firstOrNull;
+                if (_matActivityId != null) ...[
+                  Builder(
+                    builder: (context) {
+                      final act = _activities.where((a) => a.id == _matActivityId).firstOrNull;
                       if (act == null) return const SizedBox.shrink();
                       return Padding(
                         padding: const EdgeInsets.only(top: 10),
                         child: DropdownButtonFormField<String>(
-                          value: _matSubtaskId,
+                          initialValue: _matSubtaskId,
                           decoration: const InputDecoration(
                             labelText: 'Sub-activity (optional)',
                             border: OutlineInputBorder(),
@@ -852,8 +894,8 @@ class _StoreConfigScreenState extends ConsumerState<StoreConfigScreen>
                         ),
                       );
                     },
-                    orElse: () => const SizedBox.shrink(),
                   ),
+                ],
                 const SizedBox(height: 16),
                 FilledButton.icon(
                   onPressed: _saveMaterial,
@@ -886,114 +928,120 @@ class _StoreConfigScreenState extends ConsumerState<StoreConfigScreen>
           ],
         ),
         const SizedBox(height: 10),
-        materialsAsync.when(
-          loading: () => const Center(
+        if (_loading)
+          const Center(
             child: Padding(
               padding: EdgeInsets.all(24),
               child: CircularProgressIndicator(),
             ),
-          ),
-          error: (e, _) => Center(child: Text('Error loading materials: $e')),
-          data: (items) {
-            if (items.isEmpty) {
-              return const Padding(
-                padding: EdgeInsets.all(24),
-                child: Center(child: Text('No materials found. Add one above.')),
-              );
-            }
-            return Column(
-              children: [
-                for (final m in items)
-                  Card(
-                    elevation: 1,
-                    margin: const EdgeInsets.only(bottom: 8),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(10),
-                      onTap: () => _showMaterialLogsModal(context, m),
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF0D9488).withOpacity(0.1),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.inventory_2_rounded,
-                                color: Color(0xFF0D9488),
-                                size: 20,
-                              ),
+          )
+        else if (_materials.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(24),
+            child: Center(child: Text('No materials found. Add one above.')),
+          )
+        else
+          Column(
+            children: [
+              for (final m in _materials)
+                Card(
+                  elevation: 1,
+                  margin: const EdgeInsets.only(bottom: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: () => _showMaterialLogsModal(context, m),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0D9488).withValues(alpha: 0.1),
+                              shape: BoxShape.circle,
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    '${m.brand != null && m.brand!.isNotEmpty ? '${m.brand} ' : ''}${m.name}',
-                                    style: const TextStyle(fontWeight: FontWeight.w700),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Wrap(
-                                    spacing: 8,
-                                    children: [
-                                      Text(
-                                        'Available: ${m.qtyAvailable} ${m.unitCode ?? ''}',
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                          color: Color(0xFF0D9488),
-                                          fontSize: 12,
-                                        ),
+                            child: const Icon(
+                              Icons.inventory_2_rounded,
+                              color: Color(0xFF0D9488),
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${m.brand != null && m.brand!.isNotEmpty ? '${m.brand} ' : ''}${m.name}',
+                                  style: const TextStyle(fontWeight: FontWeight.w700),
+                                ),
+                                const SizedBox(height: 4),
+                                Wrap(
+                                  spacing: 8,
+                                  children: [
+                                    Text(
+                                      'Available: ${m.qtyAvailable} ${m.unitCode ?? ''}',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        color: Color(0xFF0D9488),
+                                        fontSize: 12,
                                       ),
-                                      Text(
-                                        'Total: ${m.qtyTotal}',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: isDark ? Colors.white60 : const Color(0xFF64748B),
-                                        ),
+                                    ),
+                                    Text(
+                                      'Total: ${m.qtyTotal}',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: isDark ? Colors.white60 : const Color(0xFF64748B),
                                       ),
-                                      Text(
-                                        'Used: ${m.qtyUsed}',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: isDark ? Colors.white60 : const Color(0xFF64748B),
-                                        ),
+                                    ),
+                                    Text(
+                                      'Used: ${m.qtyUsed}',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: isDark ? Colors.white60 : const Color(0xFF64748B),
                                       ),
-                                    ],
-                                  ),
-                                ],
-                              ),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
-                            IconButton(
-                              icon: const Icon(Icons.add_shopping_cart_outlined),
-                              tooltip: 'Add purchase stock',
-                              color: const Color(0xFF0D9488),
-                              onPressed: () => _addMaterialStock(m.id),
-                            ),
-                            const Icon(
-                              Icons.chevron_right_rounded,
-                              color: Colors.grey,
-                            ),
-                          ],
-                        ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.add_shopping_cart_outlined),
+                            tooltip: 'Add purchase stock',
+                            color: const Color(0xFF0D9488),
+                            onPressed: () => _addMaterialStock(m.id),
+                          ),
+                          const Icon(
+                            Icons.chevron_right_rounded,
+                            color: Colors.grey,
+                          ),
+                        ],
                       ),
                     ),
                   ),
-              ],
-            );
-          },
-        ),
+                ),
+            ],
+          ),
       ],
     );
   }
 
   // ── Material Outward Tab ──
   Widget _buildMaterialOutwardTab(bool isDark) {
-    final materialsAsync = ref.watch(erpMaterialsProvider);
-    final contractorsAsync = ref.watch(erpContractorsProvider);
+    final activeMaterials = _materials.where((m) => m.isActive).toList();
+    final activeContractors = _contractors.where((c) => c.isActive).toList();
+    final selectedMat = _outwardMaterialId != null
+        ? activeMaterials.where((m) => m.id == _outwardMaterialId).firstOrNull
+        : null;
+    final enteredQty = double.tryParse(_outwardQtyCtrl.text.trim()) ?? 0;
+    final avail = selectedMat?.qtyAvailable ?? 0;
+    final isExceeding = enteredQty > avail;
+    final isInvalid = _outwardMaterialId == null ||
+        _outwardContractorId == null ||
+        enteredQty <= 0 ||
+        enteredQty > avail;
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -1012,7 +1060,7 @@ class _StoreConfigScreenState extends ConsumerState<StoreConfigScreen>
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFEA580C).withOpacity(0.12),
+                        color: const Color(0xFFEA580C).withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: const Icon(
@@ -1039,156 +1087,118 @@ class _StoreConfigScreenState extends ConsumerState<StoreConfigScreen>
                 const SizedBox(height: 16),
 
                 // 1. Material Dropdown
-                materialsAsync.when(
-                  loading: () => const LinearProgressIndicator(),
-                  error: (e, _) => Text('Failed to load materials: $e'),
-                  data: (materials) {
-                    final activeMaterials = materials.where((m) => m.isActive).toList();
-                    ErpMaterial? selectedMat;
-                    if (_outwardMaterialId != null) {
-                      selectedMat = activeMaterials
-                          .where((m) => m.id == _outwardMaterialId)
-                          .firstOrNull;
-                    }
-
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        DropdownButtonFormField<String>(
-                          value: _outwardMaterialId,
-                          decoration: const InputDecoration(
-                            labelText: 'Which Material *',
-                            border: OutlineInputBorder(),
-                            prefixIcon: Icon(Icons.inventory_2_outlined),
-                          ),
-                          items: activeMaterials.map((m) {
-                            final label =
-                                '${m.brand != null && m.brand!.isNotEmpty ? '${m.brand} - ' : ''}${m.name} (Avail: ${m.qtyAvailable} ${m.unitCode ?? ''})';
-                            return DropdownMenuItem(
-                              value: m.id,
-                              child: Text(label, overflow: TextOverflow.ellipsis),
-                            );
-                          }).toList(),
-                          onChanged: (v) => setState(() => _outwardMaterialId = v),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    DropdownButtonFormField<String>(
+                      initialValue: _outwardMaterialId,
+                      decoration: const InputDecoration(
+                        labelText: 'Which Material *',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.inventory_2_outlined),
+                      ),
+                      items: activeMaterials.map((m) {
+                        final label =
+                            '${m.brand != null && m.brand!.isNotEmpty ? '${m.brand} - ' : ''}${m.name} (Avail: ${m.qtyAvailable} ${m.unitCode ?? ''})';
+                        return DropdownMenuItem(
+                          value: m.id,
+                          child: Text(label, overflow: TextOverflow.ellipsis),
+                        );
+                      }).toList(),
+                      onChanged: (v) => setState(() => _outwardMaterialId = v),
+                    ),
+                    if (selectedMat != null) ...[
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: selectedMat.qtyAvailable > 0
+                              ? const Color(0xFF0D9488).withValues(alpha: 0.1)
+                              : Colors.red.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(6),
                         ),
-                        if (selectedMat != null) ...[
-                          const SizedBox(height: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            decoration: BoxDecoration(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              selectedMat.qtyAvailable > 0
+                                  ? Icons.check_circle_outline
+                                  : Icons.warning_amber_rounded,
+                              size: 16,
                               color: selectedMat.qtyAvailable > 0
-                                  ? const Color(0xFF0D9488).withOpacity(0.1)
-                                  : Colors.red.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(6),
+                                  ? const Color(0xFF0D9488)
+                                  : Colors.red,
                             ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  selectedMat.qtyAvailable > 0
-                                      ? Icons.check_circle_outline
-                                      : Icons.warning_amber_rounded,
-                                  size: 16,
-                                  color: selectedMat.qtyAvailable > 0
-                                      ? const Color(0xFF0D9488)
-                                      : Colors.red,
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  'Available in Store: ${selectedMat.qtyAvailable} ${selectedMat.unitCode ?? ''}',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: selectedMat.qtyAvailable > 0
-                                        ? const Color(0xFF0D9488)
-                                        : Colors.red,
-                                  ),
-                                ),
-                              ],
+                            const SizedBox(width: 6),
+                            Text(
+                              'Available in Store: ${selectedMat.qtyAvailable} ${selectedMat.unitCode ?? ''}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: selectedMat.qtyAvailable > 0
+                                    ? const Color(0xFF0D9488)
+                                    : Colors.red,
+                              ),
                             ),
-                          ),
-                        ],
-                      ],
-                    );
-                  },
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
                 const SizedBox(height: 12),
 
                 // 2. Quantity
-                materialsAsync.maybeWhen(
-                  data: (materials) {
-                    final selectedMat = materials.where((m) => m.id == _outwardMaterialId).firstOrNull;
-                    final enteredQty = double.tryParse(_outwardQtyCtrl.text.trim()) ?? 0;
-                    final avail = selectedMat?.qtyAvailable ?? 0;
-                    final isExceeding = enteredQty > avail;
-                    return TextField(
-                      controller: _outwardQtyCtrl,
-                      onChanged: (_) => setState(() {}),
-                      decoration: InputDecoration(
-                        labelText: 'Quantity *',
-                        border: const OutlineInputBorder(),
-                        prefixIcon: const Icon(Icons.straighten_outlined),
-                        suffixIcon: selectedMat != null && avail > 0
-                            ? TextButton(
-                                onPressed: () {
-                                  _outwardQtyCtrl.text = avail % 1 == 0
-                                      ? avail.toInt().toString()
-                                      : avail.toString();
-                                  setState(() {});
-                                },
-                                child: const Text(
-                                  'Max',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFFEA580C),
-                                  ),
-                                ),
-                              )
-                            : null,
-                        errorText: isExceeding
-                            ? 'Quantity cannot exceed available stock (${avail.toInt()} ${selectedMat?.unitCode ?? ''})'
-                            : null,
-                      ),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    );
-                  },
-                  orElse: () => TextField(
-                    controller: _outwardQtyCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Quantity *',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.straighten_outlined),
-                    ),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                TextField(
+                  controller: _outwardQtyCtrl,
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    labelText: 'Quantity *',
+                    border: const OutlineInputBorder(),
+                    prefixIcon: const Icon(Icons.straighten_outlined),
+                    suffixIcon: selectedMat != null && avail > 0
+                        ? TextButton(
+                            onPressed: () {
+                              _outwardQtyCtrl.text = avail % 1 == 0
+                                  ? avail.toInt().toString()
+                                  : avail.toString();
+                              setState(() {});
+                            },
+                            child: const Text(
+                              'Max',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFFEA580C),
+                              ),
+                            ),
+                          )
+                        : null,
+                    errorText: isExceeding
+                        ? 'Quantity cannot exceed available stock (${avail.toInt()} ${selectedMat?.unitCode ?? ''})'
+                        : null,
                   ),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 ),
                 const SizedBox(height: 12),
 
                 // 3. Used by (Contractors Dropdown)
-                contractorsAsync.when(
-                  loading: () => const LinearProgressIndicator(),
-                  error: (e, _) => Text('Failed to load contractors: $e'),
-                  data: (contractors) {
-                    final activeContractors = contractors.where((c) => c.isActive).toList();
-                    return DropdownButtonFormField<String>(
-                      value: _outwardContractorId,
-                      decoration: const InputDecoration(
-                        labelText: 'Used by (Contractor) *',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.handshake_outlined),
+                DropdownButtonFormField<String>(
+                  initialValue: _outwardContractorId,
+                  decoration: const InputDecoration(
+                    labelText: 'Used by (Contractor) *',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.handshake_outlined),
+                  ),
+                  items: activeContractors.map((c) {
+                    return DropdownMenuItem(
+                      value: c.id,
+                      child: Text(
+                        c.name,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      items: activeContractors.map((c) {
-                        return DropdownMenuItem(
-                          value: c.id,
-                          child: Text(
-                            c.name,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: (v) => setState(() => _outwardContractorId = v),
                     );
-                  },
+                  }).toList(),
+                  onChanged: (v) => setState(() => _outwardContractorId = v),
                 ),
                 const SizedBox(height: 12),
 
@@ -1204,32 +1214,20 @@ class _StoreConfigScreenState extends ConsumerState<StoreConfigScreen>
                 const SizedBox(height: 16),
 
                 // Submit button
-                materialsAsync.maybeWhen(
-                  data: (materials) {
-                    final selectedMat = materials.where((m) => m.id == _outwardMaterialId).firstOrNull;
-                    final enteredQty = double.tryParse(_outwardQtyCtrl.text.trim()) ?? 0;
-                    final avail = selectedMat?.qtyAvailable ?? 0;
-                    final isInvalid = _outwardMaterialId == null ||
-                        _outwardContractorId == null ||
-                        enteredQty <= 0 ||
-                        enteredQty > avail;
-                    return FilledButton.icon(
-                      onPressed: _isDispatching || isInvalid ? null : () => _dispatchOutward(materials),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFFEA580C),
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                      ),
-                      icon: _isDispatching
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                            )
-                          : const Icon(Icons.send_rounded, size: 18),
-                      label: Text(_isDispatching ? 'Dispatching…' : 'Dispatch Outward'),
-                    );
-                  },
-                  orElse: () => const SizedBox.shrink(),
+                FilledButton.icon(
+                  onPressed: _isDispatching || isInvalid ? null : () => _dispatchOutward(_materials),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFFEA580C),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  ),
+                  icon: _isDispatching
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.send_rounded, size: 18),
+                  label: Text(_isDispatching ? 'Dispatching…' : 'Dispatch Outward'),
                 ),
               ],
             ),
@@ -1256,107 +1254,103 @@ class _StoreConfigScreenState extends ConsumerState<StoreConfigScreen>
         ),
         const SizedBox(height: 10),
 
-        materialsAsync.when(
-          loading: () => const Center(
+        if (_loading)
+          const Center(
             child: Padding(
               padding: EdgeInsets.all(24),
               child: CircularProgressIndicator(),
             ),
-          ),
-          error: (e, _) => Center(child: Text('Error: $e')),
-          data: (materials) {
-            if (materials.isEmpty) {
-              return const Padding(
-                padding: EdgeInsets.all(24),
-                child: Center(child: Text('No materials found.')),
-              );
-            }
-            return Column(
-              children: [
-                for (final m in materials)
-                  Card(
-                    elevation: 1,
-                    margin: const EdgeInsets.only(bottom: 8),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(10),
-                      onTap: () => _showMaterialLogsModal(context, m),
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFEA580C).withOpacity(0.1),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.history_rounded,
-                                color: Color(0xFFEA580C),
-                                size: 20,
-                              ),
+          )
+        else if (_materials.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(24),
+            child: Center(child: Text('No materials found.')),
+          )
+        else
+          Column(
+            children: [
+              for (final m in _materials)
+                Card(
+                  elevation: 1,
+                  margin: const EdgeInsets.only(bottom: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: () => _showMaterialLogsModal(context, m),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEA580C).withValues(alpha: 0.1),
+                              shape: BoxShape.circle,
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    '${m.brand != null && m.brand!.isNotEmpty ? '${m.brand} ' : ''}${m.name}',
-                                    style: const TextStyle(fontWeight: FontWeight.w700),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 6, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFF0D9488).withOpacity(0.1),
-                                          borderRadius: BorderRadius.circular(4),
-                                        ),
-                                        child: Text(
-                                          'Available: ${m.qtyAvailable} ${m.unitCode ?? ''}',
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                            color: Color(0xFF0D9488),
-                                          ),
-                                        ),
+                            child: const Icon(
+                              Icons.history_rounded,
+                              color: Color(0xFFEA580C),
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${m.brand != null && m.brand!.isNotEmpty ? '${m.brand} ' : ''}${m.name}',
+                                  style: const TextStyle(fontWeight: FontWeight.w700),
+                                ),
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF0D9488).withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(4),
                                       ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        'Used: ${m.qtyUsed}',
-                                        style: TextStyle(
+                                      child: Text(
+                                        'Available: ${m.qtyAvailable} ${m.unitCode ?? ''}',
+                                        style: const TextStyle(
                                           fontSize: 12,
-                                          color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF0D9488),
                                         ),
                                       ),
-                                    ],
-                                  ),
-                                ],
-                              ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Used: ${m.qtyUsed}',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
-                            OutlinedButton.icon(
-                              onPressed: () => _showMaterialLogsModal(context, m),
-                              style: OutlinedButton.styleFrom(
-                                visualDensity: VisualDensity.compact,
-                                foregroundColor: const Color(0xFFEA580C),
-                                side: const BorderSide(color: Color(0xFFEA580C)),
-                              ),
-                              icon: const Icon(Icons.receipt_long_outlined, size: 16),
-                              label: const Text('Logs'),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: () => _showMaterialLogsModal(context, m),
+                            style: OutlinedButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              foregroundColor: const Color(0xFFEA580C),
+                              side: const BorderSide(color: Color(0xFFEA580C)),
                             ),
-                          ],
-                        ),
+                            icon: const Icon(Icons.receipt_long_outlined, size: 16),
+                            label: const Text('Logs'),
+                          ),
+                        ],
                       ),
                     ),
                   ),
-              ],
-            );
-          },
-        ),
+                ),
+            ],
+          ),
       ],
     );
   }
@@ -1402,9 +1396,6 @@ class _StoreConfigScreenState extends ConsumerState<StoreConfigScreen>
 
   // ── Machine Inward & Stock Tab ──
   Widget _buildMachineInwardTab(bool isDark) {
-    final machinesAsync = ref.watch(erpMachinesProvider);
-    final activitiesAsync = ref.watch(erpActivitiesAdminProvider);
-
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -1421,7 +1412,7 @@ class _StoreConfigScreenState extends ConsumerState<StoreConfigScreen>
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF7C3AED).withOpacity(0.12),
+                        color: const Color(0xFF7C3AED).withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: const Icon(
@@ -1455,7 +1446,7 @@ class _StoreConfigScreenState extends ConsumerState<StoreConfigScreen>
                 ),
                 const SizedBox(height: 10),
                 lookupDropdown(
-                  ref: ref,
+                  context: context,
                   category: kWoMeasurementUnit,
                   value: _macUnitCode,
                   label: 'Unit',
@@ -1479,33 +1470,29 @@ class _StoreConfigScreenState extends ConsumerState<StoreConfigScreen>
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 ),
                 const SizedBox(height: 10),
-                activitiesAsync.when(
-                  loading: () => const SizedBox.shrink(),
-                  error: (_, __) => const SizedBox.shrink(),
-                  data: (acts) => DropdownButtonFormField<String>(
-                    value: _macActivityId,
-                    decoration: const InputDecoration(
-                      labelText: 'Activity (optional)',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: acts
-                        .map((a) => DropdownMenuItem(value: a.id, child: Text(a.name)))
-                        .toList(),
-                    onChanged: (v) => setState(() {
-                      _macActivityId = v;
-                      _macSubtaskId = null;
-                    }),
+                DropdownButtonFormField<String>(
+                  initialValue: _macActivityId,
+                  decoration: const InputDecoration(
+                    labelText: 'Activity (optional)',
+                    border: OutlineInputBorder(),
                   ),
+                  items: _activities
+                      .map((a) => DropdownMenuItem(value: a.id, child: Text(a.name)))
+                      .toList(),
+                  onChanged: (v) => setState(() {
+                    _macActivityId = v;
+                    _macSubtaskId = null;
+                  }),
                 ),
-                if (_macActivityId != null)
-                  activitiesAsync.maybeWhen(
-                    data: (acts) {
-                      final act = acts.where((a) => a.id == _macActivityId).firstOrNull;
+                if (_macActivityId != null) ...[
+                  Builder(
+                    builder: (context) {
+                      final act = _activities.where((a) => a.id == _macActivityId).firstOrNull;
                       if (act == null) return const SizedBox.shrink();
                       return Padding(
                         padding: const EdgeInsets.only(top: 10),
                         child: DropdownButtonFormField<String>(
-                          value: _macSubtaskId,
+                          initialValue: _macSubtaskId,
                           decoration: const InputDecoration(
                             labelText: 'Sub-activity (optional)',
                             border: OutlineInputBorder(),
@@ -1517,8 +1504,8 @@ class _StoreConfigScreenState extends ConsumerState<StoreConfigScreen>
                         ),
                       );
                     },
-                    orElse: () => const SizedBox.shrink(),
                   ),
+                ],
                 const SizedBox(height: 16),
                 FilledButton.icon(
                   onPressed: _saveMachine,
@@ -1551,143 +1538,148 @@ class _StoreConfigScreenState extends ConsumerState<StoreConfigScreen>
           ],
         ),
         const SizedBox(height: 10),
-        machinesAsync.when(
-          loading: () => const Center(
+        if (_loading)
+          const Center(
             child: Padding(
               padding: EdgeInsets.all(24),
               child: CircularProgressIndicator(),
             ),
-          ),
-          error: (e, _) => Center(child: Text('Error: $e')),
-          data: (items) {
-            if (items.isEmpty) {
-              return const Padding(
-                padding: EdgeInsets.all(24),
-                child: Center(child: Text('No machines found. Add one above.')),
-              );
-            }
-            return Column(
-              children: [
-                for (final m in items)
-                  Card(
-                    elevation: 1,
-                    margin: const EdgeInsets.only(bottom: 8),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(10),
-                      onTap: () => _showMachineLogsModal(context, m),
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF7C3AED).withOpacity(0.12),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Icon(
-                                Icons.precision_manufacturing_rounded,
-                                color: Color(0xFF7C3AED),
-                                size: 20,
-                              ),
+          )
+        else if (_machines.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(24),
+            child: Center(child: Text('No machines found. Add one above.')),
+          )
+        else
+          Column(
+            children: [
+              for (final m in _machines)
+                Card(
+                  elevation: 1,
+                  margin: const EdgeInsets.only(bottom: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: () => _showMachineLogsModal(context, m),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF7C3AED).withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(8),
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    '${m.brand != null && m.brand!.isNotEmpty ? '${m.brand} ' : ''}${m.name}',
-                                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-                                  ),
-                                  if (m.size != null && m.size!.isNotEmpty)
-                                    Text(
-                                      'Capacity: ${m.size}',
-                                      style: TextStyle(fontSize: 12, color: isDark ? Colors.white60 : const Color(0xFF64748B)),
-                                    ),
-                                  const SizedBox(height: 6),
-                                  Wrap(
-                                    spacing: 6,
-                                    runSpacing: 4,
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: isDark ? const Color(0xFF262626) : const Color(0xFFE2E8F0),
-                                          borderRadius: BorderRadius.circular(4),
-                                        ),
-                                        child: Text(
-                                          'Total: ${m.qtyTotal} ${m.unitCode ?? ''}',
-                                          style: TextStyle(fontSize: 11, color: isDark ? Colors.white70 : const Color(0xFF475569)),
-                                        ),
-                                      ),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFF7C3AED).withOpacity(0.12),
-                                          borderRadius: BorderRadius.circular(4),
-                                        ),
-                                        child: Text(
-                                          'In Use: ${m.qtyInUse} ${m.unitCode ?? ''}',
-                                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF7C3AED)),
-                                        ),
-                                      ),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFF0D9488).withOpacity(0.12),
-                                          borderRadius: BorderRadius.circular(4),
-                                        ),
-                                        child: Text(
-                                          'Avail: ${m.qtyAvailable} ${m.unitCode ?? ''}',
-                                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF0D9488)),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
+                            child: const Icon(
+                              Icons.precision_manufacturing_rounded,
+                              color: Color(0xFF7C3AED),
+                              size: 20,
                             ),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                IconButton(
-                                  icon: const Icon(Icons.add_shopping_cart_outlined),
-                                  tooltip: 'Add purchase stock',
-                                  color: const Color(0xFF7C3AED),
-                                  onPressed: () => _addMachineStock(m.id),
+                                Text(
+                                  '${m.brand != null && m.brand!.isNotEmpty ? '${m.brand} ' : ''}${m.name}',
+                                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
                                 ),
-                                OutlinedButton.icon(
-                                  onPressed: () => _showMachineLogsModal(context, m),
-                                  style: OutlinedButton.styleFrom(
-                                    visualDensity: VisualDensity.compact,
-                                    foregroundColor: const Color(0xFF7C3AED),
-                                    side: const BorderSide(color: Color(0xFF7C3AED)),
+                                if (m.size != null && m.size!.isNotEmpty)
+                                  Text(
+                                    'Capacity: ${m.size}',
+                                    style: TextStyle(fontSize: 12, color: isDark ? Colors.white60 : const Color(0xFF64748B)),
                                   ),
-                                  icon: const Icon(Icons.receipt_long_outlined, size: 16),
-                                  label: const Text('Logs'),
+                                const SizedBox(height: 6),
+                                Wrap(
+                                  spacing: 6,
+                                  runSpacing: 4,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: isDark ? const Color(0xFF262626) : const Color(0xFFE2E8F0),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        'Total: ${m.qtyTotal} ${m.unitCode ?? ''}',
+                                        style: TextStyle(fontSize: 11, color: isDark ? Colors.white70 : const Color(0xFF475569)),
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF7C3AED).withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        'In Use: ${m.qtyInUse} ${m.unitCode ?? ''}',
+                                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF7C3AED)),
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF0D9488).withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        'Avail: ${m.qtyAvailable} ${m.unitCode ?? ''}',
+                                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF0D9488)),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
-                          ],
-                        ),
+                          ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.add_shopping_cart_outlined),
+                                tooltip: 'Add purchase stock',
+                                color: const Color(0xFF7C3AED),
+                                onPressed: () => _addMachineStock(m.id),
+                              ),
+                              OutlinedButton.icon(
+                                onPressed: () => _showMachineLogsModal(context, m),
+                                style: OutlinedButton.styleFrom(
+                                  visualDensity: VisualDensity.compact,
+                                  foregroundColor: const Color(0xFF7C3AED),
+                                  side: const BorderSide(color: Color(0xFF7C3AED)),
+                                ),
+                                icon: const Icon(Icons.receipt_long_outlined, size: 16),
+                                label: const Text('Logs'),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
                   ),
-              ],
-            );
-          },
-        ),
+                ),
+            ],
+          ),
       ],
     );
   }
 
   // ── Machine Issue & Returns (Outward) Tab ──
   Widget _buildMachineIssueTab(bool isDark) {
-    final machinesAsync = ref.watch(erpMachinesProvider);
-    final contractorsAsync = ref.watch(erpContractorsProvider);
-    final activeIssuesAsync = ref.watch(activeMachineIssuesProvider);
+    final activeMachines = _machines.where((m) => m.isActive).toList();
+    final activeContractors = _contractors.where((c) => c.isActive).toList();
+    final selectedMac = _issueMachineId != null
+        ? activeMachines.where((m) => m.id == _issueMachineId).firstOrNull
+        : null;
+    final enteredQty = double.tryParse(_issueQtyCtrl.text.trim()) ?? 0;
+    final avail = selectedMac?.qtyAvailable ?? 0;
+    final isExceeding = enteredQty > avail;
+    final isInvalid = _issueMachineId == null ||
+        _issueContractorId == null ||
+        enteredQty <= 0 ||
+        enteredQty > avail;
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -1706,7 +1698,7 @@ class _StoreConfigScreenState extends ConsumerState<StoreConfigScreen>
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF7C3AED).withOpacity(0.12),
+                        color: const Color(0xFF7C3AED).withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: const Icon(
@@ -1733,157 +1725,118 @@ class _StoreConfigScreenState extends ConsumerState<StoreConfigScreen>
                 const SizedBox(height: 16),
 
                 // 1. Machine Dropdown
-                machinesAsync.when(
-                  loading: () => const LinearProgressIndicator(),
-                  error: (e, _) => Text('Failed to load machines: $e'),
-                  data: (machines) {
-                    final activeMachines = machines.where((m) => m.isActive).toList();
-                    ErpMachine? selectedMac;
-                    if (_issueMachineId != null) {
-                      selectedMac = activeMachines
-                          .where((m) => m.id == _issueMachineId)
-                          .firstOrNull;
-                    }
-
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        DropdownButtonFormField<String>(
-                          value: _issueMachineId,
-                          decoration: const InputDecoration(
-                            labelText: 'Which Machine / Equipment *',
-                            border: OutlineInputBorder(),
-                            prefixIcon: Icon(Icons.precision_manufacturing_outlined),
-                          ),
-                          items: activeMachines.map((m) {
-                            final label =
-                                '${m.brand != null && m.brand!.isNotEmpty ? '${m.brand} - ' : ''}${m.name} (Avail: ${m.qtyAvailable} ${m.unitCode ?? ''})';
-                            return DropdownMenuItem(
-                              value: m.id,
-                              child: Text(label, overflow: TextOverflow.ellipsis),
-                            );
-                          }).toList(),
-                          onChanged: (v) => setState(() => _issueMachineId = v),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    DropdownButtonFormField<String>(
+                      initialValue: _issueMachineId,
+                      decoration: const InputDecoration(
+                        labelText: 'Which Machine / Equipment *',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.precision_manufacturing_outlined),
+                      ),
+                      items: activeMachines.map((m) {
+                        final label =
+                            '${m.brand != null && m.brand!.isNotEmpty ? '${m.brand} - ' : ''}${m.name} (Avail: ${m.qtyAvailable} ${m.unitCode ?? ''})';
+                        return DropdownMenuItem(
+                          value: m.id,
+                          child: Text(label, overflow: TextOverflow.ellipsis),
+                        );
+                      }).toList(),
+                      onChanged: (v) => setState(() => _issueMachineId = v),
+                    ),
+                    if (selectedMac != null) ...[
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: selectedMac.qtyAvailable > 0
+                              ? const Color(0xFF7C3AED).withValues(alpha: 0.1)
+                              : Colors.red.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(6),
                         ),
-                        if (selectedMac != null) ...[
-                          const SizedBox(height: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            decoration: BoxDecoration(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              selectedMac.qtyAvailable > 0
+                                  ? Icons.check_circle_outline
+                                  : Icons.warning_amber_rounded,
+                              size: 16,
                               color: selectedMac.qtyAvailable > 0
-                                  ? const Color(0xFF7C3AED).withOpacity(0.1)
-                                  : Colors.red.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(6),
+                                  ? const Color(0xFF7C3AED)
+                                  : Colors.red,
                             ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  selectedMac.qtyAvailable > 0
-                                      ? Icons.check_circle_outline
-                                      : Icons.warning_amber_rounded,
-                                  size: 16,
-                                  color: selectedMac.qtyAvailable > 0
-                                      ? const Color(0xFF7C3AED)
-                                      : Colors.red,
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  'Available in Store: ${selectedMac.qtyAvailable} ${selectedMac.unitCode ?? ''} (Total: ${selectedMac.qtyTotal}, In Use: ${selectedMac.qtyInUse})',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: selectedMac.qtyAvailable > 0
-                                        ? const Color(0xFF7C3AED)
-                                        : Colors.red,
-                                  ),
-                                ),
-                              ],
+                            const SizedBox(width: 6),
+                            Text(
+                              'Available in Store: ${selectedMac.qtyAvailable} ${selectedMac.unitCode ?? ''} (Total: ${selectedMac.qtyTotal}, In Use: ${selectedMac.qtyInUse})',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: selectedMac.qtyAvailable > 0
+                                    ? const Color(0xFF7C3AED)
+                                    : Colors.red,
+                              ),
                             ),
-                          ),
-                        ],
-                      ],
-                    );
-                  },
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
                 const SizedBox(height: 12),
 
                 // 2. Quantity with strict validation & Max button
-                machinesAsync.maybeWhen(
-                  data: (machines) {
-                    final selectedMac = machines.where((m) => m.id == _issueMachineId).firstOrNull;
-                    final enteredQty = double.tryParse(_issueQtyCtrl.text.trim()) ?? 0;
-                    final avail = selectedMac?.qtyAvailable ?? 0;
-                    final isExceeding = enteredQty > avail;
-
-                    return TextField(
-                      controller: _issueQtyCtrl,
-                      onChanged: (_) => setState(() {}),
-                      decoration: InputDecoration(
-                        labelText: 'Quantity to Take *',
-                        border: const OutlineInputBorder(),
-                        prefixIcon: const Icon(Icons.numbers_outlined),
-                        suffixIcon: selectedMac != null && avail > 0
-                            ? TextButton(
-                                onPressed: () {
-                                  _issueQtyCtrl.text = avail % 1 == 0
-                                      ? avail.toInt().toString()
-                                      : avail.toString();
-                                  setState(() {});
-                                },
-                                child: const Text(
-                                  'Max',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF7C3AED),
-                                  ),
-                                ),
-                              )
-                            : null,
-                        errorText: isExceeding
-                            ? 'Quantity cannot exceed available stock ($avail ${selectedMac?.unitCode ?? ''})'
-                            : null,
-                      ),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    );
-                  },
-                  orElse: () => TextField(
-                    controller: _issueQtyCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Quantity to Take *',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.numbers_outlined),
-                    ),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                TextField(
+                  controller: _issueQtyCtrl,
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    labelText: 'Quantity to Take *',
+                    border: const OutlineInputBorder(),
+                    prefixIcon: const Icon(Icons.numbers_outlined),
+                    suffixIcon: selectedMac != null && avail > 0
+                        ? TextButton(
+                            onPressed: () {
+                              _issueQtyCtrl.text = avail % 1 == 0
+                                  ? avail.toInt().toString()
+                                  : avail.toString();
+                              setState(() {});
+                            },
+                            child: const Text(
+                              'Max',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF7C3AED),
+                              ),
+                            ),
+                          )
+                        : null,
+                    errorText: isExceeding
+                        ? 'Quantity cannot exceed available stock ($avail ${selectedMac?.unitCode ?? ''})'
+                        : null,
                   ),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 ),
                 const SizedBox(height: 12),
 
                 // 3. Used by (Contractors Dropdown)
-                contractorsAsync.when(
-                  loading: () => const LinearProgressIndicator(),
-                  error: (e, _) => Text('Failed to load contractors: $e'),
-                  data: (contractors) {
-                    final activeContractors = contractors.where((c) => c.isActive).toList();
-                    return DropdownButtonFormField<String>(
-                      value: _issueContractorId,
-                      decoration: const InputDecoration(
-                        labelText: 'Used by (Contractor) *',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.handshake_outlined),
+                DropdownButtonFormField<String>(
+                  initialValue: _issueContractorId,
+                  decoration: const InputDecoration(
+                    labelText: 'Used by (Contractor) *',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.handshake_outlined),
+                  ),
+                  items: activeContractors.map((c) {
+                    return DropdownMenuItem(
+                      value: c.id,
+                      child: Text(
+                        c.name,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      items: activeContractors.map((c) {
-                        return DropdownMenuItem(
-                          value: c.id,
-                          child: Text(
-                            c.name,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: (v) => setState(() => _issueContractorId = v),
                     );
-                  },
+                  }).toList(),
+                  onChanged: (v) => setState(() => _issueContractorId = v),
                 ),
                 const SizedBox(height: 12),
 
@@ -1922,35 +1875,22 @@ class _StoreConfigScreenState extends ConsumerState<StoreConfigScreen>
                 const SizedBox(height: 16),
 
                 // Submit button
-                machinesAsync.maybeWhen(
-                  data: (machines) {
-                    final selectedMac = machines.where((m) => m.id == _issueMachineId).firstOrNull;
-                    final enteredQty = double.tryParse(_issueQtyCtrl.text.trim()) ?? 0;
-                    final avail = selectedMac?.qtyAvailable ?? 0;
-                    final isInvalid = _issueMachineId == null ||
-                        _issueContractorId == null ||
-                        enteredQty <= 0 ||
-                        enteredQty > avail;
-
-                    return FilledButton.icon(
-                      onPressed: _isIssuingMachine || isInvalid
-                          ? null
-                          : () => _issueMachineAction(machines),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF7C3AED),
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                      ),
-                      icon: _isIssuingMachine
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                            )
-                          : const Icon(Icons.send_rounded, size: 18),
-                      label: Text(_isIssuingMachine ? 'Issuing…' : 'Issue Equipment'),
-                    );
-                  },
-                  orElse: () => const SizedBox.shrink(),
+                FilledButton.icon(
+                  onPressed: _isIssuingMachine || isInvalid
+                      ? null
+                      : () => _issueMachineAction(_machines),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF7C3AED),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  ),
+                  icon: _isIssuingMachine
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.send_rounded, size: 18),
+                  label: Text(_isIssuingMachine ? 'Issuing…' : 'Issue Equipment'),
                 ),
               ],
             ),
@@ -1977,216 +1917,206 @@ class _StoreConfigScreenState extends ConsumerState<StoreConfigScreen>
         ),
         const SizedBox(height: 10),
 
-        activeIssuesAsync.when(
-          loading: () => const Center(
+        if (_loading)
+          const Center(
             child: Padding(
               padding: EdgeInsets.all(24),
               child: CircularProgressIndicator(),
             ),
-          ),
-          error: (e, _) => Center(child: Text('Error loading active issues: $e')),
-          data: (issues) {
-            if (issues.isEmpty) {
-              return Card(
-                elevation: 0,
-                color: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF1F5F9),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                child: const Padding(
-                  padding: EdgeInsets.all(24),
-                  child: Center(
-                    child: Text('No equipment is currently issued to contractors. All machines are available in store.'),
-                  ),
-                ),
-              );
-            }
-
-            return Column(
-              children: [
-                for (final issue in issues)
-                  Card(
-                    elevation: 1,
-                    margin: const EdgeInsets.only(bottom: 10),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    child: Padding(
-                      padding: const EdgeInsets.all(14),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF7C3AED).withOpacity(0.12),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Icon(
-                                  Icons.precision_manufacturing_rounded,
-                                  color: Color(0xFF7C3AED),
-                                  size: 20,
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      '${issue.machineBrand != null && issue.machineBrand!.isNotEmpty ? '${issue.machineBrand} ' : ''}${issue.machineName ?? 'Machine'}',
-                                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+          )
+        else if (_activeIssues.isEmpty)
+          Card(
+            elevation: 0,
+            color: isDark ? const Color(0xFF1E1E1E) : const Color(0xFFF1F5F9),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            child: const Padding(
+              padding: EdgeInsets.all(24),
+              child: Center(
+                child: Text('No equipment is currently issued to contractors. All machines are available in store.'),
+              ),
+            ),
+          )
+        else
+          Column(
+            children: [
+              for (final issue in _activeIssues)
+                Card(
+                  elevation: 1,
+                  margin: const EdgeInsets.only(bottom: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF7C3AED).withValues(alpha: 0.12),
+                                      shape: BoxShape.circle,
                                     ),
-                                    const SizedBox(height: 2),
-                                    Row(
+                                    child: const Icon(
+                                      Icons.precision_manufacturing_rounded,
+                                      color: Color(0xFF7C3AED),
+                                      size: 18,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        Icon(
-                                          Icons.handshake_outlined,
-                                          size: 14,
-                                          color: isDark ? Colors.white60 : const Color(0xFF64748B),
-                                        ),
-                                        const SizedBox(width: 4),
                                         Text(
-                                          'Used by: ${issue.contractorName ?? 'Contractor'}',
+                                          issue.machineName ?? 'Equipment',
+                                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                                        ),
+                                        Text(
+                                          'Contractor: ${issue.contractorName ?? 'N/A'}',
                                           style: TextStyle(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w600,
-                                            color: isDark ? Colors.white70 : const Color(0xFF334155),
+                                            fontSize: 12,
+                                            color: isDark ? Colors.white70 : const Color(0xFF475569),
+                                            fontWeight: FontWeight.w500,
                                           ),
                                         ),
                                       ],
                                     ),
-                                  ],
-                                ),
-                              ),
-                              FilledButton.tonalIcon(
-                                onPressed: () => _showReturnDialog(issue),
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: const Color(0xFF7C3AED).withOpacity(0.15),
-                                  foregroundColor: const Color(0xFF7C3AED),
-                                  visualDensity: VisualDensity.compact,
-                                ),
-                                icon: const Icon(Icons.assignment_return_rounded, size: 16),
-                                label: const Text('Return'),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 4,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: isDark ? const Color(0xFF262626) : const Color(0xFFE2E8F0),
-                                  borderRadius: BorderRadius.circular(5),
-                                ),
-                                child: Text(
-                                  'Taken: ${issue.quantityTaken} ${issue.unitCode ?? ''}',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: isDark ? Colors.white70 : const Color(0xFF475569),
                                   ),
-                                ),
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF7C3AED).withOpacity(0.12),
-                                  borderRadius: BorderRadius.circular(5),
-                                ),
-                                child: Text(
-                                  'Currently in Use: ${issue.quantityInUse} ${issue.unitCode ?? ''}',
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF7C3AED),
-                                  ),
-                                ),
-                              ),
-                              if (issue.quantityReturned > 0)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                  decoration: BoxDecoration(
-                                    color: Colors.teal.withOpacity(0.12),
-                                    borderRadius: BorderRadius.circular(5),
-                                  ),
-                                  child: Text(
-                                    'Returned: ${issue.quantityReturned} ${issue.unitCode ?? ''}',
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.teal,
-                                    ),
-                                  ),
-                                ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: isDark ? const Color(0xFF262626) : const Color(0xFFE2E8F0),
-                                  borderRadius: BorderRadius.circular(5),
-                                ),
-                                child: Text(
-                                  'Taken Date: ${_formatDateOnly(issue.issueDate)}',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: isDark ? Colors.white60 : const Color(0xFF64748B),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          if (issue.remarks != null && issue.remarks!.isNotEmpty) ...[
-                            const SizedBox(height: 6),
-                            Text(
-                              'Remarks: ${issue.remarks}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: isDark ? Colors.white60 : const Color(0xFF64748B),
-                              ),
-                            ),
-                          ],
-                          if (issue.returnLogs.isNotEmpty) ...[
-                            const SizedBox(height: 8),
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: isDark ? const Color(0xFF262626) : const Color(0xFFF1F5F9),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text('Return History:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 11)),
-                                  const SizedBox(height: 2),
-                                  for (final r in issue.returnLogs)
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 2),
-                                      child: Row(
-                                        children: [
-                                          const Icon(Icons.subdirectory_arrow_right_rounded, size: 14, color: Colors.teal),
-                                          const SizedBox(width: 4),
-                                          Expanded(
-                                            child: Text(
-                                              'Returned ${r.quantityReturned} ${issue.unitCode ?? ''} on ${_formatDateOnly(r.returnDate)}${r.remarks != null && r.remarks!.isNotEmpty ? ' (${r.remarks})' : ''}',
-                                              style: TextStyle(fontSize: 11, color: isDark ? Colors.white70 : const Color(0xFF334155)),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
                                 ],
                               ),
                             ),
+                            FilledButton.tonalIcon(
+                              onPressed: () => _showReturnDialog(issue),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: const Color(0xFF0D9488).withValues(alpha: 0.12),
+                                foregroundColor: const Color(0xFF0D9488),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                              icon: const Icon(Icons.keyboard_return_rounded, size: 16),
+                              label: const Text('Return'),
+                            ),
                           ],
+                        ),
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: isDark ? const Color(0xFF262626) : const Color(0xFFE2E8F0),
+                                borderRadius: BorderRadius.circular(5),
+                              ),
+                              child: Text(
+                                'Taken: ${issue.quantityTaken} ${issue.unitCode ?? ''}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isDark ? Colors.white70 : const Color(0xFF475569),
+                                ),
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF7C3AED).withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(5),
+                              ),
+                              child: Text(
+                                'Currently in Use: ${issue.quantityInUse} ${issue.unitCode ?? ''}',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF7C3AED),
+                                ),
+                              ),
+                            ),
+                            if (issue.quantityReturned > 0)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: Colors.teal.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(5),
+                                ),
+                                child: Text(
+                                  'Returned: ${issue.quantityReturned} ${issue.unitCode ?? ''}',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.teal,
+                                  ),
+                                ),
+                              ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: isDark ? const Color(0xFF262626) : const Color(0xFFE2E8F0),
+                                borderRadius: BorderRadius.circular(5),
+                              ),
+                              child: Text(
+                                'Taken Date: ${_formatDateOnly(issue.issueDate)}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (issue.remarks != null && issue.remarks!.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            'Remarks: ${issue.remarks}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                            ),
+                          ),
                         ],
-                      ),
+                        if (issue.returnLogs.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: isDark ? const Color(0xFF262626) : const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Return History:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 11)),
+                                const SizedBox(height: 2),
+                                for (final r in issue.returnLogs)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 2),
+                                    child: Row(
+                                      children: [
+                                        const Icon(Icons.subdirectory_arrow_right_rounded, size: 14, color: Colors.teal),
+                                        const SizedBox(width: 4),
+                                        Expanded(
+                                          child: Text(
+                                            'Returned ${r.quantityReturned} ${issue.unitCode ?? ''} on ${_formatDateOnly(r.returnDate)}${r.remarks != null && r.remarks!.isNotEmpty ? ' (${r.remarks})' : ''}',
+                                            style: TextStyle(fontSize: 11, color: isDark ? Colors.white70 : const Color(0xFF334155)),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
-              ],
-            );
-          },
-        ),
+                ),
+            ],
+          ),
       ],
     );
   }
@@ -2195,22 +2125,28 @@ class _StoreConfigScreenState extends ConsumerState<StoreConfigScreen>
 // ────────────────────────────────────────────────────────────────────────────
 // CONSUMPTION & STOCK LOGS MODAL SHEET
 // ────────────────────────────────────────────────────────────────────────────
-class _MaterialLogsSheet extends ConsumerStatefulWidget {
+class _MaterialLogsSheet extends StatefulWidget {
   const _MaterialLogsSheet({required this.material});
 
   final ErpMaterial material;
 
   @override
-  ConsumerState<_MaterialLogsSheet> createState() => _MaterialLogsSheetState();
+  State<_MaterialLogsSheet> createState() => _MaterialLogsSheetState();
 }
 
-class _MaterialLogsSheetState extends ConsumerState<_MaterialLogsSheet> {
+class _MaterialLogsSheetState extends State<_MaterialLogsSheet> {
   bool _showConsumptionOnly = false;
+  late Future<List<ErpMaterialStockLog>> _logsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _logsFuture = context.read<BoqRepository>().getMaterialLogs(widget.material.id);
+  }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final logsAsync = ref.watch(materialStockLogsProvider(widget.material.id));
 
     return Container(
       constraints: BoxConstraints(
@@ -2262,7 +2198,7 @@ class _MaterialLogsSheetState extends ConsumerState<_MaterialLogsSheet> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF0D9488).withOpacity(0.12),
+                  color: const Color(0xFF0D9488).withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
@@ -2289,7 +2225,7 @@ class _MaterialLogsSheetState extends ConsumerState<_MaterialLogsSheet> {
                 label: const Text('Contractors Only', style: TextStyle(fontSize: 12)),
                 selected: _showConsumptionOnly,
                 onSelected: (v) => setState(() => _showConsumptionOnly = v),
-                selectedColor: const Color(0xFFEA580C).withOpacity(0.2),
+                selectedColor: const Color(0xFFEA580C).withValues(alpha: 0.2),
                 checkmarkColor: const Color(0xFFEA580C),
               ),
             ],
@@ -2298,10 +2234,16 @@ class _MaterialLogsSheetState extends ConsumerState<_MaterialLogsSheet> {
 
           // Logs List
           Expanded(
-            child: logsAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Text('Failed to load logs: $e')),
-              data: (logs) {
+            child: FutureBuilder<List<ErpMaterialStockLog>>(
+              future: _logsFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snapshot.hasError) {
+                  return Center(child: Text('Failed to load logs: ${snapshot.error}'));
+                }
+                final logs = snapshot.data ?? [];
                 final filtered = _showConsumptionOnly
                     ? logs.where((l) => l.logType == 'CONSUMPTION').toList()
                     : logs;
@@ -2336,10 +2278,10 @@ class _MaterialLogsSheetState extends ConsumerState<_MaterialLogsSheet> {
                       leading: CircleAvatar(
                         radius: 18,
                         backgroundColor: isConsumption
-                            ? const Color(0xFFEA580C).withOpacity(0.12)
+                            ? const Color(0xFFEA580C).withValues(alpha: 0.12)
                             : isPurchase
-                                ? const Color(0xFF0D9488).withOpacity(0.12)
-                                : Colors.blue.withOpacity(0.12),
+                                ? const Color(0xFF0D9488).withValues(alpha: 0.12)
+                                : Colors.blue.withValues(alpha: 0.12),
                         child: Icon(
                           isConsumption
                               ? Icons.output_rounded
@@ -2441,23 +2383,25 @@ String _formatDateOnly(DateTime dt) {
 // ────────────────────────────────────────────────────────────────────────────
 // MACHINE LOGS MODAL SHEET (Issues, Returns & Stock Logs)
 // ────────────────────────────────────────────────────────────────────────────
-class _MachineLogsSheet extends ConsumerStatefulWidget {
+class _MachineLogsSheet extends StatefulWidget {
   const _MachineLogsSheet({required this.machine});
 
   final ErpMachine machine;
 
   @override
-  ConsumerState<_MachineLogsSheet> createState() => _MachineLogsSheetState();
+  State<_MachineLogsSheet> createState() => _MachineLogsSheetState();
 }
 
-class _MachineLogsSheetState extends ConsumerState<_MachineLogsSheet>
+class _MachineLogsSheetState extends State<_MachineLogsSheet>
     with SingleTickerProviderStateMixin {
   late TabController _logTabController;
+  late Future<Map<String, dynamic>> _logsFuture;
 
   @override
   void initState() {
     super.initState();
     _logTabController = TabController(length: 2, vsync: this);
+    _logsFuture = context.read<BoqRepository>().getMachineLogs(widget.machine.id);
   }
 
   @override
@@ -2469,7 +2413,6 @@ class _MachineLogsSheetState extends ConsumerState<_MachineLogsSheet>
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final logsAsync = ref.watch(machineLogsProvider(widget.machine.id));
 
     return Container(
       constraints: BoxConstraints(
@@ -2524,7 +2467,7 @@ class _MachineLogsSheetState extends ConsumerState<_MachineLogsSheet>
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF7C3AED).withOpacity(0.12),
+                      color: const Color(0xFF7C3AED).withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
@@ -2539,7 +2482,7 @@ class _MachineLogsSheetState extends ConsumerState<_MachineLogsSheet>
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF0D9488).withOpacity(0.12),
+                      color: const Color(0xFF0D9488).withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
@@ -2571,10 +2514,16 @@ class _MachineLogsSheetState extends ConsumerState<_MachineLogsSheet>
           const SizedBox(height: 10),
 
           Expanded(
-            child: logsAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Text('Error loading logs: $e')),
-              data: (data) {
+            child: FutureBuilder<Map<String, dynamic>>(
+              future: _logsFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snapshot.hasError) {
+                  return Center(child: Text('Error loading logs: ${snapshot.error}'));
+                }
+                final data = snapshot.data ?? {};
                 final issues = (data['issues'] as List<ErpMachineIssue>?) ?? [];
                 final stockLogs = (data['stockLogs'] as List<ErpMachineStockLog>?) ?? [];
 
@@ -2623,10 +2572,10 @@ class _MachineLogsSheetState extends ConsumerState<_MachineLogsSheet>
                                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                           decoration: BoxDecoration(
                                             color: isReturned
-                                                ? Colors.green.withOpacity(0.12)
+                                                ? Colors.green.withValues(alpha: 0.12)
                                                 : isPartial
-                                                    ? Colors.orange.withOpacity(0.12)
-                                                    : const Color(0xFF7C3AED).withOpacity(0.12),
+                                                    ? Colors.orange.withValues(alpha: 0.12)
+                                                    : const Color(0xFF7C3AED).withValues(alpha: 0.12),
                                             borderRadius: BorderRadius.circular(6),
                                           ),
                                           child: Text(

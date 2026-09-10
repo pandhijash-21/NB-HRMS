@@ -39,6 +39,7 @@ import { repositoryRouter } from './modules/repository';
 import { organizationRouter } from './modules/organization';
 import { orgTreeRouter } from './modules/org-tree';
 import { crmRouter } from './modules/crm/crm.routes';
+import { platformRouter } from './modules/platform/platform.routes';
 
 configureCloudinary();
 
@@ -125,6 +126,7 @@ app.use('/api/letters', lettersRouter);
 app.use('/api/reimbursements', reimbursementsRouter);
 app.use('/api/recruitment', recruitmentRouter);
 app.use('/api/repository', repositoryRouter);
+app.use('/api/platform', platformRouter);
 app.use('/api', organizationRouter);
 app.use('/api/org-tree', orgTreeRouter);
 app.use('/api/admin', designationRouter);

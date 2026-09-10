@@ -12,9 +12,10 @@ import {
   assertNotLocked,
   clearLoginLock,
   recordLoginFailure,
+  isExemptIdentifier,
 } from './loginLock.service';
 import { otpService } from './otp.service';
-import { buildPermissionsMap } from './permissions-map';
+import { buildPermissionsMap, isSuperAdminRole, isSystemAdminRole } from './permissions-map';
 
 const SESSION_TTL = 8 * 60 * 60; // 8 hours in seconds
 
@@ -59,32 +60,87 @@ export const authService = {
     } as const;
 
     // 1. Resolve user:
-    //    - digits only → Employee.id (numeric PK)
-    //    - else → User.username (position accounts) OR generalInfo.employeeCode (normal employees)
-    let user = isNumericEmployeeId
-      ? await prisma.user.findUnique({
-          where: { employeeId: Number(identifier) },
-          include: userInclude,
-        })
-      : await prisma.user.findUnique({
-          where: { username: identifier },
-          include: userInclude,
-        });
+    //    - Priority 1: employeeGeneralInfo.employeeCode (matches '007', 'IT5', etc. even if numeric or has leading zeroes)
+    //    - Priority 2: User.username (position/alias accounts)
+    //    - Priority 3: Employee.id numeric primary key (if numeric)
+    //    - Priority 4: Institutional or personal email
+    let user = null;
 
-    if (!user && !isNumericEmployeeId) {
-      const byCode = await prisma.employeeGeneralInfo.findFirst({
-        where: { employeeCode: { equals: identifier, mode: 'insensitive' } },
+    // Check by employeeCode (case-insensitive)
+    const byCode = await prisma.employeeGeneralInfo.findFirst({
+      where: { employeeCode: { equals: identifier, mode: 'insensitive' } },
+      select: { employeeId: true },
+    });
+    if (byCode?.employeeId != null) {
+      user = await prisma.user.findUnique({
+        where: { employeeId: byCode.employeeId },
+        include: userInclude,
+      });
+    }
+
+    // Check by username (position accounts)
+    if (!user) {
+      user = await prisma.user.findFirst({
+        where: { username: { equals: identifier, mode: 'insensitive' } },
+        include: userInclude,
+      });
+    }
+
+    // Direct fallback for root administrator identifiers ('admin', 'superadmin')
+    if (!user && (identifier.toLowerCase() === 'admin' || identifier.toLowerCase() === 'superadmin')) {
+      user = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { employeeId: 1 },
+            { role: { name: { in: ['SUPERADMIN', 'SYSTEM_ADMIN', 'ADMIN', 'SYSTEM_ADMINISTRATOR'] } } },
+          ],
+        },
+        include: userInclude,
+      });
+    }
+
+    // If numeric, check by Employee.id (internal DB PK)
+    if (!user && isNumericEmployeeId) {
+      user = await prisma.user.findUnique({
+        where: { employeeId: Number(identifier) },
+        include: userInclude,
+      });
+    }
+
+    // Check by institutional or personal email
+    if (!user && identifier.includes('@')) {
+      const byEmail = await prisma.employeeAddress.findFirst({
+        where: {
+          OR: [
+            { instituteEmail: { equals: identifier, mode: 'insensitive' } },
+            { personalEmail: { equals: identifier, mode: 'insensitive' } },
+          ],
+        },
         select: { employeeId: true },
       });
-      if (byCode?.employeeId != null) {
+      if (byEmail?.employeeId != null) {
         user = await prisma.user.findUnique({
-          where: { employeeId: byCode.employeeId },
+          where: { employeeId: byEmail.employeeId },
           include: userInclude,
         });
       }
     }
 
+    const isExempt =
+      isExemptIdentifier(identifier) ||
+      (user != null &&
+        (isSuperAdminRole(user.role.name) ||
+          isSystemAdminRole(user.role.name) ||
+          isExemptIdentifier(user.username)));
+
     if (!user) {
+      if (isExempt) {
+        return {
+          error:
+            'Account does not exist. Check your employee ID or username, or contact Admin/HR.',
+          status: 404,
+        } as const;
+      }
       // Keep rate-limit for unknown IDs, but tell the client clearly when no account exists.
       const fail = await recordLoginFailure({ identifier });
       if (fail.status === 401) {
@@ -104,15 +160,34 @@ export const authService = {
       user.employeeId != null ? String(user.employeeId) : '',
     ].filter(Boolean);
 
-    const locked = await assertNotLocked({ userId: user.id, identifier });
-    if (locked) return { error: locked.error, status: locked.status } as const;
+    if (!isExempt) {
+      const locked = await assertNotLocked({
+        userId: user.id,
+        identifier,
+        roleName: user.role.name,
+        username: user.username,
+      });
+      if (locked) return { error: locked.error, status: locked.status } as const;
+    } else {
+      // Proactively clear any stale lock if previously locked
+      await clearLoginLock({ userId: user.id, aliases });
+    }
 
     if (!user.isActive) return { error: 'Account disabled', status: 403 } as const;
 
     // 2. Verify password
     const valid = await bcrypt.compare(input.password, user.passwordHash);
     if (!valid) {
-      const fail = await recordLoginFailure({ userId: user.id, identifier, aliases });
+      if (isExempt) {
+        return { error: 'Invalid username or password', status: 401 } as const;
+      }
+      const fail = await recordLoginFailure({
+        userId: user.id,
+        identifier,
+        aliases,
+        roleName: user.role.name,
+        username: user.username,
+      });
       return { error: fail.error, status: fail.status } as const;
     }
 
@@ -122,12 +197,12 @@ export const authService = {
     const permissions = buildPermissionsMap(user.role.permissions);
     const personalPerm = user.role.permissions.find((p) => p.moduleKey === 'PERSONAL_INFO');
     const employeeViewScope = personalPerm?.employeeViewScope ?? 'NONE';
+    const userSubOrg = (user as { subOrganization?: string | null }).subOrganization;
     const scopeSubOrg =
-      employeeViewScope === 'INSTITUTE'
-        ? ((user as { subOrganization?: string | null }).subOrganization ??
-          user.employee?.generalInfo?.subOrganization ??
-          null)
-        : null;
+      userSubOrg ??
+      (employeeViewScope === 'INSTITUTE'
+        ? user.employee?.generalInfo?.subOrganization ?? null
+        : null);
 
     // 4. Sign JWT
     const token = jwt.sign(

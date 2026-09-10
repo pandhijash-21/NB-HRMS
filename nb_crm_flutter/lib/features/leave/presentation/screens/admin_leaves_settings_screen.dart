@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/widgets/header_action_button.dart';
@@ -51,7 +50,7 @@ class AdminLeavesSettingsScreen extends ConsumerWidget {
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1.5),
           child: Container(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
             height: 1.5,
           ),
         ),
@@ -162,7 +161,7 @@ class AdminLeavesSettingsScreen extends ConsumerWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
-          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
           width: 1.5,
         ),
       ),
@@ -170,8 +169,8 @@ class AdminLeavesSettingsScreen extends ConsumerWidget {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            Text(message, style: TextStyle(color: Colors.red)),
-            TextButton(onPressed: onRetry, child: Text('Retry')),
+            Text(message, style: const TextStyle(color: Colors.red)),
+            TextButton(onPressed: onRetry, child: const Text('Retry')),
           ],
         ),
       ),
@@ -248,7 +247,7 @@ class AdminLeavesSettingsScreen extends ConsumerWidget {
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
         borderSide: BorderSide(
-          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
         ),
       ),
       focusedBorder: OutlineInputBorder(
@@ -370,7 +369,7 @@ class AdminLeavesSettingsScreen extends ConsumerWidget {
                       color: isDark ? const Color(0xFF2B2722) : const Color(0xFFF1F5F9),
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
-                        color: isDark ? const Color(0xFFC5A059).withOpacity(0.1) : const Color(0xFFCFD8DC),
+                        color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.1) : const Color(0xFFCFD8DC),
                       ),
                     ),
                     child: Column(
@@ -386,7 +385,7 @@ class AdminLeavesSettingsScreen extends ConsumerWidget {
                             ),
                           ),
                           value: allowHalfDay,
-                          activeColor: const Color(0xFFC5A059),
+                          activeThumbColor: const Color(0xFFC5A059),
                           onChanged: (v) => setLocal(() => allowHalfDay = v),
                         ),
                         const Divider(height: 1),
@@ -408,7 +407,7 @@ class AdminLeavesSettingsScreen extends ConsumerWidget {
                             ),
                           ),
                           value: cutsSalary,
-                          activeColor: const Color(0xFFC5A059),
+                          activeThumbColor: const Color(0xFFC5A059),
                           onChanged: (v) => setLocal(() => cutsSalary = v),
                         ),
                         const Divider(height: 1),
@@ -423,7 +422,7 @@ class AdminLeavesSettingsScreen extends ConsumerWidget {
                             ),
                           ),
                           value: isActive,
-                          activeColor: const Color(0xFFC5A059),
+                          activeThumbColor: const Color(0xFFC5A059),
                           onChanged: (v) => setLocal(() => isActive = v),
                         ),
                       ],
@@ -502,7 +501,7 @@ class _TypeTile extends ConsumerWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(
-          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
           width: 1.5,
         ),
       ),
@@ -536,7 +535,7 @@ class _TypeTile extends ConsumerWidget {
                             color: isDark ? const Color(0xFF2B2722) : const Color(0xFFF1F5F9),
                             borderRadius: BorderRadius.circular(4),
                             border: Border.all(
-                              color: isDark ? const Color(0xFFC5A059).withOpacity(0.1) : const Color(0xFFCFD8DC),
+                              color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.1) : const Color(0xFFCFD8DC),
                             ),
                           ),
                           child: Text(
@@ -553,8 +552,8 @@ class _TypeTile extends ConsumerWidget {
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
                             color: type.isActive
-                                ? Colors.green.withOpacity(0.1)
-                                : Colors.grey.withOpacity(0.1),
+                                ? Colors.green.withValues(alpha: 0.1)
+                                : Colors.grey.withValues(alpha: 0.1),
                             border: Border.all(
                               color: type.isActive ? Colors.green : Colors.grey,
                               width: 1.2,
@@ -575,8 +574,8 @@ class _TypeTile extends ConsumerWidget {
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
                             color: adminOnly
-                                ? Colors.orange.withOpacity(0.1)
-                                : Colors.blue.withOpacity(0.08),
+                                ? Colors.orange.withValues(alpha: 0.1)
+                                : Colors.blue.withValues(alpha: 0.08),
                             border: Border.all(
                               color: adminOnly ? Colors.orange : Colors.blue,
                               width: 1.2,
@@ -779,7 +778,7 @@ class _SettingTileState extends State<_SettingTile> {
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
                 borderSide: BorderSide(
-                  color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                  color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
                 ),
               ),
               focusedBorder: OutlineInputBorder(
@@ -801,7 +800,7 @@ class _SettingTileState extends State<_SettingTile> {
               backgroundColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
               foregroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
               disabledBackgroundColor:
-                  isDark ? const Color(0xFFC5A059).withOpacity(0.3) : const Color(0xFFCFD8DC),
+                  isDark ? const Color(0xFFC5A059).withValues(alpha: 0.3) : const Color(0xFFCFD8DC),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
             child: _saving
@@ -828,7 +827,7 @@ class _SettingTileState extends State<_SettingTile> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(
-          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
           width: 1.5,
         ),
       ),

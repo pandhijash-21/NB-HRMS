@@ -1,25 +1,24 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/bloc/load_status.dart';
 import '../../../../core/router/app_back_button.dart';
 import '../../../auth/domain/permissions.dart';
-import '../../../auth/presentation/auth_providers.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../erp/domain/project_lookup_keys.dart';
-import '../lookup_providers.dart';
+import '../bloc/lookups_bloc.dart';
 import '../widgets/config_square_tiles.dart';
 
 /// Hub for institutes, designations, and all dropdown masters.
-class ConfigurationsHubScreen extends ConsumerStatefulWidget {
+class ConfigurationsHubScreen extends StatefulWidget {
   const ConfigurationsHubScreen({super.key});
 
   @override
-  ConsumerState<ConfigurationsHubScreen> createState() =>
-      _ConfigurationsHubScreenState();
+  State<ConfigurationsHubScreen> createState() => _ConfigurationsHubScreenState();
 }
 
-class _ConfigurationsHubScreenState
-    extends ConsumerState<ConfigurationsHubScreen> {
+class _ConfigurationsHubScreenState extends State<ConfigurationsHubScreen> {
   final _searchCtrl = TextEditingController();
   String _query = '';
 
@@ -28,6 +27,15 @@ class _ConfigurationsHubScreenState
     'INTERVIEW_STATUS',
     'CANDIDATE_SOURCE',
   };
+
+  @override
+  void initState() {
+    super.initState();
+    final bloc = context.read<LookupsBloc>();
+    if (bloc.state.status == LoadStatus.initial) {
+      bloc.add(const LookupsLoadRequested());
+    }
+  }
 
   @override
   void dispose() {
@@ -46,11 +54,11 @@ class _ConfigurationsHubScreenState
 
   @override
   Widget build(BuildContext context) {
-    final auth = ref.watch(authNotifierProvider);
-    final role = auth.user?.role ?? '';
-    final canField = Permissions.hasPermission(auth.permissions, 'FIELD_MGMT', 'READ') ||
-        Permissions.canManageInstitutes(auth.permissions, role) ||
-        Permissions.canManageUsers(auth.permissions, role);
+    final authState = context.watch<AuthBloc>().state;
+    final role = authState.user?.role ?? '';
+    final canField = Permissions.hasPermission(authState.permissions, 'FIELD_MGMT', 'READ') ||
+        Permissions.canManageInstitutes(authState.permissions, role) ||
+        Permissions.canManageUsers(authState.permissions, role);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     if (!canField) {
@@ -64,7 +72,6 @@ class _ConfigurationsHubScreenState
       );
     }
 
-    final groupsAsync = ref.watch(lookupGroupsProvider);
     final q = _query.trim();
 
     final orgTiles = <ConfigSquareItem>[
@@ -122,7 +129,7 @@ class _ConfigurationsHubScreenState
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded, color: Color(0xFFC5A059)),
-            onPressed: () => ref.invalidate(lookupGroupsProvider),
+            onPressed: () => context.read<LookupsBloc>().add(const LookupsLoadRequested()),
           ),
         ],
       ),
@@ -159,13 +166,24 @@ class _ConfigurationsHubScreenState
             const SizedBox(height: 10),
             ConfigSquareGrid(tiles: orgTiles),
           ],
-          groupsAsync.when(
-            loading: () => const Padding(
-              padding: EdgeInsets.all(24),
-              child: Center(child: CircularProgressIndicator()),
-            ),
-            error: (e, _) => Text('Failed to load lookups: $e'),
-            data: (groups) {
+          BlocBuilder<LookupsBloc, LookupsState>(
+            builder: (context, lookupsState) {
+              if (lookupsState.status == LoadStatus.loading && lookupsState.groups.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+              if (lookupsState.status == LoadStatus.failure && lookupsState.groups.isEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Center(
+                    child: Text('Failed to load lookups: ${lookupsState.errorMessage ?? 'Unknown error'}'),
+                  ),
+                );
+              }
+
+              final groups = lookupsState.groups;
               final recruitment = groups
                   .where((g) => _recruitmentKeys.contains(g.key))
                   .where((g) => _matches(q, [g.label, g.description, g.key]))

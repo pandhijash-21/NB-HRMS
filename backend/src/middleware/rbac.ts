@@ -2,7 +2,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { prisma } from '../config/prisma';
 import { buildPermissionsMap } from '../modules/auth/permissions-map';
 import { fail } from '../utils/response';
-import { isAdminRole } from '../modules/auth/permissions-map';
+import { isAdminRole, isSuperAdminRole } from '../modules/auth/permissions-map';
 
 export type PermissionAction = 'READ' | 'WRITE' | 'APPROVE' | 'DELETE' | 'EXPORT';
 
@@ -145,3 +145,21 @@ export function requireRole(allowed: string[]) {
     return next();
   };
 }
+
+/**
+ * Superadmin-only guard — restricts route strictly to the SaaS Platform Provider (SUPERADMIN).
+ * Client company System Admins and regular users will be rejected with 403.
+ */
+export function requireSuperAdmin() {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (!req.user) return res.status(401).json(fail('Unauthenticated'));
+    const role = req.user.roleName ?? req.user.role;
+    if (!isSuperAdminRole(role)) {
+      return res
+        .status(403)
+        .json(fail('Forbidden: Requires SaaS Platform Superadmin privileges'));
+    }
+    return next();
+  };
+}
+

@@ -1,25 +1,65 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../lookups/presentation/lookup_dropdown.dart';
+import '../../data/boq_repository.dart';
+import '../../data/work_order_repository.dart';
+import '../../domain/resource_models.dart';
 import '../../domain/work_order_lookup_keys.dart';
-import '../boq_providers.dart';
-import '../work_order_providers.dart';
+import '../../domain/work_order_models.dart';
 
-class LabourConfigScreen extends ConsumerStatefulWidget {
+class LabourConfigScreen extends StatefulWidget {
   const LabourConfigScreen({super.key});
 
   @override
-  ConsumerState<LabourConfigScreen> createState() => _LabourConfigScreenState();
+  State<LabourConfigScreen> createState() => _LabourConfigScreenState();
 }
 
-class _LabourConfigScreenState extends ConsumerState<LabourConfigScreen> {
+class _LabourConfigScreenState extends State<LabourConfigScreen> {
   final _nameCtrl = TextEditingController();
   final _rateCtrl = TextEditingController();
   String? _unitCode;
   String? _activityId;
   String? _subtaskId;
+
+  List<ErpLabour> _labour = [];
+  List<ErpActivity> _activities = [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadData();
+    });
+  }
+
+  Future<void> _loadData() async {
+    try {
+      final boqRepo = context.read<BoqRepository>();
+      final workRepo = context.read<WorkOrderRepository>();
+      final results = await Future.wait([
+        boqRepo.listLabour(),
+        workRepo.listActivities(),
+      ]);
+      if (mounted) {
+        setState(() {
+          _labour = results[0] as List<ErpLabour>;
+          _activities = results[1] as List<ErpActivity>;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -32,14 +72,13 @@ class _LabourConfigScreenState extends ConsumerState<LabourConfigScreen> {
     final name = _nameCtrl.text.trim();
     if (name.isEmpty) return;
     try {
-      await ref.read(boqRepositoryProvider).createLabour({
+      await context.read<BoqRepository>().createLabour({
         'name': name,
         'unitCode': _unitCode,
         'defaultRate': double.tryParse(_rateCtrl.text),
         'activityId': _activityId,
         'subtaskId': _subtaskId,
       });
-      ref.invalidate(erpLabourProvider);
       _nameCtrl.clear();
       _rateCtrl.clear();
       setState(() {
@@ -47,6 +86,16 @@ class _LabourConfigScreenState extends ConsumerState<LabourConfigScreen> {
         _activityId = null;
         _subtaskId = null;
       });
+      _loadData();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+
+  Future<void> _delete(String id) async {
+    try {
+      await context.read<BoqRepository>().removeLabour(id);
+      _loadData();
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     }
@@ -54,9 +103,6 @@ class _LabourConfigScreenState extends ConsumerState<LabourConfigScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final labourAsync = ref.watch(erpLabourProvider);
-    final activitiesAsync = ref.watch(erpActivitiesAdminProvider);
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Labour'),
@@ -76,7 +122,7 @@ class _LabourConfigScreenState extends ConsumerState<LabourConfigScreen> {
                   TextField(controller: _nameCtrl, decoration: const InputDecoration(labelText: 'Name *', border: OutlineInputBorder())),
                   const SizedBox(height: 8),
                   lookupDropdown(
-                    ref: ref,
+                    context: context,
                     category: kWoMeasurementUnit,
                     value: _unitCode,
                     label: 'Unit',
@@ -89,18 +135,14 @@ class _LabourConfigScreenState extends ConsumerState<LabourConfigScreen> {
                     keyboardType: TextInputType.number,
                   ),
                   const SizedBox(height: 8),
-                  activitiesAsync.when(
-                    loading: () => const SizedBox.shrink(),
-                    error: (_, __) => const SizedBox.shrink(),
-                    data: (acts) => DropdownButtonFormField<String>(
-                      value: _activityId,
-                      decoration: const InputDecoration(labelText: 'Activity (optional)', border: OutlineInputBorder()),
-                      items: acts.map((a) => DropdownMenuItem(value: a.id, child: Text(a.name))).toList(),
-                      onChanged: (v) => setState(() {
-                        _activityId = v;
-                        _subtaskId = null;
-                      }),
-                    ),
+                  DropdownButtonFormField<String>(
+                    initialValue: _activityId,
+                    decoration: const InputDecoration(labelText: 'Activity (optional)', border: OutlineInputBorder()),
+                    items: _activities.map((a) => DropdownMenuItem(value: a.id, child: Text(a.name))).toList(),
+                    onChanged: (v) => setState(() {
+                      _activityId = v;
+                      _subtaskId = null;
+                    }),
                   ),
                   const SizedBox(height: 12),
                   FilledButton(onPressed: _save, child: const Text('Save Labour')),
@@ -109,12 +151,14 @@ class _LabourConfigScreenState extends ConsumerState<LabourConfigScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          labourAsync.when(
-            loading: () => const CircularProgressIndicator(),
-            error: (e, _) => Text('$e'),
-            data: (items) => Column(
+          if (_loading)
+            const Center(child: CircularProgressIndicator())
+          else if (_error != null)
+            Text(_error!)
+          else
+            Column(
               children: [
-                for (final l in items)
+                for (final l in _labour)
                   Card(
                     child: ListTile(
                       title: Text(l.name),
@@ -123,16 +167,12 @@ class _LabourConfigScreenState extends ConsumerState<LabourConfigScreen> {
                       ),
                       trailing: IconButton(
                         icon: const Icon(Icons.delete_outline),
-                        onPressed: () async {
-                          await ref.read(boqRepositoryProvider).removeLabour(l.id);
-                          ref.invalidate(erpLabourProvider);
-                        },
+                        onPressed: () => _delete(l.id),
                       ),
                     ),
                   ),
               ],
             ),
-          ),
         ],
       ),
     );

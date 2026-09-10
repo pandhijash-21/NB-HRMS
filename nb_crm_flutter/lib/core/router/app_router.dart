@@ -1,12 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../logging/app_logger.dart';
 import 'app_navigation.dart';
-import '../../features/auth/presentation/auth_notifier.dart';
-import '../../features/auth/presentation/auth_providers.dart';
+import 'go_router_refresh_stream.dart';
+import '../../features/auth/presentation/bloc/auth_bloc.dart';
+import '../../features/auth/domain/permissions.dart';
 import '../../features/auth/presentation/change_password_screen.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/verify_emails_screen.dart';
@@ -64,6 +64,11 @@ import '../../features/salary/presentation/screens/admin_salary_records_screen.d
 import '../../features/salary/presentation/screens/admin_salary_slip_screen.dart';
 import '../../features/salary/presentation/screens/admin_payroll_month_screen.dart';
 import '../../features/salary/presentation/screens/employee_salary_slip_screen.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../features/rbac/data/rbac_repository.dart';
+import '../../features/rbac/presentation/bloc/admin_users_bloc.dart';
+import '../../features/rbac/presentation/bloc/admin_roles_bloc.dart';
+import '../../features/rbac/presentation/bloc/admin_role_detail_bloc.dart';
 import '../../features/rbac/presentation/screens/admin_users_screen.dart';
 import '../../features/rbac/presentation/screens/admin_roles_screen.dart';
 import '../../features/rbac/presentation/screens/admin_role_detail_screen.dart';
@@ -107,36 +112,19 @@ import '../../features/crm/presentation/screens/crm_headers_screen.dart';
 import '../../features/crm/presentation/screens/crm_post_sales_screen.dart';
 import '../../features/crm/presentation/screens/crm_settings_screen.dart';
 import '../../features/crm/presentation/screens/crm_bin_screen.dart';
+import '../../features/platform/presentation/screens/platform_console_screen.dart';
 import '../widgets/responsive_shell.dart';
 
-/// Listenable bridge so GoRouter refreshes when [AuthState] changes.
-class GoRouterAuthRefresh extends ChangeNotifier {
-  GoRouterAuthRefresh(Ref ref) {
-    _subscription = ref.listen<AuthState>(authNotifierProvider, (_, __) {
-      notifyListeners();
-    });
-  }
+GoRouter createAppRouter(AuthBloc authBloc) {
+  final refresh = GoRouterRefreshStream(authBloc.stream);
 
-  late final ProviderSubscription<AuthState> _subscription;
-
-  @override
-  void dispose() {
-    _subscription.close();
-    super.dispose();
-  }
-}
-
-final goRouterProvider = Provider<GoRouter>((ref) {
-  final refresh = GoRouterAuthRefresh(ref);
-  ref.onDispose(refresh.dispose);
-
-  // Fresh per provider instance — avoids ShellRoute GlobalKey collisions on
+  // Fresh per router instance — avoids ShellRoute GlobalKey collisions on
   // hot reload (go_router keys navigators with GlobalObjectKey(hashCode)).
   final rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'rootNav');
   final shellNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'shellNav');
 
   // Bump when route table changes so hot-restart rebuilds GoRouter cleanly.
-  const routerRevision = 20;
+  const routerRevision = 21;
 
   return GoRouter(
     navigatorKey: rootNavigatorKey,
@@ -147,7 +135,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       // Touch revision so analyzer/tree-shaking keep the constant.
       assert(routerRevision >= 1);
-      final auth = ref.read(authNotifierProvider);
+      final auth = authBloc.state;
       final loc = state.matchedLocation;
 
       if (auth.status == AuthStatus.unknown) {
@@ -161,6 +149,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       final trackingSetup = loc == '/tracking/setup';
       final guestMeet = loc.startsWith('/meet/guest') || loc.startsWith('/meet/r/');
       final authenticated = auth.isAuthenticated;
+      final isSuperAdmin = Permissions.isSuperAdmin(auth.user?.role);
+      final isPlatformPath = loc.startsWith('/platform');
 
       String? next;
       if (!authenticated) {
@@ -169,12 +159,20 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         next = changingPassword ? null : '/change-password';
       } else if (auth.needsEmailVerification) {
         next = verifyingEmails ? null : '/verify-emails';
-      } else if (changingPassword || verifyingEmails) {
-        next = '/home';
-      } else if (loggingIn) {
-        next = '/home';
-      } else if (trackingSetup) {
-        next = null; // allow full-screen tracking setup
+      } else if (isSuperAdmin) {
+        // SaaS Platform Superadmin is dedicated strictly to the platform console
+        if (!isPlatformPath) {
+          next = '/platform';
+        }
+      } else {
+        // Client company users and employees cannot access platform console
+        if (isPlatformPath) {
+          next = '/home';
+        } else if (changingPassword || verifyingEmails || loggingIn) {
+          next = '/home';
+        } else if (trackingSetup) {
+          next = null; // allow full-screen tracking setup
+        }
       }
 
       if (next != null) {
@@ -236,6 +234,16 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           );
         },
         routes: [
+          GoRoute(
+            path: '/platform',
+            builder: (context, state) {
+              final tab = int.tryParse(state.uri.queryParameters['tab'] ?? '') ?? 0;
+              return PlatformConsoleScreen(
+                key: ValueKey('platform_console_screen_$tab'),
+                initialTab: tab,
+              );
+            },
+          ),
           GoRoute(
             path: '/home',
             builder: (context, state) => const HomeScreen(),
@@ -792,11 +800,21 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/admin/users',
-            builder: (context, state) => const AdminUsersScreen(),
+            builder: (context, state) => BlocProvider(
+              create: (context) => AdminUsersBloc(
+                rbacRepository: context.read<RbacRepository>(),
+              ),
+              child: const AdminUsersScreen(),
+            ),
           ),
           GoRoute(
             path: '/admin/roles',
-            builder: (context, state) => const AdminRolesScreen(),
+            builder: (context, state) => BlocProvider(
+              create: (context) => AdminRolesBloc(
+                rbacRepository: context.read<RbacRepository>(),
+              ),
+              child: const AdminRolesScreen(),
+            ),
           ),
           GoRoute(
             path: '/admin/roles/:id',
@@ -807,7 +825,12 @@ final goRouterProvider = Provider<GoRouter>((ref) {
                   body: Center(child: Text('Invalid Role ID')),
                 );
               }
-              return AdminRoleDetailScreen(roleId: id);
+              return BlocProvider(
+                create: (context) => AdminRoleDetailBloc(
+                  rbacRepository: context.read<RbacRepository>(),
+                ),
+                child: AdminRoleDetailScreen(roleId: id),
+              );
             },
           ),
           GoRoute(
@@ -875,4 +898,4 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       ),
     ],
   );
-});
+}

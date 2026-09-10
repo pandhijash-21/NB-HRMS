@@ -1,16 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/router/app_back_button.dart';
 
-class CrmPostSalesScreen extends ConsumerStatefulWidget {
+class CrmPostSalesScreen extends StatefulWidget {
   const CrmPostSalesScreen({super.key});
 
   @override
-  ConsumerState<CrmPostSalesScreen> createState() => _CrmPostSalesScreenState();
+  State<CrmPostSalesScreen> createState() => _CrmPostSalesScreenState();
 }
 
-class _CrmPostSalesScreenState extends ConsumerState<CrmPostSalesScreen>
+class _CrmPostSalesScreenState extends State<CrmPostSalesScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
   final TextEditingController _searchController = TextEditingController();
@@ -34,12 +33,12 @@ class _CrmPostSalesScreenState extends ConsumerState<CrmPostSalesScreen>
     final width = MediaQuery.sizeOf(context).width;
     final wide = width >= 900;
 
-    final primaryColor = const Color(0xFF16A34A);
+    const primaryColor = Color(0xFF16A34A);
     final cardBg = isDark ? const Color(0xFF1E1B18) : Colors.white;
     final borderColor = isDark
-        ? const Color(0xFFC5A059).withOpacity(0.18)
+        ? const Color(0xFFC5A059).withValues(alpha: 0.18)
         : const Color(0xFFE2E8F0);
-    final textMuted = isDark ? Colors.white.withOpacity(0.6) : const Color(0xFF64748B);
+    final textMuted = isDark ? Colors.white.withValues(alpha: 0.6) : const Color(0xFF64748B);
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF141210) : const Color(0xFFF8FAFC),
@@ -186,7 +185,7 @@ class _CrmPostSalesScreenState extends ConsumerState<CrmPostSalesScreen>
                   Container(
                     padding: const EdgeInsets.all(18),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF16A34A).withOpacity(0.12),
+                      color: const Color(0xFF16A34A).withValues(alpha: 0.12),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
@@ -248,7 +247,7 @@ class _CrmPostSalesScreenState extends ConsumerState<CrmPostSalesScreen>
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
         color: active
-            ? (isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFF16A34A).withOpacity(0.12))
+            ? (isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFF16A34A).withValues(alpha: 0.12))
             : (isDark ? const Color(0xFF1E1B18) : Colors.white),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
@@ -264,7 +263,7 @@ class _CrmPostSalesScreenState extends ConsumerState<CrmPostSalesScreen>
           fontWeight: active ? FontWeight.w700 : FontWeight.w500,
           color: active
               ? (isDark ? const Color(0xFFE2D6BE) : const Color(0xFF16A34A))
-              : (isDark ? Colors.white.withOpacity(0.7) : const Color(0xFF64748B)),
+              : (isDark ? Colors.white.withValues(alpha: 0.7) : const Color(0xFF64748B)),
         ),
       ),
     );

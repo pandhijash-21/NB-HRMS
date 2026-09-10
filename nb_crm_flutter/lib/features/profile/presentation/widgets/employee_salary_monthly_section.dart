@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../auth/domain/permissions.dart';
-import '../../../auth/presentation/auth_providers.dart';
-import '../../../salary/presentation/salary_providers.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
+import '../../../salary/data/salary_repository.dart';
 import '../../../salary/presentation/widgets/salary_shared_widgets.dart';
 
 const _monthLabels = [
@@ -12,72 +12,115 @@ const _monthLabels = [
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
 ];
 
-class EmployeeSalaryMonthlySection extends ConsumerWidget {
+class EmployeeSalaryMonthlySection extends StatefulWidget {
   const EmployeeSalaryMonthlySection({super.key, required this.employeeId});
 
   final int employeeId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final monthFilter = ref.watch(profileSalaryMonthProvider);
-    final overviewAsync = ref.watch(
-      employeeSalaryMonthlyOverviewProvider((
-        employeeId: employeeId,
-        year: monthFilter.year,
-        month: monthFilter.month,
-      )),
-    );
+  State<EmployeeSalaryMonthlySection> createState() => _EmployeeSalaryMonthlySectionState();
+}
 
+class _EmployeeSalaryMonthlySectionState extends State<EmployeeSalaryMonthlySection> {
+  int _year = DateTime.now().year;
+  int _month = DateTime.now().month;
+  bool _loading = true;
+  String? _error;
+  Map<String, dynamic>? _overview;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadOverview());
+  }
+
+  Future<void> _loadOverview() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final res = await context.read<SalaryRepository>().getEmployeeMonthlyOverview(
+        employeeId: widget.employeeId,
+        year: _year,
+        month: _month,
+      );
+      if (mounted) {
+        setState(() {
+          _overview = res;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _MonthPicker(
-          year: monthFilter.year,
-          month: monthFilter.month,
-          onYearChanged: (y) => ref
-              .read(profileSalaryMonthProvider.notifier)
-              .setMonth(y, monthFilter.month),
-          onMonthChanged: (m) => ref
-              .read(profileSalaryMonthProvider.notifier)
-              .setMonth(monthFilter.year, m),
+          year: _year,
+          month: _month,
+          onYearChanged: (y) {
+            setState(() => _year = y);
+            _loadOverview();
+          },
+          onMonthChanged: (m) {
+            setState(() => _month = m);
+            _loadOverview();
+          },
         ),
         const SizedBox(height: 12),
-        overviewAsync.when(
-          loading: () => const Center(child: Padding(
-            padding: EdgeInsets.all(24),
-            child: CircularProgressIndicator(),
-          )),
-          error: (e, _) => Text('Could not load monthly summary: $e'),
-          data: (overview) => _MonthlyOverviewCard(
-            employeeId: employeeId,
-            year: monthFilter.year,
-            month: monthFilter.month,
-            overview: overview,
+        if (_loading)
+          const Center(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: CircularProgressIndicator(),
+            ),
+          )
+        else if (_error != null)
+          Text('Could not load monthly summary: $_error')
+        else if (_overview != null)
+          _MonthlyOverviewCard(
+            employeeId: widget.employeeId,
+            year: _year,
+            month: _month,
+            overview: _overview!,
+            onRefresh: _loadOverview,
           ),
-        ),
       ],
     );
   }
 }
 
-class _MonthlyOverviewCard extends ConsumerStatefulWidget {
+class _MonthlyOverviewCard extends StatefulWidget {
   const _MonthlyOverviewCard({
     required this.employeeId,
     required this.year,
     required this.month,
     required this.overview,
+    required this.onRefresh,
   });
 
   final int employeeId;
   final int year;
   final int month;
   final Map<String, dynamic> overview;
+  final VoidCallback onRefresh;
 
   @override
-  ConsumerState<_MonthlyOverviewCard> createState() => _MonthlyOverviewCardState();
+  State<_MonthlyOverviewCard> createState() => _MonthlyOverviewCardState();
 }
 
-class _MonthlyOverviewCardState extends ConsumerState<_MonthlyOverviewCard> {
+class _MonthlyOverviewCardState extends State<_MonthlyOverviewCard> {
   bool _busy = false;
   Map<String, dynamic>? _preview;
 
@@ -87,7 +130,7 @@ class _MonthlyOverviewCardState extends ConsumerState<_MonthlyOverviewCard> {
     final salaryRecord = (_preview?['salaryRecord'] as Map<String, dynamic>?) ??
         (widget.overview['salaryRecord'] as Map<String, dynamic>?);
     final leaveApplications = (widget.overview['leaveApplications'] as List?) ?? [];
-    final auth = ref.watch(authNotifierProvider);
+    final auth = context.watch<AuthBloc>().state;
     final canWrite = Permissions.canWriteSalary(auth.permissions);
     final computed = _preview?['computed'] as Map<String, dynamic>?;
     final breakdown = _preview?['breakdown'] as Map<String, dynamic>?;
@@ -167,7 +210,7 @@ class _MonthlyOverviewCardState extends ConsumerState<_MonthlyOverviewCard> {
             if (salaryRecord != null) ...[
               Row(
                 children: [
-                  Text('Status', style: const TextStyle(fontWeight: FontWeight.w600)),
+                  const Text('Status', style: TextStyle(fontWeight: FontWeight.w600)),
                   const SizedBox(width: 10),
                   salaryStatusChip(
                     context,
@@ -285,21 +328,15 @@ class _MonthlyOverviewCardState extends ConsumerState<_MonthlyOverviewCard> {
   }
 
   Future<void> _togglePaid(String recordId, {required bool paid}) async {
+    final repo = context.read<SalaryRepository>();
     setState(() => _busy = true);
     try {
-      final repo = ref.read(salaryRepositoryProvider);
       if (paid) {
         await repo.markRecordPaid(recordId);
       } else {
         await repo.markRecordUnpaid(recordId);
       }
-      ref.invalidate(
-        employeeSalaryMonthlyOverviewProvider((
-          employeeId: widget.employeeId,
-          year: widget.year,
-          month: widget.month,
-        )),
-      );
+      widget.onRefresh();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(paid ? 'Marked paid' : 'Marked unpaid')),
@@ -313,9 +350,9 @@ class _MonthlyOverviewCardState extends ConsumerState<_MonthlyOverviewCard> {
   }
 
   Future<void> _onCalculate() async {
+    final repo = context.read<SalaryRepository>();
     setState(() => _busy = true);
     try {
-      final repo = ref.read(salaryRepositoryProvider);
       final result = await repo.calculateEmployeeMonthlySalary(
         employeeId: widget.employeeId,
         year: widget.year,
@@ -335,9 +372,9 @@ class _MonthlyOverviewCardState extends ConsumerState<_MonthlyOverviewCard> {
   }
 
   Future<void> _onSave() async {
+    final repo = context.read<SalaryRepository>();
     setState(() => _busy = true);
     try {
-      final repo = ref.read(salaryRepositoryProvider);
       final result = await repo.saveEmployeeMonthlySalary(
         employeeId: widget.employeeId,
         year: widget.year,
@@ -345,13 +382,7 @@ class _MonthlyOverviewCardState extends ConsumerState<_MonthlyOverviewCard> {
       );
       if (!mounted) return;
       setState(() => _preview = result);
-      ref.invalidate(
-        employeeSalaryMonthlyOverviewProvider((
-          employeeId: widget.employeeId,
-          year: widget.year,
-          month: widget.month,
-        )),
-      );
+      widget.onRefresh();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Salary saved as unpaid for this month')),
       );
@@ -375,7 +406,7 @@ class _MonthlyOverviewCardState extends ConsumerState<_MonthlyOverviewCard> {
         style: TextStyle(
           fontWeight: FontWeight.w600,
           fontSize: 12,
-          color: isDark ? Colors.white.withOpacity(0.9) : const Color(0xFF374151),
+          color: isDark ? Colors.white.withValues(alpha: 0.9) : const Color(0xFF374151),
         ),
       ),
       backgroundColor: isDark

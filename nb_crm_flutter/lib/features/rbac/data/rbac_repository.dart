@@ -183,6 +183,39 @@ class RbacRepository {
     );
   }
 
+  Future<SystemModule> createModule(Map<String, dynamic> data) async {
+    return _dio.postEnvelope<SystemModule>(
+      'admin/modules',
+      data: data,
+      parse: (raw) {
+        if (raw is! Map) {
+          throw const FormatException('Invalid create module response');
+        }
+        return SystemModule.fromJson(Map<String, dynamic>.from(raw));
+      },
+    );
+  }
+
+  Future<SystemModule> updateModule(String key, Map<String, dynamic> data) async {
+    return _dio.patchEnvelope<SystemModule>(
+      'admin/modules/$key',
+      data: data,
+      parse: (raw) {
+        if (raw is! Map) {
+          throw const FormatException('Invalid update module response');
+        }
+        return SystemModule.fromJson(Map<String, dynamic>.from(raw));
+      },
+    );
+  }
+
+  Future<void> deleteModule(String key) async {
+    await _dio.deleteEnvelope<void>(
+      'admin/modules/$key',
+      parse: (_) {},
+    );
+  }
+
   List<UserAccount> _parseUserList(Object? raw) {
     if (raw is! List) {
       throw const FormatException('Invalid users list response');

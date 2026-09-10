@@ -802,8 +802,23 @@ export function MeetRoom({ code }: { code: string }) {
     const bump = () => refreshRoom(r);
     r.on(RoomEvent.ParticipantConnected, bump);
     r.on(RoomEvent.ParticipantDisconnected, bump);
-    r.on(RoomEvent.TrackSubscribed, bump);
-    r.on(RoomEvent.TrackUnsubscribed, bump);
+    r.on(RoomEvent.TrackSubscribed, (track: any) => {
+      if (track && track.kind === Track.Kind.Audio) {
+        track.attach();
+      }
+      bump();
+    });
+    r.on(RoomEvent.TrackUnsubscribed, (track: any) => {
+      if (track && track.kind === Track.Kind.Audio) {
+        track.detach();
+      }
+      bump();
+    });
+    r.on(RoomEvent.AudioPlaybackStatusChanged, () => {
+      if (!r.canPlaybackAudio) {
+        r.startAudio().catch(() => {});
+      }
+    });
     r.on(RoomEvent.TrackPublished, bump);
     r.on(RoomEvent.TrackUnpublished, bump);
     r.on(RoomEvent.TrackMuted, bump);

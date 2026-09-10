@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/widgets/header_action_button.dart';
@@ -53,7 +52,7 @@ class AdminSalaryCommissionDetailScreen extends ConsumerWidget {
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1.5),
           child: Container(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
             height: 1.5,
           ),
         ),
@@ -111,7 +110,7 @@ class AdminSalaryCommissionDetailScreen extends ConsumerWidget {
                         color: isDark ? const Color(0xFF2B2722) : const Color(0xFFF1F5F9),
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(
-                          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
                         ),
                       ),
                       child: Text(
@@ -126,10 +125,10 @@ class AdminSalaryCommissionDetailScreen extends ConsumerWidget {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFFC5A059).withOpacity(0.1) : const Color(0xFFECEFF1),
+                        color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.1) : const Color(0xFFECEFF1),
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(
-                          color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC),
+                          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
                         ),
                       ),
                       child: Text(
@@ -150,7 +149,7 @@ class AdminSalaryCommissionDetailScreen extends ConsumerWidget {
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
                       color: isDark
-                          ? const Color(0xFFC5A059).withOpacity(0.15)
+                          ? const Color(0xFFC5A059).withValues(alpha: 0.15)
                           : const Color(0xFFCFD8DC),
                     ),
                   ),
@@ -287,7 +286,7 @@ class AdminSalaryCommissionDetailScreen extends ConsumerWidget {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
           side: BorderSide(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
             width: 1.5,
           ),
         ),
@@ -356,7 +355,7 @@ class AdminSalaryCommissionDetailScreen extends ConsumerWidget {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
             side: BorderSide(
-              color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC),
+              color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
               width: 1.5,
             ),
           ),
@@ -417,7 +416,7 @@ class AdminSalaryCommissionDetailScreen extends ConsumerWidget {
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Allow rule configuration', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                     value: configurable,
-                    activeColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+                    activeThumbColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
                     onChanged: (v) => setLocal(() => configurable = v),
                   ),
                   SwitchListTile(
@@ -425,7 +424,7 @@ class AdminSalaryCommissionDetailScreen extends ConsumerWidget {
                     title: const Text('Cut this on leave', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                     subtitle: const Text('Prorate when unpaid leave days apply', style: TextStyle(fontSize: 11)),
                     value: cutOnLeave,
-                    activeColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+                    activeThumbColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
                     onChanged: (v) => setLocal(() => cutOnLeave = v),
                   ),
                   SwitchListTile(
@@ -433,7 +432,7 @@ class AdminSalaryCommissionDetailScreen extends ConsumerWidget {
                     title: const Text('Cut this on absent', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                     subtitle: const Text('Prorate when true absent days apply', style: TextStyle(fontSize: 11)),
                     value: cutOnAbsent,
-                    activeColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+                    activeThumbColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
                     onChanged: (v) => setLocal(() => cutOnAbsent = v),
                   ),
                 ],
@@ -513,10 +512,10 @@ class _ColumnTable extends StatelessWidget {
           ? Text('No columns yet.', style: TextStyle(color: isDark ? Colors.white30 : const Color(0xFF607D8B)))
           : Container(
               decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF121212).withOpacity(0.4) : const Color(0xFFF8FAFC),
+                color: isDark ? const Color(0xFF121212).withValues(alpha: 0.4) : const Color(0xFFF8FAFC),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: isDark ? const Color(0xFFC5A059).withOpacity(0.12) : const Color(0xFFCFD8DC),
+                  color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.12) : const Color(0xFFCFD8DC),
                 ),
               ),
               clipBehavior: Clip.antiAlias,
@@ -525,7 +524,7 @@ class _ColumnTable extends StatelessWidget {
                 physics: const BouncingScrollPhysics(),
                 child: DataTable(
                   headingRowColor: WidgetStateProperty.all(
-                    isDark ? const Color(0xFF121212).withOpacity(0.8) : const Color(0xFFECEFF1),
+                    isDark ? const Color(0xFF121212).withValues(alpha: 0.8) : const Color(0xFFECEFF1),
                   ),
                   columns: [
                     DataColumn(

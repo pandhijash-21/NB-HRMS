@@ -355,7 +355,7 @@ class InstituteMembersPayload {
     return InstituteMembersPayload(
       institute: instituteMap != null
           ? Institute.fromJson(instituteMap)
-          : Institute(id: '', code: '', name: '', isActive: true, sortOrder: 0),
+          : const Institute(id: '', code: '', name: '', isActive: true, sortOrder: 0),
       employees: employeesRaw is List
           ? employeesRaw
               .map((e) => InstituteMember.fromJson(
@@ -392,7 +392,7 @@ class CreatePositionResult {
           : const LinkedRole(id: '', name: ''),
       designation: designationMap != null
           ? Designation.fromJson(designationMap)
-          : Designation(
+          : const Designation(
               id: '',
               name: '',
               slug: '',

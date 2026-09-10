@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../lookups/presentation/lookup_dropdown.dart';
+import '../../data/project_repository.dart';
 import '../../domain/structure_models.dart';
 import '../../domain/work_order_lookup_keys.dart';
 import '../../domain/work_order_models.dart';
-import '../project_providers.dart';
 import 'work_order_location_picker.dart';
 
-class WorkDetailsEditor extends ConsumerStatefulWidget {
+class WorkDetailsEditor extends StatefulWidget {
   const WorkDetailsEditor({
     super.key,
     required this.projectId,
@@ -23,11 +23,57 @@ class WorkDetailsEditor extends ConsumerStatefulWidget {
   final ValueChanged<List<WorkOrderActivityGroup>> onChanged;
 
   @override
-  ConsumerState<WorkDetailsEditor> createState() => _WorkDetailsEditorState();
+  State<WorkDetailsEditor> createState() => _WorkDetailsEditorState();
 }
 
-class _WorkDetailsEditorState extends ConsumerState<WorkDetailsEditor> {
+class _WorkDetailsEditorState extends State<WorkDetailsEditor> {
   String? _selectedActivityId;
+  List<ErpProjectTower> _towers = [];
+  bool _loadingTowers = false;
+  String? _towersError;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.projectId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _loadTowers(widget.projectId!);
+      });
+    }
+  }
+
+  @override
+  void didUpdateWidget(WorkDetailsEditor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.projectId != oldWidget.projectId) {
+      if (widget.projectId != null) {
+        _loadTowers(widget.projectId!);
+      } else {
+        setState(() => _towers = []);
+      }
+    }
+  }
+
+  Future<void> _loadTowers(String projectId) async {
+    setState(() {
+      _loadingTowers = true;
+      _towersError = null;
+    });
+    try {
+      final res = await context.read<ProjectRepository>().listTowers(projectId);
+      if (!mounted) return;
+      setState(() {
+        _towers = res;
+        _loadingTowers = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _towersError = e.toString();
+        _loadingTowers = false;
+      });
+    }
+  }
 
   List<WorkOrderActivityGroup> get _groups => widget.activities;
 
@@ -109,9 +155,6 @@ class _WorkDetailsEditorState extends ConsumerState<WorkDetailsEditor> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final towersAsync = widget.projectId == null
-        ? const AsyncValue<List<ErpProjectTower>>.data([])
-        : ref.watch(projectTowersProvider(widget.projectId!));
 
     return Container(
       width: double.infinity,
@@ -178,7 +221,7 @@ class _WorkDetailsEditorState extends ConsumerState<WorkDetailsEditor> {
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     isExpanded: true,
-                    value: _selectedActivityId,
+                    initialValue: _selectedActivityId,
                     decoration: InputDecoration(
                       labelText: 'Activity *',
                       filled: true,
@@ -242,47 +285,49 @@ class _WorkDetailsEditorState extends ConsumerState<WorkDetailsEditor> {
                 ],
               ),
             )
-          else
-            towersAsync.when(
-              loading: () => const Center(child: Padding(
+          else if (_loadingTowers)
+            const Center(
+              child: Padding(
                 padding: EdgeInsets.all(24),
                 child: CircularProgressIndicator(),
-              )),
-              error: (e, _) => Text('$e'),
-              data: (towers) => Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: isDark ? const Color(0xFF3D3834) : const Color(0xFFE2E8F0),
-                  ),
+              ),
+            )
+          else if (_towersError != null)
+            Text(_towersError!)
+          else
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isDark ? const Color(0xFF3D3834) : const Color(0xFFE2E8F0),
                 ),
-                clipBehavior: Clip.antiAlias,
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: DataTable(
-                    headingRowHeight: 44,
-                    dataRowMinHeight: 48,
-                    dataRowMaxHeight: 72,
-                    headingRowColor: WidgetStateProperty.all(
-                      isDark ? const Color(0xFF252220) : const Color(0xFFE8F4FC),
-                    ),
-                    columnSpacing: 16,
-                    horizontalMargin: 16,
-                    columns: const [
-                      DataColumn(label: Text('SR#', style: TextStyle(fontWeight: FontWeight.w700))),
-                      DataColumn(label: Text('ACTIVITY', style: TextStyle(fontWeight: FontWeight.w700))),
-                      DataColumn(label: Text('WORK DETAILS', style: TextStyle(fontWeight: FontWeight.w700))),
-                      DataColumn(label: Text('BLOCK', style: TextStyle(fontWeight: FontWeight.w700))),
-                      DataColumn(label: Text('FLOOR', style: TextStyle(fontWeight: FontWeight.w700))),
-                      DataColumn(label: Text('UNIT', style: TextStyle(fontWeight: FontWeight.w700))),
-                      DataColumn(label: Text('QTY', style: TextStyle(fontWeight: FontWeight.w700))),
-                      DataColumn(label: Text('UNIT', style: TextStyle(fontWeight: FontWeight.w700))),
-                      DataColumn(label: Text('RATE', style: TextStyle(fontWeight: FontWeight.w700))),
-                      DataColumn(label: Text('AMOUNT', style: TextStyle(fontWeight: FontWeight.w700))),
-                      DataColumn(label: Text('')),
-                    ],
-                    rows: _buildRows(context, towers, isDark),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: DataTable(
+                  headingRowHeight: 44,
+                  dataRowMinHeight: 48,
+                  dataRowMaxHeight: 72,
+                  headingRowColor: WidgetStateProperty.all(
+                    isDark ? const Color(0xFF252220) : const Color(0xFFE8F4FC),
                   ),
+                  columnSpacing: 16,
+                  horizontalMargin: 16,
+                  columns: const [
+                    DataColumn(label: Text('SR#', style: TextStyle(fontWeight: FontWeight.w700))),
+                    DataColumn(label: Text('ACTIVITY', style: TextStyle(fontWeight: FontWeight.w700))),
+                    DataColumn(label: Text('WORK DETAILS', style: TextStyle(fontWeight: FontWeight.w700))),
+                    DataColumn(label: Text('BLOCK', style: TextStyle(fontWeight: FontWeight.w700))),
+                    DataColumn(label: Text('FLOOR', style: TextStyle(fontWeight: FontWeight.w700))),
+                    DataColumn(label: Text('UNIT', style: TextStyle(fontWeight: FontWeight.w700))),
+                    DataColumn(label: Text('QTY', style: TextStyle(fontWeight: FontWeight.w700))),
+                    DataColumn(label: Text('UNIT', style: TextStyle(fontWeight: FontWeight.w700))),
+                    DataColumn(label: Text('RATE', style: TextStyle(fontWeight: FontWeight.w700))),
+                    DataColumn(label: Text('AMOUNT', style: TextStyle(fontWeight: FontWeight.w700))),
+                    DataColumn(label: Text('')),
+                  ],
+                  rows: _buildRows(context, _towers, isDark),
                 ),
               ),
             ),
@@ -454,7 +499,7 @@ class _WorkDetailsEditorState extends ConsumerState<WorkDetailsEditor> {
                 SizedBox(
                   width: 100,
                   child: lookupDropdown(
-                    ref: ref,
+                    context: context,
                     category: kWoMeasurementUnit,
                     value: line.unitCode,
                     label: '',

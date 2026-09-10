@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../domain/leave_models.dart';
@@ -35,7 +34,7 @@ class LeaveHistoryScreen extends ConsumerWidget {
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1.5),
           child: Container(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
             height: 1.5,
           ),
         ),
@@ -78,7 +77,7 @@ class LeaveHistoryScreen extends ConsumerWidget {
                             style: TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w600,
-                              color: isDark ? Colors.white30 : const Color(0xFF607D8B).withOpacity(0.6),
+                              color: isDark ? Colors.white30 : const Color(0xFF607D8B).withValues(alpha: 0.6),
                             ),
                           ),
                         ],
@@ -147,7 +146,7 @@ class LeaveHistoryScreen extends ConsumerWidget {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
           side: BorderSide(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
             width: 1.5,
           ),
         ),
@@ -220,7 +219,7 @@ class _FiltersBar extends ConsumerWidget {
         color: isDark ? const Color(0xFF1E1B18) : Colors.white,
         border: Border(
           bottom: BorderSide(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.12) : const Color(0xFFCFD8DC),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.12) : const Color(0xFFCFD8DC),
             width: 1.5,
           ),
         ),
@@ -249,7 +248,7 @@ class _FiltersBar extends ConsumerWidget {
                     color: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                      color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC),
+                      color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
                       width: 1.2,
                     ),
                   ),
@@ -288,7 +287,7 @@ class _FiltersBar extends ConsumerWidget {
                     color: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                      color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC),
+                      color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
                       width: 1.2,
                     ),
                   ),
@@ -353,7 +352,7 @@ class _Pagination extends StatelessWidget {
         color: isDark ? const Color(0xFF1E1B18) : Colors.white,
         border: Border(
           top: BorderSide(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.12) : const Color(0xFFCFD8DC),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.12) : const Color(0xFFCFD8DC),
             width: 1.5,
           ),
         ),
@@ -367,12 +366,12 @@ class _Pagination extends StatelessWidget {
               Icons.chevron_left_rounded,
               color: page > 0 
                   ? (isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238)) 
-                  : Colors.grey.withOpacity(0.4),
+                  : Colors.grey.withValues(alpha: 0.4),
             ),
           ),
           const SizedBox(width: 8),
           Text(
-            'Page ${page + 1} of $totalPages (${total} total)',
+            'Page ${page + 1} of $totalPages ($total total)',
             style: TextStyle(
               fontWeight: FontWeight.w700,
               fontSize: 13,
@@ -386,7 +385,7 @@ class _Pagination extends StatelessWidget {
               Icons.chevron_right_rounded,
               color: page + 1 < totalPages 
                   ? (isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238)) 
-                  : Colors.grey.withOpacity(0.4),
+                  : Colors.grey.withValues(alpha: 0.4),
             ),
           ),
         ],

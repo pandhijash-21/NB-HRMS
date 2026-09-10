@@ -1,162 +1,174 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/bloc/load_status.dart';
 import '../../../../core/router/app_back_button.dart';
 import '../../../auth/domain/permissions.dart';
-import '../../../auth/presentation/auth_providers.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../domain/work_order_labels.dart';
 import '../../domain/work_order_models.dart';
-import '../work_order_providers.dart';
+import '../bloc/erp_work_orders_bloc.dart';
 import '../widgets/work_order_info_dialogs.dart';
 
-class WorkOrderDetailScreen extends ConsumerStatefulWidget {
+class WorkOrderDetailScreen extends StatefulWidget {
   const WorkOrderDetailScreen({super.key, required this.id});
 
   final String id;
 
   @override
-  ConsumerState<WorkOrderDetailScreen> createState() => _WorkOrderDetailScreenState();
+  State<WorkOrderDetailScreen> createState() => _WorkOrderDetailScreenState();
 }
 
-class _WorkOrderDetailScreenState extends ConsumerState<WorkOrderDetailScreen> {
-  bool _saving = false;
-
-  Future<void> _setStatus(String status) async {
-    setState(() => _saving = true);
-    try {
-      await ref.read(workOrderRepositoryProvider).updateStatus(widget.id, status);
-      ref.invalidate(workOrderDetailProvider(widget.id));
-      ref.invalidate(workOrdersListProvider);
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
+class _WorkOrderDetailScreenState extends State<WorkOrderDetailScreen> {
+  @override
+  void initState() {
+    super.initState();
+    context.read<ErpWorkOrdersBloc>().add(ErpWorkOrderDetailRequested(widget.id));
   }
 
-  Future<void> _setApproval(String approval) async {
-    setState(() => _saving = true);
-    try {
-      await ref.read(workOrderRepositoryProvider).updateApproval(widget.id, approval);
-      ref.invalidate(workOrderDetailProvider(widget.id));
-      ref.invalidate(workOrdersListProvider);
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
+  void _setStatus(String status) {
+    context.read<ErpWorkOrdersBloc>().add(
+          ErpWorkOrderStatusUpdated(id: widget.id, status: status),
+        );
+  }
+
+  void _setApproval(String approval) {
+    context.read<ErpWorkOrdersBloc>().add(
+          ErpWorkOrderApprovalUpdated(id: widget.id, approvalStatus: approval),
+        );
   }
 
   @override
   Widget build(BuildContext context) {
-    final auth = ref.watch(authNotifierProvider);
+    final auth = context.watch<AuthBloc>().state;
     final canWrite = Permissions.canWriteWorkOrders(auth.permissions, auth.user?.role);
     final canApprove = Permissions.canApproveWorkOrders(auth.permissions, auth.user?.role);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final async = ref.watch(workOrderDetailProvider(widget.id));
-    final dateFmt = _formatDate;
+    const dateFmt = _formatDate;
 
-    return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
-        elevation: 0,
-        title: const Text('Work Order', style: TextStyle(fontWeight: FontWeight.w700)),
-        leading: const AppBackButton(fallbackLocation: '/erp/work-orders'),
-        actions: [
-          if (canWrite)
-            IconButton(
-              icon: const Icon(Icons.edit_outlined),
-              onPressed: () => context.go('/erp/work-orders/${widget.id}/edit'),
-            ),
-        ],
-      ),
-      body: async.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('$e')),
-        data: (wo) => ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            _section('Basic Details', [
-              _kv('Work Order ID', wo.workOrderId),
-              _kv('Date', dateFmt(wo.orderDate)),
-              if (wo.dueDate != null) _kv('Due Date', dateFmt(wo.dueDate!)),
-              _kv('Project', wo.project?.name ?? '—'),
-              _kv('Contractor', wo.contractor?.name ?? '—'),
-              _kv('Total Amount', '₹ ${wo.totalAmount.toStringAsFixed(2)}'),
-              _kv('WO Owner', wo.owner?.displayName ?? '—'),
-              if (wo.tenderRef != null) _kv('Tender', wo.tenderRef!),
-            ]),
-            const SizedBox(height: 12),
-            if (canWrite || canApprove)
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Status & Approval', style: TextStyle(fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 12),
-                      if (canWrite) ...[
-                        Row(
-                          children: [
-                            const Text('Status: '),
-                            WoStatusBadge(status: wo.status),
-                            const SizedBox(width: 8),
-                            IconButton(
-                              icon: const Icon(Icons.info_outline, size: 18),
-                              onPressed: () => showWorkOrderStatusInfo(context),
-                            ),
-                          ],
-                        ),
-                        Wrap(
-                          spacing: 8,
-                          children: WorkOrderLabels.statusOptions
-                              .map(
-                                (s) => ActionChip(
-                                  label: Text(WorkOrderLabels.statusLabel(s)),
-                                  onPressed: _saving || wo.status == s ? null : () => _setStatus(s),
-                                ),
-                              )
-                              .toList(),
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-                      if (canApprove) ...[
-                        Row(
-                          children: [
-                            const Text('Approval: '),
-                            WoApprovalBadge(approvalStatus: wo.approvalStatus),
-                            const SizedBox(width: 8),
-                            IconButton(
-                              icon: const Icon(Icons.info_outline, size: 18),
-                              onPressed: () => showWorkOrderApprovalInfo(context),
-                            ),
-                          ],
-                        ),
-                        Wrap(
-                          spacing: 8,
-                          children: WorkOrderLabels.approvalOptions
-                              .map(
-                                (s) => ActionChip(
-                                  label: Text(WorkOrderLabels.approvalLabel(s)),
-                                  onPressed:
-                                      _saving || wo.approvalStatus == s ? null : () => _setApproval(s),
-                                ),
-                              )
-                              .toList(),
-                        ),
-                      ],
-                    ],
-                  ),
+    return BlocConsumer<ErpWorkOrdersBloc, ErpWorkOrdersState>(
+      listener: (context, state) {
+        if (state.actionMessage != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(state.actionMessage!)),
+          );
+        } else if (state.errorMessage != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(state.errorMessage!)),
+          );
+        }
+      },
+      builder: (context, state) {
+        final wo = state.selectedWorkOrder;
+        final isSaving = state.isActing;
+
+        return Scaffold(
+          backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
+          appBar: AppBar(
+            backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
+            elevation: 0,
+            title: const Text('Work Order', style: TextStyle(fontWeight: FontWeight.w700)),
+            leading: const AppBackButton(fallbackLocation: '/erp/work-orders'),
+            actions: [
+              if (canWrite)
+                IconButton(
+                  icon: const Icon(Icons.edit_outlined),
+                  onPressed: () => context.go('/erp/work-orders/${widget.id}/edit'),
                 ),
-              ),
-            const SizedBox(height: 12),
-            _workDetailsSection(wo),
-          ],
-        ),
-      ),
+            ],
+          ),
+          body: () {
+            if (state.status == LoadStatus.loading && wo == null) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (wo == null) {
+              return Center(child: Text(state.errorMessage ?? 'Work order not found.'));
+            }
+            return ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                _section('Basic Details', [
+                  _kv('Work Order ID', wo.workOrderId),
+                  _kv('Date', dateFmt(wo.orderDate)),
+                  if (wo.dueDate != null) _kv('Due Date', dateFmt(wo.dueDate!)),
+                  _kv('Project', wo.project?.name ?? '—'),
+                  _kv('Contractor', wo.contractor?.name ?? '—'),
+                  _kv('Total Amount', '₹ ${wo.totalAmount.toStringAsFixed(2)}'),
+                  _kv('WO Owner', wo.owner?.displayName ?? '—'),
+                  if (wo.tenderRef != null) _kv('Tender', wo.tenderRef!),
+                ]),
+                const SizedBox(height: 12),
+                if (canWrite || canApprove)
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Status & Approval', style: TextStyle(fontWeight: FontWeight.w700)),
+                          const SizedBox(height: 12),
+                          if (canWrite) ...[
+                            Row(
+                              children: [
+                                const Text('Status: '),
+                                WoStatusBadge(status: wo.status),
+                                const SizedBox(width: 8),
+                                IconButton(
+                                  icon: const Icon(Icons.info_outline, size: 18),
+                                  onPressed: () => showWorkOrderStatusInfo(context),
+                                ),
+                              ],
+                            ),
+                            Wrap(
+                              spacing: 8,
+                              children: WorkOrderLabels.statusOptions
+                                  .map(
+                                    (s) => ActionChip(
+                                      label: Text(WorkOrderLabels.statusLabel(s)),
+                                      onPressed: isSaving || wo.status == s ? null : () => _setStatus(s),
+                                    ),
+                                  )
+                                  .toList(),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                          if (canApprove) ...[
+                            Row(
+                              children: [
+                                const Text('Approval: '),
+                                WoApprovalBadge(approvalStatus: wo.approvalStatus),
+                                const SizedBox(width: 8),
+                                IconButton(
+                                  icon: const Icon(Icons.info_outline, size: 18),
+                                  onPressed: () => showWorkOrderApprovalInfo(context),
+                                ),
+                              ],
+                            ),
+                            Wrap(
+                              spacing: 8,
+                              children: WorkOrderLabels.approvalOptions
+                                  .map(
+                                    (s) => ActionChip(
+                                      label: Text(WorkOrderLabels.approvalLabel(s)),
+                                      onPressed:
+                                          isSaving || wo.approvalStatus == s ? null : () => _setApproval(s),
+                                    ),
+                                  )
+                                  .toList(),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 12),
+                _workDetailsSection(wo),
+              ],
+            );
+          }(),
+        );
+      },
     );
   }
 

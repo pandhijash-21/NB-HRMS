@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -19,7 +18,7 @@ class AdminSalarySlipScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Salary Slip'),
+        title: const Text('Salary Slip'),
         leading: const AppBackButton(fallbackLocation: '/admin/salary/records'),
       ),
       body: SalaryAsyncBody<SalarySlip>(
@@ -27,13 +26,13 @@ class AdminSalarySlipScreen extends ConsumerWidget {
         emptyMessage: 'Slip not found.',
         onRetry: () => ref.invalidate(salarySlipProvider(recordId)),
         builder: (slip) => SingleChildScrollView(
-          padding: EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16),
           child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 720),
               child: Card(
                 child: Padding(
-                  padding: EdgeInsets.all(24),
+                  padding: const EdgeInsets.all(24),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -55,12 +54,12 @@ class AdminSalarySlipScreen extends ConsumerWidget {
                       _InfoRow(label: 'Employee ID', value: '${slip.employee.id}'),
                       _InfoRow(label: 'Designation', value: slip.employee.designation),
                       _InfoRow(label: 'Department', value: slip.employee.department),
-                      SizedBox(height: 20),
+                      const SizedBox(height: 20),
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Expanded(child: _SlipColumn(title: 'Earnings', lines: slip.earnings, color: AppColors.success)),
-                          SizedBox(width: 16),
+                          const SizedBox(width: 16),
                           Expanded(child: _SlipColumn(title: 'Deductions', lines: slip.deductions, color: AppColors.error)),
                         ],
                       ),
@@ -93,7 +92,7 @@ class _InfoRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.only(bottom: 6),
       child: Row(
         children: [
           SizedBox(
@@ -124,10 +123,10 @@ class _SlipColumn extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(title, style: TextStyle(fontWeight: FontWeight.w700, color: color)),
-        SizedBox(height: 8),
+        const SizedBox(height: 8),
         ...lines.map(
           (line) => Padding(
-            padding: EdgeInsets.symmetric(vertical: 4),
+            padding: const EdgeInsets.symmetric(vertical: 4),
             child: Row(
               children: [
                 Expanded(
@@ -157,7 +156,7 @@ class _SummaryRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [

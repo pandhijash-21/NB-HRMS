@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../data/boq_repository.dart';
+import '../../data/project_repository.dart';
+import '../../data/work_order_repository.dart';
 import '../../domain/boq_models.dart';
 import '../../domain/project_models.dart';
-import '../boq_providers.dart';
-import '../project_providers.dart';
-import '../work_order_providers.dart';
+import '../../domain/work_order_models.dart';
 import '../widgets/boq_tasks_editor.dart';
 
-class BoqFormScreen extends ConsumerStatefulWidget {
+class BoqFormScreen extends StatefulWidget {
   const BoqFormScreen({super.key, this.id});
 
   final String? id;
@@ -18,18 +19,69 @@ class BoqFormScreen extends ConsumerStatefulWidget {
   bool get isEdit => id != null && id!.isNotEmpty;
 
   @override
-  ConsumerState<BoqFormScreen> createState() => _BoqFormScreenState();
+  State<BoqFormScreen> createState() => _BoqFormScreenState();
 }
 
-class _BoqFormScreenState extends ConsumerState<BoqFormScreen> {
+class _BoqFormScreenState extends State<BoqFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _boqNoCtrl = TextEditingController();
   final _titleCtrl = TextEditingController();
   String _rateSource = 'ESTIMATED_RATE';
   String? _projectId;
   List<ErpBoqTask> _tasks = [];
-  bool _hydrated = false;
+  List<ErpProject> _projects = [];
+  List<ErpActivity> _activities = [];
+  bool _loading = true;
+  String? _error;
   bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadData();
+    });
+  }
+
+  Future<void> _loadData() async {
+    try {
+      final projectRepo = context.read<ProjectRepository>();
+      final workRepo = context.read<WorkOrderRepository>();
+      final boqRepo = context.read<BoqRepository>();
+
+      final futures = await Future.wait([
+        projectRepo.list(),
+        workRepo.listActivities(),
+        if (widget.isEdit) boqRepo.getById(widget.id!),
+      ]);
+
+      if (!mounted) return;
+      final projects = futures[0] as List<ErpProject>;
+      final activities = futures[1] as List<ErpActivity>;
+
+      if (widget.isEdit && futures.length > 2) {
+        final b = futures[2] as ErpBoq;
+        _boqNoCtrl.text = b.boqNo;
+        _titleCtrl.text = b.title;
+        _rateSource = b.rateSource;
+        _projectId = b.projectId;
+        _tasks = b.tasks;
+      }
+
+      setState(() {
+        _projects = projects;
+        _activities = activities;
+        _loading = false;
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = e.toString();
+        });
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -59,13 +111,12 @@ class _BoqFormScreenState extends ConsumerState<BoqFormScreen> {
         'projectId': _projectId,
         'tasks': _tasks.map((t) => t.toJson()).toList(),
       };
-      final repo = ref.read(boqRepositoryProvider);
+      final repo = context.read<BoqRepository>();
       if (widget.isEdit) {
         await repo.update(widget.id!, body);
       } else {
         await repo.create(body);
       }
-      ref.invalidate(boqListProvider);
       if (mounted) context.go('/erp/boq');
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
@@ -76,27 +127,24 @@ class _BoqFormScreenState extends ConsumerState<BoqFormScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final projectsAsync = ref.watch(projectsListProvider);
-    final activitiesAsync = ref.watch(erpActivitiesProvider);
-    final detailAsync = widget.isEdit ? ref.watch(boqDetailProvider(widget.id!)) : null;
+    if (_loading) {
+      return Scaffold(
+        appBar: AppBar(
+          title: Text(widget.isEdit ? 'Edit BOQ' : 'BOQ Form'),
+          leading: const AppBackButton(fallbackLocation: '/erp/boq'),
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
 
-    if (widget.isEdit && detailAsync != null) {
-      ref.listen(boqDetailProvider(widget.id!), (prev, next) {
-        next.whenData((b) {
-          if (_hydrated || !mounted) return;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted || _hydrated) return;
-            setState(() {
-              _boqNoCtrl.text = b.boqNo;
-              _titleCtrl.text = b.title;
-              _rateSource = b.rateSource;
-              _projectId = b.projectId;
-              _tasks = b.tasks;
-              _hydrated = true;
-            });
-          });
-        });
-      });
+    if (_error != null) {
+      return Scaffold(
+        appBar: AppBar(
+          title: Text(widget.isEdit ? 'Edit BOQ' : 'BOQ Form'),
+          leading: const AppBackButton(fallbackLocation: '/erp/boq'),
+        ),
+        body: Center(child: Text(_error!)),
+      );
     }
 
     return Scaffold(
@@ -158,37 +206,29 @@ class _BoqFormScreenState extends ConsumerState<BoqFormScreen> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    projectsAsync.when(
-                      loading: () => const LinearProgressIndicator(),
-                      error: (e, _) => Text('$e'),
-                      data: (projects) => DropdownButtonFormField<String>(
-                        value: _projectId,
-                        decoration: _dec('Project', required: true),
-                        items: projects
-                            .map((ErpProject p) => DropdownMenuItem(
-                                  value: p.id,
-                                  child: Text(p.name),
-                                ))
-                            .toList(),
-                        onChanged: (v) => setState(() => _projectId = v),
-                        validator: (v) => v == null ? 'Required' : null,
-                      ),
+                    DropdownButtonFormField<String>(
+                      initialValue: _projectId,
+                      decoration: _dec('Project', required: true),
+                      items: _projects
+                          .map((ErpProject p) => DropdownMenuItem(
+                                value: p.id,
+                                child: Text(p.name),
+                              ))
+                          .toList(),
+                      onChanged: (v) => setState(() => _projectId = v),
+                      validator: (v) => v == null ? 'Required' : null,
                     ),
                   ],
                 ),
               ),
             ),
             const SizedBox(height: 16),
-            activitiesAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Text('$e'),
-              data: (activities) => BoqTasksEditor(
-                projectId: _projectId,
-                tasks: _tasks,
-                configActivities: activities,
-                showTaskIds: widget.isEdit,
-                onChanged: (t) => setState(() => _tasks = t),
-              ),
+            BoqTasksEditor(
+              projectId: _projectId,
+              tasks: _tasks,
+              configActivities: _activities,
+              showTaskIds: widget.isEdit,
+              onChanged: (t) => setState(() => _tasks = t),
             ),
           ],
         ),

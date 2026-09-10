@@ -1,29 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/router/app_back_button.dart';
-import '../../../auth/presentation/auth_providers.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../lookups/presentation/lookup_dropdown.dart';
+import '../../data/boq_repository.dart';
+import '../../data/dpr_repository.dart';
+import '../../data/project_repository.dart';
+import '../../data/work_order_repository.dart';
 import '../../domain/dpr_lookup_keys.dart';
 import '../../domain/dpr_models.dart';
+import '../../domain/project_models.dart';
+import '../../domain/resource_models.dart';
 import '../../domain/structure_models.dart';
 import '../../domain/work_order_models.dart';
-import '../boq_providers.dart';
-import '../dpr_providers.dart';
-import '../project_providers.dart';
-import '../work_order_providers.dart';
 
-class DprFormScreen extends ConsumerStatefulWidget {
+class DprFormScreen extends StatefulWidget {
   const DprFormScreen({super.key});
 
   @override
-  ConsumerState<DprFormScreen> createState() => _DprFormScreenState();
+  State<DprFormScreen> createState() => _DprFormScreenState();
 }
 
-class _DprFormScreenState extends ConsumerState<DprFormScreen> {
+class _DprFormScreenState extends State<DprFormScreen> {
   final _df = DateFormat('dd/MM/yyyy');
   DateTime _reportDate = DateTime.now();
   String? _projectId;
@@ -50,6 +52,15 @@ class _DprFormScreenState extends ConsumerState<DprFormScreen> {
   List<ErpDprMachineLine> _draftMachines = [];
   final List<ErpDprLine> _lines = [];
 
+  List<ErpProject> _projects = [];
+  List<ErpContractor> _contractors = [];
+  List<ErpActivity> _activities = [];
+  List<ErpMaterial> _materials = [];
+  List<ErpMachine> _machines = [];
+  List<ErpLabour> _labour = [];
+  final Map<String, List<ErpProjectTower>> _projectTowers = {};
+  bool _loadingInitial = true;
+
   int _resourceTab = 0; // 0 mat, 1 lab, 2 mac
   bool _saving = false;
 
@@ -59,9 +70,63 @@ class _DprFormScreenState extends ConsumerState<DprFormScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final name = ref.read(authNotifierProvider).user?.name;
+      final name = context.read<AuthBloc>().state.user?.name;
       if (name != null && _createdByCtrl.text.isEmpty) _createdByCtrl.text = name;
+      _loadInitialData();
     });
+  }
+
+  Future<void> _loadInitialData() async {
+    try {
+      final projectRepo = context.read<ProjectRepository>();
+      final workRepo = context.read<WorkOrderRepository>();
+      final boqRepo = context.read<BoqRepository>();
+      final res = await Future.wait([
+        projectRepo.list(),
+        workRepo.listContractors(),
+        workRepo.listActivities(),
+        boqRepo.listMaterials(),
+        boqRepo.listMachines(),
+        boqRepo.listLabour(),
+      ]);
+      if (mounted) {
+        setState(() {
+          _projects = res[0] as List<ErpProject>;
+          _contractors = res[1] as List<ErpContractor>;
+          _activities = res[2] as List<ErpActivity>;
+          _materials = res[3] as List<ErpMaterial>;
+          _machines = res[4] as List<ErpMachine>;
+          _labour = res[5] as List<ErpLabour>;
+          _loadingInitial = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _loadingInitial = false);
+        _toast('Failed to load initial data: $e');
+      }
+    }
+  }
+
+  Future<void> _onProjectChanged(String? pId) async {
+    setState(() {
+      _projectId = pId;
+      _towerId = null;
+      _floorNo = null;
+      _unitId = null;
+    });
+    if (pId != null && !_projectTowers.containsKey(pId)) {
+      try {
+        final towers = await context.read<ProjectRepository>().listTowers(pId);
+        if (mounted) {
+          setState(() {
+            _projectTowers[pId] = towers;
+          });
+        }
+      } catch (e) {
+        debugPrint('Failed to load towers for project $pId: $e');
+      }
+    }
   }
 
   @override
@@ -91,7 +156,7 @@ class _DprFormScreenState extends ConsumerState<DprFormScreen> {
 
   List<ErpProjectTower> get _towers {
     if (_projectId == null) return const [];
-    return ref.read(projectTowersProvider(_projectId!)).asData?.value ?? const [];
+    return _projectTowers[_projectId] ?? const [];
   }
 
   List<int> get _floors {
@@ -120,8 +185,7 @@ class _DprFormScreenState extends ConsumerState<DprFormScreen> {
   }
 
   List<ErpActivitySubtask> get _subtasks {
-    final acts = ref.read(erpActivitiesProvider).asData?.value ?? const <ErpActivity>[];
-    final act = acts.where((a) => a.id == _activityId).firstOrNull;
+    final act = _activities.where((a) => a.id == _activityId).firstOrNull;
     return act?.subtasks.where((s) => s.isActive).toList() ?? const [];
   }
 
@@ -159,7 +223,7 @@ class _DprFormScreenState extends ConsumerState<DprFormScreen> {
       return;
     }
     try {
-      final res = await ref.read(dprRepositoryProvider).getContractorResources(contractorId, date: date);
+      final res = await context.read<DprRepository>().getContractorResources(contractorId, date: date);
       final mats = (res['materials'] as List<ErpDprMaterialLine>?) ?? [];
       final macs = (res['machines'] as List<ErpDprMachineLine>?) ?? [];
       if (mounted) {
@@ -198,10 +262,8 @@ class _DprFormScreenState extends ConsumerState<DprFormScreen> {
       _toast('Total task completion % is required');
       return;
     }
-    final contractors = ref.read(erpContractorsProvider).asData?.value ?? [];
-    final activities = ref.read(erpActivitiesProvider).asData?.value ?? [];
-    final contractor = contractors.where((c) => c.id == _contractorId).firstOrNull;
-    final activity = activities.where((a) => a.id == _activityId).firstOrNull;
+    final contractor = _contractors.where((c) => c.id == _contractorId).firstOrNull;
+    final activity = _activities.where((a) => a.id == _activityId).firstOrNull;
     final subtask = _subtasks.where((s) => s.id == _subtaskId).firstOrNull;
     String? towerName;
     if (_towerId == _allTower) {
@@ -254,15 +316,12 @@ class _DprFormScreenState extends ConsumerState<DprFormScreen> {
     }
     setState(() => _saving = true);
     try {
-      await ref.read(dprRepositoryProvider).create({
+      await context.read<DprRepository>().create({
         'reportDate': _reportDate.toIso8601String(),
         'projectId': _projectId,
         'createdByName': _createdByCtrl.text.trim().isEmpty ? null : _createdByCtrl.text.trim(),
         'lines': _lines.map((l) => l.toJson()).toList(),
       });
-      ref.invalidate(dprListProvider);
-      ref.invalidate(erpMaterialsProvider);
-      ref.invalidate(erpMachinesProvider);
       if (mounted) context.go('/erp/dpr');
     } catch (e) {
       _toast('$e');
@@ -276,7 +335,7 @@ class _DprFormScreenState extends ConsumerState<DprFormScreen> {
   }
 
   Future<void> _addMaterialDialog() async {
-    final materials = ref.read(erpMaterialsProvider).asData?.value ?? [];
+    final materials = _materials;
     String? selectedId;
     final qtyCtrl = TextEditingController(text: '0');
     final remCtrl = TextEditingController();
@@ -294,7 +353,7 @@ class _DprFormScreenState extends ConsumerState<DprFormScreen> {
                 children: [
                   DropdownButtonFormField<String>(
                     isExpanded: true,
-                    value: selectedId,
+                    initialValue: selectedId,
                     decoration: _dec('Item Name', required: true),
                     items: materials
                         .where((x) => x.isActive)
@@ -351,7 +410,7 @@ class _DprFormScreenState extends ConsumerState<DprFormScreen> {
   }
 
   Future<void> _addLabourDialog() async {
-    final labour = ref.read(erpLabourProvider).asData?.value ?? [];
+    final labour = _labour;
     String? selectedId;
     final qtyCtrl = TextEditingController(text: '0');
     final remCtrl = TextEditingController();
@@ -367,7 +426,7 @@ class _DprFormScreenState extends ConsumerState<DprFormScreen> {
               children: [
                 DropdownButtonFormField<String>(
                   isExpanded: true,
-                  value: selectedId,
+                  initialValue: selectedId,
                   decoration: _dec('Labour Type', required: true),
                   items: labour
                       .where((x) => x.isActive)
@@ -412,7 +471,7 @@ class _DprFormScreenState extends ConsumerState<DprFormScreen> {
   }
 
   Future<void> _addMachineDialog() async {
-    final machines = ref.read(erpMachinesProvider).asData?.value ?? [];
+    final machines = _machines;
     String? selectedId;
     final qtyCtrl = TextEditingController(text: '0');
     final remCtrl = TextEditingController();
@@ -430,7 +489,7 @@ class _DprFormScreenState extends ConsumerState<DprFormScreen> {
                 children: [
                   DropdownButtonFormField<String>(
                     isExpanded: true,
-                    value: selectedId,
+                    initialValue: selectedId,
                     decoration: _dec('Machine', required: true),
                     items: machines
                         .where((x) => x.isActive)
@@ -484,14 +543,6 @@ class _DprFormScreenState extends ConsumerState<DprFormScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final projectsAsync = ref.watch(projectsListProvider);
-    final contractorsAsync = ref.watch(erpContractorsProvider);
-    final activitiesAsync = ref.watch(erpActivitiesProvider);
-    ref.watch(erpMaterialsProvider);
-    ref.watch(erpMachinesProvider);
-    ref.watch(erpLabourProvider);
-    if (_projectId != null) ref.watch(projectTowersProvider(_projectId!));
-
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
@@ -517,45 +568,38 @@ class _DprFormScreenState extends ConsumerState<DprFormScreen> {
                           spacing: 12,
                           runSpacing: 12,
                           children: [
-                              SizedBox(
-                                width: 200,
-                                child: InkWell(
-                                  onTap: () => _pickDate(
-                                    apply: (d) {
-                                      _reportDate = d;
-                                      if (_contractorId != null) {
-                                        _fetchContractorResources(_contractorId, d);
-                                      }
-                                    },
-                                    initial: _reportDate,
-                                  ),
-                                  child: InputDecorator(
-                                    decoration: _dec('Date'),
-                                    child: Text(_df.format(_reportDate)),
-                                  ),
+                            SizedBox(
+                              width: 200,
+                              child: InkWell(
+                                onTap: () => _pickDate(
+                                  apply: (d) {
+                                    _reportDate = d;
+                                    if (_contractorId != null) {
+                                      _fetchContractorResources(_contractorId, d);
+                                    }
+                                  },
+                                  initial: _reportDate,
+                                ),
+                                child: InputDecorator(
+                                  decoration: _dec('Date'),
+                                  child: Text(_df.format(_reportDate)),
                                 ),
                               ),
+                            ),
                             SizedBox(
                               width: 320,
-                              child: projectsAsync.when(
-                                loading: () => const LinearProgressIndicator(),
-                                error: (e, _) => Text('$e'),
-                                data: (projects) => DropdownButtonFormField<String>(
-                                  isExpanded: true,
-                                  value: _projectId,
-                                  decoration: _dec('Project', required: true),
-                                  hint: const Text('Select Project'),
-                                  items: projects
-                                      .map((p) => DropdownMenuItem(value: p.id, child: Text(p.name, overflow: TextOverflow.ellipsis)))
-                                      .toList(),
-                                  onChanged: (v) => setState(() {
-                                    _projectId = v;
-                                    _towerId = null;
-                                    _floorNo = null;
-                                    _unitId = null;
-                                  }),
-                                ),
-                              ),
+                              child: _loadingInitial
+                                  ? const LinearProgressIndicator()
+                                  : DropdownButtonFormField<String>(
+                                      isExpanded: true,
+                                      initialValue: _projectId,
+                                      decoration: _dec('Project', required: true),
+                                      hint: const Text('Select Project'),
+                                      items: _projects
+                                          .map((p) => DropdownMenuItem(value: p.id, child: Text(p.name, overflow: TextOverflow.ellipsis)))
+                                          .toList(),
+                                      onChanged: _onProjectChanged,
+                                    ),
                             ),
                             SizedBox(
                               width: 240,
@@ -574,45 +618,41 @@ class _DprFormScreenState extends ConsumerState<DprFormScreen> {
                         child: Column(
                           children: [
                             _grid([
-                              contractorsAsync.when(
-                                loading: () => const LinearProgressIndicator(),
-                                error: (e, _) => Text('$e'),
-                                data: (list) => DropdownButtonFormField<String>(
-                                  isExpanded: true,
-                                  value: _contractorId,
-                                  decoration: _dec('Contractor', required: true),
-                                  hint: const Text('Select Contractor'),
-                                  items: list
-                                      .where((c) => c.isActive)
-                                      .map((c) => DropdownMenuItem(value: c.id, child: Text(c.name, overflow: TextOverflow.ellipsis)))
-                                      .toList(),
-                                  onChanged: (v) {
-                                    setState(() => _contractorId = v);
-                                    _fetchContractorResources(v, _reportDate);
-                                  },
-                                ),
-                              ),
-                              activitiesAsync.when(
-                                loading: () => const LinearProgressIndicator(),
-                                error: (e, _) => Text('$e'),
-                                data: (list) => DropdownButtonFormField<String>(
-                                  isExpanded: true,
-                                  value: _activityId,
-                                  decoration: _dec('Activity', required: true),
-                                  hint: const Text('Select Activity'),
-                                  items: list
-                                      .where((a) => a.isActive)
-                                      .map((a) => DropdownMenuItem(value: a.id, child: Text(a.name, overflow: TextOverflow.ellipsis)))
-                                      .toList(),
-                                  onChanged: (v) => setState(() {
-                                    _activityId = v;
-                                    _subtaskId = null;
-                                  }),
-                                ),
-                              ),
+                              _loadingInitial
+                                  ? const LinearProgressIndicator()
+                                  : DropdownButtonFormField<String>(
+                                      isExpanded: true,
+                                      initialValue: _contractorId,
+                                      decoration: _dec('Contractor', required: true),
+                                      hint: const Text('Select Contractor'),
+                                      items: _contractors
+                                          .where((c) => c.isActive)
+                                          .map((c) => DropdownMenuItem(value: c.id, child: Text(c.name, overflow: TextOverflow.ellipsis)))
+                                          .toList(),
+                                      onChanged: (v) {
+                                        setState(() => _contractorId = v);
+                                        _fetchContractorResources(v, _reportDate);
+                                      },
+                                    ),
+                              _loadingInitial
+                                  ? const LinearProgressIndicator()
+                                  : DropdownButtonFormField<String>(
+                                      isExpanded: true,
+                                      initialValue: _activityId,
+                                      decoration: _dec('Activity', required: true),
+                                      hint: const Text('Select Activity'),
+                                      items: _activities
+                                          .where((a) => a.isActive)
+                                          .map((a) => DropdownMenuItem(value: a.id, child: Text(a.name, overflow: TextOverflow.ellipsis)))
+                                          .toList(),
+                                      onChanged: (v) => setState(() {
+                                        _activityId = v;
+                                        _subtaskId = null;
+                                      }),
+                                    ),
                               DropdownButtonFormField<String>(
                                 isExpanded: true,
-                                value: _subtaskId,
+                                initialValue: _subtaskId,
                                 decoration: _dec('Task'),
                                 hint: const Text('Select Work Details'),
                                 items: _subtasks
@@ -622,7 +662,7 @@ class _DprFormScreenState extends ConsumerState<DprFormScreen> {
                               ),
                               DropdownButtonFormField<String>(
                                 isExpanded: true,
-                                value: _towerId,
+                                initialValue: _towerId,
                                 decoration: _dec('Property Block'),
                                 hint: const Text('Select Block'),
                                 items: [
@@ -642,7 +682,7 @@ class _DprFormScreenState extends ConsumerState<DprFormScreen> {
                             _grid([
                               DropdownButtonFormField<int>(
                                 isExpanded: true,
-                                value: _floorNo,
+                                initialValue: _floorNo,
                                 decoration: _dec('Property Floor'),
                                 hint: const Text('Select Floor'),
                                 items: _floors.map((f) => DropdownMenuItem(value: f, child: Text('Floor $f'))).toList(),
@@ -655,7 +695,7 @@ class _DprFormScreenState extends ConsumerState<DprFormScreen> {
                               ),
                               DropdownButtonFormField<String>(
                                 isExpanded: true,
-                                value: _unitId,
+                                initialValue: _unitId,
                                 decoration: _dec('Property Unit'),
                                 hint: const Text('Select Unit'),
                                 items: _units
@@ -664,7 +704,7 @@ class _DprFormScreenState extends ConsumerState<DprFormScreen> {
                                 onChanged: (v) => setState(() => _unitId = v),
                               ),
                               lookupDropdown(
-                                ref: ref,
+                                context: context,
                                 category: DprLookupKeys.measurementUnit,
                                 label: 'Unit',
                                 value: _unitCode,
@@ -681,7 +721,7 @@ class _DprFormScreenState extends ConsumerState<DprFormScreen> {
                             const SizedBox(height: 12),
                             _grid([
                               lookupDropdown(
-                                ref: ref,
+                                context: context,
                                 category: DprLookupKeys.grade,
                                 label: 'Grade',
                                 value: _gradeCode,
@@ -693,7 +733,7 @@ class _DprFormScreenState extends ConsumerState<DprFormScreen> {
                                 decoration: _dec('Remarks', hint: 'Enter Remark'),
                               ),
                               lookupDropdown(
-                                ref: ref,
+                                context: context,
                                 category: DprLookupKeys.status,
                                 label: 'Status',
                                 value: _statusCode,
@@ -809,11 +849,25 @@ class _DprFormScreenState extends ConsumerState<DprFormScreen> {
               const SizedBox(width: 8),
               _tabChip('Machinery', 2),
               const Spacer(),
+              if (_resourceTab == 0)
+                FilledButton.icon(
+                  onPressed: _addMaterialDialog,
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Add Material'),
+                  style: FilledButton.styleFrom(backgroundColor: const Color(0xFF1e3a5f)),
+                ),
               if (_resourceTab == 1)
                 FilledButton.icon(
                   onPressed: _addLabourDialog,
                   icon: const Icon(Icons.add, size: 18),
                   label: const Text('Add Labour'),
+                  style: FilledButton.styleFrom(backgroundColor: const Color(0xFF1e3a5f)),
+                ),
+              if (_resourceTab == 2)
+                FilledButton.icon(
+                  onPressed: _addMachineDialog,
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Add Machine'),
                   style: FilledButton.styleFrom(backgroundColor: const Color(0xFF1e3a5f)),
                 ),
             ],
@@ -949,7 +1003,7 @@ class _DprFormScreenState extends ConsumerState<DprFormScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF7C3AED).withOpacity(0.12),
+                      color: const Color(0xFF7C3AED).withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: const Row(

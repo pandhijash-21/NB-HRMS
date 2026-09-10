@@ -1,19 +1,33 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/bloc/load_status.dart';
 import '../../../../core/router/app_back_button.dart';
-import '../../../auth/presentation/auth_providers.dart';
-import '../../presentation/admin_notifier.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
+import '../../data/admin_repository.dart';
 import '../../domain/admin_models.dart';
-import '../../../profile/presentation/profile_notifier.dart';
+import '../bloc/admin_approvals_bloc.dart';
 
-class AdminApprovalsScreen extends ConsumerWidget {
+class AdminApprovalsScreen extends StatelessWidget {
   const AdminApprovalsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final authState = ref.watch(authNotifierProvider);
+  Widget build(BuildContext context) {
+    return BlocProvider<AdminApprovalsBloc>(
+      create: (context) => AdminApprovalsBloc(
+        adminRepository: context.read<AdminRepository>(),
+      )..add(const AdminApprovalsLoadRequested()),
+      child: const _AdminApprovalsView(),
+    );
+  }
+}
+
+class _AdminApprovalsView extends StatelessWidget {
+  const _AdminApprovalsView();
+
+  @override
+  Widget build(BuildContext context) {
+    final authState = context.watch<AuthBloc>().state;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     // Gate screen with Role Check (Admin/HR only)
@@ -48,9 +62,6 @@ class AdminApprovalsScreen extends ConsumerWidget {
       );
     }
 
-    final activeFilter = ref.watch(approvalsFilterProvider);
-    final approvalsQueue = ref.watch(approvalsQueueProvider);
-
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
       appBar: AppBar(
@@ -67,10 +78,23 @@ class AdminApprovalsScreen extends ConsumerWidget {
           ),
         ),
         leading: const AppBackButton(),
+        actions: [
+          IconButton(
+            tooltip: 'Refresh Queue',
+            icon: Icon(
+              Icons.refresh_rounded,
+              color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF212F3D),
+            ),
+            onPressed: () => context
+                .read<AdminApprovalsBloc>()
+                .add(const AdminApprovalsRefreshRequested()),
+          ),
+          const SizedBox(width: 8),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1.5),
           child: Container(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
             height: 1.5,
           ),
         ),
@@ -88,71 +112,104 @@ class AdminApprovalsScreen extends ConsumerWidget {
             ),
           );
         },
-        child: Column(
-          children: [
-            _buildFilterTabs(context, ref, activeFilter),
-            Expanded(
-              child: approvalsQueue.when(
-                data: (list) {
-                  if (list.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.assignment_turned_in_rounded,
-                            size: 64,
-                            color: isDark ? Colors.white10 : Colors.black12,
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'No change requests in this queue.',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: isDark ? Colors.white30 : const Color(0xFF607D8B).withOpacity(0.6),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
-                  return ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-                    itemCount: list.length,
-                    itemBuilder: (ctx, i) {
-                      final req = list[i];
-                      return _buildRequestCard(context, ref, req);
-                    },
-                  );
-                },
-                loading: () => const Center(
-                  child: CircularProgressIndicator(color: Color(0xFFC5A059)),
+        child: BlocConsumer<AdminApprovalsBloc, AdminApprovalsState>(
+          listener: (context, state) {
+            if (state.actionSuccessMessage != null) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(state.actionSuccessMessage!)),
+              );
+            }
+            if (state.errorMessage != null) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(state.errorMessage!),
+                  backgroundColor: Colors.red,
                 ),
-                error: (err, _) => Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.error_outline_rounded, size: 48, color: Colors.red),
-                      const SizedBox(height: 12),
-                      Text('Failed to load approvals: $err', style: const TextStyle(fontWeight: FontWeight.w600)),
-                      const SizedBox(height: 16),
-                      FilledButton(
-                        onPressed: () => ref.invalidate(approvalsQueueProvider),
-                        child: const Text('Retry'),
-                      ),
-                    ],
+              );
+            }
+          },
+          builder: (context, state) {
+            final list = state.requests;
+            return Column(
+              children: [
+                _buildFilterTabs(context, state.filterStatus),
+                Expanded(
+                  child: Builder(
+                    builder: (context) {
+                      if (state.status == LoadStatus.loading && list.isEmpty) {
+                        return const Center(
+                          child: CircularProgressIndicator(color: Color(0xFFC5A059)),
+                        );
+                      }
+                      if (state.status == LoadStatus.failure && list.isEmpty) {
+                        return Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.error_outline_rounded, size: 48, color: Colors.red),
+                              const SizedBox(height: 12),
+                              Text(
+                                'Failed to load approvals: ${state.errorMessage ?? ''}',
+                                style: const TextStyle(fontWeight: FontWeight.w600),
+                              ),
+                              const SizedBox(height: 16),
+                              FilledButton(
+                                onPressed: () => context
+                                    .read<AdminApprovalsBloc>()
+                                    .add(const AdminApprovalsRefreshRequested()),
+                                child: const Text('Retry'),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+
+                      if (list.isEmpty) {
+                        return Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.assignment_turned_in_rounded,
+                                size: 64,
+                                color: isDark ? Colors.white10 : Colors.black12,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'No change requests in this queue.',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color: isDark
+                                      ? Colors.white30
+                                      : const Color(0xFF607D8B).withValues(alpha: 0.6),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+
+                      return ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                        itemCount: list.length,
+                        itemBuilder: (ctx, i) {
+                          final req = list[i];
+                          return _buildRequestCard(context, req);
+                        },
+                      );
+                    },
                   ),
                 ),
-              ),
-            ),
-          ],
+              ],
+            );
+          },
         ),
       ),
     );
   }
 
-  Widget _buildFilterTabs(BuildContext context, WidgetRef ref, String activeFilter) {
+  Widget _buildFilterTabs(BuildContext context, String activeFilter) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
@@ -160,7 +217,7 @@ class AdminApprovalsScreen extends ConsumerWidget {
         color: isDark ? const Color(0xFF1E1B18) : Colors.white,
         border: Border(
           bottom: BorderSide(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.12) : const Color(0xFFCFD8DC),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.12) : const Color(0xFFCFD8DC),
             width: 1.5,
           ),
         ),
@@ -171,26 +228,28 @@ class AdminApprovalsScreen extends ConsumerWidget {
         physics: const BouncingScrollPhysics(),
         child: Row(
           children: [
-            _buildTabButton(context, ref, 'PENDING', activeFilter == 'PENDING'),
+            _buildTabButton(context, 'PENDING', activeFilter == 'PENDING'),
             const SizedBox(width: 8),
-            _buildTabButton(context, ref, 'APPROVED', activeFilter == 'APPROVED'),
+            _buildTabButton(context, 'APPROVED', activeFilter == 'APPROVED'),
             const SizedBox(width: 8),
-            _buildTabButton(context, ref, 'REJECTED', activeFilter == 'REJECTED'),
+            _buildTabButton(context, 'REJECTED', activeFilter == 'REJECTED'),
             const SizedBox(width: 8),
-            _buildTabButton(context, ref, 'ALL', activeFilter == 'ALL'),
+            _buildTabButton(context, 'ALL', activeFilter == 'ALL'),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildTabButton(BuildContext context, WidgetRef ref, String label, bool isSelected) {
+  Widget _buildTabButton(BuildContext context, String label, bool isSelected) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Container(
+    return SizedBox(
       height: 36,
       child: TextButton(
-        onPressed: () => ref.read(approvalsFilterProvider.notifier).set(label),
+        onPressed: () => context
+            .read<AdminApprovalsBloc>()
+            .add(AdminApprovalsFilterChanged(label)),
         style: TextButton.styleFrom(
           backgroundColor: isSelected
               ? (isDark ? const Color(0xFFC5A059) : const Color(0xFF263238))
@@ -203,7 +262,7 @@ class AdminApprovalsScreen extends ConsumerWidget {
             side: BorderSide(
               color: isSelected
                   ? Colors.transparent
-                  : (isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC)),
+                  : (isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC)),
             ),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -220,7 +279,7 @@ class AdminApprovalsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildRequestCard(BuildContext context, WidgetRef ref, ChangeRequest req) {
+  Widget _buildRequestCard(BuildContext context, ChangeRequest req) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final statusColor = _getStatusColor(req.status);
 
@@ -231,7 +290,7 @@ class AdminApprovalsScreen extends ConsumerWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
           width: 1.5,
         ),
       ),
@@ -254,7 +313,7 @@ class AdminApprovalsScreen extends ConsumerWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.12),
+                    color: statusColor.withValues(alpha: 0.12),
                     border: Border.all(color: statusColor, width: 1.2),
                     borderRadius: BorderRadius.circular(30),
                   ),
@@ -288,7 +347,7 @@ class AdminApprovalsScreen extends ConsumerWidget {
             Divider(
               height: 24,
               thickness: 1.2,
-              color: isDark ? const Color(0xFFC5A059).withOpacity(0.12) : Colors.black.withOpacity(0.06),
+              color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.06),
             ),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -298,7 +357,7 @@ class AdminApprovalsScreen extends ConsumerWidget {
                   style: OutlinedButton.styleFrom(
                     foregroundColor: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
                     side: BorderSide(
-                      color: isDark ? const Color(0xFFC5A059).withOpacity(0.4) : const Color(0xFFCFD8DC),
+                      color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.4) : const Color(0xFFCFD8DC),
                     ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
@@ -312,14 +371,14 @@ class AdminApprovalsScreen extends ConsumerWidget {
                   Row(
                     children: [
                       TextButton.icon(
-                        onPressed: () => _confirmAction(context, ref, req, approve: false),
+                        onPressed: () => _confirmAction(context, req, approve: false),
                         style: TextButton.styleFrom(foregroundColor: Colors.red),
                         icon: const Icon(Icons.close_rounded, size: 14),
                         label: const Text('Reject', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
                       ),
                       const SizedBox(width: 8),
                       ElevatedButton.icon(
-                        onPressed: () => _confirmAction(context, ref, req, approve: true),
+                        onPressed: () => _confirmAction(context, req, approve: true),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.green,
                           foregroundColor: Colors.white,
@@ -354,7 +413,7 @@ class AdminApprovalsScreen extends ConsumerWidget {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
           side: BorderSide(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
             width: 1.5,
           ),
         ),
@@ -395,9 +454,9 @@ class AdminApprovalsScreen extends ConsumerWidget {
                                 child: Container(
                                   padding: const EdgeInsets.all(8),
                                   decoration: BoxDecoration(
-                                    color: Colors.red.withOpacity(0.12),
+                                    color: Colors.red.withValues(alpha: 0.12),
                                     borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(color: Colors.red.withOpacity(0.2)),
+                                    border: Border.all(color: Colors.red.withValues(alpha: 0.2)),
                                   ),
                                   child: Text(
                                     'Old: $oldVal', 
@@ -410,9 +469,9 @@ class AdminApprovalsScreen extends ConsumerWidget {
                                 child: Container(
                                   padding: const EdgeInsets.all(8),
                                   decoration: BoxDecoration(
-                                    color: Colors.green.withOpacity(0.12),
+                                    color: Colors.green.withValues(alpha: 0.12),
                                     borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(color: Colors.green.withOpacity(0.2)),
+                                    border: Border.all(color: Colors.green.withValues(alpha: 0.2)),
                                   ),
                                   child: Text(
                                     'New: $newVal', 
@@ -426,7 +485,7 @@ class AdminApprovalsScreen extends ConsumerWidget {
                           Divider(
                             height: 1,
                             thickness: 1,
-                            color: isDark ? const Color(0xFFC5A059).withOpacity(0.1) : Colors.black.withOpacity(0.04),
+                            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.04),
                           ),
                         ],
                       ),
@@ -450,7 +509,7 @@ class AdminApprovalsScreen extends ConsumerWidget {
     );
   }
 
-  void _confirmAction(BuildContext context, WidgetRef ref, ChangeRequest req, {required bool approve}) {
+  void _confirmAction(BuildContext context, ChangeRequest req, {required bool approve}) {
     final actionName = approve ? 'Approve' : 'Reject';
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -461,7 +520,7 @@ class AdminApprovalsScreen extends ConsumerWidget {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
           side: BorderSide(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
             width: 1.5,
           ),
         ),
@@ -490,28 +549,16 @@ class AdminApprovalsScreen extends ConsumerWidget {
             ),
           ),
           FilledButton(
-            onPressed: () async {
+            onPressed: () {
               Navigator.pop(ctx);
-              try {
-                final repo = ref.read(adminRepositoryProvider);
-                if (approve) {
-                  await repo.approveRequest(req.id);
-                  ref.invalidate(profileProvider);
-                } else {
-                  await repo.rejectRequest(req.id);
-                }
-                ref.invalidate(approvalsQueueProvider);
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Request successfully ${approve ? "approved" : "rejected"}')),
-                  );
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Action failed: $e'), backgroundColor: Colors.red),
-                  );
-                }
+              if (approve) {
+                context
+                    .read<AdminApprovalsBloc>()
+                    .add(AdminApprovalsApproveRequested(req.id));
+              } else {
+                context
+                    .read<AdminApprovalsBloc>()
+                    .add(AdminApprovalsRejectRequested(req.id));
               }
             },
             style: FilledButton.styleFrom(

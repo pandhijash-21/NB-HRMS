@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -135,7 +135,7 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
                 style: OutlinedButton.styleFrom(
                   foregroundColor: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
                   side: BorderSide(
-                    color: isDark ? const Color(0xFFC5A059).withOpacity(0.4) : const Color(0xFF263238).withOpacity(0.5),
+                    color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.4) : const Color(0xFF263238).withValues(alpha: 0.5),
                     width: 1.2,
                   ),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -150,7 +150,7 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1.5),
           child: Container(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
             height: 1.5,
           ),
         ),
@@ -230,7 +230,7 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
         color: isDark ? const Color(0xFF1E1B18) : Colors.white,
         border: Border(
           bottom: BorderSide(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.12) : const Color(0xFFCFD8DC),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.12) : const Color(0xFFCFD8DC),
             width: 1.5,
           ),
         ),
@@ -242,7 +242,7 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               border: Border.all(
-                color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFF263238).withOpacity(0.15),
+                color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFF263238).withValues(alpha: 0.15),
                 width: 1.5,
               ),
             ),
@@ -286,7 +286,7 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
                         color: isDark ? const Color(0xFF2B2722) : const Color(0xFFF1F5F9),
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(
-                          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
                         ),
                       ),
                       child: Text(
@@ -302,7 +302,7 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                       decoration: BoxDecoration(
-                        color: statusColor.withOpacity(0.12),
+                        color: statusColor.withValues(alpha: 0.12),
                         border: Border.all(color: statusColor, width: 1.2),
                         borderRadius: BorderRadius.circular(30),
                       ),
@@ -337,7 +337,7 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
           width: 1.5,
         ),
       ),
@@ -398,9 +398,9 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
                         borderRadius: BorderRadius.circular(12),
                         border: Border(
                           left: const BorderSide(color: Colors.green, width: 4),
-                          top: BorderSide(color: isDark ? const Color(0xFFC5A059).withOpacity(0.1) : const Color(0xFFCFD8DC)),
-                          right: BorderSide(color: isDark ? const Color(0xFFC5A059).withOpacity(0.1) : const Color(0xFFCFD8DC)),
-                          bottom: BorderSide(color: isDark ? const Color(0xFFC5A059).withOpacity(0.1) : const Color(0xFFCFD8DC)),
+                          top: BorderSide(color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.1) : const Color(0xFFCFD8DC)),
+                          right: BorderSide(color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.1) : const Color(0xFFCFD8DC)),
+                          bottom: BorderSide(color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.1) : const Color(0xFFCFD8DC)),
                         ),
                       ),
                       child: Row(
@@ -470,14 +470,14 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
   Widget _buildActionButton(BuildContext context, String label, VoidCallback onTap) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Container(
+    return SizedBox(
       height: 34,
       child: OutlinedButton(
         onPressed: onTap,
         style: OutlinedButton.styleFrom(
           foregroundColor: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
           side: BorderSide(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.4) : const Color(0xFFCFD8DC),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.4) : const Color(0xFFCFD8DC),
             width: 1.2,
           ),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -499,7 +499,7 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
         color: isDark ? const Color(0xFF1E1B18) : Colors.white,
         border: Border(
           bottom: BorderSide(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.12) : const Color(0xFFCFD8DC),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.12) : const Color(0xFFCFD8DC),
             width: 1.5,
           ),
         ),
@@ -529,7 +529,7 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
           side: BorderSide(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
             width: 1.5,
           ),
         ),
@@ -586,7 +586,7 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
                             const SizedBox(height: 2),
                             Text(
                               'Effective: ${_formatDate(log.effectiveFrom)} - ${log.effectiveTo != null ? _formatDate(log.effectiveTo!) : "Present"}',
-                              style: TextStyle(color: isDark ? Colors.white30 : const Color(0xFF607D8B).withOpacity(0.6), fontSize: 11),
+                              style: TextStyle(color: isDark ? Colors.white30 : const Color(0xFF607D8B).withValues(alpha: 0.6), fontSize: 11),
                             ),
                             if (log.reason != null && log.reason!.isNotEmpty) ...[
                               const SizedBox(height: 4),
@@ -600,7 +600,7 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
                       ),
                       Divider(
                         height: 1,
-                        color: isDark ? const Color(0xFFC5A059).withOpacity(0.12) : Colors.black.withOpacity(0.06),
+                        color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.06),
                       ),
                       const SizedBox(height: 8),
                     ],
@@ -640,7 +640,7 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
           side: BorderSide(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
             width: 1.5,
           ),
         ),
@@ -730,7 +730,7 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
             side: BorderSide(
-              color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC),
+              color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
               width: 1.5,
             ),
           ),
@@ -751,7 +751,7 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 isExpanded: true,
-                value: selectedId,
+                initialValue: selectedId,
                 decoration: const InputDecoration(
                   labelText: 'Transfer to institute *',
                   border: OutlineInputBorder(),
@@ -874,7 +874,7 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
             side: BorderSide(
-              color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC),
+              color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
               width: 1.5,
             ),
           ),
@@ -895,7 +895,7 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 isExpanded: true,
-                value: selectedName,
+                initialValue: selectedName,
                 decoration: const InputDecoration(
                   labelText: 'New designation *',
                   border: OutlineInputBorder(),

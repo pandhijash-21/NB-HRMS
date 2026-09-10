@@ -1,24 +1,42 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/platform_file_picker.dart';
+import '../../../../core/widgets/bloc_async_body.dart';
 import '../../../../core/widgets/header_action_button.dart';
+import '../../data/leave_repository.dart';
 import '../../domain/leave_models.dart';
+import '../bloc/admin_leave_bloc.dart';
 import '../leave_providers.dart';
 import '../widgets/leave_shared_widgets.dart';
 
-class AdminLeavesScreen extends ConsumerStatefulWidget {
+class AdminLeavesScreen extends StatelessWidget {
   const AdminLeavesScreen({super.key});
 
   @override
-  ConsumerState<AdminLeavesScreen> createState() => _AdminLeavesScreenState();
+  Widget build(BuildContext context) {
+    return BlocProvider<AdminLeaveBloc>(
+      create: (ctx) => AdminLeaveBloc(
+        leaveRepository: ctx.read<LeaveRepository>(),
+      )..add(const AdminLeaveLoadRequested()),
+      child: const _AdminLeavesView(),
+    );
+  }
 }
 
-class _AdminLeavesScreenState extends ConsumerState<AdminLeavesScreen> {
+class _AdminLeavesView extends StatefulWidget {
+  const _AdminLeavesView();
+
+  @override
+  State<_AdminLeavesView> createState() => _AdminLeavesViewState();
+}
+
+class _AdminLeavesViewState extends State<_AdminLeavesView> {
   final _searchCtrl = TextEditingController();
 
   @override
@@ -29,269 +47,293 @@ class _AdminLeavesScreenState extends ConsumerState<AdminLeavesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final filters = ref.watch(adminApplicationsFilterProvider);
-    final appsAsync = ref.watch(adminApplicationsProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bloc = context.read<AdminLeaveBloc>();
 
-    return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: Text(
-          'Leave Admin',
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: 20,
-            color: isDark ? Colors.white : const Color(0xFF212F3D),
-            letterSpacing: -0.5,
-          ),
-        ),
-        leading: const AppBackButton(fallbackLocation: '/leave'),
-        actions: [
-          HeaderActionButton(
-            tooltip: 'Leave Approvals',
-            label: 'Approvals',
-            icon: const Icon(Icons.rule_rounded, size: 18, color: Color(0xFFC5A059)),
-            onPressed: () => context.go('/approvals'),
-          ),
-          HeaderActionButton(
-            tooltip: 'Settings',
-            label: 'Settings',
-            icon: const Icon(Icons.settings_rounded, size: 18, color: Color(0xFFC5A059)),
-            onPressed: () => context.go('/admin/leaves/settings'),
-          ),
-          HeaderActionButton(
-            tooltip: 'Holidays',
-            label: 'Holidays',
-            icon: const Icon(Icons.event_rounded, size: 18, color: Color(0xFFC5A059)),
-            onPressed: () => context.go('/admin/leaves/holidays'),
-          ),
-          HeaderActionButton(
-            tooltip: 'Apply on behalf',
-            label: 'Apply on behalf',
-            icon: const Icon(Icons.person_add_alt_1_rounded, size: 18, color: Color(0xFFC5A059)),
-            onPressed: () => showAdminApplyOnBehalfDialog(context, ref),
-          ),
-          const SizedBox(width: 8),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1.5),
-          child: Container(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
-            height: 1.5,
-          ),
-        ),
-      ),
-      body: TweenAnimationBuilder<double>(
-        duration: const Duration(milliseconds: 500),
-        curve: Curves.easeOutCubic,
-        tween: Tween(begin: 0.0, end: 1.0),
-        builder: (context, value, child) {
-          return Transform.translate(
-            offset: Offset(0.0, 30.0 * (1.0 - value)),
-            child: Opacity(opacity: value, child: child),
+    return BlocConsumer<AdminLeaveBloc, AdminLeaveState>(
+      listener: (context, state) {
+        if (state.errorMessage != null && state.errorMessage!.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.errorMessage!),
+              backgroundColor: AppColors.error,
+            ),
           );
-        },
-        child: Column(
-          children: [
-            Container(
-              margin: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF1E1B18) : Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
-                  width: 1.5,
-                ),
+        }
+        if (state.actionSuccessMessage != null &&
+            state.actionSuccessMessage!.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.actionSuccessMessage!),
+              backgroundColor: AppColors.success,
+            ),
+          );
+        }
+      },
+      builder: (context, state) {
+        return Scaffold(
+          backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
+          appBar: AppBar(
+            backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            title: Text(
+              'Leave Admin',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 20,
+                color: isDark ? Colors.white : const Color(0xFF212F3D),
+                letterSpacing: -0.5,
               ),
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  TextField(
-                    controller: _searchCtrl,
-                    decoration: InputDecoration(
-                      labelText: 'Search name, code, app no, or ID',
-                      labelStyle: const TextStyle(fontWeight: FontWeight.w600),
-                      prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFFC5A059), size: 18),
-                      suffixIcon: _searchCtrl.text.isEmpty
-                          ? null
-                          : IconButton(
-                              icon: const Icon(Icons.clear_rounded, size: 18),
-                              onPressed: () {
-                                _searchCtrl.clear();
-                                ref.read(adminApplicationsFilterProvider.notifier).setSearch('');
-                                setState(() {});
+            ),
+            leading: const AppBackButton(fallbackLocation: '/leave'),
+            actions: [
+              HeaderActionButton(
+                tooltip: 'Leave Approvals',
+                label: 'Approvals',
+                icon: const Icon(Icons.rule_rounded, size: 18, color: Color(0xFFC5A059)),
+                onPressed: () => context.go('/approvals'),
+              ),
+              HeaderActionButton(
+                tooltip: 'Settings',
+                label: 'Settings',
+                icon: const Icon(Icons.settings_rounded, size: 18, color: Color(0xFFC5A059)),
+                onPressed: () => context.go('/admin/leaves/settings'),
+              ),
+              HeaderActionButton(
+                tooltip: 'Holidays',
+                label: 'Holidays',
+                icon: const Icon(Icons.event_rounded, size: 18, color: Color(0xFFC5A059)),
+                onPressed: () => context.go('/admin/leaves/holidays'),
+              ),
+              HeaderActionButton(
+                tooltip: 'Apply on behalf',
+                label: 'Apply on behalf',
+                icon: const Icon(Icons.person_add_alt_1_rounded, size: 18, color: Color(0xFFC5A059)),
+                onPressed: () => showAdminApplyOnBehalfDialog(context, bloc: bloc),
+              ),
+              const SizedBox(width: 8),
+            ],
+            bottom: PreferredSize(
+              preferredSize: const Size.fromHeight(1.5),
+              child: Container(
+                color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
+                height: 1.5,
+              ),
+            ),
+          ),
+          body: TweenAnimationBuilder<double>(
+            duration: const Duration(milliseconds: 500),
+            curve: Curves.easeOutCubic,
+            tween: Tween(begin: 0.0, end: 1.0),
+            builder: (context, value, child) {
+              return Transform.translate(
+                offset: Offset(0.0, 30.0 * (1.0 - value)),
+                child: Opacity(opacity: value, child: child),
+              );
+            },
+            child: Column(
+              children: [
+                Container(
+                  margin: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1E1B18) : Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
+                      width: 1.5,
+                    ),
+                  ),
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      TextField(
+                        controller: _searchCtrl,
+                        decoration: InputDecoration(
+                          labelText: 'Search name, code, app no, or ID',
+                          labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+                          prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFFC5A059), size: 18),
+                          suffixIcon: _searchCtrl.text.isEmpty
+                              ? null
+                              : IconButton(
+                                  icon: const Icon(Icons.clear_rounded, size: 18),
+                                  onPressed: () {
+                                    _searchCtrl.clear();
+                                    bloc.add(const AdminLeaveSearchChanged(''));
+                                    setState(() {});
+                                  },
+                                ),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(
+                              color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(color: Color(0xFFC5A059), width: 1.5),
+                          ),
+                        ),
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                        onChanged: (v) {
+                          bloc.add(AdminLeaveSearchChanged(v));
+                          setState(() {});
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              initialValue: state.filterStatus.isEmpty ? '' : state.filterStatus,
+                              dropdownColor: isDark ? const Color(0xFF2B2722) : Colors.white,
+                              decoration: InputDecoration(
+                                labelText: 'Status',
+                                labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: BorderSide(
+                                    color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
+                                  ),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: const BorderSide(color: Color(0xFFC5A059), width: 1.5),
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                              ),
+                              items: const [
+                                DropdownMenuItem(value: '', child: Text('All')),
+                                DropdownMenuItem(value: 'PENDING', child: Text('Pending')),
+                                DropdownMenuItem(value: 'APPROVED', child: Text('Approved')),
+                                DropdownMenuItem(value: 'REJECTED', child: Text('Rejected')),
+                                DropdownMenuItem(value: 'CANCELLED', child: Text('Cancelled')),
+                              ],
+                              onChanged: (v) => bloc.add(AdminLeaveStatusChanged(v ?? '')),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: DropdownButtonFormField<int?>(
+                              initialValue: state.year,
+                              dropdownColor: isDark ? const Color(0xFF2B2722) : Colors.white,
+                              decoration: InputDecoration(
+                                labelText: 'Year',
+                                labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: BorderSide(
+                                    color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
+                                  ),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: const BorderSide(color: Color(0xFFC5A059), width: 1.5),
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                              ),
+                              items: List.generate(5, (i) {
+                                final y = DateTime.now().year - 2 + i;
+                                return DropdownMenuItem<int?>(
+                                  value: y,
+                                  child: Text('$y'),
+                                );
+                              }),
+                              onChanged: (v) => bloc.add(AdminLeaveYearChanged(v ?? DateTime.now().year)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: BlocAsyncBody<List<LeaveApplication>>(
+                    status: state.status,
+                    data: state.applications,
+                    errorMessage: state.errorMessage,
+                    emptyMessage: 'No leave applications.',
+                    onRetry: () => bloc.add(const AdminLeaveRefreshRequested()),
+                    builder: (items) {
+                      if (items.isEmpty) {
+                        return Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(40),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.event_busy_rounded, size: 64, color: isDark ? Colors.white10 : Colors.black12),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'No leave applications.',
+                                  style: TextStyle(
+                                    color: isDark ? Colors.white30 : const Color(0xFF607D8B).withValues(alpha: 0.6),
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 15,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }
+                      return Column(
+                        children: [
+                          Expanded(
+                            child: ListView.builder(
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              itemCount: items.length,
+                              itemBuilder: (ctx, i) {
+                                final app = items[i];
+                                final isPending = app.status.toUpperCase() == 'PENDING';
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
+                                  child: LeaveApplicationCard(
+                                    application: app,
+                                    subtitle: app.employee?.fullName ??
+                                        (app.employee != null ? 'Employee #${app.employee!.id}' : null),
+                                    trailing: isPending
+                                        ? TextButton(
+                                            onPressed: () => context.go('/approvals'),
+                                            child: const Text('Review in Approvals'),
+                                          )
+                                        : null,
+                                  ),
+                                );
                               },
                             ),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide(
-                          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
-                        ),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: Color(0xFFC5A059), width: 1.5),
-                      ),
-                    ),
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                    onChanged: (v) {
-                      ref.read(adminApplicationsFilterProvider.notifier).setSearch(v);
-                      setState(() {});
+                          ),
+                          _PagingBar(
+                            page: state.page,
+                            pageSize: state.limit,
+                            total: state.totalApplications,
+                            onPrev: state.page > 0
+                                ? () => bloc.add(AdminLeavePageChanged(state.page - 1))
+                                : null,
+                            onNext: (state.page + 1) * state.limit < state.totalApplications
+                                ? () => bloc.add(AdminLeavePageChanged(state.page + 1))
+                                : null,
+                          ),
+                        ],
+                      );
                     },
                   ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          initialValue: filters.status.isEmpty ? '' : filters.status,
-                          dropdownColor: isDark ? const Color(0xFF2B2722) : Colors.white,
-                          decoration: InputDecoration(
-                            labelText: 'Status',
-                            labelStyle: const TextStyle(fontWeight: FontWeight.w600),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: BorderSide(
-                                color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
-                              ),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: const BorderSide(color: Color(0xFFC5A059), width: 1.5),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                          ),
-                          items: const [
-                            DropdownMenuItem(value: '', child: Text('All')),
-                            DropdownMenuItem(value: 'PENDING', child: Text('Pending')),
-                            DropdownMenuItem(value: 'APPROVED', child: Text('Approved')),
-                            DropdownMenuItem(value: 'REJECTED', child: Text('Rejected')),
-                            DropdownMenuItem(value: 'CANCELLED', child: Text('Cancelled')),
-                          ],
-                          onChanged: (v) => ref.read(adminApplicationsFilterProvider.notifier).setStatus(v ?? ''),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: DropdownButtonFormField<int?>(
-                          initialValue: filters.year,
-                          dropdownColor: isDark ? const Color(0xFF2B2722) : Colors.white,
-                          decoration: InputDecoration(
-                            labelText: 'Year',
-                            labelStyle: const TextStyle(fontWeight: FontWeight.w600),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: BorderSide(
-                                color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
-                              ),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                              borderSide: const BorderSide(color: Color(0xFFC5A059), width: 1.5),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                          ),
-                          items: List.generate(5, (i) {
-                            final y = DateTime.now().year - 2 + i;
-                            return DropdownMenuItem<int?>(
-                              value: y,
-                              child: Text('$y'),
-                            );
-                          }),
-                          onChanged: (v) => ref.read(adminApplicationsFilterProvider.notifier).setYear(v),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-            Expanded(
-              child: LeaveAsyncBody<LeaveApplicationsPage>(
-                value: appsAsync,
-                emptyMessage: 'No leave applications.',
-                onRetry: () => ref.invalidate(adminApplicationsProvider),
-                builder: (page) {
-                  if (page.items.isEmpty) {
-                    return Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(40),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.event_busy_rounded, size: 64, color: isDark ? Colors.white10 : Colors.black12),
-                            const SizedBox(height: 16),
-                            Text(
-                              'No leave applications.',
-                              style: TextStyle(
-                                color: isDark ? Colors.white30 : const Color(0xFF607D8B).withOpacity(0.6),
-                                fontWeight: FontWeight.w600,
-                                fontSize: 15,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }
-                  return Column(
-                    children: [
-                      Expanded(
-                        child: ListView.builder(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          itemCount: page.items.length,
-                          itemBuilder: (ctx, i) {
-                            final app = page.items[i];
-                            final isPending = app.status.toUpperCase() == 'PENDING';
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: LeaveApplicationCard(
-                                application: app,
-                                subtitle: app.employee?.fullName ??
-                                    (app.employee != null ? 'Employee #${app.employee!.id}' : null),
-                                trailing: isPending
-                                    ? TextButton(
-                                        onPressed: () => context.go('/approvals'),
-                                        child: const Text('Review in Approvals'),
-                                      )
-                                    : null,
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                      _PagingBar(
-                        page: filters.page,
-                        pageSize: filters.limit,
-                        total: page.total,
-                        onPrev: filters.page > 0
-                            ? () => ref.read(adminApplicationsFilterProvider.notifier).setPage(filters.page - 1)
-                            : null,
-                        onNext: (filters.page + 1) * filters.limit < page.total
-                            ? () => ref.read(adminApplicationsFilterProvider.notifier).setPage(filters.page + 1)
-                            : null,
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => showAdminApplyOnBehalfDialog(context, ref),
-        backgroundColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
-        foregroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
-        icon: const Icon(Icons.person_add_alt_1_rounded),
-        label: const Text('Apply on behalf', style: TextStyle(fontWeight: FontWeight.w800)),
-      ),
+          ),
+          floatingActionButton: FloatingActionButton.extended(
+            onPressed: () => showAdminApplyOnBehalfDialog(context, bloc: bloc),
+            backgroundColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+            foregroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
+            icon: const Icon(Icons.person_add_alt_1_rounded),
+            label: const Text('Apply on behalf', style: TextStyle(fontWeight: FontWeight.w800)),
+          ),
+        );
+      },
     );
   }
 }
@@ -323,7 +365,7 @@ class _PagingBar extends StatelessWidget {
         color: isDark ? const Color(0xFF1E1B18) : Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
           width: 1.5,
         ),
       ),
@@ -352,7 +394,7 @@ class _PagingBar extends StatelessWidget {
             color: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
             style: IconButton.styleFrom(
               backgroundColor: onPrev != null
-                  ? (isDark ? const Color(0xFFC5A059).withOpacity(0.1) : const Color(0xFFCFD8DC).withOpacity(0.3))
+                  ? (isDark ? const Color(0xFFC5A059).withValues(alpha: 0.1) : const Color(0xFFCFD8DC).withValues(alpha: 0.3))
                   : Colors.transparent,
             ),
           ),
@@ -363,7 +405,7 @@ class _PagingBar extends StatelessWidget {
             color: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
             style: IconButton.styleFrom(
               backgroundColor: onNext != null
-                  ? (isDark ? const Color(0xFFC5A059).withOpacity(0.1) : const Color(0xFFCFD8DC).withOpacity(0.3))
+                  ? (isDark ? const Color(0xFFC5A059).withValues(alpha: 0.1) : const Color(0xFFCFD8DC).withValues(alpha: 0.3))
                   : Colors.transparent,
             ),
           ),
@@ -375,14 +417,22 @@ class _PagingBar extends StatelessWidget {
 
 /// Shared apply-on-behalf dialog (employee ID + admin leave types).
 Future<void> showAdminApplyOnBehalfDialog(
-  BuildContext context,
-  WidgetRef ref, {
+  BuildContext context, {
+  WidgetRef? ref,
+  AdminLeaveBloc? bloc,
   int? presetEmployeeId,
 }) async {
   List<LeaveType> types;
   try {
-    types = await ref.read(adminLeaveTypesProvider.future);
-    types = types.where((t) => t.isActive).toList();
+    if (bloc != null && bloc.state.leaveTypes.isNotEmpty) {
+      types = bloc.state.leaveTypes.where((t) => t.isActive).toList();
+    } else if (ref != null) {
+      final all = await ref.read(adminLeaveTypesProvider.future);
+      types = all.where((t) => t.isActive).toList();
+    } else {
+      final all = await context.read<LeaveRepository>().getAdminTypes();
+      types = all.where((t) => t.isActive).toList();
+    }
   } catch (e) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -405,27 +455,30 @@ Future<void> showAdminApplyOnBehalfDialog(
       types: types,
       presetEmployeeId: presetEmployeeId,
       parentRef: ref,
+      bloc: bloc,
     ),
   );
 }
 
-class _ApplyOnBehalfDialog extends ConsumerStatefulWidget {
+class _ApplyOnBehalfDialog extends StatefulWidget {
   const _ApplyOnBehalfDialog({
     required this.types,
-    required this.parentRef,
+    this.parentRef,
+    this.bloc,
     this.presetEmployeeId,
   });
 
   final List<LeaveType> types;
   final int? presetEmployeeId;
-  final WidgetRef parentRef;
+  final WidgetRef? parentRef;
+  final AdminLeaveBloc? bloc;
 
   @override
-  ConsumerState<_ApplyOnBehalfDialog> createState() =>
+  State<_ApplyOnBehalfDialog> createState() =>
       _ApplyOnBehalfDialogState();
 }
 
-class _ApplyOnBehalfDialogState extends ConsumerState<_ApplyOnBehalfDialog> {
+class _ApplyOnBehalfDialogState extends State<_ApplyOnBehalfDialog> {
   final _employeeIdCtrl = TextEditingController();
   final _reasonCtrl = TextEditingController();
   String? _leaveTypeId;
@@ -498,7 +551,9 @@ class _ApplyOnBehalfDialogState extends ConsumerState<_ApplyOnBehalfDialog> {
     if (picked == null) return;
     setState(() => _uploadingDoc = true);
     try {
-      final url = await widget.parentRef.read(leaveRepositoryProvider).uploadLeaveDocument(
+      final repo = widget.parentRef?.read(leaveRepositoryProvider) ??
+          context.read<LeaveRepository>();
+      final url = await repo.uploadLeaveDocument(
             employeeId: empId,
             bytes: picked.bytes,
             filename: picked.name,
@@ -527,7 +582,9 @@ class _ApplyOnBehalfDialogState extends ConsumerState<_ApplyOnBehalfDialog> {
     final empId = int.parse(_employeeIdCtrl.text.trim());
     final to = _isHalfDay ? _fromDate! : _toDate!;
     try {
-      await widget.parentRef.read(leaveRepositoryProvider).adminApplyLeave({
+      final repo = widget.parentRef?.read(leaveRepositoryProvider) ??
+          context.read<LeaveRepository>();
+      await repo.adminApplyLeave({
         'employeeId': empId,
         'leaveTypeId': _leaveTypeId,
         'fromDate': formatDateYmd(_fromDate!),
@@ -537,15 +594,20 @@ class _ApplyOnBehalfDialogState extends ConsumerState<_ApplyOnBehalfDialog> {
         'reason': _reasonCtrl.text.trim(),
         if (_documentUrl != null) 'documentUrl': _documentUrl,
       });
-      invalidateLeaveAdminData(widget.parentRef);
-      widget.parentRef.invalidate(
-        adminEmployeeBalancesProvider((employeeId: empId, year: _fromDate!.year)),
-      );
-      widget.parentRef.invalidate(
-        adminEmployeeApplicationsProvider(
-          (employeeId: empId, year: _fromDate!.year, page: 0),
-        ),
-      );
+      if (widget.bloc != null) {
+        widget.bloc!.add(const AdminLeaveRefreshRequested());
+      }
+      if (widget.parentRef != null) {
+        invalidateLeaveAdminData(widget.parentRef!);
+        widget.parentRef!.invalidate(
+          adminEmployeeBalancesProvider((employeeId: empId, year: _fromDate!.year)),
+        );
+        widget.parentRef!.invalidate(
+          adminEmployeeApplicationsProvider(
+            (employeeId: empId, year: _fromDate!.year, page: 0),
+          ),
+        );
+      }
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -571,7 +633,7 @@ class _ApplyOnBehalfDialogState extends ConsumerState<_ApplyOnBehalfDialog> {
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
         borderSide: BorderSide(
-          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
         ),
       ),
       focusedBorder: OutlineInputBorder(
@@ -641,7 +703,7 @@ class _ApplyOnBehalfDialogState extends ConsumerState<_ApplyOnBehalfDialog> {
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         side: BorderSide(
-                          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
                         ),
                       ),
                       onPressed: () async {
@@ -674,7 +736,7 @@ class _ApplyOnBehalfDialogState extends ConsumerState<_ApplyOnBehalfDialog> {
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         side: BorderSide(
-                          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
                         ),
                       ),
                       onPressed: _isHalfDay
@@ -709,7 +771,7 @@ class _ApplyOnBehalfDialogState extends ConsumerState<_ApplyOnBehalfDialog> {
                   color: isDark ? const Color(0xFF2B2722) : const Color(0xFFF1F5F9),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                    color: isDark ? const Color(0xFFC5A059).withOpacity(0.1) : const Color(0xFFCFD8DC),
+                    color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.1) : const Color(0xFFCFD8DC),
                   ),
                 ),
                 child: SwitchListTile(
@@ -723,7 +785,7 @@ class _ApplyOnBehalfDialogState extends ConsumerState<_ApplyOnBehalfDialog> {
                     ),
                   ),
                   value: _isHalfDay,
-                  activeColor: const Color(0xFFC5A059),
+                  activeThumbColor: const Color(0xFFC5A059),
                   onChanged: (v) => setState(() {
                     _isHalfDay = v;
                     if (v) {

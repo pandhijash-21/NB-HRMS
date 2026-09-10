@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/widgets/header_action_button.dart';
@@ -60,7 +59,7 @@ class AdminEmployeeAttendanceHistoryScreen extends ConsumerWidget {
             icon: const Icon(Icons.add_rounded, size: 18, color: Color(0xFFC5A059)),
             onPressed: () => showAdminPunchDialog(
               context,
-              ref,
+              ref: ref,
               employeeId: employeeId,
             ),
           ),
@@ -69,7 +68,7 @@ class AdminEmployeeAttendanceHistoryScreen extends ConsumerWidget {
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1.5),
           child: Container(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
             height: 1.5,
           ),
         ),
@@ -168,14 +167,14 @@ class AdminEmployeeAttendanceHistoryScreen extends ConsumerWidget {
                           employeeId: employeeId,
                           onEdit: (punch) => showAdminPunchDialog(
                             context,
-                            ref,
+                            ref: ref,
                             employeeId: employeeId,
                             existing: punch,
                             dateYmd: day.date,
                           ),
                           onAdd: () => showAdminPunchDialog(
                             context,
-                            ref,
+                            ref: ref,
                             employeeId: employeeId,
                             dateYmd: day.date,
                           ),
@@ -215,7 +214,7 @@ class _HistoryDayCard extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(
-          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
           width: 1.5,
         ),
       ),
@@ -247,7 +246,7 @@ class _HistoryDayCard extends StatelessWidget {
                   margin: const EdgeInsets.only(right: 8),
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.12),
+                    color: Colors.orange.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(color: Colors.orange),
                   ),

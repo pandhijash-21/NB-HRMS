@@ -155,8 +155,8 @@ class _TopDownCarPainter extends CustomPainter {
     final cx = size.width / 2;
     final cy = size.height / 2;
     final body = Paint()..color = color;
-    final glass = Paint()..color = Colors.lightBlueAccent.withOpacity(0.85);
-    final accent = Paint()..color = Colors.white.withOpacity(0.9);
+    final glass = Paint()..color = Colors.lightBlueAccent.withValues(alpha: 0.85);
+    final accent = Paint()..color = Colors.white.withValues(alpha: 0.9);
 
     // Body (nose toward top)
     final bodyRect = RRect.fromRectAndRadius(

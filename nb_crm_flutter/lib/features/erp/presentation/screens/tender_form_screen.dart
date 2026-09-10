@@ -1,32 +1,33 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/router/app_back_button.dart';
-import '../../../auth/presentation/auth_providers.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
+import '../../data/boq_repository.dart';
+import '../../data/project_repository.dart';
+import '../../data/tender_repository.dart';
+import '../../data/work_order_repository.dart';
 import '../../domain/boq_models.dart';
+import '../../domain/project_models.dart';
 import '../../domain/structure_models.dart';
 import '../../domain/tender_models.dart';
 import '../../domain/work_order_models.dart';
-import '../boq_providers.dart';
-import '../project_providers.dart';
-import '../tender_providers.dart';
-import '../work_order_providers.dart';
 import '../widgets/work_order_location_picker.dart';
 
-class TenderFormScreen extends ConsumerStatefulWidget {
+class TenderFormScreen extends StatefulWidget {
   const TenderFormScreen({super.key, this.id});
 
   final String? id;
   bool get isEdit => id != null && id!.isNotEmpty;
 
   @override
-  ConsumerState<TenderFormScreen> createState() => _TenderFormScreenState();
+  State<TenderFormScreen> createState() => _TenderFormScreenState();
 }
 
-class _TenderFormScreenState extends ConsumerState<TenderFormScreen> {
+class _TenderFormScreenState extends State<TenderFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _tenderNoCtrl = TextEditingController();
   final _createdByCtrl = TextEditingController();
@@ -45,15 +46,56 @@ class _TenderFormScreenState extends ConsumerState<TenderFormScreen> {
   bool _saving = false;
   bool _adding = false;
 
+  List<ErpProject> _projects = [];
+  List<ErpActivity> _activities = [];
+  List<ErpBoq> _boqs = [];
+  final Map<String, List<ErpProjectTower>> _projectTowers = {};
+  bool _loadingInitial = true;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final name = ref.read(authNotifierProvider).user?.name;
+      final name = context.read<AuthBloc>().state.user?.name;
       if (name != null && _createdByCtrl.text.isEmpty) {
         _createdByCtrl.text = name;
       }
+      _loadInitialData();
     });
+  }
+
+  Future<void> _loadInitialData() async {
+    try {
+      final projectRepo = context.read<ProjectRepository>();
+      final workRepo = context.read<WorkOrderRepository>();
+      final boqRepo = context.read<BoqRepository>();
+      final tenderRepo = context.read<TenderRepository>();
+
+      final res = await Future.wait([
+        projectRepo.list(),
+        workRepo.listActivities(),
+        boqRepo.list(),
+        if (widget.isEdit) tenderRepo.getById(widget.id!) else Future.value(null),
+      ]);
+
+      if (!mounted) return;
+      setState(() {
+        _projects = res[0] as List<ErpProject>;
+        _activities = res[1] as List<ErpActivity>;
+        _boqs = res[2] as List<ErpBoq>;
+        _loadingInitial = false;
+      });
+
+      final tender = res[3] as ErpTender?;
+      if (tender != null && !_hydrated) {
+        _hydrate(tender);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _loadingInitial = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to load initial data: $e')));
+      }
+    }
   }
 
   @override
@@ -111,6 +153,18 @@ class _TenderFormScreenState extends ConsumerState<TenderFormScreen> {
       _activityName = null;
       _boqActivities = [];
     });
+    if (id != null && !_projectTowers.containsKey(id)) {
+      try {
+        final towers = await context.read<ProjectRepository>().listTowers(id);
+        if (mounted) {
+          setState(() {
+            _projectTowers[id] = towers;
+          });
+        }
+      } catch (e) {
+        debugPrint('Failed to load towers: $e');
+      }
+    }
   }
 
   Future<void> _onBoqChanged(String? id) async {
@@ -122,7 +176,7 @@ class _TenderFormScreenState extends ConsumerState<TenderFormScreen> {
     });
     if (id == null || id.isEmpty) return;
     try {
-      final acts = await ref.read(tenderRepositoryProvider).activitiesFromBoq(id);
+      final acts = await context.read<TenderRepository>().activitiesFromBoq(id);
       if (!mounted) return;
       setState(() => _boqActivities = acts);
     } catch (e) {
@@ -143,7 +197,7 @@ class _TenderFormScreenState extends ConsumerState<TenderFormScreen> {
     }
     setState(() => _adding = true);
     try {
-      final preview = await ref.read(tenderRepositoryProvider).previewLines(
+      final preview = await context.read<TenderRepository>().previewLines(
             boqId: _boqId,
             activityId: _activityId,
           );
@@ -204,13 +258,12 @@ class _TenderFormScreenState extends ConsumerState<TenderFormScreen> {
         }).toList(),
       };
 
-      final repo = ref.read(tenderRepositoryProvider);
+      final repo = context.read<TenderRepository>();
       if (widget.isEdit) {
         await repo.update(widget.id!, body);
       } else {
         await repo.create(body);
       }
-      ref.invalidate(tenderListProvider);
       if (mounted) context.go('/erp/tenders');
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
@@ -229,10 +282,19 @@ class _TenderFormScreenState extends ConsumerState<TenderFormScreen> {
     _boqId = t.boqId;
     _lines = List.of(t.lines);
     _hydrated = true;
+    if (_projectId != null && !_projectTowers.containsKey(_projectId)) {
+      context.read<ProjectRepository>().listTowers(_projectId!).then((towers) {
+        if (mounted) {
+          setState(() {
+            _projectTowers[_projectId!] = towers;
+          });
+        }
+      }).catchError((_) {});
+    }
     if (_boqId != null) {
-      ref.read(tenderRepositoryProvider).activitiesFromBoq(_boqId!).then((acts) {
+      context.read<TenderRepository>().activitiesFromBoq(_boqId!).then((acts) {
         if (mounted) setState(() => _boqActivities = acts);
-      });
+      }).catchError((_) {});
     }
   }
 
@@ -311,7 +373,7 @@ class _TenderFormScreenState extends ConsumerState<TenderFormScreen> {
     );
   }
 
-  Widget _activityDropdown(AsyncValue<List<ErpActivity>> activitiesAsync) {
+  Widget _activityDropdown() {
     if (_boqId != null) {
       final items = <DropdownMenuItem<String>>[
         for (final a in _boqActivities)
@@ -322,7 +384,7 @@ class _TenderFormScreenState extends ConsumerState<TenderFormScreen> {
             ),
       ];
       return DropdownButtonFormField<String>(
-        value: _activityId,
+        initialValue: _activityId,
         isExpanded: true,
         decoration: _dec('Activity', required: true, hint: 'Select activity from BOQ'),
         items: items,
@@ -335,59 +397,36 @@ class _TenderFormScreenState extends ConsumerState<TenderFormScreen> {
         },
       );
     }
-    return activitiesAsync.when(
-      loading: () => const LinearProgressIndicator(),
-      error: (e, _) => Text('$e'),
-      data: (acts) {
-        final items = <DropdownMenuItem<String>>[
-          for (final a in acts)
-            DropdownMenuItem<String>(
-              value: a.id,
-              child: Text(a.name, overflow: TextOverflow.ellipsis),
-            ),
-        ];
-        return DropdownButtonFormField<String>(
-          value: _activityId,
-          isExpanded: true,
-          decoration: _dec('Activity', required: true, hint: 'Select activity'),
-          items: items,
-          onChanged: (v) {
-            final opt = acts.where((a) => a.id == v).firstOrNull;
-            setState(() {
-              _activityId = v;
-              _activityName = opt?.name;
-            });
-          },
-        );
+    if (_loadingInitial) {
+      return const LinearProgressIndicator();
+    }
+    final items = <DropdownMenuItem<String>>[
+      for (final a in _activities)
+        DropdownMenuItem<String>(
+          value: a.id,
+          child: Text(a.name, overflow: TextOverflow.ellipsis),
+        ),
+    ];
+    return DropdownButtonFormField<String>(
+      initialValue: _activityId,
+      isExpanded: true,
+      decoration: _dec('Activity', required: true, hint: 'Select activity'),
+      items: items,
+      onChanged: (v) {
+        final opt = _activities.where((a) => a.id == v).firstOrNull;
+        setState(() {
+          _activityId = v;
+          _activityName = opt?.name;
+        });
       },
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final projectsAsync = ref.watch(projectsListProvider);
-    final activitiesAsync = ref.watch(erpActivitiesProvider);
-    final boqsAsync = _projectId == null
-        ? const AsyncValue<List<ErpBoq>>.data([])
-        : ref.watch(boqListProvider);
-    final towers = _projectId == null
-        ? const <ErpProjectTower>[]
-        : (ref.watch(projectTowersProvider(_projectId!)).asData?.value ?? const <ErpProjectTower>[]);
-
-    if (widget.isEdit) {
-      ref.listen(tenderDetailProvider(widget.id!), (prev, next) {
-        next.whenData((t) {
-          if (_hydrated || !mounted) return;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted || _hydrated) return;
-            setState(() => _hydrate(t));
-          });
-        });
-      });
-    }
-
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final projectBoqs = boqsAsync.asData?.value.where((b) => b.projectId == _projectId).toList() ?? [];
+    final projectBoqs = _boqs.where((b) => b.projectId == _projectId).toList();
+    final towers = _projectId == null ? const <ErpProjectTower>[] : (_projectTowers[_projectId] ?? const <ErpProjectTower>[]);
     final total = _lines.fold(0.0, (s, l) => s + l.computedAmount);
 
     return Scaffold(
@@ -423,27 +462,22 @@ class _TenderFormScreenState extends ConsumerState<TenderFormScreen> {
                       readOnly: true,
                       decoration: _dec('Created By'),
                     ),
-                    projectsAsync.when(
-                      loading: () => const LinearProgressIndicator(),
-                      error: (e, _) => Text('$e'),
-                      data: (projects) {
-                        final items = <DropdownMenuItem<String>>[
-                          for (final p in projects)
-                            DropdownMenuItem<String>(
-                              value: p.id,
-                              child: Text(p.name, overflow: TextOverflow.ellipsis),
-                            ),
-                        ];
-                        return DropdownButtonFormField<String>(
-                          value: _projectId,
-                          isExpanded: true,
-                          decoration: _dec('Project', required: true, hint: 'Select project'),
-                          items: items,
-                          onChanged: _onProjectChanged,
-                          validator: (v) => v == null ? 'Required' : null,
-                        );
-                      },
-                    ),
+                    _loadingInitial
+                        ? const LinearProgressIndicator()
+                        : DropdownButtonFormField<String>(
+                            initialValue: _projectId,
+                            isExpanded: true,
+                            decoration: _dec('Project', required: true, hint: 'Select project'),
+                            items: [
+                              for (final p in _projects)
+                                DropdownMenuItem<String>(
+                                  value: p.id,
+                                  child: Text(p.name, overflow: TextOverflow.ellipsis),
+                                ),
+                            ],
+                            onChanged: _onProjectChanged,
+                            validator: (v) => v == null ? 'Required' : null,
+                          ),
                     _dateField(
                       label: 'Start Date',
                       value: _startDate,
@@ -518,7 +552,7 @@ class _TenderFormScreenState extends ConsumerState<TenderFormScreen> {
                 builder: (context, c) {
                   final wide = c.maxWidth >= 860;
                   final boqField = DropdownButtonFormField<String?>(
-                    value: _boqId,
+                    initialValue: _boqId,
                     isExpanded: true,
                     decoration: _dec(
                       'Project BOQ',
@@ -534,7 +568,7 @@ class _TenderFormScreenState extends ConsumerState<TenderFormScreen> {
                     ],
                     onChanged: _projectId == null ? null : _onBoqChanged,
                   );
-                  final activityField = _activityDropdown(activitiesAsync);
+                  final activityField = _activityDropdown();
                   final addBtn = SizedBox(
                     height: 44,
                     child: FilledButton.icon(

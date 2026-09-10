@@ -91,8 +91,9 @@ class ProfileRepository {
     return _dio.getEnvelope<List<EmployeeExperience>>(
       'employees/$employeeId/experience',
       parse: (raw) {
-        if (raw is! List)
+        if (raw is! List) {
           throw const FormatException('Invalid experience list');
+        }
         return raw
             .map(
               (e) => EmployeeExperience.fromJson(

@@ -11,7 +11,6 @@ import '../../domain/collab_models.dart';
 import '../collab_providers.dart';
 import '../end_meet_progress.dart';
 import '../meet_helpers.dart';
-import '../meet_icons.dart';
 
 class MeetHubScreen extends ConsumerStatefulWidget {
   const MeetHubScreen({super.key});
@@ -288,7 +287,7 @@ class _MeetHubScreenState extends ConsumerState<MeetHubScreen> {
                   LayoutBuilder(
                     builder: (context, constraints) {
                       final multi = _live.length > 1 && constraints.maxWidth >= 640;
-                      final gap = 16.0;
+                      const gap = 16.0;
                       final tileWidth = multi
                           ? (constraints.maxWidth - gap) / 2
                           : constraints.maxWidth;
@@ -321,7 +320,7 @@ class _MeetHubScreenState extends ConsumerState<MeetHubScreen> {
                   builder: (context, constraints) {
                     final w = constraints.maxWidth;
                     final cols = w >= 900 ? 3 : w >= 520 ? 2 : 1;
-                    final gap = 14.0;
+                    const gap = 14.0;
                     final tileW = (w - gap * (cols - 1)) / cols;
                     final tiles = [
                       _ActionTile(

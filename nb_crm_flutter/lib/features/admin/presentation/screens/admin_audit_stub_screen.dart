@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
-import '../../../../core/theme/app_colors.dart';
 
 /// Audit logs were GraphQL-only in the Next.js app; `/admin/audit` was a nav orphan.
 class AdminAuditStubScreen extends StatelessWidget {
@@ -13,21 +11,21 @@ class AdminAuditStubScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        title: Text('Audit log'),
+        title: const Text('Audit log'),
         leading: const AppBackButton(),
       ),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),
           child: Card(
-            margin: EdgeInsets.all(24),
+            margin: const EdgeInsets.all(24),
             child: Padding(
-              padding: EdgeInsets.all(28),
+              padding: const EdgeInsets.all(28),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.history_edu_outlined, size: 48, color: Theme.of(context).colorScheme.primary),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
                   Text(
                     'Audit API unavailable',
                     style: TextStyle(
@@ -36,7 +34,7 @@ class AdminAuditStubScreen extends StatelessWidget {
                       color: Theme.of(context).colorScheme.onSurface,
                     ),
                   ),
-                  SizedBox(height: 8),
+                  const SizedBox(height: 8),
                   Text(
                     'The legacy audit drawer used GraphQL only. '
                     'There is no REST audit page on the web app either. '

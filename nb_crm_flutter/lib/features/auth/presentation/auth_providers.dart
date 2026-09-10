@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/network/app_config.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/storage/secure_storage_service.dart';
 import '../data/auth_repository.dart';
@@ -13,12 +14,27 @@ final unauthorizedGateProvider = Provider<UnauthorizedGate>((ref) {
   return UnauthorizedGate();
 });
 
+class ApiBaseUrlNotifier extends Notifier<String> {
+  @override
+  String build() => AppConfig.apiBaseUrl;
+
+  void setUrl(String url) {
+    AppConfig.setApiBaseUrl(url);
+    state = url;
+  }
+}
+
+final apiBaseUrlProvider =
+    NotifierProvider<ApiBaseUrlNotifier, String>(ApiBaseUrlNotifier.new);
+
 final dioClientProvider = Provider<DioClient>((ref) {
   final storage = ref.watch(secureStorageProvider);
   final gate = ref.watch(unauthorizedGateProvider);
+  final baseUrl = ref.watch(apiBaseUrlProvider);
   return DioClient(
     readToken: storage.readToken,
     unauthorizedGate: gate,
+    baseUrl: baseUrl,
   );
 });
 

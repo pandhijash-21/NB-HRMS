@@ -237,7 +237,7 @@ class MyInterviewItem {
       canUpdate: canUpdate,
       candidate: cand is Map
           ? RecruitmentCandidate.fromJson(Map<String, dynamic>.from(cand))
-          : RecruitmentCandidate(
+          : const RecruitmentCandidate(
               id: '',
               requirementId: '',
               fullName: 'Unknown',

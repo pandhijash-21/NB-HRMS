@@ -1,82 +1,119 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/bloc/load_status.dart';
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/widgets/header_action_button.dart';
 import '../../../auth/domain/permissions.dart';
-import '../../../auth/presentation/auth_providers.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
+import '../../data/project_repository.dart';
 import '../../domain/structure_models.dart';
-import '../project_providers.dart';
+import '../bloc/erp_structure_bloc.dart';
 
-class ProjectStructureScreen extends ConsumerWidget {
+class ProjectStructureScreen extends StatelessWidget {
   const ProjectStructureScreen({super.key, required this.projectId});
 
   final String projectId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final auth = ref.watch(authNotifierProvider);
-    final canWrite = Permissions.canWriteProjects(auth.permissions, auth.user?.role);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final projectAsync = ref.watch(projectDetailProvider(projectId));
-    final towersAsync = ref.watch(projectTowersProvider(projectId));
-
-    return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
-        elevation: 0,
-        title: Text(
-          projectAsync.asData?.value.name ?? 'Project Structure',
-          style: const TextStyle(fontWeight: FontWeight.w700),
-        ),
-        leading: const AppBackButton(fallbackLocation: '/erp/projects'),
-        actions: [
-          HeaderActionButton(
-            tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh_rounded),
-            label: 'Refresh',
-            onPressed: () {
-              ref.invalidate(projectTowersProvider(projectId));
-              ref.invalidate(projectDetailProvider(projectId));
-            },
-          ),
-        ],
-      ),
-      floatingActionButton: canWrite
-          ? FloatingActionButton.extended(
-              onPressed: () => context.go('/erp/structure/$projectId/towers/new'),
-              icon: const Icon(Icons.add),
-              label: const Text('Add Tower'),
-            )
-          : null,
-      body: towersAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('$e')),
-        data: (towers) {
-          if (towers.isEmpty) {
-            return const Center(
-              child: Text('No towers yet. Tap Add Tower to start the project structure.'),
-            );
-          }
-          return ListView.separated(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 88),
-            itemCount: towers.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 10),
-            itemBuilder: (context, i) => _TowerCard(
-              tower: towers[i],
-              canWrite: canWrite,
-              projectId: projectId,
-            ),
-          );
-        },
-      ),
+  Widget build(BuildContext context) {
+    return BlocProvider<ErpStructureBloc>(
+      create: (ctx) => ErpStructureBloc(
+        projectRepository: ctx.read<ProjectRepository>(),
+      )..add(ErpStructureTowersRequested(projectId)),
+      child: _ProjectStructureView(projectId: projectId),
     );
   }
 }
 
-class _TowerCard extends ConsumerWidget {
+class _ProjectStructureView extends StatelessWidget {
+  const _ProjectStructureView({required this.projectId});
+
+  final String projectId;
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthBloc>().state;
+    final canWrite = Permissions.canWriteProjects(auth.permissions, auth.user?.role);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return BlocConsumer<ErpStructureBloc, ErpStructureState>(
+      listener: (context, state) {
+        if (state.errorMessage != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(state.errorMessage!)),
+          );
+        }
+        if (state.actionMessage != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(state.actionMessage!)),
+          );
+        }
+      },
+      builder: (context, state) {
+        return Scaffold(
+          backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
+          appBar: AppBar(
+            backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
+            elevation: 0,
+            title: Text(
+              state.project?.name ?? 'Project Structure',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            leading: const AppBackButton(fallbackLocation: '/erp/projects'),
+            actions: [
+              HeaderActionButton(
+                tooltip: 'Refresh',
+                icon: const Icon(Icons.refresh_rounded),
+                label: 'Refresh',
+                onPressed: () {
+                  context
+                      .read<ErpStructureBloc>()
+                      .add(ErpStructureTowersRequested(projectId));
+                },
+              ),
+            ],
+          ),
+          floatingActionButton: canWrite
+              ? FloatingActionButton.extended(
+                  onPressed: () => context.go('/erp/structure/$projectId/towers/new'),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add Tower'),
+                )
+              : null,
+          body: () {
+            if (state.status == LoadStatus.loading) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (state.status == LoadStatus.failure && state.towers.isEmpty) {
+              return Center(child: Text(state.errorMessage ?? 'Failed to load towers'));
+            }
+            if (state.towers.isEmpty) {
+              return const Center(
+                child: Text('No towers yet. Tap Add Tower to start the project structure.'),
+              );
+            }
+            return RepaintBoundary(
+              child: ListView.separated(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 88),
+                itemCount: state.towers.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 10),
+                itemBuilder: (context, i) => _TowerCard(
+                  tower: state.towers[i],
+                  canWrite: canWrite,
+                  projectId: projectId,
+                ),
+              ),
+            );
+          }(),
+        );
+      },
+    );
+  }
+}
+
+class _TowerCard extends StatelessWidget {
   const _TowerCard({
     required this.tower,
     required this.canWrite,
@@ -87,7 +124,7 @@ class _TowerCard extends ConsumerWidget {
   final bool canWrite;
   final String projectId;
 
-  Future<void> _delete(BuildContext context, WidgetRef ref) async {
+  Future<void> _delete(BuildContext context) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -106,19 +143,15 @@ class _TowerCard extends ConsumerWidget {
       ),
     );
     if (ok != true) return;
-    try {
-      await ref.read(projectRepositoryProvider).deleteTower(projectId, tower.id);
-      ref.invalidate(projectTowersProvider(projectId));
-      ref.invalidate(projectsListProvider);
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
-      }
+    if (context.mounted) {
+      context.read<ErpStructureBloc>().add(
+            ErpStructureTowerDeleted(projectId: projectId, towerId: tower.id),
+          );
     }
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Material(
       color: isDark ? const Color(0xFF1E1B18) : Colors.white,
@@ -198,7 +231,7 @@ class _TowerCard extends ConsumerWidget {
                       ),
                       IconButton(
                         tooltip: 'Delete Tower',
-                        onPressed: () => _delete(context, ref),
+                        onPressed: () => _delete(context),
                         icon: const Icon(Icons.delete_outline),
                         color: const Color(0xFFEF4444),
                       ),

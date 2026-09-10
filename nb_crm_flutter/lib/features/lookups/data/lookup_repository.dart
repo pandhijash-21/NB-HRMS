@@ -2,9 +2,13 @@ import '../../../core/network/dio_client.dart';
 import '../domain/lookup_models.dart';
 
 class LookupRepository {
-  const LookupRepository({required DioClient dioClient}) : _dio = dioClient;
+  LookupRepository({required DioClient dioClient}) : _dio = dioClient;
 
   final DioClient _dio;
+  final Map<String, List<LookupOption>> _cache = {};
+
+  List<LookupOption> getCached(String category) => _cache[category] ?? const [];
+  void clearCache() => _cache.clear();
 
   Future<List<LookupCategoryGroup>> listGrouped({bool includeInactive = false}) async {
     return _dio.getEnvelope<List<LookupCategoryGroup>>(
@@ -25,7 +29,10 @@ class LookupRepository {
     String category, {
     bool includeInactive = false,
   }) async {
-    return _dio.getEnvelope<List<LookupOption>>(
+    if (!includeInactive && _cache.containsKey(category)) {
+      return _cache[category]!;
+    }
+    final result = await _dio.getEnvelope<List<LookupOption>>(
       includeInactive ? 'admin/lookups' : 'lookups',
       queryParameters: {
         'category': category,
@@ -40,6 +47,10 @@ class LookupRepository {
             .toList();
       },
     );
+    if (!includeInactive) {
+      _cache[category] = result;
+    }
+    return result;
   }
 
   Future<LookupOption> create({

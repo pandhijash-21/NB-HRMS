@@ -111,7 +111,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                 icon: Icon(
                   Icons.arrow_back_rounded,
                   color: isDark
-                      ? Colors.white.withOpacity(0.8)
+                      ? Colors.white.withValues(alpha: 0.8)
                       : const Color(0xFF212F3D),
                 ),
                 onPressed: () => context.pop(),
@@ -120,7 +120,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                 icon: Icon(
                   Icons.home_outlined,
                   color: isDark
-                      ? Colors.white.withOpacity(0.8)
+                      ? Colors.white.withValues(alpha: 0.8)
                       : const Color(0xFF212F3D),
                 ),
                 onPressed: () => context.go('/home'),
@@ -141,8 +141,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                       : const Color(0xFF263238),
                   side: BorderSide(
                     color: isDark
-                        ? const Color(0xFFC5A059).withOpacity(0.4)
-                        : const Color(0xFF263238).withOpacity(0.5),
+                        ? const Color(0xFFC5A059).withValues(alpha: 0.4)
+                        : const Color(0xFF263238).withValues(alpha: 0.5),
                     width: 1.2,
                   ),
                   padding: const EdgeInsets.symmetric(
@@ -165,7 +165,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           preferredSize: const Size.fromHeight(1.5),
           child: Container(
             color: isDark
-                ? const Color(0xFFC5A059).withOpacity(0.15)
+                ? const Color(0xFFC5A059).withValues(alpha: 0.15)
                 : const Color(0xFFCFD8DC),
             height: 1.5,
           ),
@@ -240,7 +240,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.error_outline, size: 48, color: AppColors.error),
+              const Icon(Icons.error_outline, size: 48, color: AppColors.error),
               const SizedBox(height: 12),
               Text(
                 'Failed to load profile details\n$err',
@@ -288,7 +288,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         border: Border(
           bottom: BorderSide(
             color: isDark
-                ? const Color(0xFFC5A059).withOpacity(0.18)
+                ? const Color(0xFFC5A059).withValues(alpha: 0.18)
                 : const Color(0xFFCFD8DC),
             width: 1.5,
           ),
@@ -303,13 +303,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
               shape: BoxShape.circle,
               border: Border.all(
                 color: isDark
-                    ? const Color(0xFFC5A059).withOpacity(0.4)
-                    : const Color(0xFF263238).withOpacity(0.2),
+                    ? const Color(0xFFC5A059).withValues(alpha: 0.4)
+                    : const Color(0xFF263238).withValues(alpha: 0.2),
                 width: 3,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.08),
+                  color: Colors.black.withValues(alpha: 0.08),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
@@ -353,7 +353,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                         vertical: 5,
                       ),
                       decoration: BoxDecoration(
-                        color: statusColor.withOpacity(0.12),
+                        color: statusColor.withValues(alpha: 0.12),
                         border: Border.all(color: statusColor, width: 1.2),
                         borderRadius: BorderRadius.circular(30),
                       ),
@@ -390,7 +390,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                     fontWeight: FontWeight.w500,
                     color: isDark
                         ? Colors.white70
-                        : const Color(0xFF263238).withOpacity(0.7),
+                        : const Color(0xFF263238).withValues(alpha: 0.7),
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -401,7 +401,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                       size: 13,
                       color: isDark
                           ? Colors.white38
-                          : const Color(0xFF607D8B).withOpacity(0.8),
+                          : const Color(0xFF607D8B).withValues(alpha: 0.8),
                     ),
                     const SizedBox(width: 6),
                     Text(
@@ -439,7 +439,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         border: Border(
           bottom: BorderSide(
             color: isDark
-                ? const Color(0xFFC5A059).withOpacity(0.12)
+                ? const Color(0xFFC5A059).withValues(alpha: 0.12)
                 : const Color(0xFFCFD8DC),
             width: 1.5,
           ),

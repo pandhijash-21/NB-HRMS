@@ -75,9 +75,22 @@ class Permissions {
     return hasPermission(perms, 'LEAVE', 'APPROVE');
   }
 
+  static bool isSuperAdmin(String? role) {
+    final r = (role ?? '').toUpperCase().replaceAll(RegExp(r'[\s_-]+'), '');
+    return r == 'SUPERADMIN';
+  }
+
+  static bool isSystemAdmin(String? role) {
+    final r = (role ?? '').toUpperCase().replaceAll(RegExp(r'[\s_-]+'), '');
+    return r == 'SYSTEMADMIN' || r == 'ADMIN';
+  }
+
   static bool isAdmin(String? role) {
-    final r = (role ?? '').toUpperCase().replaceAll(RegExp(r'\s+'), '');
-    return r == 'ADMIN' || r == 'SUPERADMIN' || r == 'SYSTEMADMIN';
+    return isSuperAdmin(role) || isSystemAdmin(role);
+  }
+
+  static bool canCreateAdmins(String? role) {
+    return isSuperAdmin(role);
   }
 
   static bool canReadProjects(PermissionMap? perms, [String? role]) {
@@ -230,17 +243,17 @@ class Permissions {
   }
 
   static bool canManageUsers(PermissionMap? perms, [String? role]) {
-    if (role != null && role.toUpperCase() == 'ADMIN') return true;
+    if (isAdmin(role)) return true;
     return hasPermission(perms, 'USER_MGMT', 'READ');
   }
 
   static bool canManageRoles(PermissionMap? perms, [String? role]) {
-    if (role != null && role.toUpperCase() == 'ADMIN') return true;
+    if (isAdmin(role)) return true;
     return hasPermission(perms, 'ROLE_MGMT', 'READ');
   }
 
   static bool canManageInstitutes(PermissionMap? perms, [String? role]) {
-    if (role != null && role.toUpperCase() == 'ADMIN') return true;
+    if (isAdmin(role)) return true;
     return hasPermission(perms, 'FIELD_MGMT', 'READ');
   }
 

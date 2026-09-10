@@ -10,7 +10,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/logging/app_logger.dart';
 
 class AutostartOnboardingScreen extends StatefulWidget {
-  const AutostartOnboardingScreen({Key? key}) : super(key: key);
+  const AutostartOnboardingScreen({super.key});
 
   @override
   State<AutostartOnboardingScreen> createState() => _AutostartOnboardingScreenState();
@@ -58,7 +58,7 @@ class _AutostartOnboardingScreenState extends State<AutostartOnboardingScreen> {
 
   Future<void> _openAppInfoSettings() async {
     try {
-      final intent = AndroidIntent(
+      const intent = AndroidIntent(
         action: 'android.settings.APPLICATION_DETAILS_SETTINGS',
         data: 'package:com.nbdeveloper.nb_crm_flutter',
         flags: <int>[Flag.FLAG_ACTIVITY_NEW_TASK],

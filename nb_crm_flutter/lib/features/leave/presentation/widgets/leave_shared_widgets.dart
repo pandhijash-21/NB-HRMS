@@ -74,7 +74,7 @@ class LeaveAsyncBody<T> extends StatelessWidget {
                   Text(
                     emptyMessage,
                     style: TextStyle(
-                      color: isDark ? Colors.white30 : const Color(0xFF607D8B).withOpacity(0.6),
+                      color: isDark ? Colors.white30 : const Color(0xFF607D8B).withValues(alpha: 0.6),
                       fontWeight: FontWeight.w600,
                       fontSize: 15,
                     ),
@@ -107,7 +107,7 @@ Widget leaveStatusChip(BuildContext context, String status) {
   return Container(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
     decoration: BoxDecoration(
-      color: color.withOpacity(0.12),
+      color: color.withValues(alpha: 0.12),
       border: Border.all(color: color, width: 1.2),
       borderRadius: BorderRadius.circular(30),
     ),
@@ -145,7 +145,7 @@ class LeaveApplicationCard extends StatelessWidget {
     final employeeName = application.employee?.fullName;
 
     final cardBg = isDark ? const Color(0xFF1E1B18) : Colors.white;
-    final cardBorder = isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC);
+    final cardBorder = isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC);
     
     return Card(
       elevation: 0,
@@ -181,7 +181,7 @@ class LeaveApplicationCard extends StatelessWidget {
               Divider(
                 height: 24,
                 thickness: 1.2,
-                color: isDark ? const Color(0xFFC5A059).withOpacity(0.12) : Colors.black.withOpacity(0.06),
+                color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.06),
               ),
               if (employeeName != null) ...[
                 Text(
@@ -198,7 +198,7 @@ class LeaveApplicationCard extends StatelessWidget {
                 Text(
                   subtitle!, 
                   style: TextStyle(
-                    color: isDark ? Colors.white60 : const Color(0xFF607D8B).withOpacity(0.8),
+                    color: isDark ? Colors.white60 : const Color(0xFF607D8B).withValues(alpha: 0.8),
                     fontSize: 13,
                   ),
                 ),
@@ -230,12 +230,12 @@ class LeaveApplicationCard extends StatelessWidget {
                 Divider(
                   height: 24,
                   thickness: 1,
-                  color: isDark ? const Color(0xFFC5A059).withOpacity(0.12) : Colors.black.withOpacity(0.06),
+                  color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.06),
                 ),
                 Text(
                   application.reason,
                   style: TextStyle(
-                    color: isDark ? Colors.white70 : const Color(0xFF263238).withOpacity(0.85),
+                    color: isDark ? Colors.white70 : const Color(0xFF263238).withValues(alpha: 0.85),
                     fontSize: 13,
                   ),
                 ),

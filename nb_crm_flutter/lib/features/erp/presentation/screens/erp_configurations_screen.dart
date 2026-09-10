@@ -1,25 +1,35 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/bloc/load_status.dart';
 import '../../../../core/router/app_back_button.dart';
-import '../../../lookups/presentation/lookup_providers.dart';
+import '../../../lookups/presentation/bloc/lookups_bloc.dart';
 import '../../../lookups/presentation/widgets/config_square_tiles.dart';
 import '../../domain/contractor_lookup_keys.dart';
 import '../../domain/dpr_lookup_keys.dart';
 import '../../domain/project_lookup_keys.dart';
 import '../../domain/work_order_lookup_keys.dart';
 
-class ErpConfigurationsScreen extends ConsumerStatefulWidget {
+class ErpConfigurationsScreen extends StatefulWidget {
   const ErpConfigurationsScreen({super.key});
 
   @override
-  ConsumerState<ErpConfigurationsScreen> createState() => _ErpConfigurationsScreenState();
+  State<ErpConfigurationsScreen> createState() => _ErpConfigurationsScreenState();
 }
 
-class _ErpConfigurationsScreenState extends ConsumerState<ErpConfigurationsScreen> {
+class _ErpConfigurationsScreenState extends State<ErpConfigurationsScreen> {
   final _searchCtrl = TextEditingController();
   String _query = '';
+
+  @override
+  void initState() {
+    super.initState();
+    final bloc = context.read<LookupsBloc>();
+    if (bloc.state.status == LoadStatus.initial) {
+      bloc.add(const LookupsLoadRequested());
+    }
+  }
 
   @override
   void dispose() {
@@ -39,7 +49,6 @@ class _ErpConfigurationsScreenState extends ConsumerState<ErpConfigurationsScree
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final groupsAsync = ref.watch(lookupGroupsProvider);
     final q = _query.trim();
 
     return Scaffold(
@@ -52,7 +61,7 @@ class _ErpConfigurationsScreenState extends ConsumerState<ErpConfigurationsScree
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded, color: Color(0xFFC5A059)),
-            onPressed: () => ref.invalidate(lookupGroupsProvider),
+            onPressed: () => context.read<LookupsBloc>().add(const LookupsLoadRequested()),
           ),
         ],
       ),
@@ -69,13 +78,24 @@ class _ErpConfigurationsScreenState extends ConsumerState<ErpConfigurationsScree
             },
           ),
           const SizedBox(height: 20),
-          groupsAsync.when(
-            loading: () => const Padding(
-              padding: EdgeInsets.all(24),
-              child: Center(child: CircularProgressIndicator()),
-            ),
-            error: (e, _) => Text('Failed to load lookups: $e'),
-            data: (groups) {
+          BlocBuilder<LookupsBloc, LookupsState>(
+            builder: (context, lookupsState) {
+              if (lookupsState.status == LoadStatus.loading && lookupsState.groups.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+              if (lookupsState.status == LoadStatus.failure && lookupsState.groups.isEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Center(
+                    child: Text('Failed to load lookups: ${lookupsState.errorMessage ?? 'Unknown error'}'),
+                  ),
+                );
+              }
+
+              final groups = lookupsState.groups;
               final project = groups
                   .where((g) => kProjectLookupKeys.contains(g.key))
                   .where((g) => _matches([g.label, g.description, g.key]))

@@ -10,7 +10,7 @@ import '../../../auth/presentation/auth_providers.dart';
 
 class TripDetailHubScreen extends ConsumerStatefulWidget {
   final String tripId;
-  const TripDetailHubScreen({Key? key, required this.tripId}) : super(key: key);
+  const TripDetailHubScreen({super.key, required this.tripId});
 
   @override
   ConsumerState<TripDetailHubScreen> createState() => _TripDetailHubScreenState();

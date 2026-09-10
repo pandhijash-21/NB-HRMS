@@ -366,12 +366,12 @@ class _AdminTripReplayScreenState extends ConsumerState<AdminTripReplayScreen> w
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Row(
+                                const Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    const Icon(Icons.timer, color: Colors.white, size: 12),
-                                    const SizedBox(width: 4),
-                                    const Text(
+                                    Icon(Icons.timer, color: Colors.white, size: 12),
+                                    SizedBox(width: 4),
+                                    Text(
                                       'Stopped',
                                       style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
                                     ),
@@ -479,7 +479,7 @@ class _AdminTripReplayScreenState extends ConsumerState<AdminTripReplayScreen> w
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
-                            color: Colors.blue.withOpacity(0.1),
+                            color: Colors.blue.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text('${_playbackSpeed}x', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),

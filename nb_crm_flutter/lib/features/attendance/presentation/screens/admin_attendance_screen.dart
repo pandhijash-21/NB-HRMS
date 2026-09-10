@@ -1,159 +1,211 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/bloc/load_status.dart';
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/widgets/header_action_button.dart';
+import '../../data/attendance_repository.dart';
 import '../../domain/attendance_models.dart';
 import '../../../leave/presentation/widgets/leave_shared_widgets.dart';
 import '../attendance_providers.dart';
+import '../bloc/admin_attendance_bloc.dart';
 
-class AdminAttendanceScreen extends ConsumerWidget {
+class AdminAttendanceScreen extends StatelessWidget {
   const AdminAttendanceScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final date = ref.watch(adminAttendanceDateProvider);
-    final dayAsync = ref.watch(adminAttendanceDayProvider);
-    final policyAsync = ref.watch(adminAttendancePolicyProvider);
+  Widget build(BuildContext context) {
+    return BlocProvider(
+      create: (context) => AdminAttendanceBloc(
+        attendanceRepository: context.read<AttendanceRepository>(),
+      )..add(const AdminAttendanceLoadRequested()),
+      child: const _AdminAttendanceView(),
+    );
+  }
+}
+
+class _AdminAttendanceView extends StatelessWidget {
+  const _AdminAttendanceView();
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<AdminAttendanceBloc>().state;
+    final date = state.date;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: Text(
-          'Attendance',
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: 20,
-            color: isDark ? Colors.white : const Color(0xFF212F3D),
-            letterSpacing: -0.5,
+    return BlocListener<AdminAttendanceBloc, AdminAttendanceState>(
+      listenWhen: (previous, current) =>
+          previous.actionMessage != current.actionMessage ||
+          previous.errorMessage != current.errorMessage,
+      listener: (context, state) {
+        if (state.actionMessage != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(state.actionMessage!), backgroundColor: Colors.green),
+          );
+        } else if (state.errorMessage != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(state.errorMessage!), backgroundColor: Colors.red),
+          );
+        }
+      },
+      child: Scaffold(
+        backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
+        appBar: AppBar(
+          backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: Text(
+            'Attendance',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 20,
+              color: isDark ? Colors.white : const Color(0xFF212F3D),
+              letterSpacing: -0.5,
+            ),
+          ),
+          leading: const AppBackButton(fallbackLocation: '/attendance'),
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(1.5),
+            child: Container(
+              color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
+              height: 1.5,
+            ),
           ),
         ),
-        leading: const AppBackButton(fallbackLocation: '/attendance'),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1.5),
-          child: Container(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
-            height: 1.5,
-          ),
-        ),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Pick a date to see all employees and their punch logs.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: isDark ? Colors.white54 : const Color(0xFF607D8B),
+        body: ListView(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Pick a date to see all employees and their punch logs.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDark ? Colors.white54 : const Color(0xFF607D8B),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              OutlinedButton.icon(
-                onPressed: () async {
-                  final parts = date.split('-');
-                  final initial = DateTime(
-                    int.parse(parts[0]),
-                    int.parse(parts[1]),
-                    int.parse(parts[2]),
-                  );
-                  final picked = await showDatePicker(
-                    context: context,
-                    initialDate: initial,
-                    firstDate: DateTime.now().subtract(const Duration(days: 365)),
-                    lastDate: DateTime.now().add(const Duration(days: 30)),
-                  );
-                  if (picked != null) {
-                    ref.read(adminAttendanceDateProvider.notifier).set(formatDateYmd(picked));
-                  }
-                },
-                icon: const Icon(Icons.calendar_today_rounded, size: 16, color: Color(0xFFC5A059)),
-                label: Text(date, style: const TextStyle(fontWeight: FontWeight.w700)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          policyAsync.when(
-            loading: () => const _SectionCard(
-              child: Center(child: Padding(
-                padding: EdgeInsets.all(24),
-                child: CircularProgressIndicator(color: Color(0xFFC5A059)),
-              )),
-            ),
-            error: (e, _) => _SectionCard(
-              child: Column(
-                children: [
-                  Text('$e', style: const TextStyle(color: Colors.red)),
-                  TextButton(
-                    onPressed: () => ref.invalidate(adminAttendancePolicyProvider),
-                    child: const Text('Retry'),
-                  ),
-                ],
-              ),
-            ),
-            data: (policy) => _PolicyCard(policy: policy),
-          ),
-          const SizedBox(height: 24),
-          Text(
-            'Employees',
-            style: TextStyle(
-              fontWeight: FontWeight.w800,
-              fontSize: 16,
-              color: isDark ? Colors.white : const Color(0xFF212F3D),
-            ),
-          ),
-          const SizedBox(height: 12),
-          dayAsync.when(
-            loading: () => const Center(
-              child: Padding(
-                padding: EdgeInsets.all(32),
-                child: CircularProgressIndicator(color: Color(0xFFC5A059)),
-              ),
-            ),
-            error: (e, _) => Column(
-              children: [
-                Text('$e', style: const TextStyle(color: Colors.red)),
-                FilledButton(
-                  onPressed: () => ref.invalidate(adminAttendanceDayProvider),
-                  child: const Text('Retry'),
+                const SizedBox(width: 12),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    if (date.isEmpty) return;
+                    final parts = date.split('-');
+                    final initial = DateTime(
+                      int.parse(parts[0]),
+                      int.parse(parts[1]),
+                      int.parse(parts[2]),
+                    );
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: initial,
+                      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                      lastDate: DateTime.now().add(const Duration(days: 30)),
+                    );
+                    if (picked != null && context.mounted) {
+                      context
+                          .read<AdminAttendanceBloc>()
+                          .add(AdminAttendanceDateChanged(formatDateYmd(picked)));
+                    }
+                  },
+                  icon: const Icon(Icons.calendar_today_rounded, size: 16, color: Color(0xFFC5A059)),
+                  label: Text(date, style: const TextStyle(fontWeight: FontWeight.w700)),
                 ),
               ],
             ),
-            data: (rows) {
-              if (rows.isEmpty) {
-                return Text(
-                  'No active employees found.',
-                  style: TextStyle(color: isDark ? Colors.white54 : const Color(0xFF607D8B)),
-                );
-              }
-              return Column(
-                children: rows
+            const SizedBox(height: 16),
+            if (state.policy != null)
+              _PolicyCard(
+                policy: state.policy!,
+                onSave: (body) => context
+                    .read<AdminAttendanceBloc>()
+                    .add(AdminAttendancePolicyUpdated(body)),
+              )
+            else if (state.status == LoadStatus.loading)
+              const _SectionCard(
+                child: Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: CircularProgressIndicator(color: Color(0xFFC5A059)),
+                  ),
+                ),
+              )
+            else
+              _SectionCard(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Failed to load policy'),
+                    TextButton(
+                      onPressed: () => context
+                          .read<AdminAttendanceBloc>()
+                          .add(const AdminAttendanceRefreshRequested()),
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 24),
+            Text(
+              'Employees',
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 16,
+                color: isDark ? Colors.white : const Color(0xFF212F3D),
+              ),
+            ),
+            const SizedBox(height: 12),
+            if (state.status == LoadStatus.loading && state.rows.isEmpty)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(32),
+                  child: CircularProgressIndicator(color: Color(0xFFC5A059)),
+                ),
+              )
+            else if (state.status == LoadStatus.failure && state.rows.isEmpty)
+              Center(
+                child: Column(
+                  children: [
+                    Text(
+                      state.errorMessage ?? 'Failed to load employees',
+                      style: const TextStyle(color: Colors.red),
+                    ),
+                    FilledButton(
+                      onPressed: () => context
+                          .read<AdminAttendanceBloc>()
+                          .add(const AdminAttendanceRefreshRequested()),
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              )
+            else if (state.rows.isEmpty)
+              Text(
+                'No active employees found.',
+                style: TextStyle(color: isDark ? Colors.white54 : const Color(0xFF607D8B)),
+              )
+            else
+              Column(
+                children: state.rows
                     .map(
                       (row) => _EmployeeDayTile(
                         row: row,
                         onOpen: () => context.push('/admin/attendance/employee/${row.employeeId}'),
                         onAddPunch: () => showAdminPunchDialog(
                           context,
-                          ref,
+                          bloc: context.read<AdminAttendanceBloc>(),
                           employeeId: row.employeeId,
                           dateYmd: date,
                         ),
                       ),
                     )
                     .toList(),
-              );
-            },
-          ),
-        ],
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -173,7 +225,7 @@ class _SectionCard extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(
-          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
           width: 1.5,
         ),
       ),
@@ -182,21 +234,21 @@ class _SectionCard extends StatelessWidget {
   }
 }
 
-class _PolicyCard extends ConsumerStatefulWidget {
-  const _PolicyCard({required this.policy});
+class _PolicyCard extends StatefulWidget {
+  const _PolicyCard({required this.policy, required this.onSave});
 
   final AttendancePolicy policy;
+  final ValueChanged<Map<String, dynamic>> onSave;
 
   @override
-  ConsumerState<_PolicyCard> createState() => _PolicyCardState();
+  State<_PolicyCard> createState() => _PolicyCardState();
 }
 
-class _PolicyCardState extends ConsumerState<_PolicyCard> {
+class _PolicyCardState extends State<_PolicyCard> {
   late TextEditingController _inCtrl;
   late TextEditingController _outCtrl;
   late TextEditingController _inBufCtrl;
   late TextEditingController _outBufCtrl;
-  bool _saving = false;
 
   @override
   void initState() {
@@ -240,28 +292,13 @@ class _PolicyCardState extends ConsumerState<_PolicyCard> {
     setState(() {});
   }
 
-  Future<void> _save() async {
-    setState(() => _saving = true);
-    try {
-      await ref.read(attendanceRepositoryProvider).updateAdminPolicy({
-        'defaultPunchInTime': _inCtrl.text.trim(),
-        'defaultPunchOutTime': _outCtrl.text.trim(),
-        'punchInBufferMinutes': int.parse(_inBufCtrl.text.trim()),
-        'punchOutBufferMinutes': int.parse(_outBufCtrl.text.trim()),
-      });
-      invalidateAttendanceAdminData(ref);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Policy saved.')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
-      }
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
+  void _save() {
+    widget.onSave({
+      'defaultPunchInTime': _inCtrl.text.trim(),
+      'defaultPunchOutTime': _outCtrl.text.trim(),
+      'punchInBufferMinutes': int.tryParse(_inBufCtrl.text.trim()) ?? widget.policy.punchInBufferMinutes,
+      'punchOutBufferMinutes': int.tryParse(_outBufCtrl.text.trim()) ?? widget.policy.punchOutBufferMinutes,
+    });
   }
 
   @override
@@ -297,18 +334,12 @@ class _PolicyCardState extends ConsumerState<_PolicyCard> {
                 ),
               ),
               FilledButton(
-                onPressed: _saving ? null : _save,
+                onPressed: _save,
                 style: FilledButton.styleFrom(
                   backgroundColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
                   foregroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
                 ),
-                child: _saving
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Save Policy', style: TextStyle(fontWeight: FontWeight.w800)),
+                child: const Text('Save Policy', style: TextStyle(fontWeight: FontWeight.w800)),
               ),
             ],
           ),
@@ -401,7 +432,7 @@ class _EmployeeDayTile extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(
-          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
           width: 1.5,
         ),
       ),
@@ -488,8 +519,9 @@ class _EmployeeDayTile extends StatelessWidget {
 }
 
 Future<void> showAdminPunchDialog(
-  BuildContext context,
-  WidgetRef ref, {
+  BuildContext context, {
+  WidgetRef? ref,
+  AdminAttendanceBloc? bloc,
   int? employeeId,
   AttendancePunch? existing,
   String? dateYmd,
@@ -508,12 +540,13 @@ Future<void> showAdminPunchDialog(
     terminal = existing.terminalId ?? 'MANUAL';
   }
 
+  bool saving = false;
+
   await showDialog<void>(
     context: context,
     builder: (ctx) {
       return StatefulBuilder(
-        builder: (ctx, setState) {
-          bool saving = false;
+        builder: (ctx, setDialogState) {
           return AlertDialog(
             backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -555,34 +588,55 @@ Future<void> showAdminPunchDialog(
               ),
               FilledButton(
                 onPressed: saving ? null : () async {
-                  setState(() => saving = true);
+                  setDialogState(() => saving = true);
                   try {
                     // Use the timezone from dateYmd if possible, here defaulting to +05:30.
-                    final punchAt = '${dateYmd}T$time:00+05:30';
-                    if (existing == null) {
-                      await ref.read(attendanceRepositoryProvider).adminAddPunch(
-                        employeeId: employeeId!,
-                        punchAt: punchAt,
-                        punchType: type,
-                        terminalId: terminal,
-                      );
-                    } else {
-                      await ref.read(attendanceRepositoryProvider).adminUpdatePunch(
-                        punchId: existing.id,
-                        punchAt: punchAt,
-                        punchType: type,
-                        terminalId: terminal,
-                      );
+                    final punchAt = '${dateYmd ?? formatDateYmd(DateTime.now())}T$time:00+05:30';
+                    if (bloc != null) {
+                      if (existing == null) {
+                        bloc.add(AdminAttendancePunchAdded(
+                          employeeId: employeeId!,
+                          punchAt: punchAt,
+                          punchType: type,
+                          terminalId: terminal,
+                        ));
+                      } else {
+                        bloc.add(AdminAttendancePunchUpdated(
+                          punchId: existing.id,
+                          punchAt: punchAt,
+                          punchType: type,
+                          terminalId: terminal,
+                        ));
+                      }
+                      if (ctx.mounted) {
+                        Navigator.pop(ctx);
+                      }
+                    } else if (ref != null) {
+                      if (existing == null) {
+                        await ref.read(attendanceRepositoryProvider).adminAddPunch(
+                          employeeId: employeeId!,
+                          punchAt: punchAt,
+                          punchType: type,
+                          terminalId: terminal,
+                        );
+                      } else {
+                        await ref.read(attendanceRepositoryProvider).adminUpdatePunch(
+                          punchId: existing.id,
+                          punchAt: punchAt,
+                          punchType: type,
+                          terminalId: terminal,
+                        );
+                      }
+                      if (ctx.mounted) {
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Punch saved successfully.')));
+                      }
+                      invalidateAttendanceAdminData(ref);
                     }
-                    if (ctx.mounted) {
-                      Navigator.pop(ctx);
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Punch saved successfully.')));
-                    }
-                    invalidateAttendanceAdminData(ref);
                   } catch (e) {
                     if (ctx.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-                      setState(() => saving = false);
+                      setDialogState(() => saving = false);
                     }
                   }
                 },

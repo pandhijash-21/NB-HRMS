@@ -259,7 +259,7 @@ class _AdminLettersConfigScreenState
         final url = el.imageUrl;
         if (url == null || url.isEmpty) continue;
         buffer.write(
-          '<img src="${url}" style="position:absolute;left:${el.position.dx}px;top:${el.position.dy}px;width:${el.size.width}px;height:${el.size.height}px;object-fit:contain;" />',
+          '<img src="$url" style="position:absolute;left:${el.position.dx}px;top:${el.position.dy}px;width:${el.size.width}px;height:${el.size.height}px;object-fit:contain;" />',
         );
       } else {
         final rawText = el.text;
@@ -267,7 +267,7 @@ class _AdminLettersConfigScreenState
         final align = el.alignment.value;
         final deco = el.underline ? 'underline' : 'none';
         buffer.write(
-          '<div style="position:absolute;left:${el.position.dx}px;top:${el.position.dy}px;width:${el.size.width}px;font-family:${el.fontFamily};font-size:${el.fontSize}px;font-weight:${el.bold ? 700 : 400};font-style:${el.italic ? 'italic' : 'normal'};text-decoration:${deco};text-align:${align};white-space:normal;">${safe}</div>',
+          '<div style="position:absolute;left:${el.position.dx}px;top:${el.position.dy}px;width:${el.size.width}px;font-family:${el.fontFamily};font-size:${el.fontSize}px;font-weight:${el.bold ? 700 : 400};font-style:${el.italic ? 'italic' : 'normal'};text-decoration:$deco;text-align:$align;white-space:normal;">$safe</div>',
         );
       }
     }
@@ -336,7 +336,7 @@ class _AdminLettersConfigScreenState
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Edit text block'),
+        title: const Text('Edit text block'),
         content: SizedBox(
           width: 720,
           child: SingleChildScrollView(
@@ -371,7 +371,7 @@ class _AdminLettersConfigScreenState
                   children: [
                     Expanded(
                       child: DropdownButtonFormField<String>(
-                        value: fontFamily,
+                        initialValue: fontFamily,
                         items: const ['Arial', 'Times New Roman', 'Georgia', 'Courier New'].map((f) {
                           return DropdownMenuItem(value: f, child: Text(f));
                         }).toList(),
@@ -416,7 +416,7 @@ class _AdminLettersConfigScreenState
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  value: alignment.value,
+                  initialValue: alignment.value,
                   items: const ['left', 'center', 'right'].map((v) {
                     return DropdownMenuItem(value: v, child: Text(v));
                   }).toList(),
@@ -604,11 +604,11 @@ class _AdminLettersConfigScreenState
               height: el.size.height,
               decoration: BoxDecoration(
                 border: Border.all(
-                  color: isActive ? AppColors.bronze : AppColors.border.withOpacity(0.25),
+                  color: isActive ? AppColors.bronze : AppColors.border.withValues(alpha: 0.25),
                   width: isActive ? 2 : 1,
                 ),
                 color: isActive && el.type == _CanvasElementType.text
-                    ? AppColors.bronze.withOpacity(0.04)
+                    ? AppColors.bronze.withValues(alpha: 0.04)
                     : Colors.transparent,
               ),
               child: _buildElementPreview(el),
@@ -663,7 +663,7 @@ class _AdminLettersConfigScreenState
                       padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
                       child: Row(
                         children: [
-                          Expanded(
+                          const Expanded(
                             child: Text(
                               'Templates',
                               style: TextStyle(
@@ -714,7 +714,7 @@ class _AdminLettersConfigScreenState
                           final t = templates[i];
                           final isSelected = _selected?.id == t.id;
                           return Card(
-                            color: isSelected ? AppColors.bronze.withOpacity(0.08) : null,
+                            color: isSelected ? AppColors.bronze.withValues(alpha: 0.08) : null,
                             child: ListTile(
                               title: Text(t.name),
                               subtitle: Text(t.key),
@@ -739,7 +739,7 @@ class _AdminLettersConfigScreenState
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Template Editor',
+                      const Text('Template Editor',
                           style: TextStyle(
                             fontWeight: FontWeight.w800,
                             fontSize: 16,
@@ -807,7 +807,7 @@ class _AdminLettersConfigScreenState
                         children: [
                           Expanded(
                             child: DropdownButtonFormField<String>(
-                              value: _paperSize,
+                              initialValue: _paperSize,
                               items: const ['A2', 'A3', 'A4'].map((v) {
                                 return DropdownMenuItem(value: v, child: Text(v));
                               }).toList(),
@@ -904,7 +904,7 @@ class _AdminLettersConfigScreenState
                                 icon: const Icon(Icons.edit_outlined),
                                 label: const Text('Edit text'),
                               ),
-                            Text(
+                            const Text(
                               'Move:',
                               style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
                             ),
@@ -928,7 +928,7 @@ class _AdminLettersConfigScreenState
                               onPressed: () => _nudgeActive(10, 0),
                               icon: const Icon(Icons.keyboard_arrow_right),
                             ),
-                            Text(
+                            const Text(
                               'Drag to move • corner handle to resize',
                               style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
                             ),
@@ -951,7 +951,7 @@ class _AdminLettersConfigScreenState
                                 color: isDark ? Colors.black : Colors.white,
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
-                                  color: isDark ? AppColors.bronze.withOpacity(0.3) : AppColors.border.withOpacity(0.8),
+                                  color: isDark ? AppColors.bronze.withValues(alpha: 0.3) : AppColors.border.withValues(alpha: 0.8),
                                 ),
                               ),
                               child: Stack(
@@ -961,7 +961,7 @@ class _AdminLettersConfigScreenState
                               ),
                             ),
                             const SizedBox(height: 10),
-                            Text(
+                            const Text(
                               'Tip: Tap to select • drag to move • double-tap text to edit • drag corner to resize.',
                               style: TextStyle(
                                 fontSize: 12,

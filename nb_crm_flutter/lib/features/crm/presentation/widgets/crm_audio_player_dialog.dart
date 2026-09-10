@@ -378,7 +378,7 @@ class _CrmAudioPlayerDialogState extends ConsumerState<CrmAudioPlayerDialog>
                           ),
                         ),
                         const SizedBox(height: 2),
-                        Text(
+                        const Text(
                           'Listening inside NB CRM',
                           style: TextStyle(
                             fontSize: 12,

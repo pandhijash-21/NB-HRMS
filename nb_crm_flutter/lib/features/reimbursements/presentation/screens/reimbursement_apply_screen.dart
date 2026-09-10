@@ -184,7 +184,7 @@ class _ReimbursementApplyScreenState extends ConsumerState<ReimbursementApplyScr
             ),
             if (_proofName != null) ...[
               const SizedBox(height: 8),
-              Text('Uploaded: $_proofName', style: TextStyle(color: AppColors.textSecondary)),
+              Text('Uploaded: $_proofName', style: const TextStyle(color: AppColors.textSecondary)),
             ],
             const SizedBox(height: 24),
             FilledButton(

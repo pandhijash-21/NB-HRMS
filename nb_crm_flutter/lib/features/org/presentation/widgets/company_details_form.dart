@@ -315,7 +315,7 @@ class _OrganizationEditorDialogState extends State<_OrganizationEditorDialog> {
   late final TextEditingController _codeCtrl;
   late final TextEditingController _nameCtrl;
   late final CompanyProfileFormController _profile;
-  var _saving = false;
+  final _saving = false;
 
   @override
   void initState() {
@@ -443,7 +443,7 @@ class _InstituteEditorDialogState extends State<_InstituteEditorDialog> {
   late final CompanyProfileFormController _profile;
   late bool _isChild;
   String? _parentId;
-  var _saving = false;
+  final _saving = false;
 
   @override
   void initState() {

@@ -96,6 +96,10 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
   final _hands = <String, String>{};
   final _floatReactions = <({String id, String emoji, String name})>[];
   final _reactionTimers = <String, Timer>{};
+  bool _speakerOn = true;
+  MediaDevice? _selectedAudioOutput;
+  bool _audioPlaybackBlocked = false;
+  StreamSubscription? _deviceChangeSub;
 
   static const _connectTimeouts = Timeouts(
     connection: Duration(seconds: 40),
@@ -122,6 +126,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
       if (mounted) setState(() {});
     });
     _cam = !widget.voiceOnly;
+    _initAudioRouting();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       await _restoreGuestName();
@@ -134,11 +139,176 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
     });
   }
 
+  Future<void> _initAudioRouting() async {
+    try {
+      if (AudioManager.instance.canSwitchSpeakerphone) {
+        _speakerOn = AudioManager.instance.isSpeakerOutputPreferred;
+      }
+      _selectedAudioOutput = Hardware.instance.selectedAudioOutput;
+      _deviceChangeSub = Hardware.instance.onDeviceChange.stream.listen((devices) {
+        if (mounted) {
+          setState(() {
+            _selectedAudioOutput = Hardware.instance.selectedAudioOutput;
+          });
+        }
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _toggleAudioOutput() async {
+    try {
+      if (AudioManager.instance.canSwitchSpeakerphone) {
+        final next = !_speakerOn;
+        await AudioManager.instance.setSpeakerOutputPreferred(next);
+        if (mounted) {
+          setState(() => _speakerOn = next);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              duration: const Duration(seconds: 2),
+              content: Text(next ? 'Switched audio to Loudspeaker' : 'Switched audio to Earphones / Headphones'),
+            ),
+          );
+        }
+      } else {
+        await _showAudioDevicePicker();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not switch audio: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _showAudioDevicePicker() async {
+    try {
+      final outputs = await Hardware.instance.audioOutputs();
+      if (!mounted) return;
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+
+      await showModalBottomSheet<void>(
+        context: context,
+        backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (ctx) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.headphones_rounded, color: Color(0xFFC5A059)),
+                    const SizedBox(width: 10),
+                    Text(
+                      'Audio Output & Headphones',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        color: isDark ? Colors.white : const Color(0xFF212F3D),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Select playback device (earphones, headphones, speaker, or bluetooth)',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? Colors.white54 : const Color(0xFF607D8B),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                if (AudioManager.instance.canSwitchSpeakerphone) ...[
+                  ListTile(
+                    leading: Icon(
+                      _speakerOn ? Icons.volume_up_rounded : Icons.headphones_rounded,
+                      color: const Color(0xFFC5A059),
+                    ),
+                    title: Text(
+                      _speakerOn ? 'Loudspeaker (Active)' : 'Earphones / Headphones (Active)',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    subtitle: Text(
+                      _speakerOn
+                          ? 'Tap to route audio to plugged-in or bluetooth headphones'
+                          : 'Tap to route audio to device loudspeaker',
+                    ),
+                    trailing: Switch(
+                      value: _speakerOn,
+                      activeThumbColor: const Color(0xFFC5A059),
+                      onChanged: (val) async {
+                        Navigator.pop(ctx);
+                        await _toggleAudioOutput();
+                      },
+                    ),
+                  ),
+                  const Divider(),
+                ],
+                if (outputs.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Text(
+                      'System default output device is active.',
+                      style: TextStyle(color: isDark ? Colors.white70 : Colors.black87),
+                    ),
+                  )
+                else
+                  ...outputs.map((d) {
+                    final selected = _selectedAudioOutput?.deviceId == d.deviceId;
+                    final isHeadphone = d.label.toLowerCase().contains('head') ||
+                        d.label.toLowerCase().contains('ear') ||
+                        d.label.toLowerCase().contains('airpod') ||
+                        d.label.toLowerCase().contains('bluetooth');
+                    return ListTile(
+                      leading: Icon(
+                        isHeadphone ? Icons.headphones_rounded : Icons.volume_up_rounded,
+                        color: selected ? const Color(0xFFC5A059) : (isDark ? Colors.white60 : Colors.black54),
+                      ),
+                      title: Text(
+                        d.label.isEmpty ? 'Default Audio Device' : d.label,
+                        style: TextStyle(
+                          fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+                          color: selected ? const Color(0xFFC5A059) : (isDark ? Colors.white : Colors.black87),
+                        ),
+                      ),
+                      trailing: selected ? const Icon(Icons.check_circle_rounded, color: Color(0xFFC5A059)) : null,
+                      onTap: () async {
+                        Navigator.pop(ctx);
+                        try {
+                          await Hardware.instance.selectAudioOutput(d);
+                          if (!mounted) return;
+                          setState(() => _selectedAudioOutput = d);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Switched to ${d.label}')),
+                          );
+                        } catch (err) {
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Could not select device: $err')),
+                          );
+                        }
+                      },
+                    );
+                  }),
+              ],
+            ),
+          ),
+        ),
+      );
+    } catch (_) {}
+  }
+
   @override
   void dispose() {
     _admitPoll?.cancel();
     _hostWaitPoll?.cancel();
     _whisperPoll?.cancel();
+    _deviceChangeSub?.cancel();
     for (final timer in _toastTimers.values) {
       timer.cancel();
     }
@@ -861,6 +1031,11 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
             e.publication.source == TrackSource.microphone) {
           _stt?.setMicEnabled(true);
           _stt?.attach(room);
+        }
+      })
+      ..on<AudioPlaybackStatusChanged>((e) {
+        if (mounted) {
+          setState(() => _audioPlaybackBlocked = !e.isPlaying && !room.canPlaybackAudio);
         }
       });
   }
@@ -1972,6 +2147,43 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 _meetTopBar(participants),
+                if (_audioPlaybackBlocked)
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFB45309),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.amber, width: 1),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.volume_off_rounded, color: Colors.white, size: 20),
+                        const SizedBox(width: 10),
+                        const Expanded(
+                          child: Text(
+                            'Audio paused by browser. Tap to unmute sound for headphones & speakers.',
+                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        FilledButton(
+                          onPressed: () async {
+                            await _room?.startAudio();
+                            if (mounted) setState(() => _audioPlaybackBlocked = false);
+                          },
+                          style: FilledButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: Colors.black87,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          child: const Text('Unmute Audio', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
+                        ),
+                      ],
+                    ),
+                  ),
                 if (_busyLabel != null) ...[
                   const LinearProgressIndicator(
                     minHeight: 3,
@@ -2417,6 +2629,17 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                     }
                     setState(() => _mic = next);
                   },
+                ),
+                const SizedBox(width: 14),
+                _LobbyRoundButton(
+                  icon: _speakerOn ? Icons.volume_up_rounded : Icons.headphones_rounded,
+                  on: true,
+                  tooltip: _speakerOn
+                      ? 'Audio: Loudspeaker (Tap for Headphones/Earphones, Long-press for Devices)'
+                      : 'Audio: Earphones/Headphones (Tap for Loudspeaker, Long-press for Devices)',
+                  onPressed: _toggleAudioOutput,
+                  onLongPress: _showAudioDevicePicker,
+                  accent: !_speakerOn,
                 ),
                 const SizedBox(width: 14),
                 _LobbyRoundButton(
@@ -3854,6 +4077,7 @@ class _LobbyRoundButton extends StatelessWidget {
     required this.on,
     required this.tooltip,
     required this.onPressed,
+    this.onLongPress,
     this.accent = false,
     this.danger = false,
     this.badge,
@@ -3863,6 +4087,7 @@ class _LobbyRoundButton extends StatelessWidget {
   final bool on;
   final String tooltip;
   final VoidCallback onPressed;
+  final VoidCallback? onLongPress;
   final bool accent;
   final bool danger;
   final Color? badge;
@@ -3889,6 +4114,7 @@ class _LobbyRoundButton extends StatelessWidget {
         child: InkWell(
           customBorder: const CircleBorder(),
           onTap: onPressed,
+          onLongPress: onLongPress,
           child: SizedBox(
             width: 48,
             height: 48,

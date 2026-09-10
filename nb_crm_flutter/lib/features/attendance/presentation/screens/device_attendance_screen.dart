@@ -68,7 +68,7 @@ class _DeviceAttendanceScreenState extends ConsumerState<DeviceAttendanceScreen>
               ),
               Container(
                 color: isDark
-                    ? const Color(0xFFC5A059).withOpacity(0.15)
+                    ? const Color(0xFFC5A059).withValues(alpha: 0.15)
                     : const Color(0xFFCFD8DC),
                 height: 1.5,
               ),
@@ -339,7 +339,7 @@ class _PreviewCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isDark
-              ? const Color(0xFFC5A059).withOpacity(0.15)
+              ? const Color(0xFFC5A059).withValues(alpha: 0.15)
               : const Color(0xFFCFD8DC),
         ),
       ),
@@ -736,7 +736,7 @@ class _StatusCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isDark
-              ? const Color(0xFFC5A059).withOpacity(0.15)
+              ? const Color(0xFFC5A059).withValues(alpha: 0.15)
               : const Color(0xFFCFD8DC),
         ),
       ),

@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../lookups/presentation/lookup_dropdown.dart';
+import '../../data/project_repository.dart';
 import '../../domain/structure_models.dart';
-import '../project_providers.dart';
 
-class TowerFormScreen extends ConsumerStatefulWidget {
+class TowerFormScreen extends StatefulWidget {
   const TowerFormScreen({
     super.key,
     required this.projectId,
@@ -19,10 +19,10 @@ class TowerFormScreen extends ConsumerStatefulWidget {
   final String? towerId;
 
   @override
-  ConsumerState<TowerFormScreen> createState() => _TowerFormScreenState();
+  State<TowerFormScreen> createState() => _TowerFormScreenState();
 }
 
-class _TowerFormScreenState extends ConsumerState<TowerFormScreen> {
+class _TowerFormScreenState extends State<TowerFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _phase = TextEditingController();
@@ -37,6 +37,31 @@ class _TowerFormScreenState extends ConsumerState<TowerFormScreen> {
   bool _hydrated = false;
 
   bool get _isEdit => widget.towerId != null;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_isEdit) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _loadTower();
+      });
+    }
+  }
+
+  Future<void> _loadTower() async {
+    try {
+      final tower = await context
+          .read<ProjectRepository>()
+          .getTower(widget.projectId, widget.towerId!);
+      if (mounted) {
+        setState(() => _hydrate(tower));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -90,10 +115,10 @@ class _TowerFormScreenState extends ConsumerState<TowerFormScreen> {
               onChanged: (v) => setState(() => _hasGround = v),
             ),
           ),
-          Tooltip(
+          const Tooltip(
             message: tip,
-            waitDuration: const Duration(milliseconds: 200),
-            child: const Icon(Icons.info_outline, size: 20, color: Color(0xFF2563eb)),
+            waitDuration: Duration(milliseconds: 200),
+            child: Icon(Icons.info_outline, size: 20, color: Color(0xFF2563eb)),
           ),
         ],
       ),
@@ -115,18 +140,11 @@ class _TowerFormScreenState extends ConsumerState<TowerFormScreen> {
       'remarks': _remarks.text.trim(),
     };
     try {
-      final repo = ref.read(projectRepositoryProvider);
+      final repo = context.read<ProjectRepository>();
       if (_isEdit) {
         await repo.updateTower(widget.projectId, widget.towerId!, body);
       } else {
         await repo.createTower(widget.projectId, body);
-      }
-      ref.invalidate(projectTowersProvider(widget.projectId));
-      ref.invalidate(projectsListProvider);
-      if (_isEdit) {
-        ref.invalidate(
-          projectTowerDetailProvider((projectId: widget.projectId, towerId: widget.towerId!)),
-        );
       }
       if (!mounted) return;
       context.go('/erp/structure/${widget.projectId}');
@@ -141,16 +159,6 @@ class _TowerFormScreenState extends ConsumerState<TowerFormScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    if (_isEdit) {
-      ref.listen(
-        projectTowerDetailProvider((projectId: widget.projectId, towerId: widget.towerId!)),
-        (prev, next) {
-          next.whenData((t) {
-            if (!_hydrated) setState(() => _hydrate(t));
-          });
-        },
-      );
-    }
 
     final floors = int.tryParse(_floors.text.trim()) ?? 0;
     final flats = int.tryParse(_flats.text.trim()) ?? 0;
@@ -300,7 +308,7 @@ class _TowerFormScreenState extends ConsumerState<TowerFormScreen> {
                           ),
                           cell(
                             lookupDropdown(
-                              ref: ref,
+                              context: context,
                               category: 'PROJECT_TOWER_STATUS',
                               label: 'Status',
                               value: _statusCode,

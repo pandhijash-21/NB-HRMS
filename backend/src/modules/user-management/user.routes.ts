@@ -7,11 +7,12 @@ import { fail } from '../../utils/response';
 
 export const userRouter = Router();
 
+import { isAdminRole } from '../auth/permissions-map';
+
 function requireAdmin(req: Request, res: Response, next: NextFunction) {
   if (!req.user) return res.status(401).json(fail('Unauthenticated'));
-  const role = String(req.user.roleName ?? '').toUpperCase();
-  if (role !== 'ADMIN') {
-    return res.status(403).json(fail('Only Admin can unblock a locked login'));
+  if (!isAdminRole(req.user.roleName ?? req.user.role)) {
+    return res.status(403).json(fail('Only Admin can perform this operation'));
   }
   return next();
 }

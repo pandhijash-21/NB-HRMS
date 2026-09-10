@@ -50,7 +50,7 @@ class AdminSalaryCommissionsScreen extends ConsumerWidget {
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1.5),
           child: Container(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
             height: 1.5,
           ),
         ),
@@ -94,7 +94,7 @@ class AdminSalaryCommissionsScreen extends ConsumerWidget {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
                   side: BorderSide(
-                    color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                    color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
                     width: 1.5,
                   ),
                 ),
@@ -121,7 +121,7 @@ class AdminSalaryCommissionsScreen extends ConsumerWidget {
                               color: isDark ? const Color(0xFF2B2722) : const Color(0xFFF1F5F9),
                               borderRadius: BorderRadius.circular(6),
                               border: Border.all(
-                                color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                                color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
                               ),
                             ),
                             child: Text(
@@ -138,7 +138,7 @@ class AdminSalaryCommissionsScreen extends ConsumerWidget {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                               decoration: BoxDecoration(
-                                color: Colors.grey.withOpacity(0.12),
+                                color: Colors.grey.withValues(alpha: 0.12),
                                 border: Border.all(color: Colors.grey, width: 1.2),
                                 borderRadius: BorderRadius.circular(30),
                               ),
@@ -171,7 +171,7 @@ class AdminSalaryCommissionsScreen extends ConsumerWidget {
                         '${pc.counts?.columnDefinitions ?? pc.columnDefinitions.length} columns · '
                         '${pc.counts?.salaryStructureTemplates ?? 0} templates',
                         style: TextStyle(
-                          color: isDark ? Colors.white30 : const Color(0xFF607D8B).withOpacity(0.6), 
+                          color: isDark ? Colors.white30 : const Color(0xFF607D8B).withValues(alpha: 0.6), 
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                         ),
@@ -190,7 +190,7 @@ class AdminSalaryCommissionsScreen extends ConsumerWidget {
                                   children: [
                                     Switch(
                                       value: pc.isActive,
-                                      activeColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+                                      activeThumbColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
                                       onChanged: (v) => _toggleActive(ref, pc.id, v),
                                     ),
                                     const SizedBox(width: 4),
@@ -203,7 +203,7 @@ class AdminSalaryCommissionsScreen extends ConsumerWidget {
                                   children: [
                                     Switch(
                                       value: pc.ruleEditorEnabled,
-                                      activeColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+                                      activeThumbColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
                                       onChanged: (v) => _toggleRuleEditor(ref, pc.id, v),
                                     ),
                                     const SizedBox(width: 4),
@@ -221,7 +221,7 @@ class AdminSalaryCommissionsScreen extends ConsumerWidget {
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
                                 side: BorderSide(
-                                  color: isDark ? const Color(0xFFC5A059).withOpacity(0.4) : const Color(0xFFCFD8DC),
+                                  color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.4) : const Color(0xFFCFD8DC),
                                   width: 1.2,
                                 ),
                                 shape: RoundedRectangleBorder(
@@ -275,7 +275,7 @@ class AdminSalaryCommissionsScreen extends ConsumerWidget {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
             side: BorderSide(
-              color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC),
+              color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
               width: 1.5,
             ),
           ),
@@ -343,7 +343,7 @@ class AdminSalaryCommissionsScreen extends ConsumerWidget {
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Enable rule editor', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                     value: ruleEditor,
-                    activeColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+                    activeThumbColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
                     onChanged: (v) => setLocal(() => ruleEditor = v),
                   ),
                 ],

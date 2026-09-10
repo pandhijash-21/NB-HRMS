@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/widgets/header_action_button.dart';
@@ -45,7 +44,7 @@ class AdminLeavesHolidaysScreen extends ConsumerWidget {
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1.5),
           child: Container(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
             height: 1.5,
           ),
         ),
@@ -69,13 +68,13 @@ class AdminLeavesHolidaysScreen extends ConsumerWidget {
                 color: isDark ? const Color(0xFF1E1B18) : Colors.white,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                  color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
                   width: 1.5,
                 ),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.calendar_month_rounded, color: const Color(0xFFC5A059), size: 20),
+                  const Icon(Icons.calendar_month_rounded, color: Color(0xFFC5A059), size: 20),
                   const SizedBox(width: 8),
                   Text(
                     'Year',
@@ -120,7 +119,7 @@ class AdminLeavesHolidaysScreen extends ConsumerWidget {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text('$e', style: TextStyle(color: Colors.red)),
+                      Text('$e', style: const TextStyle(color: Colors.red)),
                       const SizedBox(height: 12),
                       FilledButton(
                         onPressed: () => ref.invalidate(adminHolidaysProvider),
@@ -145,7 +144,7 @@ class AdminLeavesHolidaysScreen extends ConsumerWidget {
                             Text(
                               'No holidays for $year.',
                               style: TextStyle(
-                                color: isDark ? Colors.white30 : const Color(0xFF607D8B).withOpacity(0.6),
+                                color: isDark ? Colors.white30 : const Color(0xFF607D8B).withValues(alpha: 0.6),
                                 fontWeight: FontWeight.w600,
                                 fontSize: 15,
                               ),
@@ -177,7 +176,7 @@ class AdminLeavesHolidaysScreen extends ConsumerWidget {
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
         borderSide: BorderSide(
-          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
         ),
       ),
       focusedBorder: OutlineInputBorder(
@@ -225,7 +224,7 @@ class AdminLeavesHolidaysScreen extends ConsumerWidget {
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     side: BorderSide(
-                      color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                      color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
                     ),
                   ),
                   onPressed: () async {
@@ -252,7 +251,7 @@ class AdminLeavesHolidaysScreen extends ConsumerWidget {
                   color: isDark ? const Color(0xFF2B2722) : const Color(0xFFF1F5F9),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                    color: isDark ? const Color(0xFFC5A059).withOpacity(0.1) : const Color(0xFFCFD8DC),
+                    color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.1) : const Color(0xFFCFD8DC),
                   ),
                 ),
                 child: SwitchListTile(
@@ -266,7 +265,7 @@ class AdminLeavesHolidaysScreen extends ConsumerWidget {
                     ),
                   ),
                   value: isOptional,
-                  activeColor: const Color(0xFFC5A059),
+                  activeThumbColor: const Color(0xFFC5A059),
                   onChanged: (v) => setLocal(() => isOptional = v),
                 ),
               ),
@@ -325,7 +324,7 @@ class _HolidayTile extends ConsumerWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(
-          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
           width: 1.5,
         ),
       ),
@@ -339,7 +338,7 @@ class _HolidayTile extends ConsumerWidget {
                 color: isDark ? const Color(0xFF2B2722) : const Color(0xFFF1F5F9),
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: isDark ? const Color(0xFFC5A059).withOpacity(0.1) : const Color(0xFFCFD8DC),
+                  color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.1) : const Color(0xFFCFD8DC),
                 ),
               ),
               child: const Icon(Icons.event_available_rounded, color: Color(0xFFC5A059), size: 20),
@@ -373,7 +372,7 @@ class _HolidayTile extends ConsumerWidget {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: Colors.orange.withOpacity(0.1),
+                            color: Colors.orange.withValues(alpha: 0.1),
                             border: Border.all(color: Colors.orange, width: 1),
                             borderRadius: BorderRadius.circular(30),
                           ),

@@ -1,36 +1,45 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/widgets/mobile_input_formatter.dart';
-import '../../../auth/presentation/auth_providers.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
+import '../../data/crm_repository.dart';
 import '../../domain/crm_models.dart';
-import '../crm_providers.dart';
+import '../bloc/crm_leads_bloc.dart';
 import '../widgets/crm_audio_player_dialog.dart';
 
-class CrmPreSalesScreen extends ConsumerStatefulWidget {
+class CrmPreSalesScreen extends StatelessWidget {
   const CrmPreSalesScreen({super.key});
 
   @override
-  ConsumerState<CrmPreSalesScreen> createState() => _CrmPreSalesScreenState();
+  Widget build(BuildContext context) {
+    return BlocProvider<CrmLeadsBloc>(
+      create: (ctx) => CrmLeadsBloc(
+        crmRepository: ctx.read<CrmRepository>(),
+      )..add(const CrmLeadsLoadRequested()),
+      child: const _CrmPreSalesView(),
+    );
+  }
 }
 
-class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
+class _CrmPreSalesView extends StatefulWidget {
+  const _CrmPreSalesView();
+
+  @override
+  State<_CrmPreSalesView> createState() => _CrmPreSalesViewState();
+}
+
+class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _horizontalScrollController = ScrollController();
-  String _selectedStatusFilter = 'ALL';
-  String _followUpFilter = 'today';
 
   // Call Recording Filters
-  String _recordingDateFilter = 'all';
-  String _recordingStatusFilter = 'ALL';
   final TextEditingController _recordingSearchController = TextEditingController();
-  bool _recordingsOnlyWithAudio = false;
 
   @override
   void initState() {
@@ -52,55 +61,76 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardBg = isDark ? const Color(0xFF1E1B18) : Colors.white;
     final borderColor = isDark
-        ? const Color(0xFFC5A059).withOpacity(0.18)
+        ? const Color(0xFFC5A059).withValues(alpha: 0.18)
         : const Color(0xFFE2E8F0);
-    final textMuted = isDark ? Colors.white.withOpacity(0.6) : const Color(0xFF64748B);
+    final textMuted = isDark ? Colors.white.withValues(alpha: 0.6) : const Color(0xFF64748B);
     final primaryGold = isDark ? const Color(0xFFC5A059) : const Color(0xFF2563EB);
 
-    return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF141210) : const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        title: const Text('Pre-Sales Management'),
-        leading: const AppBackButton(fallbackLocation: '/crm/dashboard'),
-        backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        bottom: TabBar(
-          controller: _tabController,
-          isScrollable: true,
-          tabs: const [
-            Tab(text: 'Leads & Inquiries'),
-            Tab(text: 'Follow-ups & Scheduled Calls'),
-            Tab(text: 'Call Recordings'),
-            Tab(text: 'Pipeline & Deals'),
-            Tab(text: 'Quotations'),
-          ],
-        ),
-        actions: [
-          IconButton(
-            tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: () {
-              ref.read(crmLeadsProvider.notifier).refresh();
-              ref.invalidate(crmFollowUpsProvider);
-              ref.invalidate(crmColumnsProvider);
-              ref.invalidate(crmSalesUsersProvider);
-              ref.invalidate(crmCallLogsProvider);
-            },
+    final authState = context.watch<AuthBloc>().state;
+
+    return BlocConsumer<CrmLeadsBloc, CrmLeadsState>(
+      listener: (context, state) {
+        if (state.errorMessage != null && state.errorMessage!.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.errorMessage!),
+              backgroundColor: Colors.red,
+            ),
+          );
+        } else if (state.actionSuccessMessage != null &&
+            state.actionSuccessMessage!.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.actionSuccessMessage!),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      },
+      builder: (context, state) {
+        return Scaffold(
+          backgroundColor: isDark ? const Color(0xFF141210) : const Color(0xFFF8FAFC),
+          appBar: AppBar(
+            title: const Text('Pre-Sales Management'),
+            leading: const AppBackButton(fallbackLocation: '/crm/dashboard'),
+            backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            bottom: TabBar(
+              controller: _tabController,
+              isScrollable: true,
+              tabs: const [
+                Tab(text: 'Leads & Inquiries'),
+                Tab(text: 'Follow-ups & Scheduled Calls'),
+                Tab(text: 'Call Recordings'),
+                Tab(text: 'Pipeline & Deals'),
+                Tab(text: 'Quotations'),
+              ],
+            ),
+            actions: [
+              IconButton(
+                tooltip: 'Refresh',
+                icon: const Icon(Icons.refresh_rounded),
+                onPressed: () {
+                  context.read<CrmLeadsBloc>().add(const CrmLeadsRefreshRequested());
+                },
+              ),
+            ],
           ),
-        ],
-      ),
-      body: TabBarView(
-        controller: _tabController,
-        physics: const NeverScrollableScrollPhysics(), // Disables swipe gesture conflicts / carousel effect
-        children: [
-          _buildLeadsTableTab(isDark, cardBg, borderColor, textMuted, primaryGold),
-          _buildFollowUpsTab(isDark, cardBg, borderColor, textMuted, primaryGold),
-          _buildCallRecordingsTab(isDark, cardBg, borderColor, textMuted, primaryGold),
-          _buildPipelineTab(isDark, cardBg, borderColor, textMuted),
-          _buildQuotationsTab(isDark, cardBg, borderColor, textMuted),
-        ],
-      ),
+          body: TabBarView(
+            controller: _tabController,
+            physics: const NeverScrollableScrollPhysics(), // Disables swipe gesture conflicts / carousel effect
+            children: [
+              _buildLeadsTableTab(context, state, authState, isDark, cardBg, borderColor, textMuted, primaryGold),
+              _buildFollowUpsTab(context, state, isDark, cardBg, borderColor, textMuted, primaryGold),
+              _buildCallRecordingsTab(context, state, isDark, cardBg, borderColor, textMuted, primaryGold),
+              _buildPipelineTab(isDark, cardBg, borderColor, textMuted),
+              _buildQuotationsTab(isDark, cardBg, borderColor, textMuted),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -108,20 +138,22 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
   // TAB 1: Leads & Inquiries with Dynamic Columns & Telecaller Lock Rules
   // ---------------------------------------------------------------------------
   Widget _buildLeadsTableTab(
+    BuildContext context,
+    CrmLeadsState state,
+    AuthState authState,
     bool isDark,
     Color cardBg,
     Color borderColor,
     Color textMuted,
     Color primaryColor,
   ) {
-    final projectsAsync = ref.watch(crmProjectsProvider);
-    final selectedProjectId = ref.watch(selectedProjectIdProvider);
-    final campaignsAsync = ref.watch(crmCampaignsProvider);
-    final selectedCampaignId = ref.watch(selectedCampaignIdProvider);
-    final columnsAsync = ref.watch(crmColumnsProvider);
-    final leadsAsync = ref.watch(crmLeadsProvider);
-    final salesUsersAsync = ref.watch(crmSalesUsersProvider);
-    final authState = ref.watch(authNotifierProvider);
+    final projects = state.projects;
+    final selectedProjectId = state.selectedProjectId;
+    final campaigns = state.campaigns;
+    final selectedCampaignId = state.selectedCampaignId;
+    final columns = state.columns.where((c) => c.isVisibleInTable && c.isActive).toList();
+    final leads = state.leads;
+    final salesUsers = state.salesUsers;
 
     final currentUser = authState.user;
     final userRole = currentUser?.role.toUpperCase() ?? '';
@@ -146,103 +178,81 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
                 final isNarrow = constraints.maxWidth < 950;
 
                 Widget buildProjectSelector() {
-                  return projectsAsync.when(
-                    data: (projects) {
-                      final effectiveSelectedId = (selectedProjectId != null && projects.any((p) => p.id == selectedProjectId))
-                          ? selectedProjectId
-                          : 'ALL';
+                  final effectiveSelectedId = (selectedProjectId != null && projects.any((p) => p.id == selectedProjectId))
+                      ? selectedProjectId
+                      : 'ALL';
 
-                      return DropdownButtonFormField<String>(
-                        isExpanded: true,
-                        value: effectiveSelectedId,
-                        decoration: InputDecoration(
-                          prefixIcon: Icon(Icons.apartment_rounded, size: 18, color: primaryColor),
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                        items: [
-                          const DropdownMenuItem(
-                            value: 'ALL',
-                            child: Text('All Projects', overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                          ),
-                          ...projects.map((p) => DropdownMenuItem(
-                                value: p.id,
-                                child: Text(
-                                  p.name,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                                ),
-                              )),
-                        ],
-                        onChanged: (val) {
-                          if (val != null) {
-                            final newProjId = val == 'ALL' ? null : val;
-                            ref.read(selectedProjectIdProvider.notifier).setProjectId(newProjId);
-                            ref.read(selectedCampaignIdProvider.notifier).setCampaignId(null);
-                            ref.read(crmLeadsFilterProvider.notifier).setCampaignId(null);
-                            ref.invalidate(crmCampaignsProvider);
-                            ref.invalidate(crmColumnsProvider);
-                            ref.invalidate(crmLeadsProvider);
-                            ref.invalidate(crmKpiProvider);
-                          }
-                        },
-                      );
+                  return DropdownButtonFormField<String>(
+                    isExpanded: true,
+                    initialValue: effectiveSelectedId,
+                    decoration: InputDecoration(
+                      prefixIcon: Icon(Icons.apartment_rounded, size: 18, color: primaryColor),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    items: [
+                      const DropdownMenuItem(
+                        value: 'ALL',
+                        child: Text('All Projects', overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                      ),
+                      ...projects.map((p) => DropdownMenuItem(
+                            value: p.id,
+                            child: Text(
+                              p.name,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                            ),
+                          )),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) {
+                        final newProjId = val == 'ALL' ? null : val;
+                        context.read<CrmLeadsBloc>().add(CrmLeadsProjectSelected(newProjId));
+                      }
                     },
-                    loading: () => const SizedBox(height: 40, child: Center(child: LinearProgressIndicator())),
-                    error: (_, __) => const SizedBox.shrink(),
                   );
                 }
 
                 Widget buildCampaignSelector() {
-                  return campaignsAsync.when(
-                    data: (campaigns) {
-                      const allValue = 'ALL';
-                      final hasValidSelection = selectedCampaignId != null &&
-                          campaigns.any((c) => c.id == selectedCampaignId);
-                      final effectiveSelectedId =
-                          hasValidSelection ? selectedCampaignId! : allValue;
+                  const allValue = 'ALL';
+                  final hasValidSelection = selectedCampaignId != null &&
+                      campaigns.any((c) => c.id == selectedCampaignId);
+                  final effectiveSelectedId =
+                      hasValidSelection ? selectedCampaignId : allValue;
 
-                      return DropdownButtonFormField<String>(
-                        isExpanded: true,
-                        value: effectiveSelectedId,
-                        decoration: InputDecoration(
-                          prefixIcon: Icon(Icons.campaign_rounded, size: 18, color: primaryColor),
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  return DropdownButtonFormField<String>(
+                    isExpanded: true,
+                    initialValue: effectiveSelectedId,
+                    decoration: InputDecoration(
+                      prefixIcon: Icon(Icons.campaign_rounded, size: 18, color: primaryColor),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    items: [
+                      DropdownMenuItem(
+                        value: allValue,
+                        child: Text(
+                          campaigns.isEmpty ? '0 Campaigns for Project' : 'All Campaigns',
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                         ),
-                        items: [
-                          DropdownMenuItem(
-                            value: allValue,
+                      ),
+                      ...campaigns.map((c) => DropdownMenuItem(
+                            value: c.id,
                             child: Text(
-                              campaigns.isEmpty ? '0 Campaigns for Project' : 'All Campaigns',
+                              '${c.name} (${c.leadsCount})',
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                             ),
-                          ),
-                          ...campaigns.map((c) => DropdownMenuItem(
-                                value: c.id,
-                                child: Text(
-                                  '${c.name} (${c.leadsCount})',
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                                ),
-                              )),
-                        ],
-                        onChanged: (val) {
-                          if (val == null) return;
-                          final newCampId = val == allValue ? null : val;
-                          ref.read(selectedCampaignIdProvider.notifier).setCampaignId(newCampId);
-                          ref.read(crmLeadsFilterProvider.notifier).setCampaignId(newCampId);
-                          ref.invalidate(crmColumnsProvider);
-                          ref.invalidate(crmLeadsProvider);
-                          ref.invalidate(crmKpiProvider);
-                        },
-                      );
+                          )),
+                    ],
+                    onChanged: (val) {
+                      if (val == null) return;
+                      final newCampId = val == allValue ? null : val;
+                      context.read<CrmLeadsBloc>().add(CrmLeadsCampaignSelected(newCampId));
                     },
-                    loading: () => const SizedBox(height: 40, child: Center(child: LinearProgressIndicator())),
-                    error: (_, __) => const SizedBox.shrink(),
                   );
                 }
 
@@ -257,7 +267,7 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                     ),
                     onChanged: (val) {
-                      ref.read(crmLeadsFilterProvider.notifier).setSearch(val.trim());
+                      context.read<CrmLeadsBloc>().add(CrmLeadsSearchChanged(val.trim()));
                     },
                   );
                 }
@@ -265,7 +275,7 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
                 Widget buildStatusFilter() {
                   return DropdownButtonFormField<String>(
                     isExpanded: true,
-                    value: _selectedStatusFilter,
+                    initialValue: state.statusFilter,
                     dropdownColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
                     decoration: InputDecoration(
                       isDense: true,
@@ -324,8 +334,7 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
                     ],
                     onChanged: (val) {
                       if (val != null) {
-                        setState(() => _selectedStatusFilter = val);
-                        ref.read(crmLeadsFilterProvider.notifier).setStatus(val);
+                        context.read<CrmLeadsBloc>().add(CrmLeadsStatusFilterChanged(val));
                       }
                     },
                   );
@@ -349,22 +358,18 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
                           ),
                         ),
                         const SizedBox(width: 10),
-                        columnsAsync.when(
-                          data: (columns) => Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: () => _showAddLeadDialog(context, columns),
-                              icon: const Icon(Icons.person_add_rounded, size: 18),
-                              label: const Text('Add Lead'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: primaryColor,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                              ),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () => _showAddLeadDialog(context, state.columns),
+                            icon: const Icon(Icons.person_add_rounded, size: 18),
+                            label: const Text('Add Lead'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: primaryColor,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                             ),
                           ),
-                          loading: () => const SizedBox.shrink(),
-                          error: (_, __) => const SizedBox.shrink(),
                         ),
                       ],
                     );
@@ -397,20 +402,16 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
                         ),
                       ),
                       const SizedBox(width: 8),
-                      columnsAsync.when(
-                        data: (columns) => ElevatedButton.icon(
-                          onPressed: () => _showAddLeadDialog(context, columns),
-                          icon: const Icon(Icons.person_add_rounded, size: 18),
-                          label: const Text('Add Lead'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: primaryColor,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
+                      ElevatedButton.icon(
+                        onPressed: () => _showAddLeadDialog(context, state.columns),
+                        icon: const Icon(Icons.person_add_rounded, size: 18),
+                        label: const Text('Add Lead'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primaryColor,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         ),
-                        loading: () => const SizedBox.shrink(),
-                        error: (_, __) => const SizedBox.shrink(),
                       ),
                     ],
                   );
@@ -474,189 +475,179 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
           const SizedBox(height: 16),
 
           // Dynamic Data Table with Custom Scrollbar
-          columnsAsync.when(
-            loading: () => const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator())),
-            error: (err, _) => Center(child: Text('Error loading columns: $err', style: const TextStyle(color: Colors.red))),
-            data: (rawColumns) {
-              final columns = rawColumns.where((c) => c.isVisibleInTable && c.isActive).toList();
-              return leadsAsync.when(
-                loading: () => const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator())),
-                error: (err, _) => Center(child: Text('Error loading leads: $err', style: const TextStyle(color: Colors.red))),
-                data: (leads) {
-                  if (leads.isEmpty) {
-                    return Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(40),
-                      decoration: BoxDecoration(
-                        color: cardBg,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: borderColor),
+          if (state.status.isLoading && leads.isEmpty)
+            const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator()))
+          else if (state.status.isFailure && leads.isEmpty)
+            Center(child: Text('Error loading leads: ${state.errorMessage}', style: const TextStyle(color: Colors.red)))
+          else if (leads.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(40),
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: borderColor),
+              ),
+              child: Center(
+                child: Column(
+                  children: [
+                    Icon(Icons.assignment_late_outlined, size: 48, color: textMuted),
+                    const SizedBox(height: 12),
+                    Text('No Pre-Sales Leads Found', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: isDark ? Colors.white : const Color(0xFF1E293B))),
+                    const SizedBox(height: 6),
+                    Text('Click "Import Excel" to upload leads or "Add Lead" to enter manually.', style: TextStyle(fontSize: 13, color: textMuted)),
+                  ],
+                ),
+              ),
+            )
+          else
+            RepaintBoundary(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: cardBg,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: borderColor),
+                ),
+                child: Scrollbar(
+                  controller: _horizontalScrollController,
+                  thumbVisibility: true,
+                  trackVisibility: true,
+                  child: SingleChildScrollView(
+                    controller: _horizontalScrollController,
+                    scrollDirection: Axis.horizontal,
+                    child: DataTable(
+                      headingRowColor: WidgetStateProperty.all(
+                        isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFF1F5F9),
                       ),
-                      child: Center(
-                        child: Column(
-                          children: [
-                            Icon(Icons.assignment_late_outlined, size: 48, color: textMuted),
-                            const SizedBox(height: 12),
-                            Text('No Pre-Sales Leads Found', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: isDark ? Colors.white : const Color(0xFF1E293B))),
-                            const SizedBox(height: 6),
-                            Text('Click "Import Excel" to upload leads or "Add Lead" to enter manually.', style: TextStyle(fontSize: 13, color: textMuted)),
-                          ],
-                        ),
-                      ),
-                    );
-                  }
-
-                  final salesUsers = salesUsersAsync.value ?? [];
-
-                  return Container(
-                    decoration: BoxDecoration(
-                      color: cardBg,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: borderColor),
-                    ),
-                    child: Scrollbar(
-                      controller: _horizontalScrollController,
-                      thumbVisibility: true,
-                      trackVisibility: true,
-                      child: SingleChildScrollView(
-                        controller: _horizontalScrollController,
-                        scrollDirection: Axis.horizontal,
-                        child: DataTable(
-                          headingRowColor: WidgetStateProperty.all(
-                            isDark ? Colors.white.withOpacity(0.04) : const Color(0xFFF1F5F9),
+                      horizontalMargin: 16,
+                      columnSpacing: 20,
+                      columns: [
+                        const DataColumn(label: Text('#', style: TextStyle(fontWeight: FontWeight.bold))),
+                        const DataColumn(
+                          label: Row(
+                            children: [
+                              Icon(Icons.phone_in_talk_rounded, size: 16, color: Color(0xFF16A34A)),
+                              SizedBox(width: 6),
+                              Text('Elision', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF16A34A))),
+                            ],
                           ),
-                          horizontalMargin: 16,
-                          columnSpacing: 20,
-                          columns: [
-                            const DataColumn(label: Text('#', style: TextStyle(fontWeight: FontWeight.bold))),
-                            const DataColumn(
-                              label: Row(
+                        ),
+                        const DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
+                        const DataColumn(label: Text('Assigned Sales Rep', style: TextStyle(fontWeight: FontWeight.bold))),
+                        ...columns.map((c) => DataColumn(label: Text(c.label, style: const TextStyle(fontWeight: FontWeight.bold)))),
+                        const DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold))),
+                      ],
+                      rows: List.generate(leads.length, (index) {
+                        final lead = leads[index];
+
+                        // Telecaller Edit Lock Rule:
+                        // If lead is assigned, ONLY Admin or the Assigned Sales Rep can alter it.
+                        final isAssigned = lead.assignedToId != null;
+                        final isAssignedSalesRep = userEmployeeId != null && userEmployeeId == lead.assignedToId;
+                        final canAlterLead = !isAssigned || isAdmin || isAssignedSalesRep;
+
+                        return DataRow(
+                          cells: [
+                            DataCell(Text('${index + 1}')),
+
+                            // Elision Phone Icon Column
+                            DataCell(
+                              IconButton(
+                                tooltip: 'Click-to-Call via Elision',
+                                icon: Container(
+                                  padding: const EdgeInsets.all(6),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF16A34A).withValues(alpha: 0.15),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(Icons.phone_in_talk_rounded, color: Color(0xFF16A34A), size: 18),
+                                ),
+                                onPressed: () => _handleElisionCallAndFollowUp(context, lead),
+                              ),
+                            ),
+
+                            // Status Column (Editable if permitted, locked badge if telecaller on assigned lead)
+                            DataCell(
+                              _buildStatusDropdown(context, lead, canAlterLead, salesUsers),
+                            ),
+
+                            // Assigned Sales User Column (Interactive if permitted, locked badge if telecaller)
+                            DataCell(
+                              _buildAssignedUserDropdown(
+                                context,
+                                lead,
+                                salesUsers,
+                                isDark,
+                                primaryColor,
+                                textMuted,
+                                canAlterLead,
+                              ),
+                            ),
+
+                            // Dynamic Columns (Honoring column visibility)
+                            ...columns.map((c) {
+                              String cellValue = '';
+                              final keyLower = c.columnKey.toLowerCase().replaceAll(' ', '_');
+                              if (keyLower == 'client_name' || keyLower == 'name' || keyLower == 'customer_name') {
+                                cellValue = lead.name.isNotEmpty ? lead.name : (lead.customFields[c.columnKey]?.toString() ?? '');
+                              } else if (keyLower == 'phone' || keyLower == 'mobile' || keyLower == 'contact' || keyLower == 'phone_number') {
+                                cellValue = lead.phone.isNotEmpty ? lead.phone : (lead.customFields[c.columnKey]?.toString() ?? '');
+                              } else {
+                                cellValue = lead.customFields[c.columnKey]?.toString() ??
+                                    lead.customFields[c.columnKey.toLowerCase()]?.toString() ??
+                                    '-';
+                              }
+
+                              return DataCell(
+                                Text(
+                                  cellValue.isEmpty ? '-' : cellValue,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: (keyLower == 'client_name' || keyLower == 'name') ? FontWeight.w600 : FontWeight.normal,
+                                  ),
+                                ),
+                              );
+                            }),
+
+                            // Actions (Edit / Delete to Bin)
+                            DataCell(
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(Icons.phone_in_talk_rounded, size: 16, color: Color(0xFF16A34A)),
-                                  SizedBox(width: 6),
-                                  Text('Elision', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF16A34A))),
+                                  IconButton(
+                                    icon: Icon(
+                                      canAlterLead ? Icons.edit_outlined : Icons.lock_outline_rounded,
+                                      size: 18,
+                                      color: canAlterLead ? null : Colors.amber.shade700,
+                                    ),
+                                    tooltip: canAlterLead
+                                        ? 'Edit Lead Details'
+                                        : 'Assigned to ${lead.assignedToName ?? "Sales Rep"} (View-only for telecaller)',
+                                    onPressed: () => _showEditLeadDialog(
+                                      context,
+                                      lead,
+                                      columns,
+                                      salesUsers,
+                                      isReadOnly: !canAlterLead,
+                                    ),
+                                  ),
+                                  if (canAlterLead)
+                                    IconButton(
+                                      icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.redAccent),
+                                      tooltip: 'Move to Bin',
+                                      onPressed: () => _confirmMoveToBin(context, lead),
+                                    ),
                                 ],
                               ),
                             ),
-                            const DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
-                            const DataColumn(label: Text('Assigned Sales Rep', style: TextStyle(fontWeight: FontWeight.bold))),
-                            ...columns.map((c) => DataColumn(label: Text(c.label, style: const TextStyle(fontWeight: FontWeight.bold)))),
-                            const DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold))),
                           ],
-                          rows: List.generate(leads.length, (index) {
-                            final lead = leads[index];
-
-                            // Telecaller Edit Lock Rule:
-                            // If lead is assigned, ONLY Admin or the Assigned Sales Rep can alter it.
-                            final isAssigned = lead.assignedToId != null;
-                            final isAssignedSalesRep = userEmployeeId != null && userEmployeeId == lead.assignedToId;
-                            final canAlterLead = !isAssigned || isAdmin || isAssignedSalesRep;
-
-                            return DataRow(
-                              cells: [
-                                DataCell(Text('${index + 1}')),
-
-                                // Elision Phone Icon Column
-                                DataCell(
-                                  IconButton(
-                                    tooltip: 'Click-to-Call via Elision',
-                                    icon: Container(
-                                      padding: const EdgeInsets.all(6),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF16A34A).withOpacity(0.15),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: const Icon(Icons.phone_in_talk_rounded, color: Color(0xFF16A34A), size: 18),
-                                    ),
-                                    onPressed: () => _handleElisionCallAndFollowUp(context, lead),
-                                  ),
-                                ),
-
-                                // Status Column (Editable if permitted, locked badge if telecaller on assigned lead)
-                                DataCell(
-                                  _buildStatusDropdown(context, lead, canAlterLead),
-                                ),
-
-                                // Assigned Sales User Column (Interactive if permitted, locked badge if telecaller)
-                                DataCell(
-                                  _buildAssignedUserDropdown(
-                                    context,
-                                    lead,
-                                    salesUsers,
-                                    isDark,
-                                    primaryColor,
-                                    textMuted,
-                                    canAlterLead,
-                                  ),
-                                ),
-
-                                // Dynamic Columns (Honoring column visibility)
-                                ...columns.map((c) {
-                                  String cellValue = '';
-                                  final keyLower = c.columnKey.toLowerCase().replaceAll(' ', '_');
-                                  if (keyLower == 'client_name' || keyLower == 'name' || keyLower == 'customer_name') {
-                                    cellValue = lead.name.isNotEmpty ? lead.name : (lead.customFields[c.columnKey]?.toString() ?? '');
-                                  } else if (keyLower == 'phone' || keyLower == 'mobile' || keyLower == 'contact' || keyLower == 'phone_number') {
-                                    cellValue = lead.phone.isNotEmpty ? lead.phone : (lead.customFields[c.columnKey]?.toString() ?? '');
-                                  } else {
-                                    cellValue = lead.customFields[c.columnKey]?.toString() ??
-                                        lead.customFields[c.columnKey.toLowerCase()]?.toString() ??
-                                        '-';
-                                  }
-
-                                  return DataCell(
-                                    Text(
-                                      cellValue.isEmpty ? '-' : cellValue,
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: (keyLower == 'client_name' || keyLower == 'name') ? FontWeight.w600 : FontWeight.normal,
-                                      ),
-                                    ),
-                                  );
-                                }),
-
-                                // Actions (Edit / Delete to Bin)
-                                DataCell(
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      IconButton(
-                                        icon: Icon(
-                                          canAlterLead ? Icons.edit_outlined : Icons.lock_outline_rounded,
-                                          size: 18,
-                                          color: canAlterLead ? null : Colors.amber.shade700,
-                                        ),
-                                        tooltip: canAlterLead
-                                            ? 'Edit Lead Details'
-                                            : 'Assigned to ${lead.assignedToName ?? "Sales Rep"} (View-only for telecaller)',
-                                        onPressed: () => _showEditLeadDialog(
-                                          context,
-                                          lead,
-                                          columns,
-                                          salesUsers,
-                                          isReadOnly: !canAlterLead,
-                                        ),
-                                      ),
-                                      if (canAlterLead)
-                                        IconButton(
-                                          icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.redAccent),
-                                          tooltip: 'Move to Bin',
-                                          onPressed: () => _confirmMoveToBin(context, lead),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            );
-                          }),
-                        ),
-                      ),
+                        );
+                      }),
                     ),
-                  );
-                },
-              );
-            },
-          ),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -704,9 +695,9 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: BoxDecoration(
-            color: Colors.amber.withOpacity(0.12),
+            color: Colors.amber.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.amber.withOpacity(0.35)),
+            border: Border.all(color: Colors.amber.withValues(alpha: 0.35)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -731,13 +722,13 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
         color: isAssigned
-            ? primaryColor.withOpacity(0.08)
-            : (isDark ? Colors.white.withOpacity(0.05) : const Color(0xFFF1F5F9)),
+            ? primaryColor.withValues(alpha: 0.08)
+            : (isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFF1F5F9)),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: isAssigned
-              ? primaryColor.withOpacity(0.3)
-              : (isDark ? Colors.white.withOpacity(0.15) : const Color(0xFFCBD5E1)),
+              ? primaryColor.withValues(alpha: 0.3)
+              : (isDark ? Colors.white.withValues(alpha: 0.15) : const Color(0xFFCBD5E1)),
         ),
       ),
       child: DropdownButtonHideUnderline(
@@ -785,34 +776,12 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
               );
             }),
           ],
-          onChanged: (newEmpId) async {
+          onChanged: (newEmpId) {
             if (newEmpId == selectedValue) return;
 
-            try {
-              await ref.read(crmLeadsProvider.notifier).updateLead(lead.id, {
-                'assignedToId': newEmpId,
-              });
-
-              final name = newEmpId != null && uniqueUsers.containsKey(newEmpId)
-                  ? uniqueUsers[newEmpId]!.fullName
-                  : 'Unassigned';
-
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(newEmpId != null ? 'Assigned to $name' : 'Lead unassigned'),
-                    backgroundColor: Colors.green,
-                    duration: const Duration(seconds: 2),
-                  ),
-                );
-              }
-            } catch (e) {
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Failed to update assignment: $e'), backgroundColor: Colors.red),
-                );
-              }
-            }
+            context.read<CrmLeadsBloc>().add(
+              CrmLeadsLeadUpdated(lead.id, {'assignedToId': newEmpId}),
+            );
           },
         ),
       ),
@@ -822,7 +791,12 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
   // ---------------------------------------------------------------------------
   // Status Dropdown with Modal Triggers (With Telecaller Lock)
   // ---------------------------------------------------------------------------
-  Widget _buildStatusDropdown(BuildContext context, CrmLead lead, bool canAlter) {
+  Widget _buildStatusDropdown(
+    BuildContext context,
+    CrmLead lead,
+    bool canAlter,
+    List<CrmSalesUser> salesUsers,
+  ) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     Color badgeBg;
@@ -831,24 +805,24 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
 
     switch (lead.status) {
       case CrmStatus.notStarted:
-        badgeBg = isDark ? Colors.white.withOpacity(0.08) : const Color(0xFFF1F5F9);
+        badgeBg = isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFF1F5F9);
         badgeFg = isDark ? const Color(0xFFE2E8F0) : const Color(0xFF475569);
-        badgeBorder = isDark ? Colors.white.withOpacity(0.20) : const Color(0xFFCBD5E1);
+        badgeBorder = isDark ? Colors.white.withValues(alpha: 0.20) : const Color(0xFFCBD5E1);
         break;
       case CrmStatus.followUp:
-        badgeBg = const Color(0xFFEA580C).withOpacity(isDark ? 0.22 : 0.12);
+        badgeBg = const Color(0xFFEA580C).withValues(alpha: isDark ? 0.22 : 0.12);
         badgeFg = isDark ? const Color(0xFFFB923C) : const Color(0xFFC2410C);
-        badgeBorder = const Color(0xFFEA580C).withOpacity(isDark ? 0.45 : 0.35);
+        badgeBorder = const Color(0xFFEA580C).withValues(alpha: isDark ? 0.45 : 0.35);
         break;
       case CrmStatus.interested:
-        badgeBg = const Color(0xFF16A34A).withOpacity(isDark ? 0.22 : 0.12);
+        badgeBg = const Color(0xFF16A34A).withValues(alpha: isDark ? 0.22 : 0.12);
         badgeFg = isDark ? const Color(0xFF4ADE80) : const Color(0xFF15803D);
-        badgeBorder = const Color(0xFF16A34A).withOpacity(isDark ? 0.45 : 0.35);
+        badgeBorder = const Color(0xFF16A34A).withValues(alpha: isDark ? 0.45 : 0.35);
         break;
       case CrmStatus.notInterested:
-        badgeBg = const Color(0xFFEF4444).withOpacity(isDark ? 0.22 : 0.12);
+        badgeBg = const Color(0xFFEF4444).withValues(alpha: isDark ? 0.22 : 0.12);
         badgeFg = isDark ? const Color(0xFFF87171) : const Color(0xFFB91C1C);
-        badgeBorder = const Color(0xFFEF4444).withOpacity(isDark ? 0.45 : 0.35);
+        badgeBorder = const Color(0xFFEF4444).withValues(alpha: isDark ? 0.45 : 0.35);
         break;
     }
 
@@ -977,14 +951,17 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
   // ---------------------------------------------------------------------------
   // TAB 2: Follow-ups & Scheduled Calls
   // ---------------------------------------------------------------------------
+
   Widget _buildFollowUpsTab(
+    BuildContext context,
+    CrmLeadsState state,
     bool isDark,
     Color cardBg,
     Color borderColor,
     Color textMuted,
     Color primaryColor,
   ) {
-    final followUpsAsync = ref.watch(crmFollowUpsProvider(_followUpFilter));
+    final followUps = state.followUps;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -1010,18 +987,18 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
                 children: [
                   ChoiceChip(
                     label: const Text('Today', style: TextStyle(fontSize: 12)),
-                    selected: _followUpFilter == 'today',
-                    onSelected: (val) => setState(() => _followUpFilter = 'today'),
+                    selected: state.followUpFilter == 'today',
+                    onSelected: (val) => context.read<CrmLeadsBloc>().add(const CrmLeadsFollowUpFilterChanged('today')),
                   ),
                   ChoiceChip(
                     label: const Text('Upcoming', style: TextStyle(fontSize: 12)),
-                    selected: _followUpFilter == 'upcoming',
-                    onSelected: (val) => setState(() => _followUpFilter = 'upcoming'),
+                    selected: state.followUpFilter == 'upcoming',
+                    onSelected: (val) => context.read<CrmLeadsBloc>().add(const CrmLeadsFollowUpFilterChanged('upcoming')),
                   ),
                   ChoiceChip(
                     label: const Text('All', style: TextStyle(fontSize: 12)),
-                    selected: _followUpFilter == 'all',
-                    onSelected: (val) => setState(() => _followUpFilter = 'all'),
+                    selected: state.followUpFilter == 'all',
+                    onSelected: (val) => context.read<CrmLeadsBloc>().add(const CrmLeadsFollowUpFilterChanged('all')),
                   ),
                 ],
               ),
@@ -1029,114 +1006,104 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
           ),
           const SizedBox(height: 16),
 
-          followUpsAsync.when(
-            loading: () => const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator())),
-            error: (err, _) => Center(child: Text('Error loading follow-ups: $err', style: const TextStyle(color: Colors.red))),
-            data: (followUps) {
-              if (followUps.isEmpty) {
+          if (followUps.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(40),
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: borderColor),
+              ),
+              child: Center(
+                child: Column(
+                  children: [
+                    const Icon(Icons.event_available_rounded, size: 48, color: Colors.grey),
+                    const SizedBox(height: 12),
+                    Text('No follow-ups scheduled for this period.', style: TextStyle(color: textMuted)),
+                  ],
+                ),
+              ),
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: followUps.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              itemBuilder: (context, index) {
+                final f = followUps[index];
+                final dateStr = '${f.scheduledDate.day}/${f.scheduledDate.month}/${f.scheduledDate.year}';
+
                 return Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(40),
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: cardBg,
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(color: borderColor),
                   ),
-                  child: Center(
-                    child: Column(
-                      children: [
-                        const Icon(Icons.event_available_rounded, size: 48, color: Colors.grey),
-                        const SizedBox(height: 12),
-                        Text('No follow-ups scheduled for this period.', style: TextStyle(color: textMuted)),
-                      ],
-                    ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEA580C).withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(Icons.schedule_rounded, color: Color(0xFFEA580C), size: 24),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  f.leadName ?? 'Lead Follow-up',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: isDark ? Colors.white : const Color(0xFF1E293B),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    '$dateStr at ${f.scheduledTime}',
+                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blue),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            if (f.leadPhone != null) ...[
+                              Text('Phone: ${f.leadPhone}', style: TextStyle(fontSize: 13, color: textMuted)),
+                              const SizedBox(height: 2),
+                            ],
+                            if (f.remarks != null && f.remarks!.isNotEmpty)
+                              Text('Notes: ${f.remarks}', style: TextStyle(fontSize: 13, color: textMuted)),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      IconButton(
+                        tooltip: 'Click-to-Call',
+                        icon: const Icon(Icons.phone_in_talk_rounded, color: Color(0xFF16A34A)),
+                        onPressed: () {
+                          context.read<CrmLeadsBloc>().add(CrmLeadsClickToCallRequested(f.leadId));
+                        },
+                      ),
+                    ],
                   ),
                 );
-              }
-
-              return ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: followUps.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 12),
-                itemBuilder: (context, index) {
-                  final f = followUps[index];
-                  final dateStr = '${f.scheduledDate.day}/${f.scheduledDate.month}/${f.scheduledDate.year}';
-
-                  return Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: cardBg,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: borderColor),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFEA580C).withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(Icons.schedule_rounded, color: Color(0xFFEA580C), size: 24),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Text(
-                                    f.leadName ?? 'Lead Follow-up',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w700,
-                                      color: isDark ? Colors.white : const Color(0xFF1E293B),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: Colors.blue.withOpacity(0.12),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: Text(
-                                      '$dateStr at ${f.scheduledTime}',
-                                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blue),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              if (f.leadPhone != null) ...[
-                                Text('Phone: ${f.leadPhone}', style: TextStyle(fontSize: 13, color: textMuted)),
-                                const SizedBox(height: 2),
-                              ],
-                              if (f.remarks != null && f.remarks!.isNotEmpty)
-                                Text('Notes: ${f.remarks}', style: TextStyle(fontSize: 13, color: textMuted)),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        IconButton(
-                          tooltip: 'Click-to-Call',
-                          icon: const Icon(Icons.phone_in_talk_rounded, color: Color(0xFF16A34A)),
-                          onPressed: () {
-                            ref.read(crmRepositoryProvider).clickToCall(f.leadId);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Dialing ${f.leadPhone ?? "lead"}...')),
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              );
-            },
-          ),
+              },
+            ),
         ],
       ),
     );
@@ -1146,20 +1113,15 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
   // TAB 3: Call Recordings & Telephony Logs (Elision / Greeter CTI)
   // ---------------------------------------------------------------------------
   Widget _buildCallRecordingsTab(
+    BuildContext context,
+    CrmLeadsState state,
     bool isDark,
     Color cardBg,
     Color borderColor,
     Color textMuted,
     Color primaryColor,
   ) {
-    final filter = CrmCallLogsFilter(
-      dateFilter: _recordingDateFilter,
-      callStatus: _recordingStatusFilter,
-      search: _recordingSearchController.text.trim(),
-      hasRecording: _recordingsOnlyWithAudio,
-    );
-
-    final logsAsync = ref.watch(crmCallLogsProvider(filter));
+    final logs = state.callLogs;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -1208,7 +1170,7 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
               IconButton.filledTonal(
                 icon: const Icon(Icons.refresh_rounded, size: 18),
                 tooltip: 'Reload Call Logs',
-                onPressed: () => ref.invalidate(crmCallLogsProvider),
+                onPressed: () => context.read<CrmLeadsBloc>().add(const CrmLeadsCallLogsFilterChanged()),
               ),
             ],
           ),
@@ -1232,11 +1194,11 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     Text('Date Filter:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textMuted)),
-                    _buildRecordingFilterChip('All Calls', 'all', isDark),
-                    _buildRecordingFilterChip("Today's Calls", 'today', isDark),
-                    _buildRecordingFilterChip('Yesterday', 'yesterday', isDark),
-                    _buildRecordingFilterChip('This Week', 'this_week', isDark),
-                    _buildRecordingFilterChip('This Month', 'this_month', isDark),
+                    _buildRecordingFilterChip(context, state, 'All Calls', 'all', isDark),
+                    _buildRecordingFilterChip(context, state, "Today's Calls", 'today', isDark),
+                    _buildRecordingFilterChip(context, state, 'Yesterday', 'yesterday', isDark),
+                    _buildRecordingFilterChip(context, state, 'This Week', 'this_week', isDark),
+                    _buildRecordingFilterChip(context, state, 'This Month', 'this_month', isDark),
                   ],
                 ),
                 const SizedBox(height: 14),
@@ -1257,7 +1219,7 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
                       ),
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<String>(
-                          value: _recordingStatusFilter,
+                          value: state.callRecordingFilterStatus,
                           dropdownColor: cardBg,
                           style: TextStyle(
                             fontSize: 13,
@@ -1271,7 +1233,9 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
                             DropdownMenuItem(value: 'FAILED', child: Text('Failed / Error')),
                           ],
                           onChanged: (val) {
-                            if (val != null) setState(() => _recordingStatusFilter = val);
+                            if (val != null) {
+                              context.read<CrmLeadsBloc>().add(CrmLeadsCallLogsFilterChanged(callStatus: val));
+                            }
                           },
                         ),
                       ),
@@ -1279,9 +1243,9 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
 
                     // Audio Only Filter Pill
                     FilterChip(
-                      selected: _recordingsOnlyWithAudio,
+                      selected: state.callRecordingsOnlyWithAudio,
                       label: const Text('🎙️ Audio Recordings Only'),
-                      onSelected: (val) => setState(() => _recordingsOnlyWithAudio = val),
+                      onSelected: (val) => context.read<CrmLeadsBloc>().add(CrmLeadsCallLogsFilterChanged(hasRecording: val)),
                     ),
 
                     // Search Field
@@ -1298,7 +1262,7 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
                                   icon: const Icon(Icons.clear_rounded, size: 16),
                                   onPressed: () {
                                     _recordingSearchController.clear();
-                                    setState(() {});
+                                    context.read<CrmLeadsBloc>().add(const CrmLeadsCallLogsFilterChanged(search: ''));
                                   },
                                 )
                               : null,
@@ -1306,7 +1270,7 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                           isDense: true,
                         ),
-                        onChanged: (_) => setState(() {}),
+                        onChanged: (val) => context.read<CrmLeadsBloc>().add(CrmLeadsCallLogsFilterChanged(search: val.trim())),
                       ),
                     ),
                   ],
@@ -1317,55 +1281,47 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
           const SizedBox(height: 16),
 
           // Logs Content
-          logsAsync.when(
-            loading: () => const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator())),
-            error: (err, _) => Center(
-              child: Padding(
-                padding: const EdgeInsets.all(30),
-                child: Text('Error loading call logs: $err', style: const TextStyle(color: Colors.red)),
+          if (logs.isEmpty)
+            Center(
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(40),
+                decoration: BoxDecoration(
+                  color: cardBg,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: borderColor),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.phone_missed_rounded, size: 48, color: textMuted),
+                    const SizedBox(height: 12),
+                    Text(
+                      'No Call Recordings or Logs Found',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: isDark ? Colors.white : const Color(0xFF1E293B),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Try adjusting the date filter or placing a call from Pre-Sales.',
+                      style: TextStyle(fontSize: 13, color: textMuted),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            data: (logs) {
-              if (logs.isEmpty) {
-                return Center(
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(40),
-                    decoration: BoxDecoration(
-                      color: cardBg,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: borderColor),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.phone_missed_rounded, size: 48, color: textMuted),
-                        const SizedBox(height: 12),
-                        Text(
-                          'No Call Recordings or Logs Found',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: isDark ? Colors.white : const Color(0xFF1E293B),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Try adjusting the date filter or placing a call from Pre-Sales.',
-                          style: TextStyle(fontSize: 13, color: textMuted),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }
+            )
+          else ...[
+            // Summary Stats
+            Builder(
+              builder: (context) {
+                final answeredCount = logs.where((l) => ['ANSWERED', 'ANSWER', 'COMPLETED', 'SUCCESS'].contains(l.callStatus.toUpperCase())).length;
+                final totalSeconds = logs.fold<int>(0, (sum, l) => sum + l.duration);
+                final totalMinutes = (totalSeconds / 60).toStringAsFixed(1);
 
-              // Summary Stats
-              final answeredCount = logs.where((l) => ['ANSWERED', 'ANSWER', 'COMPLETED', 'SUCCESS'].contains(l.callStatus.toUpperCase())).length;
-              final totalSeconds = logs.fold<int>(0, (sum, l) => sum + l.duration);
-              final totalMinutes = (totalSeconds / 60).toStringAsFixed(1);
-
-              return Column(
+                return Column(
                 children: [
                   // Analytics Strip
                   Container(
@@ -1383,7 +1339,7 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
                       children: [
                         Text('Total Calls: ${logs.length}', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: isDark ? Colors.white : const Color(0xFF1E293B))),
                         Text('Answered: $answeredCount', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF16A34A))),
-                        Text('Total Talk Time: ${totalMinutes} mins', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF0284C7))),
+                        Text('Total Talk Time: $totalMinutes mins', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF0284C7))),
                       ],
                     ),
                   ),
@@ -1569,17 +1525,26 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
             },
           ),
         ],
-      ),
-    );
-  }
+      ],
+    ),
+  );
+}
 
-  Widget _buildRecordingFilterChip(String label, String value, bool isDark) {
-    final isSelected = _recordingDateFilter == value;
+  Widget _buildRecordingFilterChip(
+    BuildContext context,
+    CrmLeadsState state,
+    String label,
+    String value,
+    bool isDark,
+  ) {
+    final isSelected = state.callRecordingFilterDate == value;
     return ChoiceChip(
       label: Text(label),
       selected: isSelected,
       onSelected: (selected) {
-        if (selected) setState(() => _recordingDateFilter = value);
+        if (selected) {
+          context.read<CrmLeadsBloc>().add(CrmLeadsCallLogsFilterChanged(dateFilter: value));
+        }
       },
     );
   }
@@ -1649,7 +1614,7 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
   // ---------------------------------------------------------------------------
   Future<void> _handleElisionCallAndFollowUp(BuildContext context, CrmLead lead) async {
     try {
-      final callRes = await ref.read(crmRepositoryProvider).clickToCall(lead.id);
+      final callRes = await context.read<CrmRepository>().clickToCall(lead.id);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1709,9 +1674,9 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: Colors.orange.withOpacity(0.1),
+                        color: Colors.orange.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                        border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
                       ),
                       child: Row(
                         children: [
@@ -1820,7 +1785,7 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
                 final dateIso = selectedDate.toIso8601String().split('T').first;
                 final timeFormatted = selectedTime.format(context);
 
-                await _updateLeadStatus(
+                _updateLeadStatus(
                   lead.id,
                   'FOLLOW_UP',
                   scheduledDate: dateIso,
@@ -1840,7 +1805,7 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
   // Modal: Merge Columns
   // ---------------------------------------------------------------------------
   void _showMergeColumnsDialog(BuildContext context, Color primaryColor) {
-    final cols = ref.read(crmColumnsProvider).value ?? [];
+    final cols = context.read<CrmLeadsBloc>().state.columns;
     if (cols.length < 2) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('At least 2 columns are required to perform a merge.')),
@@ -1869,9 +1834,9 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: primaryColor.withOpacity(0.08),
+                      color: primaryColor.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: primaryColor.withOpacity(0.2)),
+                      border: Border.all(color: primaryColor.withValues(alpha: 0.2)),
                     ),
                     child: Text(
                       'Merge two columns that have the same meaning (e.g. "client_name" into "Name"). All existing lead data from Source will be transferred to Target, and Source column will be removed.',
@@ -1884,7 +1849,7 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
                   const SizedBox(height: 6),
                   DropdownButtonFormField<String>(
                     isExpanded: true,
-                    value: sourceKey,
+                    initialValue: sourceKey,
                     items: cols
                         .map((c) => DropdownMenuItem(
                               value: c.columnKey,
@@ -1904,7 +1869,7 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
                   const SizedBox(height: 6),
                   DropdownButtonFormField<String>(
                     isExpanded: true,
-                    value: targetKey,
+                    initialValue: targetKey,
                     items: cols
                         .map((c) => DropdownMenuItem(
                               value: c.columnKey,
@@ -1951,28 +1916,13 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
                 }
 
                 Navigator.pop(dialogCtx);
-                try {
-                  final res = await ref.read(crmColumnsProvider.notifier).mergeColumns(
-                    sourceKey: sourceKey,
-                    targetKey: targetKey,
-                    targetLabel: labelCtrl.text.trim(),
-                  );
-
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(res['message']?.toString() ?? 'Columns merged successfully!'),
-                        backgroundColor: Colors.green,
+                context.read<CrmLeadsBloc>().add(
+                      CrmLeadsColumnsMerged(
+                        sourceKey: sourceKey,
+                        targetKey: targetKey,
+                        targetLabel: labelCtrl.text.trim(),
                       ),
                     );
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Failed to merge columns: $e'), backgroundColor: Colors.red),
-                    );
-                  }
-                }
               },
               child: const Text('Confirm & Merge'),
             ),
@@ -1990,7 +1940,7 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
     TimeOfDay selectedTime = const TimeOfDay(hour: 14, minute: 0);
     final remarksCtrl = TextEditingController();
 
-    final salesUsers = ref.read(crmSalesUsersProvider).value ?? [];
+    final salesUsers = context.read<CrmLeadsBloc>().state.salesUsers;
     final uniqueUsers = <int, CrmSalesUser>{};
     for (final u in salesUsers) {
       uniqueUsers[u.employeeId] = u;
@@ -2029,7 +1979,7 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.blue.withOpacity(0.08),
+                      color: Colors.blue.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: const Row(
@@ -2055,7 +2005,7 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
                   else
                     DropdownButtonFormField<int?>(
                       isExpanded: true,
-                      value: selectedEmployeeId,
+                      initialValue: selectedEmployeeId,
                       decoration: const InputDecoration(
                         prefixIcon: Icon(Icons.badge_outlined, size: 20),
                         border: OutlineInputBorder(),
@@ -2161,7 +2111,7 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
                 final dateIso = selectedDate.toIso8601String().split('T').first;
                 final timeFormatted = selectedTime.format(context);
 
-                await _updateLeadStatus(
+                _updateLeadStatus(
                   lead.id,
                   'INTERESTED',
                   scheduledDate: dateIso,
@@ -2207,27 +2157,12 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
         );
       }
 
-      final activeCampaignId = ref.read(selectedCampaignIdProvider);
-      final importRes = await ref.read(crmLeadsProvider.notifier).importExcel(
-            file.bytes!,
-            file.name,
-            campaignId: activeCampaignId,
+      context.read<CrmLeadsBloc>().add(
+            CrmLeadsExcelImported(
+              file.bytes!,
+              file.name,
+            ),
           );
-
-      ref.invalidate(crmLeadsProvider);
-      ref.invalidate(crmColumnsProvider);
-      ref.invalidate(crmCampaignsProvider);
-      ref.invalidate(crmProjectsProvider);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(importRes['message']?.toString() ?? 'Excel imported successfully!'),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -2348,40 +2283,24 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
                 return;
               }
 
-              final activeCampaignId = ref.read(selectedCampaignIdProvider);
-              final campaigns = ref.read(crmCampaignsProvider).value ?? [];
+              final leadsState = context.read<CrmLeadsBloc>().state;
+              final activeCampaignId = leadsState.selectedCampaignId;
+              final campaigns = leadsState.campaigns;
               final effectiveCampaignId = (activeCampaignId != null && activeCampaignId.isNotEmpty)
                   ? activeCampaignId
                   : (campaigns.isNotEmpty ? campaigns.first.id : null);
 
               Navigator.pop(dialogCtx);
 
-              try {
-                await ref.read(crmLeadsProvider.notifier).createLead({
-                  'name': name.isEmpty ? 'Unnamed Lead' : name,
-                  'phone': phone,
-                  'status': 'NOT_STARTED',
-                  'campaignId': effectiveCampaignId,
-                  'customFields': customFields,
-                });
-
-                ref.invalidate(crmLeadsProvider);
-                ref.invalidate(crmColumnsProvider);
-                ref.invalidate(crmCampaignsProvider);
-                ref.invalidate(crmProjectsProvider);
-
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Lead added successfully!'), backgroundColor: Colors.green),
+              context.read<CrmLeadsBloc>().add(
+                    CrmLeadsLeadCreated({
+                      'name': name.isEmpty ? 'Unnamed Lead' : name,
+                      'phone': phone,
+                      'status': 'NOT_STARTED',
+                      'campaignId': effectiveCampaignId,
+                      'customFields': customFields,
+                    }),
                   );
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Failed to add lead: $e'), backgroundColor: Colors.red),
-                  );
-                }
-              }
             },
             child: const Text('Create Lead'),
           ),
@@ -2456,9 +2375,9 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
                       padding: const EdgeInsets.all(12),
                       margin: const EdgeInsets.only(bottom: 16),
                       decoration: BoxDecoration(
-                        color: Colors.amber.withOpacity(0.12),
+                        color: Colors.amber.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.amber.withOpacity(0.35)),
+                        border: Border.all(color: Colors.amber.withValues(alpha: 0.35)),
                       ),
                       child: Row(
                         children: [
@@ -2485,7 +2404,7 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
                       decoration: BoxDecoration(
                         border: Border.all(color: Colors.grey.shade300),
                         borderRadius: BorderRadius.circular(8),
-                        color: Colors.grey.withOpacity(0.08),
+                        color: Colors.grey.withValues(alpha: 0.08),
                       ),
                       child: Text(
                         lead.assignedToName ?? 'Unassigned',
@@ -2495,7 +2414,7 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
                   else
                     DropdownButtonFormField<int?>(
                       isExpanded: true,
-                      value: selectedAssignee,
+                      initialValue: selectedAssignee,
                       decoration: const InputDecoration(
                         prefixIcon: Icon(Icons.badge_outlined, size: 20),
                         border: OutlineInputBorder(),
@@ -2538,7 +2457,7 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
                                 prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
                                 border: const OutlineInputBorder(),
                                 filled: isReadOnly,
-                                fillColor: isReadOnly ? Colors.grey.withOpacity(0.08) : null,
+                                fillColor: isReadOnly ? Colors.grey.withValues(alpha: 0.08) : null,
                               ),
                             )
                           else
@@ -2549,7 +2468,7 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
                                 hintText: 'Enter ${col.label.toLowerCase()}',
                                 border: const OutlineInputBorder(),
                                 filled: isReadOnly,
-                                fillColor: isReadOnly ? Colors.grey.withOpacity(0.08) : null,
+                                fillColor: isReadOnly ? Colors.grey.withValues(alpha: 0.08) : null,
                               ),
                             ),
                         ],
@@ -2588,26 +2507,14 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
 
                   Navigator.pop(dialogCtx);
 
-                  try {
-                    await ref.read(crmLeadsProvider.notifier).updateLead(lead.id, {
-                      'name': name,
-                      'phone': phone,
-                      'customFields': customFields,
-                      'assignedToId': selectedAssignee,
-                    });
-
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Lead updated successfully!')),
+                  context.read<CrmLeadsBloc>().add(
+                        CrmLeadsLeadUpdated(lead.id, {
+                          'name': name,
+                          'phone': phone,
+                          'customFields': customFields,
+                          'assignedToId': selectedAssignee,
+                        }),
                       );
-                    }
-                  } catch (e) {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Update failed: $e'), backgroundColor: Colors.red),
-                      );
-                    }
-                  }
                 },
                 child: const Text('Save Changes'),
               ),
@@ -2627,22 +2534,9 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-            onPressed: () async {
+            onPressed: () {
               Navigator.pop(ctx);
-              try {
-                await ref.read(crmLeadsProvider.notifier).moveToBin(lead.id);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Lead "${lead.name}" moved to Bin')),
-                  );
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Failed to delete: $e'), backgroundColor: Colors.red),
-                  );
-                }
-              }
+              context.read<CrmLeadsBloc>().add(CrmLeadsLeadMovedToBin(lead.id));
             },
             child: const Text('Move to Bin'),
           ),
@@ -2651,39 +2545,23 @@ class _CrmPreSalesScreenState extends ConsumerState<CrmPreSalesScreen>
     );
   }
 
-  Future<void> _updateLeadStatus(
+  void _updateLeadStatus(
     String leadId,
     String status, {
     String? scheduledDate,
     String? scheduledTime,
     String? remarks,
     int? assignedToId,
-  }) async {
-    try {
-      await ref.read(crmLeadsProvider.notifier).updateLeadStatus(
+  }) {
+    context.read<CrmLeadsBloc>().add(
+          CrmLeadsLeadStatusUpdated(
             leadId,
             status: status,
             scheduledDate: scheduledDate,
             scheduledTime: scheduledTime,
             remarks: remarks,
             assignedToId: assignedToId,
-          );
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Lead status updated to "$status"'),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 2),
           ),
         );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update status: $e'), backgroundColor: Colors.red),
-        );
-      }
-    }
   }
 }

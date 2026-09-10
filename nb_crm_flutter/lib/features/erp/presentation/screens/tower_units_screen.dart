@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/bloc/load_status.dart';
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/widgets/header_action_button.dart';
 import '../../../auth/domain/permissions.dart';
-import '../../../auth/presentation/auth_providers.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
+import '../../data/project_repository.dart';
 import '../../domain/structure_models.dart';
-import '../project_providers.dart';
+import '../bloc/erp_structure_bloc.dart';
 
-class TowerUnitsScreen extends ConsumerWidget {
+class TowerUnitsScreen extends StatelessWidget {
   const TowerUnitsScreen({
     super.key,
     required this.projectId,
@@ -20,86 +22,32 @@ class TowerUnitsScreen extends ConsumerWidget {
   final String towerId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final auth = ref.watch(authNotifierProvider);
-    final canWrite = Permissions.canWriteProjects(auth.permissions, auth.user?.role);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final async = ref.watch(
-      projectTowerDetailProvider((projectId: projectId, towerId: towerId)),
-    );
-
-    return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
-        elevation: 0,
-        title: Text(
-          async.asData?.value.name ?? 'Manage Tower',
-          style: const TextStyle(fontWeight: FontWeight.w700),
-        ),
-        leading: AppBackButton(fallbackLocation: '/erp/structure/$projectId'),
-        actions: [
-          if (canWrite)
-            HeaderActionButton(
-              tooltip: 'Regenerate units from floors × flats',
-              icon: const Icon(Icons.restart_alt_rounded),
-              label: 'Regenerate',
-              onPressed: () => _regenerate(context, ref),
-            ),
-        ],
-      ),
-      body: async.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('$e')),
-        data: (tower) {
-          final complete = tower.units.where((u) => u.isComplete).length;
-          final grouped = <int, List<ErpProjectUnit>>{};
-          for (final u in tower.units) {
-            grouped.putIfAbsent(u.floorNo, () => []).add(u);
-          }
-          final floors = grouped.keys.toList()..sort();
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
-            children: [
-              _SummaryCard(tower: tower, complete: complete),
-              const SizedBox(height: 14),
-              if (tower.units.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.only(top: 40),
-                  child: Center(child: Text('No units. Tap Regenerate to create them.')),
-                )
-              else
-                for (final floor in floors) ...[
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
-                    child: Text(
-                      '${floorLabel(floor)}  ·  ${grouped[floor]!.length} units',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        color: isDark ? Colors.white70 : const Color(0xFF455A64),
-                      ),
-                    ),
-                  ),
-                  for (final unit in grouped[floor]!)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: _UnitTile(
-                        unit: unit,
-                        enabled: canWrite,
-                        onTap: () => context.go(
-                          '/erp/structure/$projectId/towers/$towerId/units/${unit.id}',
-                        ),
-                      ),
-                    ),
-                ],
-            ],
-          );
-        },
+  Widget build(BuildContext context) {
+    return BlocProvider<ErpStructureBloc>(
+      create: (ctx) => ErpStructureBloc(
+        projectRepository: ctx.read<ProjectRepository>(),
+      )..add(ErpStructureTowerDetailRequested(
+          projectId: projectId,
+          towerId: towerId,
+        )),
+      child: _TowerUnitsView(
+        projectId: projectId,
+        towerId: towerId,
       ),
     );
   }
+}
 
-  Future<void> _regenerate(BuildContext context, WidgetRef ref) async {
+class _TowerUnitsView extends StatelessWidget {
+  const _TowerUnitsView({
+    required this.projectId,
+    required this.towerId,
+  });
+
+  final String projectId;
+  final String towerId;
+
+  Future<void> _regenerate(BuildContext context) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -114,15 +62,114 @@ class TowerUnitsScreen extends ConsumerWidget {
       ),
     );
     if (ok != true) return;
-    try {
-      await ref.read(projectRepositoryProvider).regenerateUnits(projectId, towerId);
-      ref.invalidate(projectTowerDetailProvider((projectId: projectId, towerId: towerId)));
-      ref.invalidate(projectTowersProvider(projectId));
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
-      }
+    if (context.mounted) {
+      context.read<ErpStructureBloc>().add(
+            ErpStructureUnitsRegenerated(projectId: projectId, towerId: towerId),
+          );
     }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthBloc>().state;
+    final canWrite = Permissions.canWriteProjects(auth.permissions, auth.user?.role);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return BlocConsumer<ErpStructureBloc, ErpStructureState>(
+      listener: (context, state) {
+        if (state.errorMessage != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(state.errorMessage!)),
+          );
+        }
+        if (state.actionMessage != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(state.actionMessage!)),
+          );
+        }
+      },
+      builder: (context, state) {
+        final tower = state.selectedTower;
+        return Scaffold(
+          backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
+          appBar: AppBar(
+            backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
+            elevation: 0,
+            title: Text(
+              tower?.name ?? 'Manage Tower',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            leading: AppBackButton(fallbackLocation: '/erp/structure/$projectId'),
+            actions: [
+              if (canWrite)
+                HeaderActionButton(
+                  tooltip: 'Regenerate units from floors × flats',
+                  icon: const Icon(Icons.restart_alt_rounded),
+                  label: 'Regenerate',
+                  onPressed: () {
+                    if (!state.isActing) _regenerate(context);
+                  },
+                ),
+            ],
+          ),
+          body: () {
+            if (state.status == LoadStatus.loading && tower == null) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (state.status == LoadStatus.failure && tower == null) {
+              return Center(child: Text(state.errorMessage ?? 'Failed to load tower'));
+            }
+            if (tower == null) {
+              return const Center(child: Text('Tower not found'));
+            }
+
+            final complete = tower.units.where((u) => u.isComplete).length;
+            final grouped = <int, List<ErpProjectUnit>>{};
+            for (final u in tower.units) {
+              grouped.putIfAbsent(u.floorNo, () => []).add(u);
+            }
+            final floors = grouped.keys.toList()..sort();
+
+            return ListView(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
+              children: [
+                _SummaryCard(tower: tower, complete: complete),
+                const SizedBox(height: 14),
+                if (tower.units.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 40),
+                    child: Center(child: Text('No units. Tap Regenerate to create them.')),
+                  )
+                else
+                  for (final floor in floors) ...[
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
+                      child: Text(
+                        '${floorLabel(floor)}  ·  ${grouped[floor]!.length} units',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          color: isDark ? Colors.white70 : const Color(0xFF455A64),
+                        ),
+                      ),
+                    ),
+                    for (final unit in grouped[floor]!)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: _UnitTile(
+                          unit: unit,
+                          enabled: canWrite,
+                          onTap: () => context.go(
+                            '/erp/structure/$projectId/towers/$towerId/units/${unit.id}',
+                          ),
+                        ),
+                      ),
+                  ],
+              ],
+            );
+          }(),
+        );
+      },
+    );
   }
 }
 

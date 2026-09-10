@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../auth/domain/permissions.dart';
@@ -84,7 +83,7 @@ class _AdminSalaryStructureDetailScreenState
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1.5),
           child: Container(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
             height: 1.5,
           ),
         ),
@@ -141,7 +140,7 @@ class _AdminSalaryStructureDetailScreenState
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
-                        color: Colors.orange.withOpacity(0.12),
+                        color: Colors.orange.withValues(alpha: 0.12),
                         border: Border.all(color: Colors.orange, width: 1.2),
                         borderRadius: BorderRadius.circular(30),
                       ),
@@ -170,7 +169,7 @@ class _AdminSalaryStructureDetailScreenState
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
                         color: isDark
-                            ? const Color(0xFFC5A059).withOpacity(0.15)
+                            ? const Color(0xFFC5A059).withValues(alpha: 0.15)
                             : const Color(0xFFCFD8DC),
                       ),
                     ),
@@ -260,7 +259,7 @@ class _AdminSalaryStructureDetailScreenState
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                       side: BorderSide(
-                        color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                        color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
                         width: 1.5,
                       ),
                     ),
@@ -449,10 +448,10 @@ class _RulesTable extends StatelessWidget {
       titleColor: titleColor,
       child: Container(
         decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF121212).withOpacity(0.4) : const Color(0xFFF8FAFC),
+          color: isDark ? const Color(0xFF121212).withValues(alpha: 0.4) : const Color(0xFFF8FAFC),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.12) : const Color(0xFFCFD8DC),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.12) : const Color(0xFFCFD8DC),
           ),
         ),
         clipBehavior: Clip.antiAlias,
@@ -461,7 +460,7 @@ class _RulesTable extends StatelessWidget {
           physics: const BouncingScrollPhysics(),
           child: DataTable(
             headingRowColor: WidgetStateProperty.all(
-              isDark ? const Color(0xFF121212).withOpacity(0.8) : const Color(0xFFECEFF1),
+              isDark ? const Color(0xFF121212).withValues(alpha: 0.8) : const Color(0xFFECEFF1),
             ),
             columns: [
               DataColumn(
@@ -530,17 +529,17 @@ class _RulesTable extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
                     decoration: BoxDecoration(
                       color: rule != null
-                          ? Colors.green.withOpacity(0.12)
+                          ? Colors.green.withValues(alpha: 0.12)
                           : isTotal
-                              ? Colors.blue.withOpacity(0.12)
-                              : Colors.grey.withOpacity(0.12),
+                              ? Colors.blue.withValues(alpha: 0.12)
+                              : Colors.grey.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(6),
                       border: Border.all(
                         color: rule != null
-                            ? Colors.green.withOpacity(0.2)
+                            ? Colors.green.withValues(alpha: 0.2)
                             : isTotal
-                                ? Colors.blue.withOpacity(0.2)
-                                : Colors.grey.withOpacity(0.2),
+                                ? Colors.blue.withValues(alpha: 0.2)
+                                : Colors.grey.withValues(alpha: 0.2),
                       ),
                     ),
                     child: Text(
@@ -585,14 +584,14 @@ class _RulesTable extends StatelessWidget {
                 DataCell(
                   Switch(
                     value: visible,
-                    activeColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+                    activeThumbColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
                     onChanged: canWrite ? (v) => onToggleVisibility(key, v) : null,
                   ),
                 ),
                 DataCell(
                   Switch(
                     value: col.cutOnLeave,
-                    activeColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+                    activeThumbColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
                     onChanged: canWrite && !isTotal
                         ? (v) => onToggleCut(col, cutOnLeave: v, cutOnAbsent: null)
                         : null,
@@ -601,7 +600,7 @@ class _RulesTable extends StatelessWidget {
                 DataCell(
                   Switch(
                     value: col.cutOnAbsent,
-                    activeColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+                    activeThumbColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
                     onChanged: canWrite && !isTotal
                         ? (v) => onToggleCut(col, cutOnLeave: null, cutOnAbsent: v)
                         : null,

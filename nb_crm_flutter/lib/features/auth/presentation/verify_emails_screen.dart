@@ -2,24 +2,24 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/network/api_envelope.dart';
 import '../../../core/theme/app_colors.dart';
 import '../data/auth_repository.dart';
 import '../domain/auth_user.dart';
-import 'auth_providers.dart';
+import 'bloc/auth_bloc.dart';
 import 'widgets/auth_widgets.dart';
 
-class VerifyEmailsScreen extends ConsumerStatefulWidget {
+class VerifyEmailsScreen extends StatefulWidget {
   const VerifyEmailsScreen({super.key});
 
   @override
-  ConsumerState<VerifyEmailsScreen> createState() => _VerifyEmailsScreenState();
+  State<VerifyEmailsScreen> createState() => _VerifyEmailsScreenState();
 }
 
-class _VerifyEmailsScreenState extends ConsumerState<VerifyEmailsScreen> {
+class _VerifyEmailsScreenState extends State<VerifyEmailsScreen> {
   bool _loading = true;
   String? _error;
   List<PendingEmail> _emails = const [];
@@ -35,7 +35,7 @@ class _VerifyEmailsScreenState extends ConsumerState<VerifyEmailsScreen> {
       _loading = true;
       _error = null;
     });
-    final repo = ref.read(authRepositoryProvider);
+    final repo = context.read<AuthRepository>();
     try {
       final status = await repo.fetchEmailVerificationStatus();
       if (!mounted) return;
@@ -44,9 +44,7 @@ class _VerifyEmailsScreenState extends ConsumerState<VerifyEmailsScreen> {
         _loading = false;
       });
       if (!status.needsEmailVerification) {
-        await ref
-            .read(authNotifierProvider.notifier)
-            .markEmailVerificationComplete();
+        context.read<AuthBloc>().add(const AuthEmailVerificationCompleted());
         if (mounted) context.go('/home');
       }
     } on ApiException catch (e) {
@@ -121,7 +119,7 @@ class _VerifyEmailsScreenState extends ConsumerState<VerifyEmailsScreen> {
                       for (final email in _emails) ...[
                         _EmailVerifyCard(
                           email: email,
-                          repo: ref.read(authRepositoryProvider),
+                          repo: context.read<AuthRepository>(),
                           onVerified: _onEmailVerified,
                         ),
                         const SizedBox(height: 16),
@@ -131,7 +129,7 @@ class _VerifyEmailsScreenState extends ConsumerState<VerifyEmailsScreen> {
                           message: 'No emails found on your profile. Contact HR.',
                         ),
                       TextButton(
-                        onPressed: () => ref.read(authNotifierProvider.notifier).logout(),
+                        onPressed: () => context.read<AuthBloc>().add(const AuthLogoutRequested()),
                         style: TextButton.styleFrom(foregroundColor: authGold),
                         child: const Text('Sign out'),
                       ),

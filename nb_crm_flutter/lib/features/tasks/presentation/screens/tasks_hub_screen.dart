@@ -168,7 +168,7 @@ class _TaskCard extends StatelessWidget {
       color: isDark ? const Color(0xFF1E1B18) : Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: isDark ? const Color(0xFFC5A059).withOpacity(0.18) : const Color(0xFFCFD8DC)),
+        side: BorderSide(color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.18) : const Color(0xFFCFD8DC)),
       ),
       child: ListTile(
         onTap: () => showTaskDetailSheet(context, task),

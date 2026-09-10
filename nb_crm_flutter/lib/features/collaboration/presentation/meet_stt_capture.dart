@@ -111,16 +111,16 @@ class MeetBhashiniStt {
         numChannels: 1,
         audioInterruption: AudioInterruptionMode.none,
         androidConfig: AndroidRecordConfig(
-          audioSource: AndroidAudioSource.voiceRecognition,
-          audioManagerMode: AudioManagerMode.modeNormal,
-          manageBluetooth: false,
-          useLegacy: true,
+          audioSource: AndroidAudioSource.voiceCommunication,
+          audioManagerMode: AudioManagerMode.modeInCommunication,
+          manageBluetooth: true,
+          useLegacy: false,
         ),
         iosConfig: IosRecordConfig(
           categoryOptions: [
             IosAudioCategoryOption.mixWithOthers,
-            IosAudioCategoryOption.defaultToSpeaker,
             IosAudioCategoryOption.allowBluetooth,
+            IosAudioCategoryOption.allowBluetoothA2DP,
           ],
           manageAudioSession: false,
         ),

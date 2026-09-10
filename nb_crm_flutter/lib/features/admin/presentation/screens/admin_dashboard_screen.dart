@@ -1,51 +1,40 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 
+import '../../../../core/bloc/load_status.dart';
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/widgets/header_action_button.dart';
 import '../../../../core/widgets/zoomable_photo.dart';
-import '../../../admin/presentation/admin_notifier.dart';
 import '../../../auth/domain/permissions.dart';
-import '../../../auth/presentation/auth_providers.dart';
-import '../../../leave/presentation/leave_providers.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
+import '../../../leave/data/leave_repository.dart';
 import '../../../profile/domain/profile_models.dart';
+import '../../data/admin_repository.dart';
+import '../bloc/admin_dashboard_bloc.dart';
 
-final _dashboardEmployeesProvider =
-    FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
-  return ref.read(adminRepositoryProvider).listEmployees(limit: 1000, offset: 0);
-});
-
-final _recentEmployeesProvider =
-    FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
-  return ref.read(adminRepositoryProvider).listEmployees(limit: 5, offset: 0);
-});
-
-final _pendingApprovalsCountProvider = FutureProvider.autoDispose<int>((ref) async {
-  final list = await ref.read(adminRepositoryProvider).listApprovals(status: 'PENDING');
-  return list.length;
-});
-
-final _pendingLeaveCountProvider = FutureProvider.autoDispose<int>((ref) async {
-  try {
-    final page = await ref.read(leaveRepositoryProvider).getAdminApplications(
-          status: 'PENDING',
-          limit: 1,
-          page: 0,
-        );
-    return page.total;
-  } catch (_) {
-    return 0;
-  }
-});
-
-class AdminDashboardScreen extends ConsumerWidget {
+class AdminDashboardScreen extends StatelessWidget {
   const AdminDashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final auth = ref.watch(authNotifierProvider);
+  Widget build(BuildContext context) {
+    return BlocProvider<AdminDashboardBloc>(
+      create: (context) => AdminDashboardBloc(
+        adminRepository: context.read<AdminRepository>(),
+        leaveRepository: context.read<LeaveRepository>(),
+      )..add(const AdminDashboardLoadRequested()),
+      child: const _AdminDashboardView(),
+    );
+  }
+}
+
+class _AdminDashboardView extends StatelessWidget {
+  const _AdminDashboardView();
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthBloc>().state;
     final hasAccess = Permissions.canAccessAdminPortal(
       auth.permissions,
       auth.user?.employeeViewScope,
@@ -58,11 +47,6 @@ class AdminDashboardScreen extends ConsumerWidget {
     }
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final employeesAsync = ref.watch(_dashboardEmployeesProvider);
-    final recentAsync = ref.watch(_recentEmployeesProvider);
-    final pendingAsync = ref.watch(_pendingApprovalsCountProvider);
-    final leavePendingAsync = ref.watch(_pendingLeaveCountProvider);
-
     final wide = MediaQuery.sizeOf(context).width >= 1024;
     final medium = MediaQuery.sizeOf(context).width >= 720;
 
@@ -92,10 +76,7 @@ class AdminDashboardScreen extends ConsumerWidget {
               color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
             ),
             onPressed: () {
-              ref.invalidate(_dashboardEmployeesProvider);
-              ref.invalidate(_recentEmployeesProvider);
-              ref.invalidate(_pendingApprovalsCountProvider);
-              ref.invalidate(_pendingLeaveCountProvider);
+              context.read<AdminDashboardBloc>().add(const AdminDashboardRefreshRequested());
             },
           ),
           const SizedBox(width: 8),
@@ -103,16 +84,34 @@ class AdminDashboardScreen extends ConsumerWidget {
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1.5),
           child: Container(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
             height: 1.5,
           ),
         ),
       ),
-      body: employeesAsync.when(
-        data: (data) {
-          final items = data['items'] as List<EmployeeProfile>;
-          final total = data['total'] as int;
-          final activeCount = items.where((e) => e.status.toUpperCase() == 'ACTIVE').length;
+      body: BlocBuilder<AdminDashboardBloc, AdminDashboardState>(
+        builder: (context, state) {
+          if (state.status == LoadStatus.loading || state.status == LoadStatus.initial) {
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(64),
+                child: CircularProgressIndicator(),
+              ),
+            );
+          }
+          if (state.status == LoadStatus.failure) {
+            return _ErrorPanel(
+              message: 'Failed to load dashboard data',
+              detail: state.errorMessage ?? '',
+              onRetry: () => context
+                  .read<AdminDashboardBloc>()
+                  .add(const AdminDashboardLoadRequested()),
+            );
+          }
+
+          final items = state.allEmployees;
+          final total = state.totalEmployees;
+          final activeCount = state.activeEmployees;
           
           final deptDistribution = _getDeptDistribution(items);
           final catDistribution = _getCategoryDistribution(items);
@@ -126,9 +125,8 @@ class AdminDashboardScreen extends ConsumerWidget {
               .map((e) => _ChartData(e.key, e.value.toDouble()))
               .toList();
 
-          final pendingCount = pendingAsync.value ?? 0;
-          final pendingLeave = leavePendingAsync.value ?? 0;
-          final totalPending = pendingCount + pendingLeave;
+          final totalPending =
+              state.pendingApprovalsCount + state.pendingLeaveCount;
 
           final kpis = [
             _KpiItem(
@@ -252,7 +250,7 @@ class AdminDashboardScreen extends ConsumerWidget {
                           xValueMapper: (_ChartData data, _) => data.x,
                           yValueMapper: (_ChartData data, _) => data.y,
                           name: 'Employees',
-                          color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFF0284c7).withOpacity(0.15),
+                          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFF0284c7).withValues(alpha: 0.15),
                           borderColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF0284c7),
                           borderWidth: 2.5,
                         ),
@@ -308,7 +306,7 @@ class AdminDashboardScreen extends ConsumerWidget {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                       side: BorderSide(
-                        color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                        color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
                         width: 1.5,
                       ),
                     ),
@@ -345,32 +343,26 @@ class AdminDashboardScreen extends ConsumerWidget {
                           ),
                           const SizedBox(height: 12),
                           Expanded(
-                            child: recentAsync.when(
-                              data: (data) {
-                                final list = data['items'] as List<EmployeeProfile>;
-                                if (list.isEmpty) {
-                                  return const Center(
+                            child: state.recentEmployees.isEmpty
+                                ? const Center(
                                     child: Text(
                                       'No employees registered yet.',
                                       style: TextStyle(color: Colors.grey),
                                     ),
-                                  );
-                                }
-                                return ListView.separated(
-                                  itemCount: list.length,
-                                  separatorBuilder: (context, _) => Divider(
-                                    height: 12,
-                                    color: isDark ? const Color(0xFFC5A059).withOpacity(0.1) : Colors.black.withOpacity(0.04),
+                                  )
+                                : ListView.separated(
+                                    itemCount: state.recentEmployees.length,
+                                    separatorBuilder: (context, _) => Divider(
+                                      height: 12,
+                                      color: isDark
+                                          ? const Color(0xFFC5A059).withValues(alpha: 0.1)
+                                          : Colors.black.withValues(alpha: 0.04),
+                                    ),
+                                    itemBuilder: (context, index) {
+                                      final emp = state.recentEmployees[index];
+                                      return _recentRow(context, emp, isDark);
+                                    },
                                   ),
-                                  itemBuilder: (context, index) {
-                                    final emp = list[index];
-                                    return _recentRow(context, emp, isDark);
-                                  },
-                                );
-                              },
-                              loading: () => const Center(child: CircularProgressIndicator()),
-                              error: (err, _) => Center(child: Text('Error: $err')),
-                            ),
                           ),
                         ],
                       ),
@@ -381,17 +373,6 @@ class AdminDashboardScreen extends ConsumerWidget {
             ],
           );
         },
-        loading: () => const Center(
-          child: Padding(
-            padding: EdgeInsets.all(64),
-            child: CircularProgressIndicator(),
-          ),
-        ),
-        error: (err, _) => _ErrorPanel(
-          message: 'Failed to load dashboard data',
-          detail: '$err',
-          onRetry: () => ref.invalidate(_dashboardEmployeesProvider),
-        ),
       ),
     );
   }
@@ -407,7 +388,7 @@ class AdminDashboardScreen extends ConsumerWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
           width: 1.5,
         ),
       ),
@@ -425,7 +406,7 @@ class AdminDashboardScreen extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 12),
-            Expanded(child: child),
+            Expanded(child: RepaintBoundary(child: child)),
           ],
         ),
       ),
@@ -445,7 +426,7 @@ class AdminDashboardScreen extends ConsumerWidget {
               name: emp.generalInfo?.fullName,
               identity: 'emp-${emp.id}',
               radius: 20,
-              backgroundColor: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFE5ECF0),
+              backgroundColor: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFE5ECF0),
               foregroundColor: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
             ),
             const SizedBox(width: 12),
@@ -466,7 +447,7 @@ class AdminDashboardScreen extends ConsumerWidget {
                     '${emp.generalInfo?.employeeCode ?? '—'} · ${emp.generalInfo?.designation ?? '—'}',
                     style: TextStyle(
                       fontSize: 12,
-                      color: isDark ? Colors.white.withOpacity(0.5) : const Color(0xFF607D8B),
+                      color: isDark ? Colors.white.withValues(alpha: 0.5) : const Color(0xFF607D8B),
                     ),
                   ),
                 ],
@@ -474,7 +455,7 @@ class AdminDashboardScreen extends ConsumerWidget {
             ),
             Icon(
               Icons.chevron_right_rounded,
-              color: isDark ? Colors.white.withOpacity(0.3) : const Color(0xFF607D8B),
+              color: isDark ? Colors.white.withValues(alpha: 0.3) : const Color(0xFF607D8B),
             ),
           ],
         ),
@@ -556,7 +537,7 @@ class _KpiCard extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
           width: 1.5,
         ),
       ),
@@ -594,7 +575,7 @@ class _KpiCard extends StatelessWidget {
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: kpi.color.withOpacity(0.1),
+                color: kpi.color.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(14),
               ),
               child: Icon(

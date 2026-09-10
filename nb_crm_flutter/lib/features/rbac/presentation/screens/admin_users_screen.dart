@@ -2,28 +2,39 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/bloc/load_status.dart';
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/utils/password_policy.dart';
 import '../../../../core/widgets/header_action_button.dart';
-import '../../../admin/presentation/widgets/hr_employment_change_actions.dart';
+import '../../../admin/data/admin_repository.dart';
+import '../../../admin/domain/admin_models.dart';
 import '../../../auth/domain/permissions.dart';
-import '../../../auth/presentation/auth_providers.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
+import '../../data/rbac_repository.dart';
 import '../../domain/rbac_models.dart';
-import '../rbac_providers.dart';
+import '../bloc/admin_users_bloc.dart';
 
-class AdminUsersScreen extends ConsumerStatefulWidget {
+class AdminUsersScreen extends StatefulWidget {
   const AdminUsersScreen({super.key});
 
   @override
-  ConsumerState<AdminUsersScreen> createState() => _AdminEmployeesScreenState();
+  State<AdminUsersScreen> createState() => _AdminEmployeesScreenState();
 }
 
-class _AdminEmployeesScreenState extends ConsumerState<AdminUsersScreen> {
+class _AdminEmployeesScreenState extends State<AdminUsersScreen> {
   final _searchController = TextEditingController();
   Timer? _debounce;
+
+  @override
+  void initState() {
+    super.initState();
+    final bloc = context.read<AdminUsersBloc>();
+    if (bloc.state.status == LoadStatus.initial) {
+      bloc.add(const AdminUsersLoadRequested());
+    }
+  }
 
   @override
   void dispose() {
@@ -35,22 +46,20 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminUsersScreen> {
   void _onSearchChanged(String value) {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 350), () {
-      ref.read(usersFilterProvider.notifier).setSearch(value.trim());
+      context.read<AdminUsersBloc>().add(AdminUsersFiltersChanged(search: value.trim()));
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final auth = ref.watch(authNotifierProvider);
+    final auth = context.watch<AuthBloc>().state;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     if (!Permissions.canManageUsers(auth.permissions)) {
       return _accessDenied(context);
     }
 
-    final filters = ref.watch(usersFilterProvider);
-    final usersAsync = ref.watch(usersListProvider);
-    final rolesAsync = ref.watch(allRolesProvider);
+    final usersState = context.watch<AdminUsersBloc>().state;
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
@@ -75,16 +84,16 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminUsersScreen> {
             icon: Icon(
               Icons.refresh_rounded,
               size: 18,
-              color: isDark ? Colors.white.withOpacity(0.8) : const Color(0xFF212F3D),
+              color: isDark ? Colors.white.withValues(alpha: 0.8) : const Color(0xFF212F3D),
             ),
-            onPressed: () => ref.read(usersListProvider.notifier).refresh(),
+            onPressed: () => context.read<AdminUsersBloc>().add(const AdminUsersLoadRequested()),
           ),
           Padding(
             padding: const EdgeInsets.only(right: 16.0, left: 4.0),
             child: SizedBox(
               height: 38,
               child: FilledButton.icon(
-                onPressed: () => _showAddUserDialog(context, rolesAsync),
+                onPressed: () => _showAddUserDialog(usersState.roles),
                 style: FilledButton.styleFrom(
                   backgroundColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
                   foregroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
@@ -100,7 +109,7 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminUsersScreen> {
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1.5),
           child: Container(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
             height: 1.5,
           ),
         ),
@@ -120,13 +129,40 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminUsersScreen> {
         },
         child: Column(
           children: [
-            _buildFilterBar(context, filters, rolesAsync),
+            _buildFilterBar(context, usersState),
             Expanded(
-              child: usersAsync.when(
-                data: (users) {
-                  final visible = filters.lockedOnly
-                      ? users.where((u) => u.isLoginLocked).toList()
-                      : users;
+              child: Builder(
+                builder: (context) {
+                  if (usersState.status == LoadStatus.loading && usersState.users.isEmpty) {
+                    return const Center(
+                      child: CircularProgressIndicator(color: Color(0xFFC5A059)),
+                    );
+                  }
+                  if (usersState.status == LoadStatus.failure && usersState.users.isEmpty) {
+                    return Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.error_outline_rounded, size: 48, color: Colors.red),
+                          const SizedBox(height: 12),
+                          Text(
+                            'Failed to load users\n${usersState.errorMessage ?? ''}', 
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 16),
+                          FilledButton(
+                            onPressed: () => context.read<AdminUsersBloc>().add(const AdminUsersLoadRequested()),
+                            child: const Text('Retry'),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
+                  final visible = usersState.lockedOnly
+                      ? usersState.users.where((u) => u.isLoginLocked).toList()
+                      : usersState.users;
                   if (visible.isEmpty) {
                     return Center(
                       child: Column(
@@ -139,54 +175,46 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminUsersScreen> {
                           ),
                           const SizedBox(height: 16),
                           Text(
-                            filters.lockedOnly
+                            usersState.lockedOnly
                                 ? 'No locked / blocked logins right now.'
                                 : 'No users found matching filters.',
                             style: TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w600,
-                              color: isDark ? Colors.white30 : const Color(0xFF607D8B).withOpacity(0.6),
+                              color: isDark ? Colors.white30 : const Color(0xFF607D8B).withValues(alpha: 0.6),
                             ),
                           ),
                         ],
                       ),
                     );
                   }
+                  final currentUserRole = auth.user?.role;
+                  final isSuperAdmin = Permissions.isSuperAdmin(currentUserRole);
                   return ListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
                     itemCount: visible.length,
-                    itemBuilder: (context, index) => _UserCard(
-                      user: visible[index],
-                      isAdmin: isAdminRole(auth.user?.role),
-                      onCredentials: () => _showCredentialsDialog(context, visible[index]),
-                      onEdit: () => _showEditUserDialog(context, visible[index], rolesAsync),
-                      onDelete: () => _confirmDelete(context, visible[index]),
-                      onUnblock: () => _unblockLogin(context, visible[index]),
-                    ),
+                    itemBuilder: (context, index) {
+                      final u = visible[index];
+                      final isTargetAdmin = Permissions.isAdmin(u.role.name);
+                      final isTargetSuperAdmin = Permissions.isSuperAdmin(u.role.name);
+                      final canManageTargetAdmin = isSuperAdmin || !isTargetAdmin;
+                      final canManageTargetAccount = isSuperAdmin || !isTargetSuperAdmin;
+                      return _UserCard(
+                        user: u,
+                        isAdmin: Permissions.isAdmin(currentUserRole),
+                        isSuperAdmin: isSuperAdmin,
+                        canEdit: canManageTargetAdmin,
+                        canDelete: canManageTargetAdmin,
+                        canUnblock: canManageTargetAdmin,
+                        canViewCredentials: canManageTargetAccount,
+                        onCredentials: () => _showCredentialsDialog(u),
+                        onEdit: () => _showEditUserDialog(u, usersState.roles),
+                        onDelete: () => _confirmDelete(u),
+                        onUnblock: () => _unblockLogin(u),
+                      );
+                    },
                   );
                 },
-                loading: () => const Center(
-                  child: CircularProgressIndicator(color: Color(0xFFC5A059)),
-                ),
-                error: (err, _) => Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.error_outline_rounded, size: 48, color: Colors.red),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Failed to load users\n$err', 
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 16),
-                      FilledButton(
-                        onPressed: () => ref.read(usersListProvider.notifier).refresh(),
-                        child: const Text('Retry'),
-                      ),
-                    ],
-                  ),
-                ),
               ),
             ),
           ],
@@ -229,10 +257,9 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminUsersScreen> {
 
   Widget _buildFilterBar(
     BuildContext context,
-    UsersFilterState filters,
-    AsyncValue<List<RoleSummary>> rolesAsync,
+    AdminUsersState state,
   ) {
-    final roles = rolesAsync.value ?? const <RoleSummary>[];
+    final roles = state.roles;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
@@ -240,7 +267,7 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminUsersScreen> {
         color: isDark ? const Color(0xFF1E1B18) : Colors.white,
         border: Border(
           bottom: BorderSide(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.12) : const Color(0xFFCFD8DC),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.12) : const Color(0xFFCFD8DC),
             width: 1.5,
           ),
         ),
@@ -254,21 +281,21 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminUsersScreen> {
               onChanged: _onSearchChanged,
               decoration: InputDecoration(
                 hintText: 'Search by name or code...',
-                hintStyle: TextStyle(color: isDark ? Colors.white30 : const Color(0xFF607D8B).withOpacity(0.6)),
+                hintStyle: TextStyle(color: isDark ? Colors.white30 : const Color(0xFF607D8B).withValues(alpha: 0.6)),
                 prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFFC5A059), size: 20),
                 filled: true,
                 fillColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
                   borderSide: BorderSide(
-                    color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC),
+                    color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
                     width: 1,
                   ),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
                   borderSide: BorderSide(
-                    color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                    color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
                     width: 1,
                   ),
                 ),
@@ -290,20 +317,20 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminUsersScreen> {
           const SizedBox(width: 12),
           _filterDropdown(
             label: 'Status',
-            value: filters.status,
+            value: state.statusFilter,
             items: const [
               DropdownMenuItem(value: 'all', child: Text('All Status')),
               DropdownMenuItem(value: 'true', child: Text('Active')),
               DropdownMenuItem(value: 'false', child: Text('Inactive')),
             ],
             onChanged: (v) {
-              if (v != null) ref.read(usersFilterProvider.notifier).setStatus(v);
+              if (v != null) context.read<AdminUsersBloc>().add(AdminUsersFiltersChanged(status: v));
             },
           ),
           const SizedBox(width: 12),
           _filterDropdown(
             label: 'Role',
-            value: filters.roleId,
+            value: state.roleIdFilter,
             items: [
               const DropdownMenuItem(value: 'all', child: Text('All Roles')),
               ...roles.map(
@@ -311,29 +338,29 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminUsersScreen> {
               ),
             ],
             onChanged: (v) {
-              if (v != null) ref.read(usersFilterProvider.notifier).setRoleId(v);
+              if (v != null) context.read<AdminUsersBloc>().add(AdminUsersFiltersChanged(roleId: v));
             },
           ),
           const SizedBox(width: 12),
           FilterChip(
             label: const Text('Locked only'),
-            selected: filters.lockedOnly,
+            selected: state.lockedOnly,
             avatar: Icon(
               Icons.lock_outline_rounded,
               size: 16,
-              color: filters.lockedOnly ? Colors.white : Colors.orange,
+              color: state.lockedOnly ? Colors.white : Colors.orange,
             ),
             selectedColor: Colors.orange,
             checkmarkColor: Colors.white,
             labelStyle: TextStyle(
               fontWeight: FontWeight.w700,
               fontSize: 12,
-              color: filters.lockedOnly
+              color: state.lockedOnly
                   ? Colors.white
                   : (isDark ? Colors.white70 : const Color(0xFF263238)),
             ),
             onSelected: (v) =>
-                ref.read(usersFilterProvider.notifier).setLockedOnly(v),
+                context.read<AdminUsersBloc>().add(AdminUsersFiltersChanged(lockedOnly: v)),
           ),
         ],
       ),
@@ -354,7 +381,7 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminUsersScreen> {
         color: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
           width: 1.2,
         ),
       ),
@@ -376,115 +403,401 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminUsersScreen> {
   }
 
   Future<void> _showAddUserDialog(
-    BuildContext context,
-    AsyncValue<List<RoleSummary>> rolesAsync,
+    List<RoleSummary> allRoles,
   ) async {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final employeeIdController = TextEditingController();
-    String? roleId;
-    final roles = rolesAsync.value ?? const <RoleSummary>[];
+    final currentUserRole = context.read<AuthBloc>().state.user?.role;
+    final isSuperAdmin = Permissions.isSuperAdmin(currentUserRole);
+
+    // Form controllers
+    bool isCompanyAdminMode = isSuperAdmin;
+    final companyNameController = TextEditingController();
+    final usernameController = TextEditingController();
+    final passwordController = TextEditingController(text: '01011998');
+    final employeeInputController = TextEditingController();
+
+    final defaultSystemAdminRoleId = allRoles
+        .firstWhere(
+          (r) => r.name == 'SYSTEM_ADMIN' || r.name == 'ADMIN',
+          orElse: () => allRoles.first,
+        )
+        .id;
+    String? roleId = isSuperAdmin ? defaultSystemAdminRoleId : null;
+
+    int? selectedEmployeeId;
+    String? selectedEmployeeCode;
+    final roles = allRoles.where((r) {
+      if (isSuperAdmin) return true;
+      return !Permissions.isAdmin(r.name);
+    }).toList();
+    List<EmployeeNameOption> names = const [];
+    try {
+      names = await context.read<AdminRepository>().listEmployeeNames();
+    } catch (_) {}
+    if (!mounted) return;
 
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC),
-            width: 1.5,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(
+              color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
+              width: 1.5,
+            ),
           ),
-        ),
-        title: Text(
-          'Create User Account',
-          style: TextStyle(
-            color: isDark ? Colors.white : const Color(0xFF212F3D),
-            fontWeight: FontWeight.w800,
+          title: Text(
+            isSuperAdmin && isCompanyAdminMode
+                ? 'Create Company System Admin'
+                : 'Create User Account',
+            style: TextStyle(
+              color: isDark ? Colors.white : const Color(0xFF212F3D),
+              fontWeight: FontWeight.w800,
+            ),
           ),
-        ),
-        content: SizedBox(
-          width: 420,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: employeeIdController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Employee ID',
-                  hintText: 'e.g. 1',
-                  helperText: 'The internal employee ID (numeric)',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                dropdownColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
-                style: TextStyle(color: isDark ? Colors.white : const Color(0xFF212F3D), fontWeight: FontWeight.w600),
-                decoration: const InputDecoration(
-                  labelText: 'Assign Role',
-                  border: OutlineInputBorder(),
-                ),
-                items: roles
-                    .map((r) => DropdownMenuItem(value: r.id, child: Text(r.name)))
-                    .toList(),
-                onChanged: (v) => roleId = v,
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(
-              'Cancel',
-              style: TextStyle(
-                color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF607D8B),
-                fontWeight: FontWeight.w700,
+          content: SizedBox(
+            width: 460,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (isSuperAdmin) ...[
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.25) : const Color(0xFFCBD5E1),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: InkWell(
+                              onTap: () => setDialogState(() {
+                                isCompanyAdminMode = true;
+                                roleId = defaultSystemAdminRoleId;
+                              }),
+                              borderRadius: const BorderRadius.horizontal(left: Radius.circular(9)),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 10),
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: isCompanyAdminMode
+                                      ? (isDark ? const Color(0xFFC5A059) : const Color(0xFF263238))
+                                      : Colors.transparent,
+                                  borderRadius: const BorderRadius.horizontal(left: Radius.circular(9)),
+                                ),
+                                child: Text(
+                                  'Client Company Admin',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                    color: isCompanyAdminMode
+                                        ? (isDark ? const Color(0xFF1A1816) : Colors.white)
+                                        : (isDark ? Colors.white70 : const Color(0xFF64748B)),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: InkWell(
+                              onTap: () => setDialogState(() {
+                                isCompanyAdminMode = false;
+                                roleId = null;
+                              }),
+                              borderRadius: const BorderRadius.horizontal(right: Radius.circular(9)),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 10),
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: !isCompanyAdminMode
+                                      ? (isDark ? const Color(0xFFC5A059) : const Color(0xFF263238))
+                                      : Colors.transparent,
+                                  borderRadius: const BorderRadius.horizontal(right: Radius.circular(9)),
+                                ),
+                                child: Text(
+                                  'Employee User',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                    color: !isCompanyAdminMode
+                                        ? (isDark ? const Color(0xFF1A1816) : Colors.white)
+                                        : (isDark ? Colors.white70 : const Color(0xFF64748B)),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  if (!isSuperAdmin) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      margin: const EdgeInsets.only(bottom: 14),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.12) : const Color(0xFFFFF8E1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.3) : const Color(0xFFFFD54F),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.shield_outlined,
+                            size: 16,
+                            color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFFF57F17),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Only Superadmin can create Admin accounts.',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF795548),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  if (isSuperAdmin && isCompanyAdminMode) ...[
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      margin: const EdgeInsets.only(bottom: 14),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.08) : const Color(0xFFEFF6FF),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFF93C5FD),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.business_rounded, size: 18, color: isDark ? const Color(0xFFC5A059) : const Color(0xFF2563EB)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Create a System Admin account for a client company. They will manage their own company CRM.',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF1E40AF),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    TextField(
+                      controller: companyNameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Company / Organization Name',
+                        hintText: 'e.g. Acme Corp, Alpha Builders Ltd.',
+                        helperText: 'The tenant company receiving this CRM instance',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: usernameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Admin Username',
+                        hintText: 'e.g. acme_admin, company_admin',
+                        helperText: 'Unique login identifier for the company admin',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: passwordController,
+                      decoration: const InputDecoration(
+                        labelText: 'Initial Password',
+                        hintText: 'e.g. 01011998',
+                        helperText: 'Password given to the company admin (default: 01011998)',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    DropdownButtonFormField<String>(
+                      initialValue: roleId,
+                      dropdownColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+                      style: TextStyle(color: isDark ? Colors.white : const Color(0xFF212F3D), fontWeight: FontWeight.w600),
+                      decoration: const InputDecoration(
+                        labelText: 'Admin Role Tier',
+                        helperText: 'Leave as SYSTEM_ADMIN for full company CRM control',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: allRoles
+                          .where((r) => Permissions.isAdmin(r.name))
+                          .map((r) => DropdownMenuItem(value: r.id, child: Text(r.name)))
+                          .toList(),
+                      onChanged: (v) => roleId = v,
+                    ),
+                  ] else ...[
+                    if (names.isNotEmpty) ...[
+                      DropdownButtonFormField<EmployeeNameOption?>(
+                        initialValue: null,
+                        dropdownColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+                        style: TextStyle(color: isDark ? Colors.white : const Color(0xFF212F3D), fontWeight: FontWeight.w600, fontSize: 13),
+                        decoration: const InputDecoration(
+                          labelText: 'Select Employee',
+                          helperText: 'Pick an employee to automatically link',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: [
+                          const DropdownMenuItem(value: null, child: Text('Choose from list or type below...')),
+                          ...names.map(
+                            (e) => DropdownMenuItem(
+                              value: e,
+                              child: Text(
+                                e.displayLabel,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ),
+                        ],
+                        onChanged: (opt) {
+                          setDialogState(() {
+                            if (opt != null) {
+                              selectedEmployeeId = opt.employeeId;
+                              selectedEmployeeCode = opt.employeeCode;
+                              employeeInputController.text = opt.employeeCode ?? opt.employeeId?.toString() ?? '';
+                            }
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 14),
+                    ],
+                    TextField(
+                      controller: employeeInputController,
+                      decoration: const InputDecoration(
+                        labelText: 'Employee Code or ID',
+                        hintText: 'e.g. 007, IT5, or numeric ID',
+                        helperText: 'Enter employee code (e.g. 007) or employee database ID',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      initialValue: null,
+                      dropdownColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+                      style: TextStyle(color: isDark ? Colors.white : const Color(0xFF212F3D), fontWeight: FontWeight.w600),
+                      decoration: const InputDecoration(
+                        labelText: 'Assign Role',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: roles
+                          .map((r) => DropdownMenuItem(value: r.id, child: Text(r.name)))
+                          .toList(),
+                      onChanged: (v) => roleId = v,
+                    ),
+                  ],
+                ],
               ),
             ),
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(
-              backgroundColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
-              foregroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(
+                'Cancel',
+                style: TextStyle(
+                  color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF607D8B),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
-            child: const Text('Create Account', style: TextStyle(fontWeight: FontWeight.w800)),
-          ),
-        ],
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: FilledButton.styleFrom(
+                backgroundColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+                foregroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: Text(
+                isSuperAdmin && isCompanyAdminMode ? 'Provision Company Admin' : 'Create Account',
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
+          ],
+        ),
       ),
     );
 
     if (ok != true || !mounted) return;
 
-    final empId = int.tryParse(employeeIdController.text.trim());
-    if (empId == null || roleId == null || roleId!.isEmpty) {
-      _showSnack('Please enter a valid employee ID and select a role.');
+    if (isSuperAdmin && isCompanyAdminMode) {
+      final username = usernameController.text.trim();
+      final companyName = companyNameController.text.trim();
+      final password = passwordController.text.trim();
+      if (username.isEmpty || roleId == null || roleId!.isEmpty) {
+        _showSnack('Please provide an admin username and role.');
+        return;
+      }
+      final payload = <String, dynamic>{
+        'roleId': roleId,
+        'username': username,
+        'password': password.isNotEmpty ? password : '01011998',
+        if (companyName.isNotEmpty) 'subOrganization': companyName,
+      };
+      context.read<AdminUsersBloc>().add(AdminUserCreated(payload));
       return;
     }
 
-    try {
-      await ref.read(usersListProvider.notifier).createUser({
-        'employeeId': empId,
-        'roleId': roleId,
-      });
-      if (mounted) _showSnack('User account created.');
-    } catch (e) {
-      if (mounted) _showSnack(e.toString().replaceFirst('Exception: ', ''));
+    final inputVal = employeeInputController.text.trim();
+    if (inputVal.isEmpty || roleId == null || roleId!.isEmpty) {
+      _showSnack('Please select or enter an employee code/ID and choose a role.');
+      return;
     }
+
+    final parsedNum = int.tryParse(inputVal);
+    final finalEmpId = selectedEmployeeId ?? parsedNum;
+    final finalEmpCode = (selectedEmployeeCode != null && selectedEmployeeCode!.isNotEmpty)
+        ? selectedEmployeeCode
+        : inputVal;
+
+    final payload = <String, dynamic>{
+      'roleId': roleId,
+    };
+    if (finalEmpId != null) payload['employeeId'] = finalEmpId;
+    if (finalEmpCode != null && finalEmpCode.isNotEmpty) payload['employeeCode'] = finalEmpCode;
+
+    context.read<AdminUsersBloc>().add(AdminUserCreated(payload));
   }
 
   Future<void> _showEditUserDialog(
-    BuildContext context,
     UserAccount user,
-    AsyncValue<List<RoleSummary>> rolesAsync,
+    List<RoleSummary> allRoles,
   ) async {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final currentUserRole = context.read<AuthBloc>().state.user?.role;
+    final isSuperAdmin = Permissions.isSuperAdmin(currentUserRole);
+    final targetIsSuperAdmin = Permissions.isSuperAdmin(user.role.name);
+    final targetIsAdmin = Permissions.isAdmin(user.role.name);
+
+    if (targetIsSuperAdmin && !isSuperAdmin) {
+      _showSnack('Only Superadmin can modify a Superadmin account.');
+      return;
+    }
+
     var isActive = user.isActive;
     var roleId = user.roleId;
-    final roles = rolesAsync.value ?? const <RoleSummary>[];
+    final roles = allRoles.where((r) {
+      if (isSuperAdmin) return true;
+      if (r.id == user.roleId) return true;
+      return !Permissions.isAdmin(r.name);
+    }).toList();
 
     final ok = await showDialog<bool>(
       context: context,
@@ -494,7 +807,7 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminUsersScreen> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
             side: BorderSide(
-              color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC),
+              color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
               width: 1.5,
             ),
           ),
@@ -517,7 +830,7 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminUsersScreen> {
                     color: isDark ? const Color(0xFF121212) : const Color(0xFFF1F5F9),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                      color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                      color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
                     ),
                   ),
                   child: Column(
@@ -542,16 +855,49 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminUsersScreen> {
                     ],
                   ),
                 ),
+                if (targetIsAdmin && !isSuperAdmin) ...[
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.12) : const Color(0xFFFFF8E1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.3) : const Color(0xFFFFD54F),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.shield_outlined,
+                          size: 16,
+                          color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFFF57F17),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Admin accounts can only be modified by Superadmin.',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF795548),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 OutlinedButton.icon(
                   onPressed: () {
                     Navigator.pop(ctx);
-                    _showCredentialsDialog(context, user);
+                    _showCredentialsDialog(user);
                   },
                   style: OutlinedButton.styleFrom(
                     foregroundColor: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
                     side: BorderSide(
-                      color: isDark ? const Color(0xFFC5A059).withOpacity(0.4) : const Color(0xFFCFD8DC),
+                      color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.4) : const Color(0xFFCFD8DC),
                     ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
@@ -573,7 +919,7 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminUsersScreen> {
                   items: roles
                       .map((r) => DropdownMenuItem(value: r.id, child: Text(r.name)))
                       .toList(),
-                  onChanged: (v) => setLocal(() => roleId = v ?? roleId),
+                  onChanged: (targetIsAdmin && !isSuperAdmin) ? null : (v) => setLocal(() => roleId = v ?? roleId),
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<bool>(
@@ -588,7 +934,7 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminUsersScreen> {
                     DropdownMenuItem(value: true, child: Text('Active (Can Login)')),
                     DropdownMenuItem(value: false, child: Text('Inactive (Suspended)')),
                   ],
-                  onChanged: (v) => setLocal(() => isActive = v ?? isActive),
+                  onChanged: (targetIsAdmin && !isSuperAdmin) ? null : (v) => setLocal(() => isActive = v ?? isActive),
                 ),
               ],
             ),
@@ -604,15 +950,16 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminUsersScreen> {
                 ),
               ),
             ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              style: FilledButton.styleFrom(
-                backgroundColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
-                foregroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            if (!targetIsAdmin || isSuperAdmin)
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: FilledButton.styleFrom(
+                  backgroundColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+                  foregroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                child: const Text('Save Changes', style: TextStyle(fontWeight: FontWeight.w800)),
               ),
-              child: const Text('Save Changes', style: TextStyle(fontWeight: FontWeight.w800)),
-            ),
           ],
         ),
       ),
@@ -626,22 +973,29 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminUsersScreen> {
 
     if (payload.isEmpty) return;
 
-    try {
-      await ref.read(usersListProvider.notifier).updateUser(user.id, payload);
-      if (mounted) _showSnack('User updated.');
-    } catch (e) {
-      if (mounted) _showSnack(e.toString().replaceFirst('Exception: ', ''));
-    }
+    context.read<AdminUsersBloc>().add(AdminUserUpdated(id: user.id, data: payload));
   }
 
-  Future<void> _showCredentialsDialog(BuildContext context, UserAccount user) async {
+  Future<void> _showCredentialsDialog(UserAccount user) async {
+    final currentUserRole = context.read<AuthBloc>().state.user?.role;
+    final isSuperAdmin = Permissions.isSuperAdmin(currentUserRole);
+    if (Permissions.isSuperAdmin(user.role.name) && !isSuperAdmin) {
+      _showSnack('Only Superadmin can view or modify Superadmin credentials.');
+      return;
+    }
     await showDialog<void>(
       context: context,
       builder: (ctx) => _CredentialsDialog(user: user),
     );
   }
 
-  Future<void> _confirmDelete(BuildContext context, UserAccount user) async {
+  Future<void> _confirmDelete(UserAccount user) async {
+    final currentUserRole = context.read<AuthBloc>().state.user?.role;
+    final isSuperAdmin = Permissions.isSuperAdmin(currentUserRole);
+    if (Permissions.isAdmin(user.role.name) && !isSuperAdmin) {
+      _showSnack('Only Superadmin can delete Admin accounts.');
+      return;
+    }
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final ok = await showDialog<bool>(
       context: context,
@@ -650,7 +1004,7 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminUsersScreen> {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
           side: BorderSide(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
             width: 1.5,
           ),
         ),
@@ -695,33 +1049,49 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminUsersScreen> {
 
     if (ok != true || !mounted) return;
 
-    try {
-      await ref.read(usersListProvider.notifier).deleteUser(user.id);
-      if (mounted) _showSnack('User deleted.');
-    } catch (e) {
-      if (mounted) _showSnack(e.toString().replaceFirst('Exception: ', ''));
-    }
+    context.read<AdminUsersBloc>().add(AdminUserDeleted(user.id));
   }
 
-  Future<void> _unblockLogin(BuildContext context, UserAccount user) async {
+  Future<void> _unblockLogin(UserAccount user) async {
+    final currentUserRole = context.read<AuthBloc>().state.user?.role;
+    final isSuperAdmin = Permissions.isSuperAdmin(currentUserRole);
+    if (Permissions.isAdmin(user.role.name) && !isSuperAdmin) {
+      _showSnack('Only Superadmin can unblock or activate Admin accounts.');
+      return;
+    }
+
+    final willActivate = !user.isActive;
+    final isLocked = user.isLoginLocked;
+
+    final actionTitle = (willActivate && isLocked)
+        ? 'Unblock & Activate Account'
+        : willActivate
+            ? 'Activate Account'
+            : 'Unblock Login';
+
+    final actionMsg = (willActivate && isLocked)
+        ? 'Allow ${user.displayName} to sign in again? This will activate their account and clear failed login locks.'
+        : willActivate
+            ? 'Activate account for ${user.displayName} so they can sign in?'
+            : 'Allow ${user.displayName} to sign in again? Failed-password lock will reset.';
+
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Unblock login'),
-        content: Text('Allow ${user.displayName} to sign in again? Failed-password lock will reset.'),
+        title: Text(actionTitle),
+        content: Text(actionMsg),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Unblock')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFF2E7D32)),
+            child: Text(actionTitle),
+          ),
         ],
       ),
     );
     if (ok != true || !mounted) return;
-    try {
-      await ref.read(usersListProvider.notifier).unblockLogin(user.id);
-      if (mounted) _showSnack('Login unblocked for ${user.displayName}.');
-    } catch (e) {
-      if (mounted) _showSnack(e.toString().replaceFirst('Exception: ', ''));
-    }
+    context.read<AdminUsersBloc>().add(AdminUserUnblocked(user.id));
   }
 
   void _showSnack(String message) {
@@ -733,6 +1103,11 @@ class _UserCard extends StatelessWidget {
   const _UserCard({
     required this.user,
     required this.isAdmin,
+    required this.isSuperAdmin,
+    required this.canEdit,
+    required this.canDelete,
+    required this.canUnblock,
+    required this.canViewCredentials,
     required this.onCredentials,
     required this.onEdit,
     required this.onDelete,
@@ -741,6 +1116,11 @@ class _UserCard extends StatelessWidget {
 
   final UserAccount user;
   final bool isAdmin;
+  final bool isSuperAdmin;
+  final bool canEdit;
+  final bool canDelete;
+  final bool canUnblock;
+  final bool canViewCredentials;
   final VoidCallback onCredentials;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
@@ -764,7 +1144,7 @@ class _UserCard extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
           width: 1.5,
         ),
       ),
@@ -776,7 +1156,7 @@ class _UserCard extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFF263238).withOpacity(0.15),
+                  color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFF263238).withValues(alpha: 0.15),
                   width: 1.5,
                 ),
               ),
@@ -821,7 +1201,58 @@ class _UserCard extends StatelessWidget {
                     runSpacing: 6,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      _badge(user.role.name, isDark ? const Color(0xFFC5A059) : const Color(0xFF263238)),
+                      if (Permissions.isSuperAdmin(user.role.name))
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF7C3AED).withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(30),
+                            border: Border.all(color: const Color(0xFF7C3AED), width: 1.2),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.workspace_premium_rounded, size: 12, color: Color(0xFF7C3AED)),
+                              SizedBox(width: 4),
+                              Text(
+                                'SUPERADMIN · SUPREME',
+                                style: TextStyle(
+                                  color: Color(0xFF7C3AED),
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 10,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      else if (Permissions.isSystemAdmin(user.role.name))
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFC5A059).withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(30),
+                            border: Border.all(color: const Color(0xFFC5A059), width: 1.2),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.admin_panel_settings_rounded, size: 12, color: Color(0xFFC5A059)),
+                              SizedBox(width: 4),
+                              Text(
+                                'SYSTEM ADMIN',
+                                style: TextStyle(
+                                  color: Color(0xFFC5A059),
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 10,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      else
+                        _badge(user.role.name, isDark ? const Color(0xFFC5A059) : const Color(0xFF263238)),
                       _badge(
                         user.isActive ? 'ACTIVE' : 'INACTIVE',
                         user.isActive ? Colors.green : Colors.red,
@@ -854,28 +1285,44 @@ class _UserCard extends StatelessWidget {
                             fontSize: 11, 
                             fontWeight: FontWeight.w600,
                             fontStyle: FontStyle.italic,
-                            color: isDark ? Colors.white30 : const Color(0xFF607D8B).withOpacity(0.6),
+                            color: isDark ? Colors.white30 : const Color(0xFF607D8B).withValues(alpha: 0.6),
                           ),
                         ),
                     ],
                   ),
-                  if (isAdmin && user.isLoginLocked) ...[
+                  if (isAdmin && canUnblock && (!user.isActive || user.isLoginLocked)) ...[
                     const SizedBox(height: 10),
                     Align(
                       alignment: Alignment.centerLeft,
                       child: FilledButton.tonalIcon(
                         onPressed: onUnblock,
-                        icon: const Icon(Icons.lock_open_rounded, size: 16),
+                        icon: Icon(
+                          (!user.isActive && user.isLoginLocked)
+                              ? Icons.lock_open_rounded
+                              : !user.isActive
+                                  ? Icons.check_circle_outline_rounded
+                                  : Icons.lock_open_rounded,
+                          size: 16,
+                        ),
                         label: Text(
-                          user.loginBlocked ? 'Unblock login' : 'Clear temp lock',
+                          (!user.isActive && user.isLoginLocked)
+                              ? 'Unblock & Activate Account'
+                              : !user.isActive
+                                  ? 'Activate Account'
+                                  : (user.loginBlocked ? 'Unblock Login' : 'Clear Temp Lock'),
+                          style: const TextStyle(fontWeight: FontWeight.w700),
                         ),
                         style: FilledButton.styleFrom(
-                          foregroundColor: user.loginBlocked
-                              ? Colors.red.shade800
-                              : Colors.orange.shade900,
-                          backgroundColor: user.loginBlocked
-                              ? Colors.red.withValues(alpha: 0.12)
-                              : Colors.orange.withValues(alpha: 0.12),
+                          foregroundColor: !user.isActive
+                              ? const Color(0xFF1B5E20)
+                              : user.loginBlocked
+                                  ? Colors.red.shade800
+                                  : Colors.orange.shade900,
+                          backgroundColor: !user.isActive
+                              ? const Color(0xFFE8F5E9)
+                              : user.loginBlocked
+                                  ? Colors.red.withValues(alpha: 0.12)
+                                  : Colors.orange.withValues(alpha: 0.12),
                         ),
                       ),
                     ),
@@ -887,27 +1334,38 @@ class _UserCard extends StatelessWidget {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (isAdmin && user.isLoginLocked)
+                if (isAdmin && canUnblock && (!user.isActive || user.isLoginLocked))
                   IconButton(
-                    tooltip: 'Unblock login',
+                    tooltip: (!user.isActive && user.isLoginLocked)
+                        ? 'Unblock & Activate'
+                        : !user.isActive
+                            ? 'Activate Account'
+                            : 'Unblock login',
                     onPressed: onUnblock,
-                    icon: const Icon(Icons.lock_open_rounded, color: Colors.orange, size: 18),
+                    icon: Icon(
+                      !user.isActive ? Icons.check_circle_outline_rounded : Icons.lock_open_rounded,
+                      color: !user.isActive ? Colors.green : Colors.orange,
+                      size: 20,
+                    ),
                   ),
-                IconButton(
-                  tooltip: 'Credentials',
-                  onPressed: onCredentials,
-                  icon: const Icon(Icons.key_outlined, color: Color(0xFFC5A059), size: 18),
-                ),
-                IconButton(
-                  tooltip: 'Edit',
-                  onPressed: onEdit,
-                  icon: const Icon(Icons.edit_outlined, color: Color(0xFFC5A059), size: 18),
-                ),
-                IconButton(
-                  tooltip: 'Delete',
-                  onPressed: onDelete,
-                  icon: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
-                ),
+                if (canViewCredentials)
+                  IconButton(
+                    tooltip: 'Credentials',
+                    onPressed: onCredentials,
+                    icon: const Icon(Icons.key_outlined, color: Color(0xFFC5A059), size: 18),
+                  ),
+                if (canEdit)
+                  IconButton(
+                    tooltip: 'Edit',
+                    onPressed: onEdit,
+                    icon: const Icon(Icons.edit_outlined, color: Color(0xFFC5A059), size: 18),
+                  ),
+                if (canDelete)
+                  IconButton(
+                    tooltip: 'Delete',
+                    onPressed: onDelete,
+                    icon: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
+                  ),
               ],
             ),
           ],
@@ -920,9 +1378,9 @@ class _UserCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
       decoration: BoxDecoration(
-        color: soft ? color.withOpacity(0.12) : color.withOpacity(0.08),
+        color: soft ? color.withValues(alpha: 0.12) : color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(30),
-        border: Border.all(color: color.withOpacity(0.25), width: 1.2),
+        border: Border.all(color: color.withValues(alpha: 0.25), width: 1.2),
       ),
       child: Text(
         text.toUpperCase(),
@@ -937,7 +1395,7 @@ class _UserCard extends StatelessWidget {
     final mm = local.month.toString().padLeft(2, '0');
     final hh = local.hour.toString().padLeft(2, '0');
     final min = local.minute.toString().padLeft(2, '0');
-    return '$dd/$mm ${hh}:$min';
+    return '$dd/$mm $hh:$min';
   }
 
   String _formatDate(DateTime dt) {
@@ -948,16 +1406,16 @@ class _UserCard extends StatelessWidget {
   }
 }
 
-class _CredentialsDialog extends ConsumerStatefulWidget {
+class _CredentialsDialog extends StatefulWidget {
   const _CredentialsDialog({required this.user});
 
   final UserAccount user;
 
   @override
-  ConsumerState<_CredentialsDialog> createState() => _CredentialsDialogState();
+  State<_CredentialsDialog> createState() => _CredentialsDialogState();
 }
 
-class _CredentialsDialogState extends ConsumerState<_CredentialsDialog> {
+class _CredentialsDialogState extends State<_CredentialsDialog> {
   AccountCredentials? _creds;
   String? _revealedPassword;
   bool _loading = true;
@@ -979,7 +1437,7 @@ class _CredentialsDialogState extends ConsumerState<_CredentialsDialog> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final creds = await ref.read(rbacRepositoryProvider).getUserCredentials(widget.user.id);
+      final creds = await context.read<RbacRepository>().getUserCredentials(widget.user.id);
       if (mounted) {
         setState(() {
           _creds = creds;
@@ -1009,7 +1467,7 @@ class _CredentialsDialogState extends ConsumerState<_CredentialsDialog> {
           return;
         }
       }
-      final result = await ref.read(rbacRepositoryProvider).resetPassword(
+      final result = await context.read<RbacRepository>().resetPassword(
             widget.user.id,
             password: custom.isEmpty ? null : custom,
           );
@@ -1049,6 +1507,36 @@ class _CredentialsDialogState extends ConsumerState<_CredentialsDialog> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$label copied')));
   }
 
+  bool _activating = false;
+
+    Future<void> _activateAndUnblock() async {
+    setState(() => _activating = true);
+    try {
+      await context.read<RbacRepository>().unblockLogin(widget.user.id);
+      if (!mounted) return;
+      await context.read<RbacRepository>().updateUser(widget.user.id, {'isActive': true});
+      if (!mounted) return;
+      context.read<AdminUsersBloc>().add(const AdminUsersLoadRequested());
+      await _load();
+      if (mounted) {
+        setState(() => _activating = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Account successfully activated & unblocked! User can log in now.'),
+            backgroundColor: Color(0xFF2E7D32),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _activating = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final loginId = _creds?.loginId;
@@ -1060,7 +1548,7 @@ class _CredentialsDialogState extends ConsumerState<_CredentialsDialog> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC),
+          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
           width: 1.5,
         ),
       ),
@@ -1093,16 +1581,50 @@ class _CredentialsDialogState extends ConsumerState<_CredentialsDialog> {
                 children: [
                   if (_creds?.canLogin == false)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      padding: const EdgeInsets.all(12),
                       margin: const EdgeInsets.only(bottom: 16),
                       decoration: BoxDecoration(
-                        color: Colors.amber.withOpacity(0.12),
+                        color: Colors.amber.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(color: Colors.amber, width: 1.2),
                       ),
-                      child: const Text(
-                        'Account inactive or missing login ID.',
-                        style: TextStyle(fontSize: 12, color: Colors.amber, fontWeight: FontWeight.w700),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(Icons.warning_amber_rounded, color: Colors.amber, size: 20),
+                              SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Account inactive or blocked from logging in.',
+                                  style: TextStyle(fontSize: 12, color: Colors.amber, fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          FilledButton.icon(
+                            onPressed: _activating ? null : _activateAndUnblock,
+                            icon: _activating
+                                ? const SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                  )
+                                : const Icon(Icons.lock_open_rounded, size: 16),
+                            label: Text(
+                              _activating ? 'Activating...' : 'Unblock & Activate Account',
+                              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                            ),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF2E7D32),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   Container(
@@ -1111,7 +1633,7 @@ class _CredentialsDialogState extends ConsumerState<_CredentialsDialog> {
                       color: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                        color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
                       ),
                     ),
                     child: Column(
@@ -1213,7 +1735,7 @@ class _CredentialsDialogState extends ConsumerState<_CredentialsDialog> {
                       style: OutlinedButton.styleFrom(
                         foregroundColor: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
                         side: BorderSide(
-                          color: isDark ? const Color(0xFFC5A059).withOpacity(0.4) : const Color(0xFF263238).withOpacity(0.5),
+                          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.4) : const Color(0xFF263238).withValues(alpha: 0.5),
                         ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),

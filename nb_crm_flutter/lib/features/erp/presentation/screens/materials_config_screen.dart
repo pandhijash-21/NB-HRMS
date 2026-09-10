@@ -1,20 +1,22 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../lookups/presentation/lookup_dropdown.dart';
+import '../../data/boq_repository.dart';
+import '../../data/work_order_repository.dart';
+import '../../domain/resource_models.dart';
 import '../../domain/work_order_lookup_keys.dart';
-import '../boq_providers.dart';
-import '../work_order_providers.dart';
+import '../../domain/work_order_models.dart';
 
-class MaterialsConfigScreen extends ConsumerStatefulWidget {
+class MaterialsConfigScreen extends StatefulWidget {
   const MaterialsConfigScreen({super.key});
 
   @override
-  ConsumerState<MaterialsConfigScreen> createState() => _MaterialsConfigScreenState();
+  State<MaterialsConfigScreen> createState() => _MaterialsConfigScreenState();
 }
 
-class _MaterialsConfigScreenState extends ConsumerState<MaterialsConfigScreen> {
+class _MaterialsConfigScreenState extends State<MaterialsConfigScreen> {
   final _brandCtrl = TextEditingController();
   final _nameCtrl = TextEditingController();
   final _sizeCtrl = TextEditingController();
@@ -22,6 +24,44 @@ class _MaterialsConfigScreenState extends ConsumerState<MaterialsConfigScreen> {
   String? _unitCode;
   String? _activityId;
   String? _subtaskId;
+
+  List<ErpMaterial> _materials = [];
+  List<ErpActivity> _activities = [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadData();
+    });
+  }
+
+  Future<void> _loadData() async {
+    try {
+      final boqRepo = context.read<BoqRepository>();
+      final workRepo = context.read<WorkOrderRepository>();
+      final results = await Future.wait([
+        boqRepo.listMaterials(),
+        workRepo.listActivities(),
+      ]);
+      if (mounted) {
+        setState(() {
+          _materials = results[0] as List<ErpMaterial>;
+          _activities = results[1] as List<ErpActivity>;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -36,7 +76,7 @@ class _MaterialsConfigScreenState extends ConsumerState<MaterialsConfigScreen> {
     final name = _nameCtrl.text.trim();
     if (name.isEmpty) return;
     try {
-      await ref.read(boqRepositoryProvider).createMaterial({
+      await context.read<BoqRepository>().createMaterial({
         'brand': _brandCtrl.text.trim(),
         'name': name,
         'unitCode': _unitCode,
@@ -45,7 +85,6 @@ class _MaterialsConfigScreenState extends ConsumerState<MaterialsConfigScreen> {
         'subtaskId': _subtaskId,
         'qtyOnHand': double.tryParse(_qtyCtrl.text) ?? 0,
       });
-      ref.invalidate(erpMaterialsProvider);
       _brandCtrl.clear();
       _nameCtrl.clear();
       _sizeCtrl.clear();
@@ -55,6 +94,7 @@ class _MaterialsConfigScreenState extends ConsumerState<MaterialsConfigScreen> {
         _activityId = null;
         _subtaskId = null;
       });
+      _loadData();
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     }
@@ -82,12 +122,12 @@ class _MaterialsConfigScreenState extends ConsumerState<MaterialsConfigScreen> {
     );
     if (ok != true) return;
     try {
-      await ref.read(boqRepositoryProvider).addMaterialStock(id, {
+      await context.read<BoqRepository>().addMaterialStock(id, {
         'quantity': double.tryParse(qtyCtrl.text) ?? 0,
         'logType': 'PURCHASE',
         'remarks': remarksCtrl.text.trim(),
       });
-      ref.invalidate(erpMaterialsProvider);
+      _loadData();
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     }
@@ -95,9 +135,6 @@ class _MaterialsConfigScreenState extends ConsumerState<MaterialsConfigScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final materialsAsync = ref.watch(erpMaterialsProvider);
-    final activitiesAsync = ref.watch(erpActivitiesAdminProvider);
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Materials'),
@@ -120,7 +157,7 @@ class _MaterialsConfigScreenState extends ConsumerState<MaterialsConfigScreen> {
                   const SizedBox(height: 8),
                   const SizedBox(height: 8),
                   lookupDropdown(
-                    ref: ref,
+                    context: context,
                     category: kWoMeasurementUnit,
                     value: _unitCode,
                     label: 'Unit',
@@ -131,36 +168,30 @@ class _MaterialsConfigScreenState extends ConsumerState<MaterialsConfigScreen> {
                   const SizedBox(height: 8),
                   TextField(controller: _qtyCtrl, decoration: const InputDecoration(labelText: 'Qty on hand', border: OutlineInputBorder()), keyboardType: TextInputType.number),
                   const SizedBox(height: 8),
-                  activitiesAsync.when(
-                    loading: () => const SizedBox.shrink(),
-                    error: (_, __) => const SizedBox.shrink(),
-                    data: (acts) => DropdownButtonFormField<String>(
-                      value: _activityId,
-                      decoration: const InputDecoration(labelText: 'Activity (optional)', border: OutlineInputBorder()),
-                      items: acts.map((a) => DropdownMenuItem(value: a.id, child: Text(a.name))).toList(),
-                      onChanged: (v) => setState(() {
-                        _activityId = v;
-                        _subtaskId = null;
-                      }),
-                    ),
+                  DropdownButtonFormField<String>(
+                    initialValue: _activityId,
+                    decoration: const InputDecoration(labelText: 'Activity (optional)', border: OutlineInputBorder()),
+                    items: _activities.map((a) => DropdownMenuItem(value: a.id, child: Text(a.name))).toList(),
+                    onChanged: (v) => setState(() {
+                      _activityId = v;
+                      _subtaskId = null;
+                    }),
                   ),
-                  if (_activityId != null)
-                    activitiesAsync.maybeWhen(
-                      data: (acts) {
-                        final act = acts.where((a) => a.id == _activityId).firstOrNull;
-                        if (act == null) return const SizedBox.shrink();
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: DropdownButtonFormField<String>(
-                            value: _subtaskId,
-                            decoration: const InputDecoration(labelText: 'Sub-activity (optional)', border: OutlineInputBorder()),
-                            items: act.subtasks.map((s) => DropdownMenuItem(value: s.id, child: Text(s.name))).toList(),
-                            onChanged: (v) => setState(() => _subtaskId = v),
-                          ),
-                        );
-                      },
-                      orElse: () => const SizedBox.shrink(),
-                    ),
+                  if (_activityId != null) ...[
+                    () {
+                      final act = _activities.where((a) => a.id == _activityId).firstOrNull;
+                      if (act == null) return const SizedBox.shrink();
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: DropdownButtonFormField<String>(
+                          initialValue: _subtaskId,
+                          decoration: const InputDecoration(labelText: 'Sub-activity (optional)', border: OutlineInputBorder()),
+                          items: act.subtasks.map((s) => DropdownMenuItem(value: s.id, child: Text(s.name))).toList(),
+                          onChanged: (v) => setState(() => _subtaskId = v),
+                        ),
+                      );
+                    }(),
+                  ],
                   const SizedBox(height: 12),
                   FilledButton(onPressed: _save, child: const Text('Save Material')),
                 ],
@@ -168,15 +199,17 @@ class _MaterialsConfigScreenState extends ConsumerState<MaterialsConfigScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          materialsAsync.when(
-            loading: () => const CircularProgressIndicator(),
-            error: (e, _) => Text('$e'),
-            data: (items) => Column(
+          if (_loading)
+            const Center(child: CircularProgressIndicator())
+          else if (_error != null)
+            Text(_error!)
+          else
+            Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text('Stock summary', style: TextStyle(fontWeight: FontWeight.w700)),
                 const SizedBox(height: 8),
-                for (final m in items)
+                for (final m in _materials)
                   Card(
                     child: ListTile(
                       title: Text('${m.brand != null ? '${m.brand} ' : ''}${m.name}'),
@@ -192,7 +225,6 @@ class _MaterialsConfigScreenState extends ConsumerState<MaterialsConfigScreen> {
                   ),
               ],
             ),
-          ),
         ],
       ),
     );

@@ -25,14 +25,14 @@ class SalaryAsyncBody<T> extends StatelessWidget {
       ),
       error: (err, _) => Center(
         child: Padding(
-          padding: EdgeInsets.all(24),
+          padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text('$err', textAlign: TextAlign.center),
               if (onRetry != null) ...[
-                SizedBox(height: 12),
-                FilledButton(onPressed: onRetry, child: Text('Retry')),
+                const SizedBox(height: 12),
+                FilledButton(onPressed: onRetry, child: const Text('Retry')),
               ],
             ],
           ),
@@ -56,7 +56,7 @@ class SalaryAsyncBody<T> extends StatelessWidget {
                   Text(
                     emptyMessage,
                     style: TextStyle(
-                      color: isDark ? Colors.white30 : const Color(0xFF607D8B).withOpacity(0.6),
+                      color: isDark ? Colors.white30 : const Color(0xFF607D8B).withValues(alpha: 0.6),
                       fontWeight: FontWeight.w600,
                       fontSize: 15,
                     ),
@@ -131,7 +131,7 @@ Widget salaryStatusChip(BuildContext context, String status) {
   return Container(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
     decoration: BoxDecoration(
-      color: color.withOpacity(0.12),
+      color: color.withValues(alpha: 0.12),
       border: Border.all(color: color, width: 1.2),
       borderRadius: BorderRadius.circular(30),
     ),
@@ -155,7 +155,7 @@ Widget salarySectionCard({
   return Card(
     margin: EdgeInsets.zero,
     child: Padding(
-      padding: EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -166,7 +166,7 @@ Widget salarySectionCard({
               color: titleColor,
             ),
           ),
-          SizedBox(height: 12),
+          const SizedBox(height: 12),
           child,
         ],
       ),

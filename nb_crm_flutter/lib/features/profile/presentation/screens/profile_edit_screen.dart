@@ -467,7 +467,7 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
             signatureUrl: widget.profile.signatureUrl,
           ),
           const SizedBox(height: 8),
-          Text(
+          const Text(
             'Abbreviation updates automatically from Full Name on save.',
             style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
           ),
@@ -633,7 +633,7 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
                 : formatIncrementMonth(_incrementMonth!),
           ),
           const SizedBox(height: 8),
-          Text(
+          const Text(
             'Reporting managers can be regular employees or position accounts. Leave approvals are routed to the selected user account.',
             style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
           ),
@@ -733,11 +733,11 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
             ),
           ),
           backgroundColor: isDark 
-              ? const Color(0xFFC5A059).withOpacity(0.12)
+              ? const Color(0xFFC5A059).withValues(alpha: 0.12)
               : const Color(0xFFFEF3C7),
           side: BorderSide(
             color: isDark 
-                ? const Color(0xFFC5A059).withOpacity(0.3)
+                ? const Color(0xFFC5A059).withValues(alpha: 0.3)
                 : const Color(0xFFFDE68A),
             width: 1,
           ),
@@ -1297,7 +1297,7 @@ class _EditPersonalTabState extends ConsumerState<EditPersonalTab> {
                   ],
                 ),
               ),
-            Text(
+            const Text(
               'Personal Details',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
             ),
@@ -1531,7 +1531,7 @@ class _EditPersonalTabState extends ConsumerState<EditPersonalTab> {
               _pickPassportExpiryDate,
             ),
             const Divider(height: 32),
-            Text(
+            const Text(
               'Identity Documents',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
             ),
@@ -1540,7 +1540,7 @@ class _EditPersonalTabState extends ConsumerState<EditPersonalTab> {
               _canSaveDirect
                   ? 'Upload Aadhaar, PAN, passport scan, or any other supporting document.'
                   : 'Replacing documents after first fill needs Admin/HR approval. Upload, then submit the change request.',
-              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
             ),
             const SizedBox(height: 12),
             _DocumentUploadTile(
@@ -1885,7 +1885,7 @@ class _EditAddressTabState extends ConsumerState<EditAddressTab> {
       padding: const EdgeInsets.only(bottom: 12, top: 4),
       child: Text(
         title,
-        style: TextStyle(
+        style: const TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w700,
           letterSpacing: 1.1,
@@ -2015,8 +2015,8 @@ class _EditAddressTabState extends ConsumerState<EditAddressTab> {
             originalText: _originalInstituteEmail,
             originallyVerified: _originalInstituteVerified,
           ),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
+          const Padding(
+            padding: EdgeInsets.only(bottom: 12),
             child: Text(
               'Changing email marks it Unverified. Employee must OTP-verify on next login.',
               style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
@@ -2211,14 +2211,14 @@ class _EditOtherTabState extends ConsumerState<EditOtherTab> {
     return Form(
       key: _formKey,
       child: ListView(
-        padding: EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         children: [
           _buildTextField('Skill Set', _skillSetCtrl),
           _buildTextField('Hobbies', _hobbiesCtrl),
           _buildTextField('Strengths', _strengthCtrl),
           _buildTextField('Weaknesses', _weaknessCtrl),
           SwitchListTile(
-            title: Text('Is Handicapped'),
+            title: const Text('Is Handicapped'),
             value: _isHandicapped,
             activeThumbColor: Theme.of(context).colorScheme.primary,
             onChanged: (v) => setState(() => _isHandicapped = v),
@@ -2227,7 +2227,7 @@ class _EditOtherTabState extends ConsumerState<EditOtherTab> {
             _buildTextField('Handicap Details', _handicapDetailsCtrl),
           _buildTextField('Height (ft)', _heightCtrl, isNumber: true),
           _buildTextField('Weight (kg)', _weightCtrl, isNumber: true),
-          SizedBox(height: 24),
+          const SizedBox(height: 24),
           FilledButton(
             onPressed: _save,
             child: Text(
@@ -2305,15 +2305,15 @@ class _EditFamilyTabState extends ConsumerState<EditFamilyTab> {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: list.isEmpty
-          ? Center(child: Text('No family members yet.'))
+          ? const Center(child: Text('No family members yet.'))
           : ListView.builder(
-              padding: EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
               itemCount: list.length,
               itemBuilder: (context, i) {
                 final member = list[i];
                 return Card(
                   elevation: 1,
-                  margin: EdgeInsets.only(bottom: 12),
+                  margin: const EdgeInsets.only(bottom: 12),
                   child: ListTile(
                     title: Text(member.name),
                     subtitle: Text(
@@ -2330,7 +2330,7 @@ class _EditFamilyTabState extends ConsumerState<EditFamilyTab> {
                           onPressed: () => _showDialog(member: member),
                         ),
                         IconButton(
-                          icon: Icon(
+                          icon: const Icon(
                             Icons.delete_outline,
                             color: AppColors.error,
                           ),
@@ -2346,7 +2346,7 @@ class _EditFamilyTabState extends ConsumerState<EditFamilyTab> {
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: AppColors.midnight,
         onPressed: () => _showDialog(),
-        child: Icon(Icons.add),
+        child: const Icon(Icons.add),
       ),
     );
   }
@@ -2396,15 +2396,15 @@ class _EditAcademicTabState extends ConsumerState<EditAcademicTab> {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: list.isEmpty
-          ? Center(child: Text('No academic qualifications added yet.'))
+          ? const Center(child: Text('No academic qualifications added yet.'))
           : ListView.builder(
-              padding: EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
               itemCount: list.length,
               itemBuilder: (context, i) {
                 final qual = list[i];
                 return Card(
                   elevation: 1,
-                  margin: EdgeInsets.only(bottom: 12),
+                  margin: const EdgeInsets.only(bottom: 12),
                   child: ListTile(
                     title: Text(qual.degreeName ?? qual.degreeType),
                     subtitle: Text(
@@ -2421,7 +2421,7 @@ class _EditAcademicTabState extends ConsumerState<EditAcademicTab> {
                           onPressed: () => _showDialog(qual: qual),
                         ),
                         IconButton(
-                          icon: Icon(
+                          icon: const Icon(
                             Icons.delete_outline,
                             color: AppColors.error,
                           ),
@@ -2437,7 +2437,7 @@ class _EditAcademicTabState extends ConsumerState<EditAcademicTab> {
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: AppColors.midnight,
         onPressed: () => _showDialog(),
-        child: Icon(Icons.add),
+        child: const Icon(Icons.add),
       ),
     );
   }
@@ -2531,9 +2531,9 @@ class _EditBankTabState extends ConsumerState<EditBankTab> {
               margin: const EdgeInsets.only(bottom: 16),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.amber.withOpacity(0.12),
+                color: Colors.amber.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.amber.withOpacity(0.4)),
+                border: Border.all(color: Colors.amber.withValues(alpha: 0.4)),
               ),
               child: Row(
                 children: [
@@ -2778,13 +2778,13 @@ class _EditSalaryTabState extends ConsumerState<EditSalaryTab> {
               preview.designation != null
                   ? 'Designation: ${preview.designation!.name}'
                   : 'Designation not set on general info',
-              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
             ),
             const Divider(height: 20),
             if (!widget.isPrivileged)
               Text(
                 currentCode != null
-                    ? '${preview.payCommission?.name ?? currentCode}'
+                    ? preview.payCommission?.name ?? currentCode
                     : 'Not assigned',
                 style: const TextStyle(fontWeight: FontWeight.w600),
               )
@@ -2883,7 +2883,7 @@ class _EditSalaryTabState extends ConsumerState<EditSalaryTab> {
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: fg!.withOpacity(0.2)),
+        border: Border.all(color: fg!.withValues(alpha: 0.2)),
       ),
       child: Text(message, style: TextStyle(fontSize: 12, color: fg)),
     );
@@ -2895,9 +2895,9 @@ class _EditSalaryTabState extends ConsumerState<EditSalaryTab> {
         child: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.08),
+            color: color.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: color.withOpacity(0.25)),
+            border: Border.all(color: color.withValues(alpha: 0.25)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -3038,7 +3038,7 @@ class _EditSalaryTabState extends ConsumerState<EditSalaryTab> {
                     formula,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 10,
                       color: AppColors.textSecondary,
                     ),
@@ -4011,7 +4011,7 @@ class _AcademicQualDialogState extends ConsumerState<AcademicQualDialog> {
                     ? (subtitle ?? 'Uploaded ??? tap to replace')
                     : 'Click to upload (PDF/Image)',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
               ),
             ],
           ),
@@ -4078,8 +4078,9 @@ class _AcademicQualDialogState extends ConsumerState<AcademicQualDialog> {
                 onChanged: (v) {
                   _uiLevel = v;
                   if (v == 'HSC_DIPLOMA') {
-                    if (_program != 'HSC' && _program != 'DIPLOMA')
+                    if (_program != 'HSC' && _program != 'DIPLOMA') {
                       _program = 'HSC';
+                    }
                   }
                 },
               ),
@@ -4188,7 +4189,7 @@ class _AcademicQualDialogState extends ConsumerState<AcademicQualDialog> {
                     ),
                     Text(
                       '$semCount semesters',
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 11,
                         color: AppColors.textSecondary,
                       ),
@@ -4475,7 +4476,7 @@ class _DocumentUploadTile extends ConsumerWidget {
                     isUploaded
                         ? 'Tap to replace file'
                         : 'Tap to upload from device',
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 11,
                       color: AppColors.textSecondary,
                     ),
@@ -4666,8 +4667,9 @@ class _BonusUploadZoneState extends ConsumerState<BonusUploadZone> {
   void didUpdateWidget(covariant BonusUploadZone oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.photoUrl != widget.photoUrl) _photoUrl = widget.photoUrl;
-    if (oldWidget.signatureUrl != widget.signatureUrl)
+    if (oldWidget.signatureUrl != widget.signatureUrl) {
       _signatureUrl = widget.signatureUrl;
+    }
   }
 
   Future<void> _upload(String kebabType) async {

@@ -35,7 +35,7 @@ class LocationAlertSound {
           ),
           iOS: AudioContextIOS(
             category: AVAudioSessionCategory.playback,
-            options: {AVAudioSessionOptions.mixWithOthers},
+            options: const {AVAudioSessionOptions.mixWithOthers},
           ),
         ),
       );

@@ -1,5 +1,12 @@
 import { prisma } from '../../config/prisma';
 import { connectRedis, redis } from '../../config/redis';
+import { isSuperAdminRole, isSystemAdminRole } from './permissions-map';
+
+export function isExemptIdentifier(identifier?: string | null): boolean {
+  if (!identifier) return false;
+  const id = String(identifier).trim().toLowerCase();
+  return id === 'superadmin' || id === 'systemadmin' || id === 'admin';
+}
 
 const STAGE_ATTEMPTS = [3, 2, 1] as const;
 const LOCK_MS = [15 * 60 * 1000, 60 * 60 * 1000, 0] as const;
@@ -145,7 +152,17 @@ function checkState(state: GuardState | null): LockDenial | null {
 export async function assertNotLocked(params: {
   userId?: string | null;
   identifier: string;
+  roleName?: string | null;
+  username?: string | null;
 }): Promise<LockDenial | null> {
+  if (
+    isExemptIdentifier(params.identifier) ||
+    isExemptIdentifier(params.username) ||
+    isSuperAdminRole(params.roleName) ||
+    isSystemAdminRole(params.roleName)
+  ) {
+    return null;
+  }
   if (params.userId) {
     const fromDb = await readDb(params.userId);
     if (fromDb) return checkState(fromDb);
@@ -212,7 +229,17 @@ export async function recordLoginFailure(params: {
   userId?: string | null;
   identifier: string;
   aliases?: string[];
+  roleName?: string | null;
+  username?: string | null;
 }): Promise<LockDenial> {
+  if (
+    isExemptIdentifier(params.identifier) ||
+    isExemptIdentifier(params.username) ||
+    isSuperAdminRole(params.roleName) ||
+    isSystemAdminRole(params.roleName)
+  ) {
+    return { error: 'Invalid username or password', status: 401 };
+  }
   let current: GuardState | null = null;
   if (params.userId) current = await readDb(params.userId);
   if (!current) {

@@ -1,102 +1,117 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../core/bloc/load_status.dart';
 import '../../../../core/router/app_back_button.dart';
+import '../../data/crm_repository.dart';
 import '../../domain/crm_models.dart';
-import '../crm_providers.dart';
+import '../bloc/crm_headers_bloc.dart';
 
-class CrmHeadersScreen extends ConsumerStatefulWidget {
+class CrmHeadersScreen extends StatelessWidget {
   const CrmHeadersScreen({super.key});
 
   @override
-  ConsumerState<CrmHeadersScreen> createState() => _CrmHeadersScreenState();
+  Widget build(BuildContext context) {
+    return BlocProvider<CrmHeadersBloc>(
+      create: (ctx) => CrmHeadersBloc(
+        crmRepository: ctx.read<CrmRepository>(),
+      )..add(const CrmHeadersLoadRequested()),
+      child: const _CrmHeadersView(),
+    );
+  }
 }
 
-class _CrmHeadersScreenState extends ConsumerState<CrmHeadersScreen> {
-  CrmProject? _selectedProject;
+class _CrmHeadersView extends StatelessWidget {
+  const _CrmHeadersView();
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardBg = isDark ? const Color(0xFF1E1B18) : Colors.white;
     final borderColor = isDark
-        ? const Color(0xFFC5A059).withOpacity(0.18)
+        ? const Color(0xFFC5A059).withValues(alpha: 0.18)
         : const Color(0xFFE2E8F0);
-    final textMuted = isDark ? Colors.white.withOpacity(0.6) : const Color(0xFF64748B);
+    final textMuted = isDark ? Colors.white.withValues(alpha: 0.6) : const Color(0xFF64748B);
     final primaryGold = isDark ? const Color(0xFFC5A059) : const Color(0xFF2563EB);
 
-    final projectsAsync = ref.watch(crmProjectsProvider);
-
-    return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF141210) : const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        title: Text(_selectedProject == null
-            ? 'Projects & Campaign Webhooks'
-            : '${_selectedProject!.name} — Campaigns & Headers'),
-        leading: _selectedProject != null
-            ? IconButton(
-                icon: const Icon(Icons.arrow_back_rounded),
+    return BlocConsumer<CrmHeadersBloc, CrmHeadersState>(
+      listener: (context, state) {
+        if (state.errorMessage != null && state.errorMessage!.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(state.errorMessage!), backgroundColor: Colors.red),
+          );
+        } else if (state.actionMessage != null && state.actionMessage!.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(state.actionMessage!), backgroundColor: Colors.green),
+          );
+        }
+      },
+      builder: (context, state) {
+        final selectedProject = state.selectedProject;
+        return Scaffold(
+          backgroundColor: isDark ? const Color(0xFF141210) : const Color(0xFFF8FAFC),
+          appBar: AppBar(
+            title: Text(selectedProject == null
+                ? 'Projects & Campaign Webhooks'
+                : '${selectedProject.name} — Campaigns & Headers'),
+            leading: selectedProject != null
+                ? IconButton(
+                    icon: const Icon(Icons.arrow_back_rounded),
+                    onPressed: () {
+                      context.read<CrmHeadersBloc>().add(const CrmHeadersProjectSelected(null));
+                    },
+                  )
+                : const AppBackButton(fallbackLocation: '/crm/pre-sales'),
+            backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            actions: [
+              if (selectedProject == null)
+                Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: ElevatedButton.icon(
+                    onPressed: () => _showAddProjectDialog(context, primaryGold),
+                    icon: const Icon(Icons.add_rounded, size: 18),
+                    label: const Text('Add Project'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryGold,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                )
+              else
+                Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: ElevatedButton.icon(
+                    onPressed: () => _showAddCampaignDialog(context, selectedProject, primaryGold),
+                    icon: const Icon(Icons.campaign_rounded, size: 18),
+                    label: const Text('Add Campaign'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryGold,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                ),
+              IconButton(
+                tooltip: 'Refresh',
+                icon: const Icon(Icons.refresh_rounded),
                 onPressed: () {
-                  setState(() {
-                    _selectedProject = null;
-                  });
-                  ref.read(selectedProjectIdProvider.notifier).setProjectId(null);
+                  context.read<CrmHeadersBloc>().add(const CrmHeadersLoadRequested());
                 },
-              )
-            : const AppBackButton(fallbackLocation: '/crm/pre-sales'),
-        backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        actions: [
-          if (_selectedProject == null)
-            Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: ElevatedButton.icon(
-                onPressed: () => _showAddProjectDialog(context, primaryGold),
-                icon: const Icon(Icons.add_rounded, size: 18),
-                label: const Text('Add Project'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: primaryGold,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
               ),
-            )
-          else
-            Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: ElevatedButton.icon(
-                onPressed: () => _showAddCampaignDialog(context, _selectedProject!, primaryGold),
-                icon: const Icon(Icons.campaign_rounded, size: 18),
-                label: const Text('Add Campaign'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: primaryGold,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-              ),
-            ),
-          IconButton(
-            tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: () {
-              ref.invalidate(crmProjectsProvider);
-              ref.invalidate(crmCampaignsProvider);
-              ref.invalidate(crmColumnsProvider);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Headers & Projects refreshed'), duration: Duration(seconds: 1)),
-              );
-            },
+            ],
           ),
-        ],
-      ),
-      body: _selectedProject == null
-          ? _buildProjectsView(projectsAsync, isDark, cardBg, borderColor, textMuted, primaryGold)
-          : _buildProjectDetailView(_selectedProject!, isDark, cardBg, borderColor, textMuted, primaryGold),
+          body: selectedProject == null
+              ? _buildProjectsView(context, state, isDark, cardBg, borderColor, textMuted, primaryGold)
+              : _buildProjectDetailView(context, state, selectedProject, isDark, cardBg, borderColor, textMuted, primaryGold),
+        );
+      },
     );
   }
 
@@ -104,7 +119,8 @@ class _CrmHeadersScreenState extends ConsumerState<CrmHeadersScreen> {
   // View 1: Projects List
   // ---------------------------------------------------------------------------
   Widget _buildProjectsView(
-    AsyncValue<List<CrmProject>> projectsAsync,
+    BuildContext context,
+    CrmHeadersState state,
     bool isDark,
     Color cardBg,
     Color borderColor,
@@ -129,7 +145,7 @@ class _CrmHeadersScreenState extends ConsumerState<CrmHeadersScreen> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: primaryColor.withOpacity(0.12),
+                    color: primaryColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(Icons.account_tree_outlined, color: primaryColor, size: 28),
@@ -176,77 +192,75 @@ class _CrmHeadersScreenState extends ConsumerState<CrmHeadersScreen> {
           ),
           const SizedBox(height: 14),
 
-          projectsAsync.when(
-            loading: () => const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator())),
-            error: (err, _) => Center(child: Text('Error loading projects: $err', style: const TextStyle(color: Colors.red))),
-            data: (projects) {
-              if (projects.isEmpty) {
-                return Container(
-                  padding: const EdgeInsets.all(40),
-                  decoration: BoxDecoration(
-                    color: cardBg,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: borderColor),
-                  ),
-                  child: Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.folder_open_outlined, size: 48, color: textMuted),
-                        const SizedBox(height: 14),
-                        const Text(
-                          'No Projects Created Yet',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Click "+ Add Project" to create your first real estate project / module.',
-                          style: TextStyle(fontSize: 13, color: textMuted),
-                        ),
-                        const SizedBox(height: 20),
-                        ElevatedButton.icon(
-                          onPressed: () => _showAddProjectDialog(context, primaryColor),
-                          icon: const Icon(Icons.add_rounded, size: 18),
-                          label: const Text('Add Project'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: primaryColor,
-                            foregroundColor: Colors.white,
-                          ),
-                        ),
-                      ],
+          if (state.status == LoadStatus.loading && state.projects.isEmpty)
+            const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator()))
+          else if (state.status == LoadStatus.failure && state.projects.isEmpty)
+            Center(child: Text('Error loading projects: ${state.errorMessage}', style: const TextStyle(color: Colors.red)))
+          else if (state.projects.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(40),
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: borderColor),
+              ),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.folder_open_outlined, size: 48, color: textMuted),
+                    const SizedBox(height: 14),
+                    const Text(
+                      'No Projects Created Yet',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                     ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Click "+ Add Project" to create your first real estate project / module.',
+                      style: TextStyle(fontSize: 13, color: textMuted),
+                    ),
+                    const SizedBox(height: 20),
+                    ElevatedButton.icon(
+                      onPressed: () => _showAddProjectDialog(context, primaryColor),
+                      icon: const Icon(Icons.add_rounded, size: 18),
+                      label: const Text('Add Project'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: primaryColor,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isWide = constraints.maxWidth > 700;
+                return GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: isWide ? 2 : 1,
+                    mainAxisExtent: 170,
+                    crossAxisSpacing: 16,
+                    mainAxisSpacing: 16,
                   ),
+                  itemCount: state.projects.length,
+                  itemBuilder: (context, idx) {
+                    final project = state.projects[idx];
+                    return _buildProjectCard(context, project, isDark, cardBg, borderColor, textMuted, primaryColor);
+                  },
                 );
-              }
-
-              return LayoutBuilder(
-                builder: (context, constraints) {
-                  final isWide = constraints.maxWidth > 700;
-                  return GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: isWide ? 2 : 1,
-                      mainAxisExtent: 170,
-                      crossAxisSpacing: 16,
-                      mainAxisSpacing: 16,
-                    ),
-                    itemCount: projects.length,
-                    itemBuilder: (context, idx) {
-                      final project = projects[idx];
-                      return _buildProjectCard(project, isDark, cardBg, borderColor, textMuted, primaryColor);
-                    },
-                  );
-                },
-              );
-            },
-          ),
+              },
+            ),
         ],
       ),
     );
   }
 
   Widget _buildProjectCard(
+    BuildContext context,
     CrmProject project,
     bool isDark,
     Color cardBg,
@@ -257,15 +271,7 @@ class _CrmHeadersScreenState extends ConsumerState<CrmHeadersScreen> {
     final dateFormat = DateFormat('dd MMM yyyy');
     return InkWell(
       onTap: () {
-        setState(() {
-          _selectedProject = project;
-        });
-        ref.read(selectedProjectIdProvider.notifier).setProjectId(project.id);
-        ref.read(selectedCampaignIdProvider.notifier).setCampaignId(null);
-        ref.invalidate(crmCampaignsProvider);
-        ref.invalidate(crmColumnsProvider);
-        ref.invalidate(crmLeadsProvider);
-        ref.invalidate(crmKpiProvider);
+        context.read<CrmHeadersBloc>().add(CrmHeadersProjectSelected(project));
       },
       borderRadius: BorderRadius.circular(14),
       child: Container(
@@ -285,7 +291,7 @@ class _CrmHeadersScreenState extends ConsumerState<CrmHeadersScreen> {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: primaryColor.withOpacity(0.12),
+                    color: primaryColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(Icons.apartment_rounded, color: primaryColor, size: 22),
@@ -344,7 +350,7 @@ class _CrmHeadersScreenState extends ConsumerState<CrmHeadersScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: primaryColor.withOpacity(0.12),
+                    color: primaryColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Row(
@@ -376,6 +382,8 @@ class _CrmHeadersScreenState extends ConsumerState<CrmHeadersScreen> {
   // View 2: Project Detail (Campaigns & Headers)
   // ---------------------------------------------------------------------------
   Widget _buildProjectDetailView(
+    BuildContext context,
+    CrmHeadersState state,
     CrmProject project,
     bool isDark,
     Color cardBg,
@@ -383,9 +391,9 @@ class _CrmHeadersScreenState extends ConsumerState<CrmHeadersScreen> {
     Color textMuted,
     Color primaryColor,
   ) {
-    final campaignsAsync = ref.watch(crmCampaignsProvider);
-    final selectedCampaignId = ref.watch(selectedCampaignIdProvider);
-    final columnsAsync = ref.watch(crmColumnsProvider);
+    final campaigns = state.campaigns;
+    final selectedCampaignId = state.selectedCampaignId;
+    final columns = state.columns;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -405,7 +413,7 @@ class _CrmHeadersScreenState extends ConsumerState<CrmHeadersScreen> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: primaryColor.withOpacity(0.12),
+                    color: primaryColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(Icons.apartment_rounded, color: primaryColor, size: 28),
@@ -448,68 +456,59 @@ class _CrmHeadersScreenState extends ConsumerState<CrmHeadersScreen> {
           ),
           const SizedBox(height: 12),
 
-          campaignsAsync.when(
-            loading: () => const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator())),
-            error: (err, _) => Text('Error loading campaigns: $err', style: const TextStyle(color: Colors.red)),
-            data: (campaigns) {
-              if (campaigns.isEmpty) {
-                return Container(
-                  padding: const EdgeInsets.all(28),
-                  decoration: BoxDecoration(
-                    color: cardBg,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: borderColor),
-                  ),
-                  child: Center(
-                    child: Column(
-                      children: [
-                        Icon(Icons.campaign_outlined, size: 36, color: textMuted),
-                        const SizedBox(height: 10),
-                        Text(
-                          '0 Campaigns created for this project yet.',
-                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: isDark ? Colors.white : const Color(0xFF1E293B)),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Click "+ Add Campaign" in the top-right toolbar to create your first campaign.',
-                          style: TextStyle(fontSize: 12, color: textMuted),
-                        ),
-                      ],
+          if (state.status == LoadStatus.loading && campaigns.isEmpty)
+            const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator()))
+          else if (state.status == LoadStatus.failure && campaigns.isEmpty)
+            Text('Error loading campaigns: ${state.errorMessage}', style: const TextStyle(color: Colors.red))
+          else if (campaigns.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(28),
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: borderColor),
+              ),
+              child: Center(
+                child: Column(
+                  children: [
+                    Icon(Icons.campaign_outlined, size: 36, color: textMuted),
+                    const SizedBox(height: 10),
+                    Text(
+                      '0 Campaigns created for this project yet.',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: isDark ? Colors.white : const Color(0xFF1E293B)),
                     ),
-                  ),
-                );
-              }
+                    const SizedBox(height: 4),
+                    Text(
+                      'Click "+ Add Campaign" in the top-right toolbar to create your first campaign.',
+                      style: TextStyle(fontSize: 12, color: textMuted),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            Builder(
+              builder: (context) {
+                final effectiveCampaignId =
+                    (selectedCampaignId != null && campaigns.any((c) => c.id == selectedCampaignId))
+                        ? selectedCampaignId
+                        : campaigns.first.id;
 
-              final effectiveCampaignId =
-                  (selectedCampaignId != null && campaigns.any((c) => c.id == selectedCampaignId))
-                      ? selectedCampaignId
-                      : campaigns.first.id;
-
-              if (effectiveCampaignId != selectedCampaignId) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (!mounted) return;
-                  ref.read(selectedCampaignIdProvider.notifier).setCampaignId(effectiveCampaignId);
-                  ref.invalidate(crmColumnsProvider);
-                  ref.invalidate(crmLeadsProvider);
-                });
-              }
-
-              return Column(
-                children: [
-                  // Campaign Selector Chips
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: campaigns.map((camp) {
-                        final isSelected = camp.id == effectiveCampaignId;
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 10),
-                          child: ChoiceChip(
-                            selected: isSelected,
-                            onSelected: (_) {
-                              ref.read(selectedCampaignIdProvider.notifier).setCampaignId(camp.id);
-                              ref.invalidate(crmColumnsProvider);
-                            },
+                return Column(
+                  children: [
+                    // Campaign Selector Chips
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: campaigns.map((camp) {
+                          final isSelected = camp.id == effectiveCampaignId;
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 10),
+                            child: ChoiceChip(
+                              selected: isSelected,
+                              onSelected: (_) {
+                                context.read<CrmHeadersBloc>().add(CrmHeadersCampaignSelected(camp.id));
+                              },
                             label: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -530,7 +529,7 @@ class _CrmHeadersScreenState extends ConsumerState<CrmHeadersScreen> {
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                   decoration: BoxDecoration(
-                                    color: isSelected ? Colors.white.withOpacity(0.25) : (isDark ? Colors.white12 : Colors.grey.shade200),
+                                    color: isSelected ? Colors.white.withValues(alpha: 0.25) : (isDark ? Colors.white12 : Colors.grey.shade200),
                                     borderRadius: BorderRadius.circular(10),
                                   ),
                                   child: Text(
@@ -595,7 +594,7 @@ class _CrmHeadersScreenState extends ConsumerState<CrmHeadersScreen> {
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                         decoration: BoxDecoration(
-                                          color: Colors.purple.withOpacity(0.12),
+                                          color: Colors.purple.withValues(alpha: 0.12),
                                           borderRadius: BorderRadius.circular(6),
                                         ),
                                         child: Text(
@@ -735,168 +734,149 @@ class _CrmHeadersScreenState extends ConsumerState<CrmHeadersScreen> {
           const SizedBox(height: 14),
 
           // Columns Table
-          columnsAsync.when(
-            loading: () => const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator())),
-            error: (err, _) => Center(child: Text('Error loading headers: $err', style: const TextStyle(color: Colors.red))),
-            data: (cols) {
-              if (cols.isEmpty) {
-                return Container(
-                  padding: const EdgeInsets.all(32),
-                  decoration: BoxDecoration(
-                    color: cardBg,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: borderColor),
-                  ),
-                  child: Center(
-                    child: Column(
-                      children: [
-                        Icon(Icons.view_column_outlined, size: 40, color: textMuted),
-                        const SizedBox(height: 12),
-                        const Text('No headers discovered or created for this campaign yet.'),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Incoming webhooks will automatically register headers here with First Letter Capitalization and Underscores.',
-                          style: TextStyle(fontSize: 12, color: textMuted),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
+          if (state.status == LoadStatus.loading && columns.isEmpty)
+            const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator()))
+          else if (state.status == LoadStatus.failure && columns.isEmpty)
+            Center(child: Text('Error loading headers: ${state.errorMessage}', style: const TextStyle(color: Colors.red)))
+          else if (columns.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: borderColor),
+              ),
+              child: Center(
+                child: Column(
+                  children: [
+                    Icon(Icons.view_column_outlined, size: 40, color: textMuted),
+                    const SizedBox(height: 12),
+                    const Text('No headers discovered or created for this campaign yet.'),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Incoming webhooks will automatically register headers here with First Letter Capitalization and Underscores.',
+                      style: TextStyle(fontSize: 12, color: textMuted),
+                      textAlign: TextAlign.center,
                     ),
-                  ),
-                );
-              }
-
-              return Container(
-                decoration: BoxDecoration(
-                  color: cardBg,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: borderColor),
+                  ],
                 ),
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: cols.length,
-                  separatorBuilder: (_, __) => Divider(height: 1, color: borderColor),
-                  itemBuilder: (context, idx) {
-                    final col = cols[idx];
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 32,
-                            height: 32,
-                            decoration: BoxDecoration(
-                              color: isDark ? const Color(0xFF282521) : const Color(0xFFF1F5F9),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Center(
-                              child: Text(
-                                '${idx + 1}',
-                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: textMuted),
-                              ),
+              ),
+            )
+          else
+            Container(
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: borderColor),
+              ),
+              child: ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: columns.length,
+                separatorBuilder: (_, __) => Divider(height: 1, color: borderColor),
+                itemBuilder: (context, idx) {
+                  final col = columns[idx];
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: isDark ? const Color(0xFF282521) : const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Center(
+                            child: Text(
+                              '${idx + 1}',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: textMuted),
                             ),
                           ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Text(
-                                      col.label,
-                                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Text(
+                                    col.label,
+                                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: isDark ? Colors.white10 : Colors.black12,
+                                      borderRadius: BorderRadius.circular(4),
                                     ),
-                                    const SizedBox(width: 8),
+                                    child: Text(
+                                      col.dataType,
+                                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: textMuted),
+                                    ),
+                                  ),
+                                  if (col.isSystem) ...[
+                                    const SizedBox(width: 6),
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                       decoration: BoxDecoration(
-                                        color: isDark ? Colors.white10 : Colors.black12,
+                                        color: Colors.blue.withValues(alpha: 0.12),
                                         borderRadius: BorderRadius.circular(4),
                                       ),
-                                      child: Text(
-                                        col.dataType,
-                                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: textMuted),
-                                      ),
+                                      child: const Text('DEFAULT', style: TextStyle(fontSize: 10, color: Colors.blue, fontWeight: FontWeight.w700)),
                                     ),
-                                    if (col.isSystem) ...[
-                                      const SizedBox(width: 6),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: Colors.blue.withOpacity(0.12),
-                                          borderRadius: BorderRadius.circular(4),
-                                        ),
-                                        child: const Text('DEFAULT', style: TextStyle(fontSize: 10, color: Colors.blue, fontWeight: FontWeight.w700)),
-                                      ),
-                                    ],
                                   ],
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Key: ${col.columnKey}${col.options.isNotEmpty ? " • Options: [${col.options.join(', ')}]" : ""}',
-                                  style: TextStyle(fontSize: 12, color: textMuted),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          // Horizontal Visibility Toggle (Zero vertical overflow)
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                col.isVisibleInTable ? 'VISIBLE' : 'HIDDEN',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: col.isVisibleInTable ? const Color(0xFF16A34A) : textMuted,
-                                ),
+                                ],
                               ),
-                              const SizedBox(width: 6),
-                              Switch(
-                                value: col.isVisibleInTable,
-                                activeColor: primaryColor,
-                                onChanged: (val) async {
-                                  try {
-                                    await ref.read(crmColumnsProvider.notifier).toggleVisibility(col.id, val);
-                                    if (mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(
-                                          content: Text(val
-                                              ? 'Header "${col.label}" is now visible in Pre-Sales table'
-                                              : 'Header "${col.label}" hidden from Pre-Sales table'),
-                                          duration: const Duration(seconds: 1),
-                                        ),
-                                      );
-                                    }
-                                  } catch (e) {
-                                    if (mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(content: Text('Failed to update toggle: $e'), backgroundColor: Colors.red),
-                                      );
-                                    }
-                                  }
-                                },
+                              const SizedBox(height: 4),
+                              Text(
+                                'Key: ${col.columnKey}${col.options.isNotEmpty ? " • Options: [${col.options.join(', ')}]" : ""}',
+                                style: TextStyle(fontSize: 12, color: textMuted),
                               ),
                             ],
                           ),
-                          if (!col.isSystem) ...[
-                            const SizedBox(width: 8),
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 20),
-                              tooltip: 'Delete Column',
-                              onPressed: () => _confirmDeleteColumn(context, col),
+                        ),
+                        const SizedBox(width: 12),
+                        // Horizontal Visibility Toggle (Zero vertical overflow)
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              col.isVisibleInTable ? 'VISIBLE' : 'HIDDEN',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: col.isVisibleInTable ? const Color(0xFF16A34A) : textMuted,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Switch(
+                              value: col.isVisibleInTable,
+                              activeThumbColor: primaryColor,
+                              onChanged: (val) {
+                                context.read<CrmHeadersBloc>().add(
+                                      CrmHeadersColumnVisibilityToggled(col.id, val),
+                                    );
+                              },
                             ),
                           ],
+                        ),
+                        if (!col.isSystem) ...[
+                          const SizedBox(width: 8),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 20),
+                            tooltip: 'Delete Column',
+                            onPressed: () => _confirmDeleteColumn(context, col),
+                          ),
                         ],
-                      ),
-                    );
-                  },
-                ),
-              );
-            },
-          ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
         ],
       ),
     );
@@ -1023,27 +1003,15 @@ class _CrmHeadersScreenState extends ConsumerState<CrmHeadersScreen> {
                 }
 
                 Navigator.pop(dialogCtx);
-                try {
-                  await ref.read(crmProjectsProvider.notifier).createProject({
-                    'name': name,
-                    'code': code,
-                    'location': locationCtrl.text.trim().isEmpty ? null : locationCtrl.text.trim(),
-                    'startDate': selectedDate.toIso8601String(),
-                    'description': descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim(),
-                  });
-
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Project "$name" created successfully!'), backgroundColor: Colors.green),
+                context.read<CrmHeadersBloc>().add(
+                      CrmHeadersProjectCreated({
+                        'name': name,
+                        'code': code,
+                        'location': locationCtrl.text.trim().isEmpty ? null : locationCtrl.text.trim(),
+                        'startDate': selectedDate.toIso8601String(),
+                        'description': descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim(),
+                      }),
                     );
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Failed to create project: $e'), backgroundColor: Colors.red),
-                    );
-                  }
-                }
               },
               child: const Text('Create Project'),
             ),
@@ -1079,28 +1047,17 @@ class _CrmHeadersScreenState extends ConsumerState<CrmHeadersScreen> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancel')),
           ElevatedButton(
-            onPressed: () async {
+            onPressed: () {
               final name = nameCtrl.text.trim();
               if (name.isEmpty) return;
               Navigator.pop(dialogCtx);
-              try {
-                await ref.read(crmProjectsProvider.notifier).updateProject(project.id, {
-                  'name': name,
-                  'location': locationCtrl.text.trim().isEmpty ? null : locationCtrl.text.trim(),
-                  'description': descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim(),
-                });
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Project "$name" updated')),
+              context.read<CrmHeadersBloc>().add(
+                    CrmHeadersProjectUpdated(project.id, {
+                      'name': name,
+                      'location': locationCtrl.text.trim().isEmpty ? null : locationCtrl.text.trim(),
+                      'description': descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim(),
+                    }),
                   );
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Failed to update project: $e'), backgroundColor: Colors.red),
-                  );
-                }
-              }
             },
             child: const Text('Save'),
           ),
@@ -1119,22 +1076,9 @@ class _CrmHeadersScreenState extends ConsumerState<CrmHeadersScreen> {
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-            onPressed: () async {
+            onPressed: () {
               Navigator.pop(ctx);
-              try {
-                await ref.read(crmProjectsProvider.notifier).deleteProject(project.id);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Project "${project.name}" deleted')),
-                  );
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Failed to delete project: $e'), backgroundColor: Colors.red),
-                  );
-                }
-              }
+              context.read<CrmHeadersBloc>().add(CrmHeadersProjectDeleted(project.id));
             },
             child: const Text('Delete'),
           ),
@@ -1233,9 +1177,9 @@ class _CrmHeadersScreenState extends ConsumerState<CrmHeadersScreen> {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: primaryColor.withOpacity(0.08),
+                      color: primaryColor.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: primaryColor.withOpacity(0.2)),
+                      border: Border.all(color: primaryColor.withValues(alpha: 0.2)),
                     ),
                     child: Row(
                       children: [
@@ -1269,32 +1213,16 @@ class _CrmHeadersScreenState extends ConsumerState<CrmHeadersScreen> {
                 }
 
                 Navigator.pop(dialogCtx);
-                try {
-                  final created = await ref.read(crmCampaignsProvider.notifier).createCampaign({
-                    'projectId': project.id,
-                    'name': name,
-                    'adId': adId,
-                    'startDate': selectedDate.toIso8601String(),
-                    'description': descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim(),
-                    'module': 'PRE_SALES',
-                  });
-
-                  ref.read(selectedCampaignIdProvider.notifier).setCampaignId(created.id);
-                  ref.invalidate(crmColumnsProvider);
-                  ref.invalidate(crmLeadsProvider);
-
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Campaign "$name" created successfully!'), backgroundColor: Colors.green),
+                context.read<CrmHeadersBloc>().add(
+                      CrmHeadersCampaignCreated({
+                        'projectId': project.id,
+                        'name': name,
+                        'adId': adId,
+                        'startDate': selectedDate.toIso8601String(),
+                        'description': descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim(),
+                        'module': 'PRE_SALES',
+                      }),
                     );
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Failed to create campaign: $e'), backgroundColor: Colors.red),
-                    );
-                  }
-                }
               },
               child: const Text('Create Campaign'),
             ),
@@ -1364,7 +1292,7 @@ class _CrmHeadersScreenState extends ConsumerState<CrmHeadersScreen> {
                   const SizedBox(height: 6),
                   DropdownButtonFormField<String>(
                     isExpanded: true,
-                    value: selectedType,
+                    initialValue: selectedType,
                     items: const [
                       DropdownMenuItem(value: 'TEXT', child: Text('Text')),
                       DropdownMenuItem(value: 'NUMBER', child: Text('Number')),
@@ -1422,29 +1350,17 @@ class _CrmHeadersScreenState extends ConsumerState<CrmHeadersScreen> {
                 }
 
                 Navigator.pop(dialogCtx);
-                try {
-                  await ref.read(crmColumnsProvider.notifier).createColumn({
-                    'module': 'PRE_SALES',
-                    'columnKey': key,
-                    'label': label,
-                    'dataType': selectedType,
-                    'options': options,
-                    'isRequired': isRequired,
-                    'isVisibleInTable': true,
-                  });
-
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Header "$label" added successfully')),
+                context.read<CrmHeadersBloc>().add(
+                      CrmHeadersColumnCreated({
+                        'module': 'PRE_SALES',
+                        'columnKey': key,
+                        'label': label,
+                        'dataType': selectedType,
+                        'options': options,
+                        'isRequired': isRequired,
+                        'isVisibleInTable': true,
+                      }),
                     );
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Failed to add header: $e'), backgroundColor: Colors.red),
-                    );
-                  }
-                }
               },
               child: const Text('Add Header'),
             ),
@@ -1458,7 +1374,7 @@ class _CrmHeadersScreenState extends ConsumerState<CrmHeadersScreen> {
   // Dialog: Merge Columns
   // ---------------------------------------------------------------------------
   void _showMergeColumnsDialog(BuildContext context, Color primaryColor) {
-    final cols = ref.read(crmColumnsProvider).value ?? [];
+    final cols = context.read<CrmHeadersBloc>().state.columns;
     if (cols.length < 2) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('At least 2 columns are required to perform a merge.')),
@@ -1487,9 +1403,9 @@ class _CrmHeadersScreenState extends ConsumerState<CrmHeadersScreen> {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: primaryColor.withOpacity(0.08),
+                      color: primaryColor.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: primaryColor.withOpacity(0.2)),
+                      border: Border.all(color: primaryColor.withValues(alpha: 0.2)),
                     ),
                     child: Text(
                       'Merge two columns that have the same meaning (e.g. "client_name" into "Name"). All existing lead data from Source will be transferred to Target, and Source column will be deleted.',
@@ -1502,7 +1418,7 @@ class _CrmHeadersScreenState extends ConsumerState<CrmHeadersScreen> {
                   const SizedBox(height: 6),
                   DropdownButtonFormField<String>(
                     isExpanded: true,
-                    value: sourceKey,
+                    initialValue: sourceKey,
                     items: cols
                         .map((c) => DropdownMenuItem(
                               value: c.columnKey,
@@ -1522,7 +1438,7 @@ class _CrmHeadersScreenState extends ConsumerState<CrmHeadersScreen> {
                   const SizedBox(height: 6),
                   DropdownButtonFormField<String>(
                     isExpanded: true,
-                    value: targetKey,
+                    initialValue: targetKey,
                     items: cols
                         .map((c) => DropdownMenuItem(
                               value: c.columnKey,
@@ -1560,7 +1476,7 @@ class _CrmHeadersScreenState extends ConsumerState<CrmHeadersScreen> {
             TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancel')),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: primaryColor, foregroundColor: Colors.white),
-              onPressed: () async {
+              onPressed: () {
                 if (sourceKey == targetKey) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Source and Target columns cannot be the same')),
@@ -1569,28 +1485,13 @@ class _CrmHeadersScreenState extends ConsumerState<CrmHeadersScreen> {
                 }
 
                 Navigator.pop(dialogCtx);
-                try {
-                  final res = await ref.read(crmColumnsProvider.notifier).mergeColumns(
+                context.read<CrmHeadersBloc>().add(
+                  CrmHeadersColumnsMerged(
                     sourceKey: sourceKey,
                     targetKey: targetKey,
-                    targetLabel: labelCtrl.text.trim(),
-                  );
-
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(res['message']?.toString() ?? 'Columns merged successfully!'),
-                        backgroundColor: Colors.green,
-                      ),
-                    );
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Failed to merge columns: $e'), backgroundColor: Colors.red),
-                    );
-                  }
-                }
+                    targetLabel: labelCtrl.text.trim().isEmpty ? null : labelCtrl.text.trim(),
+                  ),
+                );
               },
               child: const Text('Confirm & Merge'),
             ),
@@ -1637,29 +1538,17 @@ class _CrmHeadersScreenState extends ConsumerState<CrmHeadersScreen> {
           TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancel')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: primaryColor, foregroundColor: Colors.white),
-            onPressed: () async {
+            onPressed: () {
               final name = nameCtrl.text.trim();
               if (name.isEmpty) return;
               Navigator.pop(dialogCtx);
-              try {
-                await ref.read(crmCampaignsProvider.notifier).updateCampaign(camp.id, {
+              context.read<CrmHeadersBloc>().add(
+                CrmHeadersCampaignUpdated(camp.id, {
                   'name': name,
                   'adId': adIdCtrl.text.trim().isEmpty ? null : adIdCtrl.text.trim(),
                   'description': descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim(),
-                });
-                ref.invalidate(crmCampaignsProvider);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Campaign "$name" updated')),
-                  );
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Failed to update campaign: $e'), backgroundColor: Colors.red),
-                  );
-                }
-              }
+                }),
+              );
             },
             child: const Text('Save'),
           ),
@@ -1678,22 +1567,9 @@ class _CrmHeadersScreenState extends ConsumerState<CrmHeadersScreen> {
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
-            onPressed: () async {
+            onPressed: () {
               Navigator.pop(ctx);
-              try {
-                await ref.read(crmColumnsProvider.notifier).deleteColumn(col.id);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Header "${col.label}" removed')),
-                  );
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Failed to delete header: $e'), backgroundColor: Colors.red),
-                  );
-                }
-              }
+              context.read<CrmHeadersBloc>().add(CrmHeadersColumnDeleted(col.id));
             },
             child: const Text('Delete'),
           ),
@@ -1712,28 +1588,9 @@ class _CrmHeadersScreenState extends ConsumerState<CrmHeadersScreen> {
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
-            onPressed: () async {
+            onPressed: () {
               Navigator.pop(ctx);
-              try {
-                await ref.read(crmCampaignsProvider.notifier).deleteCampaign(camp.id);
-                ref.read(selectedCampaignIdProvider.notifier).setCampaignId(null);
-                ref.invalidate(crmCampaignsProvider);
-                ref.invalidate(crmProjectsProvider);
-                ref.invalidate(crmColumnsProvider);
-                ref.invalidate(crmLeadsProvider);
-
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Campaign "${camp.name}" deleted successfully')),
-                  );
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Failed to delete campaign: $e'), backgroundColor: Colors.red),
-                  );
-                }
-              }
+              context.read<CrmHeadersBloc>().add(CrmHeadersCampaignDeleted(camp.id));
             },
             child: const Text('Delete Campaign'),
           ),

@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/network/api_envelope.dart';
 import '../../../../core/utils/open_stored_document.dart';
-import '../../../../core/utils/picked_file_data.dart';
 import '../../../../core/utils/platform_file_picker.dart';
 import '../../../admin/presentation/admin_notifier.dart';
 import '../../../auth/presentation/auth_providers.dart';
@@ -378,8 +377,8 @@ class _TaskDetailSheetState extends ConsumerState<TaskDetailSheet> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
-        border: Border.all(color: color.withOpacity(0.5)),
+        color: color.withValues(alpha: 0.12),
+        border: Border.all(color: color.withValues(alpha: 0.5)),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w800, fontSize: 11)),

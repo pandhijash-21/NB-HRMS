@@ -1,6 +1,6 @@
 import { prisma } from '../../config/prisma';
 import { redis, connectRedis } from '../../config/redis';
-import type { UpdatePermissionsInput, PatchPermissionInput } from './types';
+import type { UpdatePermissionsInput, PatchPermissionInput, CreateModuleInput, UpdateModuleInput } from './types';
 
 import { invalidateRolePermissionCache } from '../auth/permissions-map';
 import { sseService } from '../events/sse.service';
@@ -218,5 +218,78 @@ export const permissionService = {
         isActive: m.isActive,
       }));
     }
+  },
+
+  async createModule(input: CreateModuleInput, creatorId: string) {
+    const key = input.key.trim().toUpperCase().replace(/\s+/g, '_');
+    const existing = await prisma.systemModule.findUnique({ where: { key } });
+    if (existing) {
+      return { error: `Module with key ${key} already exists`, status: 409 } as const;
+    }
+
+    const mod = await prisma.systemModule.create({
+      data: {
+        key,
+        name: input.name.trim(),
+        description: input.description?.trim() || null,
+        category: input.category ?? 'HRMS',
+        sortOrder: input.sortOrder ?? 0,
+        isActive: true,
+      },
+    });
+
+    // Automatically grant full permissions on new module to SUPERADMIN, SYSTEM_ADMIN, and ADMIN
+    const adminRoles = await prisma.role.findMany({
+      where: { name: { in: ['SUPERADMIN', 'SYSTEM_ADMIN', 'ADMIN'] } },
+    });
+    for (const r of adminRoles) {
+      await prisma.rolePermission.upsert({
+        where: { roleId_moduleKey: { roleId: r.id, moduleKey: key } },
+        update: { canRead: true, canWrite: true, canApprove: true, canDelete: true, canExport: true, updatedBy: creatorId },
+        create: {
+          roleId: r.id,
+          moduleKey: key,
+          canRead: true,
+          canWrite: true,
+          canApprove: true,
+          canDelete: true,
+          canExport: true,
+          updatedBy: creatorId,
+        },
+      });
+      await invalidateRoleSessions(r.id, key);
+    }
+
+    return mod;
+  },
+
+  async updateModule(key: string, input: UpdateModuleInput, _updaterId: string) {
+    const mod = await prisma.systemModule.findUnique({ where: { key } });
+    if (!mod) return { error: `Module ${key} not found`, status: 404 } as const;
+
+    const updated = await prisma.systemModule.update({
+      where: { key },
+      data: {
+        ...(input.name ? { name: input.name.trim() } : {}),
+        ...(input.description !== undefined ? { description: input.description?.trim() || null } : {}),
+        ...(input.category ? { category: input.category } : {}),
+        ...(input.sortOrder !== undefined ? { sortOrder: input.sortOrder } : {}),
+        ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
+      },
+    });
+
+    return updated;
+  },
+
+  async deleteModule(key: string, _requesterId: string) {
+    const mod = await prisma.systemModule.findUnique({ where: { key } });
+    if (!mod) return { error: `Module ${key} not found`, status: 404 } as const;
+
+    await prisma.systemModule.update({
+      where: { key },
+      data: { isActive: false },
+    });
+
+    return { message: `Module ${key} deactivated` };
   },
 };

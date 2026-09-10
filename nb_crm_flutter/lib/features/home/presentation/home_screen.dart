@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:nb_crm_flutter/core/theme/nb_icon.dart';
 
-import '../../auth/presentation/auth_providers.dart';
+import '../../auth/presentation/bloc/auth_bloc.dart';
 import '../../auth/domain/permissions.dart';
 
 enum ModuleCategory {
@@ -36,14 +35,14 @@ class _ModuleCardData {
   final Color color;
 }
 
-class HomeScreen extends ConsumerStatefulWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+  State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends ConsumerState<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> {
   late TextEditingController _searchController;
   String _searchQuery = '';
 
@@ -61,10 +60,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final auth = ref.watch(authNotifierProvider);
+    final auth = context.watch<AuthBloc>().state;
     final user = auth.user;
     final name = user?.name ?? 'there';
     final role = user?.role ?? '';
+
+    if (Permissions.isSuperAdmin(role)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) context.go('/platform');
+      });
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     final wide = MediaQuery.sizeOf(context).width >= 900;
     final medium = MediaQuery.sizeOf(context).width >= 600;
     final phone = MediaQuery.sizeOf(context).width < 600;
@@ -88,41 +97,41 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final canManageInstitutes = Permissions.canManageInstitutes(auth.permissions, role);
 
     final modules = <_ModuleCardData>[
-      _ModuleCardData(
+      const _ModuleCardData(
         title: 'Employee tree',
         subtitle: 'Org chart, leads, and who to contact',
         icon: Icons.account_tree_rounded,
         route: '/org-tree',
         enabled: true,
         category: ModuleCategory.mySpace,
-        color: const Color(0xFF2563EB),
+        color: Color(0xFF2563EB),
       ),
-      _ModuleCardData(
+      const _ModuleCardData(
         title: 'Tasks',
         subtitle: 'Assign work, track progress, review & Gantt',
         icon: Icons.task_alt_rounded,
         route: '/tasks',
         enabled: true,
         category: ModuleCategory.mySpace,
-        color: const Color(0xFF4f46e5),
+        color: Color(0xFF4f46e5),
       ),
-      _ModuleCardData(
+      const _ModuleCardData(
         title: 'Chat',
         subtitle: '1:1 and group chat, files, presence',
         icon: Icons.chat,
         route: '/chat',
         enabled: true,
         category: ModuleCategory.mySpace,
-        color: const Color(0xFF2563EB),
+        color: Color(0xFF2563EB),
       ),
-      _ModuleCardData(
+      const _ModuleCardData(
         title: 'Meet',
         subtitle: 'Voice, video, screen share, guest codes, AI summary',
         icon: Icons.videocam,
         route: '/meet',
         enabled: true,
         category: ModuleCategory.mySpace,
-        color: const Color(0xFF0f766e),
+        color: Color(0xFF0f766e),
       ),
       _ModuleCardData(
         title: 'Leave',
@@ -155,14 +164,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         category: ModuleCategory.mySpace,
         color: const Color(0xFF16a34a), // Green
       ),
-      _ModuleCardData(
+      const _ModuleCardData(
         title: 'Profile',
         subtitle: 'View and update your profile',
         icon: Icons.person_rounded,
         route: '/profile',
         enabled: true,
         category: ModuleCategory.mySpace,
-        color: const Color(0xFF9333ea), // Purple
+        color: Color(0xFF9333ea), // Purple
       ),
       _ModuleCardData(
         title: 'Reimbursements',
@@ -186,14 +195,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         category: ModuleCategory.mySpace,
         color: const Color(0xFF7c3aed),
       ),
-      _ModuleCardData(
+      const _ModuleCardData(
         title: 'Repository',
         subtitle: 'Company policies & documents',
         icon: Icons.folder_shared_rounded,
         route: '/repository',
         enabled: true,
         category: ModuleCategory.mySpace,
-        color: const Color(0xFF0369a1),
+        color: Color(0xFF0369a1),
       ),
       _ModuleCardData(
         title: 'Payroll',
@@ -207,84 +216,84 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         color: const Color(0xFFea580c), // Orange
       ),
       if (hasWorkforce)
-        _ModuleCardData(
+        const _ModuleCardData(
           title: 'Workforce',
           subtitle: 'Manage workforce directory',
           icon: Icons.groups_rounded,
           route: '/admin/employees',
           enabled: true,
           category: ModuleCategory.management,
-          color: const Color(0xFF0d9488), // Teal
+          color: Color(0xFF0d9488), // Teal
         ),
       if (isHR)
-        _ModuleCardData(
+        const _ModuleCardData(
           title: 'Profile Approvals',
           subtitle: 'Review employee profile changes',
           icon: Icons.assignment_turned_in_rounded,
           route: '/admin/approvals',
           enabled: true,
           category: ModuleCategory.management,
-          color: const Color(0xFF4f46e5), // Indigo
+          color: Color(0xFF4f46e5), // Indigo
         ),
       if (canAccessAdmin)
-        _ModuleCardData(
+        const _ModuleCardData(
           title: 'Admin Dashboard',
           subtitle: 'HR system overview and KPIs',
           icon: Icons.dashboard_rounded,
           route: '/admin/dashboard',
           enabled: true,
           category: ModuleCategory.system,
-          color: const Color(0xFFe11d48), // Rose
+          color: Color(0xFFe11d48), // Rose
         ),
       if (canManageUsers)
-        _ModuleCardData(
+        const _ModuleCardData(
           title: 'Users',
           subtitle: 'Manage login accounts and roles',
           icon: Icons.manage_accounts_rounded,
           route: '/admin/users',
           enabled: true,
           category: ModuleCategory.system,
-          color: const Color(0xFF475569), // Slate
+          color: Color(0xFF475569), // Slate
         ),
       if (canManageRoles)
-        _ModuleCardData(
+        const _ModuleCardData(
           title: 'Roles',
           subtitle: 'Roles & permission matrix',
           icon: Icons.shield_rounded,
           route: '/admin/roles',
           enabled: true,
           category: ModuleCategory.system,
-          color: const Color(0xFFb45309), // Amber/Brown
+          color: Color(0xFFb45309), // Amber/Brown
         ),
       if (canManageUsers || canManageInstitutes)
-        _ModuleCardData(
+        const _ModuleCardData(
           title: 'Configurations',
           subtitle: 'Institutes, designations & all dropdowns',
           icon: Icons.tune_rounded,
           route: '/admin/configurations',
           enabled: true,
           category: ModuleCategory.system,
-          color: const Color(0xFF0d9488),
+          color: Color(0xFF0d9488),
         ),
       if (Permissions.isAdmin(role))
-        _ModuleCardData(
+        const _ModuleCardData(
           title: 'Storage',
           subtitle: 'Used space, remaining capacity & data wipe',
           icon: Icons.cloud_rounded,
           route: '/admin/storage',
           enabled: true,
           category: ModuleCategory.system,
-          color: const Color(0xFF7c3aed),
+          color: Color(0xFF7c3aed),
         ),
       if (canAccessAdmin)
-        _ModuleCardData(
+        const _ModuleCardData(
           title: 'Audit',
           subtitle: 'Change history (REST pending)',
           icon: Icons.history_edu_rounded,
           route: '/admin/audit',
           enabled: true,
           category: ModuleCategory.system,
-          color: const Color(0xFF64748b), // Slate Light
+          color: Color(0xFF64748b), // Slate Light
         ),
     ];
 
@@ -301,12 +310,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         color: Theme.of(context).cardTheme.color ?? Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: Theme.of(context).dividerColor.withOpacity(0.12),
+          color: Theme.of(context).dividerColor.withValues(alpha: 0.12),
           width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.01),
+            color: Colors.black.withValues(alpha: 0.01),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -318,7 +327,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         children: [
           NbIcon(
             Icons.search_rounded,
-            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4),
+            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4),
             size: 24,
           ),
           const SizedBox(width: 14),
@@ -326,7 +335,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             child: TextField(
               controller: _searchController,
               onChanged: (val) {
-                setState(() {
+                 setState(() {
                   _searchQuery = val;
                 });
               },
@@ -338,7 +347,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               decoration: InputDecoration(
                 hintText: 'Search modules, tools, and actions...',
                 hintStyle: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4),
+                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4),
                   fontSize: 15,
                   fontWeight: FontWeight.w400,
                 ),
@@ -357,7 +366,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             IconButton(
               icon: NbIcon(
                 Icons.clear_rounded,
-                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4),
+                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4),
                 size: 20,
               ),
               onPressed: () {
@@ -457,7 +466,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       NbIcon(
                         Icons.search_off_rounded,
                         size: 64,
-                        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.2),
+                        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.2),
                       ),
                       const SizedBox(height: 16),
                       Text(
@@ -465,7 +474,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
-                          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -473,7 +482,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         'Check the spelling or try a different term',
                         style: TextStyle(
                           fontSize: 13,
-                          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4),
+                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4),
                         ),
                       ),
                     ],
@@ -517,7 +526,7 @@ class _GreetingsCardState extends State<_GreetingsCard> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeOutCubic,
-        transform: Matrix4.identity()..translate(0.0, _isHovered ? -3.0 : 0.0),
+        transform: Matrix4.translationValues(0.0, _isHovered ? -3.0 : 0.0, 0.0),
         width: double.infinity,
         padding: EdgeInsets.symmetric(
           horizontal: MediaQuery.sizeOf(context).width < 600 ? 20 : 32,
@@ -535,18 +544,18 @@ class _GreetingsCardState extends State<_GreetingsCard> {
           ),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF1A1816).withOpacity(_isHovered ? 0.45 : 0.32),
+              color: const Color(0xFF1A1816).withValues(alpha: _isHovered ? 0.45 : 0.32),
               blurRadius: _isHovered ? 28 : 24,
               offset: _isHovered ? const Offset(0, 14) : const Offset(0, 12),
             ),
             BoxShadow(
-              color: const Color(0xFFC5A059).withOpacity(_isHovered ? 0.12 : 0.06),
+              color: const Color(0xFFC5A059).withValues(alpha: _isHovered ? 0.12 : 0.06),
               blurRadius: 16,
               offset: const Offset(0, -2),
             ),
           ],
           border: Border.all(
-            color: const Color(0xFFC5A059).withOpacity(_isHovered ? 0.28 : 0.18),
+            color: const Color(0xFFC5A059).withValues(alpha: _isHovered ? 0.28 : 0.18),
             width: 1.5,
           ),
         ),
@@ -584,13 +593,13 @@ class _GreetingsCardState extends State<_GreetingsCard> {
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
-                      const Color(0xFFC5A059).withOpacity(0.2),
-                      const Color(0xFFC5A059).withOpacity(0.1),
+                      const Color(0xFFC5A059).withValues(alpha: 0.2),
+                      const Color(0xFFC5A059).withValues(alpha: 0.1),
                     ],
                   ),
                   borderRadius: BorderRadius.circular(30),
                   border: Border.all(
-                    color: const Color(0xFFC5A059).withOpacity(0.3),
+                    color: const Color(0xFFC5A059).withValues(alpha: 0.3),
                   ),
                 ),
                 child: Text(
@@ -634,19 +643,19 @@ class _ModernModuleCardState extends State<_ModernModuleCard> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeOutCubic,
-        transform: Matrix4.identity()..translate(0.0, _isHovered ? -4.0 : 0.0),
+        transform: Matrix4.translationValues(0.0, _isHovered ? -4.0 : 0.0, 0.0),
         decoration: BoxDecoration(
           color: Theme.of(context).cardTheme.color ?? Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: _isHovered 
-                ? widget.data.color.withOpacity(0.3) 
-                : Theme.of(context).dividerColor.withOpacity(0.15),
+                ? widget.data.color.withValues(alpha: 0.3) 
+                : Theme.of(context).dividerColor.withValues(alpha: 0.15),
             width: 1.5,
           ),
           boxShadow: [
             BoxShadow(
-              color: widget.data.color.withOpacity(_isHovered ? 0.15 : 0.03),
+              color: widget.data.color.withValues(alpha: _isHovered ? 0.15 : 0.03),
               blurRadius: _isHovered ? 20 : 10,
               offset: Offset(0, _isHovered ? 10 : 4),
             )
@@ -673,7 +682,7 @@ class _ModernModuleCardState extends State<_ModernModuleCard> {
                       decoration: BoxDecoration(
                         color: _isHovered 
                             ? widget.data.color 
-                            : widget.data.color.withOpacity(0.1),
+                            : widget.data.color.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: NbIcon(
@@ -704,7 +713,7 @@ class _ModernModuleCardState extends State<_ModernModuleCard> {
                           Text(
                             widget.data.subtitle,
                             style: TextStyle(
-                              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
                               fontSize: 13,
                               height: 1.25,
                             ),
@@ -717,7 +726,7 @@ class _ModernModuleCardState extends State<_ModernModuleCard> {
                     if (enabled)
                       AnimatedContainer(
                         duration: const Duration(milliseconds: 200),
-                        transform: Matrix4.identity()..translate(_isHovered ? 4.0 : 0.0, 0.0),
+                        transform: Matrix4.translationValues(_isHovered ? 4.0 : 0.0, 0.0, 0.0),
                         child: NbIcon(
                           Icons.arrow_forward_rounded, 
                           color: _isHovered ? widget.data.color : Colors.grey.shade300,

@@ -168,23 +168,35 @@ class AuthGlassCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final decoration = BoxDecoration(
+      color: const Color(0xFF1E1B18).withValues(alpha: kIsWeb ? 0.92 : 0.78),
+      borderRadius: BorderRadius.circular(24),
+      border: Border.all(color: authGold.withValues(alpha: 0.2), width: 1.5),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.4),
+          blurRadius: 30,
+          offset: const Offset(0, 15),
+        ),
+      ],
+    );
+
+    // BackdropFilter with blur is very expensive on Flutter web and causes
+    // visible flickering when the widget tree rebuilds. Skip it on web.
+    if (kIsWeb) {
+      return Container(
+        decoration: decoration,
+        padding: const EdgeInsets.fromLTRB(32, 36, 32, 32),
+        child: child,
+      );
+    }
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
-          decoration: BoxDecoration(
-            color: const Color(0xFF1E1B18).withValues(alpha: 0.78),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: authGold.withValues(alpha: 0.2), width: 1.5),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.4),
-                blurRadius: 30,
-                offset: const Offset(0, 15),
-              ),
-            ],
-          ),
+          decoration: decoration,
           padding: const EdgeInsets.fromLTRB(32, 36, 32, 32),
           child: child,
         ),
@@ -309,7 +321,7 @@ class InlineBanner extends StatelessWidget {
     final icon = isError ? Icons.error_outline : Icons.check_circle_outline;
 
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(12),
@@ -319,7 +331,7 @@ class InlineBanner extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(icon, color: fg, size: 20),
-          SizedBox(width: 10),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
               message,
@@ -353,6 +365,7 @@ class AuthPasswordField extends StatefulWidget {
     this.onSubmitted,
     this.onChanged,
     this.autofillHints = const [AutofillHints.password],
+    this.focusNode,
   });
 
   final TextEditingController controller;
@@ -366,23 +379,19 @@ class AuthPasswordField extends StatefulWidget {
   final ValueChanged<String>? onSubmitted;
   final ValueChanged<String>? onChanged;
   final Iterable<String> autofillHints;
+  final FocusNode? focusNode;
 
   @override
   State<AuthPasswordField> createState() => _AuthPasswordFieldState();
 }
 
 class _AuthPasswordFieldState extends State<AuthPasswordField> {
-  late final FocusNode _focus;
-
-  @override
-  void initState() {
-    super.initState();
-    _focus = FocusNode();
-  }
+  FocusNode? _internalFocus;
+  FocusNode get _effectiveFocus => widget.focusNode ?? (_internalFocus ??= FocusNode());
 
   @override
   void dispose() {
-    _focus.dispose();
+    _internalFocus?.dispose();
     super.dispose();
   }
 
@@ -393,18 +402,15 @@ class _AuthPasswordFieldState extends State<AuthPasswordField> {
     final hints = kIsWeb ? const <String>[] : widget.autofillHints;
     return TextFormField(
       controller: widget.controller,
-      focusNode: _focus,
+      focusNode: _effectiveFocus,
       enabled: widget.enabled,
       readOnly: false,
       obscureText: widget.obscure,
       obscuringCharacter: '•',
-      keyboardType: TextInputType.visiblePassword,
+      keyboardType: widget.obscure ? TextInputType.text : TextInputType.visiblePassword,
       textInputAction: widget.textInputAction,
       onFieldSubmitted: widget.onSubmitted,
       onChanged: widget.onChanged,
-      onTap: () {
-        if (!_focus.hasFocus) _focus.requestFocus();
-      },
       autofillHints: hints,
       autocorrect: false,
       enableSuggestions: false,

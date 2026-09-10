@@ -1,7 +1,12 @@
 import type { Request, Response } from 'express';
 import { ok, fail } from '../../utils/response';
 import { permissionService } from './permission.service';
-import { UpdatePermissionsSchema, PatchPermissionSchema } from './types';
+import {
+  UpdatePermissionsSchema,
+  PatchPermissionSchema,
+  CreateModuleSchema,
+  UpdateModuleSchema,
+} from './types';
 
 export const permissionController = {
   async getForRole(req: Request, res: Response) {
@@ -45,5 +50,31 @@ export const permissionController = {
 
   async listModules(_req: Request, res: Response) {
     return res.json(ok(await permissionService.listModules()));
+  },
+
+  async createModule(req: Request, res: Response) {
+    const body = CreateModuleSchema.safeParse(req.body);
+    if (!body.success) {
+      return res.status(400).json(fail(body.error.issues[0]?.message ?? 'Validation error'));
+    }
+    const result = await permissionService.createModule(body.data, req.user!.id);
+    if ('error' in result) return res.status(result.status ?? 400).json(fail(result.error ?? 'Error'));
+    return res.status(201).json(ok(result));
+  },
+
+  async updateModule(req: Request, res: Response) {
+    const body = UpdateModuleSchema.safeParse(req.body);
+    if (!body.success) {
+      return res.status(400).json(fail(body.error.issues[0]?.message ?? 'Validation error'));
+    }
+    const result = await permissionService.updateModule(String(req.params.key), body.data, req.user!.id);
+    if ('error' in result) return res.status(result.status ?? 400).json(fail(result.error ?? 'Error'));
+    return res.json(ok(result));
+  },
+
+  async deleteModule(req: Request, res: Response) {
+    const result = await permissionService.deleteModule(String(req.params.key), req.user!.id);
+    if ('error' in result) return res.status(result.status ?? 400).json(fail(result.error ?? 'Error'));
+    return res.json(ok(result));
   },
 };

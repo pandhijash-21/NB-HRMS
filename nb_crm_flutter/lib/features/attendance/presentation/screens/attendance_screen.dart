@@ -1,45 +1,51 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
-import '../../../auth/domain/permissions.dart';
-import '../../../auth/presentation/auth_providers.dart';
-import '../../domain/attendance_models.dart';
-import '../../../leave/presentation/widgets/leave_shared_widgets.dart';
-import '../attendance_providers.dart';
-import '../geofenced_punch_service.dart';
-import '../web_attendance_gate.dart';
+import '../../../../core/bloc/load_status.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/router/app_back_button.dart';
-import 'package:flutter/foundation.dart';
+import '../../../auth/domain/permissions.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
+import '../../data/attendance_repository.dart';
+import '../../domain/attendance_models.dart';
+import '../../../leave/presentation/widgets/leave_shared_widgets.dart';
+import '../bloc/attendance_bloc.dart';
+import '../geofenced_punch_service.dart';
+import '../web_attendance_gate.dart';
 
-final hasLocalBiometricTokenProvider = FutureProvider.autoDispose.family<bool, int>((ref, employeeId) async {
-  final dio = ref.watch(dioClientProvider);
-  final svc = GeofencedPunchService(dio);
-  return svc.hasLocalToken(employeeId);
-});
-
-final webAttendanceGateProvider = FutureProvider.autoDispose<WebAttendanceStatus>((ref) {
-  return WebAttendanceGate.evaluate();
-});
-
-class AttendanceScreen extends ConsumerWidget {
+class AttendanceScreen extends StatelessWidget {
   const AttendanceScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final monthFilter = ref.watch(attendanceMonthFilterProvider);
-    final calendarAsync = ref.watch(myAttendanceCalendarProvider);
-    final selectedDate = ref.watch(selectedAttendanceDayProvider);
-    final dayAsync = ref.watch(myAttendanceDayProvider);
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthBloc>().state;
+    final empId = auth.user?.employeeId;
+
+    return BlocProvider(
+      create: (context) => AttendanceBloc(
+        attendanceRepository: context.read<AttendanceRepository>(),
+        dioClient: context.read<DioClient>(),
+      )..add(AttendanceLoadRequested(employeeId: empId)),
+      child: const _AttendanceView(),
+    );
+  }
+}
+
+class _AttendanceView extends StatelessWidget {
+  const _AttendanceView();
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthBloc>().state;
+    final state = context.watch<AttendanceBloc>().state;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final auth = ref.watch(authNotifierProvider);
-    final settingsAsync = ref.watch(employeeAttendanceSettingsProvider(auth.user?.employeeId ?? 0));
-    final hasLocalTokenAsync = ref.watch(hasLocalBiometricTokenProvider(auth.user?.employeeId ?? 0));
-    final webGateAsync = kIsWeb ? ref.watch(webAttendanceGateProvider) : null;
-    final webAllowed = !kIsWeb || (webGateAsync?.value?.allowed == true);
+
+    final webGate = state.webGate;
+    final webAllowed = !kIsWeb || (webGate?.allowed == true);
     final canAdmin = Permissions.canAdminAttendance(
       auth.permissions,
       auth.user?.role ?? '',
@@ -47,12 +53,13 @@ class AttendanceScreen extends ConsumerWidget {
 
     // Punch In/Out is only for the current calendar day (IST).
     final todayYmd = _attendanceTodayYmdIst();
-    final canPunchSelectedDay = selectedDate == todayYmd;
+    final canPunchSelectedDay = state.selectedDate == todayYmd;
 
-    final daysInMonth =
-        DateTime(monthFilter.year, monthFilter.month + 1, 0).day;
-    final firstWeekday =
-        DateTime(monthFilter.year, monthFilter.month, 1).weekday;
+    final year = state.year == 0 ? DateTime.now().year : state.year;
+    final month = state.month == 0 ? DateTime.now().month : state.month;
+
+    final daysInMonth = DateTime(year, month + 1, 0).day;
+    final firstWeekday = DateTime(year, month, 1).weekday;
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
@@ -73,7 +80,7 @@ class AttendanceScreen extends ConsumerWidget {
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1.5),
           child: Container(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
             height: 1.5,
           ),
         ),
@@ -82,7 +89,7 @@ class AttendanceScreen extends ConsumerWidget {
           ? FloatingActionButton.extended(
         onPressed: () async {
           if (kIsWeb) {
-            final gate = await ref.read(webAttendanceGateProvider.future);
+            final gate = state.webGate ?? await WebAttendanceGate.evaluate();
             if (!gate.allowed) {
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -100,7 +107,7 @@ class AttendanceScreen extends ConsumerWidget {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(
-                  selectedDate == null
+                  state.selectedDate.isEmpty
                       ? 'Select today ($todayYmd) to punch in/out.'
                       : 'Punch in/out is only allowed for today ($todayYmd). Past or future days are view-only.',
                 ),
@@ -110,7 +117,6 @@ class AttendanceScreen extends ConsumerWidget {
             return;
           }
 
-          final auth = ref.read(authNotifierProvider);
           final empId = auth.user?.employeeId;
           if (empId == null) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -120,10 +126,10 @@ class AttendanceScreen extends ConsumerWidget {
           }
 
           // Check if biometrics is registered
-          final settings = ref.read(employeeAttendanceSettingsProvider(empId)).value;
+          final settings = state.settings;
           if (settings == null || settings.biometricToken == null || settings.biometricToken!.isEmpty) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
+              const SnackBar(
                 content: Text(
                   kIsWeb
                       ? 'Register Safari first (Attendance → Register Safari).'
@@ -135,10 +141,10 @@ class AttendanceScreen extends ConsumerWidget {
             return;
           }
 
-          final hasLocal = await ref.read(hasLocalBiometricTokenProvider(empId).future);
+          final hasLocal = state.hasLocalToken;
           if (!hasLocal) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
+              const SnackBar(
                 content: Text(
                   kIsWeb
                       ? 'Safari is not linked yet. Tap “Register Safari” first.'
@@ -150,7 +156,7 @@ class AttendanceScreen extends ConsumerWidget {
             return;
           }
 
-          final currentDayData = ref.read(myAttendanceDayProvider).value;
+          final currentDayData = state.dayDetail;
           if (currentDayData != null) {
             if (currentDayData.punches.length >= 2) {
               ScaffoldMessenger.of(context).showSnackBar(
@@ -197,10 +203,14 @@ class AttendanceScreen extends ConsumerWidget {
             }
           }
 
-          final dio = ref.read(dioClientProvider);
+          final dio = context.read<DioClient>();
           final svc = GeofencedPunchService(dio);
-          await svc.executePunch(context, empId);
-          invalidateAttendanceSelfData(ref); // refresh calendar
+          if (context.mounted) {
+            await svc.executePunch(context, empId);
+            if (context.mounted) {
+              context.read<AttendanceBloc>().add(AttendanceRefreshRequested(employeeId: empId));
+            }
+          }
         },
         backgroundColor:
             canPunchSelectedDay ? const Color(0xFFC5A059) : Colors.grey.shade500,
@@ -229,336 +239,132 @@ class AttendanceScreen extends ConsumerWidget {
         child: ListView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
           children: [
-            if (kIsWeb)
-              webGateAsync!.when(
-                loading: () => const SizedBox.shrink(),
-                error: (_, __) => const SizedBox.shrink(),
-                data: (gate) {
-                  if (!gate.allowed) {
-                    return Card(
-                    color: isDark ? const Color(0xFF2A1A1A) : Colors.red.shade50,
-                    margin: const EdgeInsets.only(bottom: 20),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      side: BorderSide(
-                        color: isDark ? Colors.red.shade300.withOpacity(0.35) : Colors.red.shade200,
-                        width: 1.5,
-                      ),
+            if (kIsWeb && webGate != null) ...[
+              if (!webGate.allowed)
+                Card(
+                  color: isDark ? const Color(0xFF2A1A1A) : Colors.red.shade50,
+                  margin: const EdgeInsets.only(bottom: 20),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    side: BorderSide(
+                      color: isDark ? Colors.red.shade300.withValues(alpha: 0.35) : Colors.red.shade200,
+                      width: 1.5,
                     ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(Icons.block_rounded, color: isDark ? Colors.red.shade300 : Colors.red.shade800, size: 28),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  'Browser attendance not available',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w800,
-                                    color: isDark ? Colors.white : const Color(0xFF212F3D),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            gate.message ??
-                                'Web attendance is only allowed in Safari on iPhone/iPad. Use the mobile app on other devices.',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: isDark ? Colors.white.withOpacity(0.7) : const Color(0xFF4A5568),
-                              height: 1.4,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Detected: ${gate.deviceLabel} · ${gate.browserLabel}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: isDark ? Colors.white54 : Colors.black54,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          OutlinedButton.icon(
-                            onPressed: () {
-                              WebAttendanceGate.reevaluate();
-                              ref.invalidate(webAttendanceGateProvider);
-                            },
-                            icon: const Icon(Icons.refresh_rounded),
-                            label: const Text('Refresh Status'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                  }
-
-                  // Allowed: clear iOS browser attendance banner
-                  return Card(
-                    color: isDark ? const Color(0xFF1A2430) : const Color(0xFFEFF6FF),
-                    margin: const EdgeInsets.only(bottom: 20),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      side: BorderSide(
-                        color: isDark
-                            ? const Color(0xFF3B82F6).withOpacity(0.4)
-                            : const Color(0xFF93C5FD),
-                        width: 1.5,
-                      ),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.phone_iphone_rounded,
-                                color: isDark ? const Color(0xFF93C5FD) : const Color(0xFF1D4ED8),
-                                size: 28,
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  'Attendance from iOS browser',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w800,
-                                    color: isDark ? Colors.white : const Color(0xFF212F3D),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            'You are punching from Safari on an iPhone/iPad (${gate.deviceLabel}). '
-                            'Before each punch, your location is checked and must be inside an allowed attendance zone. '
-                            'Other browsers and desktop devices cannot mark attendance here — use the mobile app instead.',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: isDark ? Colors.white.withOpacity(0.75) : const Color(0xFF4A5568),
-                              height: 1.4,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            // Biometric Registration Card
-            if (auth.user?.employeeId != null && webAllowed)
-              settingsAsync.when(
-                loading: () => const SizedBox.shrink(),
-                error: (_, __) => const SizedBox.shrink(),
-                data: (settings) {
-                  final isRegisteredOnServer = settings.biometricToken != null && settings.biometricToken!.isNotEmpty;
-                  final hasLocalToken = hasLocalTokenAsync.value ?? false;
-
-                  // Case C: Registered on server AND found locally on device
-                  if (isRegisteredOnServer && hasLocalToken) {
-                    return const SizedBox.shrink();
-                  }
-
-                  // Case B: Registered on server BUT NOT found locally on this device (reinstall/device change)
-                  if (isRegisteredOnServer && !hasLocalToken) {
-                    return Card(
-                      color: isDark ? const Color(0xFF2A2318) : Colors.orange.shade50,
-                      margin: const EdgeInsets.only(bottom: 20),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        side: BorderSide(
-                          color: isDark ? const Color(0xFFC5A059).withOpacity(0.3) : Colors.orange.shade300,
-                          width: 1.5,
-                        ),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
                           children: [
-                            Row(
-                              children: [
-                                Icon(Icons.warning_amber_rounded, color: isDark ? const Color(0xFFC5A059) : Colors.orange.shade800, size: 28),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    'Biometric Verification Mismatch',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w800,
-                                      color: isDark ? Colors.white : const Color(0xFF212F3D),
-                                    ),
-                                  ),
+                            Icon(Icons.block_rounded, color: isDark ? Colors.red.shade300 : Colors.red.shade800, size: 28),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'Browser attendance not available',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800,
+                                  color: isDark ? Colors.white : const Color(0xFF212F3D),
                                 ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              kIsWeb
-                                  ? 'Attendance is registered for another device. On iPhone/iPad Safari you can link this browser after Admin/HR resets your registration (this replaces the previous token).'
-                                  : 'Your fingerprint/Face ID is registered on the server, but not found on this device. '
-                                      'If you reinstalled the app or switched phones, re-register here or ask Admin/HR to reset.',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: isDark ? Colors.white.withOpacity(0.7) : const Color(0xFF4A5568),
-                                height: 1.4,
-                              ),
-                            ),
-                            const SizedBox(height: 14),
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton.icon(
-                                onPressed: () async {
-                                  final dio = ref.read(dioClientProvider);
-                                  final svc = GeofencedPunchService(dio);
-                                  final empId = auth.user?.employeeId;
-                                  if (empId != null) {
-                                    try {
-                                      await svc.registerBiometrics(context, empId);
-                                      ref.invalidate(employeeAttendanceSettingsProvider(empId));
-                                      ref.invalidate(hasLocalBiometricTokenProvider(empId));
-                                    } catch (_) {}
-                                  }
-                                },
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFFC5A059),
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                                icon: Icon(kIsWeb ? Icons.link_rounded : Icons.fingerprint_rounded),
-                                label: Text(
-                                  kIsWeb ? 'Link Safari' : 'Re-register on this device',
-                                  style: const TextStyle(fontWeight: FontWeight.bold),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            SizedBox(
-                              width: double.infinity,
-                              child: OutlinedButton.icon(
-                                onPressed: () {
-                                  final empId = auth.user?.employeeId;
-                                  if (empId != null) {
-                                    ref.invalidate(employeeAttendanceSettingsProvider(empId));
-                                    ref.invalidate(hasLocalBiometricTokenProvider(empId));
-                                  }
-                                  if (kIsWeb) {
-                                    WebAttendanceGate.reevaluate();
-                                    ref.invalidate(webAttendanceGateProvider);
-                                  }
-                                },
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: const Color(0xFFC5A059),
-                                  side: const BorderSide(color: Color(0xFFC5A059)),
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                                icon: const Icon(Icons.refresh_rounded),
-                                label: const Text('Refresh Status', style: TextStyle(fontWeight: FontWeight.bold)),
                               ),
                             ),
                           ],
                         ),
-                      ),
-                    );
-                  }
-
-                  // Case A: Not registered on server at all
-                  return Card(
-                    color: isDark ? const Color(0xFF2A2318) : Colors.amber.shade50,
-                    margin: const EdgeInsets.only(bottom: 20),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      side: BorderSide(
-                        color: isDark ? const Color(0xFFC5A059).withOpacity(0.3) : Colors.amber.shade200,
-                        width: 1.5,
-                      ),
+                        const SizedBox(height: 10),
+                        Text(
+                          webGate.message ??
+                              'Web attendance is only allowed in Safari on iPhone/iPad. Use the mobile app on other devices.',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: isDark ? Colors.white.withValues(alpha: 0.7) : const Color(0xFF4A5568),
+                            height: 1.4,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Detected: ${webGate.deviceLabel} · ${webGate.browserLabel}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? Colors.white54 : Colors.black54,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        OutlinedButton.icon(
+                          onPressed: () {
+                            WebAttendanceGate.reevaluate();
+                            final empId = auth.user?.employeeId;
+                            if (empId != null) {
+                              context.read<AttendanceBloc>().add(AttendanceSettingsReloadRequested(empId));
+                            }
+                          },
+                          icon: const Icon(Icons.refresh_rounded),
+                          label: const Text('Refresh Status'),
+                        ),
+                      ],
                     ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(Icons.warning_amber_rounded, color: isDark ? const Color(0xFFC5A059) : Colors.amber.shade800, size: 28),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  kIsWeb ? 'Safari Setup Required' : 'Fingerprint/Face ID Setup Required',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w800,
-                                    color: isDark ? Colors.white : const Color(0xFF212F3D),
-                                  ),
+                  ),
+                )
+              else
+                Card(
+                  color: isDark ? const Color(0xFF1A2430) : const Color(0xFFEFF6FF),
+                  margin: const EdgeInsets.only(bottom: 20),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    side: BorderSide(
+                      color: isDark
+                          ? const Color(0xFF3B82F6).withValues(alpha: 0.4)
+                          : const Color(0xFF93C5FD),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.phone_iphone_rounded,
+                              color: isDark ? const Color(0xFF93C5FD) : const Color(0xFF1D4ED8),
+                              size: 28,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'Attendance from iOS browser',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800,
+                                  color: isDark ? Colors.white : const Color(0xFF212F3D),
                                 ),
                               ),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            kIsWeb
-                                ? 'Register Safari once on this iPhone/iPad to enable geofenced punch in/out from the browser. Other browsers are blocked.'
-                                : 'To mark your attendance using the mobile app, you must first register your fingerprint or Face ID.',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: isDark ? Colors.white.withOpacity(0.7) : const Color(0xFF4A5568),
                             ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          'You are punching from Safari on an iPhone/iPad (${webGate.deviceLabel}). '
+                          'Before each punch, your location is checked and must be inside an allowed attendance zone. '
+                          'Other browsers and desktop devices cannot mark attendance here — use the mobile app instead.',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: isDark ? Colors.white.withValues(alpha: 0.75) : const Color(0xFF4A5568),
+                            height: 1.4,
                           ),
-                          const SizedBox(height: 14),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton.icon(
-                              onPressed: () async {
-                                final dio = ref.read(dioClientProvider);
-                                final svc = GeofencedPunchService(dio);
-                                final empId = auth.user?.employeeId;
-                                if (empId != null) {
-                                  try {
-                                    await svc.registerBiometrics(context, empId);
-                                    ref.invalidate(employeeAttendanceSettingsProvider(empId));
-                                    ref.invalidate(hasLocalBiometricTokenProvider(empId));
-                                  } catch (e) {
-                                    // Handled inside registerBiometrics
-                                  }
-                                }
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFFC5A059),
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 12),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              icon: Icon(kIsWeb ? Icons.verified_user_rounded : Icons.fingerprint_rounded),
-                              label: Text(
-                                kIsWeb ? 'Register Safari' : 'Set Fingerprint/Face ID Now',
-                                style: const TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                  );
-                },
-              ),
+                  ),
+                ),
+            ],
+            // Biometric Registration Card
+            if (auth.user?.employeeId != null && webAllowed) ...[
+              _buildBiometricCard(context, state, auth, isDark),
+            ],
             if (canAdmin) ...[
               Row(
                 children: [
@@ -638,7 +444,7 @@ class AttendanceScreen extends ConsumerWidget {
                 color: isDark ? const Color(0xFF1E1B18) : Colors.white,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                  color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
                   width: 1.5,
                 ),
               ),
@@ -647,11 +453,11 @@ class AttendanceScreen extends ConsumerWidget {
                 children: [
                   IconButton(
                     onPressed: () =>
-                        ref.read(attendanceMonthFilterProvider.notifier).previousMonth(),
+                        context.read<AttendanceBloc>().add(const AttendancePreviousMonthRequested()),
                     icon: const Icon(Icons.chevron_left_rounded, color: Color(0xFFC5A059)),
                   ),
                   Text(
-                    '${_monthName(monthFilter.month)} ${monthFilter.year}',
+                    '${_monthName(month)} $year',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w800,
@@ -661,43 +467,48 @@ class AttendanceScreen extends ConsumerWidget {
                   ),
                   IconButton(
                     onPressed: () =>
-                        ref.read(attendanceMonthFilterProvider.notifier).nextMonth(),
+                        context.read<AttendanceBloc>().add(const AttendanceNextMonthRequested()),
                     icon: const Icon(Icons.chevron_right_rounded, color: Color(0xFFC5A059)),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 24),
-            calendarAsync.when(
-              loading: () => const Center(
+            if (state.status == LoadStatus.loading && state.calendar.isEmpty)
+              const Center(
                 child: Padding(
                   padding: EdgeInsets.all(32),
                   child: CircularProgressIndicator(color: Color(0xFFC5A059)),
                 ),
-              ),
-              error: (e, _) => Column(
+              )
+            else if (state.status == LoadStatus.failure && state.calendar.isEmpty)
+              Column(
                 children: [
                   Text(
-                    '$e',
+                    state.errorMessage ?? 'Error loading calendar',
                     style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 12),
                   FilledButton(
-                    onPressed: () => ref.invalidate(myAttendanceCalendarProvider),
+                    onPressed: () {
+                      final empId = auth.user?.employeeId;
+                      context.read<AttendanceBloc>().add(AttendanceRefreshRequested(employeeId: empId));
+                    },
                     child: const Text('Retry'),
                   ),
                 ],
-              ),
-              data: (calendar) => _CalendarGrid(
+              )
+            else
+              _CalendarGrid(
                 daysInMonth: daysInMonth,
                 firstWeekday: firstWeekday,
-                monthFilter: monthFilter,
-                calendar: calendar,
-                selectedDate: selectedDate,
+                year: year,
+                month: month,
+                calendar: state.calendar,
+                selectedDate: state.selectedDate,
                 onSelect: (date) =>
-                    ref.read(selectedAttendanceDayProvider.notifier).set(date),
+                    context.read<AttendanceBloc>().add(AttendanceDateSelected(date)),
               ),
-            ),
             const SizedBox(height: 36),
             Row(
               children: [
@@ -711,7 +522,7 @@ class AttendanceScreen extends ConsumerWidget {
                 ),
                 const SizedBox(width: 10),
                 Text(
-                  'Day Detail · ${selectedDate ?? '—'}',
+                  'Day Detail · ${state.selectedDate.isEmpty ? '—' : state.selectedDate}',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w800,
@@ -722,27 +533,230 @@ class AttendanceScreen extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 16),
-            dayAsync.when(
-              loading: () => const Center(
+            if (state.isDayLoading)
+              const Center(
                 child: Padding(
                   padding: EdgeInsets.all(24),
                   child: CircularProgressIndicator(color: Color(0xFFC5A059)),
                 ),
-              ),
-              error: (e, _) => Column(
-                children: [
-                  Text(
-                    '$e',
-                    style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
+              )
+            else if (state.dayDetail != null)
+              _DayDetail(day: state.dayDetail!)
+            else
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(
+                    'No attendance logs recorded for this day.',
+                    style: TextStyle(
+                      color: isDark ? Colors.white54 : const Color(0xFF607D8B),
+                    ),
                   ),
-                  const SizedBox(height: 12),
-                  FilledButton(
-                    onPressed: () => ref.invalidate(myAttendanceDayProvider),
-                    child: const Text('Retry'),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBiometricCard(
+    BuildContext context,
+    AttendanceState state,
+    AuthState auth,
+    bool isDark,
+  ) {
+    final settings = state.settings;
+    if (settings == null) return const SizedBox.shrink();
+
+    final isRegisteredOnServer = settings.biometricToken != null && settings.biometricToken!.isNotEmpty;
+    final hasLocalToken = state.hasLocalToken;
+
+    // Case C: Registered on server AND found locally on device
+    if (isRegisteredOnServer && hasLocalToken) {
+      return const SizedBox.shrink();
+    }
+
+    // Case B: Registered on server BUT NOT found locally on this device (reinstall/device change)
+    if (isRegisteredOnServer && !hasLocalToken) {
+      return Card(
+        color: isDark ? const Color(0xFF2A2318) : Colors.orange.shade50,
+        margin: const EdgeInsets.only(bottom: 20),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.3) : Colors.orange.shade300,
+            width: 1.5,
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded, color: isDark ? const Color(0xFFC5A059) : Colors.orange.shade800, size: 28),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Biometric Verification Mismatch',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: isDark ? Colors.white : const Color(0xFF212F3D),
+                      ),
+                    ),
                   ),
                 ],
               ),
-              data: (day) => _DayDetail(day: day),
+              const SizedBox(height: 10),
+              Text(
+                kIsWeb
+                    ? 'Attendance is registered for another device. On iPhone/iPad Safari you can link this browser after Admin/HR resets your registration (this replaces the previous token).'
+                    : 'Your fingerprint/Face ID is registered on the server, but not found on this device. '
+                        'If you reinstalled the app or switched phones, re-register here or ask Admin/HR to reset.',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: isDark ? Colors.white.withValues(alpha: 0.7) : const Color(0xFF4A5568),
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () async {
+                    final dio = context.read<DioClient>();
+                    final svc = GeofencedPunchService(dio);
+                    final empId = auth.user?.employeeId;
+                    if (empId != null) {
+                      try {
+                        await svc.registerBiometrics(context, empId);
+                        if (context.mounted) {
+                          context.read<AttendanceBloc>().add(AttendanceSettingsReloadRequested(empId));
+                        }
+                      } catch (_) {}
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFC5A059),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  icon: const Icon(kIsWeb ? Icons.link_rounded : Icons.fingerprint_rounded),
+                  label: const Text(
+                    kIsWeb ? 'Link Safari' : 'Re-register on this device',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    final empId = auth.user?.employeeId;
+                    if (empId != null) {
+                      context.read<AttendanceBloc>().add(AttendanceSettingsReloadRequested(empId));
+                    }
+                  },
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFFC5A059),
+                    side: const BorderSide(color: Color(0xFFC5A059)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Refresh Status', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Case A: Not registered on server at all
+    return Card(
+      color: isDark ? const Color(0xFF2A2318) : Colors.amber.shade50,
+      margin: const EdgeInsets.only(bottom: 20),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.3) : Colors.amber.shade200,
+          width: 1.5,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: isDark ? const Color(0xFFC5A059) : Colors.amber.shade800, size: 28),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    kIsWeb ? 'Safari Setup Required' : 'Fingerprint/Face ID Setup Required',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: isDark ? Colors.white : const Color(0xFF212F3D),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              kIsWeb
+                  ? 'Register Safari once on this iPhone/iPad to enable geofenced punch in/out from the browser. Other browsers are blocked.'
+                  : 'To mark your attendance using the mobile app, you must first register your fingerprint or Face ID.',
+              style: TextStyle(
+                fontSize: 13,
+                color: isDark ? Colors.white.withValues(alpha: 0.7) : const Color(0xFF4A5568),
+              ),
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () async {
+                  final dio = context.read<DioClient>();
+                  final svc = GeofencedPunchService(dio);
+                  final empId = auth.user?.employeeId;
+                  if (empId != null) {
+                    try {
+                      await svc.registerBiometrics(context, empId);
+                      if (context.mounted) {
+                        context.read<AttendanceBloc>().add(AttendanceSettingsReloadRequested(empId));
+                      }
+                    } catch (e) {
+                      // Handled inside registerBiometrics
+                    }
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFC5A059),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                icon: const Icon(kIsWeb ? Icons.verified_user_rounded : Icons.fingerprint_rounded),
+                label: const Text(
+                  kIsWeb ? 'Register Safari' : 'Set Fingerprint/Face ID Now',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
             ),
           ],
         ),
@@ -755,6 +769,7 @@ class AttendanceScreen extends ConsumerWidget {
       'January', 'February', 'March', 'April', 'May', 'June',
       'July', 'August', 'September', 'October', 'November', 'December',
     ];
+    if (month < 1 || month > 12) return '';
     return names[month - 1];
   }
 }
@@ -763,7 +778,8 @@ class _CalendarGrid extends StatelessWidget {
   const _CalendarGrid({
     required this.daysInMonth,
     required this.firstWeekday,
-    required this.monthFilter,
+    required this.year,
+    required this.month,
     required this.calendar,
     required this.selectedDate,
     required this.onSelect,
@@ -771,7 +787,8 @@ class _CalendarGrid extends StatelessWidget {
 
   final int daysInMonth;
   final int firstWeekday;
-  final AttendanceMonthFilter monthFilter;
+  final int year;
+  final int month;
   final Map<String, AttendanceCalendarDay> calendar;
   final String? selectedDate;
   final ValueChanged<String> onSelect;
@@ -804,7 +821,7 @@ class _CalendarGrid extends StatelessWidget {
     }
 
     for (var day = 1; day <= daysInMonth; day++) {
-      final date = DateTime(monthFilter.year, monthFilter.month, day);
+      final date = DateTime(year, month, day);
       final key = formatDateYmd(date);
       final summary = calendar[key];
       final selected = key == selectedDate;
@@ -832,13 +849,13 @@ class _CalendarGrid extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
               decoration: BoxDecoration(
                 color: selected
-                    ? (isDark ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.2))
+                    ? (isDark ? Colors.black.withValues(alpha: 0.2) : Colors.white.withValues(alpha: 0.2))
                     : (isDark ? const Color(0xFF2B2722) : const Color(0xFFECEFF1)),
                 borderRadius: BorderRadius.circular(4),
                 border: Border.all(
                   color: selected
                       ? Colors.transparent
-                      : (isDark ? const Color(0xFFC5A059).withOpacity(0.3) : const Color(0xFFCFD8DC)),
+                      : (isDark ? const Color(0xFFC5A059).withValues(alpha: 0.3) : const Color(0xFFCFD8DC)),
                   width: 0.8,
                 ),
               ),
@@ -911,20 +928,20 @@ class _CalendarGrid extends StatelessWidget {
                   color: selected
                       ? (isDark ? const Color(0xFFC5A059) : const Color(0xFF263238))
                       : (hasPunches
-                          ? (isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC))
+                          ? (isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC))
                           : isLeave
-                              ? (isDark ? Colors.blue.withOpacity(0.25) : Colors.blue.shade200)
+                              ? (isDark ? Colors.blue.withValues(alpha: 0.25) : Colors.blue.shade200)
                               : isHoliday
-                                  ? (isDark ? Colors.purple.withOpacity(0.25) : Colors.purple.shade100)
+                                  ? (isDark ? Colors.purple.withValues(alpha: 0.25) : Colors.purple.shade100)
                                   : isAbsent
-                                      ? (isDark ? Colors.grey.withOpacity(0.25) : Colors.grey.shade300)
-                                      : (isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.03))),
+                                      ? (isDark ? Colors.grey.withValues(alpha: 0.25) : Colors.grey.shade300)
+                                      : (isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.03))),
                   width: selected ? 2.0 : 1.2,
                 ),
                 boxShadow: selected
                     ? [
                         BoxShadow(
-                          color: (isDark ? const Color(0xFFC5A059) : const Color(0xFF263238)).withOpacity(0.25),
+                          color: (isDark ? const Color(0xFFC5A059) : const Color(0xFF263238)).withValues(alpha: 0.25),
                           blurRadius: 8,
                           offset: const Offset(0, 3),
                         )
@@ -990,7 +1007,7 @@ class _DayDetail extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
           width: 1.5,
         ),
       ),
@@ -1009,7 +1026,7 @@ class _DayDetail extends StatelessWidget {
                       color: isDark ? const Color(0xFF151311) : const Color(0xFFF8FAFC),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.04),
+                        color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.04),
                         width: 1,
                       ),
                     ),
@@ -1047,7 +1064,7 @@ class _DayDetail extends StatelessWidget {
                       color: isDark ? const Color(0xFF151311) : const Color(0xFFF8FAFC),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: isDark ? Colors.white.withOpacity(0.04) : Colors.black.withOpacity(0.04),
+                        color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.04),
                         width: 1,
                       ),
                     ),
@@ -1110,7 +1127,7 @@ class _DayDetail extends StatelessWidget {
                 width: double.infinity,
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: Colors.purple.withOpacity(isDark ? 0.12 : 0.08),
+                  color: Colors.purple.withValues(alpha: isDark ? 0.12 : 0.08),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: Colors.purple.shade300, width: 1.2),
                 ),
@@ -1135,7 +1152,7 @@ class _DayDetail extends StatelessWidget {
                 width: double.infinity,
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(isDark ? 0.12 : 0.08),
+                  color: Colors.blue.withValues(alpha: isDark ? 0.12 : 0.08),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: Colors.blue.shade400, width: 1.2),
                 ),
@@ -1186,7 +1203,7 @@ class _DayDetail extends StatelessWidget {
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
-                  color: Colors.grey.withOpacity(0.12),
+                  color: Colors.grey.withValues(alpha: 0.12),
                   border: Border.all(color: Colors.grey, width: 1.2),
                   borderRadius: BorderRadius.circular(30),
                 ),
@@ -1211,7 +1228,7 @@ class _DayDetail extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: isLate ? Colors.red.withOpacity(0.12) : Colors.green.withOpacity(0.12),
+                    color: isLate ? Colors.red.withValues(alpha: 0.12) : Colors.green.withValues(alpha: 0.12),
                     border: Border.all(color: isLate ? Colors.red : Colors.green, width: 1.2),
                     borderRadius: BorderRadius.circular(30),
                   ),
@@ -1229,7 +1246,7 @@ class _DayDetail extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: isHalfDay ? Colors.orange.withOpacity(0.12) : Colors.green.withOpacity(0.12),
+                    color: isHalfDay ? Colors.orange.withValues(alpha: 0.12) : Colors.green.withValues(alpha: 0.12),
                     border: Border.all(color: isHalfDay ? Colors.orange : Colors.green, width: 1.2),
                     borderRadius: BorderRadius.circular(30),
                   ),
@@ -1247,7 +1264,7 @@ class _DayDetail extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: meetsPunchOut ? Colors.green.withOpacity(0.12) : Colors.amber.withOpacity(0.12),
+                    color: meetsPunchOut ? Colors.green.withValues(alpha: 0.12) : Colors.amber.withValues(alpha: 0.12),
                     border: Border.all(color: meetsPunchOut ? Colors.green : Colors.amber, width: 1.2),
                     borderRadius: BorderRadius.circular(30),
                   ),
@@ -1284,7 +1301,7 @@ class _DayDetail extends StatelessWidget {
                       : 'No punches recorded for this day.',
                   style: TextStyle(
                     fontSize: 13,
-                    color: isDark ? Colors.white30 : const Color(0xFF607D8B).withOpacity(0.6),
+                    color: isDark ? Colors.white30 : const Color(0xFF607D8B).withValues(alpha: 0.6),
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -1405,7 +1422,7 @@ class _AttendanceWorkspaceTile extends StatelessWidget {
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
               color: isDark
-                  ? const Color(0xFFC5A059).withOpacity(0.15)
+                  ? const Color(0xFFC5A059).withValues(alpha: 0.15)
                   : const Color(0xFFCFD8DC),
               width: 1.5,
             ),
@@ -1416,7 +1433,7 @@ class _AttendanceWorkspaceTile extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.12),
+                  color: color.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(icon, color: color, size: 22),
@@ -1476,49 +1493,51 @@ class _PunchMapDialog extends StatelessWidget {
       content: SizedBox(
         width: 400,
         height: 300,
-        child: FlutterMap(
-          options: MapOptions(
-            initialCenter: LatLng(lat, lng),
-            initialZoom: 15.0,
-            minZoom: 3.0,
-            maxZoom: 18.0,
-            interactionOptions: const InteractionOptions(
-              flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+        child: RepaintBoundary(
+          child: FlutterMap(
+            options: MapOptions(
+              initialCenter: LatLng(lat, lng),
+              initialZoom: 15.0,
+              minZoom: 3.0,
+              maxZoom: 18.0,
+              interactionOptions: const InteractionOptions(
+                flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+              ),
             ),
-          ),
-          children: [
-            TileLayer(
-              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-              userAgentPackageName: 'com.nbdeveloper.hrms',
-            ),
-            if (punch.location != null)
-              CircleLayer(
-                circles: [
-                  CircleMarker(
-                    point: LatLng(locLat, locLng),
-                    color: Colors.blue.withOpacity(0.3),
-                    borderColor: Colors.blue,
-                    borderStrokeWidth: 2,
-                    useRadiusInMeter: true,
-                    radius: locRadius,
-                  )
+            children: [
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.nbdeveloper.hrms',
+              ),
+              if (punch.location != null)
+                CircleLayer(
+                  circles: [
+                    CircleMarker(
+                      point: LatLng(locLat, locLng),
+                      color: Colors.blue.withValues(alpha: 0.3),
+                      borderColor: Colors.blue,
+                      borderStrokeWidth: 2,
+                      useRadiusInMeter: true,
+                      radius: locRadius,
+                    )
+                  ],
+                ),
+              MarkerLayer(
+                markers: [
+                  Marker(
+                    point: LatLng(lat, lng),
+                    width: 60,
+                    height: 60,
+                    child: const Column(
+                      children: [
+                        Icon(Icons.person_pin_circle_rounded, color: Colors.red, size: 40),
+                      ],
+                    ),
+                  ),
                 ],
               ),
-            MarkerLayer(
-              markers: [
-                Marker(
-                  point: LatLng(lat, lng),
-                  width: 60,
-                  height: 60,
-                  child: const Column(
-                    children: [
-                      Icon(Icons.person_pin_circle_rounded, color: Colors.red, size: 40),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ],
+            ],
+          ),
         ),
       ),
       actions: [

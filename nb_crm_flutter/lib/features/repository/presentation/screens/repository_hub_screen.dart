@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/utils/open_stored_document.dart';
@@ -49,7 +48,7 @@ class RepositoryHubScreen extends ConsumerWidget {
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1.5),
           child: Container(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
             height: 1.5,
           ),
         ),
@@ -225,7 +224,7 @@ class RepositoryHubScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    value: category,
+                    initialValue: category,
                     decoration: const InputDecoration(
                       labelText: 'Category',
                       border: OutlineInputBorder(),
@@ -359,7 +358,7 @@ class _DocumentCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
               color: isDark
-                  ? const Color(0xFFC5A059).withOpacity(0.15)
+                  ? const Color(0xFFC5A059).withValues(alpha: 0.15)
                   : const Color(0xFFCFD8DC),
             ),
           ),
@@ -370,7 +369,7 @@ class _DocumentCard extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF0369a1).withOpacity(0.12),
+                  color: const Color(0xFF0369a1).withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(
@@ -400,7 +399,7 @@ class _DocumentCard extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF0369a1).withOpacity(0.1),
+                            color: const Color(0xFF0369a1).withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(

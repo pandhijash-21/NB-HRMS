@@ -1,23 +1,39 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/platform_file_picker.dart';
-import '../../../auth/presentation/auth_providers.dart';
+import '../../../../core/widgets/bloc_async_body.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
+import '../../data/leave_repository.dart';
 import '../../domain/leave_models.dart';
-import '../leave_providers.dart';
+import '../bloc/leave_bloc.dart';
 import '../widgets/leave_shared_widgets.dart';
 
-class LeaveApplyScreen extends ConsumerStatefulWidget {
+class LeaveApplyScreen extends StatelessWidget {
   const LeaveApplyScreen({super.key});
 
   @override
-  ConsumerState<LeaveApplyScreen> createState() => _LeaveApplyScreenState();
+  Widget build(BuildContext context) {
+    return BlocProvider(
+      create: (context) => LeaveBloc(
+        leaveRepository: context.read<LeaveRepository>(),
+      )..add(const LeaveLoadRequested()),
+      child: const _LeaveApplyView(),
+    );
+  }
 }
 
-class _LeaveApplyScreenState extends ConsumerState<LeaveApplyScreen> {
+class _LeaveApplyView extends StatefulWidget {
+  const _LeaveApplyView();
+
+  @override
+  State<_LeaveApplyView> createState() => _LeaveApplyViewState();
+}
+
+class _LeaveApplyViewState extends State<_LeaveApplyView> {
   final _formKey = GlobalKey<FormState>();
   final _reasonController = TextEditingController();
 
@@ -69,7 +85,7 @@ class _LeaveApplyScreenState extends ConsumerState<LeaveApplyScreen> {
   }
 
   Future<void> _pickDocument() async {
-    final employeeId = ref.read(authNotifierProvider).user?.employeeId;
+    final employeeId = context.read<AuthBloc>().state.user?.employeeId;
     if (employeeId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Employee profile not linked to this account.')),
@@ -85,7 +101,7 @@ class _LeaveApplyScreenState extends ConsumerState<LeaveApplyScreen> {
 
     setState(() => _uploadingDoc = true);
     try {
-      final url = await ref.read(leaveRepositoryProvider).uploadLeaveDocument(
+      final url = await context.read<LeaveRepository>().uploadLeaveDocument(
             employeeId: employeeId,
             bytes: picked.bytes,
             filename: picked.name,
@@ -138,7 +154,7 @@ class _LeaveApplyScreenState extends ConsumerState<LeaveApplyScreen> {
 
     setState(() => _submitting = true);
     try {
-      await ref.read(leaveRepositoryProvider).applyLeave({
+      await context.read<LeaveRepository>().applyLeave({
         'leaveTypeId': _leaveTypeId,
         'fromDate': formatDateYmd(_fromDate!),
         'toDate': formatDateYmd(_toDate!),
@@ -147,7 +163,6 @@ class _LeaveApplyScreenState extends ConsumerState<LeaveApplyScreen> {
         'reason': _reasonController.text.trim(),
         if (_documentUrl != null) 'documentUrl': _documentUrl,
       });
-      invalidateLeaveSelfData(ref);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Leave application submitted.')),
@@ -167,30 +182,19 @@ class _LeaveApplyScreenState extends ConsumerState<LeaveApplyScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final typesAsync = ref.watch(leaveTypesProvider);
+    final state = context.watch<LeaveBloc>().state;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Apply Leave'),
         leading: const AppBackButton(fallbackLocation: '/leave'),
       ),
-      body: typesAsync.when(
-        loading: () => Center(
-          child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary),
-        ),
-        error: (e, _) => Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('$e'),
-              FilledButton(
-                onPressed: () => ref.invalidate(leaveTypesProvider),
-                child: const Text('Retry'),
-              ),
-            ],
-          ),
-        ),
-        data: (types) {
+      body: BlocAsyncBody<List<LeaveType>>(
+        status: state.status,
+        data: state.leaveTypes,
+        emptyMessage: 'No leave types available.',
+        onRetry: () => context.read<LeaveBloc>().add(const LeaveRefreshRequested()),
+        builder: (types) {
           final applicable = types.where((t) => t.employeeCanApply && t.isActive).toList();
           final selected = _selectedType(applicable);
           final docRequired = selected?.requiresDocument == true;

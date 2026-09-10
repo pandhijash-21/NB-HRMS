@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../domain/leave_models.dart';
@@ -60,7 +59,7 @@ class LeaveApprovalsHistoryScreen extends ConsumerWidget {
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1.5),
           child: Container(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
             height: 1.5,
           ),
         ),
@@ -72,7 +71,7 @@ class LeaveApprovalsHistoryScreen extends ConsumerWidget {
               color: isDark ? const Color(0xFF1E1B18) : Colors.white,
               border: Border(
                 bottom: BorderSide(
-                  color: isDark ? const Color(0xFFC5A059).withOpacity(0.12) : const Color(0xFFCFD8DC),
+                  color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.12) : const Color(0xFFCFD8DC),
                   width: 1.5,
                 ),
               ),
@@ -86,7 +85,7 @@ class LeaveApprovalsHistoryScreen extends ConsumerWidget {
                     color: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                      color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                      color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
                       width: 1.2,
                     ),
                   ),

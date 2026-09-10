@@ -166,6 +166,12 @@ class RolesListNotifier extends AsyncNotifier<List<RoleSummary>> {
     ref.invalidateSelf();
     return created;
   }
+
+  Future<RoleSummary> updateRole(String id, Map<String, dynamic> data) async {
+    final updated = await ref.read(rbacRepositoryProvider).updateRole(id, data);
+    ref.invalidateSelf();
+    return updated;
+  }
 }
 
 final rolesListProvider =

@@ -268,7 +268,7 @@ class AttendanceRepository {
     await _dio.postEnvelope<void>(
       'attendance/admin/reset-biometrics/$employeeId',
       data: const {},
-      parse: (raw) => null,
+      parse: (raw) {},
     );
   }
 
@@ -286,7 +286,7 @@ class AttendanceRepository {
         if (punchType != null) 'punchType': punchType,
         if (terminalId != null) 'terminalId': terminalId,
       },
-      parse: (raw) => null,
+      parse: (raw) {},
     );
   }
 
@@ -303,7 +303,7 @@ class AttendanceRepository {
         if (punchType != null) 'punchType': punchType,
         if (terminalId != null) 'terminalId': terminalId,
       },
-      parse: (raw) => null,
+      parse: (raw) {},
     );
   }
 }

@@ -1,18 +1,21 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
-import '../../../auth/presentation/auth_providers.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../lookups/presentation/lookup_dropdown.dart';
+import '../../data/project_repository.dart';
+import '../../data/tender_repository.dart';
+import '../../data/work_order_repository.dart';
+import '../../domain/project_models.dart';
+import '../../domain/tender_models.dart';
 import '../../domain/work_order_lookup_keys.dart';
 import '../../domain/work_order_models.dart';
-import '../project_providers.dart';
-import '../tender_providers.dart';
-import '../work_order_providers.dart';
+import '../bloc/erp_work_orders_bloc.dart';
 import '../widgets/work_details_editor.dart';
 
-class WorkOrderFormScreen extends ConsumerStatefulWidget {
+class WorkOrderFormScreen extends StatefulWidget {
   const WorkOrderFormScreen({super.key, this.id});
 
   final String? id;
@@ -20,10 +23,10 @@ class WorkOrderFormScreen extends ConsumerStatefulWidget {
   bool get isEdit => id != null && id!.isNotEmpty;
 
   @override
-  ConsumerState<WorkOrderFormScreen> createState() => _WorkOrderFormScreenState();
+  State<WorkOrderFormScreen> createState() => _WorkOrderFormScreenState();
 }
 
-class _WorkOrderFormScreenState extends ConsumerState<WorkOrderFormScreen> {
+class _WorkOrderFormScreenState extends State<WorkOrderFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _woIdCtrl = TextEditingController();
   final _tenderCtrl = TextEditingController();
@@ -38,6 +41,69 @@ class _WorkOrderFormScreenState extends ConsumerState<WorkOrderFormScreen> {
   List<WorkOrderActivityGroup> _activities = [];
   bool _hydrated = false;
   bool _saving = false;
+  bool _loadingInitial = true;
+
+  List<ErpProject> _projects = [];
+  List<ProjectEmployeeOption> _employees = [];
+  List<ErpContractor> _contractors = [];
+  List<ErpActivity> _configActivities = [];
+  List<ErpTenderApplication> _approvedTenders = [];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _loadInitialData();
+    });
+  }
+
+  Future<void> _loadInitialData() async {
+    final projectRepo = context.read<ProjectRepository>();
+    final workOrderRepo = context.read<WorkOrderRepository>();
+    final tenderRepo = context.read<TenderRepository>();
+    final authState = context.read<AuthBloc>().state;
+
+    setState(() => _loadingInitial = true);
+    try {
+      final futures = await Future.wait([
+        projectRepo.list(),
+        projectRepo.listEmployees(),
+        workOrderRepo.listContractors(),
+        workOrderRepo.listActivities(),
+        tenderRepo.listApplications(status: 'APPROVED'),
+        if (widget.isEdit) workOrderRepo.getById(widget.id!) else Future.value(null),
+      ]);
+
+      if (!mounted) return;
+
+      final projects = futures[0] as List<ErpProject>;
+      final employees = futures[1] as List<ProjectEmployeeOption>;
+      final contractors = futures[2] as List<ErpContractor>;
+      final activities = futures[3] as List<ErpActivity>;
+      final tenders = futures[4] as List<ErpTenderApplication>;
+      final existingWo = futures[5] as ErpWorkOrder?;
+
+      setState(() {
+        _projects = projects;
+        _employees = employees;
+        _contractors = contractors;
+        _configActivities = activities;
+        _approvedTenders = tenders;
+        _loadingInitial = false;
+
+        if (existingWo != null) {
+          _hydrate(existingWo);
+        } else if (!_hydrated && authState.user?.employeeId != null) {
+          _ownerEmployeeId = authState.user!.employeeId;
+          _hydrated = true;
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loadingInitial = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
 
   @override
   void dispose() {
@@ -216,15 +282,24 @@ class _WorkOrderFormScreenState extends ConsumerState<WorkOrderFormScreen> {
         if (_approverEmployeeId != null) 'approverEmployeeId': _approverEmployeeId,
         'activities': _activities.map((a) => a.toJson()).toList(),
       };
-      final repo = ref.read(workOrderRepositoryProvider);
+      final repo = context.read<WorkOrderRepository>();
       if (widget.isEdit) {
         await repo.update(widget.id!, body);
-        if (mounted) context.go('/erp/work-orders/${widget.id}');
+        if (mounted) {
+          try {
+            context.read<ErpWorkOrdersBloc>().add(const ErpWorkOrdersListRequested());
+          } catch (_) {}
+          context.go('/erp/work-orders/${widget.id}');
+        }
       } else {
         final created = await repo.create(body);
-        if (mounted) context.go('/erp/work-orders/${created.id}');
+        if (mounted) {
+          try {
+            context.read<ErpWorkOrdersBloc>().add(const ErpWorkOrdersListRequested());
+          } catch (_) {}
+          context.go('/erp/work-orders/${created.id}');
+        }
       }
-      ref.invalidate(workOrdersListProvider);
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     } finally {
@@ -250,20 +325,7 @@ class _WorkOrderFormScreenState extends ConsumerState<WorkOrderFormScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final auth = ref.watch(authNotifierProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final projectsAsync = ref.watch(projectsListProvider);
-    final contractorsAsync = ref.watch(erpContractorsProvider);
-    final employeesAsync = ref.watch(projectEmployeesProvider);
-    final configActivitiesAsync = ref.watch(erpActivitiesProvider);
-    final approvedTendersAsync = ref.watch(allApprovedTenderApplicationsProvider);
-
-    if (widget.isEdit) {
-      ref.watch(workOrderDetailProvider(widget.id!)).whenData(_hydrate);
-    } else if (!_hydrated && auth.user?.employeeId != null) {
-      _ownerEmployeeId = auth.user!.employeeId;
-      _hydrated = true;
-    }
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF1F5F9),
@@ -310,27 +372,26 @@ class _WorkOrderFormScreenState extends ConsumerState<WorkOrderFormScreen> {
                               value: _dueDate,
                               onTap: () => _pickDate(due: true),
                             ),
-                            employeesAsync.when(
-                              loading: () => const LinearProgressIndicator(),
-                              error: (e, _) => Text('$e'),
-                              data: (emps) => DropdownButtonFormField<int>(
+                            if (_loadingInitial)
+                              const LinearProgressIndicator()
+                            else
+                              DropdownButtonFormField<int>(
                                 isExpanded: true,
-                                value: _ownerEmployeeId,
+                                initialValue: _ownerEmployeeId,
                                 decoration: _dec('Tender Created By', required: true),
-                                items: emps
+                                items: _employees
                                     .map((e) => DropdownMenuItem(value: e.id, child: Text(e.fullName)))
                                     .toList(),
                                 onChanged: (v) => setState(() => _ownerEmployeeId = v),
                               ),
-                            ),
-                            projectsAsync.when(
-                              loading: () => const LinearProgressIndicator(),
-                              error: (e, _) => Text('$e'),
-                              data: (projects) => DropdownButtonFormField<String>(
+                            if (_loadingInitial)
+                              const LinearProgressIndicator()
+                            else
+                              DropdownButtonFormField<String>(
                                 isExpanded: true,
-                                value: _projectId,
+                                initialValue: _projectId,
                                 decoration: _dec('Project', required: true, hint: 'Select project'),
-                                items: projects
+                                items: _projects
                                     .map((p) => DropdownMenuItem(value: p.id, child: Text(p.name)))
                                     .toList(),
                                 onChanged: (v) => setState(() {
@@ -338,114 +399,107 @@ class _WorkOrderFormScreenState extends ConsumerState<WorkOrderFormScreen> {
                                   _activities = [];
                                 }),
                               ),
-                            ),
-                            contractorsAsync.when(
-                              loading: () => const LinearProgressIndicator(),
-                              error: (e, _) => Text('$e'),
-                              data: (items) => DropdownButtonFormField<String>(
+                            if (_loadingInitial)
+                              const LinearProgressIndicator()
+                            else
+                              DropdownButtonFormField<String>(
                                 isExpanded: true,
-                                value: _contractorId,
+                                initialValue: _contractorId,
                                 decoration: _dec('Contractor', required: true, hint: 'Select contractor'),
-                                items: items
+                                items: _contractors
                                     .where((c) => c.isActive)
                                     .map((c) => DropdownMenuItem(value: c.id, child: Text(c.name)))
                                     .toList(),
                                 onChanged: (v) => setState(() => _contractorId = v),
                               ),
-                            ),
-                            approvedTendersAsync.when(
-                              loading: () => const LinearProgressIndicator(),
-                              error: (e, _) => DropdownButtonFormField<String>(
-                                isExpanded: true,
-                                decoration: _dec('Tender', hint: 'Error loading tenders'),
-                                items: const [],
-                                onChanged: null,
-                              ),
-                              data: (allApps) {
-                                final projectApps = _projectId != null
-                                    ? allApps.where((a) => a.projectId == _projectId || a.tenderNo == _tenderCtrl.text).toList()
-                                    : allApps;
-                                final displayApps = projectApps.isNotEmpty ? projectApps : allApps;
-                                final currentVal = _tenderCtrl.text.trim().isNotEmpty ? _tenderCtrl.text.trim() : null;
-                                final matchingApp = displayApps.where((a) => (a.tenderNo ?? a.applicationNo) == currentVal).firstOrNull;
+                            if (_loadingInitial)
+                              const LinearProgressIndicator()
+                            else
+                              Builder(
+                                builder: (context) {
+                                  final allApps = _approvedTenders;
+                                  final projectApps = _projectId != null
+                                      ? allApps.where((a) => a.projectId == _projectId || a.tenderNo == _tenderCtrl.text).toList()
+                                      : allApps;
+                                  final displayApps = projectApps.isNotEmpty ? projectApps : allApps;
+                                  final currentVal = _tenderCtrl.text.trim().isNotEmpty ? _tenderCtrl.text.trim() : null;
+                                  final matchingApp = displayApps.where((a) => (a.tenderNo ?? a.applicationNo) == currentVal).firstOrNull;
 
-                                return DropdownButtonFormField<String>(
-                                  isExpanded: true,
-                                  value: matchingApp != null ? (matchingApp.tenderNo ?? matchingApp.applicationNo) : currentVal,
-                                  decoration: _dec('Tender', hint: displayApps.isEmpty ? 'No approved tenders' : 'Select approved tender'),
-                                  items: [
-                                    if (currentVal != null && matchingApp == null)
-                                      DropdownMenuItem(
-                                        value: currentVal,
-                                        child: Text(currentVal, overflow: TextOverflow.ellipsis),
-                                      ),
-                                    ...displayApps.map((a) {
-                                      final val = a.tenderNo ?? a.applicationNo;
-                                      final title = [
-                                        if (a.tenderNo != null) a.tenderNo!,
-                                        a.applicationNo,
-                                        if (a.contractorName != null || a.vendorName.isNotEmpty)
-                                          '(${a.contractorName ?? a.vendorName})',
-                                      ].join(' · ');
-                                      return DropdownMenuItem(
-                                        value: val,
-                                        child: Text(title, overflow: TextOverflow.ellipsis),
-                                      );
-                                    }),
-                                  ],
-                                  onChanged: (selectedVal) {
-                                    if (selectedVal == null) return;
-                                    final selectedApp = displayApps.where((a) => (a.tenderNo ?? a.applicationNo) == selectedVal).firstOrNull;
-                                    setState(() {
-                                      _tenderCtrl.text = selectedVal;
-                                      if (selectedApp != null) {
-                                        if (selectedApp.projectId != null && selectedApp.projectId!.isNotEmpty) {
-                                          _projectId = selectedApp.projectId;
+                                  return DropdownButtonFormField<String>(
+                                    isExpanded: true,
+                                    initialValue: matchingApp != null ? (matchingApp.tenderNo ?? matchingApp.applicationNo) : currentVal,
+                                    decoration: _dec('Tender', hint: displayApps.isEmpty ? 'No approved tenders' : 'Select approved tender'),
+                                    items: [
+                                      if (currentVal != null && matchingApp == null)
+                                        DropdownMenuItem(
+                                          value: currentVal,
+                                          child: Text(currentVal, overflow: TextOverflow.ellipsis),
+                                        ),
+                                      ...displayApps.map((a) {
+                                        final val = a.tenderNo ?? a.applicationNo;
+                                        final title = [
+                                          if (a.tenderNo != null) a.tenderNo!,
+                                          a.applicationNo,
+                                          if (a.contractorName != null || a.vendorName.isNotEmpty)
+                                            '(${a.contractorName ?? a.vendorName})',
+                                        ].join(' · ');
+                                        return DropdownMenuItem(
+                                          value: val,
+                                          child: Text(title, overflow: TextOverflow.ellipsis),
+                                        );
+                                      }),
+                                    ],
+                                    onChanged: (selectedVal) {
+                                      if (selectedVal == null) return;
+                                      final selectedApp = displayApps.where((a) => (a.tenderNo ?? a.applicationNo) == selectedVal).firstOrNull;
+                                      setState(() {
+                                        _tenderCtrl.text = selectedVal;
+                                        if (selectedApp != null) {
+                                          if (selectedApp.projectId != null && selectedApp.projectId!.isNotEmpty) {
+                                            _projectId = selectedApp.projectId;
+                                          }
+                                          if (selectedApp.contractorId != null && selectedApp.contractorId!.isNotEmpty) {
+                                            _contractorId = selectedApp.contractorId;
+                                          }
                                         }
-                                        if (selectedApp.contractorId != null && selectedApp.contractorId!.isNotEmpty) {
-                                          _contractorId = selectedApp.contractorId;
-                                        }
-                                      }
-                                    });
-                                  },
-                                );
-                              },
-                            ),
+                                      });
+                                    },
+                                  );
+                                },
+                              ),
                             lookupDropdown(
-                              ref: ref,
+                              context: context,
                               category: kWoCategory,
                               value: _categoryCode,
                               label: 'Category',
                               onChanged: (v) => setState(() => _categoryCode = v),
                             ),
-                            employeesAsync.when(
-                              loading: () => const SizedBox.shrink(),
-                              error: (_, __) => const SizedBox.shrink(),
-                              data: (emps) => DropdownButtonFormField<int>(
+                            if (_loadingInitial)
+                              const SizedBox.shrink()
+                            else
+                              DropdownButtonFormField<int>(
                                 isExpanded: true,
-                                value: _approverEmployeeId,
+                                initialValue: _approverEmployeeId,
                                 decoration: _dec('Approver', hint: 'Who approves this WO'),
-                                items: emps
+                                items: _employees
                                     .map((e) => DropdownMenuItem(value: e.id, child: Text(e.fullName)))
                                     .toList(),
                                 onChanged: (v) => setState(() => _approverEmployeeId = v),
                               ),
-                            ),
                           ],
                         ),
-                        configActivitiesAsync.when(
-                          loading: () => const Padding(
+                        if (_loadingInitial)
+                          const Padding(
                             padding: EdgeInsets.all(24),
                             child: Center(child: CircularProgressIndicator()),
-                          ),
-                          error: (e, _) => Text('$e'),
-                          data: (acts) => WorkDetailsEditor(
+                          )
+                        else
+                          WorkDetailsEditor(
                             projectId: _projectId,
                             activities: _activities,
-                            configActivities: acts,
+                            configActivities: _configActivities,
                             onChanged: (groups) => setState(() => _activities = groups),
                           ),
-                        ),
                       ],
                     ),
                   ),

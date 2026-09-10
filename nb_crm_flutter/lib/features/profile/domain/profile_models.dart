@@ -224,9 +224,9 @@ class GeneralInfo {
   /// Biometric machine Empcode — used only for eTimeOffice punch matching.
   final String? punchId;
   final List<String>? _weeklyOffDays;
-  List<String> get weeklyOffDays => _weeklyOffDays == null || _weeklyOffDays!.isEmpty
+  List<String> get weeklyOffDays => _weeklyOffDays == null || _weeklyOffDays.isEmpty
       ? const ['SUN']
-      : _weeklyOffDays!;
+      : _weeklyOffDays;
 
   const GeneralInfo({
     required this.id,

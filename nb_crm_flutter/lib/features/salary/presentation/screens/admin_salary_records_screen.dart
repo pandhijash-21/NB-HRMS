@@ -1,120 +1,169 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/bloc_async_body.dart';
 import '../../../../core/widgets/header_action_button.dart';
+import '../../data/salary_repository.dart';
 import '../../domain/salary_models.dart';
-import '../salary_providers.dart';
+import '../bloc/salary_bloc.dart';
 import '../widgets/salary_shared_widgets.dart';
 
-class AdminSalaryRecordsScreen extends ConsumerWidget {
+class AdminSalaryRecordsScreen extends StatelessWidget {
   const AdminSalaryRecordsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final filters = ref.watch(salaryRecordsFilterProvider);
-    final recordsAsync = ref.watch(salaryRecordsProvider);
+  Widget build(BuildContext context) {
+    return BlocProvider<SalaryBloc>(
+      create: (ctx) => SalaryBloc(
+        salaryRepository: ctx.read<SalaryRepository>(),
+      )..add(const SalaryLoadRequested()),
+      child: const _AdminSalaryRecordsView(),
+    );
+  }
+}
+
+class _AdminSalaryRecordsView extends StatefulWidget {
+  const _AdminSalaryRecordsView();
+
+  @override
+  State<_AdminSalaryRecordsView> createState() => _AdminSalaryRecordsViewState();
+}
+
+class _AdminSalaryRecordsViewState extends State<_AdminSalaryRecordsView> {
+  final _employeeIdCtrl = TextEditingController();
+  final _monthCtrl = TextEditingController();
+  final _yearCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _employeeIdCtrl.dispose();
+    _monthCtrl.dispose();
+    _yearCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bloc = context.read<SalaryBloc>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: Text(
-          'Payroll Records',
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: 20,
-            color: isDark ? Colors.white : const Color(0xFF212F3D),
-            letterSpacing: -0.5,
-          ),
-        ),
-        leading: const AppBackButton(),
-        actions: [
-          HeaderActionButton(
-            tooltip: 'Salary Entry',
-            label: 'Salary Entry',
-            icon: Icon(
-              Icons.edit_document,
-              size: 18,
-              color: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
-            ),
-            onPressed: () => context.go('/admin/salary/entry'),
-          ),
-          HeaderActionButton(
-            tooltip: 'Salary Structures',
-            label: 'Structures',
-            icon: Icon(
-              Icons.account_tree_outlined,
-              size: 18,
-              color: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
-            ),
-            onPressed: () => context.go('/admin/salary/structures'),
-          ),
-          HeaderActionButton(
-            tooltip: 'Commissions Config',
-            label: 'Commissions',
-            icon: Icon(
-              Icons.layers_outlined,
-              size: 18,
-              color: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
-            ),
-            onPressed: () => context.go('/admin/salary/commissions'),
-          ),
-          const SizedBox(width: 8),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1.5),
-          child: Container(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
-            height: 1.5,
-          ),
-        ),
-      ),
-      body: TweenAnimationBuilder<double>(
-        duration: const Duration(milliseconds: 500),
-        curve: Curves.easeOutCubic,
-        tween: Tween(begin: 0.0, end: 1.0),
-        builder: (context, value, child) {
-          return Transform.translate(
-            offset: Offset(0.0, 30.0 * (1.0 - value)),
-            child: Opacity(
-              opacity: value,
-              child: child,
+    return BlocConsumer<SalaryBloc, SalaryState>(
+      listener: (context, state) {
+        if (state.errorMessage != null && state.errorMessage!.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.errorMessage!),
+              backgroundColor: AppColors.error,
             ),
           );
-        },
-        child: Column(
-          children: [
-            _buildFilterBar(context, ref, filters),
-            Expanded(
-              child: SalaryAsyncBody<List<SalaryRecord>>(
-                value: recordsAsync,
-                emptyMessage: 'No salary records found.',
-                onRetry: () => ref.invalidate(salaryRecordsProvider),
-                builder: (records) => ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-                  itemCount: records.length,
-                  itemBuilder: (ctx, i) {
-                    final r = records[i];
-                    return _buildRecordCard(context, r);
-                  },
-                ),
+        }
+      },
+      builder: (context, state) {
+        return Scaffold(
+          backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
+          appBar: AppBar(
+            backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            title: Text(
+              'Payroll Records',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 20,
+                color: isDark ? Colors.white : const Color(0xFF212F3D),
+                letterSpacing: -0.5,
               ),
             ),
-          ],
-        ),
-      ),
+            leading: const AppBackButton(),
+            actions: [
+              HeaderActionButton(
+                tooltip: 'Salary Entry',
+                label: 'Salary Entry',
+                icon: Icon(
+                  Icons.edit_document,
+                  size: 18,
+                  color: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+                ),
+                onPressed: () => context.go('/admin/salary/entry'),
+              ),
+              HeaderActionButton(
+                tooltip: 'Salary Structures',
+                label: 'Structures',
+                icon: Icon(
+                  Icons.account_tree_outlined,
+                  size: 18,
+                  color: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+                ),
+                onPressed: () => context.go('/admin/salary/structures'),
+              ),
+              HeaderActionButton(
+                tooltip: 'Commissions Config',
+                label: 'Commissions',
+                icon: Icon(
+                  Icons.layers_outlined,
+                  size: 18,
+                  color: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+                ),
+                onPressed: () => context.go('/admin/salary/commissions'),
+              ),
+              const SizedBox(width: 8),
+            ],
+            bottom: PreferredSize(
+              preferredSize: const Size.fromHeight(1.5),
+              child: Container(
+                color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
+                height: 1.5,
+              ),
+            ),
+          ),
+          body: TweenAnimationBuilder<double>(
+            duration: const Duration(milliseconds: 500),
+            curve: Curves.easeOutCubic,
+            tween: Tween(begin: 0.0, end: 1.0),
+            builder: (context, value, child) {
+              return Transform.translate(
+                offset: Offset(0.0, 30.0 * (1.0 - value)),
+                child: Opacity(
+                  opacity: value,
+                  child: child,
+                ),
+              );
+            },
+            child: Column(
+              children: [
+                _buildFilterBar(context, bloc, state),
+                Expanded(
+                  child: BlocAsyncBody<List<SalaryRecord>>(
+                    status: state.status,
+                    data: state.records,
+                    emptyMessage: 'No salary records found.',
+                    errorMessage: state.errorMessage,
+                    onRetry: () => bloc.add(const SalaryRefreshRequested()),
+                    builder: (records) => ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                      itemCount: records.length,
+                      itemBuilder: (ctx, i) {
+                        final r = records[i];
+                        return _buildRecordCard(context, r);
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
   Widget _buildFilterBar(
     BuildContext context, 
-    WidgetRef ref, 
-    SalaryRecordsFilter filters
+    SalaryBloc bloc, 
+    SalaryState state,
   ) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -123,7 +172,7 @@ class AdminSalaryRecordsScreen extends ConsumerWidget {
         color: isDark ? const Color(0xFF1E1B18) : Colors.white,
         border: Border(
           bottom: BorderSide(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.12) : const Color(0xFFCFD8DC),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.12) : const Color(0xFFCFD8DC),
             width: 1.5,
           ),
         ),
@@ -138,6 +187,7 @@ class AdminSalaryRecordsScreen extends ConsumerWidget {
               width: 130,
               height: 44,
               child: TextField(
+                controller: _employeeIdCtrl,
                 decoration: InputDecoration(
                   labelText: 'Employee ID',
                   labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
@@ -147,13 +197,13 @@ class AdminSalaryRecordsScreen extends ConsumerWidget {
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
                     borderSide: BorderSide(
-                      color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC),
+                      color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
                     ),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
                     borderSide: BorderSide(
-                      color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                      color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
                     ),
                   ),
                   focusedBorder: OutlineInputBorder(
@@ -164,9 +214,7 @@ class AdminSalaryRecordsScreen extends ConsumerWidget {
                 ),
                 style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                 keyboardType: TextInputType.number,
-                onChanged: (v) => ref
-                    .read(salaryRecordsFilterProvider.notifier)
-                    .setEmployeeId(int.tryParse(v)),
+                onChanged: (v) => bloc.add(SalaryRecordsEmployeeIdChanged(int.tryParse(v))),
               ),
             ),
             const SizedBox(width: 12),
@@ -174,6 +222,7 @@ class AdminSalaryRecordsScreen extends ConsumerWidget {
               width: 100,
               height: 44,
               child: TextField(
+                controller: _monthCtrl,
                 decoration: InputDecoration(
                   labelText: 'Month',
                   labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
@@ -183,13 +232,13 @@ class AdminSalaryRecordsScreen extends ConsumerWidget {
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
                     borderSide: BorderSide(
-                      color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC),
+                      color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
                     ),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
                     borderSide: BorderSide(
-                      color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                      color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
                     ),
                   ),
                   focusedBorder: OutlineInputBorder(
@@ -200,9 +249,7 @@ class AdminSalaryRecordsScreen extends ConsumerWidget {
                 ),
                 style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                 keyboardType: TextInputType.number,
-                onChanged: (v) => ref
-                    .read(salaryRecordsFilterProvider.notifier)
-                    .setMonth(int.tryParse(v)),
+                onChanged: (v) => bloc.add(SalaryRecordsMonthChanged(int.tryParse(v))),
               ),
             ),
             const SizedBox(width: 12),
@@ -210,6 +257,7 @@ class AdminSalaryRecordsScreen extends ConsumerWidget {
               width: 110,
               height: 44,
               child: TextField(
+                controller: _yearCtrl,
                 decoration: InputDecoration(
                   labelText: 'Year',
                   labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
@@ -219,13 +267,13 @@ class AdminSalaryRecordsScreen extends ConsumerWidget {
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
                     borderSide: BorderSide(
-                      color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC),
+                      color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
                     ),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
                     borderSide: BorderSide(
-                      color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                      color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
                     ),
                   ),
                   focusedBorder: OutlineInputBorder(
@@ -236,9 +284,7 @@ class AdminSalaryRecordsScreen extends ConsumerWidget {
                 ),
                 style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                 keyboardType: TextInputType.number,
-                onChanged: (v) => ref
-                    .read(salaryRecordsFilterProvider.notifier)
-                    .setYear(int.tryParse(v)),
+                onChanged: (v) => bloc.add(SalaryRecordsYearChanged(int.tryParse(v))),
               ),
             ),
             const SizedBox(width: 12),
@@ -248,13 +294,13 @@ class AdminSalaryRecordsScreen extends ConsumerWidget {
                 color: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
-                  color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                  color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
                   width: 1.2,
                 ),
               ),
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<String>(
-                  value: filters.status.isEmpty ? '' : filters.status,
+                  value: state.filterStatus.isEmpty ? '' : state.filterStatus,
                   dropdownColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
                   style: TextStyle(
                     color: isDark ? Colors.white : const Color(0xFF212F3D), 
@@ -267,9 +313,7 @@ class AdminSalaryRecordsScreen extends ConsumerWidget {
                     DropdownMenuItem(value: 'UNPAID', child: Text('Unpaid')),
                     DropdownMenuItem(value: 'PAID', child: Text('Paid')),
                   ],
-                  onChanged: (v) => ref
-                      .read(salaryRecordsFilterProvider.notifier)
-                      .setStatus(v ?? ''),
+                  onChanged: (v) => bloc.add(SalaryRecordsStatusChanged(v ?? '')),
                 ),
               ),
             ),
@@ -293,7 +337,7 @@ class AdminSalaryRecordsScreen extends ConsumerWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
           width: 1.5,
         ),
       ),
@@ -308,7 +352,7 @@ class AdminSalaryRecordsScreen extends ConsumerWidget {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFF263238).withOpacity(0.15),
+                    color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFF263238).withValues(alpha: 0.15),
                     width: 1.5,
                   ),
                 ),
@@ -355,9 +399,9 @@ class AdminSalaryRecordsScreen extends ConsumerWidget {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
-                            color: Colors.blue.withOpacity(0.1),
+                            color: Colors.blue.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: Colors.blue.withOpacity(0.2)),
+                            border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
                           ),
                           child: Text(
                             'Gross: ${formatInr(r.grossPay)}',
@@ -370,7 +414,7 @@ class AdminSalaryRecordsScreen extends ConsumerWidget {
                             color: isDark ? const Color(0xFF2B2722) : const Color(0xFFF0F4F8),
                             borderRadius: BorderRadius.circular(6),
                             border: Border.all(
-                              color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFF263238).withOpacity(0.15),
+                              color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFF263238).withValues(alpha: 0.15),
                             ),
                           ),
                           child: Text(

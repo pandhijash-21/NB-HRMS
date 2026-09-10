@@ -1,24 +1,32 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/widgets/header_action_button.dart';
 import '../../../auth/domain/permissions.dart';
-import '../../../auth/presentation/auth_providers.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
+import '../../data/org_repository.dart';
 import '../../domain/org_models.dart';
-import '../org_providers.dart';
 
-class DesignationsScreen extends ConsumerStatefulWidget {
+class DesignationsScreen extends StatefulWidget {
   const DesignationsScreen({super.key});
 
   @override
-  ConsumerState<DesignationsScreen> createState() => _DesignationsScreenState();
+  State<DesignationsScreen> createState() => _DesignationsScreenState();
 }
 
-class _DesignationsScreenState extends ConsumerState<DesignationsScreen> {
+class _DesignationsScreenState extends State<DesignationsScreen> {
   final _nameCtrl = TextEditingController();
   bool _creating = false;
+  bool _loading = false;
+  String? _error;
+  List<Designation> _designations = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDesignations();
+  }
 
   @override
   void dispose() {
@@ -26,18 +34,42 @@ class _DesignationsScreenState extends ConsumerState<DesignationsScreen> {
     super.dispose();
   }
 
+  Future<void> _loadDesignations() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final list = await context.read<OrgRepository>().listDesignations(
+            isAlias: false,
+            includeInactive: true,
+          );
+      if (mounted) {
+        setState(() {
+          _designations = list;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final auth = ref.watch(authNotifierProvider);
-    final role = auth.user?.role ?? '';
-    final hasAccess = Permissions.canManageUsers(auth.permissions, role);
+    final authState = context.watch<AuthBloc>().state;
+    final role = authState.user?.role ?? '';
+    final hasAccess = Permissions.canManageUsers(authState.permissions, role);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     if (!hasAccess) {
       return _accessDenied(isDark);
     }
-
-    final jobDesignations = ref.watch(jobDesignationsProvider);
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
@@ -60,14 +92,16 @@ class _DesignationsScreenState extends ConsumerState<DesignationsScreen> {
             tooltip: 'Refresh',
             label: 'Refresh',
             icon: const Icon(Icons.refresh_rounded, size: 18, color: Color(0xFFC5A059)),
-            onPressed: _refreshAll,
+            onPressed: _loadDesignations,
           ),
           const SizedBox(width: 8),
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1.5),
           child: Container(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+            color: isDark
+                ? const Color(0xFFC5A059).withValues(alpha: 0.15)
+                : const Color(0xFFCFD8DC),
             height: 1.5,
           ),
         ),
@@ -96,24 +130,26 @@ class _DesignationsScreenState extends ConsumerState<DesignationsScreen> {
             const SizedBox(height: 20),
             _buildCreateDesignationCard(isDark),
             const SizedBox(height: 20),
-            jobDesignations.when(
-              data: (list) => _buildDesignationsList(list, isDark),
-              loading: () => _LoadingCard(isDark: isDark),
-              error: (err, _) => _ErrorCard(
-                isDark: isDark,
-                message: 'Failed to load designations',
-                detail: '$err',
-                onRetry: () => ref.invalidate(jobDesignationsProvider),
-              ),
-            ),
+            _buildContent(isDark),
           ],
         ),
       ),
     );
   }
 
-  void _refreshAll() {
-    ref.invalidate(jobDesignationsProvider);
+  Widget _buildContent(bool isDark) {
+    if (_loading && _designations.isEmpty) {
+      return _LoadingCard(isDark: isDark);
+    }
+    if (_error != null && _designations.isEmpty) {
+      return _ErrorCard(
+        isDark: isDark,
+        message: 'Failed to load designations',
+        detail: _error!,
+        onRetry: _loadDesignations,
+      );
+    }
+    return _buildDesignationsList(_designations, isDark);
   }
 
   Widget _buildCreateDesignationCard(bool isDark) {
@@ -123,7 +159,7 @@ class _DesignationsScreenState extends ConsumerState<DesignationsScreen> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
           width: 1.5,
         ),
       ),
@@ -166,7 +202,7 @@ class _DesignationsScreenState extends ConsumerState<DesignationsScreen> {
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
                   borderSide: BorderSide(
-                    color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                    color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
                   ),
                 ),
                 focusedBorder: OutlineInputBorder(
@@ -187,7 +223,7 @@ class _DesignationsScreenState extends ConsumerState<DesignationsScreen> {
                   style: FilledButton.styleFrom(
                     backgroundColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
                     foregroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
-                    disabledBackgroundColor: isDark ? const Color(0xFFC5A059).withOpacity(0.3) : const Color(0xFFCFD8DC),
+                    disabledBackgroundColor: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.3) : const Color(0xFFCFD8DC),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                   icon: _creating
@@ -235,7 +271,7 @@ class _DesignationsScreenState extends ConsumerState<DesignationsScreen> {
                   color: isDark ? const Color(0xFF2B2722) : const Color(0xFFF1F5F9),
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(
-                    color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                    color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
                   ),
                 ),
                 child: Text(
@@ -261,7 +297,7 @@ class _DesignationsScreenState extends ConsumerState<DesignationsScreen> {
                   Text(
                     'No designations yet.',
                     style: TextStyle(
-                      color: isDark ? Colors.white30 : const Color(0xFF607D8B).withOpacity(0.6),
+                      color: isDark ? Colors.white30 : const Color(0xFF607D8B).withValues(alpha: 0.6),
                       fontWeight: FontWeight.w600,
                       fontSize: 15,
                     ),
@@ -286,7 +322,7 @@ class _DesignationsScreenState extends ConsumerState<DesignationsScreen> {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
           side: BorderSide(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
             width: 1.5,
           ),
         ),
@@ -301,7 +337,7 @@ class _DesignationsScreenState extends ConsumerState<DesignationsScreen> {
                   color: isDark ? const Color(0xFF2B2722) : const Color(0xFFF1F5F9),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                    color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                    color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
                   ),
                 ),
                 child: Icon(
@@ -326,8 +362,8 @@ class _DesignationsScreenState extends ConsumerState<DesignationsScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: d.isActive
-                      ? Colors.green.withOpacity(0.1)
-                      : Colors.grey.withOpacity(0.1),
+                      ? Colors.green.withValues(alpha: 0.1)
+                      : Colors.grey.withValues(alpha: 0.1),
                   border: Border.all(
                     color: d.isActive ? Colors.green : Colors.grey,
                     width: 1.2,
@@ -346,7 +382,7 @@ class _DesignationsScreenState extends ConsumerState<DesignationsScreen> {
               ),
               Switch(
                 value: d.isActive,
-                activeColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+                activeThumbColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
                 onChanged: (checked) => _toggleDesignation(d.id, checked),
               ),
               IconButton(
@@ -365,11 +401,11 @@ class _DesignationsScreenState extends ConsumerState<DesignationsScreen> {
     setState(() => _creating = true);
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await ref.read(orgRepositoryProvider).createDesignation(
+      await context.read<OrgRepository>().createDesignation(
             name: _nameCtrl.text.trim(),
           );
       _nameCtrl.clear();
-      ref.invalidate(jobDesignationsProvider);
+      _loadDesignations();
       messenger.showSnackBar(const SnackBar(content: Text('Designation added')));
     } catch (e) {
       messenger.showSnackBar(
@@ -383,8 +419,8 @@ class _DesignationsScreenState extends ConsumerState<DesignationsScreen> {
   Future<void> _toggleDesignation(String id, bool isActive) async {
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await ref.read(orgRepositoryProvider).updateDesignation(id, isActive: isActive);
-      ref.invalidate(jobDesignationsProvider);
+      await context.read<OrgRepository>().updateDesignation(id, isActive: isActive);
+      _loadDesignations();
     } catch (e) {
       messenger.showSnackBar(
         SnackBar(content: Text('Update failed: $e'), backgroundColor: Colors.red),
@@ -414,8 +450,8 @@ class _DesignationsScreenState extends ConsumerState<DesignationsScreen> {
     if (ok != true || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await ref.read(orgRepositoryProvider).deleteDesignation(d.id);
-      ref.invalidate(jobDesignationsProvider);
+      await context.read<OrgRepository>().deleteDesignation(d.id);
+      _loadDesignations();
       messenger.showSnackBar(const SnackBar(content: Text('Designation deleted / deactivated')));
     } catch (e) {
       messenger.showSnackBar(
@@ -460,7 +496,7 @@ class _LoadingCard extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
           width: 1.5,
         ),
       ),
@@ -493,7 +529,7 @@ class _ErrorCard extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
           width: 1.5,
         ),
       ),
@@ -532,4 +568,3 @@ class _ErrorCard extends StatelessWidget {
     );
   }
 }
-

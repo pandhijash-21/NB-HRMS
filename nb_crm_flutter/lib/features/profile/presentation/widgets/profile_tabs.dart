@@ -1,33 +1,64 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/name_utils.dart';
 import '../../../../core/utils/open_stored_document.dart';
 import '../../domain/profile_models.dart';
-import '../../../admin/presentation/admin_notifier.dart';
+import '../../../admin/data/admin_repository.dart';
 import '../../../admin/domain/admin_models.dart';
+import '../../../org/data/org_repository.dart';
 import '../../../org/domain/org_models.dart';
-import '../../../org/presentation/org_providers.dart';
+import '../../../letters/data/letters_repository.dart';
 import '../../../letters/domain/letter_models.dart';
-import '../../../salary/presentation/salary_providers.dart';
-import '../../../letters/presentation/letters_providers.dart';
 import '../../../letters/presentation/letter_pdf.dart';
+import '../../../salary/data/salary_repository.dart';
+import '../../../salary/domain/salary_models.dart';
 import 'employee_salary_monthly_section.dart';
 
-class GeneralViewTab extends ConsumerWidget {
+class GeneralViewTab extends StatefulWidget {
   final EmployeeProfile profile;
 
   const GeneralViewTab({super.key, required this.profile});
 
+  @override
+  State<GeneralViewTab> createState() => _GeneralViewTabState();
+}
+
+class _GeneralViewTabState extends State<GeneralViewTab> with AutomaticKeepAliveClientMixin {
+  List<Institute> _institutes = const [];
+  List<EmployeeNameOption> _names = const [];
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        final results = await Future.wait([
+          context.read<OrgRepository>().listInstitutes(),
+          context.read<AdminRepository>().listEmployeeNames(),
+        ]);
+        if (mounted) {
+          setState(() {
+            _institutes = results[0] as List<Institute>;
+            _names = results[1] as List<EmployeeNameOption>;
+          });
+        }
+      } catch (_) {}
+    });
+  }
+
   AddressInfo? _localAddress() {
-    for (final a in profile.addresses) {
+    for (final a in widget.profile.addresses) {
       if (a.addressType.toUpperCase() == 'LOCAL') return a;
     }
     return null;
   }
 
   String _instituteLabel(List<Institute> institutes) {
-    final info = profile.generalInfo;
+    final info = widget.profile.generalInfo;
     if (info?.instituteName != null && info!.instituteName!.isNotEmpty) {
       return info.instituteName!;
     }
@@ -55,13 +86,13 @@ class GeneralViewTab extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
+    super.build(context);
+    final profile = widget.profile;
     final info = profile.generalInfo;
     final local = _localAddress();
-    final institutesAsync = ref.watch(institutesListProvider);
-    final namesAsync = ref.watch(employeeNamesProvider);
-    final institutes = institutesAsync.asData?.value ?? const <Institute>[];
-    final names = namesAsync.asData?.value ?? const <EmployeeNameOption>[];
+    final institutes = _institutes;
+    final names = _names;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -183,58 +214,70 @@ class GeneralViewTab extends ConsumerWidget {
   }
 }
 
-class _AssignmentHistoryCard extends ConsumerWidget {
+class _AssignmentHistoryCard extends StatefulWidget {
   const _AssignmentHistoryCard({required this.employeeId});
 
   final int employeeId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(employeeAssignmentsProvider(employeeId));
-    return async.when(
-      loading: () => const SizedBox.shrink(),
-      error: (_, __) => const SizedBox.shrink(),
-      data: (list) {
-        if (list.isEmpty) return const SizedBox.shrink();
-        final sorted = List<EmployeeAssignment>.from(list)
-          ..sort((a, b) => b.effectiveFrom.compareTo(a.effectiveFrom));
-        return _buildSectionCard(
-          context: context,
-          title: 'Institute transfer & designation history',
-          icon: Icons.swap_horiz_rounded,
-          children: [
-            for (var i = 0; i < sorted.length; i++)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      assignmentEventLabel(
-                        sorted[i],
-                        i + 1 < sorted.length ? sorted[i + 1] : null,
-                      ),
-                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
-                    ),
-                    Text(
-                      '${sorted[i].designation} · ${sorted[i].subOrganization ?? "—"}',
-                      style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor),
-                    ),
-                    Text(
-                      '${_formatDate(sorted[i].effectiveFrom)} – ${sorted[i].effectiveTo == null ? "Present" : _formatDate(sorted[i].effectiveTo!)}',
-                      style: TextStyle(fontSize: 11, color: Theme.of(context).hintColor),
-                    ),
-                    if (sorted[i].reason != null && sorted[i].reason!.isNotEmpty)
-                      Text(
-                        sorted[i].reason!,
-                        style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic),
-                      ),
-                  ],
+  State<_AssignmentHistoryCard> createState() => _AssignmentHistoryCardState();
+}
+
+class _AssignmentHistoryCardState extends State<_AssignmentHistoryCard> {
+  List<EmployeeAssignment>? _assignments;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        final list = await context.read<AdminRepository>().listAssignments(widget.employeeId);
+        if (mounted) setState(() => _assignments = list);
+      } catch (_) {}
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final list = _assignments;
+    if (list == null || list.isEmpty) return const SizedBox.shrink();
+    final sorted = List<EmployeeAssignment>.from(list)
+      ..sort((a, b) => b.effectiveFrom.compareTo(a.effectiveFrom));
+    return _buildSectionCard(
+      context: context,
+      title: 'Institute transfer & designation history',
+      icon: Icons.swap_horiz_rounded,
+      children: [
+        for (var i = 0; i < sorted.length; i++)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  assignmentEventLabel(
+                    sorted[i],
+                    i + 1 < sorted.length ? sorted[i + 1] : null,
+                  ),
+                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
                 ),
-              ),
-          ],
-        );
-      },
+                Text(
+                  '${sorted[i].designation} · ${sorted[i].subOrganization ?? "—"}',
+                  style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor),
+                ),
+                Text(
+                  '${_formatDate(sorted[i].effectiveFrom)} – ${sorted[i].effectiveTo == null ? "Present" : _formatDate(sorted[i].effectiveTo!)}',
+                  style: TextStyle(fontSize: 11, color: Theme.of(context).hintColor),
+                ),
+                if (sorted[i].reason != null && sorted[i].reason!.isNotEmpty)
+                  Text(
+                    sorted[i].reason!,
+                    style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic),
+                  ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }
@@ -249,7 +292,7 @@ class PersonalViewTab extends StatelessWidget {
     final info = profile.personalInfo;
 
     return SingleChildScrollView(
-      padding: EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
       child: Column(
         children: [
           _buildSectionCard(
@@ -293,7 +336,7 @@ class PersonalViewTab extends StatelessWidget {
               ),
             ],
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
           _buildSectionCard(
             context: context,
             title: 'Uploaded Documents',
@@ -355,7 +398,7 @@ class AddressViewTab extends StatelessWidget {
     );
 
     return SingleChildScrollView(
-      padding: EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
       child: Column(
         children: [
           if (isWide)
@@ -363,18 +406,18 @@ class AddressViewTab extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(child: localWidget),
-                SizedBox(width: 16),
+                const SizedBox(width: 16),
                 Expanded(child: permanentWidget),
               ],
             )
           else ...[
             localWidget,
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             permanentWidget,
           ],
           ...others.map(
             (a) => Padding(
-              padding: EdgeInsets.only(top: 16),
+              padding: const EdgeInsets.only(top: 16),
               child: _buildAddressCard(
                 context,
                 '${a.addressType} Address',
@@ -403,7 +446,7 @@ class AddressViewTab extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
           width: 1.5,
         ),
       ),
@@ -440,7 +483,7 @@ class AddressViewTab extends StatelessWidget {
             Divider(
               height: 28,
               thickness: 1.2,
-              color: isDark ? const Color(0xFFC5A059).withOpacity(0.12) : Colors.black.withOpacity(0.06),
+              color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.06),
             ),
             _buildFieldDetail(context, 'Flat / Block No', addr?.flatBlockNo),
             _buildFieldDetail(context, 'Building / Society', addr?.buildingSociety),
@@ -574,7 +617,7 @@ class OtherViewTab extends StatelessWidget {
     final info = profile.otherInfo;
 
     return SingleChildScrollView(
-      padding: EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
       child: Column(
         children: [
           _buildSectionCard(
@@ -611,7 +654,7 @@ class FamilyViewTab extends StatelessWidget {
     final members = profile.familyMembers;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardBg = isDark ? const Color(0xFF1E1B18) : Colors.white;
-    final cardBorder = isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC);
+    final cardBorder = isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC);
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -675,7 +718,7 @@ class FamilyViewTab extends StatelessWidget {
                           color: isDark ? const Color(0xFF2B2722) : const Color(0xFFECEFF1),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
-                            color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC),
+                            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
                             width: 1,
                           ),
                         ),
@@ -694,7 +737,7 @@ class FamilyViewTab extends StatelessWidget {
                   Divider(
                     height: 28,
                     thickness: 1.2,
-                    color: isDark ? const Color(0xFFC5A059).withOpacity(0.12) : Colors.black.withOpacity(0.06),
+                    color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.06),
                   ),
                   Wrap(
                     spacing: 24,
@@ -740,7 +783,7 @@ class AcademicViewTab extends StatelessWidget {
     final quals = profile.academicQuals;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardBg = isDark ? const Color(0xFF1E1B18) : Colors.white;
-    final cardBorder = isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC);
+    final cardBorder = isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC);
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -775,7 +818,7 @@ class AcademicViewTab extends StatelessWidget {
                   Divider(
                     height: 28,
                     thickness: 1.2,
-                    color: isDark ? const Color(0xFFC5A059).withOpacity(0.12) : Colors.black.withOpacity(0.06),
+                    color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.06),
                   ),
                   Wrap(
                     spacing: 24,
@@ -858,7 +901,7 @@ class AcademicViewTab extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                         decoration: BoxDecoration(
-                          color: statusColor.withOpacity(0.12),
+                          color: statusColor.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(color: statusColor, width: 1.2),
                         ),
@@ -877,7 +920,7 @@ class AcademicViewTab extends StatelessWidget {
                   Divider(
                     height: 28,
                     thickness: 1.2,
-                    color: isDark ? const Color(0xFFC5A059).withOpacity(0.12) : Colors.black.withOpacity(0.06),
+                    color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.06),
                   ),
                   Wrap(
                     spacing: 24,
@@ -941,14 +984,14 @@ class AcademicViewTab extends StatelessWidget {
         elevation: 0,
         color: hasUrl 
             ? (isDark ? const Color(0xFF1E1B18) : Colors.white) 
-            : (isDark ? const Color(0xFF1A1816).withOpacity(0.4) : const Color(0xFFECEFF1).withOpacity(0.4)),
+            : (isDark ? const Color(0xFF1A1816).withValues(alpha: 0.4) : const Color(0xFFECEFF1).withValues(alpha: 0.4)),
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(10),
           side: BorderSide(
             color: hasUrl 
-                ? (isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC)) 
-                : (isDark ? const Color(0xFFC5A059).withOpacity(0.1) : const Color(0xFFCFD8DC)),
+                ? (isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC)) 
+                : (isDark ? const Color(0xFFC5A059).withValues(alpha: 0.1) : const Color(0xFFCFD8DC)),
             width: 1.2,
           ),
         ),
@@ -1006,7 +1049,7 @@ class BankViewTab extends StatelessWidget {
     final info = profile.bankInfo;
 
     return SingleChildScrollView(
-      padding: EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
       child: Column(
         children: [
           _buildSectionCard(
@@ -1042,10 +1085,10 @@ class BankViewTab extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+          Text(label, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
           const SizedBox(height: 6),
           if (!has)
-            Text('Not uploaded', style: TextStyle(fontSize: 13, color: AppColors.textSecondary))
+            const Text('Not uploaded', style: TextStyle(fontSize: 13, color: AppColors.textSecondary))
           else
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
@@ -1060,7 +1103,7 @@ class BankViewTab extends StatelessWidget {
   }
 }
 
-class DocumentsViewTab extends ConsumerWidget {
+class DocumentsViewTab extends StatefulWidget {
   final EmployeeProfile profile;
   final bool canManageLetters;
 
@@ -1069,6 +1112,53 @@ class DocumentsViewTab extends ConsumerWidget {
     required this.profile,
     this.canManageLetters = false,
   });
+
+  @override
+  State<DocumentsViewTab> createState() => _DocumentsViewTabState();
+}
+
+class _DocumentsViewTabState extends State<DocumentsViewTab> with AutomaticKeepAliveClientMixin {
+  bool _loading = true;
+  String? _error;
+  List<LetterTemplate> _templates = const [];
+  List<LetterDocument> _documents = const [];
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final repo = context.read<LettersRepository>();
+      final results = await Future.wait([
+        repo.listTemplates(),
+        repo.getEmployeeDocuments(widget.profile.id),
+      ]);
+      if (mounted) {
+        setState(() {
+          _templates = results[0] as List<LetterTemplate>;
+          _documents = results[1] as List<LetterDocument>;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
+    }
+  }
 
   String _stripHtml(String html) {
     return html.replaceAll(RegExp(r'<[^>]*>'), ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
@@ -1115,8 +1205,6 @@ class DocumentsViewTab extends ConsumerWidget {
   }
 
   Future<void> _showLetterEditDialog({
-    required BuildContext context,
-    required WidgetRef ref,
     required String title,
     required String initialHtml,
     required Future<void> Function(String html) onGenerate,
@@ -1136,7 +1224,7 @@ class DocumentsViewTab extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
+                      const Text(
                         'Edit in simple English. Preview updates below.',
                         style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
                       ),
@@ -1168,7 +1256,7 @@ class DocumentsViewTab extends ConsumerWidget {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      Text(
+                      const Text(
                         'Live Preview',
                         style: TextStyle(
                           fontWeight: FontWeight.w700,
@@ -1216,8 +1304,6 @@ class DocumentsViewTab extends ConsumerWidget {
   }
 
   Future<void> _confirmDeleteLetter({
-    required BuildContext context,
-    required WidgetRef ref,
     required String documentId,
     required String name,
   }) async {
@@ -1237,17 +1323,18 @@ class DocumentsViewTab extends ConsumerWidget {
       ),
     );
     if (ok != true) return;
-    final repo = ref.read(lettersRepositoryProvider);
+    if (!mounted) return;
+    final repo = context.read<LettersRepository>();
     try {
       await repo.deleteDocument(documentId: documentId);
-      ref.invalidate(employeeLetterDocumentsProvider(profile.id));
-      if (context.mounted) {
+      await _loadData();
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Letter deleted')),
         );
       }
     } catch (e) {
-      if (context.mounted) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Delete failed: $e')),
         );
@@ -1255,10 +1342,7 @@ class DocumentsViewTab extends ConsumerWidget {
     }
   }
 
-  Future<void> _createCustomLetter({
-    required BuildContext context,
-    required WidgetRef ref,
-  }) async {
+  Future<void> _createCustomLetter() async {
     final titleController = TextEditingController(text: 'Custom Letter');
     final title = await showDialog<String>(
       context: context,
@@ -1283,23 +1367,22 @@ class DocumentsViewTab extends ConsumerWidget {
       ),
     );
     if (title == null) return;
-    final repo = ref.read(lettersRepositoryProvider);
+    if (!mounted) return;
+    final repo = context.read<LettersRepository>();
     try {
       final draft = await repo.createCustomDraft(
-        employeeId: profile.id,
+        employeeId: widget.profile.id,
         title: title.isEmpty ? 'Custom Letter' : title,
       );
-      if (!context.mounted) return;
+      if (!mounted) return;
       await _showLetterEditDialog(
-        context: context,
-        ref: ref,
         title: 'Draft — ${draft.template?.name ?? title}',
         initialHtml: draft.contentHtml,
         onGenerate: (html) async {
           await repo.updateDraftContent(documentId: draft.id, contentHtml: html);
           await repo.finalizeDraft(draftId: draft.id);
-          ref.invalidate(employeeLetterDocumentsProvider(profile.id));
-          if (context.mounted) {
+          await _loadData();
+          if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Letter generated')),
             );
@@ -1307,7 +1390,7 @@ class DocumentsViewTab extends ConsumerWidget {
         },
       );
     } catch (e) {
-      if (context.mounted) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to create letter: $e')),
         );
@@ -1341,7 +1424,7 @@ class DocumentsViewTab extends ConsumerWidget {
 
   List<Widget> _academicDocs(BuildContext context) {
     final items = <Widget>[];
-    for (final q in profile.academicQuals) {
+    for (final q in widget.profile.academicQuals) {
       if (q.certificateUrl != null && q.certificateUrl!.isNotEmpty) {
         items.add(_buildDocItem(context, '${_qualTitle(q)} Certificate', q.certificateUrl));
       }
@@ -1369,14 +1452,13 @@ class DocumentsViewTab extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
+    super.build(context);
+    final profile = widget.profile;
+    final canManageLetters = widget.canManageLetters;
     final personal = profile.personalInfo;
     final other = profile.otherInfo;
     final bank = profile.bankInfo;
-
-    final templatesAsync = ref.watch(letterTemplatesProvider);
-    final documentsAsync = ref.watch(employeeLetterDocumentsProvider(profile.id));
-    final repo = ref.read(lettersRepositoryProvider);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -1427,16 +1509,16 @@ class DocumentsViewTab extends ConsumerWidget {
             icon: Icons.description_outlined,
             children: [
               Builder(
-                builder: (context) {
-                  if (templatesAsync.isLoading || documentsAsync.isLoading) {
+                builder: (_) {
+                  if (_loading) {
                     return const Padding(
                       padding: EdgeInsets.symmetric(vertical: 12),
                       child: Center(child: CircularProgressIndicator()),
                     );
                   }
-                  if (templatesAsync.hasError || documentsAsync.hasError) {
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                  if (_error != null) {
+                    return const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 12),
                       child: Text(
                         'Failed to load letters',
                         style: TextStyle(
@@ -1447,8 +1529,8 @@ class DocumentsViewTab extends ConsumerWidget {
                     );
                   }
 
-                  final templates = templatesAsync.asData?.value ?? const <LetterTemplate>[];
-                  final docs = documentsAsync.asData?.value ?? const <LetterDocument>[];
+                  final templates = _templates;
+                  final docs = _documents;
 
                   // Backend already hides drafts from employees; keep UI defensive.
                   final draftDocs = canManageLetters
@@ -1464,7 +1546,7 @@ class DocumentsViewTab extends ConsumerWidget {
                       Align(
                         alignment: Alignment.centerRight,
                         child: FilledButton.icon(
-                          onPressed: () => _createCustomLetter(context: context, ref: ref),
+                          onPressed: () => _createCustomLetter(),
                           icon: const Icon(Icons.add_rounded, size: 18),
                           label: const Text('New letter'),
                         ),
@@ -1472,7 +1554,7 @@ class DocumentsViewTab extends ConsumerWidget {
                     );
                     children.add(const SizedBox(height: 10));
                     children.add(
-                      Text(
+                      const Text(
                         'Employees only see letters after you click Generate Final.',
                         style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
                       ),
@@ -1490,7 +1572,7 @@ class DocumentsViewTab extends ConsumerWidget {
                         decoration: BoxDecoration(
                           color: Theme.of(context).cardColor,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppColors.border.withOpacity(0.6)),
+                          border: Border.all(color: AppColors.border.withValues(alpha: 0.6)),
                         ),
                         margin: const EdgeInsets.only(bottom: 10),
                         child: Column(
@@ -1511,7 +1593,7 @@ class DocumentsViewTab extends ConsumerWidget {
                             const SizedBox(height: 6),
                             Text(
                               preview.length > 160 ? '${preview.substring(0, 160)}...' : preview,
-                              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                              style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
                             ),
                             const SizedBox(height: 10),
                             Wrap(
@@ -1526,9 +1608,11 @@ class DocumentsViewTab extends ConsumerWidget {
                                       title: tName,
                                       html: doc.contentHtml,
                                       onMessage: (msg) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(content: Text(msg)),
-                                        );
+                                        if (mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(content: Text(msg)),
+                                          );
+                                        }
                                       },
                                     );
                                   },
@@ -1538,8 +1622,6 @@ class DocumentsViewTab extends ConsumerWidget {
                                     icon: const Icon(Icons.delete_outline, size: 16, color: Colors.red),
                                     label: const Text('Delete', style: TextStyle(color: Colors.red)),
                                     onPressed: () => _confirmDeleteLetter(
-                                      context: context,
-                                      ref: ref,
                                       documentId: doc.id,
                                       name: tName,
                                     ),
@@ -1576,20 +1658,20 @@ class DocumentsViewTab extends ConsumerWidget {
                               children: [
                                 FilledButton(
                                   onPressed: () async {
+                                    final repo = context.read<LettersRepository>();
                                     await _showLetterEditDialog(
-                                      context: context,
-                                      ref: ref,
                                       title: 'Edit Draft — ${doc.template?.name ?? 'Letter'}',
                                       initialHtml: doc.contentHtml,
                                       onGenerate: (html) async {
+                                        final messenger = ScaffoldMessenger.of(context);
                                         await repo.updateDraftContent(
                                           documentId: doc.id,
                                           contentHtml: html,
                                         );
                                         await repo.finalizeDraft(draftId: doc.id);
-                                        ref.invalidate(employeeLetterDocumentsProvider(profile.id));
-                                        if (context.mounted) {
-                                          ScaffoldMessenger.of(context).showSnackBar(
+                                        await _loadData();
+                                        if (mounted) {
+                                          messenger.showSnackBar(
                                             const SnackBar(content: Text('Letter generated')),
                                           );
                                         }
@@ -1600,8 +1682,6 @@ class DocumentsViewTab extends ConsumerWidget {
                                 ),
                                 OutlinedButton(
                                   onPressed: () => _confirmDeleteLetter(
-                                    context: context,
-                                    ref: ref,
                                     documentId: doc.id,
                                     name: doc.template?.name ?? 'draft',
                                   ),
@@ -1618,7 +1698,7 @@ class DocumentsViewTab extends ConsumerWidget {
                   if (canManageLetters) {
                     children.add(const SizedBox(height: 8));
                     children.add(
-                      Text(
+                      const Text(
                         'Generate letters:',
                         style: TextStyle(
                           fontWeight: FontWeight.w800,
@@ -1637,7 +1717,7 @@ class DocumentsViewTab extends ConsumerWidget {
                           decoration: BoxDecoration(
                             color: Theme.of(context).cardColor,
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: AppColors.border.withOpacity(0.6)),
+                            border: Border.all(color: AppColors.border.withValues(alpha: 0.6)),
                           ),
                           margin: const EdgeInsets.only(bottom: 10),
                           child: Row(
@@ -1653,29 +1733,29 @@ class DocumentsViewTab extends ConsumerWidget {
                               const SizedBox(width: 12),
                               OutlinedButton(
                                 onPressed: () async {
+                                  final repo = context.read<LettersRepository>();
                                   final draft = await repo.createOrUpdateDraft(
-                                    employeeId: profile.id,
+                                    employeeId: widget.profile.id,
                                     templateId: t.id,
                                   );
-                                  if (!context.mounted) return;
+                                  if (!mounted) return;
                                   await _showLetterEditDialog(
-                                    context: context,
-                                    ref: ref,
                                     title: 'Draft — ${t.name}',
                                     initialHtml: draft.contentHtml,
                                     onGenerate: (html) async {
-                                      await repo.updateDraftContent(
-                                        documentId: draft.id,
-                                        contentHtml: html,
-                                      );
-                                      await repo.finalizeDraft(draftId: draft.id);
-                                      ref.invalidate(employeeLetterDocumentsProvider(profile.id));
-                                      if (context.mounted) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          const SnackBar(content: Text('Letter generated')),
+                                        final messenger = ScaffoldMessenger.of(context);
+                                        await repo.updateDraftContent(
+                                          documentId: draft.id,
+                                          contentHtml: html,
                                         );
-                                      }
-                                    },
+                                        await repo.finalizeDraft(draftId: draft.id);
+                                        await _loadData();
+                                        if (mounted) {
+                                          messenger.showSnackBar(
+                                            const SnackBar(content: Text('Letter generated')),
+                                          );
+                                        }
+                                      },
                                   );
                                 },
                                 child: const Text('Generate'),
@@ -1693,7 +1773,7 @@ class DocumentsViewTab extends ConsumerWidget {
                         canManageLetters
                             ? 'No letters yet. Generate one above.'
                             : 'No letters available yet. They appear after HR finalizes them.',
-                        style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w700),
+                        style: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w700),
                       ),
                     );
                   }
@@ -1709,31 +1789,52 @@ class DocumentsViewTab extends ConsumerWidget {
   }
 }
 
-class SalaryViewTab extends ConsumerWidget {
+class SalaryViewTab extends StatefulWidget {
   final EmployeeProfile profile;
 
   const SalaryViewTab({super.key, required this.profile});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final previewAsync = ref.watch(employeeSalaryPreviewProvider(profile.id));
+  State<SalaryViewTab> createState() => _SalaryViewTabState();
+}
 
-    return previewAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('Could not load salary structure: $e'),
-            const SizedBox(height: 16),
-            EmployeeSalaryMonthlySection(employeeId: profile.id),
-          ],
-        ),
-      ),
-      data: (preview) {
+class _SalaryViewTabState extends State<SalaryViewTab> with AutomaticKeepAliveClientMixin {
+  late Future<EmployeeSalaryPreview> _previewFuture;
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    _previewFuture = context.read<SalaryRepository>().getEmployeeSalaryPreview(widget.profile.id);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return FutureBuilder<EmployeeSalaryPreview>(
+      future: _previewFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('Could not load salary structure: ${snapshot.error}'),
+                const SizedBox(height: 16),
+                EmployeeSalaryMonthlySection(employeeId: widget.profile.id),
+              ],
+            ),
+          );
+        }
+        final preview = snapshot.data!;
         final computed = preview.computed;
-        final info = profile.salaryInfo;
+        final info = widget.profile.salaryInfo;
         return SingleChildScrollView(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -1817,7 +1918,7 @@ class SalaryViewTab extends ConsumerWidget {
                 ),
               ],
               const SizedBox(height: 16),
-              EmployeeSalaryMonthlySection(employeeId: profile.id),
+              EmployeeSalaryMonthlySection(employeeId: widget.profile.id),
             ],
           ),
         );
@@ -1834,7 +1935,7 @@ class ExperienceViewTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardBg = isDark ? const Color(0xFF1E1B18) : Colors.white;
-    final cardBorder = isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC);
+    final cardBorder = isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -1870,7 +1971,7 @@ class ExperienceViewTab extends StatelessWidget {
                   Divider(
                     height: 28,
                     thickness: 1.2,
-                    color: isDark ? const Color(0xFFC5A059).withOpacity(0.12) : Colors.black.withOpacity(0.06),
+                    color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.06),
                   ),
                   Text(
                     'REST API for experience is not available yet. Field layout matches the legacy form:',
@@ -1936,7 +2037,7 @@ Widget _buildSectionCard({
     shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(16),
       side: BorderSide(
-        color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+        color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
         width: 1.5,
       ),
     ),
@@ -1962,7 +2063,7 @@ Widget _buildSectionCard({
           Divider(
             height: 28, 
             thickness: 1.2,
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.12) : Colors.black.withOpacity(0.06),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.06),
           ),
           Wrap(
             spacing: 24,
@@ -2146,8 +2247,8 @@ Widget _buildMediaPlaceholder(
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: hasUrl 
-                  ? (isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC)) 
-                  : (isDark ? const Color(0xFFC5A059).withOpacity(0.1) : const Color(0xFFCFD8DC)),
+                  ? (isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC)) 
+                  : (isDark ? const Color(0xFFC5A059).withValues(alpha: 0.1) : const Color(0xFFCFD8DC)),
               width: 1.5,
             ),
           ),
@@ -2196,12 +2297,12 @@ Widget _buildDocItem(BuildContext context, String label, String? url) {
       decoration: BoxDecoration(
         color: hasUrl 
             ? (isDark ? const Color(0xFF1E1B18) : Colors.white) 
-            : (isDark ? const Color(0xFF1A1816).withOpacity(0.4) : const Color(0xFFECEFF1).withOpacity(0.4)),
+            : (isDark ? const Color(0xFF1A1816).withValues(alpha: 0.4) : const Color(0xFFECEFF1).withValues(alpha: 0.4)),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: hasUrl 
-              ? (isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC)) 
-              : (isDark ? const Color(0xFFC5A059).withOpacity(0.1) : const Color(0xFFCFD8DC)),
+              ? (isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC)) 
+              : (isDark ? const Color(0xFFC5A059).withValues(alpha: 0.1) : const Color(0xFFCFD8DC)),
           width: 1.2,
         ),
       ),
@@ -2231,7 +2332,7 @@ Widget _buildDocItem(BuildContext context, String label, String? url) {
                       fontWeight: FontWeight.w700,
                       color: hasUrl
                           ? (isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238))
-                          : (isDark ? Colors.white30 : const Color(0xFF607D8B).withOpacity(0.7)),
+                          : (isDark ? Colors.white30 : const Color(0xFF607D8B).withValues(alpha: 0.7)),
                       decoration: hasUrl ? TextDecoration.underline : null,
                     ),
                   ),

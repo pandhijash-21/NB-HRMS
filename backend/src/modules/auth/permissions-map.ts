@@ -27,11 +27,26 @@ export function buildPermissionsMap(
   return map;
 }
 
-export function isAdminRole(role?: string | null) {
+export function isSuperAdminRole(role?: string | null): boolean {
   const r = String(role ?? '')
     .toUpperCase()
-    .replace(/\s+/g, '');
-  return ['ADMIN', 'SUPERADMIN', 'SYSTEMADMIN'].includes(r);
+    .replace(/[\s_-]+/g, '');
+  return r === 'SUPERADMIN';
+}
+
+export function isSystemAdminRole(role?: string | null): boolean {
+  const r = String(role ?? '')
+    .toUpperCase()
+    .replace(/[\s_-]+/g, '');
+  return r === 'SYSTEMADMIN' || r === 'SYSTEMADMINISTRATOR' || r === 'ADMIN';
+}
+
+export function isAdminRole(role?: string | null): boolean {
+  return isSuperAdminRole(role) || isSystemAdminRole(role);
+}
+
+export function canCreateAdmins(role?: string | null): boolean {
+  return isSuperAdminRole(role);
 }
 
 const rolePermCache = new Map<

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 class GapTimelineWidget extends StatelessWidget {
   final List<dynamic> events;
 
-  const GapTimelineWidget({Key? key, required this.events}) : super(key: key);
+  const GapTimelineWidget({super.key, required this.events});
 
   @override
   Widget build(BuildContext context) {

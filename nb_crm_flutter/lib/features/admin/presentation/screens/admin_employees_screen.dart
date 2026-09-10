@@ -1,40 +1,51 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/bloc/load_status.dart';
 import '../../../../core/utils/name_utils.dart';
 import '../../../../core/widgets/header_action_button.dart';
 import '../../../../core/widgets/zoomable_photo.dart';
-import '../../../auth/presentation/auth_providers.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../auth/domain/permissions.dart';
-import '../../presentation/admin_notifier.dart';
 import '../../../profile/domain/profile_models.dart';
+import '../../data/admin_repository.dart';
 import '../../domain/admin_models.dart';
 import '../../../org/presentation/org_providers.dart';
 import '../../../lookups/presentation/lookup_providers.dart';
 import '../../../rbac/presentation/rbac_providers.dart';
+import '../bloc/admin_workforce_bloc.dart';
+import '../../presentation/admin_notifier.dart';
 
-class AdminEmployeesScreen extends ConsumerStatefulWidget {
+class AdminEmployeesScreen extends StatelessWidget {
   const AdminEmployeesScreen({super.key});
 
   @override
-  ConsumerState<AdminEmployeesScreen> createState() => _AdminEmployeesScreenState();
+  Widget build(BuildContext context) {
+    return BlocProvider<AdminWorkforceBloc>(
+      create: (context) => AdminWorkforceBloc(
+        adminRepository: context.read<AdminRepository>(),
+      )..add(const AdminWorkforceLoadRequested()),
+      child: const _AdminEmployeesView(),
+    );
+  }
 }
 
-class _AdminEmployeesScreenState extends ConsumerState<AdminEmployeesScreen> {
+class _AdminEmployeesView extends StatefulWidget {
+  const _AdminEmployeesView();
+
+  @override
+  State<_AdminEmployeesView> createState() => _AdminEmployeesViewState();
+}
+
+class _AdminEmployeesViewState extends State<_AdminEmployeesView> {
   final _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    // Keep the search box in sync with the shared filter (e.g. after hire navigation).
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final search = ref.read(workforceFilterProvider).search;
-      if (search.isNotEmpty && _searchController.text != search) {
-        _searchController.text = search;
-      }
-    });
   }
 
   @override
@@ -45,7 +56,7 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminEmployeesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final authState = ref.watch(authNotifierProvider);
+    final authState = context.watch<AuthBloc>().state;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     // Gate screen with RBAC
@@ -85,9 +96,6 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminEmployeesScreen> {
       );
     }
 
-    final filters = ref.watch(workforceFilterProvider);
-    final workforceListAsync = ref.watch(workforceListProvider);
-
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
       appBar: AppBar(
@@ -110,9 +118,11 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminEmployeesScreen> {
             icon: Icon(
               Icons.refresh_rounded,
               size: 18,
-              color: isDark ? Colors.white.withOpacity(0.8) : const Color(0xFF212F3D),
+              color: isDark ? Colors.white.withValues(alpha: 0.8) : const Color(0xFF212F3D),
             ),
-            onPressed: () => ref.read(workforceListProvider.notifier).refresh(),
+            onPressed: () => context
+                .read<AdminWorkforceBloc>()
+                .add(const AdminWorkforceRefreshRequested()),
           ),
           Padding(
             padding: const EdgeInsets.only(right: 16.0, left: 4.0),
@@ -135,7 +145,7 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminEmployeesScreen> {
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1.5),
           child: Container(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
             height: 1.5,
           ),
         ),
@@ -153,89 +163,112 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminEmployeesScreen> {
             ),
           );
         },
-        child: Column(
-          children: [
-            _buildFilterBar(context, filters),
-            Expanded(
-              child: workforceListAsync.when(
-                data: (data) {
-                  final List<EmployeeProfile> list = data['items'] as List<EmployeeProfile>;
-                  final total = data['total'] as int;
+        child: BlocConsumer<AdminWorkforceBloc, AdminWorkforceState>(
+          listener: (context, state) {
+            if (state.errorMessage != null && state.errorMessage!.isNotEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(state.errorMessage!),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+          },
+          builder: (context, state) {
+            final list = state.employees;
+            final total = state.total;
 
-                  if (list.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.people_alt_rounded,
-                            size: 64,
-                            color: isDark ? Colors.white10 : Colors.black12,
+            return Column(
+              children: [
+                _buildFilterBar(context, state),
+                Expanded(
+                  child: Builder(
+                    builder: (context) {
+                      if (state.status == LoadStatus.loading && list.isEmpty) {
+                        return const Center(
+                          child: CircularProgressIndicator(color: Color(0xFFC5A059)),
+                        );
+                      }
+                      if (state.status == LoadStatus.failure && list.isEmpty) {
+                        return Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.error_outline_rounded, size: 48, color: Colors.red),
+                              const SizedBox(height: 12),
+                              Text(
+                                'Failed to load employee list\n${state.errorMessage ?? ''}',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(fontWeight: FontWeight.w600),
+                              ),
+                              const SizedBox(height: 16),
+                              FilledButton(
+                                onPressed: () => context
+                                    .read<AdminWorkforceBloc>()
+                                    .add(const AdminWorkforceRefreshRequested()),
+                                child: const Text('Retry'),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'No employees found matching filters.',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: isDark ? Colors.white30 : const Color(0xFF607D8B).withOpacity(0.6),
+                        );
+                      }
+
+                      if (list.isEmpty) {
+                        return Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.people_alt_rounded,
+                                size: 64,
+                                color: isDark ? Colors.white10 : Colors.black12,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'No employees found matching filters.',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color: isDark
+                                      ? Colors.white30
+                                      : const Color(0xFF607D8B).withValues(alpha: 0.6),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+
+                      return Column(
+                        children: [
+                          Expanded(
+                            child: ListView.builder(
+                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                              itemCount: list.length,
+                              itemBuilder: (context, index) {
+                                final emp = list[index];
+                                return KeyedSubtree(
+                                  key: ValueKey('emp-card-${emp.id}'),
+                                  child: _buildEmployeeCard(context, emp),
+                                );
+                              },
                             ),
                           ),
+                          _buildPaginationControls(context, state, total),
                         ],
-                      ),
-                    );
-                  }
-
-                  return Column(
-                    children: [
-                      Expanded(
-                        child: ListView.builder(
-                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                          itemCount: list.length,
-                          itemBuilder: (context, index) {
-                            final emp = list[index];
-                            return KeyedSubtree(
-                              key: ValueKey('emp-card-${emp.id}'),
-                              child: _buildEmployeeCard(context, emp),
-                            );
-                          },
-                        ),
-                      ),
-                      _buildPaginationControls(context, filters, total),
-                    ],
-                  );
-                },
-                loading: () => const Center(
-                  child: CircularProgressIndicator(color: Color(0xFFC5A059)),
-                ),
-                error: (err, stack) => Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.error_outline_rounded, size: 48, color: Colors.red),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Failed to load employee list\n$err', 
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 16),
-                      FilledButton(
-                        onPressed: () => ref.read(workforceListProvider.notifier).refresh(),
-                        child: const Text('Retry'),
-                      ),
-                    ],
+                      );
+                    },
                   ),
                 ),
-              ),
-            ),
-          ],
+              ],
+            );
+          },
         ),
       ),
     );
   }
 
-  Widget _buildFilterBar(BuildContext context, WorkforceFilterState filters) {
+  Widget _buildFilterBar(BuildContext context, AdminWorkforceState state) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
@@ -243,7 +276,7 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminEmployeesScreen> {
         color: isDark ? const Color(0xFF1E1B18) : Colors.white,
         border: Border(
           bottom: BorderSide(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.12) : const Color(0xFFCFD8DC),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.12) : const Color(0xFFCFD8DC),
             width: 1.5,
           ),
         ),
@@ -256,9 +289,9 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminEmployeesScreen> {
               controller: _searchController,
               decoration: InputDecoration(
                 hintText: 'Search by name, code, or ID...',
-                hintStyle: TextStyle(color: isDark ? Colors.white30 : const Color(0xFF607D8B).withOpacity(0.6)),
+                hintStyle: TextStyle(color: isDark ? Colors.white30 : const Color(0xFF607D8B).withValues(alpha: 0.6)),
                 prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFFC5A059), size: 20),
-                suffixIcon: filters.search.isEmpty
+                suffixIcon: state.search.isEmpty
                     ? null
                     : IconButton(
                         tooltip: 'Clear search',
@@ -269,7 +302,9 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminEmployeesScreen> {
                         ),
                         onPressed: () {
                           _searchController.clear();
-                          ref.read(workforceFilterProvider.notifier).setSearch('');
+                          context
+                              .read<AdminWorkforceBloc>()
+                              .add(const AdminWorkforceSearchChanged(''));
                         },
                       ),
                 filled: true,
@@ -277,14 +312,14 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminEmployeesScreen> {
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
                   borderSide: BorderSide(
-                    color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC),
+                    color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
                     width: 1,
                   ),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
                   borderSide: BorderSide(
-                    color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                    color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
                     width: 1,
                   ),
                 ),
@@ -302,7 +337,9 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminEmployeesScreen> {
                 fontSize: 14,
               ),
               onChanged: (val) {
-                ref.read(workforceFilterProvider.notifier).setSearch(val.trim());
+                context
+                    .read<AdminWorkforceBloc>()
+                    .add(AdminWorkforceSearchChanged(val.trim()));
               },
             ),
           ),
@@ -313,13 +350,13 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminEmployeesScreen> {
               color: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
-                color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
                 width: 1.2,
               ),
             ),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
-                value: filters.status.isEmpty ? 'ALL' : filters.status,
+                value: state.filterStatus.isEmpty ? 'ALL' : state.filterStatus,
                 dropdownColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
                 style: TextStyle(
                   color: isDark ? Colors.white : const Color(0xFF212F3D), 
@@ -337,7 +374,9 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminEmployeesScreen> {
                 ],
                 onChanged: (val) {
                   if (val != null) {
-                    ref.read(workforceFilterProvider.notifier).setStatus(val == 'ALL' ? '' : val);
+                    context
+                        .read<AdminWorkforceBloc>()
+                        .add(AdminWorkforceStatusChanged(val == 'ALL' ? '' : val));
                   }
                 },
               ),
@@ -359,7 +398,7 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminEmployeesScreen> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
           width: 1.5,
         ),
       ),
@@ -374,7 +413,7 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminEmployeesScreen> {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFF263238).withOpacity(0.15),
+                    color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFF263238).withValues(alpha: 0.15),
                     width: 1.5,
                   ),
                 ),
@@ -417,7 +456,7 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminEmployeesScreen> {
                           color: isDark ? const Color(0xFF2B2722) : const Color(0xFFECEFF1),
                           borderRadius: BorderRadius.circular(6),
                           border: Border.all(
-                            color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
                             width: 1,
                           ),
                         ),
@@ -441,7 +480,7 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminEmployeesScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: statusColor.withOpacity(0.12),
+                      color: statusColor.withValues(alpha: 0.12),
                       border: Border.all(color: statusColor, width: 1.2),
                       borderRadius: BorderRadius.circular(30),
                     ),
@@ -467,9 +506,9 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminEmployeesScreen> {
     );
   }
 
-  Widget _buildPaginationControls(BuildContext context, WorkforceFilterState filters, int total) {
-    final totalPages = (total / filters.limit).ceil();
-    final currentPage = filters.page;
+  Widget _buildPaginationControls(BuildContext context, AdminWorkforceState state, int total) {
+    final totalPages = (total / state.limit).ceil();
+    final currentPage = state.page;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
@@ -477,7 +516,7 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminEmployeesScreen> {
         color: isDark ? const Color(0xFF1E1B18) : Colors.white,
         border: Border(
           top: BorderSide(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.12) : const Color(0xFFCFD8DC),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.12) : const Color(0xFFCFD8DC),
             width: 1.5,
           ),
         ),
@@ -487,8 +526,8 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminEmployeesScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
-            'Showing ${filters.page * filters.limit + 1} - ${List.of([
-              (filters.page + 1) * filters.limit,
+            'Showing ${state.page * state.limit + 1} - ${List.of([
+              (state.page + 1) * state.limit,
               total
             ]).reduce((a, b) => a < b ? a : b)} of $total',
             style: TextStyle(
@@ -504,10 +543,12 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminEmployeesScreen> {
                   Icons.chevron_left_rounded,
                   color: currentPage > 0 
                       ? (isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238)) 
-                      : Colors.grey.withOpacity(0.4),
+                      : Colors.grey.withValues(alpha: 0.4),
                 ),
                 onPressed: currentPage > 0
-                    ? () => ref.read(workforceFilterProvider.notifier).setPage(currentPage - 1)
+                    ? () => context
+                        .read<AdminWorkforceBloc>()
+                        .add(AdminWorkforcePageChanged(currentPage - 1))
                     : null,
               ),
               const SizedBox(width: 8),
@@ -525,10 +566,12 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminEmployeesScreen> {
                   Icons.chevron_right_rounded,
                   color: currentPage < totalPages - 1
                       ? (isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238)) 
-                      : Colors.grey.withOpacity(0.4),
+                      : Colors.grey.withValues(alpha: 0.4),
                 ),
                 onPressed: currentPage < totalPages - 1
-                    ? () => ref.read(workforceFilterProvider.notifier).setPage(currentPage + 1)
+                    ? () => context
+                        .read<AdminWorkforceBloc>()
+                        .add(AdminWorkforcePageChanged(currentPage + 1))
                     : null,
               ),
             ],
@@ -566,7 +609,7 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminEmployeesScreen> {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
           side: BorderSide(
-            color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC),
+            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
             width: 1.5,
           ),
         ),
@@ -595,19 +638,15 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminEmployeesScreen> {
             ),
           ),
           FilledButton(
-            onPressed: () async {
+            onPressed: () {
               final messenger = ScaffoldMessenger.of(context);
               ctx.pop();
-              try {
-                await ref.read(workforceListProvider.notifier).deleteEmployee(emp.id);
-                messenger.showSnackBar(
-                  const SnackBar(content: Text('Employee deactivated successfully')),
-                );
-              } catch (e) {
-                messenger.showSnackBar(
-                  SnackBar(content: Text('Deactivation failed: $e'), backgroundColor: Colors.red),
-                );
-              }
+              context
+                  .read<AdminWorkforceBloc>()
+                  .add(AdminWorkforceEmployeeDeleted(emp.id));
+              messenger.showSnackBar(
+                const SnackBar(content: Text('Employee deactivated successfully')),
+              );
             },
             style: FilledButton.styleFrom(
               backgroundColor: Colors.red,
@@ -627,7 +666,7 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminEmployeesScreen> {
     final messenger = ScaffoldMessenger.of(context);
     showDialog(
       context: context,
-      builder: (_) => const _AddEmployeeDialog(),
+      builder: (_) => _AddEmployeeDialog(bloc: context.read<AdminWorkforceBloc>()),
     ).then((created) {
       if (created is! ({EmployeeProfile profile, String? initialPassword})) return;
       _searchController.clear();
@@ -652,7 +691,9 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminEmployeesScreen> {
 // =============================================================================
 
 class _AddEmployeeDialog extends ConsumerStatefulWidget {
-  const _AddEmployeeDialog();
+  const _AddEmployeeDialog({required this.bloc});
+
+  final AdminWorkforceBloc bloc;
 
   @override
   ConsumerState<_AddEmployeeDialog> createState() => _AddEmployeeDialogState();
@@ -722,7 +763,7 @@ class _AddEmployeeDialogState extends ConsumerState<_AddEmployeeDialog> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: isDark ? const Color(0xFFC5A059).withOpacity(0.2) : const Color(0xFFCFD8DC),
+          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
           width: 1.5,
         ),
       ),
@@ -1118,7 +1159,12 @@ class _AddEmployeeDialogState extends ConsumerState<_AddEmployeeDialog> {
 
     final messenger = ScaffoldMessenger.of(context);
     try {
-      final created = await ref.read(workforceListProvider.notifier).createEmployee(data);
+      final completer =
+          Completer<({EmployeeProfile profile, String? initialPassword})>();
+      widget.bloc.add(
+        AdminWorkforceEmployeeCreated(data: data, completer: completer),
+      );
+      final created = await completer.future;
       if (mounted) context.pop(created);
     } catch (e) {
       messenger.showSnackBar(

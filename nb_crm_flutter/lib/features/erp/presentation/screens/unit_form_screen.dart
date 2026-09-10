@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../lookups/presentation/lookup_dropdown.dart';
+import '../../data/project_repository.dart';
 import '../../domain/structure_models.dart';
-import '../project_providers.dart';
 
-class UnitFormScreen extends ConsumerStatefulWidget {
+class UnitFormScreen extends StatefulWidget {
   const UnitFormScreen({
     super.key,
     required this.projectId,
@@ -21,10 +21,10 @@ class UnitFormScreen extends ConsumerStatefulWidget {
   final String unitId;
 
   @override
-  ConsumerState<UnitFormScreen> createState() => _UnitFormScreenState();
+  State<UnitFormScreen> createState() => _UnitFormScreenState();
 }
 
-class _UnitFormScreenState extends ConsumerState<UnitFormScreen> {
+class _UnitFormScreenState extends State<UnitFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _unitNo = TextEditingController();
   final _floorNo = TextEditingController();
@@ -48,6 +48,8 @@ class _UnitFormScreenState extends ConsumerState<UnitFormScreen> {
   bool _more = true;
   bool _saving = false;
   bool _hydrated = false;
+  bool _loading = true;
+  String? _loadError;
   bool _updatingTotal = false;
 
   @override
@@ -55,6 +57,46 @@ class _UnitFormScreenState extends ConsumerState<UnitFormScreen> {
     super.initState();
     _superBuiltUp.addListener(_recalcTotal);
     _baseRate.addListener(_recalcTotal);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadData();
+    });
+  }
+
+  Future<void> _loadData() async {
+    try {
+      final tower = await context
+          .read<ProjectRepository>()
+          .getTower(widget.projectId, widget.towerId);
+      ErpProjectUnit? unit;
+      for (final u in tower.units) {
+        if (u.id == widget.unitId) {
+          unit = u;
+          break;
+        }
+      }
+      if (unit != null) {
+        if (mounted) {
+          setState(() {
+            _hydrate(unit!);
+            _loading = false;
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _loading = false;
+            _loadError = 'Unit not found in tower';
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _loadError = e.toString();
+        });
+      }
+    }
   }
 
   @override
@@ -153,15 +195,12 @@ class _UnitFormScreenState extends ConsumerState<UnitFormScreen> {
       'remarks': _remarks.text.trim(),
     };
     try {
-      await ref.read(projectRepositoryProvider).updateUnit(
+      await context.read<ProjectRepository>().updateUnit(
             projectId: widget.projectId,
             towerId: widget.towerId,
             unitId: widget.unitId,
             body: body,
           );
-      ref.invalidate(
-        projectTowerDetailProvider((projectId: widget.projectId, towerId: widget.towerId)),
-      );
       if (!mounted) return;
       context.go('/erp/structure/${widget.projectId}/towers/${widget.towerId}/units');
     } catch (e) {
@@ -196,23 +235,6 @@ class _UnitFormScreenState extends ConsumerState<UnitFormScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final towerAsync = ref.watch(
-      projectTowerDetailProvider((projectId: widget.projectId, towerId: widget.towerId)),
-    );
-    towerAsync.whenData((tower) {
-      ErpProjectUnit? unit;
-      for (final u in tower.units) {
-        if (u.id == widget.unitId) {
-          unit = u;
-          break;
-        }
-      }
-      if (unit != null && !_hydrated) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && !_hydrated) setState(() => _hydrate(unit!));
-        });
-      }
-    });
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
@@ -239,10 +261,14 @@ class _UnitFormScreenState extends ConsumerState<UnitFormScreen> {
           ),
         ],
       ),
-      body: towerAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('$e')),
-        data: (_) => Form(
+      body: () {
+        if (_loading) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (_loadError != null) {
+          return Center(child: Text(_loadError!));
+        }
+        return Form(
           key: _formKey,
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
@@ -256,7 +282,7 @@ class _UnitFormScreenState extends ConsumerState<UnitFormScreen> {
                     validator: _req,
                   ),
                   lookupDropdown(
-                    ref: ref,
+                    context: context,
                     category: 'PROJECT_UNIT_TYPE',
                     label: 'Unit Type',
                     value: _unitTypeCode,
@@ -288,7 +314,7 @@ class _UnitFormScreenState extends ConsumerState<UnitFormScreen> {
                     validator: _req,
                   ),
                   lookupDropdown(
-                    ref: ref,
+                    context: context,
                     category: 'PROJECT_AREA_UNIT',
                     label: 'Area Unit',
                     value: _areaUnitCode,
@@ -296,7 +322,7 @@ class _UnitFormScreenState extends ConsumerState<UnitFormScreen> {
                     onChanged: (v) => setState(() => _areaUnitCode = v),
                   ),
                   lookupDropdown(
-                    ref: ref,
+                    context: context,
                     category: 'PROJECT_UNIT_STATUS',
                     label: 'Unit Status',
                     value: _statusCode,
@@ -335,7 +361,7 @@ class _UnitFormScreenState extends ConsumerState<UnitFormScreen> {
                       const SizedBox(height: 12),
                       _grid([
                         lookupDropdown(
-                          ref: ref,
+                          context: context,
                           category: 'PROJECT_UNIT_FACING',
                           label: 'Facing',
                           value: _facingCode,
@@ -343,7 +369,7 @@ class _UnitFormScreenState extends ConsumerState<UnitFormScreen> {
                           onChanged: (v) => setState(() => _facingCode = v),
                         ),
                         lookupDropdown(
-                          ref: ref,
+                          context: context,
                           category: 'PROJECT_UNIT_CATEGORY',
                           label: 'Unit Category',
                           value: _categoryCode,
@@ -417,8 +443,8 @@ class _UnitFormScreenState extends ConsumerState<UnitFormScreen> {
               ),
             ],
           ),
-        ),
-      ),
+        );
+      }(),
     );
   }
 

@@ -34,11 +34,11 @@ export const roleService = {
       const roleIds = [...new Set(positionRoles.map((p) => p.linkedRoleId!).filter(Boolean))];
       if (roleIds.length === 0) return [];
       where.id = { in: roleIds };
-    } else if (opts?.designationsOnly !== false) {
-      // Roles tied to a designation, plus core system roles (ADMIN matrix + EMPLOYEE default).
+    } else if (opts?.designationsOnly === true) {
+      // Roles explicitly tied to a designation, plus core system roles
       where.OR = [
         { designations: { some: { isActive: true } } },
-        { name: { in: ['ADMIN', 'EMPLOYEE'] } },
+        { name: { in: ['SUPERADMIN', 'SYSTEM_ADMIN', 'ADMIN', 'EMPLOYEE'] } },
       ];
     }
 
@@ -109,10 +109,18 @@ export const roleService = {
         status: 400,
       } as const;
     }
+
+    if (['SUPERADMIN', 'SYSTEM_ADMIN', 'SYSTEMADMIN', 'ADMIN'].includes(name)) {
+      return {
+        error: 'Role name is reserved for core system administrators',
+        status: 400,
+      } as const;
+    }
+
     const clash = await prisma.role.findUnique({ where: { name } });
     if (clash) return { error: 'Role name already exists', status: 409 } as const;
 
-    return prisma.role.create({
+    const newRole = await prisma.role.create({
       data: {
         name,
         description: input.description?.trim() || null,
@@ -120,6 +128,50 @@ export const roleService = {
         createdBy: creatorId,
       },
     });
+
+    // Populate module permissions: either cloned or defaults for all system modules
+    if (input.cloneRoleId) {
+      const sourcePerms = await prisma.rolePermission.findMany({
+        where: { roleId: input.cloneRoleId },
+      });
+      if (sourcePerms.length > 0) {
+        await prisma.rolePermission.createMany({
+          data: sourcePerms.map((p) => ({
+            roleId: newRole.id,
+            moduleKey: p.moduleKey,
+            canRead: p.canRead,
+            canWrite: p.canWrite,
+            canApprove: p.canApprove,
+            canDelete: p.canDelete,
+            canExport: p.canExport,
+            employeeViewScope: p.employeeViewScope,
+            updatedBy: creatorId,
+          })),
+        });
+      }
+    } else {
+      const modules = await prisma.systemModule.findMany({
+        where: { isActive: true },
+        select: { key: true },
+      });
+      if (modules.length > 0) {
+        await prisma.rolePermission.createMany({
+          data: modules.map((m) => ({
+            roleId: newRole.id,
+            moduleKey: m.key,
+            canRead: true,
+            canWrite: false,
+            canApprove: false,
+            canDelete: false,
+            canExport: false,
+            employeeViewScope: 'NONE',
+            updatedBy: creatorId,
+          })),
+        });
+      }
+    }
+
+    return newRole;
   },
 
   async update(id: string, input: UpdateRoleInput, updaterId: string) {
@@ -127,6 +179,9 @@ export const roleService = {
     if (!role) return { error: 'Role not found', status: 404 } as const;
 
     if (input.name && input.name !== role.name) {
+      if (role.isSystem || ['SUPERADMIN', 'SYSTEM_ADMIN', 'ADMIN', 'EMPLOYEE'].includes(role.name)) {
+        return { error: 'Cannot rename a core system role', status: 400 } as const;
+      }
       const userCount = await prisma.user.count({ where: { roleId: id, isActive: true } });
       if (userCount > 0) {
         return {
@@ -155,7 +210,9 @@ export const roleService = {
     });
     if (!role) return { error: 'Role not found', status: 404 } as const;
 
-    if (role.isSystem) return { error: 'Cannot delete a system role', status: 400 } as const;
+    if (role.isSystem || ['SUPERADMIN', 'SYSTEM_ADMIN', 'ADMIN', 'EMPLOYEE'].includes(role.name)) {
+      return { error: 'Cannot delete a core system role', status: 400 } as const;
+    }
 
     if (role.designations.length > 0) {
       return {

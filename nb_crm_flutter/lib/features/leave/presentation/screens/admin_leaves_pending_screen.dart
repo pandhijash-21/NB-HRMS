@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../domain/leave_models.dart';
@@ -17,7 +16,7 @@ class AdminLeavesPendingScreen extends ConsumerWidget {
     return Scaffold(
 
       appBar: AppBar(
-        title: Text('Pending Leave Queue'),
+        title: const Text('Pending Leave Queue'),
         leading: const AppBackButton(fallbackLocation: '/admin/leaves'),
       ),
       body: LeaveAsyncBody<List<LeaveApplication>>(
@@ -25,7 +24,7 @@ class AdminLeavesPendingScreen extends ConsumerWidget {
         emptyMessage: 'No pending applications.',
         onRetry: () => ref.invalidate(pendingApprovalsProvider),
         builder: (items) => ListView.builder(
-          padding: EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16),
           itemCount: items.length,
           itemBuilder: (ctx, i) {
             final app = items[i];
@@ -36,11 +35,11 @@ class AdminLeavesPendingScreen extends ConsumerWidget {
                 children: [
                   TextButton(
                     onPressed: () => _act(context, ref, app, approve: false),
-                    child: Text('Reject'),
+                    child: const Text('Reject'),
                   ),
                   FilledButton(
                     onPressed: () => _act(context, ref, app, approve: true),
-                    child: Text('Approve'),
+                    child: const Text('Approve'),
                   ),
                 ],
               ),
@@ -68,7 +67,7 @@ class AdminLeavesPendingScreen extends ConsumerWidget {
           minLines: 2,
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(approve ? 'Approve' : 'Reject')),
         ],
       ),

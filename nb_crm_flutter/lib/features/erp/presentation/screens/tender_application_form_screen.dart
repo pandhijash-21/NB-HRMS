@@ -1,23 +1,26 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/router/app_back_button.dart';
-import '../../../auth/presentation/auth_providers.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
+import '../../data/project_repository.dart';
+import '../../data/tender_repository.dart';
+import '../../data/work_order_repository.dart';
+import '../../domain/project_models.dart';
 import '../../domain/tender_models.dart';
-import '../project_providers.dart';
-import '../tender_providers.dart';
-import '../work_order_providers.dart';
+import '../../domain/work_order_models.dart';
+import '../bloc/erp_tenders_bloc.dart';
 
-class TenderApplicationFormScreen extends ConsumerStatefulWidget {
+class TenderApplicationFormScreen extends StatefulWidget {
   const TenderApplicationFormScreen({super.key});
 
   @override
-  ConsumerState<TenderApplicationFormScreen> createState() => _TenderApplicationFormScreenState();
+  State<TenderApplicationFormScreen> createState() => _TenderApplicationFormScreenState();
 }
 
-class _TenderApplicationFormScreenState extends ConsumerState<TenderApplicationFormScreen> {
+class _TenderApplicationFormScreenState extends State<TenderApplicationFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _appNoCtrl = TextEditingController();
   final _createdByCtrl = TextEditingController();
@@ -30,8 +33,11 @@ class _TenderApplicationFormScreenState extends ConsumerState<TenderApplicationF
   String? _activityId;
   String? _activityName;
   String? _contractorId;
+  List<ErpProject> _projects = [];
+  List<ErpContractor> _contractors = [];
   List<ErpTender> _projectTenders = [];
   List<TenderActivityOption> _activities = [];
+  bool _loadingInitial = true;
   bool _loadingTenders = false;
   bool _loadingActivities = false;
   bool _saving = false;
@@ -41,11 +47,33 @@ class _TenderApplicationFormScreenState extends ConsumerState<TenderApplicationF
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final name = ref.read(authNotifierProvider).user?.name;
-      if (name != null && _createdByCtrl.text.isEmpty) {
-        _createdByCtrl.text = name;
+      if (!mounted) return;
+      final user = context.read<AuthBloc>().state.user;
+      if (user?.name != null && _createdByCtrl.text.isEmpty) {
+        _createdByCtrl.text = user!.name;
       }
+      _loadInitialData();
     });
+  }
+
+  Future<void> _loadInitialData() async {
+    final projectRepo = context.read<ProjectRepository>();
+    final workOrderRepo = context.read<WorkOrderRepository>();
+    setState(() => _loadingInitial = true);
+    try {
+      final projects = await projectRepo.list();
+      final contractors = await workOrderRepo.listContractors();
+      if (!mounted) return;
+      setState(() {
+        _projects = projects;
+        _contractors = contractors;
+        _loadingInitial = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loadingInitial = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
   }
 
   @override
@@ -95,7 +123,7 @@ class _TenderApplicationFormScreenState extends ConsumerState<TenderApplicationF
     });
     if (id == null) return;
     try {
-      final tenders = await ref.read(tenderRepositoryProvider).list(projectId: id);
+      final tenders = await context.read<TenderRepository>().list(projectId: id);
       if (!mounted) return;
       setState(() {
         _projectTenders = tenders;
@@ -119,7 +147,7 @@ class _TenderApplicationFormScreenState extends ConsumerState<TenderApplicationF
     });
     if (id == null) return;
     try {
-      final tender = await ref.read(tenderRepositoryProvider).getById(id);
+      final tender = await context.read<TenderRepository>().getById(id);
       if (!mounted) return;
       final seen = <String>{};
       final acts = <TenderActivityOption>[];
@@ -158,7 +186,7 @@ class _TenderApplicationFormScreenState extends ConsumerState<TenderApplicationF
     }
     setState(() => _saving = true);
     try {
-      await ref.read(tenderRepositoryProvider).createApplication({
+      await context.read<TenderRepository>().createApplication({
         'applicationNo': _appNoCtrl.text.trim(),
         'applicationDate': _applicationDate.toIso8601String(),
         'createdByName': _createdByCtrl.text.trim().isEmpty ? null : _createdByCtrl.text.trim(),
@@ -169,9 +197,12 @@ class _TenderApplicationFormScreenState extends ConsumerState<TenderApplicationF
         'contractorId': _contractorId,
         'status': _status,
       });
-      ref.invalidate(tenderApplicationListProvider);
-      ref.invalidate(tenderListProvider);
-      if (mounted) context.go('/erp/tender-applications');
+      if (mounted) {
+        try {
+          context.read<ErpTendersBloc>().add(const ErpTenderApplicationsRequested());
+        } catch (_) {}
+        context.go('/erp/tender-applications');
+      }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     } finally {
@@ -181,8 +212,6 @@ class _TenderApplicationFormScreenState extends ConsumerState<TenderApplicationF
 
   @override
   Widget build(BuildContext context) {
-    final projectsAsync = ref.watch(projectsListProvider);
-    final contractorsAsync = ref.watch(erpContractorsProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
@@ -231,15 +260,15 @@ class _TenderApplicationFormScreenState extends ConsumerState<TenderApplicationF
                               controller: _createdByCtrl,
                               decoration: _dec('Tender Application Created By'),
                             ),
-                            projectsAsync.when(
-                              loading: () => const LinearProgressIndicator(),
-                              error: (e, _) => Text('$e'),
-                              data: (projects) => DropdownButtonFormField<String>(
+                            if (_loadingInitial)
+                              const LinearProgressIndicator()
+                            else
+                              DropdownButtonFormField<String>(
                                 isExpanded: true,
-                                value: _projectId,
+                                initialValue: _projectId,
                                 decoration: _dec('Project', required: true),
                                 hint: const Text('Select Project'),
-                                items: projects
+                                items: _projects
                                     .map(
                                       (p) => DropdownMenuItem(
                                         value: p.id,
@@ -250,13 +279,12 @@ class _TenderApplicationFormScreenState extends ConsumerState<TenderApplicationF
                                 onChanged: _onProjectChanged,
                                 validator: (v) => v == null ? 'Required' : null,
                               ),
-                            ),
                             if (_loadingTenders)
                               const LinearProgressIndicator()
                             else
                               DropdownButtonFormField<String>(
                                 isExpanded: true,
-                                value: _tenderId,
+                                initialValue: _tenderId,
                                 decoration: _dec('Project Tenders', required: true),
                                 hint: const Text('Select Tender'),
                                 items: _projectTenders
@@ -275,7 +303,7 @@ class _TenderApplicationFormScreenState extends ConsumerState<TenderApplicationF
                             else
                               DropdownButtonFormField<String>(
                                 isExpanded: true,
-                                value: _activityKey,
+                                initialValue: _activityKey,
                                 decoration: _dec('Activity', required: true),
                                 hint: const Text('Select Activity'),
                                 items: _activities
@@ -303,32 +331,29 @@ class _TenderApplicationFormScreenState extends ConsumerState<TenderApplicationF
                                       },
                                 validator: (v) => v == null ? 'Required' : null,
                               ),
-                            contractorsAsync.when(
-                              loading: () => const LinearProgressIndicator(),
-                              error: (e, _) => Text('$e'),
-                              data: (contractors) {
-                                final active = contractors.where((c) => c.isActive).toList();
-                                return DropdownButtonFormField<String>(
-                                  isExpanded: true,
-                                  value: _contractorId,
-                                  decoration: _dec('Contractor', required: true),
-                                  hint: const Text('Select Contractor'),
-                                  items: active
-                                      .map(
-                                        (c) => DropdownMenuItem(
-                                          value: c.id,
-                                          child: Text(c.name, overflow: TextOverflow.ellipsis),
-                                        ),
-                                      )
-                                      .toList(),
-                                  onChanged: (v) => setState(() => _contractorId = v),
-                                  validator: (v) => v == null ? 'Required' : null,
-                                );
-                              },
-                            ),
+                            if (_loadingInitial)
+                              const LinearProgressIndicator()
+                            else
+                              DropdownButtonFormField<String>(
+                                isExpanded: true,
+                                initialValue: _contractorId,
+                                decoration: _dec('Contractor', required: true),
+                                hint: const Text('Select Contractor'),
+                                items: _contractors
+                                    .where((c) => c.isActive)
+                                    .map(
+                                      (c) => DropdownMenuItem(
+                                        value: c.id,
+                                        child: Text(c.name, overflow: TextOverflow.ellipsis),
+                                      ),
+                                    )
+                                    .toList(),
+                                onChanged: (v) => setState(() => _contractorId = v),
+                                validator: (v) => v == null ? 'Required' : null,
+                              ),
                             DropdownButtonFormField<String>(
                               isExpanded: true,
-                              value: _status,
+                              initialValue: _status,
                               decoration: _dec('Status', required: true),
                               items: const [
                                 DropdownMenuItem(value: 'APPROVED', child: Text('APPROVED')),

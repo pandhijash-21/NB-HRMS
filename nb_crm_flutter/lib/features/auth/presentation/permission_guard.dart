@@ -17,7 +17,7 @@ import '../../../core/services/web_live_tracking_service.dart';
 class PermissionGuard extends StatefulWidget {
   final Widget child;
 
-  const PermissionGuard({Key? key, required this.child}) : super(key: key);
+  const PermissionGuard({super.key, required this.child});
 
   @override
   State<PermissionGuard> createState() => _PermissionGuardState();
@@ -419,7 +419,7 @@ class _PermissionGuardState extends State<PermissionGuard> {
             child: Image.asset(
               'assets/images/golden_map.jpg',
               fit: BoxFit.cover,
-              color: Colors.black.withOpacity(0.6),
+              color: Colors.black.withValues(alpha: 0.6),
               colorBlendMode: BlendMode.darken,
             ),
           ),
@@ -436,12 +436,12 @@ class _PermissionGuardState extends State<PermissionGuard> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 48.0, horizontal: 32.0),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.05),
+                          color: Colors.white.withValues(alpha: 0.05),
                           borderRadius: BorderRadius.circular(24),
-                          border: Border.all(color: Colors.amber.withOpacity(0.4), width: 1.5),
+                          border: Border.all(color: Colors.amber.withValues(alpha: 0.4), width: 1.5),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.amber.withOpacity(0.1),
+                              color: Colors.amber.withValues(alpha: 0.1),
                               blurRadius: 40,
                               spreadRadius: 5,
                             ),
@@ -453,11 +453,11 @@ class _PermissionGuardState extends State<PermissionGuard> {
                             Container(
                               padding: const EdgeInsets.all(28),
                               decoration: BoxDecoration(
-                                color: Colors.amber.withOpacity(0.15),
+                                color: Colors.amber.withValues(alpha: 0.15),
                                 shape: BoxShape.circle,
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.amber.withOpacity(0.3),
+                                    color: Colors.amber.withValues(alpha: 0.3),
                                     blurRadius: 25,
                                     spreadRadius: 5,
                                   ),
@@ -502,7 +502,7 @@ class _PermissionGuardState extends State<PermissionGuard> {
                               style: TextStyle(
                                 fontSize: 12,
                                 height: 1.4,
-                                color: Colors.amber.shade200.withOpacity(0.85),
+                                color: Colors.amber.shade200.withValues(alpha: 0.85),
                               ),
                               textAlign: TextAlign.center,
                             ),
@@ -516,7 +516,7 @@ class _PermissionGuardState extends State<PermissionGuard> {
                                 ),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.amber.withOpacity(0.5),
+                                    color: Colors.amber.withValues(alpha: 0.5),
                                     blurRadius: 15,
                                     offset: const Offset(0, 5),
                                   ),
@@ -555,7 +555,7 @@ class _PermissionGuardState extends State<PermissionGuard> {
                                     foregroundColor: Colors.amberAccent,
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(12),
-                                      side: BorderSide(color: Colors.amber.withOpacity(0.4)),
+                                      side: BorderSide(color: Colors.amber.withValues(alpha: 0.4)),
                                     ),
                                   ),
                                   child: const Text(

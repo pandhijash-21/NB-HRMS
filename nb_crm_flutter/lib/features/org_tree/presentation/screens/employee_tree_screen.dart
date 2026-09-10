@@ -325,11 +325,11 @@ class _Toolbar extends StatelessWidget {
             width: wide ? 280 : double.infinity,
             child: TextField(
               controller: search,
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 hintText: 'Search people, departments, contacts…',
-                prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                prefixIcon: Icon(Icons.search_rounded, size: 20),
                 isDense: true,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               ),
             ),
           ),
@@ -337,7 +337,7 @@ class _Toolbar extends StatelessWidget {
             ConstrainedBox(
               constraints: BoxConstraints(maxWidth: wide ? 260 : 420),
               child: DropdownButtonFormField<String>(
-                value: selected?.id,
+                initialValue: selected?.id,
                 isExpanded: true,
                 decoration: const InputDecoration(
                   labelText: 'Saved tree',
@@ -707,7 +707,7 @@ class _ContactsTab extends ConsumerWidget {
                 : 'Admin has not mapped permission contacts yet.',
           )
         else if (contacts.isEmpty)
-          _EmptyState(
+          const _EmptyState(
             icon: Icons.search_off_rounded,
             title: 'No matching contacts',
             subtitle: 'Try a different name, permission, or department.',
@@ -1106,7 +1106,7 @@ class _ContactsEditorState extends State<_ContactsEditor> {
                             ),
                             const SizedBox(height: 8),
                             DropdownButtonFormField<int?>(
-                              value: people.any((p) => p.employeeId == _assigned[m.key])
+                              initialValue: people.any((p) => p.employeeId == _assigned[m.key])
                                   ? _assigned[m.key]
                                   : null,
                               isExpanded: true,

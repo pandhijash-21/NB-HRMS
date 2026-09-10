@@ -67,7 +67,7 @@ class GeofencedPunchService {
 
       if (context.mounted) {
         messenger.showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text(
               kIsWeb
                   ? 'Safari registered for attendance successfully!'
@@ -130,13 +130,13 @@ class GeofencedPunchService {
 
       if (context.mounted) {
         messenger.showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text(
               kIsWeb
                   ? 'Checking location — you must be inside an attendance zone (iOS Safari)…'
                   : 'Verifying location — you must be inside an attendance zone…',
             ),
-            duration: const Duration(seconds: 3),
+            duration: Duration(seconds: 3),
           ),
         );
       }
@@ -414,7 +414,7 @@ class GeofencedPunchService {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.red.shade50.withOpacity(isDark ? 0.1 : 1.0),
+                color: Colors.red.shade50.withValues(alpha: isDark ? 0.1 : 1.0),
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -439,7 +439,7 @@ class GeofencedPunchService {
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 14,
-                color: isDark ? Colors.white.withOpacity(0.7) : const Color(0xFF5A6A7D),
+                color: isDark ? Colors.white.withValues(alpha: 0.7) : const Color(0xFF5A6A7D),
                 height: 1.45,
               ),
             ),

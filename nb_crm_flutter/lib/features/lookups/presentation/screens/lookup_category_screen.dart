@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/bloc/load_status.dart';
 import '../../../../core/router/app_back_button.dart';
+import '../../data/lookup_repository.dart';
 import '../../domain/lookup_models.dart';
-import '../lookup_providers.dart';
+import '../bloc/lookups_bloc.dart';
 
-class LookupCategoryScreen extends ConsumerStatefulWidget {
+class LookupCategoryScreen extends StatefulWidget {
   const LookupCategoryScreen({
     super.key,
     required this.category,
@@ -16,13 +18,22 @@ class LookupCategoryScreen extends ConsumerStatefulWidget {
   final String fallbackLocation;
 
   @override
-  ConsumerState<LookupCategoryScreen> createState() => _LookupCategoryScreenState();
+  State<LookupCategoryScreen> createState() => _LookupCategoryScreenState();
 }
 
-class _LookupCategoryScreenState extends ConsumerState<LookupCategoryScreen> {
+class _LookupCategoryScreenState extends State<LookupCategoryScreen> {
   final _codeCtrl = TextEditingController();
   final _labelCtrl = TextEditingController();
   bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final bloc = context.read<LookupsBloc>();
+    if (bloc.state.status == LoadStatus.initial) {
+      bloc.add(const LookupsLoadRequested());
+    }
+  }
 
   @override
   void dispose() {
@@ -34,14 +45,8 @@ class _LookupCategoryScreenState extends ConsumerState<LookupCategoryScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final groupsAsync = ref.watch(lookupGroupsProvider);
-    LookupCategoryGroup? group;
-    for (final g in groupsAsync.asData?.value ?? const <LookupCategoryGroup>[]) {
-      if (g.key == widget.category) {
-        group = g;
-        break;
-      }
-    }
+    final lookupsState = context.watch<LookupsBloc>().state;
+    final group = lookupsState.groupForCategory(widget.category);
 
     final title = group?.label ?? widget.category;
     final options = group?.options ?? const <LookupOption>[];
@@ -56,7 +61,7 @@ class _LookupCategoryScreenState extends ConsumerState<LookupCategoryScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded, color: Color(0xFFC5A059)),
-            onPressed: () => ref.invalidate(lookupGroupsProvider),
+            onPressed: () => context.read<LookupsBloc>().add(const LookupsLoadRequested()),
           ),
         ],
       ),
@@ -80,7 +85,7 @@ class _LookupCategoryScreenState extends ConsumerState<LookupCategoryScreen> {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(14),
               side: BorderSide(
-                color: isDark ? const Color(0xFFC5A059).withOpacity(0.15) : const Color(0xFFCFD8DC),
+                color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
               ),
             ),
             child: Padding(
@@ -118,7 +123,7 @@ class _LookupCategoryScreenState extends ConsumerState<LookupCategoryScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          if (groupsAsync.isLoading)
+          if (lookupsState.status == LoadStatus.loading && lookupsState.groups.isEmpty)
             const Center(child: CircularProgressIndicator())
           else if (options.isEmpty)
             const Text('No options yet.')
@@ -137,7 +142,7 @@ class _LookupCategoryScreenState extends ConsumerState<LookupCategoryScreen> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
-          color: isDark ? const Color(0xFFC5A059).withOpacity(0.12) : const Color(0xFFCFD8DC),
+          color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.12) : const Color(0xFFCFD8DC),
         ),
       ),
       child: Opacity(
@@ -173,16 +178,15 @@ class _LookupCategoryScreenState extends ConsumerState<LookupCategoryScreen> {
     }
     setState(() => _saving = true);
     try {
-      await ref.read(lookupRepositoryProvider).create(
+      await context.read<LookupRepository>().create(
             category: widget.category,
             code: code,
             label: label,
           );
       _labelCtrl.clear();
       _codeCtrl.clear();
-      ref.invalidate(lookupGroupsProvider);
-      ref.invalidate(activeLookupsByCategoryProvider(widget.category));
       if (mounted) {
+        context.read<LookupsBloc>().add(const LookupsLoadRequested());
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Option added')),
         );
@@ -200,9 +204,10 @@ class _LookupCategoryScreenState extends ConsumerState<LookupCategoryScreen> {
 
   Future<void> _toggle(LookupOption o, bool isActive) async {
     try {
-      await ref.read(lookupRepositoryProvider).update(o.id, isActive: isActive);
-      ref.invalidate(lookupGroupsProvider);
-      ref.invalidate(activeLookupsByCategoryProvider(widget.category));
+      await context.read<LookupRepository>().update(o.id, isActive: isActive);
+      if (mounted) {
+        context.read<LookupsBloc>().add(const LookupsLoadRequested());
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -228,11 +233,12 @@ class _LookupCategoryScreenState extends ConsumerState<LookupCategoryScreen> {
         ],
       ),
     );
-    if (ok != true) return;
+    if (ok != true || !mounted) return;
     try {
-      await ref.read(lookupRepositoryProvider).delete(o.id);
-      ref.invalidate(lookupGroupsProvider);
-      ref.invalidate(activeLookupsByCategoryProvider(widget.category));
+      await context.read<LookupRepository>().delete(o.id);
+      if (mounted) {
+        context.read<LookupsBloc>().add(const LookupsLoadRequested());
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

@@ -1077,6 +1077,7 @@ model User {
   createdBy         String?   @map("created_by")
   updatedAt         DateTime  @updatedAt @map("updated_at")
   updatedBy         String?   @map("updated_by")
+  deletedAt         DateTime? @map("deleted_at")
 
   role         Role          @relation(fields: [roleId], references: [id])
   employee     Employee?     @relation(fields: [employeeId], references: [id])
@@ -1209,6 +1210,7 @@ model Organization {
   sortOrder         Int      @default(0) @map("sort_order")
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
+  deletedAt         DateTime? @map("deleted_at")
 
   childInstitutes Institute[]
   erpProjects     ErpProject[]

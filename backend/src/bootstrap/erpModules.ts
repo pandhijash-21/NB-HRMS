@@ -1,3 +1,4 @@
+import bcrypt from 'bcryptjs';
 import { prisma } from '../config/prisma';
 
 export interface SystemSubmoduleDef {
@@ -322,23 +323,141 @@ export async function ensureErpModulePermissions(): Promise<void> {
     }
   }
 
-  const admin = await prisma.role.findUnique({ where: { name: 'ADMIN' } });
-  const emp = await prisma.role.findUnique({ where: { name: 'EMPLOYEE' } });
+  // ── Core Administrative & System Roles ─────────────────────────────────
+  const superAdminRole = await prisma.role.upsert({
+    where: { name: 'SUPERADMIN' },
+    update: { isSystem: true, isActive: true },
+    create: {
+      name: 'SUPERADMIN',
+      description: 'Super Administrator with supreme authority over system administrators, administrative roles, and system configuration',
+      isSystem: true,
+      isActive: true,
+    },
+  });
+
+  const systemAdminRole = await prisma.role.upsert({
+    where: { name: 'SYSTEM_ADMIN' },
+    update: { isSystem: true, isActive: true },
+    create: {
+      name: 'SYSTEM_ADMIN',
+      description: 'System Administrator with full freedom to manage RBAC, users, permissions, and all system modules',
+      isSystem: true,
+      isActive: true,
+    },
+  });
+
+  const adminRole = await prisma.role.upsert({
+    where: { name: 'ADMIN' },
+    update: { isSystem: true, isActive: true },
+    create: {
+      name: 'ADMIN',
+      description: 'Administrator role (alias for System Admin)',
+      isSystem: true,
+      isActive: true,
+    },
+  });
+
+  const emp = await prisma.role.upsert({
+    where: { name: 'EMPLOYEE' },
+    update: { isSystem: true, isActive: true },
+    create: {
+      name: 'EMPLOYEE',
+      description: 'Default employee permissions',
+      isSystem: true,
+      isActive: true,
+    },
+  });
+
   const elevated = await prisma.role.findMany({
-    where: { name: { in: ['HR', 'HR_MANAGER', 'SUPER_ADMIN'] } },
+    where: { name: { in: ['HR', 'HR_MANAGER'] } },
   });
 
   const allKeys = SYSTEM_SUBMODULES.map((m) => m.key);
 
-  // Grant full permissions across all submodules to ADMIN & elevated roles
-  for (const role of [admin, ...elevated].filter(Boolean)) {
+  // Grant full permissions across all submodules to SUPERADMIN, SYSTEM_ADMIN, ADMIN & elevated roles
+  for (const role of [superAdminRole, systemAdminRole, adminRole, ...elevated]) {
     for (const moduleKey of allKeys) {
       await prisma.rolePermission.upsert({
-        where: { roleId_moduleKey: { roleId: role!.id, moduleKey } },
+        where: { roleId_moduleKey: { roleId: role.id, moduleKey } },
         update: FULL,
-        create: { roleId: role!.id, moduleKey, ...FULL },
+        create: { roleId: role.id, moduleKey, ...FULL },
       });
     }
+  }
+
+  // 1. Ensure dedicated Platform SUPERADMIN user (The CRM Product Owner)
+  try {
+    const existingSuperadmin = await prisma.user.findUnique({
+      where: { username: 'superadmin' },
+      select: { id: true, passwordHash: true },
+    });
+
+    if (!existingSuperadmin) {
+      const defaultHash = await bcrypt.hash('01011998', 12);
+      await prisma.user.create({
+        data: {
+          username: 'superadmin',
+          roleId: superAdminRole.id,
+          passwordHash: defaultHash,
+          isActive: true,
+          isFirstLogin: false,
+        },
+      });
+    } else {
+      await prisma.user.update({
+        where: { id: existingSuperadmin.id },
+        data: {
+          roleId: superAdminRole.id,
+          isActive: true,
+          // Never overwrite existing password! Only populate if missing
+          ...(existingSuperadmin.passwordHash
+            ? {}
+            : { passwordHash: await bcrypt.hash('01011998', 12) }),
+        },
+      });
+    }
+
+    // 2. Ensure Client Company SYSTEM_ADMIN user (Initial company admin)
+    const companyAdmin = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { employeeId: 1 },
+          { username: 'admin' },
+        ],
+      },
+      select: { id: true, username: true, subOrganization: true, passwordHash: true },
+    });
+
+    const existingOrg = await prisma.organization.findFirst();
+    const org = existingOrg ?? await prisma.organization.create({
+      data: {
+        code: 'NB_CORP',
+        name: 'NB Solutions Corp',
+        contactPerson: 'Admin User',
+        email: 'admin@nbsolutions.com',
+        mobileNo: '9876543210',
+        tagLine: JSON.stringify(['HRMS', 'CRM', 'ERP']),
+        isActive: true,
+      },
+    });
+
+    if (companyAdmin && companyAdmin.username !== 'superadmin') {
+      await prisma.user.update({
+        where: { id: companyAdmin.id },
+        data: {
+          roleId: systemAdminRole.id,
+          username: 'admin',
+          subOrganization: companyAdmin.subOrganization || org.name,
+          isActive: true,
+          // Never overwrite existing password! Only populate if missing
+          ...(companyAdmin.passwordHash
+            ? {}
+            : { passwordHash: await bcrypt.hash('01011998', 12) }),
+        },
+      });
+    }
+  } catch (err) {
+    console.warn('Superadmin and System Admin user alignment notice:', err);
   }
 
   // Default permissions for EMPLOYEE role

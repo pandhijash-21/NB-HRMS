@@ -1,20 +1,36 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/bloc/load_status.dart';
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/widgets/mobile_input_formatter.dart';
+import '../../data/crm_repository.dart';
 import '../../domain/crm_models.dart';
-import '../crm_providers.dart';
+import '../bloc/crm_settings_bloc.dart';
 
-class CrmSettingsScreen extends ConsumerStatefulWidget {
+class CrmSettingsScreen extends StatelessWidget {
   const CrmSettingsScreen({super.key});
 
   @override
-  ConsumerState<CrmSettingsScreen> createState() => _CrmSettingsScreenState();
+  Widget build(BuildContext context) {
+    return BlocProvider<CrmSettingsBloc>(
+      create: (ctx) => CrmSettingsBloc(
+        crmRepository: ctx.read<CrmRepository>(),
+      )..add(const CrmSettingsLoadRequested()),
+      child: const _CrmSettingsView(),
+    );
+  }
 }
 
-class _CrmSettingsScreenState extends ConsumerState<CrmSettingsScreen>
+class _CrmSettingsView extends StatefulWidget {
+  const _CrmSettingsView();
+
+  @override
+  State<_CrmSettingsView> createState() => _CrmSettingsViewState();
+}
+
+class _CrmSettingsViewState extends State<_CrmSettingsView>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
 
@@ -94,59 +110,79 @@ class _CrmSettingsScreenState extends ConsumerState<CrmSettingsScreen>
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardBg = isDark ? const Color(0xFF1E1B18) : Colors.white;
     final borderColor = isDark
-        ? const Color(0xFFC5A059).withOpacity(0.18)
+        ? const Color(0xFFC5A059).withValues(alpha: 0.18)
         : const Color(0xFFE2E8F0);
-    final textMuted = isDark ? Colors.white.withOpacity(0.6) : const Color(0xFF64748B);
+    final textMuted = isDark ? Colors.white.withValues(alpha: 0.6) : const Color(0xFF64748B);
     final primaryGold = isDark ? const Color(0xFFC5A059) : const Color(0xFF2563EB);
 
-    final settingsAsync = ref.watch(crmSettingsProvider);
-    settingsAsync.whenData((settings) => _syncSettings(settings));
+    return BlocConsumer<CrmSettingsBloc, CrmSettingsState>(
+      listener: (context, state) {
+        if (state.errorMessage != null && state.errorMessage!.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(state.errorMessage!), backgroundColor: Colors.red),
+          );
+        } else if (state.successMessage != null && state.successMessage!.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(state.successMessage!), backgroundColor: Colors.green),
+          );
+        }
+        if (state.settings != null) {
+          _syncSettings(state.settings!);
+        }
+      },
+      builder: (context, state) {
+        if (state.settings != null) {
+          _syncSettings(state.settings!);
+        }
 
-    return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF141210) : const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        title: const Text('CRM Settings & Configuration'),
-        leading: const AppBackButton(fallbackLocation: '/crm/dashboard'),
-        backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        bottom: TabBar(
-          controller: _tabController,
-          isScrollable: true,
-          tabs: const [
-            Tab(text: 'Elision Telephony API'),
-            Tab(text: 'Dashboard KPI Management'),
-            Tab(text: 'Bin & Retention Policy'),
-            Tab(text: 'General Preferences'),
-          ],
-        ),
-        actions: [
-          IconButton(
-            tooltip: 'Refresh Settings',
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: () {
-              ref.invalidate(crmSettingsProvider);
-              ref.invalidate(crmKpiProvider);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('CRM configuration refreshed'),
-                  duration: Duration(seconds: 1),
-                ),
-              );
-            },
+        return Scaffold(
+          backgroundColor: isDark ? const Color(0xFF141210) : const Color(0xFFF8FAFC),
+          appBar: AppBar(
+            title: const Text('CRM Settings & Configuration'),
+            leading: const AppBackButton(fallbackLocation: '/crm/dashboard'),
+            backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            bottom: TabBar(
+              controller: _tabController,
+              isScrollable: true,
+              tabs: const [
+                Tab(text: 'Elision Telephony API'),
+                Tab(text: 'Dashboard KPI Management'),
+                Tab(text: 'Bin & Retention Policy'),
+                Tab(text: 'General Preferences'),
+              ],
+            ),
+            actions: [
+              IconButton(
+                tooltip: 'Refresh Settings',
+                icon: const Icon(Icons.refresh_rounded),
+                onPressed: () {
+                  _telephonyLoaded = false;
+                  _kpiLoaded = false;
+                  context.read<CrmSettingsBloc>().add(const CrmSettingsLoadRequested());
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('CRM configuration refreshed'),
+                      duration: Duration(seconds: 1),
+                    ),
+                  );
+                },
+              ),
+            ],
           ),
-        ],
-      ),
-      body: TabBarView(
-        controller: _tabController,
-        physics: const NeverScrollableScrollPhysics(),
-        children: [
-          _buildElisionTelephonyTab(isDark, cardBg, borderColor, textMuted, primaryGold),
-          _buildKpiManagementTab(isDark, cardBg, borderColor, textMuted, primaryGold),
-          _buildRetentionPolicyTab(isDark, cardBg, borderColor, textMuted, primaryGold),
-          _buildGeneralTab(isDark, cardBg, borderColor, textMuted),
-        ],
-      ),
+          body: TabBarView(
+            controller: _tabController,
+            physics: const NeverScrollableScrollPhysics(),
+            children: [
+              _buildElisionTelephonyTab(isDark, cardBg, borderColor, textMuted, primaryGold),
+              _buildKpiManagementTab(state, isDark, cardBg, borderColor, textMuted, primaryGold),
+              _buildRetentionPolicyTab(isDark, cardBg, borderColor, textMuted, primaryGold),
+              _buildGeneralTab(isDark, cardBg, borderColor, textMuted),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -445,13 +481,14 @@ class _CrmSettingsScreenState extends ConsumerState<CrmSettingsScreen>
   // Tab 3: Dashboard KPI Management (Admin Control & Metrics Toggle)
   // ---------------------------------------------------------------------------
   Widget _buildKpiManagementTab(
+    CrmSettingsState state,
     bool isDark,
     Color cardBg,
     Color borderColor,
     Color textMuted,
     Color primaryColor,
   ) {
-    final kpiAsync = ref.watch(crmKpiProvider);
+    final kpi = state.kpiMetrics;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -573,10 +610,14 @@ class _CrmSettingsScreenState extends ConsumerState<CrmSettingsScreen>
               ),
               const SizedBox(height: 12),
 
-              kpiAsync.when(
-                loading: () => const Center(child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator())),
-                error: (err, _) => Text('Error loading stats: $err', style: const TextStyle(color: Colors.red)),
-                data: (kpi) => Column(
+              if (kpi == null)
+                state.status == LoadStatus.loading
+                    ? const Center(child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator()))
+                    : state.errorMessage != null
+                        ? Text('Error loading stats: ${state.errorMessage}', style: const TextStyle(color: Colors.red))
+                        : const SizedBox.shrink()
+              else
+                Column(
                   children: [
                     _buildKpiToggleCard(
                       title: 'Active Leads Pipeline',
@@ -639,7 +680,6 @@ class _CrmSettingsScreenState extends ConsumerState<CrmSettingsScreen>
                     ),
                   ],
                 ),
-              ),
               const SizedBox(height: 28),
 
               // Section 2: Elision / Greeter Telephony Metrics
@@ -659,10 +699,8 @@ class _CrmSettingsScreenState extends ConsumerState<CrmSettingsScreen>
               ),
               const SizedBox(height: 12),
 
-              kpiAsync.when(
-                loading: () => const SizedBox.shrink(),
-                error: (_, __) => const SizedBox.shrink(),
-                data: (kpi) => Column(
+              if (kpi != null)
+                Column(
                   children: [
                     _buildKpiToggleCard(
                       title: "Today's Scheduled Follow-up Calls",
@@ -725,7 +763,6 @@ class _CrmSettingsScreenState extends ConsumerState<CrmSettingsScreen>
                     ),
                   ],
                 ),
-              ),
               const SizedBox(height: 28),
 
               // Save Button (Responsive)
@@ -865,7 +902,7 @@ class _CrmSettingsScreenState extends ConsumerState<CrmSettingsScreen>
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFEF4444).withOpacity(0.12),
+                      color: const Color(0xFFEF4444).withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Icon(Icons.auto_delete_outlined, color: Color(0xFFEF4444), size: 28),
@@ -981,26 +1018,26 @@ class _CrmSettingsScreenState extends ConsumerState<CrmSettingsScreen>
             children: [
               Text('General Preferences', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: isDark ? Colors.white : const Color(0xFF1E293B))),
               const SizedBox(height: 16),
-              ListTile(
+              const ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.currency_rupee_rounded),
-                title: const Text('Default Currency'),
-                trailing: const Text('INR (₹)', style: TextStyle(fontWeight: FontWeight.bold)),
+                leading: Icon(Icons.currency_rupee_rounded),
+                title: Text('Default Currency'),
+                trailing: Text('INR (₹)', style: TextStyle(fontWeight: FontWeight.bold)),
               ),
               const Divider(),
-              ListTile(
+              const ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.access_time_rounded),
-                title: const Text('Telecaller Calling Window'),
-                trailing: const Text('09:30 AM – 07:00 PM', style: TextStyle(fontWeight: FontWeight.bold)),
+                leading: Icon(Icons.access_time_rounded),
+                title: Text('Telecaller Calling Window'),
+                trailing: Text('09:30 AM – 07:00 PM', style: TextStyle(fontWeight: FontWeight.bold)),
               ),
               const Divider(),
-              ListTile(
+              const ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.security_rounded),
-                title: const Text('Sales Rep Assignment Access Control'),
-                subtitle: const Text('Telecallers have view-only access once assigned to sales user.'),
-                trailing: const Icon(Icons.check_circle_rounded, color: Colors.green),
+                leading: Icon(Icons.security_rounded),
+                title: Text('Sales Rep Assignment Access Control'),
+                subtitle: Text('Telecallers have view-only access once assigned to sales user.'),
+                trailing: Icon(Icons.check_circle_rounded, color: Colors.green),
               ),
             ],
           ),
@@ -1009,76 +1046,35 @@ class _CrmSettingsScreenState extends ConsumerState<CrmSettingsScreen>
     );
   }
 
-  Future<void> _saveTelephonySettings() async {
-    try {
-      await ref.read(crmSettingsProvider.notifier).saveSettings({
-        'elision_api_url': _apiUrlController.text.trim(),
-        'elision_user_id': _userIdController.text.trim(),
-        'elision_did': _didController.text.trim(),
-        'elision_route_number': _routeNumberController.text.trim(),
-        'elision_default_agent_number': _defaultAgentController.text.trim(),
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Elision Telephony settings saved successfully!'), backgroundColor: Colors.green),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save settings: $e'), backgroundColor: Colors.red),
-        );
-      }
-    }
+  void _saveTelephonySettings() {
+    context.read<CrmSettingsBloc>().add(CrmSettingsSaved({
+      'elision_api_url': _apiUrlController.text.trim(),
+      'elision_user_id': _userIdController.text.trim(),
+      'elision_did': _didController.text.trim(),
+      'elision_route_number': _routeNumberController.text.trim(),
+      'elision_default_agent_number': _defaultAgentController.text.trim(),
+    }));
   }
 
-  Future<void> _saveKpiSettings() async {
-    try {
-      await ref.read(crmSettingsProvider.notifier).saveSettings({
-        'kpi_show_active_leads': _kpiShowActiveLeads.toString(),
-        'kpi_show_today_followups': _kpiShowTodayFollowups.toString(),
-        'kpi_show_interested_deals': _kpiShowInterestedDeals.toString(),
-        'kpi_show_bin_count': _kpiShowBinCount.toString(),
-        'kpi_show_total_calls': _kpiShowTotalCalls.toString(),
-        'kpi_show_answered_calls': _kpiShowAnsweredCalls.toString(),
-        'kpi_show_missed_calls': _kpiShowMissedCalls.toString(),
-        'kpi_show_talk_time': _kpiShowTalkTime.toString(),
-        'kpi_show_fresh_leads': _kpiShowFreshLeads.toString(),
-        'kpi_show_conversion_rate': _kpiShowConversionRate.toString(),
-      });
-      ref.invalidate(crmKpiProvider);
-      ref.invalidate(crmSettingsProvider);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Dashboard KPI preferences saved successfully!'), backgroundColor: Colors.green),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save KPI preferences: $e'), backgroundColor: Colors.red),
-        );
-      }
-    }
+  void _saveKpiSettings() {
+    context.read<CrmSettingsBloc>().add(CrmSettingsSaved({
+      'kpi_show_active_leads': _kpiShowActiveLeads.toString(),
+      'kpi_show_today_followups': _kpiShowTodayFollowups.toString(),
+      'kpi_show_interested_deals': _kpiShowInterestedDeals.toString(),
+      'kpi_show_bin_count': _kpiShowBinCount.toString(),
+      'kpi_show_total_calls': _kpiShowTotalCalls.toString(),
+      'kpi_show_answered_calls': _kpiShowAnsweredCalls.toString(),
+      'kpi_show_missed_calls': _kpiShowMissedCalls.toString(),
+      'kpi_show_talk_time': _kpiShowTalkTime.toString(),
+      'kpi_show_fresh_leads': _kpiShowFreshLeads.toString(),
+      'kpi_show_conversion_rate': _kpiShowConversionRate.toString(),
+    }));
   }
 
-  Future<void> _saveRetentionSettings() async {
-    try {
-      await ref.read(crmSettingsProvider.notifier).saveSettings({
-        'not_interested_retention_days': _notInterestedDaysController.text.trim(),
-        'bin_retention_days': _binDaysController.text.trim(),
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Retention & Bin rules saved successfully!'), backgroundColor: Colors.green),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save settings: $e'), backgroundColor: Colors.red),
-        );
-      }
-    }
+  void _saveRetentionSettings() {
+    context.read<CrmSettingsBloc>().add(CrmSettingsSaved({
+      'not_interested_retention_days': _notInterestedDaysController.text.trim(),
+      'bin_retention_days': _binDaysController.text.trim(),
+    }));
   }
 }

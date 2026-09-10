@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../lookups/presentation/lookup_dropdown.dart';
+import '../../data/boq_repository.dart';
+import '../../data/project_repository.dart';
 import '../../domain/boq_models.dart';
 import '../../domain/resource_models.dart';
 import '../../domain/structure_models.dart';
 import '../../domain/work_order_lookup_keys.dart';
 import '../../domain/work_order_models.dart';
-import '../boq_providers.dart';
-import '../project_providers.dart';
 import 'work_order_location_picker.dart';
 import 'boq_summary_panel.dart';
 
-class BoqTasksEditor extends ConsumerStatefulWidget {
+class BoqTasksEditor extends StatefulWidget {
   const BoqTasksEditor({
     super.key,
     required this.projectId,
@@ -30,11 +30,12 @@ class BoqTasksEditor extends ConsumerStatefulWidget {
   final bool showTaskIds;
 
   @override
-  ConsumerState<BoqTasksEditor> createState() => _BoqTasksEditorState();
+  State<BoqTasksEditor> createState() => _BoqTasksEditorState();
 }
 
-class _BoqTasksEditorState extends ConsumerState<BoqTasksEditor> {
+class _BoqTasksEditorState extends State<BoqTasksEditor> {
   String? _selectedActivityId;
+  List<ErpProjectTower> _towers = [];
 
   List<ErpBoqTask> get _tasks => widget.tasks;
 
@@ -140,15 +141,43 @@ class _BoqTasksEditorState extends ConsumerState<BoqTasksEditor> {
     );
   }
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadTowers();
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant BoqTasksEditor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.projectId != widget.projectId) {
+      _loadTowers();
+    }
+  }
+
+  Future<void> _loadTowers() async {
+    if (widget.projectId == null) {
+      if (mounted) setState(() => _towers = []);
+      return;
+    }
+    try {
+      final towers = await context.read<ProjectRepository>().listTowers(widget.projectId!);
+      if (mounted) setState(() => _towers = towers);
+    } catch (_) {}
+  }
+
   Future<void> _openResourceManager(int taskIndex, String type) async {
     final task = _tasks[taskIndex];
     List<ErpMaterial> materials;
     List<ErpMachine> machines;
     List<ErpLabour> labour;
     try {
-      materials = await ref.read(erpMaterialsProvider.future);
-      machines = await ref.read(erpMachinesProvider.future);
-      labour = await ref.read(erpLabourProvider.future);
+      final boqRepo = context.read<BoqRepository>();
+      materials = await boqRepo.listMaterials();
+      machines = await boqRepo.listMachines();
+      labour = await boqRepo.listLabour();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to load resources: $e')));
@@ -177,13 +206,7 @@ class _BoqTasksEditorState extends ConsumerState<BoqTasksEditor> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    // Prefetch resource catalogs so add dialogs are populated.
-    ref.watch(erpMaterialsProvider);
-    ref.watch(erpMachinesProvider);
-    ref.watch(erpLabourProvider);
-    final towersAsync = widget.projectId == null
-        ? const AsyncValue<List<ErpProjectTower>>.data([])
-        : ref.watch(projectTowersProvider(widget.projectId!));
+    final towers = _towers;
 
     final activityIds = <String>[];
     for (final t in _tasks) {
@@ -217,7 +240,7 @@ class _BoqTasksEditorState extends ConsumerState<BoqTasksEditor> {
             children: [
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  value: _selectedActivityId,
+                  initialValue: _selectedActivityId,
                   decoration: const InputDecoration(
                     labelText: 'Activity',
                     border: OutlineInputBorder(),
@@ -266,17 +289,13 @@ class _BoqTasksEditorState extends ConsumerState<BoqTasksEditor> {
               ),
             )
           else
-            towersAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Text('$e'),
-              data: (towers) => _TaskTable(
-                tasks: _tasks,
-                towers: towers,
-                showTaskIds: widget.showTaskIds,
-                onUpdate: _updateTask,
-                onRemove: _removeTask,
-                onManageResources: _openResourceManager,
-              ),
+            _TaskTable(
+              tasks: _tasks,
+              towers: towers,
+              showTaskIds: widget.showTaskIds,
+              onUpdate: _updateTask,
+              onRemove: _removeTask,
+              onManageResources: _openResourceManager,
             ),
           if (_tasks.isNotEmpty) ...[
             const SizedBox(height: 16),
@@ -288,7 +307,7 @@ class _BoqTasksEditorState extends ConsumerState<BoqTasksEditor> {
   }
 }
 
-class _TaskTable extends ConsumerStatefulWidget {
+class _TaskTable extends StatefulWidget {
   const _TaskTable({
     required this.tasks,
     required this.towers,
@@ -306,10 +325,10 @@ class _TaskTable extends ConsumerStatefulWidget {
   final Future<void> Function(int, String) onManageResources;
 
   @override
-  ConsumerState<_TaskTable> createState() => _TaskTableState();
+  State<_TaskTable> createState() => _TaskTableState();
 }
 
-class _TaskTableState extends ConsumerState<_TaskTable> {
+class _TaskTableState extends State<_TaskTable> {
   InputDecoration _cellInput(bool isDark, {String? hint}) => InputDecoration(
         isDense: true,
         hintText: hint,
@@ -562,7 +581,7 @@ class _TaskTableState extends ConsumerState<_TaskTable> {
           SizedBox(
             width: 108,
             child: lookupDropdown(
-              ref: ref,
+              context: context,
               category: kWoMeasurementUnit,
               value: task.unitCode,
               label: '',

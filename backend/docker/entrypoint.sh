@@ -19,7 +19,8 @@ unstick_idempotent_migrations() {
     20260831120000_erp_work_orders \
     20260901100000_meeting_chat_dm_participants \
     20260901150000_meeting_bhashini_transcript \
-    20260910180000_add_user_deleted_at; do
+    20260910180000_add_user_deleted_at \
+    20260910184000_add_org_deleted_at; do
     npx prisma migrate resolve --rolled-back "$mig" 2>/dev/null || true
   done
 }

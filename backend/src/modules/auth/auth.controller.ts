@@ -18,9 +18,9 @@ export const authController = {
       }
 
       return res.json(ok(result));
-    } catch (err) {
+    } catch (err: any) {
       console.error('LOGIN FAILED', err);
-      return res.status(500).json(fail('Internal server error'));
+      return res.status(500).json(fail(err?.message ? `Login error: ${err.message}` : 'Internal server error'));
     }
   },
 

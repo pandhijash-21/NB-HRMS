@@ -28,8 +28,8 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   Bloc.observer = const AppBlocObserver();
 
-  // Prevent Google Fonts from downloading at runtime (use bundled/cached fonts)
-  GoogleFonts.config.allowRuntimeFetching = false;
+  // Allow Google Fonts runtime fetching on web / mobile
+  GoogleFonts.config.allowRuntimeFetching = true;
 
   retainMaterialIconGlyphs();
   // Load the icon font after the first frame so the app shell renders immediately

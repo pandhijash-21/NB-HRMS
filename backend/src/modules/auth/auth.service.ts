@@ -129,8 +129,8 @@ export const authService = {
     const isExempt =
       isExemptIdentifier(identifier) ||
       (user != null &&
-        (isSuperAdminRole(user.role.name) ||
-          isSystemAdminRole(user.role.name) ||
+        (isSuperAdminRole(user.role?.name) ||
+          isSystemAdminRole(user.role?.name) ||
           isExemptIdentifier(user.username)));
 
     if (!user) {
@@ -164,7 +164,7 @@ export const authService = {
       const locked = await assertNotLocked({
         userId: user.id,
         identifier,
-        roleName: user.role.name,
+        roleName: user.role?.name,
         username: user.username,
       });
       if (locked) return { error: locked.error, status: locked.status } as const;
@@ -176,7 +176,9 @@ export const authService = {
     if (!user.isActive) return { error: 'Account disabled', status: 403 } as const;
 
     // 2. Verify password
-    const valid = await bcrypt.compare(input.password, user.passwordHash);
+    const valid = user.passwordHash
+      ? await bcrypt.compare(input.password, user.passwordHash)
+      : false;
     if (!valid) {
       if (isExempt) {
         return { error: 'Invalid username or password', status: 401 } as const;
@@ -185,7 +187,7 @@ export const authService = {
         userId: user.id,
         identifier,
         aliases,
-        roleName: user.role.name,
+        roleName: user.role?.name,
         username: user.username,
       });
       return { error: fail.error, status: fail.status } as const;
@@ -194,8 +196,9 @@ export const authService = {
     await clearLoginLock({ userId: user.id, aliases });
 
     // 3. Build permissions map
-    const permissions = buildPermissionsMap(user.role.permissions);
-    const personalPerm = user.role.permissions.find((p) => p.moduleKey === 'PERSONAL_INFO');
+    const rolePermissions = user.role?.permissions ?? [];
+    const permissions = buildPermissionsMap(rolePermissions);
+    const personalPerm = rolePermissions.find((p) => p.moduleKey === 'PERSONAL_INFO');
     const employeeViewScope = personalPerm?.employeeViewScope ?? 'NONE';
     const userSubOrg = (user as { subOrganization?: string | null }).subOrganization;
     const scopeSubOrg =
@@ -209,8 +212,8 @@ export const authService = {
       {
         sub:         user.id,
         employeeId:  user.employeeId ?? null,
-        roleId:      user.roleId,
-        roleName:    user.role.name,
+        roleId:      user.roleId ?? user.role?.id ?? '',
+        roleName:    user.role?.name ?? (isSuperAdminRole(user.username) ? 'SUPERADMIN' : 'STAFF'),
         subOrganization: scopeSubOrg,
         employeeViewScope,
         permissions,

@@ -13,6 +13,7 @@ bool canAccessFieldTracking(String? role) {
     'HR',
     'SUPERADMIN',
     'SYSTEMADMIN',
+    'SYSTEMADMINISTRATOR',
     'DEVELOPER',
   }.contains(r);
 }

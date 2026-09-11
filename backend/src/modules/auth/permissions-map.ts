@@ -76,7 +76,12 @@ export async function permissionsForRole(roleId: string): Promise<{
   if (!role) return null;
   const perms = buildPermissionsMap(role.permissions);
   const personal = role.permissions.find((p) => p.moduleKey === 'PERSONAL_INFO');
-  const employeeViewScope = personal?.employeeViewScope ?? 'NONE';
+  let employeeViewScope = personal?.employeeViewScope ?? 'NONE';
+  if (isAdminRole(role.name)) {
+    if (employeeViewScope === 'NONE' || employeeViewScope === 'SELF') {
+      employeeViewScope = 'UNIVERSITY';
+    }
+  }
   rolePermCache.set(roleId, { at: Date.now(), perms, employeeViewScope });
   return { permissions: perms, employeeViewScope };
 }

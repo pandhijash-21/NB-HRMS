@@ -58,7 +58,7 @@ class _InstituteDetailScreenState extends State<InstituteDetailScreen> {
     final role = authState.user?.role ?? '';
     final hasAccess = Permissions.canManageUsers(authState.permissions, role) ||
         Permissions.canManageInstitutes(authState.permissions, role) ||
-        Permissions.canViewWorkforce(authState.permissions, authState.user?.employeeViewScope);
+        Permissions.canViewWorkforce(authState.permissions, authState.user?.employeeViewScope, role);
 
     if (!hasAccess) {
       return const Scaffold(

@@ -63,6 +63,7 @@ class _AdminEmployeesViewState extends State<_AdminEmployeesView> {
     final hasAccess = Permissions.canViewWorkforce(
       authState.permissions,
       authState.user?.employeeViewScope,
+      authState.user?.role,
     );
 
     if (!hasAccess) {

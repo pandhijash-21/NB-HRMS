@@ -38,6 +38,7 @@ class _AdminDashboardView extends StatelessWidget {
     final hasAccess = Permissions.canAccessAdminPortal(
       auth.permissions,
       auth.user?.employeeViewScope,
+      auth.user?.role,
     );
 
     if (!hasAccess) {

@@ -40,7 +40,7 @@ class _AdminRolesScreenState extends State<AdminRolesScreen> {
     final auth = context.watch<AuthBloc>().state;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    if (!Permissions.canManageRoles(auth.permissions)) {
+    if (!Permissions.canManageRoles(auth.permissions, auth.user?.role)) {
       return Scaffold(
         backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
         body: Center(

@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/bloc/load_status.dart';
 import '../../../../core/router/app_back_button.dart';
+import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../data/admin_repository.dart';
 import '../../domain/admin_models.dart';
@@ -32,7 +33,8 @@ class _AdminApprovalsView extends StatelessWidget {
 
     // Gate screen with Role Check (Admin/HR only)
     final role = authState.user?.role ?? '';
-    final hasAccess = ['ADMIN', 'HR'].contains(role.toUpperCase());
+    final hasAccess = Permissions.isAdmin(role) ||
+        ['ADMIN', 'HR', 'HR_MANAGER', 'SYSTEMADMIN', 'SYSTEM_ADMINISTRATOR'].contains(role.toUpperCase());
 
     if (!hasAccess) {
       return Scaffold(

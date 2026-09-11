@@ -11,8 +11,7 @@ import '../../features/auth/presentation/bloc/auth_bloc.dart';
 import '../../features/collaboration/presentation/chat_inbox.dart';
 import '../../features/collaboration/presentation/notification_bell.dart';
 import '../../features/tracking_hub/presentation/location_alert_watch.dart';
-import '../app_module.dart';
-import '../bloc/app_module_cubit.dart' as bloc_module;
+import '../bloc/app_module_cubit.dart';
 import '../logging/app_logger.dart';
 import '../services/location_alert_sound.dart';
 import '../theme/theme_cubit.dart';
@@ -61,7 +60,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
           backgroundColor: itemBgColor,
           foregroundColor: itemFgColor,
           onTap: () {
-            context.read<bloc_module.AppModuleCubit>().setModule(bloc_module.AppModule.hrms);
+            context.read<AppModuleCubit>().setModule(AppModule.hrms);
             context.go('/home');
           },
         ),
@@ -71,7 +70,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
           backgroundColor: itemBgColor,
           foregroundColor: itemFgColor,
           onTap: () {
-            context.read<bloc_module.AppModuleCubit>().setModule(bloc_module.AppModule.erp);
+            context.read<AppModuleCubit>().setModule(AppModule.erp);
             context.go('/erp/home');
           },
         ),
@@ -81,7 +80,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
           backgroundColor: itemBgColor,
           foregroundColor: itemFgColor,
           onTap: () {
-            context.read<bloc_module.AppModuleCubit>().setModule(bloc_module.AppModule.crm);
+            context.read<AppModuleCubit>().setModule(AppModule.crm);
             context.go('/crm/dashboard');
           },
         ),
@@ -98,19 +97,26 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     final allowExpandedSidebar = width >= 900;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    final isAdmin = Permissions.isAdmin(auth.user?.role);
+    final isSuperAdmin = Permissions.isSuperAdmin(auth.user?.role);
     final hasWorkforce = Permissions.canViewWorkforce(
       auth.permissions,
       auth.user?.employeeViewScope,
+      auth.user?.role,
     );
-    final isHR = const [
+    final isHR = isAdmin || const [
       'ADMIN',
       'HR',
+      'HR_MANAGER',
+      'SYSTEMADMIN',
+      'SYSTEM_ADMINISTRATOR',
     ].contains(auth.user?.role.toUpperCase() ?? '');
     final canTrackField = canAccessFieldTracking(auth.user?.role);
-    final canApproveLeave = Permissions.canApproveLeave(auth.permissions);
+    final canApproveLeave = isAdmin || Permissions.canApproveLeave(auth.permissions);
     final canAccessAdmin = Permissions.canAccessAdminPortal(
       auth.permissions,
       auth.user?.employeeViewScope,
+      auth.user?.role,
     );
     final canManageUsers = Permissions.canManageUsers(
       auth.permissions,
@@ -120,8 +126,6 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
       auth.permissions,
       auth.user?.role ?? '',
     );
-    final isAdmin = Permissions.isAdmin(auth.user?.role);
-    final isSuperAdmin = Permissions.isSuperAdmin(auth.user?.role);
 
     // Superadmin has a dedicated full-screen SaaS Platform Console — no sidebar needed.
     if (isSuperAdmin) {
@@ -129,14 +133,14 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     }
 
     final currentPath = GoRouterState.of(context).matchedLocation;
-    final module = context.watch<bloc_module.AppModuleCubit>().state;
-    final brandTitle = bloc_module.shellBrandTitle(module);
+    final module = context.watch<AppModuleCubit>().state;
+    final brandTitle = shellBrandTitle(module);
 
-    final inferred = bloc_module.inferAppModule(currentPath, module);
+    final inferred = inferAppModule(currentPath, module);
     if (inferred != module) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        context.read<bloc_module.AppModuleCubit>().syncFromPath(currentPath);
+        context.read<AppModuleCubit>().syncFromPath(currentPath);
       });
     }
 
@@ -341,8 +345,8 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
       ],
       ...sharedCollab,
       if (module == AppModule.hrms) ...[
-        if (Permissions.canReadLeave(auth.permissions) ||
-            Permissions.canWriteLeave(auth.permissions) ||
+        if (Permissions.canReadLeave(auth.permissions, auth.user?.role) ||
+            Permissions.canWriteLeave(auth.permissions, auth.user?.role) ||
             canApproveLeave ||
             Permissions.canAdminLeave(
               auth.permissions,
@@ -356,7 +360,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             'Leave',
             section: 'HR',
           ),
-        if (Permissions.canReadAttendance(auth.permissions))
+        if (Permissions.canReadAttendance(auth.permissions, auth.user?.role))
           const _Destination(
             '/attendance',
             Icons.fingerprint_outlined,

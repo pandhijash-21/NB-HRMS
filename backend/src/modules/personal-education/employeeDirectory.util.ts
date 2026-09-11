@@ -9,13 +9,22 @@ type AuthUser = {
   subOrganization?: string | null;
   employeeViewScope?: EmployeeViewScope;
   permissions?: Record<string, string[]>;
+  role?: string;
+  roleName?: string;
 };
 
+export function isAdministrativeRole(roleName?: string): boolean {
+  const r = String(roleName ?? '').toUpperCase().replace(/[\s_-]/g, '');
+  return ['SUPERADMIN', 'ADMIN', 'SYSTEMADMIN', 'SYSTEMADMINISTRATOR', 'HR', 'HRMANAGER', 'DEVELOPER'].includes(r);
+}
+
 export function getEmployeeViewScope(user: AuthUser | undefined): EmployeeViewScope {
+  if (isAdministrativeRole(user?.role || user?.roleName)) return 'UNIVERSITY';
   return user?.employeeViewScope ?? 'NONE';
 }
 
 export function canViewEmployeeDirectory(user: AuthUser | undefined): boolean {
+  if (isAdministrativeRole(user?.role || user?.roleName)) return true;
   const scope = getEmployeeViewScope(user);
   return scope === 'INSTITUTE' || scope === 'UNIVERSITY';
 }
@@ -26,6 +35,7 @@ export function canViewOwnEmployeeRecord(user: AuthUser | undefined): boolean {
 }
 
 export function canWriteEmployeeDirectory(user: AuthUser | undefined): boolean {
+  if (isAdministrativeRole(user?.role || user?.roleName)) return true;
   if (!canViewEmployeeDirectory(user)) return false;
   return user?.permissions?.PERSONAL_INFO?.includes('WRITE') ?? false;
 }
@@ -39,6 +49,7 @@ export function canWriteOwnEmployeeRecord(user: AuthUser | undefined): boolean {
 export async function resolveDirectoryInstituteFilter(
   user: AuthUser | undefined,
 ): Promise<string | undefined> {
+  if (isAdministrativeRole(user?.role || user?.roleName)) return undefined;
   if (getEmployeeViewScope(user) !== 'INSTITUTE') return undefined;
 
   const direct = user?.subOrganization?.trim();
@@ -60,6 +71,7 @@ export async function employeeMatchesDirectoryScope(
   employeeId: number,
   user: AuthUser | undefined,
 ): Promise<boolean> {
+  if (isAdministrativeRole(user?.role || user?.roleName)) return true;
   const scope = getEmployeeViewScope(user);
   if (scope === 'NONE') return false;
   if (scope === 'SELF') {

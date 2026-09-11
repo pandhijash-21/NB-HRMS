@@ -55,7 +55,7 @@ class _AdminEmployeesScreenState extends State<AdminUsersScreen> {
     final auth = context.watch<AuthBloc>().state;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    if (!Permissions.canManageUsers(auth.permissions)) {
+    if (!Permissions.canManageUsers(auth.permissions, auth.user?.role)) {
       return _accessDenied(context);
     }
 

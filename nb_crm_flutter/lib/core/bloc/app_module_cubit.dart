@@ -1,31 +1,11 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../app_module.dart';
 
-enum AppModule { hrms, crm, erp }
+export '../app_module.dart'
+    show AppModule, shellBrandTitle, isSharedShellPath, inferAppModule;
 
 const _kAppModuleKey = 'app_shell_module';
-
-String shellBrandTitle(AppModule module) {
-  return switch (module) {
-    AppModule.hrms => 'NB HRMS',
-    AppModule.crm => 'NB CRM',
-    AppModule.erp => 'NB ERP',
-  };
-}
-
-bool isSharedShellPath(String path) {
-  return path.startsWith('/org-tree') ||
-      path.startsWith('/chat') ||
-      path.startsWith('/meet') ||
-      path.startsWith('/tasks');
-}
-
-AppModule inferAppModule(String path, AppModule current) {
-  if (path.startsWith('/erp')) return AppModule.erp;
-  if (path.startsWith('/crm')) return AppModule.crm;
-  if (isSharedShellPath(path)) return current;
-  return AppModule.hrms;
-}
 
 class AppModuleCubit extends Cubit<AppModule> {
   AppModuleCubit() : super(AppModule.hrms) {
@@ -77,3 +57,4 @@ class AppModuleCubit extends Cubit<AppModule> {
     return next;
   }
 }
+

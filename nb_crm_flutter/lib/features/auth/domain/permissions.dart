@@ -22,8 +22,10 @@ class Permissions {
 
   static bool canViewWorkforce(
     PermissionMap? perms,
-    String? employeeViewScope,
-  ) {
+    String? employeeViewScope, [
+    String? role,
+  ]) {
+    if (isAdmin(role)) return true;
     return employeeViewScope == 'INSTITUTE' || employeeViewScope == 'UNIVERSITY';
   }
 
@@ -46,9 +48,11 @@ class Permissions {
   /// Can open the admin portal (management modules - not employee self-service).
   static bool canAccessAdminPortal(
     PermissionMap? perms,
-    String? employeeViewScope,
-  ) {
-    if (canViewWorkforce(perms, employeeViewScope)) return true;
+    String? employeeViewScope, [
+    String? role,
+  ]) {
+    if (isAdmin(role)) return true;
+    if (canViewWorkforce(perms, employeeViewScope, role)) return true;
     if (perms == null || perms.isEmpty) return false;
 
     final hasManagementModule = hasPermission(perms, 'USER_MGMT', 'READ') ||
@@ -82,7 +86,7 @@ class Permissions {
 
   static bool isSystemAdmin(String? role) {
     final r = (role ?? '').toUpperCase().replaceAll(RegExp(r'[\s_-]+'), '');
-    return r == 'SYSTEMADMIN' || r == 'ADMIN';
+    return r == 'SYSTEMADMIN' || r == 'SYSTEMADMINISTRATOR' || r == 'ADMIN';
   }
 
   static bool isAdmin(String? role) {
@@ -257,11 +261,13 @@ class Permissions {
     return hasPermission(perms, 'FIELD_MGMT', 'READ');
   }
 
-  static bool canReadLeave(PermissionMap? perms) {
+  static bool canReadLeave(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
     return hasPermission(perms, 'LEAVE', 'READ');
   }
 
-  static bool canWriteLeave(PermissionMap? perms) {
+  static bool canWriteLeave(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
     return hasPermission(perms, 'LEAVE', 'WRITE');
   }
 
@@ -270,19 +276,22 @@ class Permissions {
     String role,
     String? employeeViewScope,
   ) {
+    if (isAdmin(role)) return true;
     if (!hasPermission(perms, 'LEAVE', 'WRITE')) return false;
     final adminRole =
         const ['ADMIN', 'HR', 'HR_MANAGER'].contains(role.toUpperCase());
     if (adminRole) return true;
-    return canAccessAdminPortal(perms, employeeViewScope) &&
+    return canAccessAdminPortal(perms, employeeViewScope, role) &&
         hasPermission(perms, 'LEAVE', 'WRITE');
   }
 
-  static bool canReadAttendance(PermissionMap? perms) {
+  static bool canReadAttendance(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
     return hasPermission(perms, 'ATTENDANCE', 'READ');
   }
 
-  static bool canWriteAttendance(PermissionMap? perms) {
+  static bool canWriteAttendance(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
     return hasPermission(perms, 'ATTENDANCE', 'WRITE');
   }
 

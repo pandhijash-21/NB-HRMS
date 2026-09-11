@@ -199,7 +199,13 @@ export const authService = {
     const rolePermissions = user.role?.permissions ?? [];
     const permissions = buildPermissionsMap(rolePermissions);
     const personalPerm = rolePermissions.find((p) => p.moduleKey === 'PERSONAL_INFO');
-    const employeeViewScope = personalPerm?.employeeViewScope ?? 'NONE';
+    let employeeViewScope = personalPerm?.employeeViewScope ?? 'NONE';
+    const effectiveRoleName = user.role?.name ?? (isSuperAdminRole(user.username) ? 'SUPERADMIN' : 'STAFF');
+    if (isAdminRole(effectiveRoleName) || isSystemAdminRole(effectiveRoleName)) {
+      if (employeeViewScope === 'NONE' || employeeViewScope === 'SELF') {
+        employeeViewScope = 'UNIVERSITY';
+      }
+    }
     const userSubOrg = (user as { subOrganization?: string | null }).subOrganization;
     const scopeSubOrg =
       userSubOrg ??
@@ -213,7 +219,7 @@ export const authService = {
         sub:         user.id,
         employeeId:  user.employeeId ?? null,
         roleId:      user.roleId ?? user.role?.id ?? '',
-        roleName:    user.role?.name ?? (isSuperAdminRole(user.username) ? 'SUPERADMIN' : 'STAFF'),
+        roleName:    effectiveRoleName,
         subOrganization: scopeSubOrg,
         employeeViewScope,
         permissions,

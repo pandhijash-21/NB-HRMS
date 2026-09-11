@@ -78,19 +78,21 @@ class _HomeScreenState extends State<HomeScreen> {
     final medium = MediaQuery.sizeOf(context).width >= 600;
     final phone = MediaQuery.sizeOf(context).width < 600;
 
-    final hasWorkforce = Permissions.canViewWorkforce(auth.permissions, auth.user?.employeeViewScope);
-    final isHR = ['ADMIN', 'HR'].contains(role.toUpperCase());
-    final canApproveLeave = Permissions.canApproveLeave(auth.permissions) ||
-        Permissions.canReadLeave(auth.permissions);
-    final canAdminLeave = Permissions.canAdminLeave(
+    final hasWorkforce = Permissions.canViewWorkforce(auth.permissions, auth.user?.employeeViewScope, role);
+    final isHR = Permissions.isAdmin(role) || ['ADMIN', 'HR', 'SYSTEM_ADMINISTRATOR', 'SYSTEMADMIN'].contains(role.toUpperCase());
+    final canApproveLeave = Permissions.isAdmin(role) ||
+        Permissions.canApproveLeave(auth.permissions) ||
+        Permissions.canReadLeave(auth.permissions, role);
+    final canAdminLeave = Permissions.isAdmin(role) || Permissions.canAdminLeave(
       auth.permissions,
       role,
       auth.user?.employeeViewScope,
     );
-    final canAdminAttendance = Permissions.canAdminAttendance(auth.permissions, role);
+    final canAdminAttendance = Permissions.isAdmin(role) || Permissions.canAdminAttendance(auth.permissions, role);
     final canAccessAdmin = Permissions.canAccessAdminPortal(
       auth.permissions,
       auth.user?.employeeViewScope,
+      role,
     );
     final canManageUsers = Permissions.canManageUsers(auth.permissions, role);
     final canManageRoles = Permissions.canManageRoles(auth.permissions, role);

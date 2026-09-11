@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../../middleware/auth';
+import { requirePermission, type PermissionAction } from '../../middleware/rbac';
 import { ok, fail } from '../../utils/response';
 import { orgTreeService, type OrgGrouping } from './org-tree.service';
 
@@ -42,6 +43,12 @@ const contactsSchema = z.object({
 });
 
 orgTreeRouter.use(requireAuth);
+orgTreeRouter.use((req, res, next) => {
+  const action: PermissionAction = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)
+    ? 'WRITE'
+    : 'READ';
+  return requirePermission('ORG_TREE', action)(req, res, next);
+});
 
 orgTreeRouter.get('/', async (_req: Request, res: Response) => {
   try {

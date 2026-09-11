@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import multer from 'multer';
 import { requireAuth } from '../../middleware/auth';
+import { requirePermission } from '../../middleware/rbac';
 import { ok, fail } from '../../utils/response';
 import { uploadService } from '../personal-education/upload.service';
 import { repositoryService } from './repository.service';
@@ -29,8 +30,8 @@ function requireManageRepository(req: Request, res: Response, next: NextFunction
 
 const p = (v: string | string[]) => (Array.isArray(v) ? v[0] : v);
 
-/** List company documents — any authenticated user. */
-repositoryRouter.get('/', requireAuth, async (_req: Request, res: Response) => {
+/** List company documents — gated on REPOSITORY READ permission. */
+repositoryRouter.get('/', requireAuth, requirePermission('REPOSITORY', 'READ'), async (_req: Request, res: Response) => {
   try {
     const data = await repositoryService.listActive();
     return res.json(ok(data));
@@ -40,7 +41,7 @@ repositoryRouter.get('/', requireAuth, async (_req: Request, res: Response) => {
   }
 });
 
-repositoryRouter.get('/:id', requireAuth, async (req: Request, res: Response) => {
+repositoryRouter.get('/:id', requireAuth, requirePermission('REPOSITORY', 'READ'), async (req: Request, res: Response) => {
   try {
     const data = await repositoryService.getById(p(req.params.id));
     return res.json(ok(data));

@@ -5,7 +5,7 @@ export interface SystemSubmoduleDef {
   key: string;
   name: string;
   description: string;
-  category: 'HRMS' | 'CRM' | 'ERP';
+  category: 'HRMS' | 'CRM' | 'ERP' | 'COLLABORATION';
   sortOrder: number;
 }
 
@@ -236,29 +236,29 @@ export const SYSTEM_SUBMODULES: SystemSubmoduleDef[] = [
     key: 'TASKS',
     name: 'Tasks & Projects Hub',
     description: 'Employee task assignments, subtasks, deadlines, and interactive Gantt charts',
-    category: 'HRMS',
-    sortOrder: 17,
+    category: 'COLLABORATION',
+    sortOrder: 1,
   },
   {
     key: 'CHAT',
     name: 'Chat & Collaboration',
     description: '1:1 direct messages, group channels, document sharing, and presence',
-    category: 'HRMS',
-    sortOrder: 18,
+    category: 'COLLABORATION',
+    sortOrder: 2,
   },
   {
     key: 'MEETINGS',
     name: 'Meetings & Video Calls',
     description: 'Real-time audio/video calls, screen sharing, meeting schedules, and recordings',
-    category: 'HRMS',
-    sortOrder: 19,
+    category: 'COLLABORATION',
+    sortOrder: 3,
   },
   {
     key: 'ORG_TREE',
     name: 'Org Chart & Tree',
     description: 'Organizational hierarchy, reporting leads, and employee reporting trees',
-    category: 'HRMS',
-    sortOrder: 20,
+    category: 'COLLABORATION',
+    sortOrder: 4,
   },
 ];
 

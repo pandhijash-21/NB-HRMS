@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import { z } from 'zod';
 import { requireAuth } from '../../middleware/auth';
+import { requirePermission, type PermissionAction } from '../../middleware/rbac';
 import { ok, fail } from '../../utils/response';
 import { uploadService } from '../personal-education/upload.service';
 import { taskService } from './task.service';
@@ -29,6 +30,12 @@ function isAllowedAttachment(file: Express.Multer.File) {
 }
 
 tasksRouter.use(requireAuth);
+tasksRouter.use((req, res, next) => {
+  const action: PermissionAction = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)
+    ? 'WRITE'
+    : 'READ';
+  return requirePermission('TASKS', action)(req, res, next);
+});
 
 tasksRouter.get('/reportees', async (req: Request, res: Response) => {
   try {

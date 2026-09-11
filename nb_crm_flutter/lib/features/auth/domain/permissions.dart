@@ -331,7 +331,8 @@ class Permissions {
     return canWriteDocuments(perms);
   }
 
-  static bool canReadReimbursements(PermissionMap? perms) {
+  static bool canReadReimbursements(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
     return hasPermission(perms, 'REIMBURSEMENTS', 'READ') ||
         hasPermission(perms, 'REIMBURSEMENTS', 'WRITE');
   }
@@ -347,7 +348,8 @@ class Permissions {
         hasPermission(perms, 'REIMBURSEMENTS', 'WRITE');
   }
 
-  static bool canReadRecruitment(PermissionMap? perms) {
+  static bool canReadRecruitment(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
     return hasPermission(perms, 'RECRUITMENT', 'READ') ||
         hasPermission(perms, 'RECRUITMENT', 'WRITE');
   }
@@ -363,6 +365,83 @@ class Permissions {
     final r = (role ?? '').toUpperCase();
     if (const ['ADMIN', 'HR', 'HR_MANAGER', 'SUPER_ADMIN'].contains(r)) return true;
     return canWriteDocuments(perms);
+  }
+
+  static bool canReadRepository(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    if (perms?.containsKey('REPOSITORY') == true) return hasPermission(perms, 'REPOSITORY', 'READ');
+    return canReadDocuments(perms);
+  }
+
+  // ── COLLABORATION ────────────────────────────────────────────────────────
+  static bool canReadChat(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    return hasPermission(perms, 'CHAT', 'READ');
+  }
+
+  static bool canWriteChat(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    return hasPermission(perms, 'CHAT', 'WRITE');
+  }
+
+  static bool canReadMeetings(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    return hasPermission(perms, 'MEETINGS', 'READ');
+  }
+
+  static bool canWriteMeetings(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    return hasPermission(perms, 'MEETINGS', 'WRITE');
+  }
+
+  static bool canReadTasks(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    return hasPermission(perms, 'TASKS', 'READ');
+  }
+
+  static bool canWriteTasks(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    return hasPermission(perms, 'TASKS', 'WRITE');
+  }
+
+  static bool canReadOrgTree(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    return hasPermission(perms, 'ORG_TREE', 'READ');
+  }
+
+  // ── CRM EXTENSIONS ─────────────────────────────────────────────────────────
+  static bool canReadCrmPreSales(PermissionMap? perms, [String? role]) {
+    return canReadCrm(perms, role);
+  }
+
+  static bool canReadCrmPostSales(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    if (perms?.containsKey('CRM_POST_SALES') == true) {
+      return hasPermission(perms, 'CRM_POST_SALES', 'READ');
+    }
+    return canReadCrm(perms, role);
+  }
+
+  // ── ERP EXTENSIONS ─────────────────────────────────────────────────────────
+  static bool canReadTenderApplications(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    if (perms?.containsKey('TENDER_APPLICATIONS') == true) {
+      return hasPermission(perms, 'TENDER_APPLICATIONS', 'READ');
+    }
+    return canReadTenders(perms, role);
+  }
+
+  static bool canReadErpConfig(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    if (perms?.containsKey('ERP_CONFIGURATIONS') == true) {
+      return hasPermission(perms, 'ERP_CONFIGURATIONS', 'READ');
+    }
+    return hasPermission(perms, 'WORK_ORDERS', 'READ');
+  }
+
+  static bool canReadPayroll(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    return hasPermission(perms, 'PAYROLL', 'READ') || hasPermission(perms, 'SALARY', 'READ');
   }
 
   static String resolvePostLoginPath(

@@ -179,35 +179,39 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
       });
     }
 
-    const sharedCollab = <_Destination>[
-      _Destination(
-        '/org-tree',
-        Icons.account_tree_outlined,
-        Icons.account_tree,
-        'Employee tree',
-        section: 'Collaboration',
-      ),
-      _Destination(
-        '/tasks',
-        Icons.task_alt_outlined,
-        Icons.task_alt,
-        'Tasks',
-        section: 'Collaboration',
-      ),
-      _Destination(
-        '/chat',
-        Icons.chat_outlined,
-        Icons.chat,
-        'Chat',
-        section: 'Collaboration',
-      ),
-      _Destination(
-        '/meet',
-        Icons.videocam_outlined,
-        Icons.videocam,
-        'Meet',
-        section: 'Collaboration',
-      ),
+    final sharedCollab = <_Destination>[
+      if (Permissions.canReadOrgTree(auth.permissions, auth.user?.role))
+        const _Destination(
+          '/org-tree',
+          Icons.account_tree_outlined,
+          Icons.account_tree,
+          'Employee tree',
+          section: 'Collaboration',
+        ),
+      if (Permissions.canReadTasks(auth.permissions, auth.user?.role))
+        const _Destination(
+          '/tasks',
+          Icons.task_alt_outlined,
+          Icons.task_alt,
+          'Tasks',
+          section: 'Collaboration',
+        ),
+      if (Permissions.canReadChat(auth.permissions, auth.user?.role))
+        const _Destination(
+          '/chat',
+          Icons.chat_outlined,
+          Icons.chat,
+          'Chat',
+          section: 'Collaboration',
+        ),
+      if (Permissions.canReadMeetings(auth.permissions, auth.user?.role))
+        const _Destination(
+          '/meet',
+          Icons.videocam_outlined,
+          Icons.videocam,
+          'Meet',
+          section: 'Collaboration',
+        ),
     ];
 
     final destinations = <_Destination>[
@@ -267,65 +271,74 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
         ),
       ] else if (module == AppModule.erp) ...[
         const _Destination('/erp/home', Icons.home_outlined, Icons.home, 'Home', section: 'ERP'),
-        const _Destination(
-          '/erp/projects',
-          Icons.apartment_outlined,
-          Icons.apartment,
-          'Projects',
-          section: 'ERP',
-        ),
-        const _Destination(
-          '/erp/work-orders',
-          Icons.assignment_outlined,
-          Icons.assignment,
-          'Work Orders',
-          section: 'ERP',
-        ),
-        const _Destination(
-          '/erp/boq',
-          Icons.receipt_long_outlined,
-          Icons.receipt_long,
-          'BOQ',
-          section: 'ERP',
-        ),
-        const _Destination(
-          '/erp/store',
-          Icons.storefront_outlined,
-          Icons.storefront,
-          'Store',
-          section: 'ERP',
-        ),
-        const _Destination(
-          '/erp/tenders',
-          Icons.gavel_outlined,
-          Icons.gavel,
-          'Tenders',
-          section: 'ERP',
-          children: [
-            _Destination(
-              '/erp/tenders',
-              Icons.gavel_outlined,
-              Icons.gavel,
-              'Tenders',
-              section: 'ERP',
-            ),
-            _Destination(
-              '/erp/tender-applications',
-              Icons.handshake_outlined,
-              Icons.handshake,
-              'Tender Applications',
-              section: 'ERP',
-            ),
-          ],
-        ),
-        const _Destination(
-          '/erp/dpr',
-          Icons.assignment_turned_in_outlined,
-          Icons.assignment_turned_in,
-          'DPR',
-          section: 'ERP',
-        ),
-        if (canAccessAdmin)
+        if (Permissions.canReadProjects(auth.permissions, auth.user?.role))
+          const _Destination(
+            '/erp/projects',
+            Icons.apartment_outlined,
+            Icons.apartment,
+            'Projects',
+            section: 'ERP',
+          ),
+        if (Permissions.canReadWorkOrders(auth.permissions, auth.user?.role))
+          const _Destination(
+            '/erp/work-orders',
+            Icons.assignment_outlined,
+            Icons.assignment,
+            'Work Orders',
+            section: 'ERP',
+          ),
+        if (Permissions.canReadBoq(auth.permissions, auth.user?.role))
+          const _Destination(
+            '/erp/boq',
+            Icons.receipt_long_outlined,
+            Icons.receipt_long,
+            'BOQ',
+            section: 'ERP',
+          ),
+        if (Permissions.canReadStore(auth.permissions, auth.user?.role))
+          const _Destination(
+            '/erp/store',
+            Icons.storefront_outlined,
+            Icons.storefront,
+            'Store',
+            section: 'ERP',
+          ),
+        if (Permissions.canReadTenders(auth.permissions, auth.user?.role) ||
+            Permissions.canReadTenderApplications(auth.permissions, auth.user?.role))
+          _Destination(
+            '/erp/tenders',
+            Icons.gavel_outlined,
+            Icons.gavel,
+            'Tenders',
+            section: 'ERP',
+            children: [
+              if (Permissions.canReadTenders(auth.permissions, auth.user?.role))
+                const _Destination(
+                  '/erp/tenders',
+                  Icons.gavel_outlined,
+                  Icons.gavel,
+                  'Tenders',
+                  section: 'ERP',
+                ),
+              if (Permissions.canReadTenderApplications(auth.permissions, auth.user?.role))
+                const _Destination(
+                  '/erp/tender-applications',
+                  Icons.handshake_outlined,
+                  Icons.handshake,
+                  'Tender Applications',
+                  section: 'ERP',
+                ),
+            ],
+          ),
+        if (Permissions.canReadDpr(auth.permissions, auth.user?.role))
+          const _Destination(
+            '/erp/dpr',
+            Icons.assignment_turned_in_outlined,
+            Icons.assignment_turned_in,
+            'DPR',
+            section: 'ERP',
+          ),
+        if (isAdmin || Permissions.canReadErpConfig(auth.permissions, auth.user?.role))
           const _Destination(
             '/erp/configurations',
             Icons.settings_outlined,
@@ -334,21 +347,24 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             section: 'ERP',
           ),
       ] else if (module == AppModule.crm) ...[
-        const _Destination(
-          '/crm/dashboard',
-          Icons.dashboard_outlined,
-          Icons.dashboard,
-          'Dashboard',
-          section: 'CRM',
-        ),
-        const _Destination(
-          '/crm/pre-sales',
-          Icons.point_of_sale_outlined,
-          Icons.point_of_sale,
-          'Pre sales',
-          section: 'CRM',
-        ),
-        if (currentPath.startsWith('/crm/pre-sales'))
+        if (Permissions.canReadCrmDashboard(auth.permissions, auth.user?.role))
+          const _Destination(
+            '/crm/dashboard',
+            Icons.dashboard_outlined,
+            Icons.dashboard,
+            'Dashboard',
+            section: 'CRM',
+          ),
+        if (Permissions.canReadCrmPreSales(auth.permissions, auth.user?.role))
+          const _Destination(
+            '/crm/pre-sales',
+            Icons.point_of_sale_outlined,
+            Icons.point_of_sale,
+            'Pre sales',
+            section: 'CRM',
+          ),
+        if (currentPath.startsWith('/crm/pre-sales') &&
+            Permissions.canReadCrmHeaders(auth.permissions, auth.user?.role))
           const _Destination(
             '/crm/pre-sales/headers',
             Icons.view_column_outlined,
@@ -356,27 +372,30 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             '  ↳ Headers',
             section: 'CRM',
           ),
-        const _Destination(
-          '/crm/post-sales',
-          Icons.support_agent_outlined,
-          Icons.support_agent,
-          'Post sales',
-          section: 'CRM',
-        ),
-        const _Destination(
-          '/crm/bin',
-          Icons.delete_outline,
-          Icons.delete,
-          'Bin',
-          section: 'CRM',
-        ),
-        const _Destination(
-          '/crm/settings',
-          Icons.settings_outlined,
-          Icons.settings,
-          'Settings',
-          section: 'CRM',
-        ),
+        if (Permissions.canReadCrmPostSales(auth.permissions, auth.user?.role))
+          const _Destination(
+            '/crm/post-sales',
+            Icons.support_agent_outlined,
+            Icons.support_agent,
+            'Post sales',
+            section: 'CRM',
+          ),
+        if (Permissions.canReadCrmBin(auth.permissions, auth.user?.role))
+          const _Destination(
+            '/crm/bin',
+            Icons.delete_outline,
+            Icons.delete,
+            'Bin',
+            section: 'CRM',
+          ),
+        if (Permissions.canReadCrmSettings(auth.permissions, auth.user?.role))
+          const _Destination(
+            '/crm/settings',
+            Icons.settings_outlined,
+            Icons.settings,
+            'Settings',
+            section: 'CRM',
+          ),
       ],
       ...sharedCollab,
       if (module == AppModule.hrms) ...[

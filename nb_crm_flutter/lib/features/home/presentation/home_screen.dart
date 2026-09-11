@@ -99,73 +99,79 @@ class _HomeScreenState extends State<HomeScreen> {
     final canManageInstitutes = Permissions.canManageInstitutes(auth.permissions, role);
 
     final modules = <_ModuleCardData>[
-      const _ModuleCardData(
-        title: 'Employee tree',
-        subtitle: 'Org chart, leads, and who to contact',
-        icon: Icons.account_tree_rounded,
-        route: '/org-tree',
-        enabled: true,
-        category: ModuleCategory.mySpace,
-        color: Color(0xFF2563EB),
-      ),
-      const _ModuleCardData(
-        title: 'Tasks',
-        subtitle: 'Assign work, track progress, review & Gantt',
-        icon: Icons.task_alt_rounded,
-        route: '/tasks',
-        enabled: true,
-        category: ModuleCategory.mySpace,
-        color: Color(0xFF4f46e5),
-      ),
-      const _ModuleCardData(
-        title: 'Chat',
-        subtitle: '1:1 and group chat, files, presence',
-        icon: Icons.chat,
-        route: '/chat',
-        enabled: true,
-        category: ModuleCategory.mySpace,
-        color: Color(0xFF2563EB),
-      ),
-      const _ModuleCardData(
-        title: 'Meet',
-        subtitle: 'Voice, video, screen share, guest codes, AI summary',
-        icon: Icons.videocam,
-        route: '/meet',
-        enabled: true,
-        category: ModuleCategory.mySpace,
-        color: Color(0xFF0f766e),
-      ),
-      _ModuleCardData(
-        title: 'Leave',
-        subtitle: () {
-          final parts = <String>['Balances', 'apply', 'history'];
-          if (canApproveLeave) parts.add('approvals');
-          if (canAdminLeave) parts.add('admin');
-          return parts.join(', ');
-        }(),
-        icon: Icons.event_available_rounded,
-        route: '/leave',
-        enabled: Permissions.canReadLeave(auth.permissions) ||
-            Permissions.canWriteLeave(auth.permissions) ||
-            canApproveLeave ||
-            canAdminLeave ||
-            user?.employeeId != null,
-        category: ModuleCategory.mySpace,
-        color: const Color(0xFF0284c7), // Sky Blue
-      ),
-      _ModuleCardData(
-        title: 'Attendance',
-        subtitle: canAdminAttendance
-            ? 'My punches, policy, manual punches & all employees'
-            : 'Calendar and punch history',
-        icon: Icons.fingerprint_rounded,
-        route: '/attendance',
-        enabled: Permissions.canReadAttendance(auth.permissions) ||
-            canAdminAttendance ||
-            user?.employeeId != null,
-        category: ModuleCategory.mySpace,
-        color: const Color(0xFF16a34a), // Green
-      ),
+      if (Permissions.canReadOrgTree(auth.permissions, auth.user?.role))
+        const _ModuleCardData(
+          title: 'Employee tree',
+          subtitle: 'Org chart, leads, and who to contact',
+          icon: Icons.account_tree_rounded,
+          route: '/org-tree',
+          enabled: true,
+          category: ModuleCategory.mySpace,
+          color: Color(0xFF2563EB),
+        ),
+      if (Permissions.canReadTasks(auth.permissions, auth.user?.role))
+        const _ModuleCardData(
+          title: 'Tasks',
+          subtitle: 'Assign work, track progress, review & Gantt',
+          icon: Icons.task_alt_rounded,
+          route: '/tasks',
+          enabled: true,
+          category: ModuleCategory.mySpace,
+          color: Color(0xFF4f46e5),
+        ),
+      if (Permissions.canReadChat(auth.permissions, auth.user?.role))
+        const _ModuleCardData(
+          title: 'Chat',
+          subtitle: '1:1 and group chat, files, presence',
+          icon: Icons.chat,
+          route: '/chat',
+          enabled: true,
+          category: ModuleCategory.mySpace,
+          color: Color(0xFF2563EB),
+        ),
+      if (Permissions.canReadMeetings(auth.permissions, auth.user?.role))
+        const _ModuleCardData(
+          title: 'Meet',
+          subtitle: 'Voice, video, screen share, guest codes, AI summary',
+          icon: Icons.videocam,
+          route: '/meet',
+          enabled: true,
+          category: ModuleCategory.mySpace,
+          color: Color(0xFF0f766e),
+        ),
+      if (Permissions.canReadLeave(auth.permissions, auth.user?.role) ||
+          Permissions.canWriteLeave(auth.permissions, auth.user?.role) ||
+          canApproveLeave ||
+          canAdminLeave ||
+          user?.employeeId != null)
+        _ModuleCardData(
+          title: 'Leave',
+          subtitle: () {
+            final parts = <String>['Balances', 'apply', 'history'];
+            if (canApproveLeave) parts.add('approvals');
+            if (canAdminLeave) parts.add('admin');
+            return parts.join(', ');
+          }(),
+          icon: Icons.event_available_rounded,
+          route: '/leave',
+          enabled: true,
+          category: ModuleCategory.mySpace,
+          color: const Color(0xFF0284c7), // Sky Blue
+        ),
+      if (Permissions.canReadAttendance(auth.permissions, auth.user?.role) ||
+          canAdminAttendance ||
+          user?.employeeId != null)
+        _ModuleCardData(
+          title: 'Attendance',
+          subtitle: canAdminAttendance
+              ? 'My punches, policy, manual punches & all employees'
+              : 'Calendar and punch history',
+          icon: Icons.fingerprint_rounded,
+          route: '/attendance',
+          enabled: true,
+          category: ModuleCategory.mySpace,
+          color: const Color(0xFF16a34a), // Green
+        ),
       const _ModuleCardData(
         title: 'Profile',
         subtitle: 'View and update your profile',
@@ -175,48 +181,47 @@ class _HomeScreenState extends State<HomeScreen> {
         category: ModuleCategory.mySpace,
         color: Color(0xFF9333ea), // Purple
       ),
-      _ModuleCardData(
-        title: 'Reimbursements',
-        subtitle: 'Apply, track & approve claims',
-        icon: Icons.receipt_long_rounded,
-        route: '/reimbursements',
-        enabled: Permissions.canReadReimbursements(auth.permissions) ||
-            Permissions.canWriteReimbursements(auth.permissions) ||
-            user?.employeeId != null,
-        category: ModuleCategory.mySpace,
-        color: const Color(0xFF0f766e), // Teal dark
-      ),
-      _ModuleCardData(
-        title: 'Recruitment',
-        subtitle: isHR || canAccessAdmin
-            ? 'Vacancies'
-            : 'Openings (view only when posted)',
-        icon: Icons.work_outline_rounded,
-        route: '/recruitment',
-        enabled: true,
-        category: ModuleCategory.mySpace,
-        color: const Color(0xFF7c3aed),
-      ),
-      const _ModuleCardData(
-        title: 'Repository',
-        subtitle: 'Company policies & documents',
-        icon: Icons.folder_shared_rounded,
-        route: '/repository',
-        enabled: true,
-        category: ModuleCategory.mySpace,
-        color: Color(0xFF0369a1),
-      ),
-      _ModuleCardData(
-        title: 'Payroll',
-        subtitle: Permissions.canReadSalary(auth.permissions)
-            ? 'Monthwise salaries, paid vs remaining'
-            : 'No salary access',
-        icon: Icons.payments_rounded,
-        route: '/admin/salary/payroll',
-        enabled: Permissions.canReadSalary(auth.permissions),
-        category: ModuleCategory.mySpace,
-        color: const Color(0xFFea580c), // Orange
-      ),
+      if (Permissions.canReadReimbursements(auth.permissions, auth.user?.role) ||
+          user?.employeeId != null)
+        const _ModuleCardData(
+          title: 'Reimbursements',
+          subtitle: 'Apply, track & approve claims',
+          icon: Icons.receipt_long_rounded,
+          route: '/reimbursements',
+          enabled: true,
+          category: ModuleCategory.mySpace,
+          color: Color(0xFF0f766e), // Teal dark
+        ),
+      if (Permissions.canReadRecruitment(auth.permissions, auth.user?.role))
+        const _ModuleCardData(
+          title: 'Recruitment',
+          subtitle: 'Openings and hiring pipeline',
+          icon: Icons.work_outline_rounded,
+          route: '/recruitment',
+          enabled: true,
+          category: ModuleCategory.mySpace,
+          color: Color(0xFF7c3aed),
+        ),
+      if (Permissions.canReadRepository(auth.permissions, auth.user?.role))
+        const _ModuleCardData(
+          title: 'Repository',
+          subtitle: 'Company policies & documents',
+          icon: Icons.folder_shared_rounded,
+          route: '/repository',
+          enabled: true,
+          category: ModuleCategory.mySpace,
+          color: Color(0xFF0369a1),
+        ),
+      if (Permissions.canReadPayroll(auth.permissions, auth.user?.role))
+        const _ModuleCardData(
+          title: 'Payroll',
+          subtitle: 'Monthwise salaries, paid vs remaining',
+          icon: Icons.payments_rounded,
+          route: '/admin/salary/payroll',
+          enabled: true,
+          category: ModuleCategory.mySpace,
+          color: Color(0xFFea580c), // Orange
+        ),
       if (hasWorkforce)
         const _ModuleCardData(
           title: 'Workforce',

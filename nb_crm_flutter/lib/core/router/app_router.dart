@@ -229,6 +229,66 @@ GoRouter createAppRouter(AuthBloc authBloc) {
             next = defaultRoute;
           } else if (isHrms && !enabled.contains('HRMS')) {
             next = defaultRoute;
+          } else {
+            // Granular RBAC feature gating per role matrix
+            final perms = auth.permissions;
+            final role = auth.user?.role;
+            final isChat = loc == '/chat' || loc.startsWith('/chat/');
+            final isMeet = (loc == '/meet' || loc.startsWith('/meet/')) && !guestMeet;
+            final isTasks = loc == '/tasks' || loc.startsWith('/tasks/');
+            final isOrgTree = loc == '/org-tree' || loc.startsWith('/org-tree/');
+
+            if (isChat && !Permissions.canReadChat(perms, role)) {
+              next = defaultRoute;
+            } else if (isMeet && !Permissions.canReadMeetings(perms, role)) {
+              next = defaultRoute;
+            } else if (isTasks && !Permissions.canReadTasks(perms, role)) {
+              next = defaultRoute;
+            } else if (isOrgTree && !Permissions.canReadOrgTree(perms, role)) {
+              next = defaultRoute;
+            } else if (loc.startsWith('/erp/projects') && !Permissions.canReadProjects(perms, role)) {
+              next = '/erp/home';
+            } else if (loc.startsWith('/erp/work-orders') && !Permissions.canReadWorkOrders(perms, role)) {
+              next = '/erp/home';
+            } else if (loc.startsWith('/erp/boq') && !Permissions.canReadBoq(perms, role)) {
+              next = '/erp/home';
+            } else if (loc.startsWith('/erp/store') && !Permissions.canReadStore(perms, role)) {
+              next = '/erp/home';
+            } else if ((loc.startsWith('/erp/tenders') || loc.startsWith('/erp/tender-applications')) &&
+                !Permissions.canReadTenders(perms, role) &&
+                !Permissions.canReadTenderApplications(perms, role)) {
+              next = '/erp/home';
+            } else if (loc.startsWith('/erp/dpr') && !Permissions.canReadDpr(perms, role)) {
+              next = '/erp/home';
+            } else if (loc.startsWith('/erp/configurations') &&
+                !Permissions.isAdmin(role) &&
+                !Permissions.canReadErpConfig(perms, role)) {
+              next = '/erp/home';
+            } else if (loc.startsWith('/crm/dashboard') && !Permissions.canReadCrmDashboard(perms, role)) {
+              next = Permissions.canReadCrmPreSales(perms, role) ? '/crm/pre-sales' : defaultRoute;
+            } else if (loc.startsWith('/crm/pre-sales/headers') && !Permissions.canReadCrmHeaders(perms, role)) {
+              next = '/crm/pre-sales';
+            } else if (loc.startsWith('/crm/pre-sales') && !Permissions.canReadCrmPreSales(perms, role)) {
+              next = Permissions.canReadCrmDashboard(perms, role) ? '/crm/dashboard' : defaultRoute;
+            } else if (loc.startsWith('/crm/post-sales') && !Permissions.canReadCrmPostSales(perms, role)) {
+              next = '/crm/pre-sales';
+            } else if (loc.startsWith('/crm/bin') && !Permissions.canReadCrmBin(perms, role)) {
+              next = '/crm/pre-sales';
+            } else if (loc.startsWith('/crm/settings') && !Permissions.canReadCrmSettings(perms, role)) {
+              next = '/crm/pre-sales';
+            } else if (loc.startsWith('/admin/roles') && !Permissions.canManageRoles(perms, role)) {
+              next = defaultRoute;
+            } else if (loc.startsWith('/admin/users') && !Permissions.canManageUsers(perms, role)) {
+              next = defaultRoute;
+            } else if (loc.startsWith('/repository') && !Permissions.canReadRepository(perms, role)) {
+              next = defaultRoute;
+            } else if (loc.startsWith('/recruitment') && !Permissions.canReadRecruitment(perms, role)) {
+              next = defaultRoute;
+            } else if (loc.startsWith('/reimbursements') &&
+                !Permissions.canReadReimbursements(perms, role) &&
+                auth.user?.employeeId == null) {
+              next = defaultRoute;
+            }
           }
         }
       }

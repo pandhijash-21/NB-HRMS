@@ -555,8 +555,8 @@ class _ModularMatrixTable extends StatefulWidget {
 
 class _ModularMatrixTableState extends State<_ModularMatrixTable> {
   final Set<String> _updating = {};
-  final Set<String> _expandedCategories = {'HRMS', 'CRM', 'ERP'};
-  String _selectedFilter = 'ALL'; // 'ALL', 'HRMS', 'CRM', 'ERP'
+  final Set<String> _expandedCategories = {'HRMS', 'CRM', 'ERP', 'COLLABORATION'};
+  String _selectedFilter = 'ALL'; // 'ALL', 'HRMS', 'CRM', 'ERP', 'COLLABORATION'
   String _searchQuery = '';
   final TextEditingController _searchCtrl = TextEditingController();
 
@@ -734,8 +734,8 @@ class _ModularMatrixTableState extends State<_ModularMatrixTable> {
       allCategories.add(m.category.toUpperCase());
     }
 
-    // Standard ordering: HRMS, CRM, ERP, followed by any custom category
-    final orderedCategories = ['HRMS', 'CRM', 'ERP'];
+    // Standard ordering: HRMS, CRM, ERP, COLLABORATION followed by any custom category
+    final orderedCategories = ['HRMS', 'CRM', 'ERP', 'COLLABORATION'];
     for (final c in allCategories) {
       if (!orderedCategories.contains(c)) orderedCategories.add(c);
     }

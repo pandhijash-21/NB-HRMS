@@ -15,7 +15,7 @@ import {
   isExemptIdentifier,
 } from './loginLock.service';
 import { otpService } from './otp.service';
-import { buildPermissionsMap, isSuperAdminRole, isSystemAdminRole } from './permissions-map';
+import { buildPermissionsMap, isSuperAdminRole, isSystemAdminRole, isAdminRole } from './permissions-map';
 
 const SESSION_TTL = 8 * 60 * 60; // 8 hours in seconds
 

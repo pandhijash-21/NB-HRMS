@@ -1,5 +1,6 @@
 import { prisma } from '../../config/prisma';
 import type { CreateRoleInput, UpdateRoleInput } from './types';
+import { isSuperAdminRole } from '../auth/permissions-map';
 
 function pickDesignationLabel(
   designations: Array<{ name: string; isAlias: boolean }>,
@@ -19,12 +20,21 @@ const roleInclude = {
 };
 
 export const roleService = {
-  async list(opts?: { positionsOnly?: boolean; designationsOnly?: boolean }) {
+  async list(
+    opts?: { positionsOnly?: boolean; designationsOnly?: boolean },
+    requesterRole?: string | null,
+  ) {
+    const isSuperAdmin = isSuperAdminRole(requesterRole);
     const where: {
       isActive?: boolean;
       id?: { in: string[] };
+      name?: { notIn?: string[] };
       OR?: Array<Record<string, unknown>>;
     } = { isActive: true };
+
+    if (!isSuperAdmin) {
+      where.name = { notIn: ['SUPERADMIN', 'Superadmin', 'superadmin'] };
+    }
 
     if (opts?.positionsOnly) {
       const positionRoles = await prisma.designation.findMany({
@@ -36,9 +46,12 @@ export const roleService = {
       where.id = { in: roleIds };
     } else if (opts?.designationsOnly === true) {
       // Roles explicitly tied to a designation, plus core system roles
+      const allowedSystemRoles = isSuperAdmin
+        ? ['SUPERADMIN', 'SYSTEM_ADMIN', 'ADMIN', 'EMPLOYEE']
+        : ['SYSTEM_ADMIN', 'ADMIN', 'EMPLOYEE'];
       where.OR = [
         { designations: { some: { isActive: true } } },
-        { name: { in: ['SUPERADMIN', 'SYSTEM_ADMIN', 'ADMIN', 'EMPLOYEE'] } },
+        { name: { in: allowedSystemRoles } },
       ];
     }
 

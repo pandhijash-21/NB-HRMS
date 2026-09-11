@@ -28,17 +28,17 @@ export type UpdateCompanyInput = {
   isActive?: boolean;
 };
 
-function parseModules(raw?: string | null): string[] {
-  if (!raw) return ['HRMS', 'CRM', 'ERP'];
+export function parseModules(raw?: string | null): string[] {
+  if (raw === null || raw === undefined || raw === '') return ['HRMS', 'CRM', 'ERP'];
   try {
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    if (Array.isArray(parsed)) return parsed.map((s) => String(s).trim().toUpperCase()).filter(Boolean);
   } catch {
     // Comma-separated fallback
     const parts = (raw ?? '').split(',').map((s) => s.trim().toUpperCase()).filter(Boolean);
-    if (parts.length > 0) return parts;
+    return parts;
   }
-  return ['HRMS', 'CRM', 'ERP'];
+  return [];
 }
 
 export const platformService = {
@@ -257,6 +257,12 @@ export const platformService = {
       where: { id },
       data: updateData,
     });
+
+    try {
+      const { invalidateLicenseCache } = require('../../middleware/tenantLicense');
+      invalidateLicenseCache(existing.name);
+      if (input.name) invalidateLicenseCache(input.name);
+    } catch {}
 
     // If company name was updated, synchronize users' subOrganization
     if (input.name && input.name.trim() !== existing.name) {

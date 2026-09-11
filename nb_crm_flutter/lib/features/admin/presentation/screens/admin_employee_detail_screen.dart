@@ -45,10 +45,8 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
   void initState() {
     super.initState();
     _tabController = TabController(length: _tabs.length, vsync: this);
-    // Initialize active profile employee ID to reload detail profile
-    Future.microtask(() {
-      ref.read(activeProfileEmployeeIdProvider.notifier).set(widget.employeeId);
-    });
+    // Initialize active profile employee ID synchronously so the first build can load the profile immediately
+    ref.read(activeProfileEmployeeIdProvider.notifier).set(widget.employeeId);
   }
 
   @override
@@ -62,12 +60,23 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
     final authState = ref.watch(authNotifierProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // Gate screen with RBAC
-    final hasAccess = Permissions.canViewWorkforce(
-      authState.permissions,
-      authState.user?.employeeViewScope,
-      authState.user?.role,
-    );
+    // Synchronize active profile employee ID if it doesn't match
+    final currentActiveId = ref.watch(activeProfileEmployeeIdProvider);
+    if (currentActiveId != widget.employeeId) {
+      Future.microtask(() {
+        if (mounted) {
+          ref.read(activeProfileEmployeeIdProvider.notifier).set(widget.employeeId);
+        }
+      });
+    }
+
+    // Gate screen with RBAC: Admins always have access to company workforce details
+    final hasAccess = Permissions.isAdmin(authState.user?.role) ||
+        Permissions.canViewWorkforce(
+          authState.permissions,
+          authState.user?.employeeViewScope,
+          authState.user?.role,
+        );
 
     if (!hasAccess) {
       return Scaffold(

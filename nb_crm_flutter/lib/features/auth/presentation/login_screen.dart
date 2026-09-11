@@ -73,6 +73,7 @@ class _LoginScreenState extends State<LoginScreen> {
     authBloc.add(AuthLoginRequested(
       identifier: identifier,
       password: password,
+      portal: 'standard',
     ));
   }
 

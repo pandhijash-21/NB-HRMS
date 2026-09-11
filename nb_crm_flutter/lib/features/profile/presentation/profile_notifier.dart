@@ -28,14 +28,16 @@ class ProfileNotifier extends AsyncNotifier<EmployeeProfile> {
   ProfileRepository get _repo => ref.read(profileRepositoryProvider);
 
   int get employeeId {
-    final id = ref.read(activeProfileEmployeeIdProvider);
+    final id = ref.read(activeProfileEmployeeIdProvider) ??
+        ref.read(authNotifierProvider).user?.employeeId;
     if (id == null) throw Exception('No employee ID selected.');
     return id;
   }
 
   @override
   FutureOr<EmployeeProfile> build() {
-    final id = ref.watch(activeProfileEmployeeIdProvider);
+    final id = ref.watch(activeProfileEmployeeIdProvider) ??
+        ref.watch(authNotifierProvider).user?.employeeId;
     if (id == null) {
       throw Exception('No employee ID selected.');
     }

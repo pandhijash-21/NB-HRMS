@@ -9,10 +9,13 @@ export const roleController = {
     const all = req.query.all === 'true';
     return res.json(
       ok(
-        await roleService.list({
-          positionsOnly,
-          designationsOnly: !all && !positionsOnly,
-        }),
+        await roleService.list(
+          {
+            positionsOnly,
+            designationsOnly: !all && !positionsOnly,
+          },
+          req.user?.roleName ?? req.user?.role,
+        ),
       ),
     );
   },

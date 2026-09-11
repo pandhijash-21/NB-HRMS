@@ -9,6 +9,7 @@ import '../../features/auth/presentation/bloc/auth_bloc.dart';
 import '../../features/auth/domain/permissions.dart';
 import '../../features/auth/presentation/change_password_screen.dart';
 import '../../features/auth/presentation/login_screen.dart';
+import '../../features/auth/presentation/superadmin_login_screen.dart';
 import '../../features/auth/presentation/verify_emails_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
@@ -144,6 +145,8 @@ GoRouter createAppRouter(AuthBloc authBloc) {
       }
 
       final loggingIn = loc == '/login';
+      final isSuperAdminLogin = loc == '/superadmin/login';
+      final isSuperAdminPath = loc == '/superadmin' || loc.startsWith('/superadmin/');
       final changingPassword = loc == '/change-password';
       final verifyingEmails = loc == '/verify-emails';
       final trackingSetup = loc == '/tracking/setup';
@@ -154,7 +157,13 @@ GoRouter createAppRouter(AuthBloc authBloc) {
 
       String? next;
       if (!authenticated) {
-        next = (loggingIn || guestMeet) ? null : '/login';
+        if (loc == '/superadmin') {
+          next = '/superadmin/login';
+        } else if (isSuperAdminLogin) {
+          next = null;
+        } else {
+          next = (loggingIn || guestMeet) ? null : '/login';
+        }
       } else if (auth.isFirstLogin) {
         next = changingPassword ? null : '/change-password';
       } else if (auth.needsEmailVerification) {
@@ -165,8 +174,8 @@ GoRouter createAppRouter(AuthBloc authBloc) {
           next = '/platform';
         }
       } else {
-        // Client company users and employees cannot access platform console
-        if (isPlatformPath) {
+        // Client company users and employees cannot access platform console or superadmin portal
+        if (isPlatformPath || isSuperAdminPath) {
           next = '/home';
         } else if (changingPassword || verifyingEmails || loggingIn) {
           next = '/home';
@@ -183,6 +192,11 @@ GoRouter createAppRouter(AuthBloc authBloc) {
     routes: [
       GoRoute(path: '/', redirect: (context, state) => '/login'),
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
+      GoRoute(path: '/superadmin', redirect: (context, state) => '/superadmin/login'),
+      GoRoute(
+        path: '/superadmin/login',
+        builder: (context, state) => const SuperadminLoginScreen(),
+      ),
       GoRoute(
         path: '/change-password',
         builder: (context, state) => const ChangePasswordScreen(),

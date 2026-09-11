@@ -160,9 +160,14 @@ class _AdminEmployeesScreenState extends State<AdminUsersScreen> {
                     );
                   }
 
+                  final currentUserRole = auth.user?.role;
+                  final isSuperAdmin = Permissions.isSuperAdmin(currentUserRole);
+                  final scopedUsers = isSuperAdmin
+                      ? usersState.users
+                      : usersState.users.where((u) => !Permissions.isSuperAdmin(u.role.name) && (u.username?.toLowerCase() != 'superadmin')).toList();
                   final visible = usersState.lockedOnly
-                      ? usersState.users.where((u) => u.isLoginLocked).toList()
-                      : usersState.users;
+                      ? scopedUsers.where((u) => u.isLoginLocked).toList()
+                      : scopedUsers;
                   if (visible.isEmpty) {
                     return Center(
                       child: Column(
@@ -188,8 +193,6 @@ class _AdminEmployeesScreenState extends State<AdminUsersScreen> {
                       ),
                     );
                   }
-                  final currentUserRole = auth.user?.role;
-                  final isSuperAdmin = Permissions.isSuperAdmin(currentUserRole);
                   return ListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
                     itemCount: visible.length,

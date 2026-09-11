@@ -6,11 +6,14 @@ import { CreateUserSchema, UpdateUserSchema } from './types';
 export const userController = {
   async list(req: Request, res: Response) {
     const { roleId, isActive, search } = req.query;
-    const users = await userService.list({
-      roleId:   typeof roleId === 'string'   ? roleId   : undefined,
-      isActive: isActive === 'true' ? true : isActive === 'false' ? false : undefined,
-      search:   typeof search === 'string'   ? search   : undefined,
-    });
+    const users = await userService.list(
+      {
+        roleId: typeof roleId === 'string' ? roleId : undefined,
+        isActive: isActive === 'true' ? true : isActive === 'false' ? false : undefined,
+        search: typeof search === 'string' ? search : undefined,
+      },
+      req.user,
+    );
     return res.json(ok(users));
   },
 

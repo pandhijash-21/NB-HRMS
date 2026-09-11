@@ -15,10 +15,12 @@ class AuthLoginRequested extends AuthEvent {
   const AuthLoginRequested({
     required this.identifier,
     required this.password,
+    this.portal,
   });
 
   final String identifier;
   final String password;
+  final String? portal;
 }
 
 /// Fired when user requests password change.

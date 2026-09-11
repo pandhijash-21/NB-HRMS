@@ -115,13 +115,20 @@ import { getSttHealth } from './modules/collaboration/stt.service';
 // Generic /api prefix - personal-education module
 app.use('/api', personalEducationRouter);
 
+import { requireAuth } from './middleware/auth';
+import { requireModuleLicense } from './middleware/tenantLicense';
+
+const hrmsLicenseGuard = [requireAuth, requireModuleLicense('HRMS')];
+const erpLicenseGuard = [requireAuth, requireModuleLicense('ERP')];
+const crmLicenseGuard = [requireAuth, requireModuleLicense('CRM')];
+
 // Specific routes
 app.use('/api/auth',  authRouter);
 app.use('/api/otp', otpRouter);
 app.use('/api/admin', userMgmtRouter);
 app.use('/api/approvals', approvalsRouter);
-app.use('/api/leave', leaveRouter);
-app.use('/api/attendance', attendanceRouter);
+app.use('/api/leave', ...hrmsLicenseGuard, leaveRouter);
+app.use('/api/attendance', ...hrmsLicenseGuard, attendanceRouter);
 app.use('/api/letters', lettersRouter);
 app.use('/api/reimbursements', reimbursementsRouter);
 app.use('/api/recruitment', recruitmentRouter);
@@ -131,19 +138,19 @@ app.use('/api', organizationRouter);
 app.use('/api/org-tree', orgTreeRouter);
 app.use('/api/admin', designationRouter);
 app.use('/api', instituteRouter);
-app.use('/api/salary', salaryRouter);
+app.use('/api/salary', ...hrmsLicenseGuard, salaryRouter);
 app.use('/api', lookupRouter);
-app.use('/api/projects', projectRouter);
-app.use('/api/work-orders', workOrderRouter);
-app.use('/api/erp/activities', activityRouter);
-app.use('/api/erp/contractors', contractorRouter);
-app.use('/api/erp/resources', resourceRouter);
-app.use('/api/boq', boqRouter);
-app.use('/api/tenders', tenderRouter);
-app.use('/api/tender-applications', tenderApplicationRouter);
-app.use('/api/dpr', dprRouter);
+app.use('/api/projects', ...erpLicenseGuard, projectRouter);
+app.use('/api/work-orders', ...erpLicenseGuard, workOrderRouter);
+app.use('/api/erp/activities', ...erpLicenseGuard, activityRouter);
+app.use('/api/erp/contractors', ...erpLicenseGuard, contractorRouter);
+app.use('/api/erp/resources', ...erpLicenseGuard, resourceRouter);
+app.use('/api/boq', ...erpLicenseGuard, boqRouter);
+app.use('/api/tenders', ...erpLicenseGuard, tenderRouter);
+app.use('/api/tender-applications', ...erpLicenseGuard, tenderApplicationRouter);
+app.use('/api/dpr', ...erpLicenseGuard, dprRouter);
 app.use('/api/tracking', trackingRouter);
-app.use('/api/crm', crmRouter);
+app.use('/api/crm', ...crmLicenseGuard, crmRouter);
 app.use('/api/tasks', tasksRouter);
 app.use('/api/events', sseEventsRouter);
 app.use('/api/chat', chatRouter);

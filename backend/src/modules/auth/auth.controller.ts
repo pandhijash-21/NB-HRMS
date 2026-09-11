@@ -11,7 +11,8 @@ export const authController = {
     }
 
     try {
-      const result = await authService.login(body.data);
+      const portal = body.data.portal ?? (req.headers['x-auth-portal'] === 'superadmin' ? 'superadmin' : undefined);
+      const result = await authService.login({ ...body.data, portal });
 
       if ('error' in result) {
         return res.status(result.status ?? 400).json(fail(result.error ?? 'Error'));

@@ -153,6 +153,24 @@ export const authService = {
       return { error: fail.error, status: fail.status } as const;
     }
 
+    // Portal isolation check
+    const isUserSuperAdmin = isSuperAdminRole(user.role?.name) || isSuperAdminRole(user.username);
+    if (input.portal === 'superadmin') {
+      if (!isUserSuperAdmin) {
+        return {
+          error: 'Access Denied: Only platform Superadmin accounts can log in via this portal. Please use the standard login portal at /login.',
+          status: 403,
+        } as const;
+      }
+    } else {
+      if (isUserSuperAdmin) {
+        return {
+          error: 'Superadmin accounts must use the dedicated Superadmin portal at /superadmin/login.',
+          status: 403,
+        } as const;
+      }
+    }
+
     const aliases = [
       identifier,
       user.username ?? '',
@@ -424,12 +442,23 @@ export const authService = {
       ? buildPermissionsMap(dbUser.role.permissions)
       : user.permissions;
     const personalPerm = dbUser?.role?.permissions.find((p) => p.moduleKey === 'PERSONAL_INFO');
+    let employeeViewScope = personalPerm?.employeeViewScope ?? user.employeeViewScope ?? 'NONE';
+    const effectiveRoleName = dbUser?.role?.name ?? user.roleName ?? user.role ?? 'EMPLOYEE';
+    if (isAdminRole(effectiveRoleName) || isSystemAdminRole(effectiveRoleName)) {
+      if (employeeViewScope === 'NONE' || employeeViewScope === 'SELF') {
+        employeeViewScope = 'UNIVERSITY';
+      }
+    }
     return {
+      id: user.id,
       employeeId: user.employeeId,
       roleId: dbUser?.roleId ?? user.roleId,
-      roleName: dbUser?.role?.name ?? user.roleName,
+      roleName: effectiveRoleName,
+      role: effectiveRoleName,
+      name: dbUser?.username ?? (user as any).name ?? 'User',
+      username: dbUser?.username ?? null,
       permissions,
-      employeeViewScope: personalPerm?.employeeViewScope ?? user.employeeViewScope ?? 'NONE',
+      employeeViewScope,
       subOrganization: user.subOrganization ?? null,
       needsEmailVerification: emailStatus.needsEmailVerification,
       pendingEmails: emailStatus.emails.filter((e) => !e.verified),

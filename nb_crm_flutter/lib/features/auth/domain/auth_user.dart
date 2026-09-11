@@ -26,7 +26,7 @@ class AuthUser {
       name: (json['name'] as String?)?.trim().isNotEmpty == true
           ? json['name'] as String
           : 'User',
-      role: json['role'] as String? ?? 'EMPLOYEE',
+      role: (json['role'] ?? json['roleName']) as String? ?? 'EMPLOYEE',
       employeeId: json['employeeId'] is int
           ? json['employeeId'] as int
           : int.tryParse('${json['employeeId'] ?? ''}'),

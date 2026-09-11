@@ -72,7 +72,11 @@ class _AdminRolesScreenState extends State<AdminRolesScreen> {
     }
 
     final rolesState = context.watch<AdminRolesBloc>().state;
-    final filtered = rolesState.filteredRoles;
+    final isSuperAdmin = Permissions.isSuperAdmin(auth.user?.role);
+    final rawFiltered = rolesState.filteredRoles;
+    final filtered = isSuperAdmin
+        ? rawFiltered
+        : rawFiltered.where((r) => !Permissions.isSuperAdmin(r.name)).toList();
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),

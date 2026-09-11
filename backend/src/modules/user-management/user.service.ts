@@ -20,11 +20,36 @@ async function invalidateSession(userId: string, roleId?: string) {
 }
 
 export const userService = {
-  async list(filters: { roleId?: string; isActive?: boolean; search?: string }) {
+  async list(
+    filters: { roleId?: string; isActive?: boolean; search?: string },
+    requester?: { id?: string; roleName?: string; role?: string; subOrganization?: string | null },
+  ) {
+    const isSuperAdmin = isSuperAdminRole(requester?.roleName ?? requester?.role);
+
     const rows = await prisma.user.findMany({
       where: {
-        ...(filters.roleId   ? { roleId: filters.roleId }     : {}),
+        ...(filters.roleId ? { roleId: filters.roleId } : {}),
         ...(filters.isActive !== undefined ? { isActive: filters.isActive } : {}),
+        // If not superadmin: strictly exclude superadmin accounts & roles
+        ...(!isSuperAdmin
+          ? {
+              role: {
+                name: {
+                  notIn: ['SUPERADMIN', 'Superadmin', 'superadmin'],
+                },
+              },
+              username: {
+                not: 'superadmin',
+                mode: 'insensitive',
+              },
+            }
+          : {}),
+        // If requester belongs to a company, scope users to their company
+        ...(!isSuperAdmin && requester?.subOrganization
+          ? {
+              subOrganization: requester.subOrganization,
+            }
+          : {}),
         ...(filters.search
           ? {
               OR: [

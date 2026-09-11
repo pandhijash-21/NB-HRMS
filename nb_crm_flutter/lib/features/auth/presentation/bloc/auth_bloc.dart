@@ -123,6 +123,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       final result = await _repo.login(
         identifier: event.identifier,
         password: event.password,
+        portal: event.portal,
       );
 
       if (result.token.isEmpty) {
@@ -167,6 +168,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           final result = await _repo.login(
             identifier: event.identifier,
             password: event.password,
+            portal: event.portal,
           );
 
           if (result.token.isNotEmpty) {

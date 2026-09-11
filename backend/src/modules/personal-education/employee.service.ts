@@ -138,6 +138,13 @@ export const employeeService = {
         },
       });
 
+      const creatorUser = await tx.user.findUnique({
+        where: { id: creatorId },
+        select: { subOrganization: true },
+      });
+      const targetSubOrg = input.subOrganization || creatorUser?.subOrganization || instituteRef.subOrganization || null;
+      const targetOrg = targetSubOrg || 'NB DEVELOPER';
+
       await tx.employeeGeneralInfo.create({
         data: {
           employeeId: employee.id,
@@ -148,9 +155,9 @@ export const employeeService = {
           joiningDate: input.joiningDate,
           originalJoiningDate: input.joiningDate,
           employeeCategory: input.employeeCategory as any,
-          organization: 'GANDHINAGAR UNIVERSITY',
+          organization: targetOrg,
           instituteId: instituteRef.instituteId,
-          subOrganization: instituteRef.subOrganization,
+          subOrganization: targetSubOrg,
           employeeCode: input.employeeCode,
           firstApproverUserId:  input.firstApproverUserId  ?? null,
           secondApproverUserId: input.secondApproverUserId ?? null,

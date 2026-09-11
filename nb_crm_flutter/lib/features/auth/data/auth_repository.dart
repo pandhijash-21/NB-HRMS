@@ -17,12 +17,14 @@ class AuthRepository {
   Future<LoginResult> login({
     required String identifier,
     required String password,
+    String? portal,
   }) {
     return _dio.postEnvelope<LoginResult>(
       'auth/login',
       data: {
         'identifier': identifier.trim(),
         'password': password,
+        if (portal != null) 'portal': portal,
       },
       parse: (raw) {
         if (raw is! Map) {

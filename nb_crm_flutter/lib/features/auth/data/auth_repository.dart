@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import '../../../core/network/dio_client.dart';
 import '../../../core/storage/secure_storage_service.dart';
-import '../../../core/utils/app_logger.dart';
+import '../../../core/logging/app_logger.dart';
 import '../domain/auth_user.dart';
 
 class AuthRepository {

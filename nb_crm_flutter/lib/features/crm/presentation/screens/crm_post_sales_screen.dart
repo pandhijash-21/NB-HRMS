@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../auth/domain/permissions.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
 
 class CrmPostSalesScreen extends StatefulWidget {
   const CrmPostSalesScreen({super.key});

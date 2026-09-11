@@ -25,6 +25,7 @@ export const userService = {
     requester?: { id?: string; roleName?: string; role?: string; subOrganization?: string | null },
   ) {
     const isSuperAdmin = isSuperAdminRole(requester?.roleName ?? requester?.role);
+    const isAdmin = isAdminRole(requester?.roleName ?? requester?.role);
 
     const whereConditions: any[] = [];
 
@@ -55,8 +56,8 @@ export const userService = {
         ],
       });
 
-      // If requester belongs to a company, scope users to their company
-      if (requester?.subOrganization) {
+      // If requester belongs to a specific company, scope only if NOT an Admin
+      if (!isAdmin && requester?.subOrganization) {
         whereConditions.push({
           OR: [
             { subOrganization: requester.subOrganization },

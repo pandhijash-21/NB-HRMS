@@ -30,6 +30,7 @@ export const employeeService = {
         ...(where.generalInfo ?? {}),
         OR: [
           { subOrganization: { equals: scope, mode: 'insensitive' } },
+          { organization: { equals: scope, mode: 'insensitive' } },
           { institute: { code: { equals: scope, mode: 'insensitive' } } },
           { institute: { name: { equals: scope, mode: 'insensitive' } } },
         ],

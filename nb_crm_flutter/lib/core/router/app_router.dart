@@ -125,11 +125,23 @@ GoRouter createAppRouter(AuthBloc authBloc) {
   final shellNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'shellNav');
 
   // Bump when route table changes so hot-restart rebuilds GoRouter cleanly.
-  const routerRevision = 21;
+  const routerRevision = 22;
+
+  String resolveInitialLocation() {
+    if (kIsWeb) {
+      final base = Uri.base.toString().toLowerCase();
+      final path = Uri.base.path.toLowerCase();
+      final fragment = Uri.base.fragment.toLowerCase();
+      if (base.contains('superadmin') || path.contains('superadmin') || fragment.contains('superadmin')) {
+        return '/superadmin/login';
+      }
+    }
+    return '/login';
+  }
 
   return GoRouter(
     navigatorKey: rootNavigatorKey,
-    initialLocation: '/login',
+    initialLocation: resolveInitialLocation(),
     refreshListenable: refresh,
     debugLogDiagnostics: kDebugMode,
     observers: [AppGoRouterObserver()],
@@ -157,6 +169,15 @@ GoRouter createAppRouter(AuthBloc authBloc) {
 
       String? next;
       if (!authenticated) {
+        if (kIsWeb) {
+          final base = Uri.base.toString().toLowerCase();
+          final path = Uri.base.path.toLowerCase();
+          final fragment = Uri.base.fragment.toLowerCase();
+          final hasSuperadminUrl = base.contains('superadmin') || path.contains('superadmin') || fragment.contains('superadmin');
+          if (hasSuperadminUrl && (loc == '/login' || loc == '/' || loc.isEmpty)) {
+            return '/superadmin/login';
+          }
+        }
         if (loc == '/superadmin') {
           next = '/superadmin/login';
         } else if (isSuperAdminLogin) {

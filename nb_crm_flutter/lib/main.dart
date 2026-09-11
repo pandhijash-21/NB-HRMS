@@ -22,10 +22,12 @@ import 'features/auth/presentation/bloc/auth_bloc.dart';
 import 'features/auth/presentation/permission_guard.dart';
 import 'features/collaboration/presentation/notification_bell.dart';
 import 'features/lookups/presentation/bloc/lookups_bloc.dart';
+import 'core/router/url_strategy.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  configureAppUrlStrategy();
   Bloc.observer = const AppBlocObserver();
 
   // Allow Google Fonts runtime fetching on web / mobile

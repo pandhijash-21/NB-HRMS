@@ -70,10 +70,13 @@ class _LoginScreenState extends State<LoginScreen> {
     final identifier = _identifierController.text.trim();
     final password = _passwordController.text;
 
+    final isSuperAdmin = identifier.toLowerCase() == 'superadmin' ||
+        (kIsWeb && Uri.base.toString().toLowerCase().contains('superadmin'));
+
     authBloc.add(AuthLoginRequested(
       identifier: identifier,
       password: password,
-      portal: 'standard',
+      portal: isSuperAdmin ? 'superadmin' : 'standard',
     ));
   }
 
@@ -346,6 +349,26 @@ class _LoginScreenState extends State<LoginScreen> {
                                           if (auth.errorMessage != null) ...[
                                             const SizedBox(height: 20),
                                             InlineBanner.error(message: auth.errorMessage!),
+                                            if (auth.errorMessage!.toLowerCase().contains('superadmin')) ...[
+                                              const SizedBox(height: 10),
+                                              SizedBox(
+                                                width: double.infinity,
+                                                child: OutlinedButton.icon(
+                                                  onPressed: () {
+                                                    context.read<AuthBloc>().add(const AuthClearErrorRequested());
+                                                    context.go('/superadmin/login');
+                                                  },
+                                                  icon: const Icon(Icons.shield_outlined, size: 16, color: Color(0xFFC5A059)),
+                                                  label: const Text('Open Dedicated Superadmin Portal'),
+                                                  style: OutlinedButton.styleFrom(
+                                                    foregroundColor: const Color(0xFFC5A059),
+                                                    side: const BorderSide(color: Color(0xFFC5A059)),
+                                                    padding: const EdgeInsets.symmetric(vertical: 12),
+                                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
                                             if (!kReleaseMode &&
                                                 (auth.errorMessage!.contains('Unable to reach server') ||
                                                  auth.errorMessage!.contains('reach the server'))) ...[
@@ -450,6 +473,24 @@ class _LoginScreenState extends State<LoginScreen> {
                                                         letterSpacing: 0.5,
                                                       ),
                                                     ),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 14),
+                                          Center(
+                                            child: TextButton.icon(
+                                              onPressed: () {
+                                                context.read<AuthBloc>().add(const AuthClearErrorRequested());
+                                                context.go('/superadmin/login');
+                                              },
+                                              icon: const Icon(Icons.shield_outlined, size: 15, color: Color(0xFFC5A059)),
+                                              label: const Text(
+                                                'Platform Superadmin Portal →',
+                                                style: TextStyle(
+                                                  color: Color(0xFFC5A059),
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
                                             ),
                                           ),
                                           if (!kReleaseMode) ...[
@@ -600,9 +641,9 @@ class _BrandHeader extends StatelessWidget {
           errorBuilder: (_, __, ___) => Container(
             width: compact ? 64 : 76,
             height: compact ? 64 : 76,
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               shape: BoxShape.circle,
-              gradient: const LinearGradient(
+              gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [

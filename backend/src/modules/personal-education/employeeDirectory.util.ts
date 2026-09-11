@@ -51,17 +51,14 @@ import { isSuperAdminRole } from '../auth/permissions-map';
 export async function resolveDirectoryInstituteFilter(
   user: AuthUser | undefined,
 ): Promise<string | undefined> {
-  const isSuperAdmin = isSuperAdminRole(user?.role || user?.roleName);
-  const direct = user?.subOrganization?.trim();
-
-  // If user belongs to a client tenant company and is not superadmin, scope to their company
-  if (!isSuperAdmin && direct) {
-    return direct;
+  // Administrative roles (Superadmin, Tenant Admin, HR, System Admin) have full workforce visibility
+  if (isAdministrativeRole(user?.role || user?.roleName)) {
+    return undefined;
   }
 
-  if (isAdministrativeRole(user?.role || user?.roleName)) return undefined;
   if (getEmployeeViewScope(user) !== 'INSTITUTE') return undefined;
 
+  const direct = user?.subOrganization?.trim();
   if (direct) return direct;
 
   if (!user?.id) return '__NO_INSTITUTE_SCOPE__';

@@ -3,8 +3,10 @@ import 'package:equatable/equatable.dart';
 
 import '../../../../core/bloc/load_status.dart';
 import '../../../leave/data/leave_repository.dart';
+import '../../../leave/domain/leave_models.dart';
 import '../../../profile/domain/profile_models.dart';
 import '../../data/admin_repository.dart';
+import '../../domain/admin_models.dart';
 
 // ---------------------------------------------------------------------------
 // Events
@@ -114,14 +116,14 @@ class AdminDashboardBloc
   Future<void> _fetchDashboard(Emitter<AdminDashboardState> emit) async {
     try {
       final results = await Future.wait([
-        _adminRepository.listEmployees(limit: 1000, offset: 0),
-        _adminRepository.listEmployees(limit: 5, offset: 0),
-        _adminRepository.listApprovals(status: 'PENDING'),
+        _adminRepository.listEmployees(limit: 1000, offset: 0).catchError((_) => <String, dynamic>{'items': <EmployeeProfile>[], 'total': 0}),
+        _adminRepository.listEmployees(limit: 5, offset: 0).catchError((_) => <String, dynamic>{'items': <EmployeeProfile>[], 'total': 0}),
+        _adminRepository.listApprovals(status: 'PENDING').catchError((_) => <ChangeRequest>[]),
         _leaveRepository.getAdminApplications(
           status: 'PENDING',
           page: 0,
           limit: 1,
-        ),
+        ).catchError((_) => const LeaveApplicationsPage(items: [], total: 0)),
       ]);
 
       final allMap = results[0] as Map<String, dynamic>;

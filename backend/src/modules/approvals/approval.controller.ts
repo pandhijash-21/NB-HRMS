@@ -4,12 +4,13 @@ import { ok, fail } from '../../utils/response';
 import { approvalService } from './approval.service';
 import { sseService } from '../events/sse.service';
 import { prisma } from '../../config/prisma';
+import { isAdminRole } from '../auth/permissions-map';
 
-const REVIEWER_ROLES = ['ADMIN', 'HR', 'HR_MANAGER', 'SUPER_ADMIN'];
+const REVIEWER_ROLES = ['ADMIN', 'HR', 'HR_MANAGER', 'SUPER_ADMIN', 'SUPERADMIN'];
 
 function assertReviewer(req: Request): boolean {
   const role = String((req.user as any)?.roleName ?? (req.user as any)?.role ?? '').toUpperCase();
-  return REVIEWER_ROLES.includes(role);
+  return isAdminRole(role) || REVIEWER_ROLES.includes(role);
 }
 
 function moduleLabel(module: string): string {

@@ -19,9 +19,15 @@ class ActiveProfileEmployeeId extends Notifier<int?> {
   void set(int? id) => state = id;
 }
 
-final activeProfileEmployeeIdProvider = NotifierProvider.autoDispose<ActiveProfileEmployeeId, int?>(
+final activeProfileEmployeeIdProvider = NotifierProvider<ActiveProfileEmployeeId, int?>(
   ActiveProfileEmployeeId.new,
 );
+
+/// Direct family provider to fetch any employee profile by ID without mutating global state.
+final employeeProfileByIdProvider = FutureProvider.autoDispose.family<EmployeeProfile, int>((ref, employeeId) async {
+  final repo = ref.watch(profileRepositoryProvider);
+  return repo.getProfile(employeeId);
+});
 
 /// Notifier for the currently active employee profile.
 class ProfileNotifier extends AsyncNotifier<EmployeeProfile> {

@@ -167,13 +167,15 @@ export const platformService = {
       throw new Error(`Username "${cleanUsername}" is already in use.`);
     }
 
-    // Find System Admin role
+    // Find Company Admin role (ADMIN)
     const sysAdminRole = await prisma.role.findFirst({
-      where: { name: { in: ['SYSTEM_ADMIN', 'SYSTEM_ADMINISTRATOR', 'ADMIN'] } },
-      orderBy: { name: 'asc' },
+      where: { name: 'ADMIN', isActive: true },
+    }) ?? await prisma.role.findFirst({
+      where: { name: { in: ['ADMIN', 'SYSTEM_ADMIN', 'SYSTEM_ADMINISTRATOR'] }, isActive: true },
+      orderBy: { isSystem: 'desc' },
     });
     if (!sysAdminRole) {
-      throw new Error('System Admin role not found. Please contact support.');
+      throw new Error('Admin role not found. Please contact support.');
     }
 
     const modules = input.enabledModules && input.enabledModules.length > 0

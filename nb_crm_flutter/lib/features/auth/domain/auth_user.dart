@@ -9,6 +9,7 @@ class AuthUser {
     this.photoUrl,
     this.subOrganization,
     this.employeeViewScope,
+    this.enabledModules = const ['HRMS', 'CRM', 'ERP'],
   });
 
   final String id;
@@ -19,8 +20,14 @@ class AuthUser {
   final String? photoUrl;
   final String? subOrganization;
   final String? employeeViewScope;
+  final List<String> enabledModules;
 
   factory AuthUser.fromJson(Map<String, dynamic> json) {
+    final rawMods = json['enabledModules'];
+    final List<String> mods = (rawMods is List)
+        ? rawMods.map((e) => e.toString().toUpperCase().trim()).toList()
+        : const ['HRMS', 'CRM', 'ERP'];
+
     return AuthUser(
       id: json['id']?.toString() ?? '',
       name: (json['name'] as String?)?.trim().isNotEmpty == true
@@ -34,6 +41,7 @@ class AuthUser {
       photoUrl: json['photoUrl'] as String?,
       subOrganization: json['subOrganization'] as String?,
       employeeViewScope: json['employeeViewScope'] as String?,
+      enabledModules: mods,
     );
   }
 
@@ -46,6 +54,7 @@ class AuthUser {
     String? photoUrl,
     String? subOrganization,
     String? employeeViewScope,
+    List<String>? enabledModules,
   }) {
     return AuthUser(
       id: id ?? this.id,
@@ -56,6 +65,7 @@ class AuthUser {
       photoUrl: photoUrl ?? this.photoUrl,
       subOrganization: subOrganization ?? this.subOrganization,
       employeeViewScope: employeeViewScope ?? this.employeeViewScope,
+      enabledModules: enabledModules ?? this.enabledModules,
     );
   }
 
@@ -68,6 +78,7 @@ class AuthUser {
         'photoUrl': photoUrl,
         'subOrganization': subOrganization,
         'employeeViewScope': employeeViewScope,
+        'enabledModules': enabledModules,
       };
 }
 

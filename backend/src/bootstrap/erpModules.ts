@@ -335,27 +335,34 @@ export async function ensureErpModulePermissions(): Promise<void> {
     },
   });
 
-  const systemAdminRole = await prisma.role.upsert({
-    where: { name: 'SYSTEM_ADMIN' },
-    update: { isSystem: true, isActive: true },
-    create: {
-      name: 'SYSTEM_ADMIN',
-      description: 'System Administrator with full freedom to manage RBAC, users, permissions, and all system modules',
-      isSystem: true,
-      isActive: true,
-    },
-  });
-
   const adminRole = await prisma.role.upsert({
     where: { name: 'ADMIN' },
     update: { isSystem: true, isActive: true },
     create: {
       name: 'ADMIN',
-      description: 'Administrator role (alias for System Admin)',
+      description: 'System Administrator with full permissions across all suites and modules',
       isSystem: true,
       isActive: true,
     },
   });
+
+  // Migrate any users currently assigned to obsolete SYSTEM_ADMIN or SYSTEM_ADMINISTRATOR roles to ADMIN
+  const obsoleteRoles = await prisma.role.findMany({
+    where: { name: { in: ['SYSTEM_ADMIN', 'SYSTEM_ADMINISTRATOR', 'SYSTEMADMIN'] } },
+    select: { id: true, name: true },
+  });
+  if (obsoleteRoles.length > 0) {
+    const obsoleteIds = obsoleteRoles.map((r) => r.id);
+    await prisma.user.updateMany({
+      where: { roleId: { in: obsoleteIds } },
+      data: { roleId: adminRole.id },
+    });
+    // Mark obsolete duplicate roles inactive so they never appear in admin > roles
+    await prisma.role.updateMany({
+      where: { id: { in: obsoleteIds } },
+      data: { isActive: false, isSystem: false },
+    });
+  }
 
   const emp = await prisma.role.upsert({
     where: { name: 'EMPLOYEE' },
@@ -374,8 +381,8 @@ export async function ensureErpModulePermissions(): Promise<void> {
 
   const allKeys = SYSTEM_SUBMODULES.map((m) => m.key);
 
-  // Grant full permissions across all submodules to SUPERADMIN, SYSTEM_ADMIN, ADMIN & elevated roles
-  for (const role of [superAdminRole, systemAdminRole, adminRole, ...elevated]) {
+  // Grant full permissions across all submodules to SUPERADMIN, ADMIN & elevated roles
+  for (const role of [superAdminRole, adminRole, ...elevated]) {
     for (const moduleKey of allKeys) {
       await prisma.rolePermission.upsert({
         where: { roleId_moduleKey: { roleId: role.id, moduleKey } },
@@ -445,7 +452,7 @@ export async function ensureErpModulePermissions(): Promise<void> {
       await prisma.user.update({
         where: { id: companyAdmin.id },
         data: {
-          roleId: systemAdminRole.id,
+          roleId: adminRole.id,
           username: 'admin',
           subOrganization: companyAdmin.subOrganization || org.name,
           isActive: true,

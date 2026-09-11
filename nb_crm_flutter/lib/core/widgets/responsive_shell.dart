@@ -37,7 +37,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     super.dispose();
   }
 
-  Widget _buildSpeedDial(BuildContext context) {
+  Widget _buildSpeedDial(BuildContext context, List<String> enabledModules) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     const goldColor = Color(0xFFC5A059);
     
@@ -49,11 +49,8 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     final itemBgColor = isDark ? const Color(0xFF1E1B18) : Colors.white;
     final itemFgColor = isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238);
     
-    return RepaintBoundary(
-      child: RadialMenu(
-        primaryColor: mainBgColor,
-        onPrimaryColor: mainIconColor,
-        items: [
+    final items = <RadialMenuItem>[
+      if (enabledModules.contains('HRMS'))
         RadialMenuItem(
           icon: Icons.groups_rounded,
           label: 'HRMS',
@@ -64,6 +61,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             context.go('/home');
           },
         ),
+      if (enabledModules.contains('ERP'))
         RadialMenuItem(
           icon: Icons.account_balance_rounded,
           label: 'ERP',
@@ -74,6 +72,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             context.go('/erp/home');
           },
         ),
+      if (enabledModules.contains('CRM'))
         RadialMenuItem(
           icon: Icons.support_agent_rounded,
           label: 'CRM',
@@ -84,8 +83,19 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             context.go('/crm/dashboard');
           },
         ),
-      ],
-    ),);
+    ];
+
+    if (items.length <= 1) {
+      return const SizedBox.shrink();
+    }
+
+    return RepaintBoundary(
+      child: RadialMenu(
+        primaryColor: mainBgColor,
+        onPrimaryColor: mainIconColor,
+        items: items,
+      ),
+    );
   }
 
   @override
@@ -135,6 +145,31 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     final currentPath = GoRouterState.of(context).matchedLocation;
     final module = context.watch<AppModuleCubit>().state;
     final brandTitle = shellBrandTitle(module);
+    final enabledModules = auth.user?.enabledModules ?? const ['HRMS', 'CRM', 'ERP'];
+
+    // Auto-correct active module if current one was revoked for this tenant
+    if (module == AppModule.hrms && !enabledModules.contains('HRMS')) {
+      final fallback = enabledModules.contains('ERP')
+          ? AppModule.erp
+          : (enabledModules.contains('CRM') ? AppModule.crm : AppModule.hrms);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) context.read<AppModuleCubit>().setModule(fallback);
+      });
+    } else if (module == AppModule.erp && !enabledModules.contains('ERP')) {
+      final fallback = enabledModules.contains('HRMS')
+          ? AppModule.hrms
+          : (enabledModules.contains('CRM') ? AppModule.crm : AppModule.hrms);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) context.read<AppModuleCubit>().setModule(fallback);
+      });
+    } else if (module == AppModule.crm && !enabledModules.contains('CRM')) {
+      final fallback = enabledModules.contains('HRMS')
+          ? AppModule.hrms
+          : (enabledModules.contains('ERP') ? AppModule.erp : AppModule.hrms);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) context.read<AppModuleCubit>().setModule(fallback);
+      });
+    }
 
     final inferred = inferAppModule(currentPath, module);
     if (inferred != module) {
@@ -718,7 +753,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
         body: Stack(
           children: [
             widget.child,
-            if (!isSuperAdmin) _buildSpeedDial(context),
+            if (!isSuperAdmin) _buildSpeedDial(context, enabledModules),
           ],
         ),
       ),
@@ -747,7 +782,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
               Expanded(child: widget.child),
             ],
           ),
-          if (!isSuperAdmin) _buildSpeedDial(context),
+          if (!isSuperAdmin) _buildSpeedDial(context, enabledModules),
         ],
       ),
     ),

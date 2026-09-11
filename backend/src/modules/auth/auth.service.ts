@@ -16,8 +16,30 @@ import {
 } from './loginLock.service';
 import { otpService } from './otp.service';
 import { buildPermissionsMap, isSuperAdminRole, isSystemAdminRole, isAdminRole } from './permissions-map';
+import { parseModules } from '../platform/platform.service';
 
 const SESSION_TTL = 8 * 60 * 60; // 8 hours in seconds
+
+async function resolveEnabledModules(subOrg?: string | null, isSuperAdmin = false): Promise<string[]> {
+  if (isSuperAdmin) return ['HRMS', 'CRM', 'ERP'];
+  if (!subOrg) return ['HRMS', 'CRM', 'ERP'];
+  try {
+    const org = await prisma.organization.findFirst({
+      where: {
+        OR: [
+          { name: { equals: subOrg, mode: 'insensitive' } },
+          { code: { equals: subOrg, mode: 'insensitive' } },
+        ],
+        deletedAt: null,
+      },
+      select: { tagLine: true, isActive: true },
+    });
+    if (!org || !org.isActive) return parseModules(org?.tagLine);
+    return parseModules(org.tagLine);
+  } catch {
+    return ['HRMS', 'CRM', 'ERP'];
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -165,8 +187,8 @@ export const authService = {
     } else {
       if (isUserSuperAdmin) {
         return {
-          error: 'Superadmin accounts must use the dedicated Superadmin portal at /superadmin/login.',
-          status: 403,
+          error: 'Account does not exist. Check your employee ID or username, or contact Admin/HR.',
+          status: 404,
         } as const;
       }
     }
@@ -231,6 +253,8 @@ export const authService = {
         ? user.employee?.generalInfo?.subOrganization ?? null
         : null);
 
+    const enabledModules = await resolveEnabledModules(scopeSubOrg, isUserSuperAdmin);
+
     // 4. Sign JWT
     const token = jwt.sign(
       {
@@ -241,6 +265,7 @@ export const authService = {
         subOrganization: scopeSubOrg,
         employeeViewScope,
         permissions,
+        enabledModules,
       },
       env.JWT_SECRET,
       { expiresIn: '8h' }
@@ -292,6 +317,7 @@ export const authService = {
         subOrganization: scopeSubOrg,
         employeeViewScope,
         permissions,
+        enabledModules,
       },
     };
   },
@@ -449,6 +475,8 @@ export const authService = {
         employeeViewScope = 'UNIVERSITY';
       }
     }
+    const isSuperAdmin = isSuperAdminRole(dbUser?.role?.name ?? user.roleName ?? user.role);
+    const enabledModules = await resolveEnabledModules(user.subOrganization, isSuperAdmin);
     return {
       id: user.id,
       employeeId: user.employeeId,
@@ -460,6 +488,7 @@ export const authService = {
       permissions,
       employeeViewScope,
       subOrganization: user.subOrganization ?? null,
+      enabledModules,
       needsEmailVerification: emailStatus.needsEmailVerification,
       pendingEmails: emailStatus.emails.filter((e) => !e.verified),
     };

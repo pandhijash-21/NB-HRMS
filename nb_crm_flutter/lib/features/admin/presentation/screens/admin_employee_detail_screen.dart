@@ -106,7 +106,7 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
       );
     }
 
-    final profileAsyncVal = ref.watch(profileProvider);
+    final profileAsyncVal = ref.watch(employeeProfileByIdProvider(widget.employeeId));
     final assignmentsAsync = ref.watch(employeeAssignmentsProvider(widget.employeeId));
     ref.watch(activeInstitutesProvider);
     ref.watch(jobDesignationsProvider);
@@ -221,7 +221,7 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
               Text('Failed to load profile details\n$err', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w600)),
               const SizedBox(height: 16),
               FilledButton(
-                onPressed: () => ref.read(profileProvider.notifier).refresh(),
+                onPressed: () => ref.invalidate(employeeProfileByIdProvider(widget.employeeId)),
                 child: const Text('Retry'),
               ),
             ],

@@ -60,15 +60,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     final authState = ref.watch(authNotifierProvider);
     final empId = widget.employeeId ?? authState.user?.employeeId;
 
-    if (empId == null) {
-      return const Scaffold(
-        body: Center(
-          child: Text('Error: No profile ID provided or found in session.'),
-        ),
-      );
-    }
-
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    if (empId == null) {
+      return _buildAdminProfileScreen(context, authState.user, isDark);
+    }
     final profileAsyncVal = ref.watch(profileProvider);
 
     final userScope =
@@ -485,5 +480,132 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
 
   String _formatDate(DateTime date) {
     return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+  }
+
+  Widget _buildAdminProfileScreen(BuildContext context, dynamic user, bool isDark) {
+    const goldColor = Color(0xFFC5A059);
+    final cardBg = isDark ? const Color(0xFF1E1B18) : Colors.white;
+    final borderColor = isDark ? goldColor.withValues(alpha: 0.2) : const Color(0xFFE2E8F0);
+    final textPrimary = isDark ? Colors.white : const Color(0xFF1E293B);
+    final textSecondary = isDark ? Colors.white70 : const Color(0xFF64748B);
+
+    return Scaffold(
+      backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
+      appBar: AppBar(
+        backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        title: Text(
+          'Administrator Profile',
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: 20,
+            color: textPrimary,
+            letterSpacing: -0.5,
+          ),
+        ),
+      ),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: Container(
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: borderColor),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircleAvatar(
+                    radius: 46,
+                    backgroundColor: goldColor.withValues(alpha: 0.15),
+                    child: const Icon(Icons.admin_panel_settings_rounded, size: 48, color: goldColor),
+                  ),
+                  const SizedBox(height: 18),
+                  Text(
+                    user?.name ?? user?.username ?? 'System Administrator',
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: textPrimary),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: goldColor.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: goldColor.withValues(alpha: 0.3)),
+                    ),
+                    child: Text(
+                      (user?.role ?? 'ADMIN').toUpperCase(),
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: goldColor),
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  Divider(color: borderColor, height: 1),
+                  const SizedBox(height: 20),
+                  _buildAdminInfoRow('Account Username', user?.username ?? 'admin', textSecondary, textPrimary),
+                  const SizedBox(height: 12),
+                  _buildAdminInfoRow('Organization / Tenant', user?.subOrganization ?? 'All Organizations (System)', textSecondary, textPrimary),
+                  const SizedBox(height: 12),
+                  _buildAdminInfoRow('Workforce View Scope', user?.employeeViewScope ?? 'UNIVERSITY (Full)', textSecondary, textPrimary),
+                  const SizedBox(height: 12),
+                  _buildAdminInfoRow('Account Type', 'Dedicated Administrative Principal', textSecondary, textPrimary),
+                  const SizedBox(height: 28),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    alignment: WrapAlignment.center,
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: () => context.go('/admin/dashboard'),
+                        icon: const Icon(Icons.dashboard_rounded, size: 16),
+                        label: const Text('Admin Dashboard'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: goldColor,
+                          foregroundColor: const Color(0xFF1A1816),
+                          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: () => context.go('/admin/employees'),
+                        icon: const Icon(Icons.people_rounded, size: 16),
+                        label: const Text('Manage Workforce'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: textPrimary,
+                          side: BorderSide(color: borderColor),
+                          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAdminInfoRow(String label, String value, Color labelColor, Color valueColor) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: TextStyle(fontSize: 13, color: labelColor, fontWeight: FontWeight.w500)),
+        Text(value, style: TextStyle(fontSize: 13, color: valueColor, fontWeight: FontWeight.w700)),
+      ],
+    );
   }
 }

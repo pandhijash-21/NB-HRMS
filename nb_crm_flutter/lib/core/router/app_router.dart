@@ -202,6 +202,34 @@ GoRouter createAppRouter(AuthBloc authBloc) {
           next = '/home';
         } else if (trackingSetup) {
           next = null; // allow full-screen tracking setup
+        } else {
+          // Module license enforcement for tenant users: bounce if suite revoked
+          final enabled = auth.user?.enabledModules ?? const ['HRMS', 'CRM', 'ERP'];
+          final isErp = loc.startsWith('/erp');
+          final isCrm = loc.startsWith('/crm');
+          final isHrms = loc == '/home' ||
+              loc.startsWith('/admin') ||
+              loc.startsWith('/leave') ||
+              loc.startsWith('/attendance') ||
+              loc.startsWith('/salary') ||
+              loc.startsWith('/reimbursements') ||
+              loc.startsWith('/recruitment') ||
+              loc.startsWith('/letters') ||
+              loc.startsWith('/lookups');
+
+          final defaultRoute = enabled.contains('HRMS')
+              ? '/home'
+              : (enabled.contains('ERP')
+                  ? '/erp/home'
+                  : (enabled.contains('CRM') ? '/crm/dashboard' : '/home'));
+
+          if (isErp && !enabled.contains('ERP')) {
+            next = defaultRoute;
+          } else if (isCrm && !enabled.contains('CRM')) {
+            next = defaultRoute;
+          } else if (isHrms && !enabled.contains('HRMS')) {
+            next = defaultRoute;
+          }
         }
       }
 

@@ -176,15 +176,15 @@ class _PlatformConsoleScreenViewState extends State<_PlatformConsoleScreenView>
 
     try {
       final repo = context.read<RbacRepository>();
-      for (final p in targets) {
-        await repo.patchRolePermission(roleId, p.moduleKey, {
+      await Future.wait(
+        targets.map((p) => repo.patchRolePermission(roleId, p.moduleKey, {
           'canRead': grant,
           'canWrite': grant,
           'canApprove': grant,
           'canDelete': grant,
           'canExport': grant,
-        });
-      }
+        })),
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -240,6 +240,7 @@ class _PlatformConsoleScreenViewState extends State<_PlatformConsoleScreenView>
     );
 
     if (ok == true && nameCtrl.text.trim().isNotEmpty) {
+      if (!mounted) return;
       try {
         final repo = context.read<RbacRepository>();
         final role = await repo.createRole({

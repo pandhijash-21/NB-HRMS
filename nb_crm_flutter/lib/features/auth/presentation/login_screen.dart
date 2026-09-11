@@ -349,26 +349,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                           if (auth.errorMessage != null) ...[
                                             const SizedBox(height: 20),
                                             InlineBanner.error(message: auth.errorMessage!),
-                                            if (auth.errorMessage!.toLowerCase().contains('superadmin')) ...[
-                                              const SizedBox(height: 10),
-                                              SizedBox(
-                                                width: double.infinity,
-                                                child: OutlinedButton.icon(
-                                                  onPressed: () {
-                                                    context.read<AuthBloc>().add(const AuthClearErrorRequested());
-                                                    context.go('/superadmin/login');
-                                                  },
-                                                  icon: const Icon(Icons.shield_outlined, size: 16, color: Color(0xFFC5A059)),
-                                                  label: const Text('Open Dedicated Superadmin Portal'),
-                                                  style: OutlinedButton.styleFrom(
-                                                    foregroundColor: const Color(0xFFC5A059),
-                                                    side: const BorderSide(color: Color(0xFFC5A059)),
-                                                    padding: const EdgeInsets.symmetric(vertical: 12),
-                                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
                                             if (!kReleaseMode &&
                                                 (auth.errorMessage!.contains('Unable to reach server') ||
                                                  auth.errorMessage!.contains('reach the server'))) ...[

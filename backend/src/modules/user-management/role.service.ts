@@ -33,7 +33,18 @@ export const roleService = {
     } = { isActive: true };
 
     if (!isSuperAdmin) {
-      where.name = { notIn: ['SUPERADMIN', 'Superadmin', 'superadmin'] };
+      where.name = {
+        notIn: [
+          'SUPERADMIN',
+          'Superadmin',
+          'superadmin',
+          'SYSTEM_ADMIN',
+          'SYSTEMADMIN',
+          'SYSTEM_ADMINISTRATOR',
+          'System Administrator',
+          'System Admin',
+        ],
+      };
     }
 
     if (opts?.positionsOnly) {
@@ -45,10 +56,8 @@ export const roleService = {
       if (roleIds.length === 0) return [];
       where.id = { in: roleIds };
     } else if (opts?.designationsOnly === true) {
-      // Roles explicitly tied to a designation, plus core system roles
-      const allowedSystemRoles = isSuperAdmin
-        ? ['SUPERADMIN', 'SYSTEM_ADMIN', 'ADMIN', 'EMPLOYEE']
-        : ['SYSTEM_ADMIN', 'ADMIN', 'EMPLOYEE'];
+      // Roles explicitly tied to a designation, plus single core organization admin role
+      const allowedSystemRoles = ['ADMIN', 'EMPLOYEE'];
       where.OR = [
         { designations: { some: { isActive: true } } },
         { name: { in: allowedSystemRoles } },

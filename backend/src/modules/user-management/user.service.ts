@@ -26,46 +26,77 @@ export const userService = {
   ) {
     const isSuperAdmin = isSuperAdminRole(requester?.roleName ?? requester?.role);
 
+    const whereConditions: any[] = [];
+
+    if (filters.roleId) {
+      whereConditions.push({ roleId: filters.roleId });
+    }
+    if (filters.isActive !== undefined) {
+      whereConditions.push({ isActive: filters.isActive });
+    }
+
+    if (!isSuperAdmin) {
+      // Strictly exclude superadmin role & username
+      whereConditions.push({
+        role: {
+          name: {
+            notIn: ['SUPERADMIN', 'Superadmin', 'superadmin'],
+          },
+        },
+      });
+      whereConditions.push({
+        OR: [
+          { username: null },
+          {
+            username: {
+              notIn: ['superadmin', 'SUPERADMIN', 'Superadmin'],
+            },
+          },
+        ],
+      });
+
+      // If requester belongs to a company, scope users to their company
+      if (requester?.subOrganization) {
+        whereConditions.push({
+          OR: [
+            { subOrganization: requester.subOrganization },
+            {
+              employee: {
+                generalInfo: {
+                  subOrganization: requester.subOrganization,
+                },
+              },
+            },
+          ],
+        });
+      }
+    }
+
+    if (filters.search) {
+      whereConditions.push({
+        OR: [
+          { username: { contains: filters.search, mode: 'insensitive' } },
+          { subOrganization: { contains: filters.search, mode: 'insensitive' } },
+          {
+            employee: {
+              generalInfo: {
+                fullName: { contains: filters.search, mode: 'insensitive' },
+              },
+            },
+          },
+          {
+            employee: {
+              generalInfo: {
+                employeeCode: { contains: filters.search, mode: 'insensitive' },
+              },
+            },
+          },
+        ],
+      });
+    }
+
     const rows = await prisma.user.findMany({
-      where: {
-        ...(filters.roleId ? { roleId: filters.roleId } : {}),
-        ...(filters.isActive !== undefined ? { isActive: filters.isActive } : {}),
-        // If not superadmin: strictly exclude superadmin accounts & roles
-        ...(!isSuperAdmin
-          ? {
-              role: {
-                name: {
-                  notIn: ['SUPERADMIN', 'Superadmin', 'superadmin'],
-                },
-              },
-              username: {
-                not: 'superadmin',
-                mode: 'insensitive',
-              },
-            }
-          : {}),
-        // If requester belongs to a company, scope users to their company
-        ...(!isSuperAdmin && requester?.subOrganization
-          ? {
-              subOrganization: requester.subOrganization,
-            }
-          : {}),
-        ...(filters.search
-          ? {
-              OR: [
-                { username: { contains: filters.search, mode: 'insensitive' } },
-                { subOrganization: { contains: filters.search, mode: 'insensitive' } },
-                {
-                  employee: {
-                    generalInfo: {
-                      fullName: { contains: filters.search, mode: 'insensitive' },
-                    },
-                  },
-                },
-              ],
-            }
-          : {}),
-      },
+      where: whereConditions.length > 0 ? { AND: whereConditions } : {},
       select: {
         id:          true,
         employeeId:  true,
@@ -100,10 +131,14 @@ export const userService = {
     return rows.map((u) => ({ ...u, ...(locks[u.id] ?? lockSummary({ stage: 0, fails: 0, lockedUntil: null, blockedAt: null })) }));
   },
 
-  async getCredentials(id: string) {
+  async getCredentials(
+    id: string,
+    requester?: { id?: string; roleName?: string; role?: string },
+  ) {
     const user = await prisma.user.findUnique({
       where: { id },
       include: {
+        role: { select: { name: true } },
         employee: {
           include: {
             generalInfo: { select: { employeeCode: true, fullName: true } },
@@ -114,6 +149,10 @@ export const userService = {
       },
     });
     if (!user) return null;
+    const isRequesterSuperAdmin = isSuperAdminRole(requester?.roleName ?? requester?.role);
+    if (!isRequesterSuperAdmin && (isSuperAdminRole(user.role?.name) || user.username?.toLowerCase() === 'superadmin')) {
+      return null;
+    }
     return buildCredentialView(user);
   },
 

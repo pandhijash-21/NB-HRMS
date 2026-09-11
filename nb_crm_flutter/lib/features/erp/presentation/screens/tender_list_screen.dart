@@ -29,7 +29,7 @@ class _TenderListView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthBloc>().state;
-    final canWrite = Permissions.canWriteWorkOrders(auth.permissions, auth.user?.role);
+    final canWrite = Permissions.canWriteTenders(auth.permissions, auth.user?.role);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final df = DateFormat('dd MMM yyyy');
 

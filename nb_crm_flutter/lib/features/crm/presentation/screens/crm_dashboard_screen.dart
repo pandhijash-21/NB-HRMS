@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/bloc/load_status.dart';
 import '../../../../core/router/app_back_button.dart';
+import '../../../auth/domain/permissions.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../data/crm_repository.dart';
 import '../bloc/crm_dashboard_bloc.dart';
 
@@ -39,6 +41,14 @@ class _CrmDashboardView extends StatelessWidget {
         : const Color(0xFFE2E8F0);
     final textMuted = isDark ? Colors.white.withValues(alpha: 0.6) : const Color(0xFF64748B);
 
+    final auth = context.watch<AuthBloc>().state;
+    final canReadPreSales = Permissions.canReadCrmPreSales(auth.permissions, auth.user?.role);
+    final canReadPostSales = Permissions.canReadCrmPostSales(auth.permissions, auth.user?.role);
+    final canAccessSettings = Permissions.hasPermission(auth.permissions, 'CRM_SETTINGS', 'WRITE') ||
+        Permissions.isAdmin(auth.user?.role);
+    final canAccessBin = Permissions.hasPermission(auth.permissions, 'CRM_SETTINGS', 'READ') ||
+        Permissions.isAdmin(auth.user?.role);
+
     return BlocConsumer<CrmDashboardBloc, CrmDashboardState>(
       listener: (context, state) {
         if (state.actionSuccessMessage != null && state.actionSuccessMessage!.isNotEmpty) {
@@ -57,16 +67,18 @@ class _CrmDashboardView extends StatelessWidget {
             elevation: 0,
             scrolledUnderElevation: 0,
             actions: [
-              IconButton(
-                tooltip: 'Bin / Archive',
-                icon: const Icon(Icons.delete_outline_rounded),
-                onPressed: () => context.go('/crm/bin'),
-              ),
-              IconButton(
-                tooltip: 'Settings',
-                icon: const Icon(Icons.settings_outlined),
-                onPressed: () => context.go('/crm/settings'),
-              ),
+              if (canAccessBin)
+                IconButton(
+                  tooltip: 'Bin / Archive',
+                  icon: const Icon(Icons.delete_outline_rounded),
+                  onPressed: () => context.go('/crm/bin'),
+                ),
+              if (canAccessSettings)
+                IconButton(
+                  tooltip: 'Settings',
+                  icon: const Icon(Icons.settings_outlined),
+                  onPressed: () => context.go('/crm/settings'),
+                ),
               IconButton(
                 tooltip: 'Refresh',
                 icon: const Icon(Icons.refresh_rounded),
@@ -487,140 +499,97 @@ class _CrmDashboardView extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
-            // Adaptive Workspace Cards
             LayoutBuilder(
               builder: (context, constraints) {
+                final List<Widget> moduleTiles = [
+                  if (canReadPreSales)
+                    _buildModuleTile(
+                      context,
+                      title: 'Pre-sales',
+                      description: 'Inquiries, dynamic columns, Elision dialer, and sales pipeline.',
+                      icon: Icons.point_of_sale_rounded,
+                      color: const Color(0xFF0284C7),
+                      route: '/crm/pre-sales',
+                      isDark: isDark,
+                      cardBg: cardBg,
+                      borderColor: borderColor,
+                      textMuted: textMuted,
+                    ),
+                  if (canReadPostSales)
+                    _buildModuleTile(
+                      context,
+                      title: 'Post-sales',
+                      description: 'Handovers, client accounts, customer service & tickets.',
+                      icon: Icons.support_agent_rounded,
+                      color: const Color(0xFF16A34A),
+                      route: '/crm/post-sales',
+                      isDark: isDark,
+                      cardBg: cardBg,
+                      borderColor: borderColor,
+                      textMuted: textMuted,
+                    ),
+                  if (canAccessBin)
+                    _buildModuleTile(
+                      context,
+                      title: 'CRM Bin',
+                      description: 'Discarded & Not Interested leads with 30-day restore.',
+                      icon: Icons.delete_outline_rounded,
+                      color: const Color(0xFFEF4444),
+                      route: '/crm/bin',
+                      isDark: isDark,
+                      cardBg: cardBg,
+                      borderColor: borderColor,
+                      textMuted: textMuted,
+                    ),
+                  if (canAccessSettings)
+                    _buildModuleTile(
+                      context,
+                      title: 'CRM Settings',
+                      description: 'Dynamic columns, Elision telephony API, and retention rules.',
+                      icon: Icons.settings_rounded,
+                      color: primaryGold,
+                      route: '/crm/settings',
+                      isDark: isDark,
+                      cardBg: cardBg,
+                      borderColor: borderColor,
+                      textMuted: textMuted,
+                    ),
+                ];
+
+                if (moduleTiles.isEmpty) {
+                  return const SizedBox.shrink();
+                }
+
                 final isStacked = constraints.maxWidth < 650;
 
                 if (isStacked) {
                   return Column(
                     children: [
-                      _buildModuleTile(
-                        context,
-                        title: 'Pre-sales',
-                        description: 'Inquiries, dynamic columns, Elision dialer, and sales pipeline.',
-                        icon: Icons.point_of_sale_rounded,
-                        color: const Color(0xFF0284C7),
-                        route: '/crm/pre-sales',
-                        isDark: isDark,
-                        cardBg: cardBg,
-                        borderColor: borderColor,
-                        textMuted: textMuted,
-                      ),
-                      const SizedBox(height: 10),
-                      _buildModuleTile(
-                        context,
-                        title: 'Post-sales',
-                        description: 'Handovers, client accounts, customer service & tickets.',
-                        icon: Icons.support_agent_rounded,
-                        color: const Color(0xFF16A34A),
-                        route: '/crm/post-sales',
-                        isDark: isDark,
-                        cardBg: cardBg,
-                        borderColor: borderColor,
-                        textMuted: textMuted,
-                      ),
-                      const SizedBox(height: 10),
-                      _buildModuleTile(
-                        context,
-                        title: 'CRM Bin',
-                        description: 'Discarded & Not Interested leads with 30-day restore.',
-                        icon: Icons.delete_outline_rounded,
-                        color: const Color(0xFFEF4444),
-                        route: '/crm/bin',
-                        isDark: isDark,
-                        cardBg: cardBg,
-                        borderColor: borderColor,
-                        textMuted: textMuted,
-                      ),
-                      const SizedBox(height: 10),
-                      _buildModuleTile(
-                        context,
-                        title: 'CRM Settings',
-                        description: 'Dynamic columns, Elision telephony API, and retention rules.',
-                        icon: Icons.settings_rounded,
-                        color: primaryGold,
-                        route: '/crm/settings',
-                        isDark: isDark,
-                        cardBg: cardBg,
-                        borderColor: borderColor,
-                        textMuted: textMuted,
-                      ),
+                      for (int i = 0; i < moduleTiles.length; i++) ...[
+                        if (i > 0) const SizedBox(height: 10),
+                        moduleTiles[i],
+                      ],
                     ],
                   );
                 }
 
-                return Column(
-                  children: [
+                final rows = <Widget>[];
+                for (int i = 0; i < moduleTiles.length; i += 2) {
+                  final first = moduleTiles[i];
+                  final second = (i + 1 < moduleTiles.length) ? moduleTiles[i + 1] : null;
+                  if (rows.isNotEmpty) rows.add(const SizedBox(height: 12));
+                  rows.add(
                     Row(
                       children: [
-                        Expanded(
-                          child: _buildModuleTile(
-                            context,
-                            title: 'Pre-sales',
-                            description: 'Inquiries, dynamic columns, Elision dialer, and sales pipeline.',
-                            icon: Icons.point_of_sale_rounded,
-                            color: const Color(0xFF0284C7),
-                            route: '/crm/pre-sales',
-                            isDark: isDark,
-                            cardBg: cardBg,
-                            borderColor: borderColor,
-                            textMuted: textMuted,
-                          ),
-                        ),
+                        Expanded(child: first),
                         const SizedBox(width: 12),
-                        Expanded(
-                          child: _buildModuleTile(
-                            context,
-                            title: 'Post-sales',
-                            description: 'Handovers, client accounts, customer service & tickets.',
-                            icon: Icons.support_agent_rounded,
-                            color: const Color(0xFF16A34A),
-                            route: '/crm/post-sales',
-                            isDark: isDark,
-                            cardBg: cardBg,
-                            borderColor: borderColor,
-                            textMuted: textMuted,
-                          ),
-                        ),
+                        Expanded(child: second ?? const SizedBox.shrink()),
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildModuleTile(
-                            context,
-                            title: 'CRM Bin',
-                            description: 'Discarded & Not Interested leads with 30-day restore.',
-                            icon: Icons.delete_outline_rounded,
-                            color: const Color(0xFFEF4444),
-                            route: '/crm/bin',
-                            isDark: isDark,
-                            cardBg: cardBg,
-                            borderColor: borderColor,
-                            textMuted: textMuted,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _buildModuleTile(
-                            context,
-                            title: 'CRM Settings',
-                            description: 'Dynamic columns, Elision telephony API, and retention rules.',
-                            icon: Icons.settings_rounded,
-                            color: primaryGold,
-                            route: '/crm/settings',
-                            isDark: isDark,
-                            cardBg: cardBg,
-                            borderColor: borderColor,
-                            textMuted: textMuted,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                );
+                  );
+                }
+
+                return Column(children: rows);
               },
             ),
           ],

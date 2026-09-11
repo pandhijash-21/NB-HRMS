@@ -363,14 +363,26 @@ export const authService = {
     return { message: 'Password changed. Please log in again.' };
   },
 
-  async resetPassword(targetUserId: string, requesterId: string) {
+  async resetPassword(
+    targetUserId: string,
+    requester: { id: string; role?: string; roleName?: string } | string,
+  ) {
+    const requesterRole = typeof requester === 'object' ? (requester.roleName ?? requester.role) : undefined;
+    const requesterId = typeof requester === 'object' ? requester.id : requester;
+    const isRequesterSuperAdmin = isSuperAdminRole(requesterRole);
+
     const user = await prisma.user.findUnique({
       where: { id: targetUserId },
       include: {
+        role: { select: { name: true } },
         employee: { include: { personalInfo: true } },
       },
     });
     if (!user) return { error: 'User not found', status: 404 } as const;
+
+    if (!isRequesterSuperAdmin && (isSuperAdminRole(user.role?.name) || user.username?.toLowerCase() === 'superadmin')) {
+      return { error: 'Forbidden: Cannot reset password for a Superadmin account', status: 403 } as const;
+    }
 
     // Default password = DOB as DDMMYYYY, fallback to 01011990
     let defaultPassword = '01011990';
@@ -419,14 +431,26 @@ export const authService = {
 
   async adminSetPassword(
     targetUserId: string,
-    requesterId: string,
+    requester: { id: string; role?: string; roleName?: string } | string,
     newPassword: string,
   ) {
+    const requesterRole = typeof requester === 'object' ? (requester.roleName ?? requester.role) : undefined;
+    const requesterId = typeof requester === 'object' ? requester.id : requester;
+    const isRequesterSuperAdmin = isSuperAdminRole(requesterRole);
+
     const user = await prisma.user.findUnique({
       where: { id: targetUserId },
-      include: { employee: { include: { generalInfo: true } } },
+      include: {
+        role: { select: { name: true } },
+        employee: { include: { generalInfo: true } },
+      },
     });
     if (!user) return { error: 'User not found', status: 404 } as const;
+
+    if (!isRequesterSuperAdmin && (isSuperAdminRole(user.role?.name) || user.username?.toLowerCase() === 'superadmin')) {
+      return { error: 'Forbidden: Cannot set password for a Superadmin account', status: 403 } as const;
+    }
+
     const policyError = passwordPolicyIssue(newPassword);
     if (policyError) {
       return { error: policyError, status: 400 } as const;

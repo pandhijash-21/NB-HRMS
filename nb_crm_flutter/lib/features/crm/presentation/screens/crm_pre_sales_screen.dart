@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/widgets/mobile_input_formatter.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
+import '../../../auth/domain/permissions.dart';
 import '../../data/crm_repository.dart';
 import '../../domain/crm_models.dart';
 import '../bloc/crm_leads_bloc.dart';
@@ -159,6 +160,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     final userRole = currentUser?.role.toUpperCase() ?? '';
     final userEmployeeId = currentUser?.employeeId;
     final isAdmin = ['ADMIN', 'SUPER_ADMIN', 'SYSTEM_ADMIN'].contains(userRole);
+    final canWrite = Permissions.canWriteCrmPreSales(authState.permissions, authState.user?.role);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -341,6 +343,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                 }
 
                 Widget buildActionButtons({bool expand = false}) {
+                  if (!canWrite) return const SizedBox.shrink();
                   if (expand) {
                     return Row(
                       children: [
@@ -450,8 +453,10 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
-                      buildActionButtons(expand: true),
+                      if (canWrite) ...[
+                        const SizedBox(height: 12),
+                        buildActionButtons(expand: true),
+                      ],
                     ],
                   );
                 }
@@ -466,7 +471,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                     SizedBox(width: 170, child: buildCampaignSelector()),
                     SizedBox(width: 190, child: buildSearchField()),
                     SizedBox(width: 150, child: buildStatusFilter()),
-                    buildActionButtons(expand: false),
+                    if (canWrite) buildActionButtons(expand: false),
                   ],
                 );
               },
@@ -544,7 +549,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                         // If lead is assigned, ONLY Admin or the Assigned Sales Rep can alter it.
                         final isAssigned = lead.assignedToId != null;
                         final isAssignedSalesRep = userEmployeeId != null && userEmployeeId == lead.assignedToId;
-                        final canAlterLead = !isAssigned || isAdmin || isAssignedSalesRep;
+                        final canAlterLead = canWrite && (!isAssigned || isAdmin || isAssignedSalesRep);
 
                         return DataRow(
                           cells: [

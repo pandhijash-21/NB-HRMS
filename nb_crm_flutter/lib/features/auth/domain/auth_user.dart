@@ -28,19 +28,25 @@ class AuthUser {
         ? rawMods.map((e) => e.toString().toUpperCase().trim()).toList()
         : const ['HRMS', 'CRM', 'ERP'];
 
+    final nameStr = json['name']?.toString().trim();
+    final roleRaw = json['role'] ?? json['roleName'];
+    final String roleStr = roleRaw is String
+        ? roleRaw
+        : (roleRaw is Map && roleRaw['name'] != null
+            ? roleRaw['name'].toString()
+            : (json['roleName']?.toString() ?? 'EMPLOYEE'));
+
     return AuthUser(
       id: json['id']?.toString() ?? '',
-      name: (json['name'] as String?)?.trim().isNotEmpty == true
-          ? json['name'] as String
-          : 'User',
-      role: (json['role'] ?? json['roleName']) as String? ?? 'EMPLOYEE',
+      name: (nameStr != null && nameStr.isNotEmpty) ? nameStr : 'User',
+      role: roleStr.isNotEmpty ? roleStr : 'EMPLOYEE',
       employeeId: json['employeeId'] is int
           ? json['employeeId'] as int
           : int.tryParse('${json['employeeId'] ?? ''}'),
-      username: json['username'] as String?,
-      photoUrl: json['photoUrl'] as String?,
-      subOrganization: json['subOrganization'] as String?,
-      employeeViewScope: json['employeeViewScope'] as String?,
+      username: json['username']?.toString(),
+      photoUrl: json['photoUrl']?.toString(),
+      subOrganization: json['subOrganization']?.toString(),
+      employeeViewScope: json['employeeViewScope']?.toString(),
       enabledModules: mods,
     );
   }

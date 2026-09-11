@@ -59,8 +59,9 @@ class _CrmPostSalesScreenState extends State<CrmPostSalesScreen>
           ],
         ),
         actions: [
-          IconButton(
-            tooltip: 'New Ticket / Request',
+          if (Permissions.canWriteCrmPostSales(context.watch<AuthBloc>().state.permissions, context.watch<AuthBloc>().state.user?.role))
+            IconButton(
+              tooltip: 'New Ticket / Request',
             icon: const Icon(Icons.add_task_rounded),
             onPressed: () {
               ScaffoldMessenger.of(context).showSnackBar(

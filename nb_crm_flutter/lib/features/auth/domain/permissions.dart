@@ -422,6 +422,22 @@ class Permissions {
     return canReadCrm(perms, role);
   }
 
+  static bool canWriteCrmPreSales(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    if (perms?.containsKey('CRM_PRE_SALES') == true) {
+      return hasPermission(perms, 'CRM_PRE_SALES', 'WRITE');
+    }
+    return canWriteCrm(perms, role);
+  }
+
+  static bool canWriteCrmPostSales(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    if (perms?.containsKey('CRM_POST_SALES') == true) {
+      return hasPermission(perms, 'CRM_POST_SALES', 'WRITE');
+    }
+    return canWriteCrm(perms, role);
+  }
+
   // ── ERP EXTENSIONS ─────────────────────────────────────────────────────────
   static bool canReadTenderApplications(PermissionMap? perms, [String? role]) {
     if (isAdmin(role)) return true;
@@ -429,6 +445,14 @@ class Permissions {
       return hasPermission(perms, 'TENDER_APPLICATIONS', 'READ');
     }
     return canReadTenders(perms, role);
+  }
+
+  static bool canWriteTenderApplications(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    if (perms?.containsKey('TENDER_APPLICATIONS') == true) {
+      return hasPermission(perms, 'TENDER_APPLICATIONS', 'WRITE');
+    }
+    return canWriteTenders(perms, role);
   }
 
   static bool canReadErpConfig(PermissionMap? perms, [String? role]) {

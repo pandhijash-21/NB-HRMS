@@ -130,10 +130,16 @@ GoRouter createAppRouter(AuthBloc authBloc) {
   String resolveInitialLocation() {
     if (kIsWeb) {
       final base = Uri.base.toString().toLowerCase();
-      final path = Uri.base.path.toLowerCase();
-      final fragment = Uri.base.fragment.toLowerCase();
-      if (base.contains('superadmin') || path.contains('superadmin') || fragment.contains('superadmin')) {
+      final path = Uri.base.path;
+      final fragment = Uri.base.fragment;
+      if (base.contains('superadmin')) {
         return '/superadmin/login';
+      }
+      if (fragment.isNotEmpty && fragment != '/') {
+        return fragment.startsWith('/') ? fragment : '/$fragment';
+      }
+      if (path.isNotEmpty && path != '/' && path != '/index.html') {
+        return path;
       }
     }
     return '/login';

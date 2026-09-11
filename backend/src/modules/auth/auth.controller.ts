@@ -51,8 +51,8 @@ export const authController = {
     const customPassword = typeof req.body?.password === 'string' ? req.body.password : undefined;
 
     const result = customPassword
-      ? await authService.adminSetPassword(userId, req.user!.id, customPassword)
-      : await authService.resetPassword(userId, req.user!.id);
+      ? await authService.adminSetPassword(userId, req.user!, customPassword)
+      : await authService.resetPassword(userId, req.user!);
 
     if ('error' in result) {
       return res.status(result.status ?? 400).json(fail(result.error ?? 'Error'));

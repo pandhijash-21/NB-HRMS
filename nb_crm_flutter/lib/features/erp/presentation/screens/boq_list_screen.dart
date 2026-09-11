@@ -51,7 +51,7 @@ class _BoqListViewState extends State<_BoqListView> {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthBloc>().state;
-    final canWrite = Permissions.canWriteWorkOrders(auth.permissions, auth.user?.role);
+    final canWrite = Permissions.canWriteBoq(auth.permissions, auth.user?.role);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return BlocConsumer<ErpBoqBloc, ErpBoqState>(

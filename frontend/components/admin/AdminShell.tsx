@@ -181,9 +181,16 @@ const adminNav: NavGroupDef[] = [
           </svg>
         ),
       },
+    ],
+  },
+  {
+    heading: "Collaboration",
+    items: [
       {
         label: "Chat",
         href: "/chat",
+        module: "CHAT",
+        action: "READ",
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -193,6 +200,8 @@ const adminNav: NavGroupDef[] = [
       {
         label: "Meet",
         href: "/meet",
+        module: "MEETINGS",
+        action: "READ",
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
             <polygon points="23 7 16 12 23 17 23 7" />
@@ -203,6 +212,8 @@ const adminNav: NavGroupDef[] = [
       {
         label: "All meetings",
         href: "/admin/meetings",
+        module: "MEETINGS",
+        action: "READ",
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
             <rect x="3" y="4" width="18" height="18" rx="2" />

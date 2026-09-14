@@ -317,8 +317,19 @@ export async function ensureErpModulePermissions(): Promise<void> {
       // Fallback to prisma upsert
       await prisma.systemModule.upsert({
         where: { key: mod.key },
-        update: { name: mod.name, description: mod.description },
-        create: { key: mod.key, name: mod.name, description: mod.description },
+        update: {
+          name: mod.name,
+          description: mod.description,
+          category: mod.category,
+          sortOrder: mod.sortOrder,
+        },
+        create: {
+          key: mod.key,
+          name: mod.name,
+          description: mod.description,
+          category: mod.category,
+          sortOrder: mod.sortOrder,
+        },
       });
     }
   }

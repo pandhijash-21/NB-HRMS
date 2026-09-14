@@ -11,26 +11,28 @@ const prisma = new PrismaClient();
 // Module definitions
 // ---------------------------------------------------------------------------
 const MODULES = [
-  { key: 'PERSONAL_INFO', name: 'Personal Information' },
-  { key: 'EDUCATION',     name: 'Education & Qualifications' },
-  { key: 'EXPERIENCE',    name: 'Work Experience' },
-  { key: 'LEAVE',         name: 'Leave Management' },
-  { key: 'PAYROLL',       name: 'Payroll' },
-  { key: 'SALARY',        name: 'Salary Management' },
-  { key: 'ATTENDANCE',    name: 'Attendance' },
-  { key: 'BANK_DETAILS',  name: 'Bank Details' },
-  { key: 'DOCUMENTS',     name: 'Document Management' },
-  { key: 'REIMBURSEMENTS', name: 'Reimbursements' },
-  { key: 'RECRUITMENT',   name: 'Recruitment' },
-  { key: 'REPORTS',       name: 'Reports & Analytics' },
-  { key: 'USER_MGMT',     name: 'User Management' },
-  { key: 'ROLE_MGMT',     name: 'Role Management' },
-  { key: 'FIELD_MGMT',    name: 'Dynamic Field Management' },
-  { key: 'PROJECTS',      name: 'ERP Projects' },
-  { key: 'WORK_ORDERS',   name: 'ERP Work Orders' },
-  { key: 'CHAT',          name: 'Chat & Collaboration' },
-  { key: 'MEETINGS',      name: 'Meetings' },
-  { key: 'CRM',           name: 'CRM Pre-Sales' },
+  { key: 'PERSONAL_INFO', name: 'Personal Information', category: 'HRMS' },
+  { key: 'EDUCATION',     name: 'Education & Qualifications', category: 'HRMS' },
+  { key: 'EXPERIENCE',    name: 'Work Experience', category: 'HRMS' },
+  { key: 'LEAVE',         name: 'Leave Management', category: 'HRMS' },
+  { key: 'PAYROLL',       name: 'Payroll', category: 'HRMS' },
+  { key: 'SALARY',        name: 'Salary Management', category: 'HRMS' },
+  { key: 'ATTENDANCE',    name: 'Attendance', category: 'HRMS' },
+  { key: 'BANK_DETAILS',  name: 'Bank Details', category: 'HRMS' },
+  { key: 'DOCUMENTS',     name: 'Document Management', category: 'HRMS' },
+  { key: 'REIMBURSEMENTS', name: 'Reimbursements', category: 'HRMS' },
+  { key: 'RECRUITMENT',   name: 'Recruitment', category: 'HRMS' },
+  { key: 'REPORTS',       name: 'Reports & Analytics', category: 'HRMS' },
+  { key: 'USER_MGMT',     name: 'User Management', category: 'HRMS' },
+  { key: 'ROLE_MGMT',     name: 'Role Management', category: 'HRMS' },
+  { key: 'FIELD_MGMT',    name: 'Dynamic Field Management', category: 'HRMS' },
+  { key: 'PROJECTS',      name: 'ERP Projects', category: 'ERP' },
+  { key: 'WORK_ORDERS',   name: 'ERP Work Orders', category: 'ERP' },
+  { key: 'TASKS',         name: 'Tasks & Projects Hub', category: 'COLLABORATION' },
+  { key: 'CHAT',          name: 'Chat & Collaboration', category: 'COLLABORATION' },
+  { key: 'MEETINGS',      name: 'Meetings', category: 'COLLABORATION' },
+  { key: 'ORG_TREE',      name: 'Org Chart & Tree', category: 'COLLABORATION' },
+  { key: 'CRM',           name: 'CRM Pre-Sales', category: 'CRM' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -79,7 +81,7 @@ async function main() {
   for (const mod of MODULES) {
     await prisma.systemModule.upsert({
       where:  { key: mod.key },
-      update: {},
+      update: { name: mod.name, category: mod.category },
       create: mod,
     });
   }

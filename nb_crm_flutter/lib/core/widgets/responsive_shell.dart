@@ -579,7 +579,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
         appBar: AppBar(
           title: Text(brandTitle),
           actions: [
-            if (!isSuperAdmin)
+            if (!isSuperAdmin && Permissions.canReadOrgTree(auth.permissions, auth.user?.role))
               IconButton(
                 tooltip: 'Employee tree',
                 icon: const NbIcon(Icons.account_tree_rounded),

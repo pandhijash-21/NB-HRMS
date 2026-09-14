@@ -139,11 +139,30 @@ class _HomeScreenState extends State<HomeScreen> {
           category: ModuleCategory.mySpace,
           color: Color(0xFF0f766e),
         ),
+      if (Permissions.canReadTasks(auth.permissions, auth.user?.role))
+        const _ModuleCardData(
+          title: 'Tasks',
+          subtitle: 'Assignments, subtasks, deadlines & Gantt',
+          icon: Icons.task_alt_rounded,
+          route: '/tasks',
+          enabled: true,
+          category: ModuleCategory.mySpace,
+          color: Color(0xFF0284c7),
+        ),
+      if (Permissions.canReadOrgTree(auth.permissions, auth.user?.role))
+        const _ModuleCardData(
+          title: 'Org Chart',
+          subtitle: 'Hierarchy & reporting structure',
+          icon: Icons.account_tree_rounded,
+          route: '/org-tree',
+          enabled: true,
+          category: ModuleCategory.mySpace,
+          color: Color(0xFF059669),
+        ),
       if (Permissions.canReadLeave(auth.permissions, auth.user?.role) ||
           Permissions.canWriteLeave(auth.permissions, auth.user?.role) ||
           canApproveLeave ||
-          canAdminLeave ||
-          user?.employeeId != null)
+          canAdminLeave)
         _ModuleCardData(
           title: 'Leave',
           subtitle: () {
@@ -159,8 +178,7 @@ class _HomeScreenState extends State<HomeScreen> {
           color: const Color(0xFF0284c7), // Sky Blue
         ),
       if (Permissions.canReadAttendance(auth.permissions, auth.user?.role) ||
-          canAdminAttendance ||
-          user?.employeeId != null)
+          canAdminAttendance)
         _ModuleCardData(
           title: 'Attendance',
           subtitle: canAdminAttendance
@@ -181,8 +199,7 @@ class _HomeScreenState extends State<HomeScreen> {
         category: ModuleCategory.mySpace,
         color: Color(0xFF9333ea), // Purple
       ),
-      if (Permissions.canReadReimbursements(auth.permissions, auth.user?.role) ||
-          user?.employeeId != null)
+      if (Permissions.canReadReimbursements(auth.permissions, auth.user?.role))
         const _ModuleCardData(
           title: 'Reimbursements',
           subtitle: 'Apply, track & approve claims',

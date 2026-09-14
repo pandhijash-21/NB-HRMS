@@ -37,12 +37,18 @@ export async function invalidateRoleSessions(roleId: string, moduleKey?: string)
 export function inferCategory(
   key: string,
   explicitCategory?: string | null,
-): 'HRMS' | 'CRM' | 'ERP' {
+): 'HRMS' | 'CRM' | 'ERP' | 'COLLABORATION' {
   if (explicitCategory) {
     const up = explicitCategory.trim().toUpperCase();
-    if (up === 'HRMS' || up === 'CRM' || up === 'ERP') return up;
+    if (up === 'HRMS' || up === 'CRM' || up === 'ERP' || up === 'COLLABORATION') return up;
   }
   const k = key.trim().toUpperCase();
+  if (
+    k.startsWith('COLLAB_') ||
+    ['CHAT', 'MEETINGS', 'TASKS', 'ORG_TREE', 'COLLABORATION'].includes(k)
+  ) {
+    return 'COLLABORATION';
+  }
   if (
     k.startsWith('ERP_') ||
     [

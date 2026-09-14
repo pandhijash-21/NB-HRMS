@@ -3,6 +3,7 @@
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
 import { useSession } from "next-auth/react";
+import { hasPermission } from "@/lib/auth/permissions";
 
 const iconCalendar = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
@@ -16,6 +17,12 @@ const iconCalendar = (
 export default function EmployeeLayout({ children }: { children: React.ReactNode }) {
   const { data: session } = useSession();
   const employeeId = (session?.user as any)?.employeeId;
+  const permissions = (session?.user as any)?.permissions;
+
+  const canAttendance = hasPermission(permissions, "ATTENDANCE", "READ");
+  const canChat = hasPermission(permissions, "CHAT", "READ");
+  const canMeet = hasPermission(permissions, "MEETINGS", "READ");
+  const canLeave = hasPermission(permissions, "LEAVE", "READ") || hasPermission(permissions, "LEAVE", "WRITE");
 
   const employeeNav = [
     {
@@ -42,20 +49,22 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
             </svg>
           ),
         },
-        ...(employeeId ? [{ label: "Attendance", href: "/attendance", icon: iconCalendar }] : []),
-  { label: "Chat", href: "/chat", icon: iconCalendar },
-        { label: "Meet", href: "/meet", icon: iconCalendar },
-        { label: "Leave", href: "/leave", icon: iconCalendar },
-        {
-          label: "Leave History",
-          href: "/leave/history",
-          icon: (
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
-              <path d="M12 8v4l3 3" />
-              <circle cx="12" cy="12" r="9" />
-            </svg>
-          ),
-        },
+        ...(employeeId && canAttendance ? [{ label: "Attendance", href: "/attendance", icon: iconCalendar }] : []),
+        ...(canChat ? [{ label: "Chat", href: "/chat", icon: iconCalendar }] : []),
+        ...(canMeet ? [{ label: "Meet", href: "/meet", icon: iconCalendar }] : []),
+        ...(canLeave ? [
+          { label: "Leave", href: "/leave", icon: iconCalendar },
+          {
+            label: "Leave History",
+            href: "/leave/history",
+            icon: (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+                <path d="M12 8v4l3 3" />
+                <circle cx="12" cy="12" r="9" />
+              </svg>
+            ),
+          },
+        ] : []),
       ],
     },
   ];

@@ -243,6 +243,24 @@ GoRouter createAppRouter(AuthBloc authBloc) {
             final isMeet = (loc == '/meet' || loc.startsWith('/meet/')) && !guestMeet;
             final isTasks = loc == '/tasks' || loc.startsWith('/tasks/');
             final isOrgTree = loc == '/org-tree' || loc.startsWith('/org-tree/');
+            final isLeave = loc == '/leave' ||
+                loc.startsWith('/leave/') ||
+                loc.startsWith('/approvals') ||
+                loc.startsWith('/admin/leaves');
+            final isAttendance = loc == '/attendance' ||
+                loc.startsWith('/attendance/') ||
+                loc.startsWith('/admin/attendance');
+            final isSalary = loc.startsWith('/salary') || loc.startsWith('/admin/salary');
+            final isWorkforce = loc.startsWith('/admin/employees');
+
+            final canLeave = Permissions.canReadLeave(perms, role) ||
+                Permissions.canWriteLeave(perms, role) ||
+                Permissions.canApproveLeave(perms) ||
+                Permissions.canAdminLeave(perms, role ?? '', auth.user?.employeeViewScope);
+            final canAttendance = Permissions.canReadAttendance(perms, role) ||
+                Permissions.canWriteAttendance(perms, role);
+            final canWorkforce = Permissions.canViewWorkforce(perms, auth.user?.employeeViewScope, role);
+            final canSalary = Permissions.canReadSalary(perms);
 
             if (isChat && !Permissions.canReadChat(perms, role)) {
               next = defaultRoute;
@@ -251,6 +269,14 @@ GoRouter createAppRouter(AuthBloc authBloc) {
             } else if (isTasks && !Permissions.canReadTasks(perms, role)) {
               next = defaultRoute;
             } else if (isOrgTree && !Permissions.canReadOrgTree(perms, role)) {
+              next = defaultRoute;
+            } else if (isLeave && !canLeave) {
+              next = defaultRoute;
+            } else if (isAttendance && !canAttendance) {
+              next = defaultRoute;
+            } else if (isWorkforce && !canWorkforce) {
+              next = defaultRoute;
+            } else if (isSalary && !canSalary) {
               next = defaultRoute;
             } else if (loc.startsWith('/erp/projects') && !Permissions.canReadProjects(perms, role)) {
               next = '/erp/home';
@@ -290,9 +316,7 @@ GoRouter createAppRouter(AuthBloc authBloc) {
               next = defaultRoute;
             } else if (loc.startsWith('/recruitment') && !Permissions.canReadRecruitment(perms, role)) {
               next = defaultRoute;
-            } else if (loc.startsWith('/reimbursements') &&
-                !Permissions.canReadReimbursements(perms, role) &&
-                auth.user?.employeeId == null) {
+            } else if (loc.startsWith('/reimbursements') && !Permissions.canReadReimbursements(perms, role)) {
               next = defaultRoute;
             }
           }

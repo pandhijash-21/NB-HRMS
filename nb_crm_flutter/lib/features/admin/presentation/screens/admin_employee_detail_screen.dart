@@ -430,13 +430,19 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
                                   ),
                                 ),
                                 const SizedBox(height: 2),
-                                Text(
-                                  'Institute: ${current.subOrganization ?? "GIT"}  ·  From: ${_formatDate(current.effectiveFrom)}',
-                                  style: TextStyle(
-                                    fontSize: 11, 
-                                    fontWeight: FontWeight.w600,
-                                    color: isDark ? Colors.white30 : const Color(0xFF607D8B),
-                                  ),
+                                Builder(
+                                  builder: (context) {
+                                    final rawSub = current.subOrganization?.trim();
+                                    final isValidSub = rawSub != null && rawSub.isNotEmpty && !RegExp(r'^\d{4}$').hasMatch(rawSub);
+                                    return Text(
+                                      'Institute: ${isValidSub ? rawSub : "GIT"}  ·  From: ${_formatDate(current.effectiveFrom)}',
+                                      style: TextStyle(
+                                        fontSize: 11, 
+                                        fontWeight: FontWeight.w600,
+                                        color: isDark ? Colors.white30 : const Color(0xFF607D8B),
+                                      ),
+                                    );
+                                  },
                                 ),
                               ],
                             ),
@@ -589,9 +595,15 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
                               'Designation: ${log.designation}',
                               style: TextStyle(color: isDark ? Colors.white70 : const Color(0xFF212F3D), fontSize: 12, fontWeight: FontWeight.w700),
                             ),
-                            Text(
-                              'Institute: ${log.subOrganization ?? "—"} · Department: ${log.department ?? "N/A"}',
-                              style: TextStyle(color: isDark ? Colors.white60 : const Color(0xFF607D8B), fontSize: 12),
+                            Builder(
+                              builder: (context) {
+                                final rawSub = log.subOrganization?.trim();
+                                final isValidSub = rawSub != null && rawSub.isNotEmpty && !RegExp(r'^\d{4}$').hasMatch(rawSub);
+                                return Text(
+                                  'Institute: ${isValidSub ? rawSub : "—"} · Department: ${log.department ?? "N/A"}',
+                                  style: TextStyle(color: isDark ? Colors.white60 : const Color(0xFF607D8B), fontSize: 12),
+                                );
+                              },
                             ),
                             const SizedBox(height: 2),
                             Text(
@@ -754,9 +766,16 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
           scrollable: true,
           content: Column(
             children: [
-              Text(
-                'Current: ${profile?.generalInfo?.instituteName ?? profile?.generalInfo?.subOrganization ?? "â€”"}',
-                style: TextStyle(fontSize: 12, color: isDark ? Colors.white60 : const Color(0xFF607D8B)),
+              Builder(
+                builder: (context) {
+                  final rawSub = profile?.generalInfo?.subOrganization?.trim();
+                  final isValidSub = rawSub != null && rawSub.isNotEmpty && !RegExp(r'^\d{4}$').hasMatch(rawSub);
+                  final label = profile?.generalInfo?.instituteName ?? (isValidSub ? rawSub : null) ?? '—';
+                  return Text(
+                    'Current: $label',
+                    style: TextStyle(fontSize: 12, color: isDark ? Colors.white60 : const Color(0xFF607D8B)),
+                  );
+                },
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(

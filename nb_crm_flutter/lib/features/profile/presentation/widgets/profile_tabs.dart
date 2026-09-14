@@ -67,8 +67,8 @@ class _GeneralViewTabState extends State<GeneralViewTab> with AutomaticKeepAlive
         if (inst.id == info!.instituteId) return inst.name;
       }
     }
-    final subOrg = info?.subOrganization;
-    if (subOrg != null && subOrg.isNotEmpty) return subOrg;
+    final subOrg = info?.subOrganization?.trim();
+    if (subOrg != null && subOrg.isNotEmpty && !RegExp(r'^\d{4}$').hasMatch(subOrg)) return subOrg;
     return '—';
   }
 
@@ -261,9 +261,15 @@ class _AssignmentHistoryCardState extends State<_AssignmentHistoryCard> {
                   ),
                   style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
                 ),
-                Text(
-                  '${sorted[i].designation} · ${sorted[i].subOrganization ?? "—"}',
-                  style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor),
+                Builder(
+                  builder: (context) {
+                    final rawSub = sorted[i].subOrganization?.trim();
+                    final isValidSub = rawSub != null && rawSub.isNotEmpty && !RegExp(r'^\d{4}$').hasMatch(rawSub);
+                    return Text(
+                      isValidSub ? '${sorted[i].designation} · $rawSub' : sorted[i].designation,
+                      style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor),
+                    );
+                  },
                 ),
                 Text(
                   '${_formatDate(sorted[i].effectiveFrom)} – ${sorted[i].effectiveTo == null ? "Present" : _formatDate(sorted[i].effectiveTo!)}',

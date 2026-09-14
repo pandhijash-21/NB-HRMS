@@ -29,13 +29,18 @@ async function requireCurrentAssignment(employeeId: number) {
   const gi = await prisma.employeeGeneralInfo.findUnique({ where: { employeeId } });
   if (!gi) throw new Error('Employee general info not found');
 
+  const rawSub = gi.subOrganization?.trim();
+  const isYear = rawSub ? /^\d{4}$/.test(rawSub) : false;
+  const cleanSub = isYear ? null : (rawSub || null);
+
   return prisma.employeeAssignment.create({
     data: {
       employeeId,
       effectiveFrom: toUtcDateOnly(gi.joiningDate),
       effectiveTo: null,
       organization: gi.organization ?? null,
-      subOrganization: gi.subOrganization ?? null,
+      instituteId: gi.instituteId ?? null,
+      subOrganization: cleanSub,
       department: gi.department ?? null,
       designation: gi.designation,
       shift: gi.shift ?? null,
@@ -167,13 +172,18 @@ export const employmentChangeService = {
         where: { name: params.newDesignation, isAlias: false },
       });
 
+      const rawSub = base.subOrganization?.trim();
+      const isYear = rawSub ? /^\d{4}$/.test(rawSub) : false;
+      const cleanSub = isYear ? null : (rawSub || null);
+
       const next = await tx.employeeAssignment.create({
         data: {
           employeeId: params.employeeId,
           effectiveFrom,
           effectiveTo: null,
           organization: base.organization ?? null,
-          subOrganization: base.subOrganization ?? null,
+          instituteId: base.instituteId ?? null,
+          subOrganization: cleanSub,
           department: base.department ?? null,
           designation: params.newDesignation,
           designationId: designationRef?.id ?? null,

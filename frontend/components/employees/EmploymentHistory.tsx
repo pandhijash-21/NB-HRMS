@@ -8,8 +8,13 @@ function fmtRange(a: EmployeeAssignment) {
   return `${a.effectiveFrom} → ${a.effectiveTo ?? "Present"}`;
 }
 
+function cleanSub(s?: string | null) {
+  return s && !/^\d{4}$/.test(s.trim()) ? s.trim() : null;
+}
+
 export function EmploymentHistory(props: { assignments: EmployeeAssignment[]; currentSubOrg?: string | null; currentDesignation?: string | null }) {
   const rows = (props.assignments ?? []).slice().sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
+  const currentSub = cleanSub(props.currentSubOrg);
 
   return (
     <Card className="p-4">
@@ -21,7 +26,7 @@ export function EmploymentHistory(props: { assignments: EmployeeAssignment[]; cu
           </div>
         </div>
         <div className="flex gap-2">
-          {props.currentSubOrg ? <Badge variant="outline">Current: {props.currentSubOrg}</Badge> : null}
+          {currentSub ? <Badge variant="outline">Current: {currentSub}</Badge> : null}
           {props.currentDesignation ? <Badge variant="secondary">{props.currentDesignation}</Badge> : null}
         </div>
       </div>
@@ -44,7 +49,7 @@ export function EmploymentHistory(props: { assignments: EmployeeAssignment[]; cu
               {rows.map((a) => (
                 <tr key={a.id} className="border-b border-slate-100">
                   <td className="py-2 pr-3 font-medium text-slate-700">{fmtRange(a)}</td>
-                  <td className="py-2 pr-3">{a.subOrganization ?? "—"}</td>
+                  <td className="py-2 pr-3">{cleanSub(a.subOrganization) ?? "—"}</td>
                   <td className="py-2 pr-3">{a.designation}</td>
                   <td className="py-2 pr-3">{a.department ?? "—"}</td>
                   <td className="py-2 pr-3">{a.reason ?? "—"}</td>

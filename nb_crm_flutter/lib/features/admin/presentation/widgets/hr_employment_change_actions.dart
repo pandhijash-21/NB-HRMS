@@ -37,9 +37,16 @@ Future<void> showInstituteTransferDialog({
           width: 420,
           child: Column(
             children: [
-              Text(
-                'Current: ${profile?.generalInfo?.instituteName ?? profile?.generalInfo?.subOrganization ?? "—"}',
-                style: TextStyle(fontSize: 12, color: isDark ? Colors.white60 : const Color(0xFF607D8B)),
+              Builder(
+                builder: (context) {
+                  final rawSub = profile?.generalInfo?.subOrganization?.trim();
+                  final isValidSub = rawSub != null && rawSub.isNotEmpty && !RegExp(r'^\d{4}$').hasMatch(rawSub);
+                  final label = profile?.generalInfo?.instituteName ?? (isValidSub ? rawSub : null) ?? '—';
+                  return Text(
+                    'Current: $label',
+                    style: TextStyle(fontSize: 12, color: isDark ? Colors.white60 : const Color(0xFF607D8B)),
+                  );
+                },
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(

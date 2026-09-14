@@ -107,6 +107,7 @@ export const employeeService = {
     firstReportingId?: number | null;
     secondReportingId?: number | null;
     thirdReportingId?: number | null;
+    organization?: string | null;
     instituteId?: string | null;
     subOrganization?: string | null;
     abbreviation?: string | null;
@@ -143,8 +144,17 @@ export const employeeService = {
         where: { id: creatorId },
         select: { subOrganization: true },
       });
-      const targetSubOrg = input.subOrganization || creatorUser?.subOrganization || instituteRef.subOrganization || null;
-      const targetOrg = targetSubOrg || 'NB DEVELOPER';
+      const cleanSub = (s?: string | null) => (s && !/^\d{4}$/.test(s.trim()) ? s.trim() : null);
+      const targetSubOrg =
+        cleanSub(input.subOrganization) ||
+        instituteRef.subOrganization ||
+        cleanSub(creatorUser?.subOrganization) ||
+        null;
+      const targetOrg =
+        (input.organization && input.organization.trim()) ||
+        instituteRef.institute?.name ||
+        targetSubOrg ||
+        'NB DEVELOPER';
 
       await tx.employeeGeneralInfo.create({
         data: {
@@ -201,6 +211,23 @@ export const employeeService = {
           isFirstLogin: true,
           createdBy: creatorId,
         }
+      });
+
+      await tx.employeeAssignment.create({
+        data: {
+          employeeId: employee.id,
+          effectiveFrom: input.joiningDate,
+          effectiveTo: null,
+          organization: targetOrg,
+          instituteId: instituteRef.instituteId,
+          subOrganization: targetSubOrg,
+          department: input.department,
+          designation: input.designation,
+          designationId: designationRef.id,
+          reason: 'Initial onboarding assignment',
+          changeType: 'JOINING',
+          changedBy: creatorId,
+        },
       });
 
       const created = await tx.employee.update({

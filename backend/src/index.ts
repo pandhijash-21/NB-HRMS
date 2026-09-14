@@ -70,6 +70,22 @@ async function start() {
       END $$;
     `);
     console.log('Database soft-delete columns verified');
+
+    // Clean up corrupted legacy subOrganization entries (e.g. 4-digit years like '2020')
+    await prisma.$executeRawUnsafe(`
+      DO $$ BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'employee_general_info') THEN
+          UPDATE "employee_general_info"
+          SET "sub_organization" = NULL
+          WHERE "sub_organization" ~ '^\\d{4}$';
+        END IF;
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'employee_assignments') THEN
+          UPDATE "employee_assignments"
+          SET "sub_organization" = NULL
+          WHERE "sub_organization" ~ '^\\d{4}$';
+        END IF;
+      END $$;
+    `);
   } catch (err) {
     console.warn('Database schema column verify notice:', err);
   }

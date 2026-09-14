@@ -28,26 +28,37 @@ export const assignmentService = {
   async list(employeeId: number): Promise<AssignmentSnapshot[]> {
     const rows = await prisma.employeeAssignment.findMany({
       where: { employeeId },
+      include: {
+        institute: {
+          select: { id: true, code: true, name: true },
+        },
+      },
       orderBy: { effectiveFrom: 'asc' },
     });
-    return rows.map((r) => ({
-      id: r.id,
-      employeeId: r.employeeId,
-      effectiveFrom: r.effectiveFrom.toISOString().slice(0, 10),
-      effectiveTo: r.effectiveTo ? r.effectiveTo.toISOString().slice(0, 10) : null,
-      organization: r.organization ?? null,
-      instituteId: r.instituteId ?? null,
-      subOrganization: r.subOrganization ?? null,
-      department: r.department ?? null,
-      designation: r.designation,
-      designationId: r.designationId ?? null,
-      shift: r.shift ?? null,
-      appointmentType: r.appointmentType ? String(r.appointmentType) : null,
-      reason: r.reason ?? null,
-      changeType: r.changeType ?? null,
-      changedBy: r.changedBy,
-      createdAt: r.createdAt.toISOString(),
-    }));
+    return rows.map((r) => {
+      const rawSub = r.subOrganization?.trim();
+      const isYear = rawSub ? /^\d{4}$/.test(rawSub) : false;
+      const resolvedSubOrg = r.institute?.code ?? r.institute?.name ?? (isYear ? null : (rawSub || null));
+
+      return {
+        id: r.id,
+        employeeId: r.employeeId,
+        effectiveFrom: r.effectiveFrom.toISOString().slice(0, 10),
+        effectiveTo: r.effectiveTo ? r.effectiveTo.toISOString().slice(0, 10) : null,
+        organization: r.organization ?? null,
+        instituteId: r.instituteId ?? r.institute?.id ?? null,
+        subOrganization: resolvedSubOrg,
+        department: r.department ?? null,
+        designation: r.designation,
+        designationId: r.designationId ?? null,
+        shift: r.shift ?? null,
+        appointmentType: r.appointmentType ? String(r.appointmentType) : null,
+        reason: r.reason ?? null,
+        changeType: r.changeType ?? null,
+        changedBy: r.changedBy,
+        createdAt: r.createdAt.toISOString(),
+      };
+    });
   },
 
   async resolveForDate(employeeId: number, date: Date | string) {
@@ -70,6 +81,7 @@ export const assignmentService = {
           select: {
             joiningDate: true,
             organization: true,
+            instituteId: true,
             subOrganization: true,
             department: true,
             designation: true,
@@ -96,13 +108,18 @@ export const assignmentService = {
         skipped += 1;
         continue;
       }
+      const rawSub = e.generalInfo.subOrganization?.trim();
+      const isYear = rawSub ? /^\d{4}$/.test(rawSub) : false;
+      const cleanSub = isYear ? null : (rawSub || null);
+
       await prisma.employeeAssignment.create({
         data: {
           employeeId: e.id,
           effectiveFrom: toUtcDateOnly(e.generalInfo.joiningDate),
           effectiveTo: null,
           organization: e.generalInfo.organization ?? null,
-          subOrganization: e.generalInfo.subOrganization ?? null,
+          instituteId: e.generalInfo.instituteId ?? null,
+          subOrganization: cleanSub,
           department: e.generalInfo.department ?? null,
           designation: e.generalInfo.designation,
           shift: e.generalInfo.shift ?? null,

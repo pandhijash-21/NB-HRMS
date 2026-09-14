@@ -1,7 +1,6 @@
 import { prisma } from '../../config/prisma';
 import { redis, connectRedis } from '../../config/redis';
 import type { UpdatePermissionsInput, PatchPermissionInput, CreateModuleInput, UpdateModuleInput } from './types';
-
 import { invalidateRolePermissionCache } from '../auth/permissions-map';
 import { sseService } from '../events/sse.service';
 import { emitPermissionsUpdated } from '../collaboration/socket';
@@ -139,7 +138,7 @@ export const permissionService = {
       }),
     ]);
 
-    await invalidateRoleSessions(roleId);
+    invalidateRolePermissionCache(roleId);
 
     return permissionService.getForRole(roleId);
   },

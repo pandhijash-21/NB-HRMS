@@ -52,6 +52,7 @@ class _AdminEmployeesScreenState extends ConsumerState<AdminEmployeesScreen> {
     final hasAccess = Permissions.canViewWorkforce(
       authState.permissions,
       authState.user?.employeeViewScope,
+      authState.user?.role,
     );
 
     if (!hasAccess) {

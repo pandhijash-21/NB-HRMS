@@ -69,7 +69,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final medium = MediaQuery.sizeOf(context).width >= 600;
     final phone = MediaQuery.sizeOf(context).width < 600;
 
-    final hasWorkforce = Permissions.canViewWorkforce(auth.permissions, auth.user?.employeeViewScope);
+    final hasWorkforce = Permissions.canViewWorkforce(auth.permissions, auth.user?.employeeViewScope, role);
     final isHR = ['ADMIN', 'HR'].contains(role.toUpperCase());
     final canApproveLeave = Permissions.canApproveLeave(auth.permissions) ||
         Permissions.canReadLeave(auth.permissions);

@@ -22,8 +22,10 @@ class Permissions {
 
   static bool canViewWorkforce(
     PermissionMap? perms,
-    String? employeeViewScope,
-  ) {
+    String? employeeViewScope, [
+    String? role,
+  ]) {
+    if (isAdmin(role)) return true;
     return employeeViewScope == 'INSTITUTE' || employeeViewScope == 'UNIVERSITY';
   }
 

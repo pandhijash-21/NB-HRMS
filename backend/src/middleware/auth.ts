@@ -28,6 +28,8 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
           fail('Session expired or logged in from another device. Please log in again.'),
         );
       }
+      // Sliding expiration window: extend active session TTL by 8 hours
+      await redis.expire(`session:${userId}`, 8 * 60 * 60);
     } catch (err) {
       // Fail closed: exclusive sessions require Redis. Do not accept bare JWTs.
       console.error('Redis session validation failed:', err);

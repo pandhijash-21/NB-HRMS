@@ -20,7 +20,7 @@ class InstituteDetailScreen extends ConsumerWidget {
     final role = auth.user?.role ?? '';
     final hasAccess = Permissions.canManageUsers(auth.permissions, role) ||
         Permissions.canManageInstitutes(auth.permissions, role) ||
-        Permissions.canViewWorkforce(auth.permissions, auth.user?.employeeViewScope);
+        Permissions.canViewWorkforce(auth.permissions, auth.user?.employeeViewScope, role);
 
     if (!hasAccess) {
       return const Scaffold(

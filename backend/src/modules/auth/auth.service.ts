@@ -14,7 +14,7 @@ import {
   recordLoginFailure,
 } from './loginLock.service';
 import { otpService } from './otp.service';
-import { buildPermissionsMap } from './permissions-map';
+import { buildPermissionsMap, isAdminRole } from './permissions-map';
 
 const SESSION_TTL = 8 * 60 * 60; // 8 hours in seconds
 
@@ -121,7 +121,10 @@ export const authService = {
     // 3. Build permissions map
     const permissions = buildPermissionsMap(user.role.permissions);
     const personalPerm = user.role.permissions.find((p) => p.moduleKey === 'PERSONAL_INFO');
-    const employeeViewScope = personalPerm?.employeeViewScope ?? 'NONE';
+    let employeeViewScope = personalPerm?.employeeViewScope ?? 'NONE';
+    if (isAdminRole(user.role.name) && employeeViewScope === 'NONE') {
+      employeeViewScope = 'UNIVERSITY';
+    }
     const scopeSubOrg =
       employeeViewScope === 'INSTITUTE'
         ? ((user as { subOrganization?: string | null }).subOrganization ??

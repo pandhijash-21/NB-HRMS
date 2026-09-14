@@ -1,6 +1,7 @@
 import { prisma } from '../../config/prisma';
 import { redis, connectRedis } from '../../config/redis';
 import type { UpdatePermissionsInput, PatchPermissionInput } from './types';
+import { invalidateRolePermissionCache } from '../auth/permissions-map';
 
 /** Invalidate all active sessions for every user assigned to a given role. */
 export async function invalidateRoleSessions(roleId: string) {
@@ -76,7 +77,7 @@ export const permissionService = {
       }),
     ]);
 
-    await invalidateRoleSessions(roleId);
+    invalidateRolePermissionCache(roleId);
 
     return permissionService.getForRole(roleId);
   },
@@ -109,7 +110,7 @@ export const permissionService = {
       },
     });
 
-    await invalidateRoleSessions(roleId);
+    invalidateRolePermissionCache(roleId);
 
     return permissionService.getForRole(roleId);
   },

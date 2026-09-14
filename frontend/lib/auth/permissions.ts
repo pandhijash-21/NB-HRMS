@@ -20,7 +20,10 @@ export function canViewOwnWorkforce(
 export function canViewWorkforce(
   perms: PermissionMap | undefined | null,
   employeeViewScope?: string | null,
+  role?: string | null,
 ): boolean {
+  const r = (role ?? '').toUpperCase().replace(/\s+/g, '');
+  if (['ADMIN', 'SUPERADMIN', 'SYSTEMADMIN'].includes(r)) return true;
   if (employeeViewScope === 'INSTITUTE' || employeeViewScope === 'UNIVERSITY') return true;
   return false;
 }

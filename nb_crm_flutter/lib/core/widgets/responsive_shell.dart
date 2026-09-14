@@ -98,6 +98,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     final hasWorkforce = Permissions.canViewWorkforce(
       auth.permissions,
       auth.user?.employeeViewScope,
+      auth.user?.role,
     );
     final isHR = const [
       'ADMIN',

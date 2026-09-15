@@ -566,6 +566,31 @@ class _ModularMatrixTableState extends State<_ModularMatrixTable> {
     super.dispose();
   }
 
+  Map<String, dynamic> _normalizePatchData(String moduleKey, Map<String, dynamic> data) {
+    final patch = Map<String, dynamic>.from(data);
+    final current = widget.permByKey[moduleKey];
+    if (current == null) return patch;
+
+    final canRead = patch.containsKey('canRead') ? patch['canRead'] == true : current.canRead;
+    var canWrite = patch.containsKey('canWrite') ? patch['canWrite'] == true : current.canWrite;
+    var canApprove = patch.containsKey('canApprove') ? patch['canApprove'] == true : current.canApprove;
+    var canDelete = patch.containsKey('canDelete') ? patch['canDelete'] == true : current.canDelete;
+    var canExport = patch.containsKey('canExport') ? patch['canExport'] == true : current.canExport;
+
+    if (canWrite || canApprove || canDelete || canExport) {
+      patch['canRead'] = true;
+    } else if (patch.containsKey('canRead') && patch['canRead'] != true) {
+      patch['canWrite'] = false;
+      patch['canApprove'] = false;
+      patch['canDelete'] = false;
+      patch['canExport'] = false;
+    } else if (canRead) {
+      patch['canRead'] = true;
+    }
+
+    return patch;
+  }
+
   Future<void> _patch(String moduleKey, Map<String, dynamic> data) async {
     if (Permissions.isSuperAdmin(widget.roleName)) {
       if (mounted) {
@@ -575,17 +600,23 @@ class _ModularMatrixTableState extends State<_ModularMatrixTable> {
       }
       return;
     }
-    final trackKey = '$moduleKey-${data.keys.join()}';
+    final normalized = _normalizePatchData(moduleKey, data);
+    final trackKey = '$moduleKey-${normalized.keys.join()}';
     if (_updating.contains(trackKey)) return;
     setState(() => _updating.add(trackKey));
     try {
       context.read<AdminRoleDetailBloc>().add(RolePermissionPatched(
             roleId: widget.roleId,
             moduleKey: moduleKey,
-            data: data,
+            data: normalized,
           ));
       if (mounted) {
-        context.read<AuthBloc>().add(const AuthPermissionsRefreshRequested());
+        final auth = context.read<AuthBloc>().state;
+        final editingOwnRole = auth.user?.role.trim().toUpperCase() ==
+            widget.roleName.trim().toUpperCase();
+        if (editingOwnRole) {
+          context.read<AuthBloc>().add(const AuthPermissionsRefreshRequested());
+        }
       }
     } finally {
       if (mounted) setState(() => _updating.remove(trackKey));

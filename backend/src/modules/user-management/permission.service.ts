@@ -5,8 +5,8 @@ import { invalidateRolePermissionCache } from '../auth/permissions-map';
 import { sseService } from '../events/sse.service';
 import { emitPermissionsUpdated } from '../collaboration/socket';
 
-/** Invalidate all active sessions for every user assigned to a given role and clear permission caches. */
-export async function invalidateRoleSessions(roleId: string, moduleKey?: string) {
+/** Clear permission cache and notify connected clients (does not sign users out). */
+export async function notifyRolePermissionsUpdated(roleId: string, moduleKey?: string) {
   invalidateRolePermissionCache(roleId);
   try {
     sseService.broadcast('permissions_updated', {
@@ -22,6 +22,11 @@ export async function invalidateRoleSessions(roleId: string, moduleKey?: string)
   } catch {
     // Socket broadcast skipped if error
   }
+}
+
+/** Force logout for every user on a role — use for role reassignment, not matrix edits. */
+export async function invalidateRoleSessions(roleId: string, moduleKey?: string) {
+  await notifyRolePermissionsUpdated(roleId, moduleKey);
   try {
     await connectRedis();
     const userIds = await redis.sMembers(`role_users:${roleId}`);
@@ -32,6 +37,25 @@ export async function invalidateRoleSessions(roleId: string, moduleKey?: string)
   } catch {
     // Redis unavailable — sessions will expire naturally
   }
+}
+
+function normalizePermissionFlags(flags: {
+  canRead: boolean;
+  canWrite: boolean;
+  canApprove: boolean;
+  canDelete: boolean;
+  canExport: boolean;
+}) {
+  const hasElevated =
+    flags.canWrite || flags.canApprove || flags.canDelete || flags.canExport;
+  if (hasElevated) flags.canRead = true;
+  if (!flags.canRead) {
+    flags.canWrite = false;
+    flags.canApprove = false;
+    flags.canDelete = false;
+    flags.canExport = false;
+  }
+  return flags;
 }
 
 export function inferCategory(
@@ -161,23 +185,36 @@ export const permissionService = {
     const mod = await prisma.systemModule.findUnique({ where: { key: moduleKey } });
     if (!mod) return { error: `Module ${moduleKey} not found`, status: 404 } as const;
 
+    const existing = await prisma.rolePermission.findUnique({
+      where: { roleId_moduleKey: { roleId, moduleKey } },
+    });
+    const merged = normalizePermissionFlags({
+      canRead: input.canRead ?? existing?.canRead ?? false,
+      canWrite: input.canWrite ?? existing?.canWrite ?? false,
+      canApprove: input.canApprove ?? existing?.canApprove ?? false,
+      canDelete: input.canDelete ?? existing?.canDelete ?? false,
+      canExport: input.canExport ?? existing?.canExport ?? false,
+    });
+
     await prisma.rolePermission.upsert({
       where:  { roleId_moduleKey: { roleId, moduleKey } },
-      update: { ...input, updatedBy: updaterId },
+      update: {
+        ...merged,
+        ...(input.employeeViewScope !== undefined
+          ? { employeeViewScope: input.employeeViewScope }
+          : {}),
+        updatedBy: updaterId,
+      },
       create: {
         roleId,
         moduleKey,
-        canRead:    input.canRead    ?? false,
-        canWrite:   input.canWrite   ?? false,
-        canApprove: input.canApprove ?? false,
-        canDelete:  input.canDelete  ?? false,
-        canExport:  input.canExport  ?? false,
+        ...merged,
         employeeViewScope: input.employeeViewScope ?? 'NONE',
         updatedBy:  updaterId,
       },
     });
 
-    await invalidateRoleSessions(roleId, moduleKey);
+    await notifyRolePermissionsUpdated(roleId, moduleKey);
 
     return permissionService.getForRole(roleId);
   },
@@ -262,7 +299,7 @@ export const permissionService = {
           updatedBy: creatorId,
         },
       });
-      await invalidateRoleSessions(r.id, key);
+      await notifyRolePermissionsUpdated(r.id, key);
     }
 
     return mod;

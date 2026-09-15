@@ -37,7 +37,10 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     super.dispose();
   }
 
-  Widget _buildSpeedDial(BuildContext context, List<String> enabledModules) {
+  Widget _buildSpeedDial(
+    BuildContext context,
+    List<String> accessibleSuites,
+  ) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     const goldColor = Color(0xFFC5A059);
     
@@ -50,7 +53,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     final itemFgColor = isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238);
     
     final items = <RadialMenuItem>[
-      if (enabledModules.contains('HRMS'))
+      if (accessibleSuites.contains('HRMS'))
         RadialMenuItem(
           icon: Icons.groups_rounded,
           label: 'HRMS',
@@ -61,7 +64,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             context.go('/home');
           },
         ),
-      if (enabledModules.contains('ERP'))
+      if (accessibleSuites.contains('ERP'))
         RadialMenuItem(
           icon: Icons.account_balance_rounded,
           label: 'ERP',
@@ -72,7 +75,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             context.go('/erp/home');
           },
         ),
-      if (enabledModules.contains('CRM'))
+      if (accessibleSuites.contains('CRM'))
         RadialMenuItem(
           icon: Icons.support_agent_rounded,
           label: 'CRM',
@@ -146,26 +149,32 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     final module = context.watch<AppModuleCubit>().state;
     final brandTitle = shellBrandTitle(module);
     final enabledModules = auth.user?.enabledModules ?? const ['HRMS', 'CRM', 'ERP'];
+    final accessibleSuites = Permissions.accessibleSuites(
+      auth.permissions,
+      enabledModules,
+      auth.user?.role,
+    );
 
-    // Auto-correct active module if current one was revoked for this tenant
-    if (module == AppModule.hrms && !enabledModules.contains('HRMS')) {
-      final fallback = enabledModules.contains('ERP')
-          ? AppModule.erp
-          : (enabledModules.contains('CRM') ? AppModule.crm : AppModule.hrms);
+    AppModule _fallbackSuite() {
+      if (accessibleSuites.contains('HRMS')) return AppModule.hrms;
+      if (accessibleSuites.contains('ERP')) return AppModule.erp;
+      if (accessibleSuites.contains('CRM')) return AppModule.crm;
+      return AppModule.hrms;
+    }
+
+    // Auto-correct active module if suite license or RBAC access was revoked
+    if (module == AppModule.hrms && !accessibleSuites.contains('HRMS')) {
+      final fallback = _fallbackSuite();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) context.read<AppModuleCubit>().setModule(fallback);
       });
-    } else if (module == AppModule.erp && !enabledModules.contains('ERP')) {
-      final fallback = enabledModules.contains('HRMS')
-          ? AppModule.hrms
-          : (enabledModules.contains('CRM') ? AppModule.crm : AppModule.hrms);
+    } else if (module == AppModule.erp && !accessibleSuites.contains('ERP')) {
+      final fallback = _fallbackSuite();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) context.read<AppModuleCubit>().setModule(fallback);
       });
-    } else if (module == AppModule.crm && !enabledModules.contains('CRM')) {
-      final fallback = enabledModules.contains('HRMS')
-          ? AppModule.hrms
-          : (enabledModules.contains('ERP') ? AppModule.erp : AppModule.hrms);
+    } else if (module == AppModule.crm && !accessibleSuites.contains('CRM')) {
+      final fallback = _fallbackSuite();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) context.read<AppModuleCubit>().setModule(fallback);
       });
@@ -772,7 +781,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
         body: Stack(
           children: [
             widget.child,
-            if (!isSuperAdmin) _buildSpeedDial(context, enabledModules),
+            if (!isSuperAdmin) _buildSpeedDial(context, accessibleSuites),
           ],
         ),
       ),
@@ -801,7 +810,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
               Expanded(child: widget.child),
             ],
           ),
-          if (!isSuperAdmin) _buildSpeedDial(context, enabledModules),
+          if (!isSuperAdmin) _buildSpeedDial(context, accessibleSuites),
         ],
       ),
     ),

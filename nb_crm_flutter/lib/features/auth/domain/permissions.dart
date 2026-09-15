@@ -104,6 +104,82 @@ class Permissions {
     return isSuperAdmin(role);
   }
 
+  /// Suite category for a module key (HRMS / CRM / ERP / COLLABORATION).
+  static String suiteForModuleKey(String moduleKey) {
+    final k = moduleKey.trim().toUpperCase();
+    if (k.startsWith('COLLAB_') ||
+        const ['CHAT', 'MEETINGS', 'TASKS', 'ORG_TREE', 'COLLABORATION'].contains(k)) {
+      return 'COLLABORATION';
+    }
+    if (k.startsWith('ERP_') ||
+        const [
+          'PROJECTS',
+          'WORK_ORDERS',
+          'BOQ',
+          'STORE',
+          'DPR',
+          'TENDERS',
+          'TENDER_APPLICATIONS',
+          'CONTRACTORS',
+          'ERP_CONFIGURATIONS',
+        ].contains(k)) {
+      return 'ERP';
+    }
+    if (k.startsWith('CRM_') ||
+        const [
+          'CRM',
+          'CRM_PRE_SALES',
+          'CRM_POST_SALES',
+          'CRM_HEADERS',
+          'CRM_BIN',
+          'CRM_SETTINGS',
+          'CRM_DASHBOARD',
+        ].contains(k)) {
+      return 'CRM';
+    }
+    return 'HRMS';
+  }
+
+  /// True when the user may open the HRMS / CRM / ERP suite switcher entry.
+  /// Requires at least one READ (or elevated) action on a module in that suite.
+  static bool canAccessSuite(
+    PermissionMap? perms,
+    String suite, [
+    String? role,
+  ]) {
+    if (isSuperAdmin(role)) return true;
+    if (perms == null || perms.isEmpty) return false;
+    final target = suite.trim().toUpperCase();
+    for (final entry in perms.entries) {
+      if (suiteForModuleKey(entry.key) != target) continue;
+      final actions = entry.value;
+      if (actions.any((a) =>
+          a == 'READ' ||
+          a == 'WRITE' ||
+          a == 'APPROVE' ||
+          a == 'DELETE' ||
+          a == 'EXPORT')) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// Suites the user can actually open (license ∩ permission matrix).
+  static List<String> accessibleSuites(
+    PermissionMap? perms,
+    List<String> enabledModules, [
+    String? role,
+  ]) {
+    final out = <String>[];
+    for (final suite in const ['HRMS', 'CRM', 'ERP']) {
+      if (!enabledModules.map((e) => e.toUpperCase()).contains(suite)) continue;
+      if (!canAccessSuite(perms, suite, role)) continue;
+      out.add(suite);
+    }
+    return out;
+  }
+
   static bool canReadProjects(PermissionMap? perms, [String? role]) {
     if (isSuperAdmin(role)) return true;
     return hasPermission(perms, 'PROJECTS', 'READ');

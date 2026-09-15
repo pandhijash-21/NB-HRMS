@@ -209,8 +209,11 @@ GoRouter createAppRouter(AuthBloc authBloc) {
         } else if (trackingSetup) {
           next = null; // allow full-screen tracking setup
         } else {
-          // Module license enforcement for tenant users: bounce if suite revoked
+          // Suite access: company license ∩ user permission matrix
           final enabled = auth.user?.enabledModules ?? const ['HRMS', 'CRM', 'ERP'];
+          final perms = auth.permissions;
+          final role = auth.user?.role;
+          final accessible = Permissions.accessibleSuites(perms, enabled, role);
           final isErp = loc.startsWith('/erp');
           final isCrm = loc.startsWith('/crm');
           final isHrms = loc == '/home' ||
@@ -223,22 +226,20 @@ GoRouter createAppRouter(AuthBloc authBloc) {
               loc.startsWith('/letters') ||
               loc.startsWith('/lookups');
 
-          final defaultRoute = enabled.contains('HRMS')
+          final defaultRoute = accessible.contains('HRMS')
               ? '/home'
-              : (enabled.contains('ERP')
+              : (accessible.contains('ERP')
                   ? '/erp/home'
-                  : (enabled.contains('CRM') ? '/crm/dashboard' : '/home'));
+                  : (accessible.contains('CRM') ? '/crm/dashboard' : '/home'));
 
-          if (isErp && !enabled.contains('ERP')) {
+          if (isErp && !accessible.contains('ERP')) {
             next = defaultRoute;
-          } else if (isCrm && !enabled.contains('CRM')) {
+          } else if (isCrm && !accessible.contains('CRM')) {
             next = defaultRoute;
-          } else if (isHrms && !enabled.contains('HRMS')) {
+          } else if (isHrms && !accessible.contains('HRMS')) {
             next = defaultRoute;
           } else {
             // Granular RBAC feature gating per role matrix
-            final perms = auth.permissions;
-            final role = auth.user?.role;
             final isChat = loc == '/chat' || loc.startsWith('/chat/');
             final isMeet = (loc == '/meet' || loc.startsWith('/meet/')) && !guestMeet;
             final isTasks = loc == '/tasks' || loc.startsWith('/tasks/');

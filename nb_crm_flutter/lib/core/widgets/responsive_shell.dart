@@ -144,7 +144,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
       auth.user?.role,
     );
     final canAdminAttendance = Permissions.isAdmin(auth.user?.role) ||
-        Permissions.canAdminAttendance(auth.permissions, auth.user?.role);
+        Permissions.canAdminAttendance(auth.permissions, auth.user?.role ?? '');
 
     // Superadmin has a dedicated full-screen SaaS Platform Console — no sidebar needed.
     if (isSuperAdmin) {

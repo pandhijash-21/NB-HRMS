@@ -109,6 +109,14 @@ export async function permissionsForOrganizationAdmin(organizationId: string): P
     where: { organizationId },
   });
   const perms = buildPermissionsMap(rows);
+
+  // Cascade: USER_MGMT implies workforce directory (PERSONAL_INFO) for company admins.
+  if ((perms.USER_MGMT ?? []).includes('READ') && !(perms.PERSONAL_INFO ?? []).includes('READ')) {
+    perms.PERSONAL_INFO = [
+      ...new Set([...(perms.PERSONAL_INFO ?? []), 'READ', 'WRITE', 'DELETE']),
+    ];
+  }
+
   const personal = rows.find((p) => p.moduleKey === 'PERSONAL_INFO');
   let employeeViewScope = personal?.employeeViewScope ?? 'NONE';
   if (

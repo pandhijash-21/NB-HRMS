@@ -71,6 +71,80 @@ export const employeeService = {
     return { items, total };
   },
 
+  /**
+   * Company System Admin / ADMIN login accounts that are not linked to an Employee row.
+   * Shown in Workforce so admins are visible alongside staff (login-only accounts).
+   */
+  async listUnlinkedSystemAdmins(params: {
+    subOrganization?: string | null;
+    search?: string;
+    limit?: number;
+  }) {
+    const scope = params.subOrganization?.trim();
+    if (!scope || scope === '__NO_INSTITUTE_SCOPE__') return [];
+
+    const s = params.search?.trim();
+    const users = await prisma.user.findMany({
+      where: {
+        deletedAt: null,
+        employeeId: null,
+        role: { name: { in: ['ADMIN', 'SYSTEM_ADMIN', 'SYSTEM_ADMINISTRATOR', 'System Admin'] } },
+        OR: [
+          { subOrganization: { equals: scope, mode: 'insensitive' } },
+        ],
+        ...(s
+          ? {
+              AND: [
+                {
+                  OR: [
+                    { username: { contains: s, mode: 'insensitive' } },
+                  ],
+                },
+              ],
+            }
+          : {}),
+      },
+      select: {
+        id: true,
+        username: true,
+        isActive: true,
+        subOrganization: true,
+        role: { select: { name: true } },
+      },
+      take: params.limit ?? 50,
+      orderBy: { username: 'asc' },
+    });
+
+    // Stable negative synthetic ids so Flutter can render cards without colliding with employees
+    return users.map((u, index) => {
+      let hash = 0;
+      for (let i = 0; i < u.id.length; i++) hash = (hash * 31 + u.id.charCodeAt(i)) | 0;
+      const syntheticId = -Math.abs(hash || index + 1);
+      return {
+        id: syntheticId,
+        abbreviation: 'ADM',
+        userId: u.id,
+        status: u.isActive ? 'ACTIVE' : 'INACTIVE',
+        photoUrl: null,
+        signatureUrl: null,
+        isSystemAdminAccount: true,
+        generalInfo: {
+          fullName: u.username ?? 'System Admin',
+          employeeCode: `ADMIN-${u.username ?? u.id.slice(0, 8)}`,
+          subOrganization: u.subOrganization,
+          organization: u.subOrganization,
+        },
+        user: { roleId: '', role: { name: u.role?.name ?? 'ADMIN' } },
+        position: {
+          id: 'system-admin',
+          name: 'System Admin',
+          linkedRoleId: '',
+          linkedRoleName: u.role?.name ?? 'ADMIN',
+        },
+      };
+    });
+  },
+
   async getById(employeeId: number) {
     const [employee, positionMap] = await Promise.all([
       prisma.employee.findUnique({

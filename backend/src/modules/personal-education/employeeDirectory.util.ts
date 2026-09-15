@@ -1,6 +1,6 @@
 import { prisma } from '../../config/prisma';
 import { resolveInstituteRef } from '../institute/institute.util';
-import { isSuperAdminRole } from '../auth/permissions-map';
+import { isSuperAdminRole, isSystemAdminRole } from '../auth/permissions-map';
 
 export type EmployeeViewScope = 'NONE' | 'SELF' | 'INSTITUTE' | 'UNIVERSITY';
 
@@ -16,20 +16,38 @@ type AuthUser = {
 
 export function isAdministrativeRole(roleName?: string): boolean {
   const r = String(roleName ?? '').toUpperCase().replace(/[\s_-]/g, '');
-  // SUPERADMIN + HR tiers only — tenant ADMIN uses org matrix scope/permissions.
+  // SUPERADMIN + HR tiers — tenant ADMIN uses org matrix (see canViewEmployeeDirectory).
   return ['SUPERADMIN', 'HR', 'HRMANAGER', 'DEVELOPER'].includes(r);
 }
 
 export function getEmployeeViewScope(user: AuthUser | undefined): EmployeeViewScope {
   if (isSuperAdminRole(user?.role || user?.roleName)) return 'UNIVERSITY';
   if (isAdministrativeRole(user?.role || user?.roleName)) return 'UNIVERSITY';
+  if (isSystemAdminRole(user?.role || user?.roleName)) {
+    const scope = user?.employeeViewScope ?? 'NONE';
+    if (scope === 'INSTITUTE' || scope === 'UNIVERSITY') return scope;
+    const perms = user?.permissions ?? {};
+    if ((perms.PERSONAL_INFO ?? []).includes('READ') || (perms.USER_MGMT ?? []).includes('READ')) {
+      return 'UNIVERSITY';
+    }
+  }
   return user?.employeeViewScope ?? 'NONE';
 }
 
 export function canViewEmployeeDirectory(user: AuthUser | undefined): boolean {
   if (isSuperAdminRole(user?.role || user?.roleName)) return true;
   if (isAdministrativeRole(user?.role || user?.roleName)) return true;
-  if (!(user?.permissions?.PERSONAL_INFO ?? []).includes('READ')) return false;
+
+  const perms = user?.permissions ?? {};
+  const hasPersonalRead = (perms.PERSONAL_INFO ?? []).includes('READ');
+  const hasUserMgmt = (perms.USER_MGMT ?? []).includes('READ');
+
+  if (isSystemAdminRole(user?.role || user?.roleName)) {
+    // Company System Admin: matrix PERSONAL_INFO, or USER_MGMT cascade for workforce.
+    if (hasPersonalRead || hasUserMgmt) return true;
+  }
+
+  if (!hasPersonalRead) return false;
   const scope = getEmployeeViewScope(user);
   return scope === 'INSTITUTE' || scope === 'UNIVERSITY';
 }
@@ -43,7 +61,13 @@ export function canWriteEmployeeDirectory(user: AuthUser | undefined): boolean {
   if (isSuperAdminRole(user?.role || user?.roleName)) return true;
   if (isAdministrativeRole(user?.role || user?.roleName)) return true;
   if (!canViewEmployeeDirectory(user)) return false;
-  return user?.permissions?.PERSONAL_INFO?.includes('WRITE') ?? false;
+  const perms = user?.permissions ?? {};
+  if ((perms.PERSONAL_INFO ?? []).includes('WRITE')) return true;
+  // Cascade: user managers can maintain directory when PERSONAL_INFO write wasn't seeded.
+  if (isSystemAdminRole(user?.role || user?.roleName) && (perms.USER_MGMT ?? []).includes('WRITE')) {
+    return true;
+  }
+  return false;
 }
 
 export function canWriteOwnEmployeeRecord(user: AuthUser | undefined): boolean {
@@ -55,9 +79,16 @@ export function canWriteOwnEmployeeRecord(user: AuthUser | undefined): boolean {
 export async function resolveDirectoryInstituteFilter(
   user: AuthUser | undefined,
 ): Promise<string | undefined> {
-  // Administrative roles (Superadmin, Tenant Admin, HR, System Admin) have full workforce visibility
+  // Full-directory roles / company System Admin with university-level effective scope
   if (isAdministrativeRole(user?.role || user?.roleName)) {
     return undefined;
+  }
+  if (isSystemAdminRole(user?.role || user?.roleName)) {
+    const scope = getEmployeeViewScope(user);
+    if (scope === 'UNIVERSITY' || scope === 'NONE') {
+      // NONE here already failed canView; UNIVERSITY = whole company
+      if (scope === 'UNIVERSITY') return undefined;
+    }
   }
 
   if (getEmployeeViewScope(user) !== 'INSTITUTE') return undefined;
@@ -82,6 +113,7 @@ export async function employeeMatchesDirectoryScope(
   user: AuthUser | undefined,
 ): Promise<boolean> {
   if (isAdministrativeRole(user?.role || user?.roleName)) return true;
+  if (isSuperAdminRole(user?.role || user?.roleName)) return true;
   const scope = getEmployeeViewScope(user);
   if (scope === 'NONE') return false;
   if (scope === 'SELF') {

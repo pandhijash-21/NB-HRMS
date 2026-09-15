@@ -387,6 +387,16 @@ export async function loadOrgAdminPermissionMap(
   const permissions = buildPermissionsMap(rows);
   const personal = rows.find((p) => p.moduleKey === 'PERSONAL_INFO');
   let employeeViewScope = personal?.employeeViewScope ?? 'NONE';
+
+  // Cascade: company admins who can manage users always get workforce directory access.
+  // Fixes tenants where Admin Access granted USER_MGMT but not PERSONAL_INFO.
+  const hasUserMgmt = (permissions.USER_MGMT ?? []).includes('READ');
+  if (hasUserMgmt && !(permissions.PERSONAL_INFO ?? []).includes('READ')) {
+    permissions.PERSONAL_INFO = [
+      ...new Set([...(permissions.PERSONAL_INFO ?? []), 'READ', 'WRITE', 'DELETE']),
+    ];
+  }
+
   if (employeeViewScope === 'NONE' || employeeViewScope === 'SELF') {
     // Admins with PERSONAL_INFO read still get a sensible default for workforce directory
     if ((permissions.PERSONAL_INFO ?? []).includes('READ')) {

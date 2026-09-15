@@ -35,7 +35,26 @@ export const employeeController = {
     const subOrganization = await resolveDirectoryInstituteFilter(req.user);
 
     const data = await employeeService.list({ limit, offset, search, status, subOrganization });
-    return res.json(ok({ ...data, viewScope: req.user?.employeeViewScope ?? 'NONE' }));
+
+    // On first page, surface company System Admin login accounts (no Employee row).
+    let items = data.items as any[];
+    let total = data.total;
+    if (offset === 0 && (!status || status === 'ACTIVE')) {
+      const orgScope =
+        subOrganization && subOrganization !== '__NO_INSTITUTE_SCOPE__'
+          ? subOrganization
+          : req.user?.subOrganization ?? null;
+      const admins = await employeeService.listUnlinkedSystemAdmins({
+        subOrganization: orgScope,
+        search,
+      });
+      if (admins.length) {
+        items = [...admins, ...items];
+        total += admins.length;
+      }
+    }
+
+    return res.json(ok({ items, total, viewScope: req.user?.employeeViewScope ?? 'NONE' }));
   },
 
   async getById(req: Request, res: Response) {

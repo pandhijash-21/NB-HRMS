@@ -51,6 +51,8 @@ class EmployeeProfile {
   final List<AcademicQualification> academicQuals;
   final SalaryInfo? salaryInfo;
   final BankInfo? bankInfo;
+  /// Login-only System Admin account (no Employee profile row).
+  final bool isSystemAdminAccount;
 
   const EmployeeProfile({
     required this.id,
@@ -67,6 +69,7 @@ class EmployeeProfile {
     required this.academicQuals,
     this.salaryInfo,
     this.bankInfo,
+    this.isSystemAdminAccount = false,
   });
 
   factory EmployeeProfile.fromJson(Map<String, dynamic> json) {
@@ -92,6 +95,7 @@ class EmployeeProfile {
       academicQuals: _asMapList(json['academicQuals']).map(AcademicQualification.fromJson).toList(),
       salaryInfo: salary != null ? SalaryInfo.fromJson(salary) : null,
       bankInfo: bank != null ? BankInfo.fromJson(bank) : null,
+      isSystemAdminAccount: json['isSystemAdminAccount'] == true,
     );
   }
 

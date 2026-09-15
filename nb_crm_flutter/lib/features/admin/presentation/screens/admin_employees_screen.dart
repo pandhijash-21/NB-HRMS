@@ -390,7 +390,9 @@ class _AdminEmployeesViewState extends State<_AdminEmployeesView> {
 
   Widget _buildEmployeeCard(BuildContext context, EmployeeProfile emp) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final statusColor = _getStatusColor(emp.status);
+    final statusColor = emp.isSystemAdminAccount
+        ? const Color(0xFF4f46e5)
+        : _getStatusColor(emp.status);
 
     return Card(
       elevation: 0,
@@ -404,7 +406,17 @@ class _AdminEmployeesViewState extends State<_AdminEmployeesView> {
         ),
       ),
       child: InkWell(
-        onTap: () => context.push('/admin/employees/${emp.id}'),
+        onTap: emp.isSystemAdminAccount
+            ? () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'System Admin is a login account — manage it under Organisation → Users.',
+                    ),
+                  ),
+                );
+              }
+            : () => context.push('/admin/employees/${emp.id}'),
         borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: const EdgeInsets.all(16.0),
@@ -486,10 +498,11 @@ class _AdminEmployeesViewState extends State<_AdminEmployeesView> {
                       borderRadius: BorderRadius.circular(30),
                     ),
                     child: Text(
-                      emp.status,
+                      emp.isSystemAdminAccount ? 'SYSTEM ADMIN' : emp.status,
                       style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: statusColor, letterSpacing: 0.5),
                     ),
                   ),
+                  if (!emp.isSystemAdminAccount) ...[
                   const SizedBox(height: 12),
                   IconButton(
                     icon: Icon(
@@ -506,6 +519,7 @@ class _AdminEmployeesViewState extends State<_AdminEmployeesView> {
                         ? 'Permanently delete'
                         : 'Terminate employee',
                   ),
+                  ],
                 ],
               ),
             ],
@@ -602,8 +616,11 @@ class _AdminEmployeesViewState extends State<_AdminEmployeesView> {
         return Colors.grey;
       case 'TERMINATED':
         return Colors.red;
+      case 'SYSTEM ADMIN':
+      case 'SYSTEM_ADMIN':
+        return const Color(0xFF4f46e5);
       default:
-        return isDark(context) ? const Color(0xFFC5A059) : const Color(0xFF263238);
+        return Colors.grey;
     }
   }
 

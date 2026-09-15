@@ -15,6 +15,7 @@ import '../bloc/app_module_cubit.dart';
 import '../logging/app_logger.dart';
 import '../services/location_alert_sound.dart';
 import '../theme/theme_cubit.dart';
+import 'backend_env_switcher.dart';
 
 class ResponsiveShell extends ConsumerStatefulWidget {
   const ResponsiveShell({super.key, required this.child});
@@ -275,6 +276,22 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             Icons.dashboard,
             'Dashboard',
             section: 'Main',
+          ),
+        if (Permissions.canReadGoogleEarth(auth.permissions, auth.user?.role))
+          const _Destination(
+            '/admin/earth',
+            Icons.public_outlined,
+            Icons.public,
+            'NB Earth',
+            section: 'Earth',
+          ),
+        if (Permissions.canReadGoogleEarth(auth.permissions, auth.user?.role))
+          const _Destination(
+            '/admin/earth/dashboard',
+            Icons.insights_outlined,
+            Icons.insights,
+            'Earth Dashboard',
+            section: 'Earth',
           ),
         const _Destination('/home', Icons.home_outlined, Icons.home, 'Home', section: 'Main'),
         const _Destination(
@@ -589,6 +606,12 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
         return currentPath == '/erp/tenders' ||
             currentPath.startsWith('/erp/tenders/');
       }
+      if (d.route == '/admin/earth/dashboard') {
+        return currentPath.startsWith('/admin/earth/dashboard');
+      }
+      if (d.route == '/admin/earth') {
+        return currentPath == '/admin/earth';
+      }
       return currentPath.startsWith(d.route);
     }
 
@@ -643,6 +666,10 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
         appBar: AppBar(
           title: Text(brandTitle),
           actions: [
+            const Padding(
+              padding: EdgeInsets.only(right: 8),
+              child: Center(child: BackendEnvSwitcher.chip()),
+            ),
             if (!isSuperAdmin && Permissions.canReadOrgTree(auth.permissions, auth.user?.role))
               IconButton(
                 tooltip: 'Employee tree',

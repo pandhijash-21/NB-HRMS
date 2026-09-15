@@ -57,7 +57,8 @@ export function canAccessAdminPortal(
     hasPermission(perms, 'PAYROLL', 'READ') ||
     hasPermission(perms, 'REPORTS', 'READ') ||
     hasPermission(perms, 'FIELD_MGMT', 'READ') ||
-    hasPermission(perms, 'LEAVE', 'APPROVE');
+    hasPermission(perms, 'LEAVE', 'APPROVE') ||
+    hasPermission(perms, 'GOOGLE_EARTH', 'READ');
 
   if (hasManagementModule) return true;
 

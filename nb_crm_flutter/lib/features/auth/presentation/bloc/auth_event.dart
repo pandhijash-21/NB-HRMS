@@ -49,9 +49,12 @@ class AuthUnauthorizedKicked extends AuthEvent {
   const AuthUnauthorizedKicked();
 }
 
-/// Fired when user taps logout.
+/// Fired when user taps logout, or when switching local/live backends.
 class AuthLogoutRequested extends AuthEvent {
-  const AuthLogoutRequested();
+  const AuthLogoutRequested({this.infoMessage, this.skipRemote = false});
+
+  final String? infoMessage;
+  final bool skipRemote;
 }
 
 /// Fired to clear error messages.

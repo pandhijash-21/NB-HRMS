@@ -15,6 +15,7 @@ import '../../features/erp/data/dpr_repository.dart';
 import '../../features/erp/data/project_repository.dart';
 import '../../features/erp/data/tender_repository.dart';
 import '../../features/erp/data/work_order_repository.dart';
+import '../../features/earth/data/earth_repository.dart';
 import '../../features/leave/data/leave_repository.dart';
 import '../../features/letters/data/letters_repository.dart';
 import '../../features/lookups/data/lookup_repository.dart';
@@ -121,6 +122,9 @@ class AppRepositories {
         ),
         RepositoryProvider<ProjectRepository>(
           create: (_) => ProjectRepository(dioClient: dioClient),
+        ),
+        RepositoryProvider<EarthRepository>(
+          create: (_) => EarthRepository(dioClient: dioClient),
         ),
         RepositoryProvider<TenderRepository>(
           create: (_) => TenderRepository(dioClient: dioClient),

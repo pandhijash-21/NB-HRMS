@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_envelope.dart';
-import '../../../core/network/app_config.dart';
 import '../../../core/services/web_live_tracking_service.dart';
 import '../domain/auth_user.dart';
 import '../domain/permissions.dart';
@@ -237,53 +236,6 @@ class AuthNotifier extends Notifier<AuthState> {
       await WebLiveTrackingService.ensureRunning();
       return true;
     } on ApiException catch (e) {
-      final currentUrl = ref.read(apiBaseUrlProvider);
-      final isLocal = currentUrl.contains('127.0.0.1') || currentUrl.contains('localhost');
-      if (isLocal &&
-          (e.message.contains('Unable to reach server') ||
-           e.message.contains('reach the server') ||
-           e.statusCode == null)) {
-        try {
-          ref.read(apiBaseUrlProvider.notifier).setUrl(AppConfig.liveApiBaseUrl);
-          final liveRepo = ref.read(authRepositoryProvider);
-          final result = await liveRepo.login(
-            identifier: identifier,
-            password: password,
-          );
-          if (result.token.isNotEmpty) {
-            await liveRepo.persistSession(
-              token: result.token,
-              user: result.user,
-              permissions: result.permissions,
-              isFirstLogin: result.isFirstLogin,
-              needsEmailVerification: result.needsEmailVerification,
-            );
-            state = AuthState(
-              status: AuthStatus.authenticated,
-              user: result.user,
-              permissions: result.permissions,
-              isFirstLogin: result.isFirstLogin,
-              needsEmailVerification: result.needsEmailVerification,
-              isSubmitting: false,
-            );
-            ref.invalidate(profileProvider);
-            ref.invalidate(activeProfileEmployeeIdProvider);
-            _startSessionWatch();
-            await WebLiveTrackingService.ensureRunning();
-            return true;
-          }
-        } catch (failoverError) {
-          if (failoverError is ApiException) {
-            state = state.copyWith(
-              isSubmitting: false,
-              status: AuthStatus.unauthenticated,
-              errorMessage: failoverError.message,
-            );
-            return false;
-          }
-        }
-      }
-
       state = state.copyWith(
         isSubmitting: false,
         status: AuthStatus.unauthenticated,

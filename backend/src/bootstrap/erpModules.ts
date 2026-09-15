@@ -233,6 +233,13 @@ export const SYSTEM_SUBMODULES: SystemSubmoduleDef[] = [
     sortOrder: 16,
   },
   {
+    key: 'GOOGLE_EARTH',
+    name: 'NB Earth',
+    description: '3D globe property inventory, satellite map, price history, and Earth dashboard trends',
+    category: 'HRMS',
+    sortOrder: 17,
+  },
+  {
     key: 'TASKS',
     name: 'Tasks & Projects Hub',
     description: 'Employee task assignments, subtasks, deadlines, and interactive Gantt charts',
@@ -421,6 +428,28 @@ export async function ensureErpModulePermissions(): Promise<void> {
           org.id,
           parseModules(org.tagLine),
         );
+      } else {
+        const enabled = parseModules(org.tagLine);
+        if (enabled.map((e) => e.toUpperCase()).includes('HRMS')) {
+          await prisma.organizationAdminPermission.upsert({
+            where: {
+              organizationId_moduleKey: {
+                organizationId: org.id,
+                moduleKey: 'GOOGLE_EARTH',
+              },
+            },
+            update: {},
+            create: {
+              organizationId: org.id,
+              moduleKey: 'GOOGLE_EARTH',
+              canRead: true,
+              canWrite: true,
+              canApprove: true,
+              canDelete: true,
+              canExport: true,
+            },
+          });
+        }
       }
     }
   } catch (err) {

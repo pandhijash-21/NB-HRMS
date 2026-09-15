@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -11,16 +13,18 @@ class ApiUrlCubit extends Cubit<String> {
 
   final DioClient _dio;
 
+  bool get isLocal => AppConfig.isLocalUrl(state);
+
   void setUrl(String url) {
     if (kReleaseMode) return;
     AppConfig.setApiBaseUrl(url);
     _dio.updateBaseUrl(url);
     emit(url);
+    unawaited(AppConfig.persistApiBaseUrl(url));
   }
 
   void toggleLiveLocal() {
     if (kReleaseMode) return;
-    final isLocal = state.contains('127.0.0.1') || state.contains('localhost');
     final next = isLocal ? AppConfig.liveApiBaseUrl : AppConfig.localApiBaseUrl;
     setUrl(next);
   }

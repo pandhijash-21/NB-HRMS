@@ -9,6 +9,7 @@ import 'core/bloc/app_bloc_observer.dart';
 import 'core/bloc/app_module_cubit.dart';
 import 'core/di/app_repositories.dart';
 import 'core/network/api_url_cubit.dart';
+import 'core/network/app_config.dart';
 import 'core/router/app_router.dart';
 import 'core/services/app_sounds.dart';
 import 'core/services/background_tracking_service.dart';
@@ -29,6 +30,9 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   configureAppUrlStrategy();
   Bloc.observer = const AppBlocObserver();
+
+  // Restore last local/live API choice before Dio and session bootstrap.
+  await AppConfig.hydrate();
 
   // Allow Google Fonts runtime fetching on web / mobile
   GoogleFonts.config.allowRuntimeFetching = true;

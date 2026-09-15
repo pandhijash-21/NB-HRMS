@@ -3224,3 +3224,128 @@ model CrmSetting {
 
   @@map("crm_settings")
 }
+
+// =============================================================================
+// NB Earth — geospatial property inventory, price history & trends
+// =============================================================================
+
+enum EarthPropertyKind {
+  FLAT
+  APARTMENT
+  BUNGALOW
+  VILLA
+  PENTHOUSE
+  ROW_HOUSE
+  DUPLEX
+  STUDIO
+  SHOP
+  OFFICE
+  WAREHOUSE
+  SHOWROOM
+  LAND
+  PLOT
+  FARMHOUSE
+  MIXED_USE
+  OTHER
+}
+
+enum EarthPropertyStatus {
+  AVAILABLE
+  UNDER_CONSTRUCTION
+  RESERVED
+  SOLD
+  RENTED
+  HOLD
+}
+
+enum EarthMediaKind {
+  PHOTO
+  DOCUMENT
+}
+
+model EarthProperty {
+  id         String              @id @default(uuid())
+  name       String
+  kind       EarthPropertyKind
+  customKind String?             @map("custom_kind")
+  status     EarthPropertyStatus @default(AVAILABLE)
+
+  latitude  Decimal  @db.Decimal(10, 7)
+  longitude Decimal  @db.Decimal(10, 7)
+  altitudeM Decimal? @map("altitude_m") @db.Decimal(10, 2)
+
+  address  String? @db.Text
+  locality String?
+  city     String?
+  state    String?
+  country  String?
+  pincode  String?
+
+  imageUrl String? @map("image_url")
+  specs    Json?
+
+  carpetArea  Decimal? @map("carpet_area") @db.Decimal(14, 2)
+  builtUpArea Decimal? @map("built_up_area") @db.Decimal(14, 2)
+  plotArea    Decimal? @map("plot_area") @db.Decimal(14, 2)
+  areaUnit    String?  @map("area_unit")
+  bedrooms    Int?
+  bathrooms   Int?
+  floorNo     Int?     @map("floor_no")
+  totalFloors Int?     @map("total_floors")
+
+  currentPrice Decimal? @map("current_price") @db.Decimal(16, 2)
+  currency     String   @default("INR")
+
+  notes     String?  @db.Text
+  isActive  Boolean  @default(true) @map("is_active")
+  createdBy String?  @map("created_by")
+  updatedBy String?  @map("updated_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  prices EarthPropertyPrice[]
+  media  EarthPropertyMedia[]
+
+  @@index([isActive, createdAt])
+  @@index([kind, status])
+  @@index([city])
+  @@index([latitude, longitude])
+  @@map("earth_properties")
+}
+
+model EarthPropertyPrice {
+  id            String    @id @default(uuid())
+  propertyId    String    @map("property_id")
+  amount        Decimal   @db.Decimal(16, 2)
+  currency      String    @default("INR")
+  pricePerArea  Decimal?  @map("price_per_area") @db.Decimal(16, 2)
+  effectiveFrom DateTime  @map("effective_from")
+  effectiveTo   DateTime? @map("effective_to")
+  notes         String?
+  createdBy     String?   @map("created_by")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  property EarthProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId, effectiveFrom])
+  @@index([effectiveFrom])
+  @@map("earth_property_prices")
+}
+
+model EarthPropertyMedia {
+  id         String         @id @default(uuid())
+  propertyId String         @map("property_id")
+  url        String
+  kind       EarthMediaKind @default(PHOTO)
+  isPrimary  Boolean        @default(false) @map("is_primary")
+  fileName   String?        @map("file_name")
+  mimeType   String?        @map("mime_type")
+  fileSize   Int?           @map("file_size")
+  sortOrder  Int            @default(0) @map("sort_order")
+  createdAt  DateTime       @default(now()) @map("created_at")
+
+  property EarthProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId])
+  @@map("earth_property_media")
+}

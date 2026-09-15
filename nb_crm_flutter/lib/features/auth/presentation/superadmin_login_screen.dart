@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/widgets/backend_env_switcher.dart';
 import 'bloc/auth_bloc.dart';
 import 'widgets/auth_widgets.dart';
 
@@ -359,7 +361,9 @@ class _SuperadminLoginScreenState extends State<SuperadminLoginScreen> {
                                           ],
                                         ),
                                 ),
-                                const SizedBox(height: 24),
+                                const SizedBox(height: 16),
+                                if (!kReleaseMode) const BackendEnvSwitcher.card(),
+                                const SizedBox(height: 8),
 
                                 // Return to standard portal link
                                 Center(

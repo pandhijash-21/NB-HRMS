@@ -26,6 +26,7 @@ const MODULES = [
   { key: 'USER_MGMT',     name: 'User Management', category: 'HRMS' },
   { key: 'ROLE_MGMT',     name: 'Role Management', category: 'HRMS' },
   { key: 'FIELD_MGMT',    name: 'Dynamic Field Management', category: 'HRMS' },
+  { key: 'GOOGLE_EARTH',  name: 'NB Earth', category: 'HRMS' },
   { key: 'PROJECTS',      name: 'ERP Projects', category: 'ERP' },
   { key: 'WORK_ORDERS',   name: 'ERP Work Orders', category: 'ERP' },
   { key: 'TASKS',         name: 'Tasks & Projects Hub', category: 'COLLABORATION' },

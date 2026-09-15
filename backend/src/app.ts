@@ -40,6 +40,7 @@ import { organizationRouter } from './modules/organization';
 import { orgTreeRouter } from './modules/org-tree';
 import { crmRouter } from './modules/crm/crm.routes';
 import { platformRouter } from './modules/platform/platform.routes';
+import { earthRouter } from './modules/earth';
 
 configureCloudinary();
 
@@ -151,6 +152,7 @@ app.use('/api/tender-applications', ...erpLicenseGuard, tenderApplicationRouter)
 app.use('/api/dpr', ...erpLicenseGuard, dprRouter);
 app.use('/api/tracking', trackingRouter);
 app.use('/api/crm', ...crmLicenseGuard, crmRouter);
+app.use('/api/earth', earthRouter);
 app.use('/api/tasks', tasksRouter);
 app.use('/api/events', sseEventsRouter);
 app.use('/api/chat', chatRouter);

@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/bloc/bloc_async_value.dart';
 import '../../../../core/theme/nb_icon.dart';
 import '../../../../core/theme/theme_cubit.dart';
+import '../../../../core/widgets/backend_env_switcher.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../data/platform_repository.dart';
 import '../../domain/platform_models.dart';
@@ -281,6 +282,8 @@ class _PlatformConsoleScreenViewState extends State<_PlatformConsoleScreenView>
             ),
           ),
           // Actions
+          const BackendEnvSwitcher.chip(),
+          const SizedBox(width: 8),
           if (!isMobile)
             statsAsync.maybeWhen(
               data: (stats) {

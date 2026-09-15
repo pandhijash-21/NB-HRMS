@@ -114,6 +114,9 @@ import '../../features/crm/presentation/screens/crm_post_sales_screen.dart';
 import '../../features/crm/presentation/screens/crm_settings_screen.dart';
 import '../../features/crm/presentation/screens/crm_bin_screen.dart';
 import '../../features/platform/presentation/screens/platform_console_screen.dart';
+import '../../features/earth/presentation/screens/earth_hub_screen.dart';
+import '../../features/earth/presentation/screens/earth_dashboard_screen.dart';
+import '../../features/earth/data/earth_repository.dart';
 import '../widgets/responsive_shell.dart';
 
 GoRouter createAppRouter(AuthBloc authBloc) {
@@ -125,7 +128,7 @@ GoRouter createAppRouter(AuthBloc authBloc) {
   final shellNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'shellNav');
 
   // Bump when route table changes so hot-restart rebuilds GoRouter cleanly.
-  const routerRevision = 22;
+  const routerRevision = 23;
 
   String resolveInitialLocation() {
     if (kIsWeb) {
@@ -308,6 +311,8 @@ GoRouter createAppRouter(AuthBloc authBloc) {
               next = '/crm/pre-sales';
             } else if (loc.startsWith('/crm/settings') && !Permissions.canReadCrmSettings(perms, role)) {
               next = '/crm/pre-sales';
+            } else if (loc.startsWith('/admin/earth') && !Permissions.canReadGoogleEarth(perms, role)) {
+              next = defaultRoute;
             } else if (loc.startsWith('/admin/roles') && !Permissions.canManageRoles(perms, role)) {
               next = defaultRoute;
             } else if (loc.startsWith('/admin/users') && !Permissions.canManageUsers(perms, role)) {
@@ -811,6 +816,16 @@ GoRouter createAppRouter(AuthBloc authBloc) {
           GoRoute(
             path: '/admin/dashboard',
             builder: (context, state) => const AdminDashboardScreen(),
+          ),
+          GoRoute(
+            path: '/admin/earth/dashboard',
+            builder: (context, state) => EarthDashboardScreen(
+              repository: context.read<EarthRepository>(),
+            ),
+          ),
+          GoRoute(
+            path: '/admin/earth',
+            builder: (context, state) => const EarthHubScreen(),
           ),
           GoRoute(
             path: '/admin/configurations',

@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/network/api_envelope.dart';
-import '../../../../core/network/app_config.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/services/web_live_tracking_service.dart';
 import '../../../../core/storage/secure_storage_service.dart';
@@ -154,57 +153,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       _startSessionWatch();
       await WebLiveTrackingService.ensureRunning();
     } on ApiException catch (e) {
-      // Automatic local to live failover if local server is unreachable
-      final currentUrl = _dio.baseUrl;
-      final isLocal = currentUrl.contains('127.0.0.1') || currentUrl.contains('localhost');
-      if (isLocal &&
-          (e.message.contains('Unable to reach server') ||
-              e.message.contains('reach the server') ||
-              e.statusCode == null)) {
-        try {
-          AppConfig.setApiBaseUrl(AppConfig.liveApiBaseUrl);
-          _dio.updateBaseUrl(AppConfig.liveApiBaseUrl);
-
-          final result = await _repo.login(
-            identifier: event.identifier,
-            password: event.password,
-            portal: event.portal,
-          );
-
-          if (result.token.isNotEmpty) {
-            await _repo.persistSession(
-              token: result.token,
-              user: result.user,
-              permissions: result.permissions,
-              isFirstLogin: result.isFirstLogin,
-              needsEmailVerification: result.needsEmailVerification,
-            );
-
-            emit(AuthState(
-              status: AuthStatus.authenticated,
-              user: result.user,
-              permissions: result.permissions,
-              isFirstLogin: result.isFirstLogin,
-              needsEmailVerification: result.needsEmailVerification,
-              isSubmitting: false,
-            ));
-
-            _startSessionWatch();
-            await WebLiveTrackingService.ensureRunning();
-            return;
-          }
-        } catch (failoverError) {
-          if (failoverError is ApiException) {
-            emit(state.copyWith(
-              isSubmitting: false,
-              status: AuthStatus.unauthenticated,
-              errorMessage: failoverError.message,
-            ));
-            return;
-          }
-        }
-      }
-
       emit(state.copyWith(
         isSubmitting: false,
         status: AuthStatus.unauthenticated,
@@ -343,11 +291,13 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     AuthLogoutRequested event,
     Emitter<AuthState> emit,
   ) async {
-    await _repo.logoutRemote();
+    if (!event.skipRemote) {
+      await _repo.logoutRemote();
+    }
     await _repo.clearSession();
     WebLiveTrackingService.stop();
     _stopSessionWatch();
-    emit(const AuthState.unauthenticated());
+    emit(AuthState.unauthenticated(infoMessage: event.infoMessage));
   }
 
   void _onClearError(AuthClearErrorRequested event, Emitter<AuthState> emit) {

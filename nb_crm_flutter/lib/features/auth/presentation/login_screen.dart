@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/network/api_url_cubit.dart';
 import '../../../core/network/app_config.dart';
+import '../../../core/widgets/backend_env_switcher.dart';
 import '../data/auth_repository.dart';
 import 'bloc/auth_bloc.dart';
 import 'widgets/auth_widgets.dart';
@@ -383,7 +384,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                                             Text(
                                                               isLocal
                                                                   ? 'Switch to Live Server (crm.nbdeveloper.co.in)'
-                                                                  : 'Switch to Local Server (127.0.0.1:4000)',
+                                                                  : 'Switch to Local Server (localhost:4000)',
                                                               style: const TextStyle(
                                                                 fontSize: 12,
                                                                 fontWeight: FontWeight.w700,
@@ -475,97 +476,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                           ),
                                           if (!kReleaseMode) ...[
                                             const SizedBox(height: 20),
-                                            // Server Environment Switcher (Local Development Only)
-                                            BlocBuilder<ApiUrlCubit, String>(
-                                              buildWhen: (previous, current) => previous != current,
-                                              builder: (context, currentBaseUrl) {
-                                                final isLocal = currentBaseUrl.contains('127.0.0.1') ||
-                                                    currentBaseUrl.contains('localhost');
-                                                return Container(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.white.withValues(alpha: 0.04),
-                                                    borderRadius: BorderRadius.circular(10),
-                                                    border: Border.all(
-                                                      color: isLocal
-                                                          ? Colors.amber.withValues(alpha: 0.25)
-                                                          : const Color(0xFF22C55E).withValues(alpha: 0.3),
-                                                    ),
-                                                  ),
-                                                  child: Row(
-                                                    children: [
-                                                      Icon(
-                                                        isLocal
-                                                            ? Icons.developer_mode_rounded
-                                                            : Icons.cloud_done_rounded,
-                                                        size: 15,
-                                                        color: isLocal ? Colors.amber : const Color(0xFF22C55E),
-                                                      ),
-                                                      const SizedBox(width: 8),
-                                                      Expanded(
-                                                        child: Column(
-                                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                                          mainAxisSize: MainAxisSize.min,
-                                                          children: [
-                                                            Text(
-                                                              isLocal ? 'Backend: Local Dev' : 'Backend: Live Server',
-                                                              style: TextStyle(
-                                                                fontSize: 11,
-                                                                fontWeight: FontWeight.w700,
-                                                                color: isLocal
-                                                                    ? Colors.amber
-                                                                    : const Color(0xFF22C55E),
-                                                              ),
-                                                            ),
-                                                            Text(
-                                                              currentBaseUrl,
-                                                              style: TextStyle(
-                                                                fontSize: 10,
-                                                                color: Colors.white.withValues(alpha: 0.45),
-                                                                fontFamily: 'monospace',
-                                                              ),
-                                                              maxLines: 1,
-                                                              overflow: TextOverflow.ellipsis,
-                                                            ),
-                                                          ],
-                                                        ),
-                                                      ),
-                                                      InkWell(
-                                                        onTap: submitting
-                                                            ? null
-                                                            : () {
-                                                                final target = isLocal
-                                                                    ? AppConfig.liveApiBaseUrl
-                                                                    : AppConfig.localApiBaseUrl;
-                                                                AppConfig.setApiBaseUrl(target);
-                                                                context.read<ApiUrlCubit>().setUrl(target);
-                                                                context.read<AuthBloc>().add(const AuthClearErrorRequested());
-                                                              },
-                                                        borderRadius: BorderRadius.circular(6),
-                                                        child: Container(
-                                                          padding: const EdgeInsets.symmetric(
-                                                              horizontal: 8, vertical: 4),
-                                                          decoration: BoxDecoration(
-                                                            color: const Color(0xFFC5A059).withValues(alpha: 0.12),
-                                                            borderRadius: BorderRadius.circular(6),
-                                                            border: Border.all(
-                                                                color: const Color(0xFFC5A059).withValues(alpha: 0.3)),
-                                                          ),
-                                                          child: Text(
-                                                            isLocal ? 'Use Live' : 'Use Local',
-                                                            style: const TextStyle(
-                                                              fontSize: 11,
-                                                              fontWeight: FontWeight.w700,
-                                                              color: Color(0xFFC5A059),
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                );
-                                              },
-                                            ),
+                                            BackendEnvSwitcher.card(enabled: !submitting),
                                           ],
                                           const SizedBox(height: 24),
                                           Text(

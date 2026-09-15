@@ -37,6 +37,7 @@ dependencies:
   flutter_3d_controller: ^2.3.0
   flutter_local_notifications: ^19.4.2
   flutter_map_animations: ^0.10.0
+  flutter_earth_globe: ^2.2.1
   disable_battery_optimization: ^1.1.2
   http: ^1.6.0
   vector_math: ^2.2.0
@@ -67,7 +68,10 @@ flutter:
         - asset: fonts/MaterialIcons-Regular.otf
   assets:
     - assets/images/
+    - assets/images/earth/
     - assets/sounds/
+  shaders:
+    - shaders/earth_sphere.frag
 
 dependency_overrides:
   latlong2: ^0.10.1

@@ -62,7 +62,8 @@ class Permissions {
         hasPermission(perms, 'PAYROLL', 'READ') ||
         hasPermission(perms, 'REPORTS', 'READ') ||
         hasPermission(perms, 'FIELD_MGMT', 'READ') ||
-        hasPermission(perms, 'LEAVE', 'APPROVE');
+        hasPermission(perms, 'LEAVE', 'APPROVE') ||
+        hasPermission(perms, 'GOOGLE_EARTH', 'READ');
 
     // Tenant System Admin: portal only when Superadmin granted a management module
     if (isSystemAdmin(role)) return hasManagementModule;
@@ -183,6 +184,16 @@ class Permissions {
   static bool canReadProjects(PermissionMap? perms, [String? role]) {
     if (isSuperAdmin(role)) return true;
     return hasPermission(perms, 'PROJECTS', 'READ');
+  }
+
+  static bool canReadGoogleEarth(PermissionMap? perms, [String? role]) {
+    if (isSuperAdmin(role)) return true;
+    return hasPermission(perms, 'GOOGLE_EARTH', 'READ');
+  }
+
+  static bool canWriteGoogleEarth(PermissionMap? perms, [String? role]) {
+    if (isSuperAdmin(role)) return true;
+    return hasPermission(perms, 'GOOGLE_EARTH', 'WRITE');
   }
 
   static bool canWriteProjects(PermissionMap? perms, [String? role]) {

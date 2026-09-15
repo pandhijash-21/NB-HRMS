@@ -21,6 +21,7 @@ class ApiBaseUrlNotifier extends Notifier<String> {
   void setUrl(String url) {
     AppConfig.setApiBaseUrl(url);
     state = url;
+    AppConfig.persistApiBaseUrl(url);
   }
 }
 

@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../../../core/network/app_config.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/storage/secure_storage_service.dart';
 import '../../../core/logging/app_logger.dart';
@@ -139,6 +140,7 @@ class AuthRepository {
     await _storage.writeToken(token);
     await _storage.writeSessionJson(
       jsonEncode({
+        'apiBaseUrl': AppConfig.apiBaseUrl,
         'isFirstLogin': isFirstLogin,
         'needsEmailVerification': needsEmailVerification,
         'permissions': permissions,
@@ -161,6 +163,16 @@ class AuthRepository {
 
     try {
       final map = jsonDecode(sessionJson) as Map<String, dynamic>;
+      final savedApi = map['apiBaseUrl']?.toString();
+      if (savedApi != null && savedApi.isNotEmpty) {
+        if (AppConfig.isLocalUrl(savedApi) != AppConfig.isUsingLocalBackend) {
+          await clearSession();
+          return null;
+        }
+      } else if (AppConfig.isUsingLocalBackend) {
+        await clearSession();
+        return null;
+      }
       final userRaw = map['user'];
       if (userRaw is! Map) return null;
       final permsRaw = map['permissions'];

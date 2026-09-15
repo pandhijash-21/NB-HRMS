@@ -49,11 +49,12 @@ class AdminWorkforcePageChanged extends AdminWorkforceEvent {
 }
 
 class AdminWorkforceEmployeeDeleted extends AdminWorkforceEvent {
-  const AdminWorkforceEmployeeDeleted(this.employeeId);
+  const AdminWorkforceEmployeeDeleted(this.employeeId, { this.permanent = false });
   final int employeeId;
+  final bool permanent;
 
   @override
-  List<Object?> get props => [employeeId];
+  List<Object?> get props => [employeeId, permanent];
 }
 
 class AdminWorkforceEmployeeCreated extends AdminWorkforceEvent {
@@ -255,7 +256,7 @@ class AdminWorkforceBloc
   ) async {
     emit(state.copyWith(isDeleting: true));
     try {
-      await _adminRepository.deleteEmployee(event.employeeId);
+      await _adminRepository.deleteEmployee(event.employeeId, permanent: event.permanent);
       await _fetchData(
         emit,
         page: state.page,

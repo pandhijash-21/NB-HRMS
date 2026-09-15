@@ -139,6 +139,12 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
       auth.permissions,
       auth.user?.role ?? '',
     );
+    final canManageInstitutes = Permissions.canManageInstitutes(
+      auth.permissions,
+      auth.user?.role,
+    );
+    final canAdminAttendance = Permissions.isAdmin(auth.user?.role) ||
+        Permissions.canAdminAttendance(auth.permissions, auth.user?.role);
 
     // Superadmin has a dedicated full-screen SaaS Platform Console — no sidebar needed.
     if (isSuperAdmin) {
@@ -423,12 +429,45 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             'Leave',
             section: 'HR',
           ),
-        if (Permissions.canReadAttendance(auth.permissions, auth.user?.role))
+        if (Permissions.canReadAttendance(auth.permissions, auth.user?.role) ||
+            canAdminAttendance)
           const _Destination(
             '/attendance',
             Icons.fingerprint_outlined,
             Icons.fingerprint,
             'Attendance',
+            section: 'HR',
+          ),
+        if (Permissions.canReadReimbursements(auth.permissions, auth.user?.role))
+          const _Destination(
+            '/reimbursements',
+            Icons.receipt_long_outlined,
+            Icons.receipt_long,
+            'Reimbursements',
+            section: 'HR',
+          ),
+        if (Permissions.canReadRecruitment(auth.permissions, auth.user?.role))
+          const _Destination(
+            '/recruitment',
+            Icons.work_outline_rounded,
+            Icons.work_rounded,
+            'Recruitment',
+            section: 'HR',
+          ),
+        if (Permissions.canReadRepository(auth.permissions, auth.user?.role))
+          const _Destination(
+            '/repository',
+            Icons.folder_shared_outlined,
+            Icons.folder_shared,
+            'Repository',
+            section: 'HR',
+          ),
+        if (Permissions.canReadPayroll(auth.permissions, auth.user?.role))
+          const _Destination(
+            '/admin/salary/payroll',
+            Icons.payments_outlined,
+            Icons.payments,
+            'Payroll',
             section: 'HR',
           ),
         if (hasWorkforce)
@@ -455,12 +494,28 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             'Roles',
             section: 'Organisation',
           ),
+        if (canManageUsers || canManageInstitutes)
+          const _Destination(
+            '/admin/configurations',
+            Icons.tune_outlined,
+            Icons.tune,
+            'Configurations',
+            section: 'Organisation',
+          ),
         if (isAdmin)
           const _Destination(
             '/admin/storage',
             Icons.cloud_outlined,
             Icons.cloud,
             'Storage',
+            section: 'Organisation',
+          ),
+        if (canAccessAdmin)
+          const _Destination(
+            '/admin/audit',
+            Icons.history_edu_outlined,
+            Icons.history_edu,
+            'Audit',
             section: 'Organisation',
           ),
         if (isHR)

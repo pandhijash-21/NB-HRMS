@@ -88,10 +88,10 @@ class WorkforceListNotifier extends AsyncNotifier<Map<String, dynamic>> {
     });
   }
 
-  Future<void> deleteEmployee(int employeeId) async {
+  Future<void> deleteEmployee(int employeeId, {bool permanent = false}) async {
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() async {
-      await ref.read(adminRepositoryProvider).deleteEmployee(employeeId);
+      await ref.read(adminRepositoryProvider).deleteEmployee(employeeId, permanent: permanent);
       final filters = ref.read(workforceFilterProvider);
       return ref.read(adminRepositoryProvider).listEmployees(
             limit: filters.limit,

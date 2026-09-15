@@ -492,11 +492,19 @@ class _AdminEmployeesViewState extends State<_AdminEmployeesView> {
                   ),
                   const SizedBox(height: 12),
                   IconButton(
-                    icon: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
+                    icon: Icon(
+                      emp.status.toUpperCase() == 'TERMINATED'
+                          ? Icons.delete_forever_rounded
+                          : Icons.person_off_outlined,
+                      color: Colors.red,
+                      size: 20,
+                    ),
                     onPressed: () => _showConfirmDeleteDialog(context, emp),
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
-                    tooltip: 'Deactivate Employee',
+                    tooltip: emp.status.toUpperCase() == 'TERMINATED'
+                        ? 'Permanently delete'
+                        : 'Terminate employee',
                   ),
                 ],
               ),
@@ -603,62 +611,157 @@ class _AdminEmployeesViewState extends State<_AdminEmployeesView> {
 
   void _showConfirmDeleteDialog(BuildContext context, EmployeeProfile emp) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isTerminated = emp.status.toUpperCase() == 'TERMINATED';
+    final name = emp.generalInfo?.fullName ?? 'this employee';
+
+    if (!isTerminated) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(
+              color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
+              width: 1.5,
+            ),
+          ),
+          title: Text(
+            'Terminate Employee',
+            style: TextStyle(
+              color: isDark ? Colors.white : const Color(0xFF212F3D),
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          content: Text(
+            'Mark $name as terminated? Their login will be deactivated. '
+            'You can permanently erase all related data later by deleting again.',
+            style: TextStyle(
+              color: isDark ? Colors.white70 : const Color(0xFF607D8B),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => ctx.pop(),
+              child: Text(
+                'Cancel',
+                style: TextStyle(
+                  color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF607D8B),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            FilledButton(
+              onPressed: () {
+                final messenger = ScaffoldMessenger.of(context);
+                ctx.pop();
+                context.read<AdminWorkforceBloc>().add(
+                      AdminWorkforceEmployeeDeleted(emp.id),
+                    );
+                messenger.showSnackBar(
+                  const SnackBar(content: Text('Employee terminated')),
+                );
+              },
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.orange.shade800,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              child: const Text('Terminate', style: TextStyle(fontWeight: FontWeight.w800)),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    var consented = false;
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(
-            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
-            width: 1.5,
-          ),
-        ),
-        title: Text(
-          'Deactivate Employee',
-          style: TextStyle(
-            color: isDark ? Colors.white : const Color(0xFF212F3D),
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        content: Text(
-          'Are you sure you want to deactivate ${emp.generalInfo?.fullName ?? "this employee"}?',
-          style: TextStyle(
-            color: isDark ? Colors.white70 : const Color(0xFF607D8B),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => ctx.pop(),
-            child: Text(
-              'Cancel',
-              style: TextStyle(
-                color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF607D8B),
-                fontWeight: FontWeight.w700,
-              ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(
+              color: Colors.red.withValues(alpha: 0.35),
+              width: 1.5,
             ),
           ),
-          FilledButton(
-            onPressed: () {
-              final messenger = ScaffoldMessenger.of(context);
-              ctx.pop();
-              context
-                  .read<AdminWorkforceBloc>()
-                  .add(AdminWorkforceEmployeeDeleted(emp.id));
-              messenger.showSnackBar(
-                const SnackBar(content: Text('Employee deactivated successfully')),
-              );
-            },
-            style: FilledButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+          title: Text(
+            'Permanently Delete',
+            style: TextStyle(
+              color: isDark ? Colors.white : const Color(0xFF212F3D),
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'This will permanently erase $name and ALL related data from the database '
+                '(profile, attendance, leave, salary, documents, login account). This cannot be undone.',
+                style: TextStyle(
+                  color: isDark ? Colors.white70 : const Color(0xFF607D8B),
+                ),
+              ),
+              const SizedBox(height: 16),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                value: consented,
+                activeColor: Colors.red,
+                controlAffinity: ListTileControlAffinity.leading,
+                title: Text(
+                  'I understand and consent to permanent deletion',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white : const Color(0xFF212F3D),
+                  ),
+                ),
+                onChanged: (v) => setLocal(() => consented = v ?? false),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => ctx.pop(),
+              child: Text(
+                'Cancel',
+                style: TextStyle(
+                  color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF607D8B),
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
-            child: const Text('Deactivate', style: TextStyle(fontWeight: FontWeight.w800)),
-          ),
-        ],
+            FilledButton(
+              onPressed: !consented
+                  ? null
+                  : () {
+                      final messenger = ScaffoldMessenger.of(context);
+                      ctx.pop();
+                      context.read<AdminWorkforceBloc>().add(
+                            AdminWorkforceEmployeeDeleted(emp.id, permanent: true),
+                          );
+                      messenger.showSnackBar(
+                        const SnackBar(content: Text('Employee permanently deleted')),
+                      );
+                    },
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: Colors.red.withValues(alpha: 0.35),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              child: const Text('Delete forever', style: TextStyle(fontWeight: FontWeight.w800)),
+            ),
+          ],
+        ),
       ),
     );
   }

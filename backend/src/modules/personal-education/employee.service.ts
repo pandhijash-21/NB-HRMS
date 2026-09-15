@@ -6,6 +6,9 @@ import { resolveOrCreateRoleForDesignation } from '../designation/designationRol
 import { encryptPasswordForAdmin } from '../../utils/passwordCrypto';
 import { passwordFromBirthDate, parseBirthDateInput } from '../../utils/dobPassword';
 import bcrypt from 'bcryptjs';
+import { safelyDeleteUserIds } from '../platform/platform.service';
+import { isAdminRole } from '../auth/permissions-map';
+import { redis, connectRedis } from '../../config/redis';
 
 function attachPosition<T extends { user?: { roleId: string } | null }>(
   employee: T,
@@ -406,6 +409,141 @@ export const employeeService = {
         },
       });
     });
+  },
+
+  /**
+   * Permanently remove a TERMINATED employee and all related DB rows
+   * (photos URLs, attendance, leave, salary, docs, login user, sessions).
+   * Refuses to delete SUPERADMIN / ADMIN login accounts.
+   */
+  async hardDelete(employeeId: number, requesterId: string) {
+    const employee = await prisma.employee.findUnique({
+      where: { id: employeeId },
+      include: {
+        generalInfo: { select: { fullName: true, employeeCode: true } },
+      },
+    });
+    if (!employee) return { ok: false as const, error: 'Employee not found', status: 404 as const };
+
+    if (employee.status !== 'TERMINATED') {
+      return {
+        ok: false as const,
+        error: 'Employee must be terminated first. Terminate once, then delete again to permanently remove all data.',
+        status: 400 as const,
+      };
+    }
+
+    const userId = employee.userId?.startsWith('pending-') ? null : employee.userId;
+    const linkedUser = userId
+      ? await prisma.user.findUnique({
+          where: { id: userId },
+          select: { id: true, role: { select: { name: true } } },
+        })
+      : await prisma.user.findFirst({
+          where: { employeeId },
+          select: { id: true, role: { select: { name: true } } },
+        });
+
+    if (isAdminRole(linkedUser?.role?.name)) {
+      return {
+        ok: false as const,
+        error: 'Cannot permanently delete Superadmin or System Admin accounts from workforce.',
+        status: 403 as const,
+      };
+    }
+
+    const deleteUserId = linkedUser?.id ?? userId;
+
+    if (deleteUserId) {
+      await safelyDeleteUserIds([deleteUserId]);
+      try {
+        await connectRedis();
+        await redis.del(`session:${deleteUserId}`);
+      } catch {
+        // Redis optional for wipe
+      }
+    } else {
+      // Pending / orphan employee — purge person data without a real user row
+      const empIds = [employeeId];
+      const apps = await prisma.leaveApplication.findMany({
+        where: { employeeId: { in: empIds } },
+        select: { id: true },
+      });
+      if (apps.length) {
+        await prisma.leaveApprovalStep.deleteMany({
+          where: { applicationId: { in: apps.map((a) => a.id) } },
+        });
+      }
+      await prisma.leaveApplication.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.leaveBalance.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.leaveAuditLog.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.monthlyLWPRecord.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.absenceRecord.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.attendancePunch.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.employeeAttendanceSettings.deleteMany({ where: { employeeId: { in: empIds } } });
+      const salaryRecords = await prisma.employeeSalaryRecord.findMany({
+        where: { employeeId: { in: empIds } },
+        select: { id: true },
+      });
+      if (salaryRecords.length) {
+        await prisma.employeeSalaryColumnValue.deleteMany({
+          where: { salaryRecordId: { in: salaryRecords.map((r) => r.id) } },
+        });
+      }
+      await prisma.employeeSalaryRecord.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.employeeSalaryInfo.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.employeeBankInfo.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.employeeLetterDocument.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.reimbursementClaim.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.changeRequest.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.auditLog.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.locationHistory.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.trip.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.trackingEvent.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.positionAssignment.deleteMany({ where: { holderEmployeeId: { in: empIds } } });
+      await prisma.employeeAssignment.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.departmentApprover.deleteMany({ where: { hodEmployeeId: { in: empIds } } });
+      await prisma.instituteApprover.deleteMany({ where: { hoiEmployeeId: { in: empIds } } });
+      await prisma.globalApprover.updateMany({
+        where: { vcEmployeeId: { in: empIds } },
+        data: { vcEmployeeId: null },
+      });
+      await prisma.globalApprover.updateMany({
+        where: { registrarEmployeeId: { in: empIds } },
+        data: { registrarEmployeeId: null },
+      });
+      await prisma.orgTreeContact.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.crmFollowUp.updateMany({
+        where: { assignedToId: { in: empIds } },
+        data: { assignedToId: null },
+      });
+      await prisma.familyMember.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.academicQualification.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.employeeExperience.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.employeeAddress.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.employeePersonalInfo.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.employeeOtherInfo.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.employeeGeneralInfo.deleteMany({ where: { employeeId: { in: empIds } } });
+      await prisma.employee.deleteMany({ where: { id: { in: empIds } } });
+    }
+
+    // Ensure employee row is gone even if user cascade missed it
+    const still = await prisma.employee.findUnique({ where: { id: employeeId } });
+    if (still) {
+      await prisma.user.updateMany({
+        where: { employeeId },
+        data: { employeeId: null, updatedBy: requesterId },
+      });
+      await prisma.employee.delete({ where: { id: employeeId } }).catch(() => null);
+    }
+
+    return {
+      ok: true as const,
+      message: 'Employee and all related data permanently deleted',
+      employeeId,
+      name: employee.generalInfo?.fullName ?? null,
+      code: employee.generalInfo?.employeeCode ?? null,
+    };
   },
 
   async update(

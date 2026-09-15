@@ -230,8 +230,21 @@ export const employeeController = {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json(fail('Invalid employee id'));
 
+    const permanent =
+      req.query.permanent === 'true' ||
+      req.query.permanent === '1' ||
+      req.body?.permanent === true;
+
+    if (permanent) {
+      const result = await employeeService.hardDelete(id, req.user!.id);
+      if (!result.ok) {
+        return res.status(result.status).json(fail(result.error));
+      }
+      return res.json(ok(result));
+    }
+
     const deleted = await employeeService.softDelete(id, req.user!.id);
     if (!deleted) return res.status(404).json(fail('Employee not found'));
-    return res.json(ok({ message: 'Employee deactivated successfully' }));
+    return res.json(ok({ message: 'Employee terminated successfully', status: 'TERMINATED' }));
   },
 };

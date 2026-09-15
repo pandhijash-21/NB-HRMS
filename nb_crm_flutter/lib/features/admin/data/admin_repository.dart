@@ -78,15 +78,16 @@ class AdminRepository {
     );
   }
 
-  /// Soft-delete/deactivate an employee via DELETE `employees/{id}`.
-  Future<void> deleteEmployee(int employeeId) async {
+  /// Terminate (soft) or permanently purge an employee via DELETE `employees/{id}`.
+  Future<void> deleteEmployee(int employeeId, {bool permanent = false}) async {
     try {
       final response = await _dio.dio.delete<Map<String, dynamic>>(
         'employees/$employeeId',
+        queryParameters: permanent ? {'permanent': 'true'} : null,
       );
       final body = response.data;
       if (body == null || body['success'] != true) {
-        throw Exception(body?['error'] ?? 'Deactivation failed');
+        throw Exception(body?['error'] ?? (permanent ? 'Permanent delete failed' : 'Deactivation failed'));
       }
     } on DioException catch (e) {
       throw _mapDioException(e);

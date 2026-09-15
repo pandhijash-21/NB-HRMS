@@ -12,6 +12,7 @@
     "db:push": "prisma db push",
     "db:seed": "prisma db seed",
     "wipe:admin": "npx tsx prisma/wipe-to-admin.ts",
+    "wipe:users": "npx tsx scripts/wipe-user-data.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "npm run typecheck"
   },

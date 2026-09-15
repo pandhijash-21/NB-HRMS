@@ -7,7 +7,7 @@ import {
   wantsTransportEncryption,
 } from '../utils/transportCrypto';
 
-const SKIP_PATHS = new Set(['/', '/health', '/vpn-gate']);
+const SKIP_PATHS = new Set(['/', '/health', '/vpn-gate', '/system-health', '/docs', '/system-health.html', '/project-documentation.html']);
 
 function isPublicCrmWebhook(path: string): boolean {
   return (

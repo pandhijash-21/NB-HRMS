@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NB HRMS · Project documentation</title>
+  <style>
+    :root {
+      --bg: #081018; --panel: #101826; --line: #243044; --text: #f4f6fb; --muted: #94a3b8;
+      --bronze: #c5a059; --cyan: #4cc3ff; --green: #34d399; --violet: #8b7cff; --erp: #38bdf8;
+      --crm: #f59e0b; --hrms: #34d399; --col: #a78bfa;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: "Segoe UI", Inter, system-ui, sans-serif; }
+    body {
+      background:
+        radial-gradient(900px 400px at 0% 0%, rgba(197,160,89,.16), transparent 50%),
+        radial-gradient(800px 400px at 100% 10%, rgba(76,195,255,.1), transparent 45%),
+        var(--bg);
+    }
+    .shell { display: grid; grid-template-columns: 260px 1fr; min-height: 100vh; }
+    nav {
+      position: sticky; top: 0; height: 100vh; overflow: auto; padding: 22px 16px;
+      border-right: 1px solid var(--line); background: rgba(8,16,24,.9); backdrop-filter: blur(12px);
+    }
+    nav a { display: block; color: var(--muted); text-decoration: none; padding: 7px 10px; border-radius: 8px; font-size: 13px; }
+    nav a:hover, nav a.active { background: #1a2433; color: var(--text); }
+    .logo { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; font-weight: 800; background: linear-gradient(145deg, var(--bronze), #8a6a2e); color: #1a140c; }
+    header.top { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 22px 32px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: rgba(8,16,24,.88); z-index: 5; }
+    main { padding: 28px 36px 80px; max-width: 1100px; }
+    h1 { margin: 0; font-size: 28px; }
+    h2 { font-size: 22px; margin: 42px 0 12px; }
+    h3 { font-size: 16px; margin: 22px 0 8px; color: var(--bronze); }
+    p, li { color: #d5deea; line-height: 1.6; }
+    .muted { color: var(--muted); }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px; }
+    .grid { display: grid; gap: 12px; }
+    .g2 { grid-template-columns: 1fr 1fr; }
+    .g3 { grid-template-columns: repeat(3, 1fr); }
+    .g4 { grid-template-columns: repeat(4, 1fr); }
+    @media (max-width: 980px) {
+      .shell { grid-template-columns: 1fr; }
+      nav { display: none; }
+      .g2, .g3, .g4 { grid-template-columns: 1fr; }
+      main { padding: 20px; }
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { border-bottom: 1px solid var(--line); padding: 8px 7px; text-align: left; vertical-align: top; }
+    th { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+    code, kbd { font-family: Consolas, "Courier New", monospace; background: #0b1220; padding: 1px 6px; border-radius: 6px; color: #fde68a; }
+    .chip { display: inline-block; padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: 800; }
+    .ERP { background: #082f49; color: #7dd3fc; }
+    .CRM { background: #3b2508; color: #fcd34d; }
+    .HRMS { background: #052e1c; color: #6ee7b7; }
+    .COLLABORATION { background: #2e1065; color: #ddd6fe; }
+    svg.arch { width: 100%; height: auto; background: #0b1220; border-radius: 16px; border: 1px solid var(--line); }
+    .flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .flow span { background: #0b1220; border: 1px solid var(--line); padding: 8px 10px; border-radius: 10px; font-size: 12px; font-weight: 700; }
+    .arrow { color: var(--bronze); font-weight: 900; }
+    input#q { width: 240px; background: #0b1220; color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+    a.btn { color: #1a140c; background: var(--bronze); text-decoration: none; padding: 8px 12px; border-radius: 10px; font-weight: 800; font-size: 13px; }
+    .mod { border-left: 3px solid var(--bronze); }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <nav>
+      <div class="logo" style="margin-bottom:14px">NB</div>
+      <div class="muted" style="font-size:12px;margin:0 10px 12px">NB Developer CRM + HRMS + ERP</div>
+      <a href="#overview">Overview</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#stack">Tech stack</a>
+      <a href="#local">Local setup & ports</a>
+      <a href="#auth">Auth & RBAC</a>
+      <a href="#modules">System modules</a>
+      <a href="#api">API map</a>
+      <a href="#flutter">Flutter client</a>
+      <a href="#earth">NB Earth</a>
+      <a href="#data">Database</a>
+      <a href="#security">Security</a>
+      <a href="#collab">Chat, Meet, tracking</a>
+      <a href="#deploy">Deploy</a>
+      <a href="#ops">Operations</a>
+      <a href="./system-health.html" id="navHealth">Open health check</a>
+    </nav>
+    <div>
+      <header class="top">
+        <div>
+          <h1>Project documentation</h1>
+          <div class="muted">Complete reference for NB HRMS — every product surface, API prefix, module, and runtime.</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="q" placeholder="Filter this page…" />
+          <a class="btn" id="healthLink" href="./system-health.html">System health</a>
+        </div>
+      </header>
+      <main id="doc">
+        <section id="overview">
+          <h2>1. Overview</h2>
+          <p>NB HRMS is a multi-tenant <b>CRM + HRMS + ERP + Collaboration</b> platform forked from a university HRMS. The product database is <code>nb_crm_db</code> and must never share a connection with the college <code>hrms_db</code>.</p>
+          <div class="grid g3">
+            <div class="card"><b>Primary client</b><p class="muted">Flutter app <code>nb_crm_flutter</code> (web, Android, desktop). Routes such as <code>/admin/earth</code> and CRM/ERP live here.</p></div>
+            <div class="card"><b>API</b><p class="muted">Express 5 + Prisma 6 on port <b>4000</b>. REST under <code>/api</code>, health at <code>/health</code>, sockets for chat/meet.</p></div>
+            <div class="card"><b>Legacy UI</b><p class="muted">Next.js <code>frontend/</code> remains as a reference HRMS UI. New work ships in Flutter.</p></div>
+          </div>
+        </section>
+
+        <section id="architecture">
+          <h2>2. Architecture</h2>
+          <p class="muted">Request path from a signed-in admin to Postgres and sidecars.</p>
+          <svg class="arch" viewBox="0 0 980 360" role="img" aria-label="System architecture">
+            <defs>
+              <linearGradient id="g" x1="0" x2="1"><stop stop-color="#c5a059"/><stop offset="1" stop-color="#4cc3ff"/></linearGradient>
+            </defs>
+            <rect x="20" y="40" width="160" height="70" rx="14" fill="#152033" stroke="#c5a059"/>
+            <text x="100" y="72" fill="#fff" text-anchor="middle" font-size="13">Flutter client</text>
+            <text x="100" y="92" fill="#94a3b8" text-anchor="middle" font-size="11">nb_crm_flutter</text>
+            <rect x="20" y="140" width="160" height="54" rx="14" fill="#152033" stroke="#243044"/>
+            <text x="100" y="172" fill="#94a3b8" text-anchor="middle" font-size="12">Next.js legacy</text>
+            <rect x="260" y="90" width="180" height="90" rx="16" fill="#152033" stroke="#4cc3ff"/>
+            <text x="350" y="128" fill="#fff" text-anchor="middle" font-size="14">Express API :4000</text>
+            <text x="350" y="148" fill="#94a3b8" text-anchor="middle" font-size="11">JWT · RBAC · license</text>
+            <rect x="520" y="30" width="150" height="64" rx="14" fill="#152033" stroke="#34d399"/>
+            <text x="595" y="68" fill="#fff" text-anchor="middle" font-size="13">Postgres 5434</text>
+            <rect x="520" y="110" width="150" height="64" rx="14" fill="#152033" stroke="#f59e0b"/>
+            <text x="595" y="148" fill="#fff" text-anchor="middle" font-size="13">Redis 6380</text>
+            <rect x="520" y="190" width="150" height="64" rx="14" fill="#152033" stroke="#8b7cff"/>
+            <text x="595" y="228" fill="#fff" text-anchor="middle" font-size="13">Hasura 8080</text>
+            <rect x="740" y="30" width="210" height="54" rx="14" fill="#152033" stroke="#243044"/>
+            <text x="845" y="62" fill="#d5deea" text-anchor="middle" font-size="12">Cloudinary / MinIO</text>
+            <rect x="740" y="100" width="210" height="54" rx="14" fill="#152033" stroke="#243044"/>
+            <text x="845" y="132" fill="#d5deea" text-anchor="middle" font-size="12">LiveKit Meet</text>
+            <rect x="740" y="170" width="210" height="54" rx="14" fill="#152033" stroke="#243044"/>
+            <text x="845" y="202" fill="#d5deea" text-anchor="middle" font-size="12">Whisper STT 8095</text>
+            <rect x="740" y="240" width="210" height="54" rx="14" fill="#152033" stroke="#243044"/>
+            <text x="845" y="272" fill="#d5deea" text-anchor="middle" font-size="12">PayTime / MSSQL</text>
+            <path d="M180 75 H250" stroke="url(#g)" stroke-width="2"/>
+            <path d="M180 167 H230 V135 H250" stroke="#4cc3ff" stroke-width="2" fill="none"/>
+            <path d="M440 135 H520" stroke="#34d399" stroke-width="2"/>
+            <path d="M440 145 H520" stroke="#f59e0b" stroke-width="2"/>
+            <path d="M670 62 H740" stroke="#94a3b8" stroke-width="2"/>
+            <path d="M670 142 H740" stroke="#94a3b8" stroke-width="2"/>
+            <text x="490" y="320" fill="#94a3b8" text-anchor="middle" font-size="12">Production host: https://crm.nbdeveloper.co.in  ·  Flutter web on Netlify</text>
+          </svg>
+          <div class="flow" style="margin-top:14px">
+            <span>Login</span><span class="arrow">→</span><span>JWT in Redis session</span><span class="arrow">→</span>
+            <span>Module license (HRMS/CRM/ERP)</span><span class="arrow">→</span>
+            <span>RolePermission or OrgAdminPermission</span><span class="arrow">→</span>
+            <span>Prisma / Socket.IO / LiveKit</span>
+          </div>
+        </section>
+
+        <section id="stack">
+          <h2>3. Tech stack</h2>
+          <div class="card" style="overflow:auto">
+            <table>
+              <tr><th>Layer</th><th>Technology</th></tr>
+              <tr><td>Client</td><td>Flutter 3.9, go_router, BLoC, Dio, flutter_map, custom Earth shader, LiveKit, Socket.IO</td></tr>
+              <tr><td>Legacy UI</td><td>Next.js App Router, React, Tailwind, NextAuth, Apollo → Hasura</td></tr>
+              <tr><td>API</td><td>Node 20, Express 5, TypeScript, Prisma 6, Zod, Helmet, CORS</td></tr>
+              <tr><td>Data</td><td>PostgreSQL 15 (<code>nb_crm_db</code>), Redis sessions + BullMQ, 116 Prisma models</td></tr>
+              <tr><td>Files</td><td>Cloudinary, MinIO (<code>/uploads/collab</code>)</td></tr>
+              <tr><td>Realtime</td><td>Socket.IO (chat), LiveKit (meet), SSE <code>/api/events</code></td></tr>
+              <tr><td>Speech</td><td>Self-hosted Faster-Whisper on :8095</td></tr>
+            </table>
+          </div>
+        </section>
+
+        <section id="local">
+          <h2>4. Local setup and ports</h2>
+          <p>Start API with <code>cd backend && npm run dev</code>. Flutter debug defaults to <code>http://localhost:4000/api</code>. Compose can bring up Postgres, Redis, Hasura, Whisper, MinIO, and LiveKit.</p>
+          <div class="card" style="overflow:auto">
+            <table>
+              <tr><th>Service</th><th>Host port</th><th>Notes</th></tr>
+              <tr><td>Express API</td><td>4000</td><td><code>/health</code>, <code>/system-health</code>, <code>/docs</code></td></tr>
+              <tr><td>Postgres</td><td>5434</td><td>User <code>hrms_user</code>, database <code>nb_crm_db</code></td></tr>
+              <tr><td>Redis</td><td>6380</td><td>Required for login sessions</td></tr>
+              <tr><td>Hasura</td><td>8080</td><td>GraphQL used mainly by Next.js</td></tr>
+              <tr><td>Whisper</td><td>8095</td><td>Meet captions</td></tr>
+              <tr><td>MinIO</td><td>9000 / 9001</td><td>Object storage / console</td></tr>
+              <tr><td>LiveKit</td><td>7880</td><td>WebRTC</td></tr>
+              <tr><td>Next.js</td><td>3000</td><td>Legacy UI</td></tr>
+              <tr><td>Flutter web</td><td>ephemeral</td><td>e.g. Chrome localhost from <code>flutter run -d chrome</code></td></tr>
+            </table>
+          </div>
+          <h3>Environment (backend)</h3>
+          <p class="muted">Copy <code>backend/.env.example</code> → <code>backend/.env</code>. Critical: <code>DATABASE_URL</code>, <code>REDIS_URL</code>, <code>JWT_SECRET</code>, <code>ENCRYPTION_KEY</code> (64 hex), <code>TRANSPORT_SECRET</code> (must match Flutter), <code>CLOUDINARY_*</code>, <code>LIVEKIT_*</code>, <code>WHISPER_URL</code>.</p>
+        </section>
+
+        <section id="auth">
+          <h2>5. Auth and RBAC</h2>
+          <div class="grid g2">
+            <div class="card">
+              <h3>Login surfaces</h3>
+              <ul>
+                <li>Company / tenant: Flutter <code>/login</code> → <code>POST /api/auth/login</code></li>
+                <li>Superadmin: Flutter <code>/superadmin/login</code> with <code>portal: "superadmin"</code> or header <code>X-Auth-Portal</code></li>
+                <li>Also: logout, <code>/api/auth/me</code>, change-password, OTP <code>/api/otp</code></li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>Session model</h3>
+              <ul>
+                <li>JWT signed with <code>JWT_SECRET</code></li>
+                <li>Redis key <code>session:{userId}</code>, one active login, ~8h sliding TTL</li>
+                <li>If Redis is down, login fails closed (503) — not a bare JWT</li>
+                <li>Tenant <b>ADMIN</b> uses <code>OrganizationAdminPermission</code></li>
+                <li>Other roles use <code>RolePermission</code> per <code>SystemModule</code></li>
+              </ul>
+            </div>
+          </div>
+          <p>Permission actions: <code>READ</code>, <code>WRITE</code>, <code>APPROVE</code>, <code>DELETE</code>, <code>EXPORT</code>. Org product license is stored in organization <code>tagLine</code> JSON such as <code>["HRMS","CRM","ERP"]</code>. Route groups enforce <code>requireModuleLicense</code>.</p>
+        </section>
+
+        <section id="modules">
+          <h2>6. All 37 system modules</h2>
+          <p class="muted">Seeded by <code>backend/src/bootstrap/erpModules.ts</code>. Display names appear in Superadmin / Admin Access.</p>
+          <div class="grid g2" id="mods"></div>
+        </section>
+
+        <section id="api">
+          <h2>7. API map</h2>
+          <p>Envelope: <code>{ success: true, data }</code> or <code>{ success: false, error }</code>. Flutter Dio uses the <code>/api</code> base. JSON writes on <code>/api/*</code> require the AES-GCM transport envelope except skipped public paths.</p>
+          <div class="card" style="overflow:auto">
+            <table>
+              <tr><th>Prefix</th><th>Area</th><th>Guard</th></tr>
+              <tr><td><code>GET /</code> · <code>/health</code></td><td>Liveness</td><td>Public</td></tr>
+              <tr><td><code>/actions</code> · <code>/events</code></td><td>Hasura actions / events stubs</td><td>Public health</td></tr>
+              <tr><td><code>/api/auth</code> · <code>/api/otp</code></td><td>Login, session, OTP</td><td>Mixed</td></tr>
+              <tr><td><code>/api/admin</code></td><td>Users, roles, designations, storage</td><td>Auth + USER_MGMT / ROLE_MGMT</td></tr>
+              <tr><td><code>/api/leave</code> · <code>/attendance</code> · <code>/salary</code></td><td>HRMS core</td><td>Auth + HRMS license</td></tr>
+              <tr><td><code>/api/letters</code> · <code>/reimbursements</code> · <code>/recruitment</code> · <code>/repository</code></td><td>HR ops</td><td>Auth</td></tr>
+              <tr><td><code>/api/approvals</code></td><td>Profile change requests</td><td>Auth</td></tr>
+              <tr><td><code>/api/platform</code></td><td>Companies, trash, diagnostics</td><td>Superadmin</td></tr>
+              <tr><td><code>/api/organizations</code> · <code>/institutes</code> · <code>/lookups</code></td><td>Tenant config</td><td>Auth</td></tr>
+              <tr><td><code>/api/org-tree</code></td><td>Reporting tree</td><td>Auth + ORG_TREE</td></tr>
+              <tr><td><code>/api/projects</code> · <code>/work-orders</code> · <code>/boq</code> · <code>/tenders</code> · <code>/dpr</code></td><td>ERP</td><td>Auth + ERP license</td></tr>
+              <tr><td><code>/api/erp/activities|contractors|resources</code></td><td>ERP masters</td><td>Auth + ERP</td></tr>
+              <tr><td><code>/api/crm</code></td><td>Leads, calls, bookings, webhooks</td><td>Auth + CRM (webhooks public)</td></tr>
+              <tr><td><code>/api/earth</code></td><td>NB Earth properties, geocode, dashboard</td><td>Auth + GOOGLE_EARTH</td></tr>
+              <tr><td><code>/api/tasks</code> · <code>/chat</code> · <code>/meetings</code></td><td>Collaboration</td><td>Auth + module</td></tr>
+              <tr><td><code>/api/tracking</code></td><td>Live GPS / trips</td><td>Auth</td></tr>
+              <tr><td><code>/uploads/collab</code></td><td>Chat/meet files</td><td>Collab upload auth</td></tr>
+              <tr><td><code>/vpn-gate</code></td><td>VPN probe</td><td>204 allow / 403 block</td></tr>
+            </table>
+          </div>
+        </section>
+
+        <section id="flutter">
+          <h2>8. Flutter client</h2>
+          <p>Package <code>nb_crm_flutter</code>. Debug can switch local vs live from login / shell chips. Release always uses <code>https://crm.nbdeveloper.co.in/api</code> unless <code>--dart-define=API_BASE_URL</code>.</p>
+          <div class="grid g2">
+            <div class="card">
+              <h3>Feature folders</h3>
+              <p class="muted">admin, attendance, auth, collaboration, crm, earth, erp, home, leave, letters, lookups, org, org_tree, platform, profile, rbac, recruitment, reimbursements, repository, salary, tasks, tracking, tracking_hub</p>
+            </div>
+            <div class="card">
+              <h3>Key routes</h3>
+              <ul>
+                <li><code>/login</code>, <code>/superadmin/login</code></li>
+                <li>CRM: <code>/crm</code>, pre-sales, post-sales, bin, settings</li>
+                <li>ERP: <code>/erp/projects</code>, work-orders, BOQ, tenders, DPR, store</li>
+                <li>HRMS: leave, attendance, salary, recruitment, repository, profile</li>
+                <li>Admin: dashboard, employees, users, roles, tracking-hub</li>
+                <li>Earth: <code>/admin/earth</code>, <code>/admin/earth/dashboard</code></li>
+                <li>Collab: <code>/chat</code>, <code>/meet</code>, <code>/tasks</code>, <code>/org-tree</code></li>
+                <li>SaaS: <code>/platform</code></li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section id="earth">
+          <h2>9. NB Earth</h2>
+          <p>Module key remains <code>GOOGLE_EARTH</code> for compatibility; UI name is <b>NB Earth</b>. 3D globe (shader + mesh fallback), satellite/streets map without world wrap, property pins, price history, distance/area tools, day/night, pause, zoom.</p>
+          <div class="card" style="overflow:auto">
+            <table>
+              <tr><th>Piece</th><th>Detail</th></tr>
+              <tr><td>Models</td><td><code>EarthProperty</code>, <code>EarthPropertyPrice</code>, <code>EarthPropertyMedia</code></td></tr>
+              <tr><td>API</td><td><code>GET/POST /api/earth/properties</code>, geocode, reverse, upload, dashboard, prices</td></tr>
+              <tr><td>Flutter</td><td>Hub, dashboard, globe, map, pin, property sheet</td></tr>
+              <tr><td>Assets</td><td><code>assets/images/earth/*</code>, <code>shaders/earth_sphere.frag</code></td></tr>
+            </table>
+          </div>
+        </section>
+
+        <section id="data">
+          <h2>10. Database</h2>
+          <p>Prisma schema: <code>backend/prisma/schema.prisma</code> — about <b>116 models</b>.</p>
+          <div class="grid g2">
+            <div class="card"><b>People & HR</b><p class="muted">User, Employee, personal/general info, family, education, experience, leave, attendance, salary, bank, letters, reimbursements, recruitment, repository, lookups, institutes, designations.</p></div>
+            <div class="card"><b>Access</b><p class="muted">Role, RolePermission, SystemModule, Organization, OrganizationAdminPermission, audit logs.</p></div>
+            <div class="card"><b>CRM</b><p class="muted">Projects, campaigns, leads, follow-ups, call logs, bookings, settings, recycle bin.</p></div>
+            <div class="card"><b>ERP</b><p class="muted">Projects/towers/units, work orders, BOQ, store (materials/machines/labour), tenders, DPR, contractors.</p></div>
+            <div class="card"><b>Collab & field</b><p class="muted">Chat, meetings, tasks, org tree, trips, location history, tracking events.</p></div>
+            <div class="card"><b>Earth</b><p class="muted">Geospatial inventory, price series, media. Migration <code>20260915153000_google_earth</code>.</p></div>
+          </div>
+        </section>
+
+        <section id="security">
+          <h2>11. Security</h2>
+          <ul>
+            <li>Helmet + CORS allowlist (localhost, Vercel, Netlify, <code>crm.nbdeveloper.co.in</code>)</li>
+            <li>VPN/proxy block in production (<code>/vpn-gate</code>)</li>
+            <li>AES-256 at rest for Aadhaar/PAN; transport AES-GCM between Flutter and API</li>
+            <li>RBAC on every mutating module; tenant license gates HRMS/CRM/ERP routers</li>
+            <li>Cloudinary uploads via memory multer; collab static files behind auth</li>
+          </ul>
+        </section>
+
+        <section id="collab">
+          <h2>12. Chat, Meet, and tracking</h2>
+          <p>Chat uses Socket.IO + REST <code>/api/chat</code>. Meet uses LiveKit tokens from <code>/api/meetings</code> plus optional Whisper captions. Field staff send GPS to <code>/api/tracking</code>; admins replay trips in tracking-hub.</p>
+        </section>
+
+        <section id="deploy">
+          <h2>13. Deploy</h2>
+          <div class="card" style="overflow:auto">
+            <table>
+              <tr><th>Target</th><th>How</th></tr>
+              <tr><td>Hostinger VPS</td><td><code>docker-compose.prod.yml</code> + Traefik → <code>https://crm.nbdeveloper.co.in</code>. GitHub Action <code>deploy-hostinger.yml</code> on <code>main</code>.</td></tr>
+              <tr><td>Flutter web</td><td>Netlify builds <code>nb_crm_flutter</code> with live API define.</td></tr>
+              <tr><td>Render</td><td><code>render.yaml</code> service <code>nb-crm-api</code>, health <code>/health</code>.</td></tr>
+              <tr><td>Local Docker</td><td><code>docker-compose.yml</code> full stack.</td></tr>
+            </table>
+          </div>
+        </section>
+
+        <section id="ops">
+          <h2>14. Operations checklist</h2>
+          <ol>
+            <li>Postgres <code>nb_crm_db</code> migrated (<code>npx prisma migrate deploy</code>).</li>
+            <li>Redis up — otherwise nobody can log in.</li>
+            <li>Open <a href="./system-health.html" id="opsHealth">system health</a> or <code>http://localhost:4000/system-health</code>.</li>
+            <li>Confirm <code>GET /health</code> shows redis/cloudinary/whisper.</li>
+            <li>Flutter debug: Local chip → login → NB Earth / CRM / ERP as licensed.</li>
+            <li>Grant <code>GOOGLE_EARTH</code> on the tenant ADMIN matrix for Earth.</li>
+          </ol>
+          <p class="muted">This file is the human-readable map of the repo. The health page is the live probe. Keep them next to each other in <code>docs/</code>.</p>
+        </section>
+      </main>
+    </div>
+  </div>
+  <script>
+    const MODULES = [
+      ["PROJECTS","Projects & Sites","ERP","Sites, towers, units"],
+      ["WORK_ORDERS","Work Orders","ERP","Issue and complete contractor WOs"],
+      ["DPR","Daily Progress Reports","ERP","Daily site progress"],
+      ["STORE","Store & Inventory","ERP","Materials, machines, labour"],
+      ["BOQ","Bill of Quantities","ERP","Quantities and rates"],
+      ["TENDERS","Tenders & Bidding","ERP","Publish competitive tenders"],
+      ["TENDER_APPLICATIONS","Tender Applications","ERP","Bids and awards"],
+      ["CONTRACTORS","Contractors & Vendors","ERP","Vendor master"],
+      ["ERP_CONFIGURATIONS","ERP Configurations","ERP","Activities, machines, wages"],
+      ["CRM","Pre-Sales & Leads","CRM","Pipeline and conversion"],
+      ["CRM_DASHBOARD","CRM Analytics Dashboard","CRM","KPIs and call stats"],
+      ["CRM_HEADERS","Pipeline Stages & Headers","CRM","Dynamic columns"],
+      ["CRM_POST_SALES","Post-Sales & Bookings","CRM","Units and milestones"],
+      ["CRM_SETTINGS","CRM Settings","CRM","Telephony and imports"],
+      ["CRM_BIN","Recycle Bin","CRM","Soft-deleted leads"],
+      ["PERSONAL_INFO","Personal Info & Workforce","HRMS","Employee directory"],
+      ["EDUCATION","Education","HRMS","Qualifications"],
+      ["EXPERIENCE","Work Experience","HRMS","Prior employers"],
+      ["LEAVE","Leave Management","HRMS","Balances and approvals"],
+      ["ATTENDANCE","Attendance","HRMS","Punches and tracking"],
+      ["PAYROLL","Payroll Processing","HRMS","Monthly payroll"],
+      ["SALARY","Salary Management","HRMS","Structures and slips"],
+      ["BANK_DETAILS","Bank Details","HRMS","Accounts"],
+      ["DOCUMENTS","Documents & Letters","HRMS","Letters and files"],
+      ["REIMBURSEMENTS","Reimbursements","HRMS","Expense claims"],
+      ["RECRUITMENT","Recruitment & ATS","HRMS","Jobs and candidates"],
+      ["REPORTS","Reports & Analytics","HRMS","Headcount reports"],
+      ["USER_MGMT","User Management","HRMS","Logins"],
+      ["ROLE_MGMT","Roles & Permission Matrix","HRMS","RBAC"],
+      ["FIELD_MGMT","Configurations & Lookups","HRMS","Dropdowns"],
+      ["REPOSITORY","Company Repository","HRMS","Policies"],
+      ["GOOGLE_EARTH","NB Earth","HRMS","Globe, map, inventory"],
+      ["TASKS","Tasks & Projects Hub","COLLABORATION","Gantt and assignments"],
+      ["CHAT","Chat","COLLABORATION","DMs and channels"],
+      ["MEETINGS","Meetings & Video","COLLABORATION","LiveKit"],
+      ["ORG_TREE","Org Chart & Tree","COLLABORATION","Reporting lines"],
+    ];
+    document.getElementById("mods").innerHTML = MODULES.map(([k,n,c,d]) =>
+      `<div class="card mod"><span class="chip ${c}">${c}</span> <b>${n}</b><div class="muted">${k} — ${d}</div></div>`
+    ).join("");
+
+    if (location.protocol.startsWith("http") && !location.pathname.endsWith(".html")) {
+      ["healthLink", "navHealth", "opsHealth"].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.setAttribute("href", "/system-health");
+      });
+    }
+    const q = document.getElementById("q");
+    q.addEventListener("input", () => {
+      const v = q.value.trim().toLowerCase();
+      document.querySelectorAll("main section").forEach((s) => {
+        s.style.display = !v || s.innerText.toLowerCase().includes(v) ? "" : "none";
+      });
+    });
+  </script>
+</body>
+</html>

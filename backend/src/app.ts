@@ -105,6 +105,17 @@ app.get('/health', async (_req, res) => {
   }));
 });
 
+const docsRoot = path.resolve(__dirname, '../../docs');
+const sendLocalHtml = (file: string) => (_req: express.Request, res: express.Response) => {
+  res.sendFile(path.join(docsRoot, file), (err) => {
+    if (err) res.status(404).type('text/plain').send(`${file} not found`);
+  });
+};
+app.get('/system-health', sendLocalHtml('system-health.html'));
+app.get('/system-health.html', sendLocalHtml('system-health.html'));
+app.get('/docs', sendLocalHtml('project-documentation.html'));
+app.get('/project-documentation.html', sendLocalHtml('project-documentation.html'));
+
 app.use('/actions', actionsRouter);
 app.use('/events', eventsRouter);
 

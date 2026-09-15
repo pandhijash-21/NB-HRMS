@@ -1,13 +1,27 @@
 import type { NextFunction, Request, Response } from 'express';
 import { prisma } from '../config/prisma';
-import { buildPermissionsMap } from '../modules/auth/permissions-map';
+import {
+  buildPermissionsMap,
+  isSuperAdminRole,
+  isSystemAdminRole,
+  resolveSystemAdminPermissions,
+} from '../modules/auth/permissions-map';
 import { fail } from '../utils/response';
-import { isAdminRole, isSuperAdminRole } from '../modules/auth/permissions-map';
 
 export type PermissionAction = 'READ' | 'WRITE' | 'APPROVE' | 'DELETE' | 'EXPORT';
 
 async function refreshUserPermissions(req: Request): Promise<boolean> {
-  if (!req.user?.roleId) return false;
+  if (!req.user) return false;
+  const roleName = req.user.roleName ?? req.user.role;
+  if (isSystemAdminRole(roleName) && !isSuperAdminRole(roleName)) {
+    const orgLive = await resolveSystemAdminPermissions(req.user.subOrganization);
+    if (!orgLive) return false;
+    req.user.permissions = orgLive.permissions;
+    req.user.employeeViewScope = orgLive.employeeViewScope;
+    req.user.organizationId = orgLive.organizationId;
+    return true;
+  }
+  if (!req.user.roleId) return false;
   const role = await prisma.role.findUnique({
     where: { id: req.user.roleId },
     include: { permissions: true },
@@ -26,7 +40,7 @@ export function requirePermission(moduleKey: string, action: PermissionAction) {
   return async (req: Request, res: Response, next: NextFunction) => {
     if (!req.user) return res.status(401).json(fail('Unauthenticated'));
 
-    if (isAdminRole(req.user.roleName ?? req.user.role)) {
+    if (isSuperAdminRole(req.user.roleName ?? req.user.role)) {
       return next();
     }
 
@@ -53,7 +67,7 @@ export function requireAnyPermission(moduleKeys: string[], action: PermissionAct
   return async (req: Request, res: Response, next: NextFunction) => {
     if (!req.user) return res.status(401).json(fail('Unauthenticated'));
 
-    if (isAdminRole(req.user.roleName ?? req.user.role)) {
+    if (isSuperAdminRole(req.user.roleName ?? req.user.role)) {
       return next();
     }
 
@@ -90,7 +104,7 @@ export function requireSelfEmployeeOrPermission(
   return async (req: Request, res: Response, next: NextFunction) => {
     if (!req.user) return res.status(401).json(fail('Unauthenticated'));
 
-    if (isAdminRole(req.user.roleName ?? req.user.role)) {
+    if (isSuperAdminRole(req.user.roleName ?? req.user.role)) {
       return next();
     }
 
@@ -116,9 +130,9 @@ export function requireSelfEmployeeOrPermission(
     }
 
     // 3. Accessing another employee's record requires elevated role or workforce view scope
-    const elevatedRoles = ['HR', 'HR_MANAGER', 'HOI', 'REGISTRAR', 'VC'];
+    const elevatedRoles = ['ADMIN', 'HR', 'HR_MANAGER', 'HOI', 'REGISTRAR', 'VC'];
     const roleName = String(req.user.roleName ?? req.user.role ?? '').toUpperCase();
-    if (elevatedRoles.includes(roleName)) {
+    if (elevatedRoles.includes(roleName) && (req.user.permissions?.[moduleKey] ?? []).includes(action)) {
       return next();
     }
 

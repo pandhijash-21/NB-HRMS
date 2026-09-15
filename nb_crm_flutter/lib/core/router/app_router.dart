@@ -293,7 +293,6 @@ GoRouter createAppRouter(AuthBloc authBloc) {
             } else if (loc.startsWith('/erp/dpr') && !Permissions.canReadDpr(perms, role)) {
               next = '/erp/home';
             } else if (loc.startsWith('/erp/configurations') &&
-                !Permissions.isAdmin(role) &&
                 !Permissions.canReadErpConfig(perms, role)) {
               next = '/erp/home';
             } else if (loc.startsWith('/crm/dashboard') && !Permissions.canReadCrmDashboard(perms, role)) {

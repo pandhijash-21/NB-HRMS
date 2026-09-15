@@ -1,4 +1,5 @@
 import '../../../core/network/dio_client.dart';
+import '../../rbac/domain/rbac_models.dart';
 import '../domain/platform_models.dart';
 
 class PlatformRepository {
@@ -143,6 +144,55 @@ class PlatformRepository {
       'platform/trash/empty',
       data: superadminPassword != null ? {'superadminPassword': superadminPassword} : null,
       parse: (_) {},
+    );
+  }
+
+  Future<List<ModulePermission>> getCompanyAdminPermissions(String companyId) async {
+    return _dio.getEnvelope<List<ModulePermission>>(
+      'platform/companies/$companyId/admin-permissions',
+      parse: (raw) {
+        if (raw is! List) throw const FormatException('Expected admin permissions list');
+        return raw
+            .whereType<Map>()
+            .map((m) => ModulePermission.fromJson(Map<String, dynamic>.from(m)))
+            .toList();
+      },
+    );
+  }
+
+  Future<List<ModulePermission>> patchCompanyAdminPermission(
+    String companyId,
+    String moduleKey,
+    Map<String, dynamic> data,
+  ) async {
+    return _dio.patchEnvelope<List<ModulePermission>>(
+      'platform/companies/$companyId/admin-permissions/$moduleKey',
+      data: data,
+      parse: (raw) {
+        if (raw is! List) throw const FormatException('Expected admin permissions list');
+        return raw
+            .whereType<Map>()
+            .map((m) => ModulePermission.fromJson(Map<String, dynamic>.from(m)))
+            .toList();
+      },
+    );
+  }
+
+  Future<List<ModulePermission>> batchCompanyAdminPermissions(
+    String companyId, {
+    required String category,
+    required bool enable,
+  }) async {
+    return _dio.postEnvelope<List<ModulePermission>>(
+      'platform/companies/$companyId/admin-permissions/batch',
+      data: {'category': category, 'enable': enable},
+      parse: (raw) {
+        if (raw is! List) throw const FormatException('Expected admin permissions list');
+        return raw
+            .whereType<Map>()
+            .map((m) => ModulePermission.fromJson(Map<String, dynamic>.from(m)))
+            .toList();
+      },
     );
   }
 }

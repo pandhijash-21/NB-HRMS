@@ -3,7 +3,13 @@ import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
 import { redis, connectRedis } from '../config/redis';
 import { fail } from '../utils/response';
-import { permissionsForRole, getLiveUserRole } from '../modules/auth/permissions-map';
+import {
+  permissionsForRole,
+  getLiveUserRole,
+  isSystemAdminRole,
+  isSuperAdminRole,
+  resolveSystemAdminPermissions,
+} from '../modules/auth/permissions-map';
 
 /** One active JWT per user id — newer login overwrites Redis and kicks older devices. */
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
@@ -57,11 +63,25 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
         | 'INSTITUTE'
         | 'UNIVERSITY'
         | undefined) ?? 'NONE';
+    let organizationId =
+      (decoded.organizationId as string | null | undefined) ?? null;
+    const subOrganization =
+      (decoded.subOrganization as string | null | undefined) ?? null;
+
     try {
-      const live = await permissionsForRole(activeRoleId);
-      if (live) {
-        permissions = live.permissions;
-        employeeViewScope = live.employeeViewScope;
+      if (isSystemAdminRole(activeRoleName) && !isSuperAdminRole(activeRoleName)) {
+        const orgLive = await resolveSystemAdminPermissions(subOrganization);
+        if (orgLive) {
+          permissions = orgLive.permissions;
+          employeeViewScope = orgLive.employeeViewScope;
+          organizationId = orgLive.organizationId;
+        }
+      } else {
+        const live = await permissionsForRole(activeRoleId);
+        if (live) {
+          permissions = live.permissions;
+          employeeViewScope = live.employeeViewScope;
+        }
       }
     } catch (err) {
       console.warn('Live role permissions lookup failed; using JWT permissions:', err);
@@ -73,7 +93,8 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       roleId: activeRoleId,
       roleName: activeRoleName,
       role: activeRoleName,
-      subOrganization: (decoded.subOrganization as string | null | undefined) ?? null,
+      subOrganization,
+      organizationId,
       employeeViewScope,
       permissions,
     };

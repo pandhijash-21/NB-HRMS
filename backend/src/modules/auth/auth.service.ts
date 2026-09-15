@@ -15,7 +15,7 @@ import {
   isExemptIdentifier,
 } from './loginLock.service';
 import { otpService } from './otp.service';
-import { buildPermissionsMap, isSuperAdminRole, isSystemAdminRole, isAdminRole } from './permissions-map';
+import { buildPermissionsMap, isSuperAdminRole, isSystemAdminRole, resolveSystemAdminPermissions } from './permissions-map';
 import { parseModules } from '../platform/platform.service';
 
 const SESSION_TTL = 8 * 60 * 60; // 8 hours in seconds
@@ -236,17 +236,29 @@ export const authService = {
     await clearLoginLock({ userId: user.id, aliases });
 
     // 3. Build permissions map
-    const rolePermissions = user.role?.permissions ?? [];
-    const permissions = buildPermissionsMap(rolePermissions);
-    const personalPerm = rolePermissions.find((p) => p.moduleKey === 'PERSONAL_INFO');
-    let employeeViewScope = personalPerm?.employeeViewScope ?? 'NONE';
     const effectiveRoleName = user.role?.name ?? (isSuperAdminRole(user.username) ? 'SUPERADMIN' : 'STAFF');
-    if (isAdminRole(effectiveRoleName) || isSystemAdminRole(effectiveRoleName)) {
-      if (employeeViewScope === 'NONE' || employeeViewScope === 'SELF') {
-        employeeViewScope = 'UNIVERSITY';
+    const userSubOrg = (user as { subOrganization?: string | null }).subOrganization;
+    let permissions = buildPermissionsMap(user.role?.permissions ?? []);
+    let employeeViewScope: 'NONE' | 'SELF' | 'INSTITUTE' | 'UNIVERSITY' = 'NONE';
+    let organizationId: string | null = null;
+
+    if (isSystemAdminRole(effectiveRoleName) && !isSuperAdminRole(effectiveRoleName)) {
+      const orgLive = await resolveSystemAdminPermissions(userSubOrg);
+      permissions = orgLive?.permissions ?? {};
+      employeeViewScope = orgLive?.employeeViewScope ?? 'NONE';
+      organizationId = orgLive?.organizationId ?? null;
+    } else {
+      const rolePermissions = user.role?.permissions ?? [];
+      permissions = buildPermissionsMap(rolePermissions);
+      const personalPerm = rolePermissions.find((p) => p.moduleKey === 'PERSONAL_INFO');
+      employeeViewScope = personalPerm?.employeeViewScope ?? 'NONE';
+      if (isSuperAdminRole(effectiveRoleName)) {
+        if (employeeViewScope === 'NONE' || employeeViewScope === 'SELF') {
+          employeeViewScope = 'UNIVERSITY';
+        }
       }
     }
-    const userSubOrg = (user as { subOrganization?: string | null }).subOrganization;
+
     const scopeSubOrg =
       userSubOrg ??
       (employeeViewScope === 'INSTITUTE'
@@ -263,6 +275,7 @@ export const authService = {
         roleId:      user.roleId ?? user.role?.id ?? '',
         roleName:    effectiveRoleName,
         subOrganization: scopeSubOrg,
+        organizationId,
         employeeViewScope,
         permissions,
         enabledModules,
@@ -488,19 +501,31 @@ export const authService = {
       where: { id: user.id },
       include: { role: { include: { permissions: true } } },
     });
-    const permissions = dbUser?.role
-      ? buildPermissionsMap(dbUser.role.permissions)
-      : user.permissions;
-    const personalPerm = dbUser?.role?.permissions.find((p) => p.moduleKey === 'PERSONAL_INFO');
-    let employeeViewScope = personalPerm?.employeeViewScope ?? user.employeeViewScope ?? 'NONE';
     const effectiveRoleName = dbUser?.role?.name ?? user.roleName ?? user.role ?? 'EMPLOYEE';
-    if (isAdminRole(effectiveRoleName) || isSystemAdminRole(effectiveRoleName)) {
-      if (employeeViewScope === 'NONE' || employeeViewScope === 'SELF') {
-        employeeViewScope = 'UNIVERSITY';
+    const subOrganization = user.subOrganization ?? dbUser?.subOrganization ?? null;
+    let permissions = user.permissions;
+    let employeeViewScope: 'NONE' | 'SELF' | 'INSTITUTE' | 'UNIVERSITY' =
+      user.employeeViewScope ?? 'NONE';
+    let organizationId = user.organizationId ?? null;
+
+    if (isSystemAdminRole(effectiveRoleName) && !isSuperAdminRole(effectiveRoleName)) {
+      const orgLive = await resolveSystemAdminPermissions(subOrganization);
+      permissions = orgLive?.permissions ?? {};
+      employeeViewScope = orgLive?.employeeViewScope ?? 'NONE';
+      organizationId = orgLive?.organizationId ?? null;
+    } else if (dbUser?.role) {
+      permissions = buildPermissionsMap(dbUser.role.permissions);
+      const personalPerm = dbUser.role.permissions.find((p) => p.moduleKey === 'PERSONAL_INFO');
+      employeeViewScope = personalPerm?.employeeViewScope ?? user.employeeViewScope ?? 'NONE';
+      if (isSuperAdminRole(effectiveRoleName)) {
+        if (employeeViewScope === 'NONE' || employeeViewScope === 'SELF') {
+          employeeViewScope = 'UNIVERSITY';
+        }
       }
     }
-    const isSuperAdmin = isSuperAdminRole(dbUser?.role?.name ?? user.roleName ?? user.role);
-    const enabledModules = await resolveEnabledModules(user.subOrganization, isSuperAdmin);
+
+    const isSuperAdmin = isSuperAdminRole(effectiveRoleName);
+    const enabledModules = await resolveEnabledModules(subOrganization, isSuperAdmin);
     return {
       id: user.id,
       employeeId: user.employeeId,
@@ -511,7 +536,8 @@ export const authService = {
       username: dbUser?.username ?? null,
       permissions,
       employeeViewScope,
-      subOrganization: user.subOrganization ?? null,
+      subOrganization,
+      organizationId,
       enabledModules,
       needsEmailVerification: emailStatus.needsEmailVerification,
       pendingEmails: emailStatus.emails.filter((e) => !e.verified),

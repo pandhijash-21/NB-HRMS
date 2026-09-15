@@ -1,9 +1,19 @@
 import { prisma } from '../../config/prisma';
 import { redis, connectRedis } from '../../config/redis';
 import type { UpdatePermissionsInput, PatchPermissionInput, CreateModuleInput, UpdateModuleInput } from './types';
-import { invalidateRolePermissionCache } from '../auth/permissions-map';
+import { invalidateRolePermissionCache, isSuperAdminRole, isSystemAdminRole } from '../auth/permissions-map';
 import { sseService } from '../events/sse.service';
 import { emitPermissionsUpdated } from '../collaboration/socket';
+import { orgAdminPermissionService } from '../platform/org-admin-permission.service';
+
+export type PermissionRequester = {
+  id: string;
+  roleName?: string | null;
+  role?: string | null;
+  permissions?: Record<string, string[]>;
+  organizationId?: string | null;
+  subOrganization?: string | null;
+};
 
 /** Clear permission cache and notify connected clients (does not sign users out). */
 export async function notifyRolePermissionsUpdated(roleId: string, moduleKey?: string) {
@@ -107,7 +117,7 @@ export function inferCategory(
 }
 
 export const permissionService = {
-  async getForRole(roleId: string) {
+  async getForRole(roleId: string, requester?: PermissionRequester) {
     const role = await prisma.role.findUnique({ where: { id: roleId } });
     if (!role) return { error: 'Role not found', status: 404 } as const;
 
@@ -120,7 +130,7 @@ export const permissionService = {
     const existing = await prisma.rolePermission.findMany({ where: { roleId } });
     const permMap = new Map(existing.map((p) => [p.moduleKey, p]));
 
-    return modules.map((mod: any) => {
+    let rows = modules.map((mod: any) => {
       const p = permMap.get(mod.key);
       return {
         moduleKey:  mod.key,
@@ -135,9 +145,27 @@ export const permissionService = {
         employeeViewScope: p?.employeeViewScope ?? 'NONE',
       };
     });
+
+    // Tenant ADMIN only sees modules they themselves hold (READ+)
+    const roleName = requester?.roleName ?? requester?.role;
+    if (
+      requester &&
+      isSystemAdminRole(roleName) &&
+      !isSuperAdminRole(roleName)
+    ) {
+      const held = requester.permissions ?? {};
+      rows = rows.filter((r) => (held[r.moduleKey] ?? []).includes('READ'));
+    }
+
+    return rows;
   },
 
-  async replaceForRole(roleId: string, input: UpdatePermissionsInput, updaterId: string) {
+  async replaceForRole(
+    roleId: string,
+    input: UpdatePermissionsInput,
+    updaterId: string,
+    requester?: PermissionRequester,
+  ) {
     const role = await prisma.role.findUnique({ where: { id: roleId } });
     if (!role) return { error: 'Role not found', status: 404 } as const;
 
@@ -148,6 +176,19 @@ export const permissionService = {
     for (const { moduleKey } of input.permissions) {
       if (!validKeys.has(moduleKey)) {
         return { error: `Unknown module key: ${moduleKey}`, status: 400 } as const;
+      }
+    }
+
+    const roleName = requester?.roleName ?? requester?.role;
+    if (
+      requester &&
+      isSystemAdminRole(roleName) &&
+      !isSuperAdminRole(roleName)
+    ) {
+      const held = requester.permissions ?? {};
+      for (const p of input.permissions) {
+        const denied = orgAdminPermissionService.assertGrantAllowed(held, p.moduleKey, p);
+        if (denied) return denied;
       }
     }
 
@@ -170,14 +211,15 @@ export const permissionService = {
 
     invalidateRolePermissionCache(roleId);
 
-    return permissionService.getForRole(roleId);
+    return permissionService.getForRole(roleId, requester);
   },
 
   async patchModulePermission(
     roleId: string,
     moduleKey: string,
     input: PatchPermissionInput,
-    updaterId: string
+    updaterId: string,
+    requester?: PermissionRequester,
   ) {
     const role = await prisma.role.findUnique({ where: { id: roleId } });
     if (!role) return { error: 'Role not found', status: 404 } as const;
@@ -195,6 +237,17 @@ export const permissionService = {
       canDelete: input.canDelete ?? existing?.canDelete ?? false,
       canExport: input.canExport ?? existing?.canExport ?? false,
     });
+
+    const roleName = requester?.roleName ?? requester?.role;
+    if (
+      requester &&
+      isSystemAdminRole(roleName) &&
+      !isSuperAdminRole(roleName)
+    ) {
+      const held = requester.permissions ?? {};
+      const denied = orgAdminPermissionService.assertGrantAllowed(held, moduleKey, merged);
+      if (denied) return denied;
+    }
 
     await prisma.rolePermission.upsert({
       where:  { roleId_moduleKey: { roleId, moduleKey } },
@@ -216,7 +269,7 @@ export const permissionService = {
 
     await notifyRolePermissionsUpdated(roleId, moduleKey);
 
-    return permissionService.getForRole(roleId);
+    return permissionService.getForRole(roleId, requester);
   },
 
   async listModules() {
@@ -280,9 +333,9 @@ export const permissionService = {
       },
     });
 
-    // Automatically grant full permissions on new module to SUPERADMIN, SYSTEM_ADMIN, and ADMIN
+    // Automatically grant full permissions on new module to SUPERADMIN only
     const adminRoles = await prisma.role.findMany({
-      where: { name: { in: ['SUPERADMIN', 'SYSTEM_ADMIN', 'ADMIN'] } },
+      where: { name: { in: ['SUPERADMIN'] } },
     });
     for (const r of adminRoles) {
       await prisma.rolePermission.upsert({

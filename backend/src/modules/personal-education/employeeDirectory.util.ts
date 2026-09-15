@@ -1,5 +1,6 @@
 import { prisma } from '../../config/prisma';
 import { resolveInstituteRef } from '../institute/institute.util';
+import { isSuperAdminRole } from '../auth/permissions-map';
 
 export type EmployeeViewScope = 'NONE' | 'SELF' | 'INSTITUTE' | 'UNIVERSITY';
 
@@ -15,16 +16,20 @@ type AuthUser = {
 
 export function isAdministrativeRole(roleName?: string): boolean {
   const r = String(roleName ?? '').toUpperCase().replace(/[\s_-]/g, '');
-  return ['SUPERADMIN', 'ADMIN', 'SYSTEMADMIN', 'SYSTEMADMINISTRATOR', 'HR', 'HRMANAGER', 'DEVELOPER'].includes(r);
+  // SUPERADMIN + HR tiers only — tenant ADMIN uses org matrix scope/permissions.
+  return ['SUPERADMIN', 'HR', 'HRMANAGER', 'DEVELOPER'].includes(r);
 }
 
 export function getEmployeeViewScope(user: AuthUser | undefined): EmployeeViewScope {
+  if (isSuperAdminRole(user?.role || user?.roleName)) return 'UNIVERSITY';
   if (isAdministrativeRole(user?.role || user?.roleName)) return 'UNIVERSITY';
   return user?.employeeViewScope ?? 'NONE';
 }
 
 export function canViewEmployeeDirectory(user: AuthUser | undefined): boolean {
+  if (isSuperAdminRole(user?.role || user?.roleName)) return true;
   if (isAdministrativeRole(user?.role || user?.roleName)) return true;
+  if (!(user?.permissions?.PERSONAL_INFO ?? []).includes('READ')) return false;
   const scope = getEmployeeViewScope(user);
   return scope === 'INSTITUTE' || scope === 'UNIVERSITY';
 }
@@ -35,6 +40,7 @@ export function canViewOwnEmployeeRecord(user: AuthUser | undefined): boolean {
 }
 
 export function canWriteEmployeeDirectory(user: AuthUser | undefined): boolean {
+  if (isSuperAdminRole(user?.role || user?.roleName)) return true;
   if (isAdministrativeRole(user?.role || user?.roleName)) return true;
   if (!canViewEmployeeDirectory(user)) return false;
   return user?.permissions?.PERSONAL_INFO?.includes('WRITE') ?? false;
@@ -44,8 +50,6 @@ export function canWriteOwnEmployeeRecord(user: AuthUser | undefined): boolean {
   if (!canViewOwnEmployeeRecord(user)) return false;
   return user?.permissions?.PERSONAL_INFO?.includes('WRITE') ?? false;
 }
-
-import { isSuperAdminRole } from '../auth/permissions-map';
 
 /** Institute code/name filter for list queries when scope is INSTITUTE or tenant scoped. */
 export async function resolveDirectoryInstituteFilter(

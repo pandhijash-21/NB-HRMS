@@ -1,21 +1,22 @@
 import { Router } from 'express';
 import type { NextFunction, Request, Response } from 'express';
 import { requireAuth } from '../../middleware/auth';
-import { isAdminRole } from '../auth/permissions-map';
+import { isSuperAdminRole } from '../auth/permissions-map';
 import { fail, ok } from '../../utils/response';
 import { storageService } from './storage.service';
 
 export const storageRouter = Router();
 
-function requireAdmin(req: Request, res: Response, next: NextFunction) {
+function requireStorageAdmin(req: Request, res: Response, next: NextFunction) {
   if (!req.user) return res.status(401).json(fail('Unauthenticated'));
-  if (!isAdminRole(req.user.roleName ?? req.user.role)) {
-    return res.status(403).json(fail('Only Admin can view or clear storage'));
-  }
-  return next();
+  const role = req.user.roleName ?? req.user.role;
+  if (isSuperAdminRole(role)) return next();
+  const held = req.user.permissions?.USER_MGMT ?? [];
+  if (held.includes('WRITE') || held.includes('DELETE')) return next();
+  return res.status(403).json(fail('You do not have permission to manage storage'));
 }
 
-storageRouter.get('/', requireAuth, requireAdmin, async (_req, res) => {
+storageRouter.get('/', requireAuth, requireStorageAdmin, async (_req, res) => {
   try {
     const usage = await storageService.usage();
     return res.json(ok(usage));
@@ -25,7 +26,7 @@ storageRouter.get('/', requireAuth, requireAdmin, async (_req, res) => {
   }
 });
 
-storageRouter.post('/purge', requireAuth, requireAdmin, async (req, res) => {
+storageRouter.post('/purge', requireAuth, requireStorageAdmin, async (req, res) => {
   const password = String((req.body as { password?: unknown } | undefined)?.password ?? '').trim();
   if (!password) {
     return res.status(400).json(fail('Admin password is required'));

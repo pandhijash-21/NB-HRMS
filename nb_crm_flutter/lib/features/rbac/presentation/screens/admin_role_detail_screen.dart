@@ -350,7 +350,16 @@ class _AdminRoleDetailScreenState extends State<AdminRoleDetailScreen> {
             if (role == null) {
               return const Center(child: Text('Role not found'));
             }
-            final modules = detailState.modules;
+            final auth = context.watch<AuthBloc>().state;
+            final viewerRole = auth.user?.role;
+            final allModules = detailState.modules;
+            final modules = Permissions.isSystemAdmin(viewerRole) &&
+                    !Permissions.isSuperAdmin(viewerRole)
+                ? allModules
+                    .where((m) =>
+                        Permissions.hasPermission(auth.permissions, m.key, 'READ'))
+                    .toList()
+                : allModules;
             final permissions = detailState.permissions;
             final permByKey = {
               for (final p in permissions) p.moduleKey: p,
@@ -518,7 +527,7 @@ class _RoleHeader extends StatelessWidget {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'System Admin possesses full administrative authority across all modules. Operates directly under Superadmin.',
+                      'System Admin capabilities for this company are set by Superadmin. This role matrix only shows modules your company admin access allows, and you can only grant actions you hold.',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,

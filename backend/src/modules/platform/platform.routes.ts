@@ -61,6 +61,64 @@ platformRouter.patch('/companies/:id', async (req: Request, res: Response) => {
 });
 
 /**
+ * Per-company System Admin capability matrix
+ */
+platformRouter.get('/companies/:id/admin-permissions', async (req: Request, res: Response) => {
+  try {
+    const id = p(req.params.id);
+    const { orgAdminPermissionService } = await import('./org-admin-permission.service');
+    const result = await orgAdminPermissionService.getForOrganization(id);
+    if (result && typeof result === 'object' && 'error' in result) {
+      return res.status((result as { status?: number }).status ?? 400).json(fail((result as { error: string }).error));
+    }
+    return res.json(ok(result));
+  } catch (err: unknown) {
+    return res.status(500).json(fail(err instanceof Error ? err.message : 'Failed to load admin permissions'));
+  }
+});
+
+platformRouter.patch('/companies/:id/admin-permissions/:moduleKey', async (req: Request, res: Response) => {
+  try {
+    const id = p(req.params.id);
+    const moduleKey = p(req.params.moduleKey).toUpperCase();
+    const { orgAdminPermissionService } = await import('./org-admin-permission.service');
+    const result = await orgAdminPermissionService.patchModule(
+      id,
+      moduleKey,
+      req.body ?? {},
+      req.user!.id,
+    );
+    if (result && typeof result === 'object' && 'error' in result) {
+      return res.status((result as { status?: number }).status ?? 400).json(fail((result as { error: string }).error));
+    }
+    return res.json(ok(result));
+  } catch (err: unknown) {
+    return res.status(400).json(fail(err instanceof Error ? err.message : 'Failed to update admin permission'));
+  }
+});
+
+platformRouter.post('/companies/:id/admin-permissions/batch', async (req: Request, res: Response) => {
+  try {
+    const id = p(req.params.id);
+    const category = String(req.body?.category ?? 'ALL');
+    const enable = req.body?.enable === true;
+    const { orgAdminPermissionService } = await import('./org-admin-permission.service');
+    const result = await orgAdminPermissionService.batchSetCategory(
+      id,
+      category,
+      enable,
+      req.user!.id,
+    );
+    if (result && typeof result === 'object' && 'error' in result) {
+      return res.status((result as { status?: number }).status ?? 400).json(fail((result as { error: string }).error));
+    }
+    return res.json(ok(result));
+  } catch (err: unknown) {
+    return res.status(400).json(fail(err instanceof Error ? err.message : 'Failed to batch update admin permissions'));
+  }
+});
+
+/**
  * List all client company System Admins
  */
 platformRouter.get('/admins', async (_req: Request, res: Response) => {

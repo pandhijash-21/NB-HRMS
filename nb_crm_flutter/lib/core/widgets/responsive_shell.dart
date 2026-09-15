@@ -122,7 +122,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
       'SYSTEM_ADMINISTRATOR',
     ].contains(auth.user?.role.toUpperCase() ?? '');
     final canTrackField = canAccessFieldTracking(auth.user?.role);
-    final canApproveLeave = isAdmin || Permissions.canApproveLeave(auth.permissions);
+    final canApproveLeave = isSuperAdmin || Permissions.canApproveLeave(auth.permissions);
     final canAccessAdmin = Permissions.canAccessAdminPortal(
       auth.permissions,
       auth.user?.employeeViewScope,

@@ -53,11 +53,20 @@ const rolePermCache = new Map<
   string,
   { at: number; perms: Record<string, string[]>; employeeViewScope: RolePermissionRow['employeeViewScope'] }
 >();
+const orgAdminPermCache = new Map<
+  string,
+  { at: number; perms: Record<string, string[]>; employeeViewScope: RolePermissionRow['employeeViewScope'] }
+>();
 const ROLE_PERM_TTL_MS = 15_000;
 
 export function invalidateRolePermissionCache(roleId?: string) {
   if (roleId) rolePermCache.delete(roleId);
   else rolePermCache.clear();
+}
+
+export function invalidateOrgAdminPermissionCache(organizationId?: string) {
+  if (organizationId) orgAdminPermCache.delete(organizationId);
+  else orgAdminPermCache.clear();
 }
 
 /** Live role permissions (seed/role edits apply without forcing a new login). */
@@ -77,13 +86,71 @@ export async function permissionsForRole(roleId: string): Promise<{
   const perms = buildPermissionsMap(role.permissions);
   const personal = role.permissions.find((p) => p.moduleKey === 'PERSONAL_INFO');
   let employeeViewScope = personal?.employeeViewScope ?? 'NONE';
-  if (isAdminRole(role.name)) {
+  // Only Superadmin gets forced university scope; tenant ADMIN uses org matrix scope.
+  if (isSuperAdminRole(role.name)) {
     if (employeeViewScope === 'NONE' || employeeViewScope === 'SELF') {
       employeeViewScope = 'UNIVERSITY';
     }
   }
   rolePermCache.set(roleId, { at: Date.now(), perms, employeeViewScope });
   return { permissions: perms, employeeViewScope };
+}
+
+/** Live per-company System Admin capabilities. */
+export async function permissionsForOrganizationAdmin(organizationId: string): Promise<{
+  permissions: Record<string, string[]>;
+  employeeViewScope: 'NONE' | 'SELF' | 'INSTITUTE' | 'UNIVERSITY';
+} | null> {
+  const hit = orgAdminPermCache.get(organizationId);
+  if (hit && Date.now() - hit.at < ROLE_PERM_TTL_MS) {
+    return { permissions: hit.perms, employeeViewScope: hit.employeeViewScope ?? 'NONE' };
+  }
+  const rows = await prisma.organizationAdminPermission.findMany({
+    where: { organizationId },
+  });
+  const perms = buildPermissionsMap(rows);
+  const personal = rows.find((p) => p.moduleKey === 'PERSONAL_INFO');
+  let employeeViewScope = personal?.employeeViewScope ?? 'NONE';
+  if (
+    (employeeViewScope === 'NONE' || employeeViewScope === 'SELF') &&
+    (perms.PERSONAL_INFO ?? []).includes('READ')
+  ) {
+    employeeViewScope = 'UNIVERSITY';
+  }
+  orgAdminPermCache.set(organizationId, { at: Date.now(), perms, employeeViewScope });
+  return { permissions: perms, employeeViewScope };
+}
+
+/** Resolve org + org-admin permissions for a System Admin user by subOrganization. */
+export async function resolveSystemAdminPermissions(
+  subOrganization?: string | null,
+): Promise<{
+  organizationId: string | null;
+  permissions: Record<string, string[]>;
+  employeeViewScope: 'NONE' | 'SELF' | 'INSTITUTE' | 'UNIVERSITY';
+} | null> {
+  if (!subOrganization?.trim()) {
+    return { organizationId: null, permissions: {}, employeeViewScope: 'NONE' };
+  }
+  const org = await prisma.organization.findFirst({
+    where: {
+      deletedAt: null,
+      OR: [
+        { name: { equals: subOrganization.trim(), mode: 'insensitive' } },
+        { code: { equals: subOrganization.trim(), mode: 'insensitive' } },
+      ],
+    },
+    select: { id: true },
+  });
+  if (!org) {
+    return { organizationId: null, permissions: {}, employeeViewScope: 'NONE' };
+  }
+  const live = await permissionsForOrganizationAdmin(org.id);
+  return {
+    organizationId: org.id,
+    permissions: live?.permissions ?? {},
+    employeeViewScope: live?.employeeViewScope ?? 'NONE',
+  };
 }
 
 const userRoleCache = new Map<string, { roleId: string; roleName: string; at: number }>();

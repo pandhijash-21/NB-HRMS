@@ -6,13 +6,12 @@ import '../../../../core/bloc/bloc_async_value.dart';
 import '../../../../core/theme/nb_icon.dart';
 import '../../../../core/theme/theme_cubit.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
-import '../../../rbac/data/rbac_repository.dart';
-import '../../../rbac/domain/rbac_models.dart';
 import '../../data/platform_repository.dart';
 import '../../domain/platform_models.dart';
 import '../bloc/platform_console_bloc.dart';
 import '../bloc/platform_console_event.dart';
 import '../bloc/platform_console_state.dart';
+import 'company_admin_access_sheet.dart';
 
 class PlatformConsoleScreen extends StatelessWidget {
   const PlatformConsoleScreen({super.key, this.initialTab = 0});
@@ -47,15 +46,6 @@ class _PlatformConsoleScreenViewState extends State<_PlatformConsoleScreenView>
   String _companyStatusFilter = 'ALL'; // ALL, ACTIVE, SUSPENDED
   String _trashFilter = 'ALL'; // ALL, COMPANIES, ADMINS
 
-  // Cross-Module RBAC Governance State
-  List<RoleSummary> _rbacRoles = const [];
-  String? _selectedRbacRoleId;
-  List<ModulePermission> _selectedRolePermissions = const [];
-  bool _loadingRbac = false;
-  String? _rbacError;
-  String _rbacCategoryFilter = 'ALL'; // ALL, HRMS, CRM, ERP
-  String _rbacSearch = '';
-
   @override
   void initState() {
     super.initState();
@@ -67,204 +57,6 @@ class _PlatformConsoleScreenViewState extends State<_PlatformConsoleScreenView>
     _tabController.addListener(() {
       if (mounted) setState(() {});
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadRbacRoles();
-    });
-  }
-
-  Future<void> _loadRbacRoles() async {
-    try {
-      final repo = context.read<RbacRepository>();
-      final roles = await repo.listRoles();
-      if (!mounted) return;
-      setState(() {
-        _rbacRoles = roles;
-        if (_selectedRbacRoleId == null && roles.isNotEmpty) {
-          final defaultRole = roles.firstWhere(
-            (r) => r.name.toUpperCase() == 'ADMIN' || r.name.toUpperCase() == 'HR',
-            orElse: () => roles.first,
-          );
-          _selectedRbacRoleId = defaultRole.id;
-        }
-      });
-      if (_selectedRbacRoleId != null) {
-        _loadRolePermissions(_selectedRbacRoleId!);
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _rbacError = e.toString());
-      }
-    }
-  }
-
-  Future<void> _loadRolePermissions(String roleId) async {
-    setState(() {
-      _loadingRbac = true;
-      _rbacError = null;
-    });
-    try {
-      final repo = context.read<RbacRepository>();
-      final perms = await repo.getRolePermissions(roleId);
-      if (!mounted) return;
-      setState(() {
-        _selectedRolePermissions = perms;
-        _loadingRbac = false;
-      });
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _rbacError = e.toString();
-          _loadingRbac = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _toggleRbacPerm(String moduleKey, String permKey, bool value) async {
-    if (_selectedRbacRoleId == null) return;
-    final roleId = _selectedRbacRoleId!;
-
-    final idx = _selectedRolePermissions.indexWhere((p) => p.moduleKey == moduleKey);
-    if (idx == -1) return;
-    final current = _selectedRolePermissions[idx];
-
-    final updated = current.copyWith(
-      canRead: permKey == 'canRead' ? value : current.canRead,
-      canWrite: permKey == 'canWrite' ? value : current.canWrite,
-      canApprove: permKey == 'canApprove' ? value : current.canApprove,
-      canDelete: permKey == 'canDelete' ? value : current.canDelete,
-      canExport: permKey == 'canExport' ? value : current.canExport,
-    );
-
-    setState(() {
-      final list = List<ModulePermission>.from(_selectedRolePermissions);
-      list[idx] = updated;
-      _selectedRolePermissions = list;
-    });
-
-    try {
-      final repo = context.read<RbacRepository>();
-      final res = await repo.patchRolePermission(roleId, moduleKey, {
-        'canRead': updated.canRead,
-        'canWrite': updated.canWrite,
-        'canApprove': updated.canApprove,
-        'canDelete': updated.canDelete,
-        'canExport': updated.canExport,
-      });
-      if (mounted) {
-        setState(() {
-          _selectedRolePermissions = res;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update permission: $e'), backgroundColor: Colors.red),
-        );
-        _loadRolePermissions(roleId);
-      }
-    }
-  }
-
-  Future<void> _batchSetCategoryPerms(String category, bool grant) async {
-    if (_selectedRbacRoleId == null) return;
-    final roleId = _selectedRbacRoleId!;
-    final targets = _selectedRolePermissions.where((p) {
-      if (category == 'ALL') return true;
-      return p.category.toUpperCase() == category.toUpperCase();
-    }).toList();
-
-    try {
-      final repo = context.read<RbacRepository>();
-      await Future.wait(
-        targets.map((p) => repo.patchRolePermission(roleId, p.moduleKey, {
-          'canRead': grant,
-          'canWrite': grant,
-          'canApprove': grant,
-          'canDelete': grant,
-          'canExport': grant,
-        })),
-      );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(grant ? 'Granted full $category permissions' : 'Revoked $category permissions'),
-            backgroundColor: grant ? const Color(0xFF10B981) : const Color(0xFFEF4444),
-          ),
-        );
-        _loadRolePermissions(roleId);
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Batch update failed: $e'), backgroundColor: Colors.red),
-        );
-      }
-    }
-  }
-
-  Future<void> _showCreateRoleDialog() async {
-    final nameCtrl = TextEditingController();
-    final descCtrl = TextEditingController();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Create New Platform / Tenant Role'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameCtrl,
-              decoration: const InputDecoration(labelText: 'Role Name (e.g. OPERATIONS_DIRECTOR)'),
-              textCapitalization: TextCapitalization.characters,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: descCtrl,
-              decoration: const InputDecoration(labelText: 'Description (optional)'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () {
-              if (nameCtrl.text.trim().isNotEmpty) {
-                Navigator.of(ctx).pop(true);
-              }
-            },
-            child: const Text('Create Role'),
-          ),
-        ],
-      ),
-    );
-
-    if (ok == true && nameCtrl.text.trim().isNotEmpty) {
-      if (!mounted) return;
-      try {
-        final repo = context.read<RbacRepository>();
-        final role = await repo.createRole({
-          'name': nameCtrl.text.trim().toUpperCase(),
-          'description': descCtrl.text.trim(),
-        });
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Role "${role.name}" created successfully'), backgroundColor: const Color(0xFF10B981)),
-          );
-          await _loadRbacRoles();
-          setState(() {
-            _selectedRbacRoleId = role.id;
-          });
-          _loadRolePermissions(role.id);
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to create role: $e'), backgroundColor: Colors.red),
-          );
-        }
-      }
-    }
   }
 
   @override
@@ -1298,6 +1090,22 @@ class _PlatformConsoleScreenViewState extends State<_PlatformConsoleScreenView>
                 ),
               ),
               const SizedBox(width: 8),
+              OutlinedButton.icon(
+                onPressed: () => CompanyAdminAccessSheet.show(
+                  context,
+                  company: company,
+                  repository: context.read<PlatformRepository>(),
+                ),
+                icon: const NbIcon(Icons.admin_panel_settings_rounded, size: 15),
+                label: const Text('Admin Access'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF6366F1),
+                  side: const BorderSide(color: Color(0xFF6366F1)),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+              const SizedBox(width: 8),
               // Suspend / Activate Toggle
               FilledButton.tonalIcon(
                 onPressed: () => _toggleCompanyStatus(company),
@@ -1824,13 +1632,30 @@ class _PlatformConsoleScreenViewState extends State<_PlatformConsoleScreenView>
                             ),
                             Padding(
                               padding: const EdgeInsets.all(14),
-                              child: OutlinedButton(
-                                onPressed: () => _showEntitlementsDialog(context, company),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: textPrimary,
-                                  side: BorderSide(color: borderColor),
-                                ),
-                                child: const Text('Configure'),
+                              child: Row(
+                                children: [
+                                  OutlinedButton(
+                                    onPressed: () => _showEntitlementsDialog(context, company),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: textPrimary,
+                                      side: BorderSide(color: borderColor),
+                                    ),
+                                    child: const Text('Suites'),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  OutlinedButton(
+                                    onPressed: () => CompanyAdminAccessSheet.show(
+                                      context,
+                                      company: company,
+                                      repository: context.read<PlatformRepository>(),
+                                    ),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: const Color(0xFF6366F1),
+                                      side: const BorderSide(color: Color(0xFF6366F1)),
+                                    ),
+                                    child: const Text('Admin Access'),
+                                  ),
+                                ],
                               ),
                             ),
                           ],
@@ -1856,21 +1681,6 @@ class _PlatformConsoleScreenViewState extends State<_PlatformConsoleScreenView>
     Color textPrimary,
     Color textSecondary,
   ) {
-    // Filter permissions by category and search query
-    final filteredPerms = _selectedRolePermissions.where((p) {
-      if (_rbacCategoryFilter != 'ALL' &&
-          p.category.toUpperCase() != _rbacCategoryFilter.toUpperCase()) {
-        return false;
-      }
-      if (_rbacSearch.isNotEmpty) {
-        final q = _rbacSearch.toLowerCase();
-        final name = (p.module?.name ?? p.moduleKey).toLowerCase();
-        final key = p.moduleKey.toLowerCase();
-        return name.contains(q) || key.contains(q);
-      }
-      return true;
-    }).toList();
-
     return Container(
       decoration: BoxDecoration(
         color: surfaceColor,
@@ -1878,285 +1688,36 @@ class _PlatformConsoleScreenViewState extends State<_PlatformConsoleScreenView>
         border: Border.all(color: borderColor, width: 1),
       ),
       padding: const EdgeInsets.all(22),
-      child: Column(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF6366F1).withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.admin_panel_settings_rounded, color: Color(0xFF6366F1), size: 22),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Cross-Module RBAC Governance',
-                      style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: textPrimary),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Configure granular permissions across HRMS, CRM, and ERP modules differently for any platform or tenant role.',
-                      style: TextStyle(fontSize: 13, color: textSecondary),
-                    ),
-                  ],
-                ),
-              ),
-              FilledButton.icon(
-                onPressed: _showCreateRoleDialog,
-                icon: const Icon(Icons.add_rounded, size: 16),
-                label: const Text('Add Role'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF6366F1),
-                  foregroundColor: Colors.white,
-                ),
-              ),
-            ],
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF6366F1).withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.admin_panel_settings_rounded, color: Color(0xFF6366F1), size: 22),
           ),
-          const SizedBox(height: 20),
-
-          // Role Selector Bar
-          Row(
-            children: [
-              Text('Select Target Role: ', style: TextStyle(fontWeight: FontWeight.w700, color: textPrimary, fontSize: 13)),
-              const SizedBox(width: 8),
-              if (_rbacRoles.isEmpty)
-                const Text('Loading roles...', style: TextStyle(fontSize: 12, color: Colors.grey))
-              else
-                Expanded(
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: _rbacRoles.map((role) {
-                        final isSelected = role.id == _selectedRbacRoleId;
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: ChoiceChip(
-                            label: Text('${role.name} (${role.userCount})'),
-                            selected: isSelected,
-                            selectedColor: const Color(0xFF6366F1).withValues(alpha: 0.25),
-                            labelStyle: TextStyle(
-                              color: isSelected ? const Color(0xFF6366F1) : textSecondary,
-                              fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
-                              fontSize: 12,
-                            ),
-                            side: BorderSide(
-                              color: isSelected ? const Color(0xFF6366F1) : borderColor,
-                            ),
-                            onSelected: (val) {
-                              if (val) {
-                                setState(() => _selectedRbacRoleId = role.id);
-                                _loadRolePermissions(role.id);
-                              }
-                            },
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          // Suite Filter & Batch Actions Bar
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              // Category filter
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(value: 'ALL', label: Text('All Suites')),
-                  ButtonSegment(value: 'HRMS', label: Text('HRMS Modules')),
-                  ButtonSegment(value: 'CRM', label: Text('CRM Modules')),
-                  ButtonSegment(value: 'ERP', label: Text('ERP Modules')),
-                ],
-                selected: {_rbacCategoryFilter},
-                onSelectionChanged: (val) => setState(() => _rbacCategoryFilter = val.first),
-                style: const ButtonStyle(visualDensity: VisualDensity.compact),
-              ),
-              const SizedBox(width: 12),
-
-              // Batch actions
-              OutlinedButton.icon(
-                onPressed: () => _batchSetCategoryPerms(_rbacCategoryFilter, true),
-                icon: const Icon(Icons.check_circle_outline_rounded, size: 16, color: Color(0xFF10B981)),
-                label: Text('Grant Full ${_rbacCategoryFilter == 'ALL' ? 'Access' : _rbacCategoryFilter}'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF10B981),
-                  side: const BorderSide(color: Color(0xFF10B981), width: 1.2),
-                ),
-              ),
-              OutlinedButton.icon(
-                onPressed: () => _batchSetCategoryPerms(_rbacCategoryFilter, false),
-                icon: const Icon(Icons.remove_circle_outline_rounded, size: 16, color: Color(0xFFEF4444)),
-                label: Text('Revoke ${_rbacCategoryFilter == 'ALL' ? 'All' : _rbacCategoryFilter}'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFFEF4444),
-                  side: const BorderSide(color: Color(0xFFEF4444), width: 1.2),
-                ),
-              ),
-
-              // Search field
-              SizedBox(
-                width: 220,
-                height: 36,
-                child: TextField(
-                  onChanged: (v) => setState(() => _rbacSearch = v.trim()),
-                  decoration: InputDecoration(
-                    hintText: 'Filter modules...',
-                    hintStyle: TextStyle(fontSize: 12, color: textSecondary),
-                    prefixIcon: const Icon(Icons.search_rounded, size: 16),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-                    filled: true,
-                    fillColor: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-
-          // Permissions Matrix Table
-          if (_loadingRbac)
-            const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator()))
-          else if (_rbacError != null)
-            Center(child: Text('Error: $_rbacError', style: const TextStyle(color: Colors.red)))
-          else if (filteredPerms.isEmpty)
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Text('No modules match filter.', style: TextStyle(color: textSecondary)),
-              ),
-            )
-          else
-            Table(
-              columnWidths: const {
-                0: FlexColumnWidth(2.4),
-                1: FlexColumnWidth(1.0),
-                2: FlexColumnWidth(0.8),
-                3: FlexColumnWidth(0.8),
-                4: FlexColumnWidth(0.8),
-                5: FlexColumnWidth(0.8),
-                6: FlexColumnWidth(0.8),
-              },
-              border: TableBorder.all(
-                color: borderColor.withValues(alpha: 0.6),
-                borderRadius: BorderRadius.circular(10),
-              ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                TableRow(
-                  decoration: BoxDecoration(color: borderColor.withValues(alpha: 0.35)),
-                  children: [
-                    _buildHeaderCell('Module / Resource', textPrimary),
-                    _buildHeaderCell('Suite', textPrimary),
-                    _buildHeaderCell('Read', textPrimary),
-                    _buildHeaderCell('Write', textPrimary),
-                    _buildHeaderCell('Approve', textPrimary),
-                    _buildHeaderCell('Delete', textPrimary),
-                    _buildHeaderCell('Export', textPrimary),
-                  ],
+                Text(
+                  'Per-Company Admin Access',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: textPrimary),
                 ),
-                for (final perm in filteredPerms)
-                  TableRow(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              perm.module?.name ?? perm.moduleKey,
-                              style: TextStyle(fontWeight: FontWeight.w700, color: textPrimary, fontSize: 13),
-                            ),
-                            Text(
-                              perm.moduleKey,
-                              style: TextStyle(fontSize: 11, color: textSecondary, fontFamily: 'monospace'),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: _buildCategoryBadge(perm.category),
-                      ),
-                      Center(
-                        child: Checkbox(
-                          value: perm.canRead,
-                          activeColor: const Color(0xFF3B82F6),
-                          onChanged: (v) => _toggleRbacPerm(perm.moduleKey, 'canRead', v ?? false),
-                        ),
-                      ),
-                      Center(
-                        child: Checkbox(
-                          value: perm.canWrite,
-                          activeColor: const Color(0xFF10B981),
-                          onChanged: (v) => _toggleRbacPerm(perm.moduleKey, 'canWrite', v ?? false),
-                        ),
-                      ),
-                      Center(
-                        child: Checkbox(
-                          value: perm.canApprove,
-                          activeColor: const Color(0xFFF59E0B),
-                          onChanged: (v) => _toggleRbacPerm(perm.moduleKey, 'canApprove', v ?? false),
-                        ),
-                      ),
-                      Center(
-                        child: Checkbox(
-                          value: perm.canDelete,
-                          activeColor: const Color(0xFFEF4444),
-                          onChanged: (v) => _toggleRbacPerm(perm.moduleKey, 'canDelete', v ?? false),
-                        ),
-                      ),
-                      Center(
-                        child: Checkbox(
-                          value: perm.canExport,
-                          activeColor: const Color(0xFF8B5CF6),
-                          onChanged: (v) => _toggleRbacPerm(perm.moduleKey, 'canExport', v ?? false),
-                        ),
-                      ),
-                    ],
-                  ),
+                const SizedBox(height: 6),
+                Text(
+                  'System Admin capabilities are configured per company. Open a tenant from the Tenants tab and use Admin Access to grant HRMS, CRM, ERP, and Collaboration sub-modules. Admins can only delegate modules they themselves hold.',
+                  style: TextStyle(fontSize: 13, color: textSecondary, height: 1.4),
+                ),
               ],
             ),
+          ),
         ],
       ),
-    );
-  }
-
-  Widget _buildCategoryBadge(String cat) {
-    Color bg;
-    Color fg;
-    switch (cat.toUpperCase()) {
-      case 'HRMS':
-        bg = const Color(0xFF10B981).withValues(alpha: 0.15);
-        fg = const Color(0xFF10B981);
-        break;
-      case 'CRM':
-        bg = const Color(0xFF6366F1).withValues(alpha: 0.15);
-        fg = const Color(0xFF6366F1);
-        break;
-      case 'ERP':
-        bg = const Color(0xFFF59E0B).withValues(alpha: 0.15);
-        fg = const Color(0xFFF59E0B);
-        break;
-      default:
-        bg = Colors.grey.withValues(alpha: 0.15);
-        fg = Colors.grey;
-    }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(6)),
-      child: Text(cat.toUpperCase(), style: TextStyle(color: fg, fontWeight: FontWeight.w800, fontSize: 11)),
     );
   }
 

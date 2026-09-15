@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 import { ok, fail } from '../../utils/response';
-import { permissionService } from './permission.service';
+import { permissionService, type PermissionRequester } from './permission.service';
 import {
   UpdatePermissionsSchema,
   PatchPermissionSchema,
@@ -8,9 +8,23 @@ import {
   UpdateModuleSchema,
 } from './types';
 
+function requesterFrom(req: Request): PermissionRequester {
+  return {
+    id: req.user!.id,
+    roleName: req.user!.roleName,
+    role: req.user!.role,
+    permissions: req.user!.permissions,
+    organizationId: req.user!.organizationId,
+    subOrganization: req.user!.subOrganization,
+  };
+}
+
 export const permissionController = {
   async getForRole(req: Request, res: Response) {
-    const result = await permissionService.getForRole(String(req.params.roleId));
+    const result = await permissionService.getForRole(
+      String(req.params.roleId),
+      requesterFrom(req),
+    );
     if ('error' in result) return res.status(result.status ?? 400).json(fail(result.error ?? 'Error'));
     return res.json(ok(result));
   },
@@ -24,7 +38,8 @@ export const permissionController = {
     const result = await permissionService.replaceForRole(
       String(req.params.roleId),
       body.data,
-      req.user!.id
+      req.user!.id,
+      requesterFrom(req),
     );
 
     if (result && 'error' in result) return res.status(result.status ?? 400).json(fail(result.error ?? 'Error'));
@@ -41,7 +56,8 @@ export const permissionController = {
       String(req.params.roleId),
       String(req.params.moduleKey),
       body.data,
-      req.user!.id
+      req.user!.id,
+      requesterFrom(req),
     );
 
     if (result && 'error' in result) return res.status(result.status ?? 400).json(fail(result.error ?? 'Error'));

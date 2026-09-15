@@ -19,6 +19,7 @@ import {
   transcribeSpeech,
 } from './stt.service';
 import { clearMeetingWhisperEnabled, getMeetingWhisperEnabled } from './whisperRoomState';
+import { isSuperAdminRole } from '../auth/permissions-map';
 
 export type MeetEndProgress = {
   step: 'stop_recording' | 'save_cloud' | 'close_room' | 'summary';
@@ -52,13 +53,13 @@ async function uniqueCode() {
 }
 
 function canAdminMeetings(user: { roleName?: string; role?: string; permissions?: Record<string, string[]> }) {
-  if (isAdminRole(user)) return true;
-  return (user.permissions?.MEETINGS ?? []).includes('READ');
+  if (isSuperAdminRole(user.roleName ?? user.role)) return true;
+  const meetings = user.permissions?.MEETINGS ?? [];
+  return meetings.includes('WRITE') || meetings.includes('APPROVE') || meetings.includes('DELETE');
 }
 
-function isAdminRole(user: { roleName?: string; role?: string }) {
-  const role = String(user.roleName ?? user.role ?? '').toUpperCase().replace(/\s+/g, '');
-  return ['ADMIN', 'SUPERADMIN', 'SYSTEMADMIN'].includes(role);
+function isMeetingElevated(user: { roleName?: string; role?: string; permissions?: Record<string, string[]> }) {
+  return canAdminMeetings(user);
 }
 
 function sleep(ms: number) {
@@ -989,7 +990,7 @@ export const meetService = {
     const meeting = await prisma.meeting.findUnique({ where: { id: meetingId } });
     if (!meeting) throw new Error('Meeting not found');
     const isHost = meeting.hostUserId === hostUserId;
-    if (!isHost && !isAdminRole(actor ?? {})) {
+    if (!isHost && !isMeetingElevated(actor ?? {})) {
       throw new Error('Only the host can remove people from this meeting');
     }
 
@@ -1066,7 +1067,7 @@ export const meetService = {
     const meeting = await prisma.meeting.findUnique({ where: { id: meetingId } });
     if (!meeting) throw new Error('Meeting not found');
     const isHost = meeting.hostUserId === hostUserId;
-    if (!isHost && !isAdminRole(opts.actor ?? {})) {
+    if (!isHost && !isMeetingElevated(opts.actor ?? {})) {
       throw new Error('Only the host can moderate participants in this meeting');
     }
     const hostProfile = await getProfile(hostUserId);
@@ -1347,7 +1348,7 @@ export const meetService = {
       startedAt: meeting.startedAt,
       endedAt: meeting.endedAt,
       hostName: host?.name || 'Host',
-      canDelete: isAdminRole(user),
+      canDelete: isMeetingElevated(user),
       attendees: meeting.participants
         .filter((p) => p.admission !== 'WAITING' && p.admission !== 'DENIED')
         .map((p) =>
@@ -1360,7 +1361,7 @@ export const meetService = {
     id: string,
     user: { id: string; roleName?: string; role?: string; permissions?: Record<string, string[]> },
   ) {
-    if (!isAdminRole(user)) {
+    if (!isMeetingElevated(user)) {
       throw new Error('Only an admin can delete a meeting recording');
     }
     const meeting = await prisma.meeting.findUnique({ where: { id } });

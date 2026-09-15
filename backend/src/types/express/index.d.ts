@@ -10,6 +10,7 @@ declare global {
         roleName: string;
         role: string;
         subOrganization?: string | null;
+        organizationId?: string | null;
         employeeViewScope?: 'NONE' | 'SELF' | 'INSTITUTE' | 'UNIVERSITY';
         permissions: Record<string, string[]>;
       };

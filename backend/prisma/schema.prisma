@@ -997,7 +997,8 @@ model SystemModule {
   isActive    Boolean  @default(true) @map("is_active")
   createdAt   DateTime @default(now()) @map("created_at")
 
-  permissions RolePermission[]
+  permissions                 RolePermission[]
+  organizationAdminPermissions OrganizationAdminPermission[]
 
   @@map("system_modules")
 }
@@ -1212,10 +1213,35 @@ model Organization {
   updatedAt         DateTime @updatedAt @map("updated_at")
   deletedAt         DateTime? @map("deleted_at")
 
-  childInstitutes Institute[]
-  erpProjects     ErpProject[]
+  childInstitutes              Institute[]
+  erpProjects                  ErpProject[]
+  organizationAdminPermissions OrganizationAdminPermission[]
 
   @@map("organizations")
+}
+
+/// Per-company System Admin capability matrix (shared by all ADMIN users of that company).
+model OrganizationAdminPermission {
+  id             String @id @default(uuid())
+  organizationId String @map("organization_id")
+  moduleKey      String @map("module_key")
+
+  canRead           Boolean           @default(false) @map("can_read")
+  canWrite          Boolean           @default(false) @map("can_write")
+  canApprove        Boolean           @default(false) @map("can_approve")
+  canDelete         Boolean           @default(false) @map("can_delete")
+  canExport         Boolean           @default(false) @map("can_export")
+  employeeViewScope EmployeeViewScope @default(NONE) @map("employee_view_scope")
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  module       SystemModule @relation(fields: [moduleKey], references: [key])
+
+  @@unique([organizationId, moduleKey])
+  @@index([organizationId])
+  @@map("organization_admin_permissions")
 }
 
 // =============================================================================

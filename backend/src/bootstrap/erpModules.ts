@@ -351,7 +351,7 @@ export async function ensureErpModulePermissions(): Promise<void> {
     update: { isSystem: true, isActive: true },
     create: {
       name: 'ADMIN',
-      description: 'System Administrator with full permissions across all suites and modules',
+      description: 'Company System Administrator — capabilities controlled per company by Superadmin',
       isSystem: true,
       isActive: true,
     },
@@ -392,8 +392,9 @@ export async function ensureErpModulePermissions(): Promise<void> {
 
   const allKeys = SYSTEM_SUBMODULES.map((m) => m.key);
 
-  // Grant full permissions across all submodules to SUPERADMIN, ADMIN & elevated roles
-  for (const role of [superAdminRole, adminRole, ...elevated]) {
+  // Grant full permissions across all submodules to SUPERADMIN only.
+  // Tenant ADMIN capabilities come from OrganizationAdminPermission (per company).
+  for (const role of [superAdminRole, ...elevated]) {
     for (const moduleKey of allKeys) {
       await prisma.rolePermission.upsert({
         where: { roleId_moduleKey: { roleId: role.id, moduleKey } },
@@ -401,6 +402,29 @@ export async function ensureErpModulePermissions(): Promise<void> {
         create: { roleId: role.id, moduleKey, ...FULL },
       });
     }
+  }
+
+  // Backfill per-company admin matrices for orgs that have none yet
+  try {
+    const { orgAdminPermissionService } = await import('../modules/platform/org-admin-permission.service');
+    const { parseModules } = await import('../modules/platform/platform.service');
+    const orgs = await prisma.organization.findMany({
+      where: { deletedAt: null },
+      select: { id: true, tagLine: true },
+    });
+    for (const org of orgs) {
+      const count = await prisma.organizationAdminPermission.count({
+        where: { organizationId: org.id },
+      });
+      if (count === 0) {
+        await orgAdminPermissionService.seedForOrganization(
+          org.id,
+          parseModules(org.tagLine),
+        );
+      }
+    }
+  } catch (err) {
+    console.warn('Org admin permission backfill skipped:', err);
   }
 
   // 1. Ensure dedicated Platform SUPERADMIN user (The CRM Product Owner)

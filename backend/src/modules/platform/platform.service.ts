@@ -217,6 +217,9 @@ export const platformService = {
       },
     });
 
+    const { orgAdminPermissionService } = await import('./org-admin-permission.service');
+    await orgAdminPermissionService.seedForOrganization(org.id, modules, user.id);
+
     return {
       company: {
         id: org.id,
@@ -272,6 +275,14 @@ export const platformService = {
         where: { subOrganization: existing.name },
         data: { subOrganization: input.name.trim() },
       });
+    }
+
+    if (input.enabledModules !== undefined) {
+      const { orgAdminPermissionService } = await import('./org-admin-permission.service');
+      const modules = parseModules(updated.tagLine);
+      await orgAdminPermissionService.trimUnlicensed(id, modules);
+      // Ensure newly licensed suites get seeded rows (create-only)
+      await orgAdminPermissionService.seedForOrganization(id, modules);
     }
 
     return {

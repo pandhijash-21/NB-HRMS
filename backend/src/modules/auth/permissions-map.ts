@@ -45,6 +45,27 @@ export function isAdminRole(role?: string | null): boolean {
   return isSuperAdminRole(role) || isSystemAdminRole(role);
 }
 
+/** Tenant System Admin privileges, including Super Admin grants that keep designation. */
+export function hasCompanyAdminPrivileges(
+  role?: string | null,
+  companyAdminGranted?: boolean | null,
+): boolean {
+  if (isSuperAdminRole(role)) return false;
+  return isSystemAdminRole(role) || companyAdminGranted === true;
+}
+
+/** Overlay ADMIN for privilege checks without changing the stored designation role. */
+export function effectiveCompanyAdminRoleName(
+  roleName?: string | null,
+  companyAdminGranted?: boolean | null,
+): string {
+  const name = roleName ?? 'EMPLOYEE';
+  if (hasCompanyAdminPrivileges(name, companyAdminGranted) && !isSystemAdminRole(name)) {
+    return 'ADMIN';
+  }
+  return name;
+}
+
 export function canCreateAdmins(role?: string | null): boolean {
   return isSuperAdminRole(role);
 }
@@ -161,7 +182,12 @@ export async function resolveSystemAdminPermissions(
   };
 }
 
-const userRoleCache = new Map<string, { roleId: string; roleName: string; at: number }>();
+const userRoleCache = new Map<string, {
+  roleId: string;
+  roleName: string;
+  companyAdminGranted: boolean;
+  at: number;
+}>();
 const USER_ROLE_TTL_MS = 15_000;
 
 export function invalidateUserRoleCache(userId?: string) {
@@ -170,17 +196,31 @@ export function invalidateUserRoleCache(userId?: string) {
 }
 
 /** Resolves live user role so designation/role switches apply immediately. */
-export async function getLiveUserRole(userId: string): Promise<{ roleId: string; roleName: string } | null> {
+export async function getLiveUserRole(userId: string): Promise<{
+  roleId: string;
+  roleName: string;
+  companyAdminGranted: boolean;
+} | null> {
   const hit = userRoleCache.get(userId);
   if (hit && Date.now() - hit.at < USER_ROLE_TTL_MS) {
-    return { roleId: hit.roleId, roleName: hit.roleName };
+    return {
+      roleId: hit.roleId,
+      roleName: hit.roleName,
+      companyAdminGranted: hit.companyAdminGranted,
+    };
   }
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { roleId: true, role: { select: { name: true } } },
+    select: { roleId: true, companyAdminGranted: true, role: { select: { name: true } } },
   });
   if (!user) return null;
-  const res = { roleId: user.roleId, roleName: user.role?.name ?? 'EMPLOYEE' };
+  const dbRole = user.role?.name ?? 'EMPLOYEE';
+  const companyAdminGranted = user.companyAdminGranted === true;
+  const res = {
+    roleId: user.roleId,
+    roleName: effectiveCompanyAdminRoleName(dbRole, companyAdminGranted),
+    companyAdminGranted,
+  };
   userRoleCache.set(userId, { ...res, at: Date.now() });
   return res;
 }

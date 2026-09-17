@@ -168,7 +168,7 @@ export const employeeService = {
 
   async createFull(input: {
     fullName: string;
-    personalEmail: string;
+    personalEmail?: string | null;
     institutionalEmail?: string | null;
     designation: string;
     department: string;
@@ -261,8 +261,8 @@ export const employeeService = {
         data: {
           employeeId: employee.id,
           addressType: 'LOCAL',
-          personalEmail: input.personalEmail,
-          instituteEmail: input.institutionalEmail,
+          personalEmail: input.personalEmail?.trim() || null,
+          instituteEmail: input.institutionalEmail?.trim() || null,
         },
       });
 

@@ -46,11 +46,13 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 
     let activeRoleId = String(decoded.roleId ?? '');
     let activeRoleName = String(decoded.roleName ?? '');
+    let companyAdminGranted = decoded.companyAdminGranted === true;
     try {
       const liveUserRole = await getLiveUserRole(userId);
       if (liveUserRole) {
         activeRoleId = liveUserRole.roleId;
         activeRoleName = liveUserRole.roleName;
+        companyAdminGranted = liveUserRole.companyAdminGranted;
       }
     } catch {}
 
@@ -96,6 +98,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       subOrganization,
       organizationId,
       employeeViewScope,
+      companyAdminGranted,
       permissions,
     };
 

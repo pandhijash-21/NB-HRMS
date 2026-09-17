@@ -4,6 +4,7 @@ type SSEClient = {
   userId: string;
   employeeId: number | null;
   role: string;
+  companyAdminGranted?: boolean;
   res: Response;
 };
 
@@ -24,7 +25,10 @@ export const sseService = {
     const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
     for (const client of clients.values()) {
       const role = String(client.role ?? '').toUpperCase().replace(/[\s_]/g, '');
-      if (['ADMIN', 'SUPERADMIN', 'SYSTEMADMIN', 'HR', 'DEVELOPER'].includes(role)) {
+      if (
+        ['ADMIN', 'SUPERADMIN', 'SYSTEMADMIN', 'HR', 'DEVELOPER'].includes(role) ||
+        client.companyAdminGranted === true
+      ) {
         try { client.res.write(payload); } catch { /* client disconnected */ }
       }
     }

@@ -932,13 +932,19 @@ class _AddEmployeeDialogState extends ConsumerState<_AddEmployeeDialog> {
                 _abbreviationCtrl.text.isEmpty ? '—' : _abbreviationCtrl.text,
                 helper: 'Auto-generated from name (e.g. Jash Pandhi → JP)',
               ),
-              _buildDialogField('Personal Email (Gmail)', _personalEmailCtrl, required: true, isEmail: true, hint: 'yourname@gmail.com'),
               _buildDialogField(
-                'Institutional Email (Optional)',
+                'Personal Email (Gmail)',
+                _personalEmailCtrl,
+                isEmail: true,
+                hint: 'yourname@gmail.com',
+                helper: 'Required if institutional email is empty. Must be Gmail.',
+              ),
+              _buildDialogField(
+                'Institutional Email',
                 _instEmailCtrl,
                 isEmail: true,
                 hint: 'firstname.lastname@gandhinagaruni.ac.in',
-                helper: 'Format: firstname.lastname@gandhinagaruni.ac.in',
+                helper: 'Required if personal email is empty.',
               ),
               _buildDropdown(
                 isDark: isDark,
@@ -1264,12 +1270,23 @@ class _AddEmployeeDialogState extends ConsumerState<_AddEmployeeDialog> {
       );
       return;
     }
+    final personalEmail = _personalEmailCtrl.text.trim();
+    final institutionalEmail = _instEmailCtrl.text.trim();
+    if (personalEmail.isEmpty && institutionalEmail.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Provide a personal email or an institutional email'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
     if (!_formKey.currentState!.validate()) return;
 
     final data = {
       'fullName': _fullNameCtrl.text.trim(),
-      'personalEmail': _personalEmailCtrl.text.trim(),
-      'institutionalEmail': _instEmailCtrl.text.trim().isEmpty ? null : _instEmailCtrl.text.trim(),
+      'personalEmail': personalEmail.isEmpty ? null : personalEmail,
+      'institutionalEmail': institutionalEmail.isEmpty ? null : institutionalEmail,
       'employeeCode': _employeeCodeCtrl.text.trim(),
       'abbreviation': generateAbbreviation(_fullNameCtrl.text.trim()),
       'organization': _organization!.trim(),

@@ -3,7 +3,11 @@ import { prisma } from '../../config/prisma';
 import { redis, connectRedis } from '../../config/redis';
 import { encryptPasswordForAdmin, decryptPasswordForAdmin } from '../../utils/passwordCrypto';
 import { clearLoginLock, loadLocksByUserIds } from '../auth/loginLock.service';
-import { isSuperAdminRole } from '../auth/permissions-map';
+import {
+  invalidateUserRoleCache,
+  isSuperAdminRole,
+  isSystemAdminRole,
+} from '../auth/permissions-map';
 
 export type OnboardCompanyInput = {
   name: string;
@@ -64,7 +68,10 @@ export const platformService = {
       prisma.organization.count({ where: { isActive: true, deletedAt: null } }),
       prisma.user.count({
         where: {
-          role: { name: { in: ['SYSTEM_ADMIN', 'SYSTEM_ADMINISTRATOR', 'ADMIN'] } },
+          OR: [
+            { role: { name: { in: ['SYSTEM_ADMIN', 'SYSTEM_ADMINISTRATOR', 'ADMIN'] } } },
+            { companyAdminGranted: true },
+          ],
           isActive: true,
           deletedAt: null,
         },
@@ -103,8 +110,11 @@ export const platformService = {
           prisma.user.findFirst({
             where: {
               subOrganization: org.name,
-              role: { name: { in: ['SYSTEM_ADMIN', 'SYSTEM_ADMINISTRATOR', 'ADMIN'] } },
               deletedAt: null,
+              OR: [
+                { role: { name: { in: ['SYSTEM_ADMIN', 'SYSTEM_ADMINISTRATOR', 'ADMIN'] } } },
+                { companyAdminGranted: true },
+              ],
             },
             select: {
               id: true,
@@ -302,7 +312,10 @@ export const platformService = {
   async listSystemAdmins() {
     const admins = await prisma.user.findMany({
       where: {
-        role: { name: { in: ['SYSTEM_ADMIN', 'SYSTEM_ADMINISTRATOR', 'ADMIN'] } },
+        OR: [
+          { role: { name: { in: ['SYSTEM_ADMIN', 'SYSTEM_ADMINISTRATOR', 'ADMIN'] } } },
+          { companyAdminGranted: true },
+        ],
         deletedAt: null,
       },
       select: {
@@ -314,7 +327,14 @@ export const platformService = {
         lastLoginAt: true,
         createdAt: true,
         adminPasswordEnc: true,
+        companyAdminGranted: true,
         role: { select: { id: true, name: true } },
+        employee: {
+          select: {
+            id: true,
+            generalInfo: { select: { fullName: true, designation: true, employeeCode: true } },
+          },
+        },
       },
       orderBy: [{ createdAt: 'desc' }],
     });
@@ -331,6 +351,10 @@ export const platformService = {
         username: admin.username,
         companyName: admin.subOrganization || 'Unassigned',
         role: admin.role.name,
+        designation: admin.employee?.generalInfo?.designation ?? null,
+        fullName: admin.employee?.generalInfo?.fullName ?? admin.username,
+        companyAdminGranted: admin.companyAdminGranted === true,
+        isNativeAdmin: isSystemAdminRole(admin.role.name),
         isActive: admin.isActive,
         isFirstLogin: admin.isFirstLogin,
         lastLoginAt: admin.lastLoginAt?.toISOString() ?? null,
@@ -342,6 +366,158 @@ export const platformService = {
         loginFailCount: locks?.loginFailCount ?? 0,
       };
     });
+  },
+
+  async listCompanyPeople(organizationId: string) {
+    const org = await prisma.organization.findFirst({
+      where: { id: organizationId, deletedAt: null },
+    });
+    if (!org) throw new Error('Company not found');
+
+    const employees = await prisma.employee.findMany({
+      where: {
+        OR: [
+          { generalInfo: { organization: { equals: org.name, mode: 'insensitive' } } },
+          { generalInfo: { organization: { equals: org.code, mode: 'insensitive' } } },
+          { generalInfo: { subOrganization: { equals: org.code, mode: 'insensitive' } } },
+          { generalInfo: { institute: { organizationId: org.id } } },
+          { user: { subOrganization: org.name, deletedAt: null } },
+          { user: { subOrganization: org.code, deletedAt: null } },
+        ],
+      },
+      include: {
+        generalInfo: {
+          select: {
+            fullName: true,
+            designation: true,
+            employeeCode: true,
+            organization: true,
+            institute: { select: { organizationId: true } },
+          },
+        },
+        user: {
+          select: {
+            id: true,
+            username: true,
+            isActive: true,
+            deletedAt: true,
+            companyAdminGranted: true,
+            subOrganization: true,
+            role: { select: { name: true } },
+          },
+        },
+      },
+      orderBy: { id: 'asc' },
+    });
+
+    return employees.map((emp) => {
+      const user = emp.user && !emp.user.deletedAt ? emp.user : null;
+      const roleName = user?.role?.name ?? null;
+      const isNativeAdmin = isSystemAdminRole(roleName);
+      const granted = user?.companyAdminGranted === true;
+      const isSuper = isSuperAdminRole(roleName) || isSuperAdminRole(user?.username);
+      return {
+        employeeId: emp.id,
+        userId: user?.id ?? null,
+        fullName: emp.generalInfo?.fullName ?? `Employee #${emp.id}`,
+        employeeCode: emp.generalInfo?.employeeCode ?? null,
+        designation: emp.generalInfo?.designation ?? null,
+        username: user?.username ?? null,
+        roleName,
+        isActive: user?.isActive ?? false,
+        hasLoginAccount: Boolean(user),
+        isNativeAdmin,
+        companyAdminGranted: granted,
+        hasCompanyAdminPrivileges: !isSuper && (isNativeAdmin || granted),
+        isSuperAdmin: isSuper,
+        canGrant: Boolean(user) && !isSuper && !isNativeAdmin && !granted,
+        canRevoke: Boolean(user) && !isSuper && !isNativeAdmin && granted,
+      };
+    });
+  },
+
+  async grantCompanyAdmin(organizationId: string, employeeId: number, grantedBy: string) {
+    const org = await prisma.organization.findFirst({
+      where: { id: organizationId, deletedAt: null },
+    });
+    if (!org) throw new Error('Company not found');
+
+    const emp = await prisma.employee.findUnique({
+      where: { id: employeeId },
+      include: {
+        generalInfo: {
+          include: { institute: { select: { organizationId: true } } },
+        },
+        user: { include: { role: true } },
+      },
+    });
+    if (!emp) throw new Error('Employee not found');
+
+    const orgName = org.name.trim().toLowerCase();
+    const orgCode = org.code.trim().toLowerCase();
+    const empOrg = emp.generalInfo?.organization?.trim().toLowerCase() ?? '';
+    const empSub = emp.generalInfo?.subOrganization?.trim().toLowerCase() ?? '';
+    const userSub = emp.user?.subOrganization?.trim().toLowerCase() ?? '';
+    const belongs =
+      empOrg === orgName ||
+      empOrg === orgCode ||
+      empSub === orgCode ||
+      emp.generalInfo?.institute?.organizationId === org.id ||
+      userSub === orgName ||
+      userSub === orgCode;
+    if (!belongs) throw new Error('This employee does not belong to this company');
+
+    if (!emp.user || emp.user.deletedAt) {
+      throw new Error('This person has no login account. Create a user first, then grant admin.');
+    }
+    if (isSuperAdminRole(emp.user.role?.name) || isSuperAdminRole(emp.user.username)) {
+      throw new Error('Cannot change Superadmin privileges from this screen.');
+    }
+    if (isSystemAdminRole(emp.user.role?.name)) {
+      throw new Error('This account is already the company System Admin.');
+    }
+
+    await prisma.user.update({
+      where: { id: emp.user.id },
+      data: {
+        companyAdminGranted: true,
+        subOrganization: emp.user.subOrganization || org.name,
+        updatedBy: grantedBy,
+      },
+    });
+    invalidateUserRoleCache(emp.user.id);
+
+    return this.listCompanyPeople(organizationId);
+  },
+
+  async revokeCompanyAdmin(organizationId: string, employeeId: number, revokedBy: string) {
+    const org = await prisma.organization.findFirst({
+      where: { id: organizationId, deletedAt: null },
+    });
+    if (!org) throw new Error('Company not found');
+
+    const emp = await prisma.employee.findUnique({
+      where: { id: employeeId },
+      include: { user: { include: { role: true } } },
+    });
+    if (!emp?.user) throw new Error('Employee login account not found');
+    if (isSuperAdminRole(emp.user.role?.name) || isSuperAdminRole(emp.user.username)) {
+      throw new Error('Cannot change Superadmin privileges from this screen.');
+    }
+    if (isSystemAdminRole(emp.user.role?.name)) {
+      throw new Error('Cannot revoke the built-in System Admin account. Designation stays with that login.');
+    }
+
+    await prisma.user.update({
+      where: { id: emp.user.id },
+      data: {
+        companyAdminGranted: false,
+        updatedBy: revokedBy,
+      },
+    });
+    invalidateUserRoleCache(emp.user.id);
+
+    return this.listCompanyPeople(organizationId);
   },
 
   /** Reset a client company system admin's password */

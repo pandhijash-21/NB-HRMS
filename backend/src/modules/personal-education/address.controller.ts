@@ -5,6 +5,11 @@ import { addressService } from './address.service';
 import { parseAddressType } from './types';
 import { assertMayDirectWriteProfile } from './profileWriteGuard';
 
+const optionalEmail = z
+  .union([z.string().email(), z.literal(''), z.null()])
+  .optional()
+  .transform((v) => (typeof v === 'string' && v.trim() ? v.trim() : v === null ? null : undefined));
+
 const addressSchema = z.object({
   addressType: z.enum(['LOCAL', 'PERMANENT']).optional(),
   flatBlockNo: z.string().min(1).nullable().optional(),
@@ -17,8 +22,8 @@ const addressSchema = z.object({
   phoneNo: z.string().min(1).nullable().optional(),
   mobileNo: z.string().min(1).nullable().optional(),
   intercomNo: z.string().min(1).nullable().optional(),
-  personalEmail: z.string().email().nullable().optional(),
-  instituteEmail: z.string().email().nullable().optional(),
+  personalEmail: optionalEmail,
+  instituteEmail: optionalEmail,
   url: z.string().url().nullable().optional(),
   updatedBy: z.string().min(1).nullable().optional(),
 });

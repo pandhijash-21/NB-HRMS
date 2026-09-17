@@ -1,20 +1,8 @@
-import { prisma } from '../../config/prisma';
 import { env } from '../../config/env';
 import { sseService } from '../events/sse.service';
 import { getRedisClient } from '../../config/redis';
 import nodemailer from 'nodemailer';
-
-const ADMIN_ROLES = [
-  'ADMIN',
-  'SUPERADMIN',
-  'SUPER_ADMIN',
-  'SYSTEMADMIN',
-  'SYSTEM_ADMIN',
-  'SYSTEM_ADMINISTRATOR',
-  'SYSTEMADMINISTRATOR',
-  'HR',
-  'DEVELOPER',
-];
+import { resolveAdminNotificationEmails } from '../../utils/adminRecipients';
 
 const ALERTS_KEY = 'admin:location_alerts';
 const ACTIVE_ALERTS_KEY = 'admin:location_alerts_active';
@@ -76,30 +64,7 @@ function formatLocal(iso: string | null) {
 }
 
 async function resolveAdminEmails(): Promise<string[]> {
-  const users = await prisma.user.findMany({
-    where: {
-      isActive: true,
-      role: { name: { in: ADMIN_ROLES } },
-    },
-    select: {
-      employee: {
-        select: {
-          addresses: {
-            select: { instituteEmail: true, personalEmail: true },
-          },
-        },
-      },
-    },
-  });
-
-  const emails = new Set<string>();
-  for (const u of users) {
-    for (const addr of u.employee?.addresses ?? []) {
-      const email = addr.instituteEmail || addr.personalEmail;
-      if (email && email.includes('@')) emails.add(email.trim());
-    }
-  }
-  return [...emails];
+  return resolveAdminNotificationEmails();
 }
 
 export async function pushRecentAlert(alert: LocationUnavailableAlert) {

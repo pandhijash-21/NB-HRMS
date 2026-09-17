@@ -191,8 +191,8 @@ export const employeeController = {
     console.log('POST /api/employees/full hit with:', req.body);
     const FullCreateSchema = z.object({
       fullName: z.string().min(1),
-      personalEmail: z.string().email(),
-      institutionalEmail: z.string().email().optional().nullable(),
+      personalEmail: z.union([z.string().email(), z.literal(''), z.null()]).optional(),
+      institutionalEmail: z.union([z.string().email(), z.literal(''), z.null()]).optional(),
       designation: z.string().min(1),
       department: z.string().min(1),
       joiningDate: z.string().transform((str) => new Date(str)),
@@ -212,10 +212,27 @@ export const employeeController = {
       positionDesignationId: z.string().uuid().optional().nullable(),
       roleId: z.string().uuid().optional().nullable(),
       abbreviation: z.string().min(1).max(10).optional().nullable(),
+    }).superRefine((data, ctx) => {
+      const personal = data.personalEmail?.trim() || '';
+      const institute = data.institutionalEmail?.trim() || '';
+      if (!personal && !institute) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Provide a personal email or an institutional email',
+          path: ['personalEmail'],
+        });
+      }
+      if (personal && !personal.toLowerCase().endsWith('@gmail.com')) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Personal email must be a Gmail address',
+          path: ['personalEmail'],
+        });
+      }
     });
 
     const body = FullCreateSchema.safeParse(req.body);
-    if (!body.success) return res.status(400).json(fail(body.error.message));
+    if (!body.success) return res.status(400).json(fail(body.error.issues[0]?.message ?? 'Validation error'));
 
     try {
       const created = await employeeService.createFull(body.data, req.user!.id);

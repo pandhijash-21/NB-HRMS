@@ -36,6 +36,17 @@ function normEmail(v: string | null | undefined): string | null {
   return t ? t : null;
 }
 
+function assertLocalHasEmail(
+  addressType: AddressType,
+  personal?: string | null,
+  institute?: string | null,
+) {
+  if (addressType !== 'LOCAL') return;
+  if (!normEmail(personal) && !normEmail(institute)) {
+    throw new Error('Provide a personal email or an institutional email');
+  }
+}
+
 export const addressService = {
   getByType(employeeId: number, addressType: AddressType) {
     return prisma.employeeAddress.findUnique({
@@ -49,6 +60,7 @@ export const addressService = {
     });
 
     if (!existing) {
+      assertLocalHasEmail(input.addressType, input.personalEmail, input.instituteEmail);
       const created = await prisma.employeeAddress.create({
         data: {
           employeeId,
@@ -90,6 +102,12 @@ export const addressService = {
       };
     }
 
+    const nextPersonal =
+      input.personalEmail !== undefined ? input.personalEmail : existing.personalEmail;
+    const nextInstitute =
+      input.instituteEmail !== undefined ? input.instituteEmail : existing.instituteEmail;
+    assertLocalHasEmail(input.addressType, nextPersonal, nextInstitute);
+
     const personalChanged =
       input.addressType === 'LOCAL' &&
       input.personalEmail !== undefined &&
@@ -112,8 +130,8 @@ export const addressService = {
         phoneNo: input.phoneNo ?? undefined,
         mobileNo: input.mobileNo ?? undefined,
         intercomNo: input.intercomNo ?? undefined,
-        personalEmail: input.personalEmail ?? undefined,
-        instituteEmail: input.instituteEmail ?? undefined,
+        ...(input.personalEmail !== undefined ? { personalEmail: input.personalEmail } : {}),
+        ...(input.instituteEmail !== undefined ? { instituteEmail: input.instituteEmail } : {}),
         url: input.url ?? undefined,
         updatedBy: input.updatedBy ?? req.user?.id ?? undefined,
         ...(personalChanged ? { personalEmailVerifiedAt: null } : {}),
@@ -174,6 +192,12 @@ export const addressService = {
       );
     }
 
+    const nextPersonal =
+      patch.personalEmail !== undefined ? patch.personalEmail : existing.personalEmail;
+    const nextInstitute =
+      patch.instituteEmail !== undefined ? patch.instituteEmail : existing.instituteEmail;
+    assertLocalHasEmail(addressType, nextPersonal, nextInstitute);
+
     const personalChanged =
       addressType === 'LOCAL' &&
       patch.personalEmail !== undefined &&
@@ -196,8 +220,8 @@ export const addressService = {
         phoneNo: patch.phoneNo ?? undefined,
         mobileNo: patch.mobileNo ?? undefined,
         intercomNo: patch.intercomNo ?? undefined,
-        personalEmail: patch.personalEmail ?? undefined,
-        instituteEmail: patch.instituteEmail ?? undefined,
+        ...(patch.personalEmail !== undefined ? { personalEmail: patch.personalEmail } : {}),
+        ...(patch.instituteEmail !== undefined ? { instituteEmail: patch.instituteEmail } : {}),
         url: patch.url ?? undefined,
         updatedBy: patch.updatedBy ?? req.user?.id ?? undefined,
         ...(personalChanged ? { personalEmailVerifiedAt: null } : {}),

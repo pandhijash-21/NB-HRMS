@@ -12,6 +12,7 @@ declare global {
         subOrganization?: string | null;
         organizationId?: string | null;
         employeeViewScope?: 'NONE' | 'SELF' | 'INSTITUTE' | 'UNIVERSITY';
+        companyAdminGranted?: boolean;
         permissions: Record<string, string[]>;
       };
       auditEntries?: AuditEntryInput[];

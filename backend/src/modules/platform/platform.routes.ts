@@ -77,6 +77,44 @@ platformRouter.get('/companies/:id/admin-permissions', async (req: Request, res:
   }
 });
 
+platformRouter.get('/companies/:id/people', async (req: Request, res: Response) => {
+  try {
+    const id = p(req.params.id);
+    const people = await platformService.listCompanyPeople(id);
+    return res.json(ok(people));
+  } catch (err: unknown) {
+    return res.status(400).json(fail(err instanceof Error ? err.message : 'Failed to list company people'));
+  }
+});
+
+platformRouter.post('/companies/:id/people/:employeeId/grant-admin', async (req: Request, res: Response) => {
+  try {
+    const id = p(req.params.id);
+    const employeeId = Number(p(req.params.employeeId));
+    if (!Number.isInteger(employeeId) || employeeId <= 0) {
+      return res.status(400).json(fail('Invalid employee id'));
+    }
+    const people = await platformService.grantCompanyAdmin(id, employeeId, req.user!.id);
+    return res.json(ok(people));
+  } catch (err: unknown) {
+    return res.status(400).json(fail(err instanceof Error ? err.message : 'Failed to grant company admin'));
+  }
+});
+
+platformRouter.post('/companies/:id/people/:employeeId/revoke-admin', async (req: Request, res: Response) => {
+  try {
+    const id = p(req.params.id);
+    const employeeId = Number(p(req.params.employeeId));
+    if (!Number.isInteger(employeeId) || employeeId <= 0) {
+      return res.status(400).json(fail('Invalid employee id'));
+    }
+    const people = await platformService.revokeCompanyAdmin(id, employeeId, req.user!.id);
+    return res.json(ok(people));
+  } catch (err: unknown) {
+    return res.status(400).json(fail(err instanceof Error ? err.message : 'Failed to revoke company admin'));
+  }
+});
+
 platformRouter.patch('/companies/:id/admin-permissions/:moduleKey', async (req: Request, res: Response) => {
   try {
     const id = p(req.params.id);

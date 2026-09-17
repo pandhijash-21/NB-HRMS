@@ -19,6 +19,7 @@ eventsRouter.get('/stream', (req, res, next) => {
   const userId = req.user!.id;
   const employeeId = req.user!.employeeId ? Number(req.user!.employeeId) : null;
   const role = req.user!.role ?? 'EMPLOYEE';
+  const companyAdminGranted = req.user!.companyAdminGranted === true;
 
   // SSE headers
   res.setHeader('Content-Type', 'text/event-stream');
@@ -28,7 +29,7 @@ eventsRouter.get('/stream', (req, res, next) => {
   res.flushHeaders();
 
   // Register client
-  sseService.add(userId, { userId, employeeId, role, res });
+  sseService.add(userId, { userId, employeeId, role, companyAdminGranted, res });
 
   // Send initial ping so client knows connection is live
   res.write(`event: connected\ndata: ${JSON.stringify({ userId, employeeId, role })}\n\n`);

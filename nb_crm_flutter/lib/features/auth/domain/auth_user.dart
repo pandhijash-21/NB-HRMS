@@ -9,6 +9,8 @@ class AuthUser {
     this.photoUrl,
     this.subOrganization,
     this.employeeViewScope,
+    this.companyAdminGranted = false,
+    this.jobRole,
     this.enabledModules = const ['HRMS', 'CRM', 'ERP'],
   });
 
@@ -20,6 +22,9 @@ class AuthUser {
   final String? photoUrl;
   final String? subOrganization;
   final String? employeeViewScope;
+  final bool companyAdminGranted;
+  /// Stored designation role (e.g. HR_HEAD) when company admin was granted.
+  final String? jobRole;
   final List<String> enabledModules;
 
   factory AuthUser.fromJson(Map<String, dynamic> json) {
@@ -35,11 +40,22 @@ class AuthUser {
         : (roleRaw is Map && roleRaw['name'] != null
             ? roleRaw['name'].toString()
             : (json['roleName']?.toString() ?? 'EMPLOYEE'));
+    final granted = json['companyAdminGranted'] == true;
+    final jobRole = json['jobRole']?.toString();
+    final compact = roleStr.toUpperCase().replaceAll(RegExp(r'[\s_-]+'), '');
+    final overlayAdmin = granted &&
+        compact != 'SUPERADMIN' &&
+        compact != 'SYSTEMADMIN' &&
+        compact != 'SYSTEMADMINISTRATOR' &&
+        compact != 'ADMIN';
+    final effectiveRole = overlayAdmin
+        ? 'ADMIN'
+        : (roleStr.isNotEmpty ? roleStr : 'EMPLOYEE');
 
     return AuthUser(
       id: json['id']?.toString() ?? '',
       name: (nameStr != null && nameStr.isNotEmpty) ? nameStr : 'User',
-      role: roleStr.isNotEmpty ? roleStr : 'EMPLOYEE',
+      role: effectiveRole,
       employeeId: json['employeeId'] is int
           ? json['employeeId'] as int
           : int.tryParse('${json['employeeId'] ?? ''}'),
@@ -47,6 +63,8 @@ class AuthUser {
       photoUrl: json['photoUrl']?.toString(),
       subOrganization: json['subOrganization']?.toString(),
       employeeViewScope: json['employeeViewScope']?.toString(),
+      companyAdminGranted: granted,
+      jobRole: (jobRole != null && jobRole.isNotEmpty) ? jobRole : null,
       enabledModules: mods,
     );
   }
@@ -60,6 +78,8 @@ class AuthUser {
     String? photoUrl,
     String? subOrganization,
     String? employeeViewScope,
+    bool? companyAdminGranted,
+    String? jobRole,
     List<String>? enabledModules,
   }) {
     return AuthUser(
@@ -71,6 +91,8 @@ class AuthUser {
       photoUrl: photoUrl ?? this.photoUrl,
       subOrganization: subOrganization ?? this.subOrganization,
       employeeViewScope: employeeViewScope ?? this.employeeViewScope,
+      companyAdminGranted: companyAdminGranted ?? this.companyAdminGranted,
+      jobRole: jobRole ?? this.jobRole,
       enabledModules: enabledModules ?? this.enabledModules,
     );
   }
@@ -84,6 +106,8 @@ class AuthUser {
         'photoUrl': photoUrl,
         'subOrganization': subOrganization,
         'employeeViewScope': employeeViewScope,
+        'companyAdminGranted': companyAdminGranted,
+        'jobRole': jobRole,
         'enabledModules': enabledModules,
       };
 }

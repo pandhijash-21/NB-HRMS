@@ -13,6 +13,7 @@ import '../bloc/platform_console_bloc.dart';
 import '../bloc/platform_console_event.dart';
 import '../bloc/platform_console_state.dart';
 import 'company_admin_access_sheet.dart';
+import 'company_grant_admin_sheet.dart';
 
 class PlatformConsoleScreen extends StatelessWidget {
   const PlatformConsoleScreen({super.key, this.initialTab = 0});
@@ -1080,7 +1081,13 @@ class _PlatformConsoleScreenViewState extends State<_PlatformConsoleScreenView>
                   ],
                 ),
               ),
-              // Entitlements Button
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
               OutlinedButton.icon(
                 onPressed: () => _showEntitlementsDialog(context, company),
                 icon: const NbIcon(Icons.tune_rounded, size: 15),
@@ -1092,7 +1099,6 @@ class _PlatformConsoleScreenViewState extends State<_PlatformConsoleScreenView>
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
               ),
-              const SizedBox(width: 8),
               OutlinedButton.icon(
                 onPressed: () => CompanyAdminAccessSheet.show(
                   context,
@@ -1108,8 +1114,21 @@ class _PlatformConsoleScreenViewState extends State<_PlatformConsoleScreenView>
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
               ),
-              const SizedBox(width: 8),
-              // Suspend / Activate Toggle
+              OutlinedButton.icon(
+                onPressed: () => CompanyGrantAdminSheet.show(
+                  context,
+                  company: company,
+                  repository: context.read<PlatformRepository>(),
+                ),
+                icon: const NbIcon(Icons.person_add_alt_1_rounded, size: 15),
+                label: const Text('Grant Admin'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF0EA5E9),
+                  side: const BorderSide(color: Color(0xFF0EA5E9)),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
               FilledButton.tonalIcon(
                 onPressed: () => _toggleCompanyStatus(company),
                 icon: NbIcon(
@@ -1132,8 +1151,6 @@ class _PlatformConsoleScreenViewState extends State<_PlatformConsoleScreenView>
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
               ),
-              const SizedBox(width: 8),
-              // Move to Trash Button
               IconButton(
                 onPressed: () => _confirmTrashCompany(company),
                 tooltip: 'Move to Trash (30 Days Retention)',
@@ -1658,6 +1675,19 @@ class _PlatformConsoleScreenViewState extends State<_PlatformConsoleScreenView>
                                     ),
                                     child: const Text('Admin Access'),
                                   ),
+                                  const SizedBox(width: 8),
+                                  OutlinedButton(
+                                    onPressed: () => CompanyGrantAdminSheet.show(
+                                      context,
+                                      company: company,
+                                      repository: context.read<PlatformRepository>(),
+                                    ),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: const Color(0xFF0EA5E9),
+                                      side: const BorderSide(color: Color(0xFF0EA5E9)),
+                                    ),
+                                    child: const Text('Grant Admin'),
+                                  ),
                                 ],
                               ),
                             ),
@@ -1713,7 +1743,7 @@ class _PlatformConsoleScreenViewState extends State<_PlatformConsoleScreenView>
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'System Admin capabilities are configured per company. Open a tenant from the Tenants tab and use Admin Access to grant HRMS, CRM, ERP, and Collaboration sub-modules. Admins can only delegate modules they themselves hold.',
+                  'Open a tenant and use Admin Access for the shared capability matrix. Use Grant Admin to give someone the same privileges as the System Admin login without changing their designation (for example HR HEAD stays HR HEAD).',
                   style: TextStyle(fontSize: 13, color: textSecondary, height: 1.4),
                 ),
               ],

@@ -1067,6 +1067,8 @@ model User {
   adminPasswordEnc  String?   @map("admin_password_enc")
   isFirstLogin      Boolean   @default(true) @map("is_first_login")
   isActive          Boolean   @default(true) @map("is_active")
+  /// Super Admin grant: same tenant privileges as System Admin without changing designation/roleId.
+  companyAdminGranted Boolean  @default(false) @map("company_admin_granted")
   lastLoginAt       DateTime? @map("last_login_at")
   passwordChangedAt DateTime? @map("password_changed_at")
   /// 0 = 3 attempts, 1 = 2 attempts after 15m lock, 2 = 1 attempt after 1h lock, 3 = permanently blocked

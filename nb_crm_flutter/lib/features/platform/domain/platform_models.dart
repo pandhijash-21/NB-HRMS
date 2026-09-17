@@ -99,6 +99,64 @@ class ClientCompany {
   }
 }
 
+class CompanyPerson {
+  const CompanyPerson({
+    required this.employeeId,
+    this.userId,
+    required this.fullName,
+    this.employeeCode,
+    this.designation,
+    this.username,
+    this.roleName,
+    required this.isActive,
+    required this.hasLoginAccount,
+    required this.isNativeAdmin,
+    required this.companyAdminGranted,
+    required this.hasCompanyAdminPrivileges,
+    required this.isSuperAdmin,
+    required this.canGrant,
+    required this.canRevoke,
+  });
+
+  final int employeeId;
+  final String? userId;
+  final String fullName;
+  final String? employeeCode;
+  final String? designation;
+  final String? username;
+  final String? roleName;
+  final bool isActive;
+  final bool hasLoginAccount;
+  final bool isNativeAdmin;
+  final bool companyAdminGranted;
+  final bool hasCompanyAdminPrivileges;
+  final bool isSuperAdmin;
+  final bool canGrant;
+  final bool canRevoke;
+
+  factory CompanyPerson.fromJson(Map<String, dynamic> json) {
+    return CompanyPerson(
+      employeeId: json['employeeId'] is int
+          ? json['employeeId'] as int
+          : int.tryParse('${json['employeeId'] ?? 0}') ?? 0,
+      userId: json['userId']?.toString(),
+      fullName: json['fullName']?.toString() ?? 'Employee',
+      employeeCode: json['employeeCode']?.toString(),
+      designation: json['designation']?.toString(),
+      username: json['username']?.toString(),
+      roleName: json['roleName']?.toString(),
+      isActive: json['isActive'] as bool? ?? false,
+      hasLoginAccount: json['hasLoginAccount'] as bool? ?? false,
+      isNativeAdmin: json['isNativeAdmin'] as bool? ?? false,
+      companyAdminGranted: json['companyAdminGranted'] as bool? ?? false,
+      hasCompanyAdminPrivileges: json['hasCompanyAdminPrivileges'] as bool? ?? false,
+      isSuperAdmin: json['isSuperAdmin'] as bool? ?? false,
+      canGrant: json['canGrant'] as bool? ?? false,
+      canRevoke: json['canRevoke'] as bool? ?? false,
+    );
+  }
+}
+
 class PlatformAdminUser {
   const PlatformAdminUser({
     required this.id,

@@ -15,7 +15,13 @@ import {
   isExemptIdentifier,
 } from './loginLock.service';
 import { otpService } from './otp.service';
-import { buildPermissionsMap, isSuperAdminRole, isSystemAdminRole, resolveSystemAdminPermissions } from './permissions-map';
+import {
+  buildPermissionsMap,
+  effectiveCompanyAdminRoleName,
+  isSuperAdminRole,
+  isSystemAdminRole,
+  resolveSystemAdminPermissions,
+} from './permissions-map';
 import { parseModules } from '../platform/platform.service';
 
 const SESSION_TTL = 8 * 60 * 60; // 8 hours in seconds
@@ -153,6 +159,7 @@ export const authService = {
       (user != null &&
         (isSuperAdminRole(user.role?.name) ||
           isSystemAdminRole(user.role?.name) ||
+          user.companyAdminGranted === true ||
           isExemptIdentifier(user.username)));
 
     if (!user) {
@@ -236,7 +243,9 @@ export const authService = {
     await clearLoginLock({ userId: user.id, aliases });
 
     // 3. Build permissions map
-    const effectiveRoleName = user.role?.name ?? (isSuperAdminRole(user.username) ? 'SUPERADMIN' : 'STAFF');
+    const dbRoleName = user.role?.name ?? (isSuperAdminRole(user.username) ? 'SUPERADMIN' : 'STAFF');
+    const companyAdminGranted = user.companyAdminGranted === true;
+    const effectiveRoleName = effectiveCompanyAdminRoleName(dbRoleName, companyAdminGranted);
     const userSubOrg = (user as { subOrganization?: string | null }).subOrganization;
     let permissions = buildPermissionsMap(user.role?.permissions ?? []);
     let employeeViewScope: 'NONE' | 'SELF' | 'INSTITUTE' | 'UNIVERSITY' = 'NONE';
@@ -274,6 +283,7 @@ export const authService = {
         employeeId:  user.employeeId ?? null,
         roleId:      user.roleId ?? user.role?.id ?? '',
         roleName:    effectiveRoleName,
+        companyAdminGranted,
         subOrganization: scopeSubOrg,
         organizationId,
         employeeViewScope,
@@ -324,7 +334,9 @@ export const authService = {
           user.employeeId
             ? (user.employee?.generalInfo?.fullName ?? `Employee #${user.employeeId}`)
             : (user.username ?? 'Position Account'),
-        role:       user.role.name,
+        role:       effectiveRoleName,
+        jobRole:    dbRoleName,
+        companyAdminGranted,
         photoUrl:   user.employee?.photoUrl ?? null,
         username:   user.username ?? null,
         subOrganization: scopeSubOrg,
@@ -501,7 +513,9 @@ export const authService = {
       where: { id: user.id },
       include: { role: { include: { permissions: true } } },
     });
-    const effectiveRoleName = dbUser?.role?.name ?? user.roleName ?? user.role ?? 'EMPLOYEE';
+    const dbRoleName = dbUser?.role?.name ?? user.roleName ?? user.role ?? 'EMPLOYEE';
+    const companyAdminGranted = dbUser?.companyAdminGranted === true || user.companyAdminGranted === true;
+    const effectiveRoleName = effectiveCompanyAdminRoleName(dbRoleName, companyAdminGranted);
     const subOrganization = user.subOrganization ?? dbUser?.subOrganization ?? null;
     let permissions = user.permissions;
     let employeeViewScope: 'NONE' | 'SELF' | 'INSTITUTE' | 'UNIVERSITY' =
@@ -532,6 +546,8 @@ export const authService = {
       roleId: dbUser?.roleId ?? user.roleId,
       roleName: effectiveRoleName,
       role: effectiveRoleName,
+      jobRole: dbRoleName,
+      companyAdminGranted,
       name: dbUser?.username ?? (user as any).name ?? 'User',
       username: dbUser?.username ?? null,
       permissions,

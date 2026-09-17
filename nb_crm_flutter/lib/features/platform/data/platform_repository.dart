@@ -195,4 +195,45 @@ class PlatformRepository {
       },
     );
   }
+
+  Future<List<CompanyPerson>> listCompanyPeople(String companyId) async {
+    return _dio.getEnvelope<List<CompanyPerson>>(
+      'platform/companies/$companyId/people',
+      parse: (raw) {
+        if (raw is! List) throw const FormatException('Expected company people list');
+        return raw
+            .whereType<Map>()
+            .map((m) => CompanyPerson.fromJson(Map<String, dynamic>.from(m)))
+            .toList();
+      },
+    );
+  }
+
+  Future<List<CompanyPerson>> grantCompanyAdmin(String companyId, int employeeId) async {
+    return _dio.postEnvelope<List<CompanyPerson>>(
+      'platform/companies/$companyId/people/$employeeId/grant-admin',
+      data: const {},
+      parse: (raw) {
+        if (raw is! List) throw const FormatException('Expected company people list');
+        return raw
+            .whereType<Map>()
+            .map((m) => CompanyPerson.fromJson(Map<String, dynamic>.from(m)))
+            .toList();
+      },
+    );
+  }
+
+  Future<List<CompanyPerson>> revokeCompanyAdmin(String companyId, int employeeId) async {
+    return _dio.postEnvelope<List<CompanyPerson>>(
+      'platform/companies/$companyId/people/$employeeId/revoke-admin',
+      data: const {},
+      parse: (raw) {
+        if (raw is! List) throw const FormatException('Expected company people list');
+        return raw
+            .whereType<Map>()
+            .map((m) => CompanyPerson.fromJson(Map<String, dynamic>.from(m)))
+            .toList();
+      },
+    );
+  }
 }

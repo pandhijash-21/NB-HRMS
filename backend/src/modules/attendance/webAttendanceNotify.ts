@@ -3,16 +3,7 @@ import { env } from '../../config/env';
 import { sseService } from '../events/sse.service';
 import nodemailer from 'nodemailer';
 import type { WebAttendanceGateResult } from './webAttendanceGate';
-
-const ADMIN_ROLES = [
-  'ADMIN',
-  'SUPERADMIN',
-  'SUPER_ADMIN',
-  'SYSTEMADMIN',
-  'SYSTEM_ADMIN',
-  'HR',
-  'DEVELOPER',
-];
+import { resolveAdminNotificationEmails } from '../../utils/adminRecipients';
 
 function createTransport() {
   if (!env.SMTP_HOST || !env.SMTP_USER || !env.SMTP_PASS) return null;
@@ -31,30 +22,7 @@ function getTransport() {
 }
 
 async function resolveAdminEmails(): Promise<string[]> {
-  const users = await prisma.user.findMany({
-    where: {
-      isActive: true,
-      role: { name: { in: ADMIN_ROLES } },
-    },
-    select: {
-      employee: {
-        select: {
-          addresses: {
-            select: { instituteEmail: true, personalEmail: true },
-          },
-        },
-      },
-    },
-  });
-
-  const emails = new Set<string>();
-  for (const u of users) {
-    for (const addr of u.employee?.addresses ?? []) {
-      const email = addr.instituteEmail || addr.personalEmail;
-      if (email && email.includes('@')) emails.add(email.trim());
-    }
-  }
-  return [...emails];
+  return resolveAdminNotificationEmails();
 }
 
 export type WebAttendanceAdminAlert = {

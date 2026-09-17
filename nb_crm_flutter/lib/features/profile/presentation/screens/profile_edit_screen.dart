@@ -376,7 +376,7 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
     }
     final subOrg = info?.subOrganization;
     if (subOrg != null && subOrg.isNotEmpty) return subOrg;
-    return '???';
+    return '—';
   }
 
   Future<void> _pickDate({required bool original}) async {
@@ -494,7 +494,7 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
             originallyVerified: _originalInstituteVerified,
           ),
           _buildHelperChip(
-            'Changing email marks it Unverified. That employee must verify via OTP on next login before using the app.',
+            'At least one email is required (personal or institutional). Changing an email marks it Unverified — that employee must verify via OTP on next login.',
           ),
           _positionDropdown(ref),
           const SizedBox(height: 8),
@@ -509,7 +509,7 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
           _buildTextField('Abbreviation', _abbreviationCtrl),
           _buildTextField('Employee Code', _empCodeCtrl),
           _buildTextField('Punch ID (biometric Empcode)', _punchIdCtrl),
-          _buildHelperChip('Must match the biometric machine Empcode ??? not employee code'),
+          _buildHelperChip('Must match the biometric machine Empcode — not employee code'),
           const SizedBox(height: 8),
           Text(
             'Weekly Holidays',
@@ -629,7 +629,7 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
             _pickIncrementMonth,
             placeholder: _incrementMonth == null,
             display: _incrementMonth == null
-                ? 'Not set ??? tap Select'
+                ? 'Not set — tap Select'
                 : formatIncrementMonth(_incrementMonth!),
           ),
           const SizedBox(height: 8),
@@ -865,7 +865,7 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
         items: [
           const DropdownMenuItem<String?>(
             value: null,
-            child: Text('Staff ??? no admin position'),
+            child: Text('Staff — no admin position'),
           ),
           for (final d in designations)
             DropdownMenuItem<String?>(
@@ -932,7 +932,7 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
         decoration: const InputDecoration(
           labelText: 'Institute',
           border: OutlineInputBorder(),
-          helperText: 'From Configurations ??? Institutes',
+          helperText: 'From Configurations → Institutes',
         ),
         items: [
           const DropdownMenuItem<String?>(
@@ -969,7 +969,7 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
           labelText: 'Organization *',
           border: const OutlineInputBorder(),
           helperText: labels.isEmpty
-              ? 'Nothing in Configurations ??? Organizations. Add one there first.'
+              ? 'Nothing in Configurations → Organizations. Add one there first.'
               : null,
         ),
         items: [
@@ -993,6 +993,25 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
       final punchId = _punchIdCtrl.text.trim();
       final personalEmail = _personalEmailCtrl.text.trim();
       final instituteEmail = _instituteEmailCtrl.text.trim();
+      if (personalEmail.isEmpty && instituteEmail.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Provide a personal email or an institutional email'),
+            ),
+          );
+        }
+        return;
+      }
+      if (personalEmail.isNotEmpty &&
+          !personalEmail.toLowerCase().endsWith('@gmail.com')) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Personal email must be a Gmail address')),
+          );
+        }
+        return;
+      }
       final rematch = await notifier.updateGeneralInfoDirect({
         'fullName': _fullNameCtrl.text.trim(),
         if (empCode.isNotEmpty) 'employeeCode': empCode,
@@ -1060,7 +1079,7 @@ class _EditGeneralTabState extends ConsumerState<EditGeneralTab> {
             ? 'Saved. Imported $inserted machine punches'
                 '${fetched is num ? ' (from $fetched rows)' : ''} for Punch ID.'
             : emailReverify
-                ? 'General Info updated. Email changed ??? employee must verify via OTP.'
+                ? 'General Info updated. Email changed — employee must verify via OTP.'
                 : 'General Info updated successfully';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(msg)),
@@ -2018,7 +2037,7 @@ class _EditAddressTabState extends ConsumerState<EditAddressTab> {
           const Padding(
             padding: EdgeInsets.only(bottom: 12),
             child: Text(
-              'Changing email marks it Unverified. Employee must OTP-verify on next login.',
+              'At least one email is required (personal or institutional). Changing email marks it Unverified. Employee must OTP-verify on next login.',
               style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
             ),
           ),
@@ -2071,6 +2090,17 @@ class _EditAddressTabState extends ConsumerState<EditAddressTab> {
     if (_sameAsLocal) _copyLocalToPermanent();
 
     final local = _localPayload();
+    if ((local['personalEmail'] as String?) == null &&
+        (local['instituteEmail'] as String?) == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Provide a personal email or an institutional email'),
+          ),
+        );
+      }
+      return;
+    }
     final permanent = _permanentPayload();
     bool hasAddr(AddressInfo? a) =>
         a != null &&
@@ -2812,7 +2842,7 @@ class _EditSalaryTabState extends ConsumerState<EditSalaryTab> {
                             .map(
                               (c) => DropdownMenuItem(
                                 value: c.code,
-                                child: Text('${c.code} ??? ${c.name}'),
+                                child: Text('${c.code} — ${c.name}'),
                               ),
                             )
                             .toList(),
@@ -2861,12 +2891,12 @@ class _EditSalaryTabState extends ConsumerState<EditSalaryTab> {
         fg = Colors.blue.shade900;
       case 'NO_TEMPLATE':
         message =
-            'No salary structure for ${preview.designation?.name ?? 'this designation'} + ${preview.payCommissionCode ?? 'commission'}. Configure it under Payroll ??? Structures.';
+            'No salary structure for ${preview.designation?.name ?? 'this designation'} + ${preview.payCommissionCode ?? 'commission'}. Configure it under Payroll → Structures.';
         bg = Colors.orange.shade50;
         fg = Colors.orange.shade900;
       case 'NO_RULES':
         message =
-            'Structure exists but no column rules yet. Open Payroll ??? Structures and configure rules.';
+            'Structure exists but no column rules yet. Open Payroll → Structures and configure rules.';
         bg = Colors.orange.shade50;
         fg = Colors.orange.shade900;
       default:
@@ -2905,7 +2935,7 @@ class _EditSalaryTabState extends ConsumerState<EditSalaryTab> {
               Text(label, style: TextStyle(fontSize: 11, color: color)),
               const SizedBox(height: 4),
               Text(
-                '???${value.toStringAsFixed(0)}',
+                '₹${value.toStringAsFixed(0)}',
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
                   color: color,
@@ -3066,7 +3096,7 @@ class _EditSalaryTabState extends ConsumerState<EditSalaryTab> {
                 ),
                 decoration: InputDecoration(
                   isDense: true,
-                  prefixText: '??? ',
+                  prefixText: '₹ ',
                   border: const OutlineInputBorder(),
                   filled: hasOverride,
                   fillColor: hasOverride
@@ -3091,7 +3121,7 @@ class _EditSalaryTabState extends ConsumerState<EditSalaryTab> {
             SizedBox(
               width: 90,
               child: Text(
-                '???${displayAmount.toStringAsFixed(0)}',
+                '₹${displayAmount.toStringAsFixed(0)}',
                 textAlign: TextAlign.right,
                 style: TextStyle(
                   fontWeight: isTotal ? FontWeight.w800 : FontWeight.w600,
@@ -3242,7 +3272,7 @@ class _EditSalaryTabState extends ConsumerState<EditSalaryTab> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Pay commission applied ??? structure loaded'),
+            content: Text('Pay commission applied — structure loaded'),
           ),
         );
       }
@@ -3592,7 +3622,7 @@ class _FamilyMemberDialogState extends ConsumerState<FamilyMemberDialog> {
                         Text(
                           aadhaarReady
                               ? (_pendingAadhaar?.name ??
-                                    'Aadhaar uploaded ??? tap to replace')
+                                    'Aadhaar uploaded — tap to replace')
                               : 'Click to upload Aadhaar (PDF/Image) *',
                           textAlign: TextAlign.center,
                           style: const TextStyle(
@@ -4008,7 +4038,7 @@ class _AcademicQualDialogState extends ConsumerState<AcademicQualDialog> {
               ),
               Text(
                 filled
-                    ? (subtitle ?? 'Uploaded ??? tap to replace')
+                    ? (subtitle ?? 'Uploaded — tap to replace')
                     : 'Click to upload (PDF/Image)',
                 textAlign: TextAlign.center,
                 style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
@@ -4171,7 +4201,7 @@ class _AcademicQualDialogState extends ConsumerState<AcademicQualDialog> {
                   label: 'Click to upload marksheet (PDF/Image)',
                   filled: _semUrls[0] != null && _semUrls[0]!.isNotEmpty,
                   onTap: () => _uploadMarksheet(0),
-                  subtitle: 'Marksheet uploaded ??? tap to replace',
+                  subtitle: 'Marksheet uploaded — tap to replace',
                 ),
               ],
               if (_showSemGrid) ...[
@@ -4229,7 +4259,7 @@ class _AcademicQualDialogState extends ConsumerState<AcademicQualDialog> {
                   filled:
                       _certificateUrl != null && _certificateUrl!.isNotEmpty,
                   onTap: _uploadCertificate,
-                  subtitle: 'Certificate uploaded ??? tap to replace',
+                  subtitle: 'Certificate uploaded — tap to replace',
                 ),
               ],
             ],

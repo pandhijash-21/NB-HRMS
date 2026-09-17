@@ -123,12 +123,17 @@ class AuthNotifier extends Notifier<AuthState> {
       final roleChanged = roleName != null &&
           roleName.trim().isNotEmpty &&
           roleName.trim() != state.user?.role;
-      if (!permsChanged && !needsChanged && !roleChanged) return;
+      final granted = me['companyAdminGranted'] == true;
+      final grantedChanged = granted != (state.user?.companyAdminGranted ?? false);
+      if (!permsChanged && !needsChanged && !roleChanged && !grantedChanged) return;
       final next = state.copyWith(
         permissions: permsChanged ? permissions : state.permissions,
         needsEmailVerification: needsChanged ? needs : state.needsEmailVerification,
-        user: roleChanged && state.user != null
-            ? state.user!.copyWith(role: roleName.trim())
+        user: (roleChanged || grantedChanged) && state.user != null
+            ? state.user!.copyWith(
+                role: roleChanged ? roleName.trim() : state.user!.role,
+                companyAdminGranted: granted,
+              )
             : state.user,
       );
       _setState(next);

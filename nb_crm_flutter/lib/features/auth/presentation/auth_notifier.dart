@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_envelope.dart';
@@ -81,10 +82,12 @@ class AuthNotifier extends Notifier<AuthState> {
     gate.bind(_handleUnauthorized);
     ref.onDispose(_stopSessionWatch);
 
-    // Future() (not microtask) so restore/login state is not written while
-    // the widget tree is still building — that throws Riverpod's
-    // "Tried to modify a provider while the widget tree was building".
-    Future(_bootstrap);
+    // After the frame (not Future/Timer) so restore does not write while the
+    // tree is building, and widget tests are not left with a pending Timer.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!ref.mounted) return;
+      unawaited(_bootstrap());
+    });
     return const AuthState.unknown();
   }
 

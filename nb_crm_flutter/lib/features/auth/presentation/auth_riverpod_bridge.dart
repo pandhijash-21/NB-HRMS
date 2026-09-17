@@ -21,16 +21,28 @@ class _AuthRiverpodBridgeState extends ConsumerState<AuthRiverpodBridge> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      ref
-          .read(authNotifierProvider.notifier)
-          .hydrateFromBloc(context.read<AuthBloc>().state);
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _hydrate());
+  }
+
+  AuthBloc? _maybeAuthBloc() {
+    try {
+      return context.read<AuthBloc>();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _hydrate() {
+    if (!mounted) return;
+    final authBloc = _maybeAuthBloc();
+    if (authBloc == null) return;
+    ref.read(authNotifierProvider.notifier).hydrateFromBloc(authBloc.state);
   }
 
   @override
   Widget build(BuildContext context) {
+    final authBloc = _maybeAuthBloc();
+    if (authBloc == null) return widget.child;
     return BlocListener<AuthBloc, AuthState>(
       listener: (context, state) {
         ref.read(authNotifierProvider.notifier).hydrateFromBloc(state);

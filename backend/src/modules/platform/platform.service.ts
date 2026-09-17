@@ -380,7 +380,7 @@ export const platformService = {
           { generalInfo: { organization: { equals: org.name, mode: 'insensitive' } } },
           { generalInfo: { organization: { equals: org.code, mode: 'insensitive' } } },
           { generalInfo: { subOrganization: { equals: org.code, mode: 'insensitive' } } },
-          { generalInfo: { institute: { organizationId: org.id } } },
+          { generalInfo: { institute: { parentOrganizationId: org.id } } },
           { user: { subOrganization: org.name, deletedAt: null } },
           { user: { subOrganization: org.code, deletedAt: null } },
         ],
@@ -392,7 +392,7 @@ export const platformService = {
             designation: true,
             employeeCode: true,
             organization: true,
-            institute: { select: { organizationId: true } },
+            institute: { select: { parentOrganizationId: true } },
           },
         },
         user: {
@@ -446,7 +446,7 @@ export const platformService = {
       where: { id: employeeId },
       include: {
         generalInfo: {
-          include: { institute: { select: { organizationId: true } } },
+          include: { institute: { select: { parentOrganizationId: true } } },
         },
         user: { include: { role: true } },
       },
@@ -462,7 +462,7 @@ export const platformService = {
       empOrg === orgName ||
       empOrg === orgCode ||
       empSub === orgCode ||
-      emp.generalInfo?.institute?.organizationId === org.id ||
+      emp.generalInfo?.institute?.parentOrganizationId === org.id ||
       userSub === orgName ||
       userSub === orgCode;
     if (!belongs) throw new Error('This employee does not belong to this company');

@@ -133,6 +133,8 @@ class EmployeeAssignment {
   final DateTime? effectiveTo;
   final String? organization;
   final String? instituteId;
+  final String? instituteName;
+  final String? instituteCode;
   final String? subOrganization;
   final String? department;
   final String designation;
@@ -150,6 +152,8 @@ class EmployeeAssignment {
     this.effectiveTo,
     this.organization,
     this.instituteId,
+    this.instituteName,
+    this.instituteCode,
     this.subOrganization,
     this.department,
     required this.designation,
@@ -171,6 +175,8 @@ class EmployeeAssignment {
       effectiveTo: json['effectiveTo'] != null ? DateTime.parse(json['effectiveTo'].toString()) : null,
       organization: json['organization'] as String?,
       instituteId: json['instituteId'] as String?,
+      instituteName: json['instituteName'] as String?,
+      instituteCode: json['instituteCode'] as String?,
       subOrganization: json['subOrganization'] as String?,
       department: json['department'] as String?,
       designation: json['designation'] as String? ?? '',

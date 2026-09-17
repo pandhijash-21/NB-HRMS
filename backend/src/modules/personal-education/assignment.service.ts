@@ -12,6 +12,8 @@ export type AssignmentSnapshot = {
   effectiveTo: string | null;
   organization: string | null;
   instituteId: string | null;
+  instituteName: string | null;
+  instituteCode: string | null;
   subOrganization: string | null;
   department: string | null;
   designation: string;
@@ -38,7 +40,11 @@ export const assignmentService = {
     return rows.map((r) => {
       const rawSub = r.subOrganization?.trim();
       const isYear = rawSub ? /^\d{4}$/.test(rawSub) : false;
-      const resolvedSubOrg = r.institute?.code ?? r.institute?.name ?? (isYear ? null : (rawSub || null));
+      // Prefer live institute name. Never invent a tenant default (GIT).
+      const resolvedSubOrg =
+        r.institute?.name ??
+        r.institute?.code ??
+        (isYear ? null : rawSub || null);
 
       return {
         id: r.id,
@@ -47,6 +53,8 @@ export const assignmentService = {
         effectiveTo: r.effectiveTo ? r.effectiveTo.toISOString().slice(0, 10) : null,
         organization: r.organization ?? null,
         instituteId: r.instituteId ?? r.institute?.id ?? null,
+        instituteName: r.institute?.name ?? null,
+        instituteCode: r.institute?.code ?? null,
         subOrganization: resolvedSubOrg,
         department: r.department ?? null,
         designation: r.designation,

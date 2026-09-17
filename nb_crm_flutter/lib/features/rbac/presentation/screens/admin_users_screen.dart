@@ -1274,7 +1274,7 @@ class _UserCard extends StatelessWidget {
                       const SizedBox(width: 4),
                       if (user.lastLoginAt != null)
                         Text(
-                          'Last login: ${_formatDate(user.lastLoginAt!)}',
+                          'Last login: ${_formatIstDateTime(user.lastLoginAt!)}',
                           style: TextStyle(
                             fontSize: 11, 
                             fontWeight: FontWeight.w600,
@@ -1393,19 +1393,23 @@ class _UserCard extends StatelessWidget {
   }
 
   String _formatDateTime(DateTime d) {
-    final local = d.toLocal();
-    final dd = local.day.toString().padLeft(2, '0');
-    final mm = local.month.toString().padLeft(2, '0');
-    final hh = local.hour.toString().padLeft(2, '0');
-    final min = local.minute.toString().padLeft(2, '0');
-    return '$dd/$mm $hh:$min';
+    final ist = d.toUtc().add(const Duration(hours: 5, minutes: 30));
+    final dd = ist.day.toString().padLeft(2, '0');
+    final mm = ist.month.toString().padLeft(2, '0');
+    final hh = ist.hour.toString().padLeft(2, '0');
+    final min = ist.minute.toString().padLeft(2, '0');
+    return '$dd/$mm $hh:$min IST';
   }
 
-  String _formatDate(DateTime dt) {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    final h = dt.hour.toString().padLeft(2, '0');
-    final m = dt.minute.toString().padLeft(2, '0');
-    return '${dt.day.toString().padLeft(2, '0')} ${months[dt.month - 1]} ${dt.year}, $h:$m';
+  String _formatIstDateTime(DateTime dt) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    final ist = dt.toUtc().add(const Duration(hours: 5, minutes: 30));
+    final h = ist.hour.toString().padLeft(2, '0');
+    final m = ist.minute.toString().padLeft(2, '0');
+    return '${ist.day.toString().padLeft(2, '0')} ${months[ist.month - 1]} ${ist.year}, $h:$m IST';
   }
 }
 

@@ -442,10 +442,21 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
                                 const SizedBox(height: 2),
                                 Builder(
                                   builder: (context) {
-                                    final rawSub = current.subOrganization?.trim();
-                                    final isValidSub = rawSub != null && rawSub.isNotEmpty && !RegExp(r'^\d{4}$').hasMatch(rawSub);
+                                    final institutes =
+                                        ref.watch(activeInstitutesProvider).asData?.value ??
+                                            const <Institute>[];
+                                    final profile = ref
+                                        .watch(employeeProfileByIdProvider(widget.employeeId))
+                                        .asData?.value;
+                                    final label = _liveInstituteLabel(
+                                      assignment: current,
+                                      institutes: institutes,
+                                      profileInstituteId: profile?.generalInfo?.instituteId,
+                                      profileInstituteName: profile?.generalInfo?.instituteName,
+                                      preferProfile: true,
+                                    );
                                     return Text(
-                                      'Institute: ${isValidSub ? rawSub : "GIT"}  ·  From: ${_formatDate(current.effectiveFrom)}',
+                                      'Institute: $label  ·  From: ${_formatDate(current.effectiveFrom)}',
                                       style: TextStyle(
                                         fontSize: 11, 
                                         fontWeight: FontWeight.w600,
@@ -547,6 +558,8 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
 
   void _showHistoryDetailsDialog(BuildContext context, AsyncValue<List<EmployeeAssignment>> asyncList) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final institutes =
+        ref.read(activeInstitutesProvider).asData?.value ?? const <Institute>[];
 
     showDialog(
       context: context,
@@ -607,10 +620,12 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
                             ),
                             Builder(
                               builder: (context) {
-                                final rawSub = log.subOrganization?.trim();
-                                final isValidSub = rawSub != null && rawSub.isNotEmpty && !RegExp(r'^\d{4}$').hasMatch(rawSub);
+                                final label = _liveInstituteLabel(
+                                  assignment: log,
+                                  institutes: institutes,
+                                );
                                 return Text(
-                                  'Institute: ${isValidSub ? rawSub : "—"} · Department: ${log.department ?? "N/A"}',
+                                  'Institute: $label · Department: ${log.department ?? "N/A"}',
                                   style: TextStyle(color: isDark ? Colors.white60 : const Color(0xFF607D8B), fontSize: 12),
                                 );
                               },
@@ -1042,6 +1057,59 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
 
   String _formatDate(DateTime date) {
     return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+  }
+
+  /// Resolve institute from the live org list / employee assignment.
+  /// Deleted institutes (e.g. GIT) must not be shown.
+  String _liveInstituteLabel({
+    required EmployeeAssignment assignment,
+    required List<Institute> institutes,
+    String? profileInstituteId,
+    String? profileInstituteName,
+    bool preferProfile = false,
+  }) {
+    Institute? byId(String? id) {
+      if (id == null || id.isEmpty) return null;
+      for (final i in institutes) {
+        if (i.id == id) return i;
+      }
+      return null;
+    }
+
+    Institute? byCodeOrName(String? value) {
+      final v = value?.trim();
+      if (v == null || v.isEmpty || RegExp(r'^\d{4}$').hasMatch(v)) return null;
+      final lower = v.toLowerCase();
+      for (final i in institutes) {
+        if (i.id == v ||
+            i.code.toLowerCase() == lower ||
+            i.name.toLowerCase() == lower) {
+          return i;
+        }
+      }
+      return null;
+    }
+
+    if (preferProfile) {
+      final fromProfile = byId(profileInstituteId) ?? byCodeOrName(profileInstituteName);
+      if (fromProfile != null) return fromProfile.name;
+      final profileName = profileInstituteName?.trim();
+      if (profileName != null && profileName.isNotEmpty) return profileName;
+    }
+
+    final live = byId(assignment.instituteId) ??
+        byCodeOrName(assignment.instituteName) ??
+        byCodeOrName(assignment.instituteCode) ??
+        byCodeOrName(assignment.subOrganization) ??
+        byId(profileInstituteId) ??
+        byCodeOrName(profileInstituteName);
+    if (live != null) return live.name;
+
+    final apiName = assignment.instituteName?.trim();
+    if (apiName != null && apiName.isNotEmpty && byCodeOrName(apiName) != null) {
+      return apiName;
+    }
+    return '—';
   }
 
   Future<void> _refreshProfileAfterHrAction() async {

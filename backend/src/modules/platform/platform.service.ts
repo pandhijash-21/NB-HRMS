@@ -45,6 +45,32 @@ export function parseModules(raw?: string | null): string[] {
   return [];
 }
 
+const TENANT_ADMIN_ROLE_NAMES = ['ADMIN', 'SYSTEM_ADMIN', 'SYSTEM_ADMINISTRATOR'] as const;
+
+/** Native System Admin login plus Super Admin-granted admins for this tenant. */
+async function loadTenantAdminActors(org: { name: string; code: string }) {
+  return prisma.user.findMany({
+    where: {
+      deletedAt: null,
+      AND: [
+        {
+          OR: [
+            { subOrganization: { equals: org.name, mode: 'insensitive' } },
+            { subOrganization: { equals: org.code, mode: 'insensitive' } },
+          ],
+        },
+        {
+          OR: [
+            { role: { name: { in: [...TENANT_ADMIN_ROLE_NAMES] } } },
+            { companyAdminGranted: true },
+          ],
+        },
+      ],
+    },
+    select: { id: true, employeeId: true },
+  });
+}
+
 export const platformService = {
   /** Aggregated SaaS platform overview metrics */
   async getStats() {
@@ -368,23 +394,43 @@ export const platformService = {
     });
   },
 
-  async listCompanyPeople(organizationId: string) {
+  async listCompanyPeople(organizationId: string, search?: string) {
     const org = await prisma.organization.findFirst({
       where: { id: organizationId, deletedAt: null },
     });
     if (!org) throw new Error('Company not found');
 
+    const admins = await loadTenantAdminActors(org);
+    const adminIds = [...new Set(admins.map((a) => a.id))];
+    const adminEmployeeIds = admins
+      .map((a) => a.employeeId)
+      .filter((id): id is number => typeof id === 'number' && id > 0);
+
+    if (adminIds.length === 0) return [];
+
+    const q = search?.trim() ?? '';
+    const createdByAdmins = {
+      OR: [
+        { createdBy: { in: adminIds } },
+        { user: { createdBy: { in: adminIds } } },
+        { user: { id: { in: adminIds } } },
+        ...(adminEmployeeIds.length > 0 ? [{ id: { in: adminEmployeeIds } }] : []),
+      ],
+    };
+
+    const searchMatch = q.length >= 2
+      ? {
+          OR: [
+            { generalInfo: { fullName: { contains: q, mode: 'insensitive' } } },
+            { generalInfo: { employeeCode: { contains: q, mode: 'insensitive' } } },
+            { generalInfo: { designation: { contains: q, mode: 'insensitive' } } },
+            { user: { username: { contains: q, mode: 'insensitive' } } },
+          ],
+        }
+      : null;
+
     const employees = await prisma.employee.findMany({
-      where: {
-        OR: [
-          { generalInfo: { organization: { equals: org.name, mode: 'insensitive' } } },
-          { generalInfo: { organization: { equals: org.code, mode: 'insensitive' } } },
-          { generalInfo: { subOrganization: { equals: org.code, mode: 'insensitive' } } },
-          { generalInfo: { institute: { parentOrganizationId: org.id } } },
-          { user: { subOrganization: org.name, deletedAt: null } },
-          { user: { subOrganization: org.code, deletedAt: null } },
-        ],
-      },
+      where: searchMatch ? { AND: [createdByAdmins, searchMatch] } : createdByAdmins,
       include: {
         generalInfo: {
           select: {
@@ -392,7 +438,6 @@ export const platformService = {
             designation: true,
             employeeCode: true,
             organization: true,
-            institute: { select: { parentOrganizationId: true } },
           },
         },
         user: {
@@ -408,6 +453,7 @@ export const platformService = {
         },
       },
       orderBy: { id: 'asc' },
+      take: 300,
     });
 
     return employees.map((emp) => {
@@ -445,27 +491,11 @@ export const platformService = {
     const emp = await prisma.employee.findUnique({
       where: { id: employeeId },
       include: {
-        generalInfo: {
-          include: { institute: { select: { parentOrganizationId: true } } },
-        },
+        generalInfo: true,
         user: { include: { role: true } },
       },
     });
     if (!emp) throw new Error('Employee not found');
-
-    const orgName = org.name.trim().toLowerCase();
-    const orgCode = org.code.trim().toLowerCase();
-    const empOrg = emp.generalInfo?.organization?.trim().toLowerCase() ?? '';
-    const empSub = emp.generalInfo?.subOrganization?.trim().toLowerCase() ?? '';
-    const userSub = emp.user?.subOrganization?.trim().toLowerCase() ?? '';
-    const belongs =
-      empOrg === orgName ||
-      empOrg === orgCode ||
-      empSub === orgCode ||
-      emp.generalInfo?.institute?.parentOrganizationId === org.id ||
-      userSub === orgName ||
-      userSub === orgCode;
-    if (!belongs) throw new Error('This employee does not belong to this company');
 
     if (!emp.user || emp.user.deletedAt) {
       throw new Error('This person has no login account. Create a user first, then grant admin.');
@@ -481,7 +511,7 @@ export const platformService = {
       where: { id: emp.user.id },
       data: {
         companyAdminGranted: true,
-        subOrganization: emp.user.subOrganization || org.name,
+        subOrganization: org.name,
         updatedBy: grantedBy,
       },
     });

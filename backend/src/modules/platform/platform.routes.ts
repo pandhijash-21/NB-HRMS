@@ -80,7 +80,8 @@ platformRouter.get('/companies/:id/admin-permissions', async (req: Request, res:
 platformRouter.get('/companies/:id/people', async (req: Request, res: Response) => {
   try {
     const id = p(req.params.id);
-    const people = await platformService.listCompanyPeople(id);
+    const search = typeof req.query.search === 'string' ? req.query.search : undefined;
+    const people = await platformService.listCompanyPeople(id, search);
     return res.json(ok(people));
   } catch (err: unknown) {
     return res.status(400).json(fail(err instanceof Error ? err.message : 'Failed to list company people'));

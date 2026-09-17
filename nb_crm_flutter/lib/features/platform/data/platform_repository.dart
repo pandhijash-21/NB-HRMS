@@ -196,9 +196,12 @@ class PlatformRepository {
     );
   }
 
-  Future<List<CompanyPerson>> listCompanyPeople(String companyId) async {
+  Future<List<CompanyPerson>> listCompanyPeople(String companyId, {String? search}) async {
     return _dio.getEnvelope<List<CompanyPerson>>(
       'platform/companies/$companyId/people',
+      queryParameters: {
+        if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+      },
       parse: (raw) {
         if (raw is! List) throw const FormatException('Expected company people list');
         return raw

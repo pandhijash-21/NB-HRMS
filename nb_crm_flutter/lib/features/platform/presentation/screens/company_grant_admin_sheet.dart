@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../data/platform_repository.dart';
@@ -39,6 +41,8 @@ class _CompanyGrantAdminSheetState extends State<CompanyGrantAdminSheet> {
   String? _error;
   String _search = '';
   final Set<int> _updating = {};
+  Timer? _searchDebounce;
+  int _loadGen = 0;
 
   @override
   void initState() {
@@ -46,25 +50,44 @@ class _CompanyGrantAdminSheetState extends State<CompanyGrantAdminSheet> {
     _load();
   }
 
-  Future<void> _load() async {
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _load({String? search}) async {
+    final gen = ++_loadGen;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final rows = await widget.repository.listCompanyPeople(widget.company.id);
-      if (!mounted) return;
+      final rows = await widget.repository.listCompanyPeople(
+        widget.company.id,
+        search: search,
+      );
+      if (!mounted || gen != _loadGen) return;
       setState(() {
         _people = rows;
         _loading = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || gen != _loadGen) return;
       setState(() {
         _error = e.toString();
         _loading = false;
       });
     }
+  }
+
+  void _onSearchChanged(String value) {
+    setState(() => _search = value);
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 280), () {
+      final q = value.trim();
+      _load(search: q.length >= 2 ? q : null);
+    });
   }
 
   Future<void> _grant(CompanyPerson person) async {
@@ -77,6 +100,7 @@ class _CompanyGrantAdminSheetState extends State<CompanyGrantAdminSheet> {
       );
       if (!mounted) return;
       setState(() => _people = rows);
+      await _load(search: _search.trim().length >= 2 ? _search.trim() : null);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -196,9 +220,9 @@ class _CompanyGrantAdminSheetState extends State<CompanyGrantAdminSheet> {
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
               child: TextField(
-                onChanged: (v) => setState(() => _search = v),
+                onChanged: _onSearchChanged,
                 decoration: InputDecoration(
-                  hintText: 'Search name, code, designation…',
+                  hintText: 'Search people added by this company\'s admins…',
                   prefixIcon: const Icon(Icons.search_rounded, size: 20),
                   isDense: true,
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
@@ -227,7 +251,7 @@ class _CompanyGrantAdminSheetState extends State<CompanyGrantAdminSheet> {
                           ? Center(
                               child: Text(
                                 _people.isEmpty
-                                    ? 'No people found for this company.'
+                                    ? 'No people added by this company\'s admins yet.'
                                     : 'No matches.',
                                 style: TextStyle(color: textSecondary),
                               ),

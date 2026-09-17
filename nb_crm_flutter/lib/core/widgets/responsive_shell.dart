@@ -16,6 +16,7 @@ import '../logging/app_logger.dart';
 import '../services/location_alert_sound.dart';
 import '../theme/theme_cubit.dart';
 import 'backend_env_switcher.dart';
+import 'install_android_app_button.dart';
 
 class ResponsiveShell extends ConsumerStatefulWidget {
   const ResponsiveShell({super.key, required this.child});
@@ -785,6 +786,8 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    if (InstallAndroidAppButton.visible)
+                      InstallAndroidAppButton.drawer(),
                     InkWell(
                       onTap: () {
                         Navigator.pop(context);
@@ -1472,6 +1475,8 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (InstallAndroidAppButton.visible)
+                  InstallAndroidAppButton.sidebar(expanded: expanded),
                 NotificationBellButton(
                   variant: NotificationBellVariant.sidebar,
                   expanded: expanded,

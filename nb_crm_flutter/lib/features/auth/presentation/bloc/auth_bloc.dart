@@ -249,13 +249,19 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
       if (!permsChanged && !needsChanged && !roleChanged) return;
 
-      emit(state.copyWith(
+      final next = state.copyWith(
         permissions: permsChanged ? permissions : state.permissions,
         needsEmailVerification: needsChanged ? needs : state.needsEmailVerification,
         user: roleChanged && state.user != null
             ? state.user!.copyWith(role: roleName.trim())
             : state.user,
-      ));
+      );
+
+      // Don't emit in the same turn as an in-progress widget rebuild
+      // (session poll + shell watch<AuthBloc> used to lock the tree).
+      await Future<void>(() {});
+      if (state.status != AuthStatus.authenticated) return;
+      emit(next);
 
       final token = await _storage.readToken();
       if (token != null && state.user != null) {

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/widgets/zoomable_photo.dart';
-import '../../../auth/presentation/auth_providers.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../presentation/admin_notifier.dart';
 import '../../../profile/presentation/profile_notifier.dart';
@@ -45,8 +46,10 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
   void initState() {
     super.initState();
     _tabController = TabController(length: _tabs.length, vsync: this);
-    // Initialize active profile employee ID synchronously so the first build can load the profile immediately
-    ref.read(activeProfileEmployeeIdProvider.notifier).set(widget.employeeId);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(activeProfileEmployeeIdProvider.notifier).set(widget.employeeId);
+    });
   }
 
   @override
@@ -57,20 +60,27 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
 
   @override
   Widget build(BuildContext context) {
-    final authState = ref.watch(authNotifierProvider);
+    final authState = context.watch<AuthBloc>().state;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     // Synchronize active profile employee ID if it doesn't match
     final currentActiveId = ref.watch(activeProfileEmployeeIdProvider);
     if (currentActiveId != widget.employeeId) {
-      Future.microtask(() {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           ref.read(activeProfileEmployeeIdProvider.notifier).set(widget.employeeId);
         }
       });
     }
 
-    // Gate screen with RBAC: Admins always have access to company workforce details
+    if (authState.status == AuthStatus.unknown) {
+      return Scaffold(
+        backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    // Same session as Workforce list / sidebar (AuthBloc), not Riverpod AuthNotifier.
     final hasAccess = Permissions.isAdmin(authState.user?.role) ||
         Permissions.canViewWorkforce(
           authState.permissions,
@@ -338,7 +348,7 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
 
   Widget _buildAssignmentSection(BuildContext context, AsyncValue<List<EmployeeAssignment>> assignmentsAsync) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isAdmin = isAdminRole(ref.watch(authNotifierProvider).user?.role);
+    final isAdmin = isAdminRole(context.watch<AuthBloc>().state.user?.role);
 
     return Card(
       elevation: 0,

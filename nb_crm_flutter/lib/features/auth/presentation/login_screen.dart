@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/network/api_url_cubit.dart';
 import '../../../core/network/app_config.dart';
 import '../../../core/widgets/backend_env_switcher.dart';
+import '../../../core/widgets/install_android_app_button.dart';
 import '../data/auth_repository.dart';
 import 'bloc/auth_bloc.dart';
 import 'widgets/auth_widgets.dart';
@@ -474,6 +475,10 @@ class _LoginScreenState extends State<LoginScreen> {
                                               ),
                                             ),
                                           ),
+                                          if (InstallAndroidAppButton.visible) ...[
+                                            const SizedBox(height: 4),
+                                            Center(child: InstallAndroidAppButton.login()),
+                                          ],
                                           if (!kReleaseMode) ...[
                                             const SizedBox(height: 20),
                                             BackendEnvSwitcher.card(enabled: !submitting),

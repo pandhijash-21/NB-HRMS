@@ -7,6 +7,7 @@ import '../../../core/services/web_live_tracking_service.dart';
 import '../domain/auth_user.dart';
 import '../domain/permissions.dart';
 import 'auth_providers.dart';
+import 'bloc/auth_bloc.dart' as bloc;
 import '../../profile/presentation/profile_notifier.dart';
 
 enum AuthStatus { unknown, authenticated, unauthenticated }
@@ -80,8 +81,18 @@ class AuthNotifier extends Notifier<AuthState> {
     gate.bind(_handleUnauthorized);
     ref.onDispose(_stopSessionWatch);
 
-    Future.microtask(_bootstrap);
+    // Future() (not microtask) so restore/login state is not written while
+    // the widget tree is still building — that throws Riverpod's
+    // "Tried to modify a provider while the widget tree was building".
+    Future(_bootstrap);
     return const AuthState.unknown();
+  }
+
+  void _setState(AuthState next) {
+    Future<void>(() {
+      if (!ref.mounted) return;
+      state = next;
+    });
   }
 
   void _stopSessionWatch() {
@@ -110,22 +121,23 @@ class AuthNotifier extends Notifier<AuthState> {
           roleName.trim().isNotEmpty &&
           roleName.trim() != state.user?.role;
       if (!permsChanged && !needsChanged && !roleChanged) return;
-      state = state.copyWith(
+      final next = state.copyWith(
         permissions: permsChanged ? permissions : state.permissions,
         needsEmailVerification: needsChanged ? needs : state.needsEmailVerification,
         user: roleChanged && state.user != null
             ? state.user!.copyWith(role: roleName.trim())
             : state.user,
       );
+      _setState(next);
       final repo = ref.read(authRepositoryProvider);
       final token = await ref.read(secureStorageProvider).readToken();
-      if (token != null && state.user != null) {
+      if (token != null && next.user != null) {
         await repo.persistSession(
           token: token,
-          user: state.user!,
-          permissions: state.permissions,
-          isFirstLogin: state.isFirstLogin,
-          needsEmailVerification: state.needsEmailVerification,
+          user: next.user!,
+          permissions: next.permissions,
+          isFirstLogin: next.isFirstLogin,
+          needsEmailVerification: next.needsEmailVerification,
         );
       }
     } catch (_) {
@@ -141,10 +153,35 @@ class AuthNotifier extends Notifier<AuthState> {
     });
   }
 
+  /// Keep Riverpod screens in sync with AuthBloc (login/shell use the bloc).
+  void hydrateFromBloc(bloc.AuthState source) {
+    final mapped = switch (source.status) {
+      bloc.AuthStatus.unknown => AuthStatus.unknown,
+      bloc.AuthStatus.authenticated => AuthStatus.authenticated,
+      bloc.AuthStatus.unauthenticated => AuthStatus.unauthenticated,
+    };
+    final next = AuthState(
+      status: mapped,
+      user: source.user,
+      permissions: source.permissions,
+      isFirstLogin: source.isFirstLogin,
+      needsEmailVerification: source.needsEmailVerification,
+      errorMessage: source.errorMessage,
+      infoMessage: source.infoMessage,
+      isSubmitting: source.isSubmitting,
+    );
+    _setState(next);
+    if (mapped != AuthStatus.authenticated) {
+      _stopSessionWatch();
+    }
+  }
+
   Future<void> _bootstrap() async {
     final repo = ref.read(authRepositoryProvider);
     final restored = await repo.restoreSession();
     if (restored == null) {
+      // Login goes through AuthBloc; do not wipe a session it already restored.
+      if (state.isAuthenticated) return;
       state = const AuthState.unauthenticated();
       return;
     }

@@ -19,6 +19,7 @@ import 'core/theme/app_theme.dart';
 import 'core/theme/icon_font_bootstrap.dart';
 import 'core/theme/material_icon_keep_alive.dart';
 import 'core/theme/theme_cubit.dart';
+import 'features/auth/presentation/auth_riverpod_bridge.dart';
 import 'features/auth/presentation/bloc/auth_bloc.dart';
 import 'features/auth/presentation/permission_guard.dart';
 import 'features/collaboration/presentation/notification_bell.dart';
@@ -118,7 +119,11 @@ class NbCrmApp extends StatelessWidget {
                       child: Stack(
                         children: [
                           Positioned.fill(
-                            child: PermissionGuard(child: child ?? const SizedBox.shrink()),
+                            child: PermissionGuard(
+                              child: AuthRiverpodBridge(
+                                child: child ?? const SizedBox.shrink(),
+                              ),
+                            ),
                           ),
                           const IncomingCallHost(),
                         ],

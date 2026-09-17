@@ -128,11 +128,20 @@ jobs:
           fi
 
   build-flutter-web:
-    name: Flutter web release build
+    name: Flutter web + Android APK
     needs: [test-flutter]
     runs-on: ubuntu-latest
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
 
       - uses: subosito/flutter-action@v2
         with:
@@ -157,6 +166,25 @@ jobs:
           flutter build web --release --no-tree-shake-icons --pwa-strategy=none \
             --dart-define=API_BASE_URL="$API" \
             --dart-define=TRANSPORT_SECRET="$SECRET"
+
+      - name: Build Android APK
+        working-directory: nb_crm_flutter
+        env:
+          API_BASE_URL: ${{ secrets.API_BASE_URL }}
+          TRANSPORT_SECRET: ${{ secrets.TRANSPORT_SECRET }}
+        run: |
+          SECRET="${TRANSPORT_SECRET:-ci-transport-protocol-key}"
+          API="${API_BASE_URL:-https://crm.nbdeveloper.co.in/api}"
+          if [ "${{ github.ref }}" = "refs/heads/main" ] && [ -z "${TRANSPORT_SECRET}" ]; then
+            echo "Missing TRANSPORT_SECRET for main APK build"
+            exit 1
+          fi
+          flutter build apk --release --no-tree-shake-icons \
+            --dart-define=API_BASE_URL="$API" \
+            --dart-define=TRANSPORT_SECRET="$SECRET"
+          mkdir -p build/web/downloads
+          cp build/app/outputs/flutter-apk/app-release.apk build/web/downloads/nb-crm.apk
+          ls -lh build/web/downloads/nb-crm.apk
 
       - name: Upload web artifact
         uses: actions/upload-artifact@v4

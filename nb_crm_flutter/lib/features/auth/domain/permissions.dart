@@ -25,20 +25,12 @@ class Permissions {
     String? employeeViewScope, [
     String? role,
   ]) {
-    if (isSuperAdmin(role)) return true;
+    // Company Admin / Superadmin always administer workforce. Org-matrix
+    // PERSONAL_INFO can lag behind a fresh login JWT and must not 403 them.
+    if (isAdmin(role)) return true;
 
-    final scopeOk =
-        employeeViewScope == 'INSTITUTE' || employeeViewScope == 'UNIVERSITY';
-
-    // Tenant System Admin: org Admin Access matrix (PERSONAL_INFO), with
-    // USER_MGMT cascade so company admins who can manage users can also open Workforce.
-    if (isSystemAdmin(role)) {
-      if (hasPermission(perms, 'PERSONAL_INFO', 'READ')) return true;
-      if (hasPermission(perms, 'USER_MGMT', 'READ')) return true;
-      return scopeOk;
-    }
-
-    return scopeOk;
+    return employeeViewScope == 'INSTITUTE' ||
+        employeeViewScope == 'UNIVERSITY';
   }
 
   static bool canEditOwnWorkforce(

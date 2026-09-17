@@ -59,12 +59,19 @@ class _AdminEmployeesViewState extends State<_AdminEmployeesView> {
     final authState = context.watch<AuthBloc>().state;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // Gate screen with RBAC
-    final hasAccess = Permissions.canViewWorkforce(
-      authState.permissions,
-      authState.user?.employeeViewScope,
-      authState.user?.role,
-    );
+    if (authState.status == AuthStatus.unknown) {
+      return Scaffold(
+        backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final hasAccess = Permissions.isAdmin(authState.user?.role) ||
+        Permissions.canViewWorkforce(
+          authState.permissions,
+          authState.user?.employeeViewScope,
+          authState.user?.role,
+        );
 
     if (!hasAccess) {
       return Scaffold(

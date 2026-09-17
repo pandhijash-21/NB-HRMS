@@ -140,13 +140,15 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
+
+      # ubuntu-latest already has ANDROID_HOME; do not use setup-android@v3
+      # (Node 20 + mismatched cmdline-tools, sdkmanager --licenses fails).
+      - name: Accept Android SDK licenses
+        run: yes | flutter doctor --android-licenses >/dev/null 2>&1 || true
 
       - name: Build web release
         working-directory: nb_crm_flutter

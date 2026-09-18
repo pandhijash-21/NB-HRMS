@@ -914,15 +914,35 @@ model AttendancePolicy {
    * Single-row table (id = "default") holding punch timing policy.
    * Times are stored as "HH:MM" in Asia/Kolkata local time.
    */
-  id                    String   @id @default("default")
-  defaultPunchInTime    String   @default("10:00") @map("default_punch_in_time") // "HH:MM" IST
-  defaultPunchOutTime   String   @default("19:00") @map("default_punch_out_time") // "HH:MM" IST
-  punchInBufferMinutes  Int      @default(10) @map("punch_in_buffer_minutes")
-  punchOutBufferMinutes Int      @default(10) @map("punch_out_buffer_minutes")
-  updatedBy             String?  @map("updated_by")
-  updatedAt             DateTime @updatedAt @map("updated_at")
+  id                      String   @id @default("default")
+  defaultPunchInTime      String   @default("10:00") @map("default_punch_in_time") // "HH:MM" IST
+  defaultPunchOutTime     String   @default("19:00") @map("default_punch_out_time") // "HH:MM" IST
+  punchInBufferMinutes    Int      @default(10) @map("punch_in_buffer_minutes")
+  punchOutBufferMinutes   Int      @default(10) @map("punch_out_buffer_minutes")
+  /// How many days/month an employee may arrive within the punch-in buffer without half-day.
+  /// After this quota, even in-buffer late arrivals are half-day. Outside buffer is always half-day.
+  maxBufferDaysPerMonth   Int      @default(2) @map("max_buffer_days_per_month")
+  updatedBy               String?  @map("updated_by")
+  updatedAt               DateTime @updatedAt @map("updated_at")
 
   @@map("attendance_policy")
+}
+
+/// Admin override of global punch timing for a single calendar day (IST date).
+model AttendancePolicyDayOverride {
+  id                    String   @id @default(uuid())
+  /// Calendar day in IST (stored as UTC midnight of that YMD).
+  date                  DateTime @unique @db.Date
+  defaultPunchInTime    String?  @map("default_punch_in_time")
+  defaultPunchOutTime   String?  @map("default_punch_out_time")
+  punchInBufferMinutes  Int?     @map("punch_in_buffer_minutes")
+  punchOutBufferMinutes Int?     @map("punch_out_buffer_minutes")
+  note                  String?
+  updatedBy             String?  @map("updated_by")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  @@map("attendance_policy_day_overrides")
 }
 
 /// Per-employee punch window overrides (falls back to global AttendancePolicy when useGlobalPolicy=true).

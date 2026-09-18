@@ -216,6 +216,7 @@ async function main() {
       defaultPunchOutTime: '15:30',
       punchInBufferMinutes: 10,
       punchOutBufferMinutes: 10,
+      maxBufferDaysPerMonth: 2,
       updatedBy: 'seed',
     },
   });

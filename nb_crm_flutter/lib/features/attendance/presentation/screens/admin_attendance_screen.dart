@@ -148,6 +148,10 @@ class _AdminAttendanceView extends StatelessWidget {
                   ],
                 ),
               ),
+            if (state.policy != null && date.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              _DayOverrideCard(date: date, globalPolicy: state.policy!),
+            ],
             const SizedBox(height: 24),
             Text(
               'Employees',
@@ -249,6 +253,7 @@ class _PolicyCardState extends State<_PolicyCard> {
   late TextEditingController _outCtrl;
   late TextEditingController _inBufCtrl;
   late TextEditingController _outBufCtrl;
+  late TextEditingController _maxBufDaysCtrl;
 
   @override
   void initState() {
@@ -257,6 +262,7 @@ class _PolicyCardState extends State<_PolicyCard> {
     _outCtrl = TextEditingController(text: widget.policy.defaultPunchOutTime);
     _inBufCtrl = TextEditingController(text: '${widget.policy.punchInBufferMinutes}');
     _outBufCtrl = TextEditingController(text: '${widget.policy.punchOutBufferMinutes}');
+    _maxBufDaysCtrl = TextEditingController(text: '${widget.policy.maxBufferDaysPerMonth}');
   }
 
   @override
@@ -267,6 +273,7 @@ class _PolicyCardState extends State<_PolicyCard> {
       _outCtrl.text = widget.policy.defaultPunchOutTime;
       _inBufCtrl.text = '${widget.policy.punchInBufferMinutes}';
       _outBufCtrl.text = '${widget.policy.punchOutBufferMinutes}';
+      _maxBufDaysCtrl.text = '${widget.policy.maxBufferDaysPerMonth}';
     }
   }
 
@@ -276,6 +283,7 @@ class _PolicyCardState extends State<_PolicyCard> {
     _outCtrl.dispose();
     _inBufCtrl.dispose();
     _outBufCtrl.dispose();
+    _maxBufDaysCtrl.dispose();
     super.dispose();
   }
 
@@ -298,6 +306,8 @@ class _PolicyCardState extends State<_PolicyCard> {
       'defaultPunchOutTime': _outCtrl.text.trim(),
       'punchInBufferMinutes': int.tryParse(_inBufCtrl.text.trim()) ?? widget.policy.punchInBufferMinutes,
       'punchOutBufferMinutes': int.tryParse(_outBufCtrl.text.trim()) ?? widget.policy.punchOutBufferMinutes,
+      'maxBufferDaysPerMonth':
+          int.tryParse(_maxBufDaysCtrl.text.trim()) ?? widget.policy.maxBufferDaysPerMonth,
     });
   }
 
@@ -324,7 +334,7 @@ class _PolicyCardState extends State<_PolicyCard> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Late if punch-in is after Punch In + buffer. Eligible if punch-out is after Punch Out − buffer.',
+                      'Late if punch-in is after Punch In + buffer. Buffer grace applies only for N days/month; after that (or outside buffer) = half day + salary cut.',
                       style: TextStyle(
                         fontSize: 11,
                         color: isDark ? Colors.white54 : const Color(0xFF607D8B),
@@ -400,8 +410,266 @@ class _PolicyCardState extends State<_PolicyCard> {
                   ),
                 ),
               ),
+              SizedBox(
+                width: 150,
+                child: TextField(
+                  controller: _maxBufDaysCtrl,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  decoration: const InputDecoration(
+                    labelText: 'Buffer days / month',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                    helperText: 'e.g. 2',
+                  ),
+                ),
+              ),
             ],
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DayOverrideCard extends ConsumerStatefulWidget {
+  const _DayOverrideCard({required this.date, required this.globalPolicy});
+
+  final String date;
+  final AttendancePolicy globalPolicy;
+
+  @override
+  ConsumerState<_DayOverrideCard> createState() => _DayOverrideCardState();
+}
+
+class _DayOverrideCardState extends ConsumerState<_DayOverrideCard> {
+  late TextEditingController _inCtrl;
+  late TextEditingController _outCtrl;
+  late TextEditingController _inBufCtrl;
+  late TextEditingController _outBufCtrl;
+  AttendancePolicyDayOverride? _override;
+  bool _loading = true;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _inCtrl = TextEditingController(text: widget.globalPolicy.defaultPunchInTime);
+    _outCtrl = TextEditingController(text: widget.globalPolicy.defaultPunchOutTime);
+    _inBufCtrl = TextEditingController(text: '${widget.globalPolicy.punchInBufferMinutes}');
+    _outBufCtrl = TextEditingController(text: '${widget.globalPolicy.punchOutBufferMinutes}');
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant _DayOverrideCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.date != widget.date) _load();
+  }
+
+  @override
+  void dispose() {
+    _inCtrl.dispose();
+    _outCtrl.dispose();
+    _inBufCtrl.dispose();
+    _outBufCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      final repo = ref.read(attendanceRepositoryProvider);
+      final ov = await repo.getAdminPolicyDayOverride(widget.date);
+      if (!mounted) return;
+      setState(() {
+        _override = ov;
+        _inCtrl.text = ov?.defaultPunchInTime ?? widget.globalPolicy.defaultPunchInTime;
+        _outCtrl.text = ov?.defaultPunchOutTime ?? widget.globalPolicy.defaultPunchOutTime;
+        _inBufCtrl.text = '${ov?.punchInBufferMinutes ?? widget.globalPolicy.punchInBufferMinutes}';
+        _outBufCtrl.text = '${ov?.punchOutBufferMinutes ?? widget.globalPolicy.punchOutBufferMinutes}';
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _pickTime(TextEditingController ctrl) async {
+    final parts = ctrl.text.split(':');
+    final initial = TimeOfDay(
+      hour: int.tryParse(parts.isNotEmpty ? parts[0] : '') ?? 9,
+      minute: int.tryParse(parts.length > 1 ? parts[1] : '') ?? 0,
+    );
+    final picked = await showTimePicker(context: context, initialTime: initial);
+    if (picked == null) return;
+    ctrl.text =
+        '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
+    setState(() {});
+  }
+
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    try {
+      final repo = ref.read(attendanceRepositoryProvider);
+      final saved = await repo.upsertAdminPolicyDayOverride({
+        'date': widget.date,
+        'defaultPunchInTime': _inCtrl.text.trim(),
+        'defaultPunchOutTime': _outCtrl.text.trim(),
+        'punchInBufferMinutes': int.tryParse(_inBufCtrl.text.trim()),
+        'punchOutBufferMinutes': int.tryParse(_outBufCtrl.text.trim()),
+      });
+      if (!mounted) return;
+      setState(() {
+        _override = saved;
+        _saving = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Day policy saved for ${widget.date}')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  Future<void> _clear() async {
+    setState(() => _saving = true);
+    try {
+      final repo = ref.read(attendanceRepositoryProvider);
+      await repo.deleteAdminPolicyDayOverride(widget.date);
+      if (!mounted) return;
+      setState(() {
+        _override = null;
+        _inCtrl.text = widget.globalPolicy.defaultPunchInTime;
+        _outCtrl.text = widget.globalPolicy.defaultPunchOutTime;
+        _inBufCtrl.text = '${widget.globalPolicy.punchInBufferMinutes}';
+        _outBufCtrl.text = '${widget.globalPolicy.punchOutBufferMinutes}';
+        _saving = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Day override cleared — using global policy')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return _SectionCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Policy for ${widget.date}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 14,
+                        color: isDark ? Colors.white : const Color(0xFF212F3D),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _override == null
+                          ? 'Using global policy. Save to override punch times for this day only.'
+                          : 'Custom override active for this day.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isDark ? Colors.white54 : const Color(0xFF607D8B),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (_override != null)
+                TextButton(onPressed: _saving ? null : _clear, child: const Text('Clear')),
+              FilledButton(
+                onPressed: _saving || _loading ? null : _save,
+                style: FilledButton.styleFrom(
+                  backgroundColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+                  foregroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
+                ),
+                child: Text(_saving ? 'Saving…' : 'Save Day Policy'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (_loading)
+            const LinearProgressIndicator()
+          else
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                SizedBox(
+                  width: 140,
+                  child: TextField(
+                    controller: _inCtrl,
+                    readOnly: true,
+                    onTap: () => _pickTime(_inCtrl),
+                    decoration: const InputDecoration(
+                      labelText: 'Punch In',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  width: 120,
+                  child: TextField(
+                    controller: _inBufCtrl,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    decoration: const InputDecoration(
+                      labelText: 'In Buffer',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  width: 140,
+                  child: TextField(
+                    controller: _outCtrl,
+                    readOnly: true,
+                    onTap: () => _pickTime(_outCtrl),
+                    decoration: const InputDecoration(
+                      labelText: 'Punch Out',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  width: 120,
+                  child: TextField(
+                    controller: _outBufCtrl,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    decoration: const InputDecoration(
+                      labelText: 'Out Buffer',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                ),
+              ],
+            ),
         ],
       ),
     );

@@ -35,6 +35,7 @@ export type AttendancePolicy = {
   defaultPunchOutTime: string; // "HH:MM" IST
   punchInBufferMinutes: number;
   punchOutBufferMinutes: number;
+  maxBufferDaysPerMonth?: number;
   updatedAt?: string;
   updatedBy?: string | null;
 };

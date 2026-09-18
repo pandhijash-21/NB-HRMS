@@ -45,6 +45,7 @@ export default function AdminAttendancePage() {
   const [policyOut, setPolicyOut] = useState<string>("15:30");
   const [policyInBuf, setPolicyInBuf] = useState<string>("10");
   const [policyOutBuf, setPolicyOutBuf] = useState<string>("10");
+  const [policyMaxBufDays, setPolicyMaxBufDays] = useState<string>("2");
   const addPunch = useAdminAddPunch();
   const updatePunch = useAdminUpdatePunch();
 
@@ -56,6 +57,7 @@ export default function AdminAttendancePage() {
     setPolicyOut(policyQ.data.defaultPunchOutTime);
     setPolicyInBuf(String(policyQ.data.punchInBufferMinutes));
     setPolicyOutBuf(String(policyQ.data.punchOutBufferMinutes));
+    setPolicyMaxBufDays(String(policyQ.data.maxBufferDaysPerMonth ?? 2));
   }, [policyQ.data]);
 
   const handleAddPunch = async () => {
@@ -94,11 +96,13 @@ export default function AdminAttendancePage() {
   const savePolicy = async () => {
     const punchInBufferMinutes = Number(policyInBuf);
     const punchOutBufferMinutes = Number(policyOutBuf);
+    const maxBufferDaysPerMonth = Number(policyMaxBufDays);
     await updatePolicy.mutateAsync({
       defaultPunchInTime: policyIn,
       defaultPunchOutTime: policyOut,
       punchInBufferMinutes,
       punchOutBufferMinutes,
+      maxBufferDaysPerMonth,
     });
   };
 
@@ -132,7 +136,7 @@ export default function AdminAttendancePage() {
             </Button>
           </div>
 
-          <div className="mt-3 grid grid-cols-1 md:grid-cols-4 gap-2">
+          <div className="mt-3 grid grid-cols-1 md:grid-cols-5 gap-2">
             <div>
               <label className="text-xs font-semibold text-slate-600">Default Punch In</label>
               <Input type="time" value={policyIn} onChange={(e) => setPolicyIn(e.target.value)} />
@@ -148,6 +152,10 @@ export default function AdminAttendancePage() {
             <div>
               <label className="text-xs font-semibold text-slate-600">Out Buffer (mins)</label>
               <Input inputMode="numeric" value={policyOutBuf} onChange={(e) => setPolicyOutBuf(e.target.value)} />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-600">Buffer days / month</label>
+              <Input inputMode="numeric" value={policyMaxBufDays} onChange={(e) => setPolicyMaxBufDays(e.target.value)} />
             </div>
           </div>
 

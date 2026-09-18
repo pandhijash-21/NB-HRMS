@@ -97,6 +97,7 @@ class AttendancePolicy {
     required this.defaultPunchOutTime,
     required this.punchInBufferMinutes,
     required this.punchOutBufferMinutes,
+    this.maxBufferDaysPerMonth = 2,
     this.updatedAt,
     this.updatedBy,
   });
@@ -106,6 +107,7 @@ class AttendancePolicy {
   final String defaultPunchOutTime;
   final int punchInBufferMinutes;
   final int punchOutBufferMinutes;
+  final int maxBufferDaysPerMonth;
   final String? updatedAt;
   final String? updatedBy;
 
@@ -116,6 +118,9 @@ class AttendancePolicy {
       defaultPunchOutTime: json['defaultPunchOutTime'] as String? ?? '15:30',
       punchInBufferMinutes: _asInt(json['punchInBufferMinutes']),
       punchOutBufferMinutes: _asInt(json['punchOutBufferMinutes']),
+      maxBufferDaysPerMonth: json['maxBufferDaysPerMonth'] != null
+          ? _asInt(json['maxBufferDaysPerMonth'])
+          : 2,
       updatedAt: json['updatedAt']?.toString(),
       updatedBy: json['updatedBy'] as String?,
     );
@@ -126,6 +131,50 @@ class AttendancePolicy {
         'defaultPunchOutTime': defaultPunchOutTime,
         'punchInBufferMinutes': punchInBufferMinutes,
         'punchOutBufferMinutes': punchOutBufferMinutes,
+        'maxBufferDaysPerMonth': maxBufferDaysPerMonth,
+      };
+}
+
+class AttendancePolicyDayOverride {
+  const AttendancePolicyDayOverride({
+    required this.date,
+    this.id,
+    this.defaultPunchInTime,
+    this.defaultPunchOutTime,
+    this.punchInBufferMinutes,
+    this.punchOutBufferMinutes,
+    this.note,
+  });
+
+  final String? id;
+  final String date;
+  final String? defaultPunchInTime;
+  final String? defaultPunchOutTime;
+  final int? punchInBufferMinutes;
+  final int? punchOutBufferMinutes;
+  final String? note;
+
+  factory AttendancePolicyDayOverride.fromJson(Map<String, dynamic> json) {
+    return AttendancePolicyDayOverride(
+      id: json['id']?.toString(),
+      date: json['date']?.toString() ?? '',
+      defaultPunchInTime: json['defaultPunchInTime'] as String?,
+      defaultPunchOutTime: json['defaultPunchOutTime'] as String?,
+      punchInBufferMinutes:
+          json['punchInBufferMinutes'] == null ? null : _asInt(json['punchInBufferMinutes']),
+      punchOutBufferMinutes:
+          json['punchOutBufferMinutes'] == null ? null : _asInt(json['punchOutBufferMinutes']),
+      note: json['note'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'date': date,
+        if (defaultPunchInTime != null) 'defaultPunchInTime': defaultPunchInTime,
+        if (defaultPunchOutTime != null) 'defaultPunchOutTime': defaultPunchOutTime,
+        if (punchInBufferMinutes != null) 'punchInBufferMinutes': punchInBufferMinutes,
+        if (punchOutBufferMinutes != null) 'punchOutBufferMinutes': punchOutBufferMinutes,
+        if (note != null) 'note': note,
       };
 }
 

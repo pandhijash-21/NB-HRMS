@@ -100,6 +100,9 @@ attendanceRouter.patch('/admin/policy', requireAuth, requirePermission('ATTENDAN
     const defaultPunchOutTime = String(req.body?.defaultPunchOutTime ?? '');
     const punchInBufferMinutes = Number(req.body?.punchInBufferMinutes);
     const punchOutBufferMinutes = Number(req.body?.punchOutBufferMinutes);
+    const maxBufferDaysPerMonth = Number(
+      req.body?.maxBufferDaysPerMonth ?? req.body?.maxBufferDays ?? 2,
+    );
     const updatedBy = String((req.user as any)?.id ?? (req.user as any)?.userId ?? 'unknown');
 
     const data = await attendanceService.updateAdminPolicy({
@@ -107,8 +110,61 @@ attendanceRouter.patch('/admin/policy', requireAuth, requirePermission('ATTENDAN
       defaultPunchOutTime,
       punchInBufferMinutes,
       punchOutBufferMinutes,
+      maxBufferDaysPerMonth,
       updatedBy,
     });
+    return res.json(ok(data));
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});
+
+attendanceRouter.get('/admin/policy/day', requireAuth, requirePermission('ATTENDANCE', 'READ'), async (req: Request, res: Response) => {
+  try {
+    const role = String((req.user as any)?.role ?? '');
+    if (!['ADMIN', 'HR', 'HR_MANAGER'].includes(role)) {
+      return res.status(403).json(fail('Forbidden'));
+    }
+    const date = String(req.query.date ?? '');
+    const data = await attendanceService.getAdminPolicyDayOverride(date);
+    return res.json(ok(data));
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});
+
+attendanceRouter.put('/admin/policy/day', requireAuth, requirePermission('ATTENDANCE', 'WRITE'), async (req: Request, res: Response) => {
+  try {
+    const role = String((req.user as any)?.role ?? '');
+    if (!['ADMIN', 'HR', 'HR_MANAGER'].includes(role)) {
+      return res.status(403).json(fail('Forbidden'));
+    }
+    const updatedBy = String((req.user as any)?.id ?? (req.user as any)?.userId ?? 'unknown');
+    const data = await attendanceService.upsertAdminPolicyDayOverride({
+      date: String(req.body?.date ?? ''),
+      defaultPunchInTime: req.body?.defaultPunchInTime ?? null,
+      defaultPunchOutTime: req.body?.defaultPunchOutTime ?? null,
+      punchInBufferMinutes:
+        req.body?.punchInBufferMinutes == null ? null : Number(req.body.punchInBufferMinutes),
+      punchOutBufferMinutes:
+        req.body?.punchOutBufferMinutes == null ? null : Number(req.body.punchOutBufferMinutes),
+      note: req.body?.note ?? null,
+      updatedBy,
+    });
+    return res.json(ok(data));
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});
+
+attendanceRouter.delete('/admin/policy/day', requireAuth, requirePermission('ATTENDANCE', 'WRITE'), async (req: Request, res: Response) => {
+  try {
+    const role = String((req.user as any)?.role ?? '');
+    if (!['ADMIN', 'HR', 'HR_MANAGER'].includes(role)) {
+      return res.status(403).json(fail('Forbidden'));
+    }
+    const date = String(req.query.date ?? req.body?.date ?? '');
+    const data = await attendanceService.deleteAdminPolicyDayOverride(date);
     return res.json(ok(data));
   } catch (e: any) {
     return res.status(400).json(fail(e.message));

@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/prisma';
 import { redis, connectRedis } from '../../config/redis';
 import { encryptPasswordForAdmin, decryptPasswordForAdmin } from '../../utils/passwordCrypto';
@@ -409,7 +410,7 @@ export const platformService = {
     if (adminIds.length === 0) return [];
 
     const q = search?.trim() ?? '';
-    const createdByAdmins = {
+    const createdByAdmins: Prisma.EmployeeWhereInput = {
       OR: [
         { createdBy: { in: adminIds } },
         { user: { createdBy: { in: adminIds } } },
@@ -418,40 +419,47 @@ export const platformService = {
       ],
     };
 
-    const searchMatch = q.length >= 2
-      ? {
-          OR: [
-            { generalInfo: { fullName: { contains: q, mode: 'insensitive' } } },
-            { generalInfo: { employeeCode: { contains: q, mode: 'insensitive' } } },
-            { generalInfo: { designation: { contains: q, mode: 'insensitive' } } },
-            { user: { username: { contains: q, mode: 'insensitive' } } },
-          ],
-        }
-      : null;
+    const searchMatch: Prisma.EmployeeWhereInput | null =
+      q.length >= 2
+        ? {
+            OR: [
+              { generalInfo: { fullName: { contains: q, mode: 'insensitive' } } },
+              { generalInfo: { employeeCode: { contains: q, mode: 'insensitive' } } },
+              { generalInfo: { designation: { contains: q, mode: 'insensitive' } } },
+              { user: { username: { contains: q, mode: 'insensitive' } } },
+            ],
+          }
+        : null;
 
-    const employees = await prisma.employee.findMany({
-      where: searchMatch ? { AND: [createdByAdmins, searchMatch] } : createdByAdmins,
-      include: {
-        generalInfo: {
-          select: {
-            fullName: true,
-            designation: true,
-            employeeCode: true,
-            organization: true,
-          },
-        },
-        user: {
-          select: {
-            id: true,
-            username: true,
-            isActive: true,
-            deletedAt: true,
-            companyAdminGranted: true,
-            subOrganization: true,
-            role: { select: { name: true } },
-          },
+    const where: Prisma.EmployeeWhereInput = searchMatch
+      ? { AND: [createdByAdmins, searchMatch] }
+      : createdByAdmins;
+
+    const peopleInclude = {
+      generalInfo: {
+        select: {
+          fullName: true,
+          designation: true,
+          employeeCode: true,
+          organization: true,
         },
       },
+      user: {
+        select: {
+          id: true,
+          username: true,
+          isActive: true,
+          deletedAt: true,
+          companyAdminGranted: true,
+          subOrganization: true,
+          role: { select: { name: true } },
+        },
+      },
+    } satisfies Prisma.EmployeeInclude;
+
+    const employees = await prisma.employee.findMany({
+      where,
+      include: peopleInclude,
       orderBy: { id: 'asc' },
       take: 300,
     });

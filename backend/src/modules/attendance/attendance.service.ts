@@ -12,6 +12,7 @@ const DEFAULT_POLICY = {
   defaultPunchOutTime: '19:00',
   punchInBufferMinutes: 10,
   punchOutBufferMinutes: 10,
+  maxBufferDaysPerMonth: 2,
 };
 const WEEKDAY_CODES = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'] as const;
 type DayStatus = 'PRESENT' | 'LEAVE' | 'ABSENT' | 'HOLIDAY';
@@ -87,15 +88,66 @@ async function getAttendancePolicy() {
     defaultPunchOutTime: row.defaultPunchOutTime,
     punchInBufferMinutes: row.punchInBufferMinutes,
     punchOutBufferMinutes: row.punchOutBufferMinutes,
+    maxBufferDaysPerMonth: row.maxBufferDaysPerMonth ?? DEFAULT_POLICY.maxBufferDaysPerMonth,
   };
 }
 
+type DayOverrideRow = {
+  date: Date;
+  defaultPunchInTime: string | null;
+  defaultPunchOutTime: string | null;
+  punchInBufferMinutes: number | null;
+  punchOutBufferMinutes: number | null;
+  note: string | null;
+};
+
+function serializeDayOverride(row: {
+  id: string;
+  date: Date;
+  defaultPunchInTime: string | null;
+  defaultPunchOutTime: string | null;
+  punchInBufferMinutes: number | null;
+  punchOutBufferMinutes: number | null;
+  note: string | null;
+  updatedAt: Date;
+  updatedBy: string | null;
+}) {
+  return {
+    id: row.id,
+    date: istKeyFromUtcDate(row.date),
+    defaultPunchInTime: row.defaultPunchInTime,
+    defaultPunchOutTime: row.defaultPunchOutTime,
+    punchInBufferMinutes: row.punchInBufferMinutes,
+    punchOutBufferMinutes: row.punchOutBufferMinutes,
+    note: row.note,
+    updatedAt: row.updatedAt.toISOString(),
+    updatedBy: row.updatedBy,
+  };
+}
+
+async function fetchDayOverridesMap(fromYmd: string, toYmd: string): Promise<Map<string, DayOverrideRow>> {
+  const rows = await prisma.attendancePolicyDayOverride.findMany({
+    where: {
+      date: {
+        gte: parseYmd(fromYmd),
+        lte: parseYmd(toYmd),
+      },
+    },
+  });
+  const map = new Map<string, DayOverrideRow>();
+  for (const r of rows) {
+    map.set(istKeyFromUtcDate(r.date), r);
+  }
+  return map;
+}
+
 type EffectivePolicy = {
-  source: 'GLOBAL' | 'EMPLOYEE';
+  source: 'GLOBAL' | 'EMPLOYEE' | 'DAY_OVERRIDE';
   punchInTime: string;
   punchOutTime: string;
   punchInBufferMinutes: number;
   punchOutBufferMinutes: number;
+  maxBufferDaysPerMonth: number;
   globalPolicy: Awaited<ReturnType<typeof getAttendancePolicy>>;
   employeeSettings: {
     useGlobalPolicy: boolean;
@@ -104,6 +156,7 @@ type EffectivePolicy = {
     punchInBufferMinutes: number | null;
     punchOutBufferMinutes: number | null;
   } | null;
+  dayOverride: ReturnType<typeof serializeDayOverride> | null;
 };
 
 async function resolveEffectivePolicy(employeeId: number): Promise<EffectivePolicy> {
@@ -119,6 +172,7 @@ async function resolveEffectivePolicy(employeeId: number): Promise<EffectivePoli
       punchOutTime: globalPolicy.defaultPunchOutTime,
       punchInBufferMinutes: globalPolicy.punchInBufferMinutes,
       punchOutBufferMinutes: globalPolicy.punchOutBufferMinutes,
+      maxBufferDaysPerMonth: globalPolicy.maxBufferDaysPerMonth,
       globalPolicy,
       employeeSettings: settings
         ? {
@@ -129,6 +183,7 @@ async function resolveEffectivePolicy(employeeId: number): Promise<EffectivePoli
             punchOutBufferMinutes: settings.punchOutBufferMinutes,
           }
         : null,
+      dayOverride: null,
     };
   }
 
@@ -138,6 +193,7 @@ async function resolveEffectivePolicy(employeeId: number): Promise<EffectivePoli
     punchOutTime: settings.punchOutTime ?? globalPolicy.defaultPunchOutTime,
     punchInBufferMinutes: settings.punchInBufferMinutes ?? globalPolicy.punchInBufferMinutes,
     punchOutBufferMinutes: settings.punchOutBufferMinutes ?? globalPolicy.punchOutBufferMinutes,
+    maxBufferDaysPerMonth: globalPolicy.maxBufferDaysPerMonth,
     globalPolicy,
     employeeSettings: {
       useGlobalPolicy: false,
@@ -146,14 +202,55 @@ async function resolveEffectivePolicy(employeeId: number): Promise<EffectivePoli
       punchInBufferMinutes: settings.punchInBufferMinutes,
       punchOutBufferMinutes: settings.punchOutBufferMinutes,
     },
+    dayOverride: null,
   };
 }
 
+function applyDayOverrideToPolicy(
+  base: EffectivePolicy,
+  override: DayOverrideRow | null | undefined,
+): EffectivePolicy {
+  if (!override) return base;
+  return {
+    ...base,
+    source: 'DAY_OVERRIDE',
+    punchInTime: override.defaultPunchInTime ?? base.punchInTime,
+    punchOutTime: override.defaultPunchOutTime ?? base.punchOutTime,
+    punchInBufferMinutes: override.punchInBufferMinutes ?? base.punchInBufferMinutes,
+    punchOutBufferMinutes: override.punchOutBufferMinutes ?? base.punchOutBufferMinutes,
+    dayOverride: serializeDayOverride({
+      id: 'override',
+      date: override.date,
+      defaultPunchInTime: override.defaultPunchInTime,
+      defaultPunchOutTime: override.defaultPunchOutTime,
+      punchInBufferMinutes: override.punchInBufferMinutes,
+      punchOutBufferMinutes: override.punchOutBufferMinutes,
+      note: override.note,
+      updatedAt: new Date(),
+      updatedBy: null,
+    }),
+  };
+}
+
+type DayPunchEval = {
+  totalMinutes: number;
+  isAfterExactIn: boolean | null;
+  isOutsideBuffer: boolean | null;
+  /** Provisional: outside buffer always half; in-buffer grace until quota applied. */
+  isLate: boolean | null;
+  isHalfDay: boolean | null;
+  usedBufferGrace: boolean;
+  meetsPunchOut: boolean | null;
+};
+
 function evaluateDayPunches(
-  policy: Pick<EffectivePolicy, 'punchInTime' | 'punchOutTime' | 'punchInBufferMinutes' | 'punchOutBufferMinutes'>,
+  policy: Pick<
+    EffectivePolicy,
+    'punchInTime' | 'punchOutTime' | 'punchInBufferMinutes' | 'punchOutBufferMinutes'
+  >,
   firstIn: string | null,
   lastOut: string | null,
-) {
+): DayPunchEval {
   const totalMinutes =
     firstIn && lastOut
       ? Math.max(0, Math.floor((new Date(lastOut).getTime() - new Date(firstIn).getTime()) / 60000))
@@ -164,10 +261,137 @@ function evaluateDayPunches(
   const defaultOutMin = parseHmToMinutes(policy.punchOutTime);
   const lateAfterMin = defaultInMin + policy.punchInBufferMinutes;
   const eligibleOutAfterMin = defaultOutMin - policy.punchOutBufferMinutes;
-  const isLate = punchInMin == null ? null : punchInMin > lateAfterMin;
-  const isHalfDay = isLate;
   const meetsPunchOut = punchOutMin == null ? null : punchOutMin >= eligibleOutAfterMin;
-  return { totalMinutes, isLate, isHalfDay, meetsPunchOut };
+
+  if (punchInMin == null) {
+    return {
+      totalMinutes,
+      isAfterExactIn: null,
+      isOutsideBuffer: null,
+      isLate: null,
+      isHalfDay: null,
+      usedBufferGrace: false,
+      meetsPunchOut,
+    };
+  }
+
+  const isAfterExactIn = punchInMin > defaultInMin;
+  const isOutsideBuffer = punchInMin > lateAfterMin;
+  // Outside buffer → always late + half-day. In-buffer late → provisional until monthly quota applied.
+  const isLate = isOutsideBuffer ? true : isAfterExactIn;
+  const isHalfDay = isOutsideBuffer;
+  const usedBufferGrace = isAfterExactIn && !isOutsideBuffer;
+
+  return {
+    totalMinutes,
+    isAfterExactIn,
+    isOutsideBuffer,
+    isLate,
+    isHalfDay,
+    usedBufferGrace,
+    meetsPunchOut,
+  };
+}
+
+/**
+ * Apply monthly buffer-day quota chronologically.
+ * First `maxBufferDays` in-buffer late days are forgiven (not half-day).
+ * Further in-buffer late days become half-day. Outside-buffer days always half-day.
+ */
+function applyMonthlyBufferQuota<T extends { date: string; eval: DayPunchEval }>(
+  days: T[],
+  maxBufferDaysPerMonth: number,
+): Array<T & { isLate: boolean | null; isHalfDay: boolean | null; bufferGraceUsed: boolean }> {
+  const max = Math.max(0, Math.floor(maxBufferDaysPerMonth));
+  const sorted = [...days].sort((a, b) => a.date.localeCompare(b.date));
+  const byDate = new Map<string, { isLate: boolean | null; isHalfDay: boolean | null; bufferGraceUsed: boolean }>();
+  let used = 0;
+  let currentMonth = '';
+
+  for (const day of sorted) {
+    const monthKey = day.date.slice(0, 7); // YYYY-MM
+    if (monthKey !== currentMonth) {
+      currentMonth = monthKey;
+      used = 0;
+    }
+    const e = day.eval;
+    if (e.isOutsideBuffer === true) {
+      byDate.set(day.date, { isLate: true, isHalfDay: true, bufferGraceUsed: false });
+      continue;
+    }
+    if (e.usedBufferGrace) {
+      if (used < max) {
+        used += 1;
+        byDate.set(day.date, { isLate: false, isHalfDay: false, bufferGraceUsed: true });
+      } else {
+        byDate.set(day.date, { isLate: true, isHalfDay: true, bufferGraceUsed: false });
+      }
+      continue;
+    }
+    byDate.set(day.date, {
+      isLate: e.isLate,
+      isHalfDay: e.isHalfDay,
+      bufferGraceUsed: false,
+    });
+  }
+
+  return days.map((d) => {
+    const applied = byDate.get(d.date) ?? {
+      isLate: d.eval.isLate,
+      isHalfDay: d.eval.isHalfDay,
+      bufferGraceUsed: false,
+    };
+    return { ...d, ...applied };
+  });
+}
+
+async function monthBufferUsageBeforeDate(
+  employeeId: number,
+  dateYmd: string,
+  basePolicy: EffectivePolicy,
+): Promise<{ used: number; max: number }> {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateYmd);
+  if (!m) return { used: 0, max: basePolicy.maxBufferDaysPerMonth };
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  const { from, to } = monthRangeYmd(year, month);
+  // Only count days strictly before this date in the month.
+  if (dateYmd <= from) return { used: 0, max: basePolicy.maxBufferDaysPerMonth };
+
+  const dayBefore = (() => {
+    const dt = parseYmd(dateYmd);
+    const prev = new Date(dt.getTime() - 24 * 60 * 60 * 1000);
+    return `${prev.getUTCFullYear()}-${String(prev.getUTCMonth() + 1).padStart(2, '0')}-${String(prev.getUTCDate()).padStart(2, '0')}`;
+  })();
+
+  const overrides = await fetchDayOverridesMap(from, dayBefore < from ? from : dayBefore);
+  const { from: fromUtc } = istDayRangeUtc(from);
+  const toExclusive = new Date(istDayStartUtc(dayBefore).getTime() + 24 * 60 * 60 * 1000);
+  const punches = await prisma.attendancePunch.findMany({
+    where: {
+      employeeId,
+      punchAt: { gte: fromUtc, lt: toExclusive },
+    },
+    orderBy: { punchAt: 'asc' },
+    select: { punchAt: true, source: true },
+  });
+
+  const byDay: Record<string, Array<{ punchAt: Date; source: string }>> = {};
+  for (const p of punches) {
+    const key = istKeyFromUtcDate(p.punchAt);
+    if (key >= dateYmd) continue;
+    (byDay[key] ??= []).push({ punchAt: p.punchAt, source: String(p.source) });
+  }
+
+  const evalDays: Array<{ date: string; eval: DayPunchEval }> = [];
+  for (const [date, dayPunches] of Object.entries(byDay)) {
+    const { firstIn, lastOut } = deriveDayInOut(dayPunches);
+    const policy = applyDayOverrideToPolicy(basePolicy, overrides.get(date));
+    evalDays.push({ date, eval: evaluateDayPunches(policy, firstIn, lastOut) });
+  }
+  const applied = applyMonthlyBufferQuota(evalDays, basePolicy.maxBufferDaysPerMonth);
+  const used = applied.filter((d) => d.bufferGraceUsed).length;
+  return { used, max: basePolicy.maxBufferDaysPerMonth };
 }
 
 function monthRangeYmd(year: number, month: number) {
@@ -303,6 +527,7 @@ export const attendanceService = {
       defaultPunchOutTime: row.defaultPunchOutTime,
       punchInBufferMinutes: row.punchInBufferMinutes,
       punchOutBufferMinutes: row.punchOutBufferMinutes,
+      maxBufferDaysPerMonth: row.maxBufferDaysPerMonth ?? DEFAULT_POLICY.maxBufferDaysPerMonth,
       updatedAt: row.updatedAt.toISOString(),
       updatedBy: row.updatedBy ?? null,
     };
@@ -313,6 +538,7 @@ export const attendanceService = {
     defaultPunchOutTime: string;
     punchInBufferMinutes: number;
     punchOutBufferMinutes: number;
+    maxBufferDaysPerMonth: number;
     updatedBy: string;
   }) {
     // Validate early (throws friendly errors)
@@ -324,6 +550,9 @@ export const attendanceService = {
     if (!Number.isFinite(params.punchOutBufferMinutes) || params.punchOutBufferMinutes < 0 || params.punchOutBufferMinutes > 240) {
       throw new Error('Invalid punchOutBufferMinutes (expected 0-240)');
     }
+    if (!Number.isFinite(params.maxBufferDaysPerMonth) || params.maxBufferDaysPerMonth < 0 || params.maxBufferDaysPerMonth > 31) {
+      throw new Error('Invalid maxBufferDaysPerMonth (expected 0-31)');
+    }
 
     const row = await prisma.attendancePolicy.upsert({
       where: { id: 'default' },
@@ -332,6 +561,7 @@ export const attendanceService = {
         defaultPunchOutTime: params.defaultPunchOutTime,
         punchInBufferMinutes: params.punchInBufferMinutes,
         punchOutBufferMinutes: params.punchOutBufferMinutes,
+        maxBufferDaysPerMonth: params.maxBufferDaysPerMonth,
         updatedBy: params.updatedBy,
       },
       create: {
@@ -340,6 +570,7 @@ export const attendanceService = {
         defaultPunchOutTime: params.defaultPunchOutTime,
         punchInBufferMinutes: params.punchInBufferMinutes,
         punchOutBufferMinutes: params.punchOutBufferMinutes,
+        maxBufferDaysPerMonth: params.maxBufferDaysPerMonth,
         updatedBy: params.updatedBy,
       },
     });
@@ -350,9 +581,83 @@ export const attendanceService = {
       defaultPunchOutTime: row.defaultPunchOutTime,
       punchInBufferMinutes: row.punchInBufferMinutes,
       punchOutBufferMinutes: row.punchOutBufferMinutes,
+      maxBufferDaysPerMonth: row.maxBufferDaysPerMonth,
       updatedAt: row.updatedAt.toISOString(),
       updatedBy: row.updatedBy ?? null,
     };
+  },
+
+  async getAdminPolicyDayOverride(dateYmd: string) {
+    parseYmd(dateYmd);
+    const row = await prisma.attendancePolicyDayOverride.findUnique({
+      where: { date: parseYmd(dateYmd) },
+    });
+    return row ? serializeDayOverride(row) : null;
+  },
+
+  async upsertAdminPolicyDayOverride(params: {
+    date: string;
+    defaultPunchInTime?: string | null;
+    defaultPunchOutTime?: string | null;
+    punchInBufferMinutes?: number | null;
+    punchOutBufferMinutes?: number | null;
+    note?: string | null;
+    updatedBy: string;
+  }) {
+    parseYmd(params.date);
+    if (params.defaultPunchInTime) parseHmToMinutes(params.defaultPunchInTime);
+    if (params.defaultPunchOutTime) parseHmToMinutes(params.defaultPunchOutTime);
+    if (
+      params.punchInBufferMinutes != null &&
+      (!Number.isFinite(params.punchInBufferMinutes) ||
+        params.punchInBufferMinutes < 0 ||
+        params.punchInBufferMinutes > 240)
+    ) {
+      throw new Error('Invalid punchInBufferMinutes (expected 0-240)');
+    }
+    if (
+      params.punchOutBufferMinutes != null &&
+      (!Number.isFinite(params.punchOutBufferMinutes) ||
+        params.punchOutBufferMinutes < 0 ||
+        params.punchOutBufferMinutes > 240)
+    ) {
+      throw new Error('Invalid punchOutBufferMinutes (expected 0-240)');
+    }
+
+    const hasAny =
+      params.defaultPunchInTime != null ||
+      params.defaultPunchOutTime != null ||
+      params.punchInBufferMinutes != null ||
+      params.punchOutBufferMinutes != null;
+    if (!hasAny) throw new Error('Provide at least one override field for this day');
+
+    const row = await prisma.attendancePolicyDayOverride.upsert({
+      where: { date: parseYmd(params.date) },
+      create: {
+        date: parseYmd(params.date),
+        defaultPunchInTime: params.defaultPunchInTime ?? null,
+        defaultPunchOutTime: params.defaultPunchOutTime ?? null,
+        punchInBufferMinutes: params.punchInBufferMinutes ?? null,
+        punchOutBufferMinutes: params.punchOutBufferMinutes ?? null,
+        note: params.note ?? null,
+        updatedBy: params.updatedBy,
+      },
+      update: {
+        defaultPunchInTime: params.defaultPunchInTime ?? null,
+        defaultPunchOutTime: params.defaultPunchOutTime ?? null,
+        punchInBufferMinutes: params.punchInBufferMinutes ?? null,
+        punchOutBufferMinutes: params.punchOutBufferMinutes ?? null,
+        note: params.note ?? null,
+        updatedBy: params.updatedBy,
+      },
+    });
+    return serializeDayOverride(row);
+  },
+
+  async deleteAdminPolicyDayOverride(dateYmd: string) {
+    parseYmd(dateYmd);
+    await prisma.attendancePolicyDayOverride.deleteMany({ where: { date: parseYmd(dateYmd) } });
+    return { ok: true };
   },
 
   async getMyCalendarPunches(params: { employeeId: number; from: string; to: string }) {
@@ -457,12 +762,30 @@ export const attendanceService = {
       punches.map((p) => ({ punchAt: p.punchAt, source: String(p.source) })),
     );
 
-    const policy = await resolveEffectivePolicy(params.employeeId);
-    const { totalMinutes, isLate, isHalfDay, meetsPunchOut } = evaluateDayPunches(
-      policy,
-      firstIn,
-      lastOut,
-    );
+    const basePolicy = await resolveEffectivePolicy(params.employeeId);
+    const dayOverrideRow = await prisma.attendancePolicyDayOverride.findUnique({
+      where: { date: parseYmd(params.date) },
+    });
+    const policy = applyDayOverrideToPolicy(basePolicy, dayOverrideRow);
+    const raw = evaluateDayPunches(policy, firstIn, lastOut);
+    const { used, max } = await monthBufferUsageBeforeDate(params.employeeId, params.date, basePolicy);
+
+    let isLate = raw.isLate;
+    let isHalfDay = raw.isHalfDay;
+    let bufferGraceUsed = false;
+    if (raw.isOutsideBuffer === true) {
+      isLate = true;
+      isHalfDay = true;
+    } else if (raw.usedBufferGrace) {
+      if (used < max) {
+        isLate = false;
+        isHalfDay = false;
+        bufferGraceUsed = true;
+      } else {
+        isLate = true;
+        isHalfDay = true;
+      }
+    }
 
     const hasPunch = punches.length > 0;
     const [leaveApp, holidayDates] = await Promise.all([
@@ -481,7 +804,7 @@ export const attendanceService = {
       summary: {
         firstIn,
         lastOut,
-        totalMinutes,
+        totalMinutes: raw.totalMinutes,
         dayStatus,
         leave: dayStatus === 'LEAVE' && leaveApp
           ? {
@@ -499,14 +822,20 @@ export const attendanceService = {
           punchOutTime: policy.punchOutTime,
           punchInBufferMinutes: policy.punchInBufferMinutes,
           punchOutBufferMinutes: policy.punchOutBufferMinutes,
+          maxBufferDaysPerMonth: policy.maxBufferDaysPerMonth,
+          bufferDaysUsedThisMonth: used + (bufferGraceUsed ? 1 : 0),
           globalPolicy: policy.globalPolicy,
           employeeSettings: policy.employeeSettings,
+          dayOverride: dayOverrideRow ? serializeDayOverride(dayOverrideRow) : null,
         },
         evaluation: hasPunch
           ? {
               isLate,
               isHalfDay,
-              meetsPunchOut,
+              meetsPunchOut: raw.meetsPunchOut,
+              isOutsideBuffer: raw.isOutsideBuffer,
+              bufferGraceUsed,
+              bufferDaysRemaining: Math.max(0, max - used - (bufferGraceUsed ? 1 : 0)),
               thresholds: {
                 lateAfter: policy.punchInTime,
                 lateBufferMinutes: policy.punchInBufferMinutes,
@@ -601,7 +930,8 @@ export const attendanceService = {
       select: { id: true, punchAt: true, terminalId: true, punchType: true, source: true, latitude: true, longitude: true, locationId: true, location: true, deviceInfo: true },
     });
 
-    const policy = await resolveEffectivePolicy(params.employeeId);
+    const basePolicy = await resolveEffectivePolicy(params.employeeId);
+    const dayOverrides = await fetchDayOverridesMap(params.from, params.to);
 
     const approvedLeaveDates = await fetchApprovedLeaveDates(
       params.employeeId,
@@ -636,18 +966,15 @@ export const attendanceService = {
     }
 
     // Iterate every IST day in [from, to] inclusive so empty days appear.
-    const days: Array<{
+    type DraftDay = {
       date: string;
       firstIn: string | null;
       lastOut: string | null;
-      totalMinutes: number;
       punches: PunchRow[];
-      isLate: boolean | null;
-      isHalfDay: boolean | null;
-      meetsPunchOut: boolean | null;
       dayStatus: DayStatus;
-      leaveTypeName?: string | null;
-    }> = [];
+      eval: DayPunchEval;
+    };
+    const draftDays: DraftDay[] = [];
 
     let cursor = istDayStartUtc(params.from);
     const end = istDayStartUtc(params.to);
@@ -657,29 +984,37 @@ export const attendanceService = {
       const { firstIn, lastOut } = deriveDayInOut(
         dayPunches.map((p) => ({ punchAt: p.punchAt, source: p.source })),
       );
-      const { totalMinutes, isLate, isHalfDay, meetsPunchOut } = evaluateDayPunches(
-        policy,
-        firstIn,
-        lastOut,
-      );
+      const dayPolicy = applyDayOverrideToPolicy(basePolicy, dayOverrides.get(date));
+      const evaluation = evaluateDayPunches(dayPolicy, firstIn, lastOut);
 
       const hasPunch = Boolean(firstIn);
       const dayStatus = resolveDayStatus(hasPunch, date, approvedLeaveDates, holidayDates);
 
-      days.push({
+      draftDays.push({
         date,
         firstIn,
         lastOut,
-        totalMinutes,
         punches: dayPunches,
-        isLate,
-        isHalfDay,
-        meetsPunchOut,
         dayStatus,
+        eval: evaluation,
       });
 
       cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
     }
+
+    const applied = applyMonthlyBufferQuota(draftDays, basePolicy.maxBufferDaysPerMonth);
+    const days = applied.map((d) => ({
+      date: d.date,
+      firstIn: d.firstIn,
+      lastOut: d.lastOut,
+      totalMinutes: d.eval.totalMinutes,
+      punches: d.punches,
+      isLate: d.isLate,
+      isHalfDay: d.isHalfDay,
+      meetsPunchOut: d.eval.meetsPunchOut,
+      bufferGraceUsed: d.bufferGraceUsed,
+      dayStatus: d.dayStatus,
+    }));
 
     return {
       employee: {
@@ -692,13 +1027,15 @@ export const attendanceService = {
       from: params.from,
       to: params.to,
       policy: {
-        source: policy.source,
-        punchInTime: policy.punchInTime,
-        punchOutTime: policy.punchOutTime,
-        punchInBufferMinutes: policy.punchInBufferMinutes,
-        punchOutBufferMinutes: policy.punchOutBufferMinutes,
-        globalPolicy: policy.globalPolicy,
-        employeeSettings: policy.employeeSettings,
+        source: basePolicy.source,
+        punchInTime: basePolicy.punchInTime,
+        punchOutTime: basePolicy.punchOutTime,
+        punchInBufferMinutes: basePolicy.punchInBufferMinutes,
+        punchOutBufferMinutes: basePolicy.punchOutBufferMinutes,
+        maxBufferDaysPerMonth: basePolicy.maxBufferDaysPerMonth,
+        bufferDaysUsed: days.filter((d) => d.bufferGraceUsed).length,
+        globalPolicy: basePolicy.globalPolicy,
+        employeeSettings: basePolicy.employeeSettings,
       },
       days,
     };
@@ -831,7 +1168,7 @@ export const attendanceService = {
       .filter((d) => (d as { dayStatus?: string }).dayStatus === 'ABSENT')
       .map((d) => d.date);
     const daysInMonth = history.days.length;
-    const salaryAbsentDays = absentDays + unpaidLeaveDays;
+    const salaryAbsentDays = absentDays + unpaidLeaveDays + halfDays * 0.5;
 
     return {
       year: params.year,

@@ -461,11 +461,12 @@ const AGGREGATE_COLUMNS = new Set(['gross_pay', 'total_deductions', 'net_pay', '
 export function buildAttendanceCutOverrides(
   result: ComputeResult,
   columnDefinitions: SalaryColumnDefinition[],
-  opts: { daysInMonth: number; absentDays: number; unpaidLeaveDays: number },
+  opts: { daysInMonth: number; absentDays: number; unpaidLeaveDays: number; halfDays?: number },
 ): Record<string, number> {
   const D = Math.max(1, Math.floor(opts.daysInMonth));
   const X = Math.max(0, opts.absentDays);
   const L = Math.max(0, opts.unpaidLeaveDays);
+  const H = Math.max(0, opts.halfDays ?? 0);
   const defByKey = new Map(
     columnDefinitions.map((d) => [columnKey(d.columnIdentifier, d.category), d]),
   );
@@ -477,7 +478,8 @@ export function buildAttendanceCutOverrides(
     if (!def || AGGREGATE_COLUMNS.has(c.column_identifier)) continue;
     const cutOnLeave = Boolean((def as { cutOnLeave?: boolean }).cutOnLeave);
     const cutOnAbsent = Boolean((def as { cutOnAbsent?: boolean }).cutOnAbsent);
-    const cutDays = (cutOnAbsent ? X : 0) + (cutOnLeave ? L : 0);
+    // Half-days cut at 0.5 day each on the same columns that cut for absence.
+    const cutDays = (cutOnAbsent ? X + H * 0.5 : 0) + (cutOnLeave ? L : 0);
     if (cutDays <= 0) continue;
     const payable = round2((c.effective_value * (D - cutDays)) / D);
     overrides[key] = payable;

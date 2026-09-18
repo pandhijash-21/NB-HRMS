@@ -116,6 +116,41 @@ class AttendanceRepository {
     );
   }
 
+  Future<AttendancePolicyDayOverride?> getAdminPolicyDayOverride(String date) async {
+    return _dio.getEnvelope<AttendancePolicyDayOverride?>(
+      'attendance/admin/policy/day',
+      queryParameters: {'date': date},
+      parse: (raw) {
+        if (raw == null) return null;
+        if (raw is! Map) {
+          throw const FormatException('Invalid day policy response');
+        }
+        return AttendancePolicyDayOverride.fromJson(Map<String, dynamic>.from(raw));
+      },
+    );
+  }
+
+  Future<AttendancePolicyDayOverride> upsertAdminPolicyDayOverride(Map<String, dynamic> body) async {
+    return _dio.putEnvelope<AttendancePolicyDayOverride>(
+      'attendance/admin/policy/day',
+      data: body,
+      parse: (raw) {
+        if (raw is! Map) {
+          throw const FormatException('Invalid day policy update response');
+        }
+        return AttendancePolicyDayOverride.fromJson(Map<String, dynamic>.from(raw));
+      },
+    );
+  }
+
+  Future<void> deleteAdminPolicyDayOverride(String date) async {
+    await _dio.deleteEnvelope(
+      'attendance/admin/policy/day',
+      queryParameters: {'date': date},
+      parse: (_) => true,
+    );
+  }
+
   Future<AdminAttendanceEmployeeHistory> getAdminEmployeeHistory({
     required int employeeId,
     required String from,

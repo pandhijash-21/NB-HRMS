@@ -792,6 +792,7 @@ export const salaryService = {
     const stats = attendance.stats as {
       absentDays: number;
       unpaidLeaveDays: number;
+      halfDays: number;
       salaryAbsentDays: number;
       daysInMonth: number;
       holidayDays: number;
@@ -893,6 +894,7 @@ export const salaryService = {
       daysInMonth: stats.daysInMonth,
       absentDays: stats.absentDays,
       unpaidLeaveDays: stats.unpaidLeaveDays,
+      halfDays: stats.halfDays,
     });
     if (Object.keys(cutOverrides).length) {
       // Recompute full formula chain with cut amounts locked (avoids double-counting gross_salary).
@@ -904,13 +906,14 @@ export const salaryService = {
     }
 
     const cutDays = Object.keys(cutOverrides).length
-      ? stats.absentDays + stats.unpaidLeaveDays
+      ? stats.absentDays + stats.unpaidLeaveDays + stats.halfDays * 0.5
       : 0;
 
     const breakdown = {
       daysInMonth: stats.daysInMonth,
       trueAbsentDays: stats.absentDays,
       unpaidLeaveDays: stats.unpaidLeaveDays,
+      halfDays: stats.halfDays,
       salaryAbsentDays: stats.salaryAbsentDays,
       holidayDays: stats.holidayDays,
       leaveDays: stats.leaveDays,

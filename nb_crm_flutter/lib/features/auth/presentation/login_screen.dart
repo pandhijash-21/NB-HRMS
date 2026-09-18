@@ -1,9 +1,11 @@
 import 'dart:ui';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/network/api_url_cubit.dart';
 import '../../../core/network/app_config.dart';
@@ -13,6 +15,18 @@ import '../data/auth_repository.dart';
 import 'bloc/auth_bloc.dart';
 import 'widgets/auth_widgets.dart';
 
+class _C {
+  static const gold = Color(0xFFC5A36A);
+  static const goldSoft = Color(0xFFD6BC85);
+  static const card = Color(0xFFFFFFFF);
+  static const field = Color(0xFFF4F2EE);
+  static const ink = Color(0xFF1A1F1B);
+  static const mute = Color(0xFF6F766F);
+  static const line = Color(0xFFE2DDD5);
+  static const onImage = Color(0xFFF7F4EE);
+  static const apkBg = Color(0xFFF0E6D4);
+}
+
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -20,7 +34,7 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _identifierController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -29,10 +43,13 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscurePassword = true;
   bool _rememberMe = false;
   bool _loadingRemembered = true;
+  late final AnimationController _enter;
 
   @override
   void initState() {
     super.initState();
+    _enter = AnimationController(vsync: this, duration: const Duration(milliseconds: 850));
+    _enter.forward();
     _loadRememberedCredentials();
   }
 
@@ -54,6 +71,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   void dispose() {
+    _enter.dispose();
     _identifierController.dispose();
     _passwordController.dispose();
     _identifierFocusNode.dispose();
@@ -64,14 +82,11 @@ class _LoginScreenState extends State<LoginScreen> {
   void _submit() {
     final authBloc = context.read<AuthBloc>();
     if (authBloc.state.isSubmitting) return;
-
     authBloc.add(const AuthClearErrorRequested());
-
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
     final identifier = _identifierController.text.trim();
     final password = _passwordController.text;
-
     final isSuperAdmin = identifier.toLowerCase() == 'superadmin' ||
         (kIsWeb && Uri.base.toString().toLowerCase().contains('superadmin'));
 
@@ -84,434 +99,183 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    final wide = size.width >= 720;
+    final wide = MediaQuery.sizeOf(context).width >= 980;
+    final fade = CurvedAnimation(parent: _enter, curve: Curves.easeOutCubic);
 
     return Theme(
       data: authScreenTheme(),
       child: Scaffold(
         body: Stack(
+          fit: StackFit.expand,
           children: [
-            // Background Gradient
-            const Positioned.fill(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Color(0xFF0F0E0D), // Deep rich black
-                      Color(0xFF1A1816), // Very dark brown/black
-                      Color(0xFF2B2722), // Lighter dark brown
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-            // Subtle glowing orb effect in the background
-            Positioned(
-              top: -100,
-              right: -100,
-              child: Container(
-                width: 400,
-                height: 400,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: const Color(0xFFC5A059).withValues(alpha: 0.05),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFC5A059).withValues(alpha: 0.1),
-                      blurRadius: 100,
-                      spreadRadius: 50,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            SafeArea(
-              child: Center(
-                child: SingleChildScrollView(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: wide ? 32 : 20,
-                    vertical: 24,
-                  ),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 440),
-                    child: TweenAnimationBuilder<double>(
-                      duration: const Duration(milliseconds: 800),
-                      curve: Curves.easeOutExpo,
-                      tween: Tween(begin: 0.0, end: 1.0),
-                      builder: (context, value, child) {
-                        return Transform.translate(
-                          offset: Offset(0.0, 40.0 * (1.0 - value)),
-                          child: Opacity(opacity: value, child: child),
-                        );
-                      },
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _BrandHeader(compact: !wide),
-                          const SizedBox(height: 36),
-
-                          // Glassmorphism Card — skip blur on web (causes flicker)
-                          Builder(builder: (context) {
-                            final cardDecoration = BoxDecoration(
-                              color: const Color(0xFF1E1B18).withValues(alpha: kIsWeb ? 0.92 : 0.7),
-                              borderRadius: BorderRadius.circular(24),
-                              border: Border.all(
-                                color: const Color(0xFFC5A059).withValues(alpha: 0.2),
-                                width: 1.5,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.4),
-                                  blurRadius: 30,
-                                  offset: const Offset(0, 15),
+            const _LoginBackdrop(),
+            // Soft dark veil so white text stays readable.
+            const ColoredBox(color: Color(0x66000000)),
+            FadeTransition(
+              opacity: fade,
+              child: wide
+                  ? Row(
+                      children: [
+                        const Expanded(flex: 62, child: _BrandOverlay()),
+                        Expanded(
+                          flex: 38,
+                          child: SafeArea(
+                            child: Center(
+                              child: SingleChildScrollView(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 28,
+                                  vertical: 28,
                                 ),
-                              ],
-                            );
-                            final cardChild = Container(
-                              decoration: cardDecoration,
-                              padding: EdgeInsets.all(wide ? 32 : 24),
-                                child: BlocConsumer<AuthBloc, AuthState>(
-                                  listenWhen: (prev, curr) =>
-                                      prev.isSubmitting != curr.isSubmitting ||
-                                      prev.status != curr.status ||
-                                      prev.errorMessage != curr.errorMessage,
-                                  listener: (context, auth) async {
-                                    if (auth.errorMessage != null && auth.errorMessage!.isNotEmpty) {
-                                      _passwordFocusNode.requestFocus();
-                                      _passwordController.selection = TextSelection(
-                                        baseOffset: 0,
-                                        extentOffset: _passwordController.text.length,
-                                      );
-                                      return;
-                                    }
-
-                                    if (auth.isAuthenticated) {
-                                      final repo = context.read<AuthRepository>();
-                                      final identifier = _identifierController.text.trim();
-                                      final password = _passwordController.text;
-
-                                      if (_rememberMe && !auth.isFirstLogin) {
-                                        await repo.saveRememberedCredentials(
-                                          identifier: identifier,
-                                          password: password,
-                                        );
-                                        if (!kIsWeb) {
-                                          TextInput.finishAutofillContext(shouldSave: true);
-                                        }
-                                      } else if (!_rememberMe) {
-                                        await repo.clearRememberedCredentials();
-                                        if (!kIsWeb) {
-                                          TextInput.finishAutofillContext(shouldSave: false);
-                                        }
-                                      }
-
-                                      if (!context.mounted) return;
-
-                                      if (auth.isFirstLogin) {
-                                        context.go('/change-password');
-                                      } else if (auth.needsEmailVerification) {
-                                        context.go('/verify-emails');
-                                      } else if (auth.isSuperAdmin) {
-                                        context.go('/platform');
-                                      } else {
-                                        context.go('/home');
-                                      }
-                                    }
-                                  },
-                                  builder: (context, auth) {
-                                    final submitting = auth.isSubmitting;
-
-                                    return Form(
-                                      key: _formKey,
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                                        children: [
-                                          Text(
-                                            'Welcome Back',
-                                            style: TextStyle(
-                                              fontSize: wide ? 28 : 24,
-                                              fontWeight: FontWeight.w800,
-                                              color: Colors.white,
-                                              letterSpacing: -0.5,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 6),
-                                          Text(
-                                            'Sign in to access your portal',
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              color: Colors.white.withValues(alpha: 0.6),
-                                              fontWeight: FontWeight.w400,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 28),
-
-                                          // Employee Code / Username Field
-                                          TextFormField(
-                                            key: const ValueKey('login-username-field'),
-                                            controller: _identifierController,
-                                            focusNode: _identifierFocusNode,
-                                            enabled: true,
-                                            textInputAction: TextInputAction.next,
-                                            onFieldSubmitted: (_) => _passwordFocusNode.requestFocus(),
-                                            autofillHints: kIsWeb ? const [] : const [AutofillHints.username],
-                                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-                                            cursorColor: authGold,
-                                            decoration: authFieldDecoration(
-                                              label: 'Employee Code / Username',
-                                              hint: 'e.g. TEST1234 or HOD_OPS',
-                                              prefixIcon: const Icon(Icons.person_rounded),
-                                            ),
-                                            validator: (value) {
-                                              if (value == null || value.trim().isEmpty) {
-                                                return 'Employee ID or username is required';
-                                              }
-                                              return null;
-                                            },
-                                            onChanged: (_) {
-                                              if (auth.errorMessage != null) {
-                                                context.read<AuthBloc>().add(const AuthClearErrorRequested());
-                                              }
-                                            },
-                                          ),
-                                          const SizedBox(height: 20),
-
-                                          // Password Field
-                                          AuthPasswordField(
-                                            key: const ValueKey('login-password-field'),
-                                            controller: _passwordController,
-                                            focusNode: _passwordFocusNode,
-                                            label: 'Password',
-                                            hint: '••••••••',
-                                            obscure: _obscurePassword,
-                                            enabled: true,
-                                            onToggle: () => setState(
-                                              () => _obscurePassword = !_obscurePassword,
-                                            ),
-                                            textInputAction: TextInputAction.done,
-                                            onSubmitted: (_) => submitting ? null : _submit(),
-                                            onChanged: (_) {
-                                              if (auth.errorMessage != null) {
-                                                context.read<AuthBloc>().add(const AuthClearErrorRequested());
-                                              }
-                                            },
-                                            validator: (value) {
-                                              if (value == null || value.isEmpty) {
-                                                return 'Password is required';
-                                              }
-                                              return null;
-                                            },
-                                          ),
-                                          const SizedBox(height: 12),
-                                          InkWell(
-                                            onTap: submitting || _loadingRemembered
-                                                ? null
-                                                : () => setState(
-                                                      () => _rememberMe = !_rememberMe,
-                                                    ),
-                                            borderRadius: BorderRadius.circular(8),
-                                            child: Row(
-                                              children: [
-                                                SizedBox(
-                                                  height: 24,
-                                                  width: 24,
-                                                  child: Checkbox(
-                                                    value: _rememberMe,
-                                                    onChanged: submitting || _loadingRemembered
-                                                        ? null
-                                                        : (v) => setState(
-                                                              () => _rememberMe = v ?? false,
-                                                            ),
-                                                    activeColor: const Color(0xFFC5A059),
-                                                    checkColor: const Color(0xFF1A1816),
-                                                    side: BorderSide(
-                                                      color: Colors.white.withValues(alpha: 0.35),
-                                                    ),
-                                                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                                    visualDensity: VisualDensity.compact,
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 10),
-                                                Text(
-                                                  'Remember me',
-                                                  style: TextStyle(
-                                                    color: Colors.white.withValues(alpha: 0.75),
-                                                    fontWeight: FontWeight.w600,
-                                                    fontSize: 14,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          if (auth.errorMessage != null) ...[
-                                            const SizedBox(height: 20),
-                                            InlineBanner.error(message: auth.errorMessage!),
-                                            if (!kReleaseMode &&
-                                                (auth.errorMessage!.contains('Unable to reach server') ||
-                                                 auth.errorMessage!.contains('reach the server'))) ...[
-                                              const SizedBox(height: 8),
-                                              BlocBuilder<ApiUrlCubit, String>(
-                                                buildWhen: (previous, current) => previous != current,
-                                                builder: (context, currentUrl) {
-                                                  final isLocal = currentUrl.contains('127.0.0.1') ||
-                                                      currentUrl.contains('localhost');
-                                                  return Align(
-                                                    alignment: Alignment.centerLeft,
-                                                    child: InkWell(
-                                                      onTap: submitting
-                                                          ? null
-                                                          : () {
-                                                              final target = isLocal
-                                                                  ? AppConfig.liveApiBaseUrl
-                                                                  : AppConfig.localApiBaseUrl;
-                                                              context.read<ApiUrlCubit>().setUrl(target);
-                                                              context.read<AuthBloc>().add(const AuthClearErrorRequested());
-                                                              _submit();
-                                                            },
-                                                      borderRadius: BorderRadius.circular(8),
-                                                      child: Padding(
-                                                        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-                                                        child: Row(
-                                                          mainAxisSize: MainAxisSize.min,
-                                                          children: [
-                                                            const Icon(Icons.swap_horiz_rounded,
-                                                                size: 16, color: Color(0xFFC5A059)),
-                                                            const SizedBox(width: 6),
-                                                            Text(
-                                                              isLocal
-                                                                  ? 'Switch to Live Server (crm.nbdeveloper.co.in)'
-                                                                  : 'Switch to Local Server (localhost:4000)',
-                                                              style: const TextStyle(
-                                                                fontSize: 12,
-                                                                fontWeight: FontWeight.w700,
-                                                                color: Color(0xFFC5A059),
-                                                                decoration: TextDecoration.underline,
-                                                              ),
-                                                            ),
-                                                          ],
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  );
-                                                },
-                                              ),
-                                            ],
-                                          ],
-                                          if (auth.infoMessage != null) ...[
-                                            const SizedBox(height: 20),
-                                            InlineBanner.info(message: auth.infoMessage!),
-                                          ],
-                                          const SizedBox(height: 28),
-
-                                          // Luxurious Gold Submit Button
-                                          Container(
-                                            height: 52,
-                                            decoration: BoxDecoration(
-                                              borderRadius: BorderRadius.circular(14),
-                                              gradient: const LinearGradient(
-                                                colors: [
-                                                  Color(0xFFE2C481), // Light shimmering gold
-                                                  Color(0xFFC5A059), // Classic metallic gold
-                                                  Color(0xFF9E7D3B), // Deep antique bronze/gold
-                                                ],
-                                              ),
-                                              boxShadow: [
-                                                BoxShadow(
-                                                  color: const Color(0xFFC5A059).withValues(alpha: 0.35),
-                                                  blurRadius: 15,
-                                                  offset: const Offset(0, 5),
-                                                ),
-                                              ],
-                                            ),
-                                            child: ElevatedButton(
-                                              onPressed: submitting ? null : _submit,
-                                              style: ElevatedButton.styleFrom(
-                                                backgroundColor: Colors.transparent,
-                                                shadowColor: Colors.transparent,
-                                                shape: RoundedRectangleBorder(
-                                                  borderRadius: BorderRadius.circular(14),
-                                                ),
-                                              ),
-                                              child: submitting
-                                                  ? const SizedBox(
-                                                      height: 22,
-                                                      width: 22,
-                                                      child: CircularProgressIndicator(
-                                                        strokeWidth: 2.5,
-                                                        color: Color(0xFF1A1816),
-                                                      ),
-                                                    )
-                                                  : const Text(
-                                                      'Sign In',
-                                                      style: TextStyle(
-                                                        color: Color(0xFF1A1816),
-                                                        fontSize: 16,
-                                                        fontWeight: FontWeight.w800,
-                                                        letterSpacing: 0.5,
-                                                      ),
-                                                    ),
-                                            ),
-                                          ),
-                                          const SizedBox(height: 14),
-                                          Center(
-                                            child: TextButton.icon(
-                                              onPressed: () {
-                                                context.read<AuthBloc>().add(const AuthClearErrorRequested());
-                                                context.go('/superadmin/login');
-                                              },
-                                              icon: const Icon(Icons.shield_outlined, size: 15, color: Color(0xFFC5A059)),
-                                              label: const Text(
-                                                'Platform Superadmin Portal →',
-                                                style: TextStyle(
-                                                  color: Color(0xFFC5A059),
-                                                  fontSize: 13,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          if (InstallAndroidAppButton.visible) ...[
-                                            const SizedBox(height: 4),
-                                            Center(child: InstallAndroidAppButton.login()),
-                                          ],
-                                          if (!kReleaseMode) ...[
-                                            const SizedBox(height: 20),
-                                            BackendEnvSwitcher.card(enabled: !submitting),
-                                          ],
-                                          const SizedBox(height: 24),
-                                          Text(
-                                            'Protected by enterprise security. All access is audited.',
-                                            textAlign: TextAlign.center,
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              color: Colors.white.withValues(alpha: 0.4),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    );
-                                  },
+                                child: ConstrainedBox(
+                                  constraints: const BoxConstraints(maxWidth: 440),
+                                  child: _LoginCard(
+                                    formKey: _formKey,
+                                    identifierController: _identifierController,
+                                    passwordController: _passwordController,
+                                    identifierFocusNode: _identifierFocusNode,
+                                    passwordFocusNode: _passwordFocusNode,
+                                    obscurePassword: _obscurePassword,
+                                    rememberMe: _rememberMe,
+                                    loadingRemembered: _loadingRemembered,
+                                    onToggleObscure: () => setState(
+                                      () => _obscurePassword = !_obscurePassword,
+                                    ),
+                                    onRememberChanged: (v) =>
+                                        setState(() => _rememberMe = v),
+                                    onSubmit: _submit,
+                                  ),
                                 ),
-                                );
-                            if (kIsWeb) return cardChild;
-                            return ClipRRect(
-                              borderRadius: BorderRadius.circular(24),
-                              child: BackdropFilter(
-                                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                                child: cardChild,
                               ),
-                            );
-                          }),
-                        ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  : SafeArea(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(18, 20, 18, 28),
+                        child: Column(
+                          children: [
+                            const _MobileBrandHeader(),
+                            const SizedBox(height: 22),
+                            _LoginCard(
+                              formKey: _formKey,
+                              identifierController: _identifierController,
+                              passwordController: _passwordController,
+                              identifierFocusNode: _identifierFocusNode,
+                              passwordFocusNode: _passwordFocusNode,
+                              obscurePassword: _obscurePassword,
+                              rememberMe: _rememberMe,
+                              loadingRemembered: _loadingRemembered,
+                              onToggleObscure: () => setState(
+                                () => _obscurePassword = !_obscurePassword,
+                              ),
+                              onRememberChanged: (v) =>
+                                  setState(() => _rememberMe = v),
+                              onSubmit: _submit,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LoginBackdrop extends StatelessWidget {
+  const _LoginBackdrop();
+
+  static const _bg = 'assets/images/login_bg.png';
+
+  @override
+  Widget build(BuildContext context) {
+    return Image.asset(
+      _bg,
+      fit: BoxFit.cover,
+      width: double.infinity,
+      height: double.infinity,
+      alignment: Alignment.center,
+      filterQuality: FilterQuality.high,
+      errorBuilder: (_, error, __) {
+        debugPrint('login_bg.png failed: $error');
+        return const ColoredBox(color: Color(0xFF0B100E));
+      },
+    );
+  }
+}
+
+class _BrandOverlay extends StatelessWidget {
+  const _BrandOverlay();
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(48, 36, 36, 32),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const _BrandHeader(onDark: true),
+            const Spacer(flex: 3),
+            Text(
+              'WELCOME TO',
+              style: GoogleFonts.sourceSans3(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 3.2,
+                color: _C.onImage.withValues(alpha: 0.85),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'NB CRM',
+              style: GoogleFonts.fraunces(
+                fontSize: 64,
+                fontWeight: FontWeight.w600,
+                height: 0.95,
+                letterSpacing: -1.5,
+                color: _C.goldSoft,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(width: 48, height: 2, color: _C.gold),
+            const SizedBox(height: 16),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 380),
+              child: Text(
+                'People, projects, and site progress — one private workspace.',
+                style: GoogleFonts.sourceSans3(
+                  fontSize: 16,
+                  height: 1.45,
+                  color: _C.onImage.withValues(alpha: 0.88),
                 ),
+              ),
+            ),
+            const SizedBox(height: 36),
+            const Row(
+              children: [
+                _FeatureItem(icon: Icons.people_outline_rounded, label: 'Manage Teams'),
+                SizedBox(width: 28),
+                _FeatureItem(icon: Icons.bar_chart_rounded, label: 'Track Progress'),
+                SizedBox(width: 28),
+                _FeatureItem(
+                  icon: Icons.description_outlined,
+                  label: 'Streamline Operations',
+                ),
+              ],
+            ),
+            const Spacer(flex: 4),
+            Text(
+              'HRMS  ·  CRM  ·  ERP',
+              style: GoogleFonts.sourceSans3(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 2.6,
+                color: _C.onImage.withValues(alpha: 0.55),
               ),
             ),
           ],
@@ -522,66 +286,593 @@ class _LoginScreenState extends State<LoginScreen> {
 }
 
 class _BrandHeader extends StatelessWidget {
-  const _BrandHeader({required this.compact});
+  const _BrandHeader({required this.onDark});
 
-  final bool compact;
+  final bool onDark;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = onDark ? _C.onImage : _C.ink;
+    final sub = onDark ? _C.onImage.withValues(alpha: 0.7) : _C.mute;
+
+    return Row(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.asset(
+            'assets/images/nb-logo.png',
+            width: 52,
+            height: 52,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => Container(
+              width: 52,
+              height: 52,
+              color: _C.gold,
+              alignment: Alignment.center,
+              child: Text(
+                'NB',
+                style: GoogleFonts.fraunces(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: _C.ink,
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'NB DEVELOPERS',
+              style: GoogleFonts.sourceSans3(
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.6,
+                color: title,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'BUILDING BETTER TOMORROW',
+              style: GoogleFonts.sourceSans3(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 1.3,
+                color: sub,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _FeatureItem extends StatelessWidget {
+  const _FeatureItem({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Image.asset(
-          'assets/images/nbdeveloperlogo.png',
-          height: compact ? 72 : 96,
-          fit: BoxFit.contain,
-          errorBuilder: (_, __, ___) => Container(
-            width: compact ? 64 : 76,
-            height: compact ? 64 : 76,
-            decoration: const BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFFE2C481),
-                  Color(0xFFC5A059),
-                  Color(0xFF8C6D2D),
-                ],
-              ),
-            ),
-            child: Center(
-              child: Icon(
-                Icons.domain_rounded,
-                size: compact ? 34 : 40,
-                color: const Color(0xFF1A1816),
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
+        Icon(icon, size: 26, color: _C.onImage.withValues(alpha: 0.9)),
+        const SizedBox(height: 8),
         Text(
-          'NB CRM',
-          style: TextStyle(
-            fontSize: compact ? 26 : 32,
-            fontWeight: FontWeight.w900,
-            letterSpacing: 2.0,
-            foreground: Paint()
-              ..shader = const LinearGradient(
-                colors: [Color(0xFFFFF7D6), Color(0xFFC5A059)],
-              ).createShader(const Rect.fromLTWH(0.0, 0.0, 200.0, 70.0)),
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          'HRMS · CRM · ERP SUITE',
-          style: TextStyle(
+          label,
+          style: GoogleFonts.sourceSans3(
             fontSize: 12,
-            letterSpacing: 3.5,
             fontWeight: FontWeight.w600,
-            color: const Color(0xFFC5A059).withValues(alpha: 0.8),
+            color: _C.onImage.withValues(alpha: 0.8),
           ),
         ),
       ],
+    );
+  }
+}
+
+class _MobileBrandHeader extends StatelessWidget {
+  const _MobileBrandHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
+          color: Colors.black.withValues(alpha: 0.35),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const _BrandHeader(onDark: true),
+              const SizedBox(height: 14),
+              Text(
+                'NB CRM',
+                style: GoogleFonts.fraunces(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w600,
+                  color: _C.goldSoft,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LoginCard extends StatelessWidget {
+  const _LoginCard({
+    required this.formKey,
+    required this.identifierController,
+    required this.passwordController,
+    required this.identifierFocusNode,
+    required this.passwordFocusNode,
+    required this.obscurePassword,
+    required this.rememberMe,
+    required this.loadingRemembered,
+    required this.onToggleObscure,
+    required this.onRememberChanged,
+    required this.onSubmit,
+  });
+
+  final GlobalKey<FormState> formKey;
+  final TextEditingController identifierController;
+  final TextEditingController passwordController;
+  final FocusNode identifierFocusNode;
+  final FocusNode passwordFocusNode;
+  final bool obscurePassword;
+  final bool rememberMe;
+  final bool loadingRemembered;
+  final VoidCallback onToggleObscure;
+  final ValueChanged<bool> onRememberChanged;
+  final VoidCallback onSubmit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(30, 32, 30, 24),
+      decoration: BoxDecoration(
+        color: _C.card,
+        borderRadius: BorderRadius.circular(32),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.22),
+            blurRadius: 36,
+            offset: const Offset(0, 16),
+          ),
+        ],
+      ),
+      child: BlocConsumer<AuthBloc, AuthState>(
+        listenWhen: (prev, curr) =>
+            prev.isSubmitting != curr.isSubmitting ||
+            prev.status != curr.status ||
+            prev.errorMessage != curr.errorMessage,
+        listener: (context, auth) async {
+          if (auth.errorMessage != null && auth.errorMessage!.isNotEmpty) {
+            passwordFocusNode.requestFocus();
+            passwordController.selection = TextSelection(
+              baseOffset: 0,
+              extentOffset: passwordController.text.length,
+            );
+            return;
+          }
+
+          if (auth.isAuthenticated) {
+            final repo = context.read<AuthRepository>();
+            final identifier = identifierController.text.trim();
+            final password = passwordController.text;
+
+            if (rememberMe && !auth.isFirstLogin) {
+              await repo.saveRememberedCredentials(
+                identifier: identifier,
+                password: password,
+              );
+              if (!kIsWeb) {
+                TextInput.finishAutofillContext(shouldSave: true);
+              }
+            } else if (!rememberMe) {
+              await repo.clearRememberedCredentials();
+              if (!kIsWeb) {
+                TextInput.finishAutofillContext(shouldSave: false);
+              }
+            }
+
+            if (!context.mounted) return;
+
+            if (auth.isFirstLogin) {
+              context.go('/change-password');
+            } else if (auth.needsEmailVerification) {
+              context.go('/verify-emails');
+            } else if (auth.isSuperAdmin) {
+              context.go('/platform');
+            } else {
+              context.go('/home');
+            }
+          }
+        },
+        builder: (context, auth) {
+          final submitting = auth.isSubmitting;
+
+          return Form(
+            key: formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Sign in',
+                  style: GoogleFonts.fraunces(
+                    fontSize: 32,
+                    fontWeight: FontWeight.w600,
+                    color: _C.ink,
+                    height: 1.1,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Welcome back! Access your NB CRM account.',
+                  style: GoogleFonts.sourceSans3(
+                    fontSize: 14,
+                    color: _C.mute,
+                  ),
+                ),
+                const SizedBox(height: 26),
+                TextFormField(
+                  key: const ValueKey('login-username-field'),
+                  controller: identifierController,
+                  focusNode: identifierFocusNode,
+                  textInputAction: TextInputAction.next,
+                  onFieldSubmitted: (_) => passwordFocusNode.requestFocus(),
+                  autofillHints: kIsWeb ? const [] : const [AutofillHints.username],
+                  style: GoogleFonts.sourceSans3(
+                    color: _C.ink,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14.5,
+                  ),
+                  cursorColor: _C.ink,
+                  decoration: _fieldDecoration(
+                    hint: 'Employee Code / Username',
+                    prefixIcon: const Icon(Icons.person_outline_rounded, size: 20),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Employee ID or username is required';
+                    }
+                    return null;
+                  },
+                  onChanged: (_) {
+                    if (auth.errorMessage != null) {
+                      context.read<AuthBloc>().add(const AuthClearErrorRequested());
+                    }
+                  },
+                ),
+                const SizedBox(height: 14),
+                TextFormField(
+                  key: const ValueKey('login-password-field'),
+                  controller: passwordController,
+                  focusNode: passwordFocusNode,
+                  obscureText: obscurePassword,
+                  obscuringCharacter: '•',
+                  textInputAction: TextInputAction.done,
+                  onFieldSubmitted: (_) => submitting ? null : onSubmit(),
+                  autofillHints: kIsWeb ? const [] : const [AutofillHints.password],
+                  style: GoogleFonts.sourceSans3(
+                    color: _C.ink,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14.5,
+                  ),
+                  cursorColor: _C.ink,
+                  decoration: _fieldDecoration(
+                    hint: 'Password',
+                    prefixIcon: const Icon(Icons.lock_outline_rounded, size: 20),
+                    suffixIcon: IconButton(
+                      onPressed: onToggleObscure,
+                      icon: Icon(
+                        obscurePassword
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Password is required';
+                    }
+                    return null;
+                  },
+                  onChanged: (_) {
+                    if (auth.errorMessage != null) {
+                      context.read<AuthBloc>().add(const AuthClearErrorRequested());
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    InkWell(
+                      onTap: submitting || loadingRemembered
+                          ? null
+                          : () => onRememberChanged(!rememberMe),
+                      borderRadius: BorderRadius.circular(6),
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            height: 22,
+                            width: 22,
+                            child: Checkbox(
+                              value: rememberMe,
+                              onChanged: submitting || loadingRemembered
+                                  ? null
+                                  : (v) => onRememberChanged(v ?? false),
+                              activeColor: _C.ink,
+                              checkColor: _C.card,
+                              side: const BorderSide(color: _C.line),
+                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Remember me',
+                            style: GoogleFonts.sourceSans3(
+                              color: _C.mute,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Contact your admin to reset your password.',
+                            ),
+                          ),
+                        );
+                      },
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: Text(
+                        'Forgot password?',
+                        style: GoogleFonts.sourceSans3(
+                          color: _C.gold,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (auth.errorMessage != null) ...[
+                  const SizedBox(height: 14),
+                  InlineBanner.error(message: auth.errorMessage!),
+                  if (!kReleaseMode &&
+                      (auth.errorMessage!.contains('Unable to reach server') ||
+                          auth.errorMessage!.contains('reach the server'))) ...[
+                    const SizedBox(height: 8),
+                    BlocBuilder<ApiUrlCubit, String>(
+                      buildWhen: (previous, current) => previous != current,
+                      builder: (context, currentUrl) {
+                        final isLocal = currentUrl.contains('127.0.0.1') ||
+                            currentUrl.contains('localhost');
+                        return Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton(
+                            onPressed: submitting
+                                ? null
+                                : () {
+                                    final target = isLocal
+                                        ? AppConfig.liveApiBaseUrl
+                                        : AppConfig.localApiBaseUrl;
+                                    context.read<ApiUrlCubit>().setUrl(target);
+                                    context
+                                        .read<AuthBloc>()
+                                        .add(const AuthClearErrorRequested());
+                                    onSubmit();
+                                  },
+                            child: Text(
+                              isLocal ? 'Switch to Live Server' : 'Switch to Local Server',
+                              style: GoogleFonts.sourceSans3(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: _C.ink,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ],
+                if (auth.infoMessage != null) ...[
+                  const SizedBox(height: 14),
+                  InlineBanner.info(message: auth.infoMessage!),
+                ],
+                const SizedBox(height: 22),
+                SizedBox(
+                  height: 52,
+                  child: FilledButton(
+                    onPressed: submitting ? null : onSubmit,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: _C.ink,
+                      foregroundColor: _C.card,
+                      disabledBackgroundColor: _C.ink.withValues(alpha: 0.4),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: submitting
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.4,
+                              color: _C.card,
+                            ),
+                          )
+                        : Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                'Continue',
+                                style: GoogleFonts.sourceSans3(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              const Icon(Icons.arrow_forward_rounded, size: 18),
+                            ],
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                    onPressed: () {
+                      context.read<AuthBloc>().add(const AuthClearErrorRequested());
+                      context.go('/superadmin/login');
+                    },
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: Text(
+                      'Platform Superadmin →',
+                      style: GoogleFonts.sourceSans3(
+                        color: _C.gold,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+                if (InstallAndroidAppButton.visible) ...[
+                  const SizedBox(height: 12),
+                  Material(
+                    color: _C.apkBg,
+                    borderRadius: BorderRadius.circular(14),
+                    child: InkWell(
+                      onTap: () => InstallAndroidAppButton.download(context),
+                      borderRadius: BorderRadius.circular(14),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 13,
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.android_rounded, color: _C.gold, size: 22),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'Install Android app (.apk)',
+                                style: GoogleFonts.sourceSans3(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: _C.ink,
+                                ),
+                              ),
+                            ),
+                            Icon(
+                              Icons.chevron_right_rounded,
+                              color: _C.ink.withValues(alpha: 0.4),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+                if (!kReleaseMode) ...[
+                  const SizedBox(height: 12),
+                  BackendEnvSwitcher.card(enabled: !submitting),
+                ],
+                const SizedBox(height: 18),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.verified_user_outlined,
+                      size: 14,
+                      color: _C.mute.withValues(alpha: 0.85),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Access is private and audited.',
+                      style: GoogleFonts.sourceSans3(
+                        fontSize: 12,
+                        color: _C.mute,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  InputDecoration _fieldDecoration({
+    required String hint,
+    Widget? prefixIcon,
+    Widget? suffixIcon,
+  }) {
+    return InputDecoration(
+      hintText: hint,
+      prefixIcon: prefixIcon,
+      suffixIcon: suffixIcon,
+      filled: true,
+      fillColor: _C.field,
+      hintStyle: GoogleFonts.sourceSans3(
+        color: _C.mute.withValues(alpha: 0.7),
+        fontSize: 13.5,
+        fontWeight: FontWeight.w500,
+      ),
+      prefixIconColor: _C.mute,
+      suffixIconColor: _C.mute,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 15),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide.none,
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide.none,
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: _C.ink, width: 1.2),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFF8F4E48)),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFF8F4E48), width: 1.2),
+      ),
     );
   }
 }

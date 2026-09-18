@@ -2210,7 +2210,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
               builder: (context) {
                 final isLargeWebOrDesktop = kIsWeb || MediaQuery.sizeOf(context).width >= 900;
                 final screenLayout = Column(
-                  children: [
+              children: [
                     if (_whiteboardOpen)
                       Expanded(
                         child: Padding(
@@ -2514,12 +2514,12 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                         ),
                       ),
                     if (_peopleOpen)
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: SizedBox(
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: SizedBox(
                           width: (MediaQuery.sizeOf(context).width * 0.92).clamp(280.0, 360.0),
-                          child: Material(
-                            color: const Color(0xFF161616),
+                      child: Material(
+                        color: const Color(0xFF161616),
                             child: _buildPeopleDrawer(participants),
                           ),
                         ),
@@ -2538,18 +2538,18 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                               ),
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                child: Column(
+                        child: Column(
                                   mainAxisSize: MainAxisSize.min,
                                   crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
+                          children: [
                                     for (final row in _captions.length <= 3
                                         ? _captions
                                         : _captions.sublist(_captions.length - 3))
-                                      Padding(
+                            Padding(
                                         padding: const EdgeInsets.only(bottom: 2),
                                         child: Text.rich(
                                           TextSpan(
-                                            children: [
+                                children: [
                                               TextSpan(
                                                 text: '${meetClock(row.spokenAt)} ',
                                                 style: const TextStyle(color: Colors.white54, fontSize: 11),
@@ -2557,7 +2557,7 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                                               TextSpan(
                                                 text: '${row.speakerName}: ',
                                                 style: const TextStyle(
-                                                  color: Colors.white,
+                                    color: Colors.white,
                                                   fontWeight: FontWeight.w700,
                                                   fontSize: 13,
                                                 ),
@@ -2565,10 +2565,10 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                                               TextSpan(
                                                 text: row.text,
                                                 style: const TextStyle(color: Colors.white, fontSize: 13, height: 1.3),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
+                                  ),
+                                ],
+                              ),
+                            ),
                                       ),
                                   ],
                                 ),
@@ -2585,10 +2585,10 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                           child: Material(
                             color: const Color(0xFF161616),
                             child: _buildChatDrawer(),
-                          ),
-                        ),
                       ),
-                  ],
+                    ),
+                  ),
+              ],
                 );
               },
             ),
@@ -2671,9 +2671,9 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
                   tooltip: _screenShareLocked
                       ? 'Screen sharing disabled by host (locked)'
                       : (_share
-                          ? 'Stop sharing screen'
-                          : widget.voiceOnly
-                              ? 'Share screen'
+                      ? 'Stop sharing screen'
+                      : widget.voiceOnly
+                          ? 'Share screen'
                               : 'Present now'),
                   onPressed: () {
                     if (_screenShareLocked) {
@@ -3397,10 +3397,10 @@ class _MeetRoomScreenState extends ConsumerState<MeetRoomScreen> {
           final mod = _moderationLocks[identityKey] ?? (person?.id != null ? _moderationLocks[person!.id!] : null) ?? (micLocked: false, camLocked: false, screenLocked: false);
           final name = _labelFor(p);
 
-          return _ParticipantTile(
-            participant: p,
+        return _ParticipantTile(
+          participant: p,
             label: name,
-            photoUrl: _photoForParticipant(p),
+          photoUrl: _photoForParticipant(p),
             handRaised: _hands.containsKey(p.identity),
             canModerate: isHost && !isMe,
             isMicLocked: mod.micLocked,
@@ -4507,10 +4507,10 @@ class _ParticipantTile extends StatelessWidget {
                                   ),
                                 ),
                               ],
-                            ],
-                          ),
+                          ],
                         ),
                       ),
+                    ),
                   ],
                 );
               },

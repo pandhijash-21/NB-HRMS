@@ -57,6 +57,29 @@ export const employeeController = {
     return res.json(ok({ items, total, viewScope: req.user?.employeeViewScope ?? 'NONE' }));
   },
 
+  async upcomingBirthdays(req: Request, res: Response) {
+    const daysAhead = Number(req.query.daysAhead) || 45;
+    const limit = Number(req.query.limit) || 12;
+    // Prefer directory scope when available; otherwise use caller's org.
+    let subOrganization: string | null | undefined;
+    try {
+      if (canViewEmployeeDirectory(req.user)) {
+        subOrganization = await resolveDirectoryInstituteFilter(req.user);
+      } else {
+        subOrganization = req.user?.subOrganization ?? null;
+      }
+    } catch {
+      subOrganization = req.user?.subOrganization ?? null;
+    }
+
+    const data = await employeeService.upcomingBirthdays({
+      daysAhead,
+      limit,
+      subOrganization,
+    });
+    return res.json(ok(data));
+  },
+
   async getById(req: Request, res: Response) {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json(fail('Invalid employee id'));

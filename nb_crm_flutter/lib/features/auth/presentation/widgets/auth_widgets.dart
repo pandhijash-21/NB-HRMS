@@ -1,38 +1,40 @@
-import 'dart:ui';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import '../../../../core/theme/app_colors.dart';
-
 export '../../../../core/utils/password_policy.dart';
 
-const authGold = Color(0xFFC5A059);
-const authInk = Color(0xFF1A1816);
-const authFieldFill = Color(0xFF2B2722);
+/// Shared muted stone auth palette (no pure white / no bright gold).
+const authGold = Color(0xFF5C6B5F); // kept name for call sites — muted sage
+const authInk = Color(0xFF2A2E34);
+const authFieldFill = Color(0xFFD0CBC1);
+const authPanel = Color(0xFFDDD8CE);
+const authStone = Color(0xFFC7C2B8);
+const authLine = Color(0xFFA39E94);
+const authMuted = Color(0xFF5A616C);
+const authAccentDeep = Color(0xFF3E4A41);
 
-/// Dark theme for auth screens so light-mode app theme cannot make typed
-/// passwords (and the cursor) invisible on dark fields.
+/// Light muted theme for auth screens (login / password / verify).
 ThemeData authScreenTheme() {
   return ThemeData(
-    brightness: Brightness.dark,
-    colorScheme: const ColorScheme.dark(
-      primary: authGold,
+    brightness: Brightness.light,
+    colorScheme: const ColorScheme.light(
+      primary: authAccentDeep,
       secondary: authGold,
-      surface: Color(0xFF1E1B18),
-      error: Color(0xFFFF8A80),
-      onSurface: Colors.white,
+      surface: authPanel,
+      error: Color(0xFF8F4E48),
+      onSurface: authInk,
+      onPrimary: authStone,
     ),
-    scaffoldBackgroundColor: authInk,
+    scaffoldBackgroundColor: authStone,
     textSelectionTheme: TextSelectionThemeData(
-      cursorColor: authGold,
-      selectionColor: authGold.withValues(alpha: 0.35),
-      selectionHandleColor: authGold,
+      cursorColor: authAccentDeep,
+      selectionColor: authGold.withValues(alpha: 0.28),
+      selectionHandleColor: authAccentDeep,
     ),
   );
 }
 
-/// Dark gold backdrop used on login, first-password, and email verification.
+/// Soft stone backdrop used on auth flows.
 class AuthScenicScaffold extends StatelessWidget {
   const AuthScenicScaffold({
     super.key,
@@ -53,60 +55,27 @@ class AuthScenicScaffold extends StatelessWidget {
       child: PopScope(
         canPop: canPop,
         child: Scaffold(
-        body: Stack(
-          children: [
-            const Positioned.fill(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Color(0xFF0F0E0D),
-                      Color(0xFF1A1816),
-                      Color(0xFF2B2722),
-                    ],
+          body: Stack(
+            children: [
+              const Positioned.fill(
+                child: ColoredBox(color: authStone),
+              ),
+              SafeArea(
+                child: Center(
+                  child: SingleChildScrollView(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: wide ? 32 : 20,
+                      vertical: 24,
+                    ),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: maxWidth),
+                      child: child,
+                    ),
                   ),
                 ),
               ),
-            ),
-            Positioned(
-              top: -100,
-              right: -100,
-              child: IgnorePointer(
-                child: Container(
-                  width: 400,
-                  height: 400,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: authGold.withValues(alpha: 0.05),
-                    boxShadow: [
-                      BoxShadow(
-                        color: authGold.withValues(alpha: 0.1),
-                        blurRadius: 100,
-                        spreadRadius: 50,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            SafeArea(
-              child: Center(
-                child: SingleChildScrollView(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: wide ? 32 : 20,
-                    vertical: 24,
-                  ),
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: maxWidth),
-                    child: child,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
+            ],
+          ),
         ),
       ),
     );
@@ -130,7 +99,7 @@ class AuthBrandMark extends StatelessWidget {
           errorBuilder: (_, __, ___) => Icon(
             Icons.apartment_rounded,
             size: compact ? 48 : 64,
-            color: authGold,
+            color: authAccentDeep,
           ),
         ),
         const SizedBox(height: 16),
@@ -138,7 +107,7 @@ class AuthBrandMark extends StatelessWidget {
           'NB CRM',
           textAlign: TextAlign.center,
           style: TextStyle(
-            color: Colors.white,
+            color: authInk,
             fontWeight: FontWeight.w800,
             fontSize: compact ? 24 : 28,
             letterSpacing: 0.5,
@@ -150,7 +119,7 @@ class AuthBrandMark extends StatelessWidget {
             subtitle!,
             textAlign: TextAlign.center,
             style: const TextStyle(
-              color: authGold,
+              color: authAccentDeep,
               fontWeight: FontWeight.w700,
               fontSize: 13,
             ),
@@ -168,39 +137,21 @@ class AuthGlassCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final decoration = BoxDecoration(
-      color: const Color(0xFF1E1B18).withValues(alpha: kIsWeb ? 0.92 : 0.78),
-      borderRadius: BorderRadius.circular(24),
-      border: Border.all(color: authGold.withValues(alpha: 0.2), width: 1.5),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.4),
-          blurRadius: 30,
-          offset: const Offset(0, 15),
-        ),
-      ],
-    );
-
-    // BackdropFilter with blur is very expensive on Flutter web and causes
-    // visible flickering when the widget tree rebuilds. Skip it on web.
-    if (kIsWeb) {
-      return Container(
-        decoration: decoration,
-        padding: const EdgeInsets.fromLTRB(32, 36, 32, 32),
-        child: child,
-      );
-    }
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
-          decoration: decoration,
-          padding: const EdgeInsets.fromLTRB(32, 36, 32, 32),
-          child: child,
-        ),
+    return Container(
+      decoration: BoxDecoration(
+        color: authPanel,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: authLine.withValues(alpha: 0.55), width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: authInk.withValues(alpha: 0.08),
+            blurRadius: 24,
+            offset: const Offset(0, 12),
+          ),
+        ],
       ),
+      padding: const EdgeInsets.fromLTRB(28, 30, 28, 26),
+      child: child,
     );
   }
 }
@@ -219,43 +170,43 @@ InputDecoration authFieldDecoration({
     suffixIcon: suffixIcon,
     counterText: counterText,
     filled: true,
-    fillColor: authFieldFill.withValues(alpha: 0.55),
-    labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.55), fontWeight: FontWeight.w600),
-    floatingLabelStyle: const TextStyle(color: authGold, fontWeight: FontWeight.w700),
-    hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.25)),
+    fillColor: authFieldFill,
+    labelStyle: TextStyle(color: authMuted.withValues(alpha: 0.95), fontWeight: FontWeight.w600),
+    floatingLabelStyle: const TextStyle(color: authAccentDeep, fontWeight: FontWeight.w700),
+    hintStyle: TextStyle(color: authMuted.withValues(alpha: 0.55)),
     errorStyle: const TextStyle(
-      color: Color(0xFFFF8A80),
+      color: Color(0xFF8F4E48),
       fontSize: 12,
       fontWeight: FontWeight.w600,
       height: 1.3,
     ),
     errorMaxLines: 3,
-    prefixIconColor: authGold,
-    suffixIconColor: Colors.white.withValues(alpha: 0.55),
+    prefixIconColor: authAccentDeep,
+    suffixIconColor: authMuted,
     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
     border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(12),
       borderSide: BorderSide.none,
     ),
     enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-      borderSide: BorderSide(color: authGold.withValues(alpha: 0.12), width: 1.5),
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(color: authLine.withValues(alpha: 0.7), width: 1),
     ),
     focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-      borderSide: const BorderSide(color: authGold, width: 1.5),
+      borderRadius: BorderRadius.circular(12),
+      borderSide: const BorderSide(color: authAccentDeep, width: 1.4),
     ),
     disabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-      borderSide: BorderSide(color: authGold.withValues(alpha: 0.08), width: 1.5),
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(color: authLine.withValues(alpha: 0.4), width: 1),
     ),
     errorBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-      borderSide: const BorderSide(color: Color(0xFFFF8A80)),
+      borderRadius: BorderRadius.circular(12),
+      borderSide: const BorderSide(color: Color(0xFF8F4E48)),
     ),
     focusedErrorBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-      borderSide: const BorderSide(color: Color(0xFFFF8A80), width: 1.5),
+      borderRadius: BorderRadius.circular(12),
+      borderSide: const BorderSide(color: Color(0xFF8F4E48), width: 1.4),
     ),
   );
 }
@@ -275,33 +226,31 @@ class AuthGoldButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 54,
+      height: 50,
       child: FilledButton(
         onPressed: busy ? null : onPressed,
         style: FilledButton.styleFrom(
-          backgroundColor: authGold,
-          foregroundColor: authInk,
-          disabledBackgroundColor: authGold.withValues(alpha: 0.45),
-          disabledForegroundColor: authInk.withValues(alpha: 0.7),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          elevation: 4,
-          shadowColor: authGold.withValues(alpha: 0.45),
+          backgroundColor: authAccentDeep,
+          foregroundColor: authStone,
+          disabledBackgroundColor: authAccentDeep.withValues(alpha: 0.45),
+          disabledForegroundColor: authStone.withValues(alpha: 0.7),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          elevation: 0,
         ),
         child: busy
             ? const SizedBox(
                 height: 22,
                 width: 22,
-                child: CircularProgressIndicator(strokeWidth: 2.6, color: authInk),
+                child: CircularProgressIndicator(strokeWidth: 2.6, color: authStone),
               )
             : Text(
                 label,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: 0.4),
+                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, letterSpacing: 0.2),
               ),
       ),
     );
   }
 }
-
 
 class InlineBanner extends StatelessWidget {
   const InlineBanner.error({super.key, required this.message})
@@ -316,8 +265,8 @@ class InlineBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isError = _tone == _BannerTone.error;
-    final bg = isError ? AppColors.errorSoft : AppColors.successSoft;
-    final fg = isError ? AppColors.error : AppColors.success;
+    final bg = isError ? const Color(0xFFE8D6D3) : const Color(0xFFD5E0D7);
+    final fg = isError ? const Color(0xFF8F4E48) : const Color(0xFF3E4A41);
     final icon = isError ? Icons.error_outline : Icons.check_circle_outline;
 
     return Container(
@@ -325,7 +274,7 @@ class InlineBanner extends StatelessWidget {
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: fg.withValues(alpha: 0.35)),
+        border: Border.all(color: fg.withValues(alpha: 0.3)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -397,8 +346,6 @@ class _AuthPasswordFieldState extends State<AuthPasswordField> {
 
   @override
   Widget build(BuildContext context) {
-    // Chrome + Flutter web treat `new-password` + obscureText as a password
-    // manager form and leave the previous field readonly after you tab away.
     final hints = kIsWeb ? const <String>[] : widget.autofillHints;
     return TextFormField(
       controller: widget.controller,
@@ -419,11 +366,11 @@ class _AuthPasswordFieldState extends State<AuthPasswordField> {
       smartDashesType: SmartDashesType.disabled,
       smartQuotesType: SmartQuotesType.disabled,
       style: const TextStyle(
-        color: Colors.white,
+        color: authInk,
         fontWeight: FontWeight.w600,
         fontSize: 16,
       ),
-      cursorColor: authGold,
+      cursorColor: authAccentDeep,
       decoration: authFieldDecoration(
         label: widget.label,
         hint: widget.hint,
@@ -433,7 +380,7 @@ class _AuthPasswordFieldState extends State<AuthPasswordField> {
           onPressed: widget.enabled ? widget.onToggle : null,
           icon: Icon(
             widget.obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-            color: Colors.white.withValues(alpha: 0.55),
+            color: authMuted,
           ),
         ),
       ),
@@ -468,9 +415,7 @@ class PasswordPolicyChecklist extends StatelessWidget {
                   Icon(
                     rule.ok ? Icons.check_circle_rounded : Icons.radio_button_unchecked,
                     size: 16,
-                    color: rule.ok
-                        ? const Color(0xFF81C784)
-                        : Colors.white.withValues(alpha: 0.35),
+                    color: rule.ok ? authAccentDeep : authMuted.withValues(alpha: 0.55),
                   ),
                   const SizedBox(width: 8),
                   Text(
@@ -478,9 +423,7 @@ class PasswordPolicyChecklist extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: rule.ok
-                          ? const Color(0xFF81C784)
-                          : Colors.white.withValues(alpha: 0.45),
+                      color: rule.ok ? authAccentDeep : authMuted.withValues(alpha: 0.75),
                     ),
                   ),
                 ],

@@ -25,12 +25,22 @@ class NotificationBellButton extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(appNotificationsProvider);
     final unread = state.unread;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final iconColor = isDark ? Colors.white : const Color(0xFF263238);
+    final inSidebar = variant == NotificationBellVariant.sidebar;
+    // Sidebar is always dark chrome — ignore app Theme brightness here.
+    final iconColor = inSidebar
+        ? const Color(0xFFD6BC85)
+        : (Theme.of(context).brightness == Brightness.dark
+            ? Colors.white
+            : const Color(0xFF263238));
+    final textColor = inSidebar
+        ? const Color(0xFFE8E4DC)
+        : (Theme.of(context).brightness == Brightness.dark
+            ? Colors.white.withValues(alpha: 0.8)
+            : const Color(0xFF263238));
     final bell = NbIcon(
       unread > 0 ? Icons.notifications_active_rounded : Icons.notifications_none_rounded,
       color: iconColor,
-      size: variant == NotificationBellVariant.sidebar ? 20 : 24,
+      size: inSidebar ? 20 : 24,
     );
     final badge = Badge(
       isLabelVisible: unread > 0,
@@ -42,7 +52,7 @@ class NotificationBellButton extends ConsumerWidget {
       child: bell,
     );
 
-    if (variant != NotificationBellVariant.sidebar) {
+    if (!inSidebar) {
       return IconButton(
         tooltip: 'Notifications',
         visualDensity: compact ? VisualDensity.compact : null,
@@ -56,11 +66,9 @@ class NotificationBellButton extends ConsumerWidget {
       height: 36,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.16) : Colors.white,
+        color: const Color(0xFFC5A36A).withValues(alpha: 0.16),
         border: Border.all(
-          color: isDark
-              ? const Color(0xFFC5A059).withValues(alpha: 0.38)
-              : const Color(0xFFCCD6DD),
+          color: const Color(0xFFC5A36A).withValues(alpha: 0.38),
         ),
       ),
       alignment: Alignment.center,
@@ -98,7 +106,7 @@ class NotificationBellButton extends ConsumerWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: isDark ? Colors.white.withValues(alpha: 0.8) : const Color(0xFF263238),
+                    color: textColor,
                     fontWeight: FontWeight.w600,
                     fontSize: 13,
                   ),

@@ -155,12 +155,12 @@ class _Card extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.04),
+        color: const Color(0xFFD0CBC1),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: isLocal
-              ? Colors.amber.withValues(alpha: 0.25)
-              : const Color(0xFF22C55E).withValues(alpha: 0.3),
+              ? const Color(0xFF8A7A3E).withValues(alpha: 0.45)
+              : const Color(0xFF3E4A41).withValues(alpha: 0.45),
         ),
       ),
       child: Row(
@@ -168,7 +168,7 @@ class _Card extends StatelessWidget {
           Icon(
             isLocal ? Icons.developer_mode_rounded : Icons.cloud_done_rounded,
             size: 15,
-            color: isLocal ? Colors.amber : const Color(0xFF22C55E),
+            color: isLocal ? const Color(0xFF8A7A3E) : const Color(0xFF3E4A41),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -181,14 +181,14 @@ class _Card extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
-                    color: isLocal ? Colors.amber : const Color(0xFF22C55E),
+                    color: isLocal ? const Color(0xFF8A7A3E) : const Color(0xFF3E4A41),
                   ),
                 ),
                 Text(
                   currentBaseUrl,
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 10,
-                    color: Colors.white.withValues(alpha: 0.45),
+                    color: Color(0xFF5A616C),
                     fontFamily: 'monospace',
                   ),
                   maxLines: 1,

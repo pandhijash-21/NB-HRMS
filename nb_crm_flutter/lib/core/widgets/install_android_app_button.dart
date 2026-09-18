@@ -66,26 +66,26 @@ class InstallAndroidAppButton extends StatelessWidget {
           ),
         );
       case _InstallVariant.drawer:
-        final isDark = Theme.of(context).brightness == Brightness.dark;
+        // Drawer chrome matches always-dark sidebar.
         return InkWell(
           onTap: () => download(context),
           borderRadius: BorderRadius.circular(12),
-          child: SizedBox(
+          child: const SizedBox(
             height: 44,
             child: Row(
               children: [
-                const SizedBox(width: 12),
+                SizedBox(width: 12),
                 NbIcon(
                   Icons.android_rounded,
-                  color: isDark ? Colors.white.withValues(alpha: 0.7) : const Color(0xFF263238),
+                  color: Color(0xFFD6BC85),
                   size: 22,
                 ),
-                const SizedBox(width: 12),
+                SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     'Install Android app',
                     style: TextStyle(
-                      color: isDark ? Colors.white.withValues(alpha: 0.8) : const Color(0xFF263238),
+                      color: Color(0xFFE8E4DC),
                       fontWeight: FontWeight.w600,
                       fontSize: 13,
                     ),
@@ -96,9 +96,9 @@ class InstallAndroidAppButton extends StatelessWidget {
           ),
         );
       case _InstallVariant.sidebar:
-        final isDark = Theme.of(context).brightness == Brightness.dark;
-        final iconColor =
-            isDark ? Colors.white.withValues(alpha: 0.7) : const Color(0xFF263238);
+        // Sidebar chrome is always dark — don't follow app light/dark theme.
+        const iconColor = Color(0xFFD6BC85);
+        const textColor = Color(0xFFE8E4DC);
         return Tooltip(
           message: 'Install Android app (.apk)',
           child: InkWell(
@@ -110,17 +110,15 @@ class InstallAndroidAppButton extends StatelessWidget {
                   ? Row(
                       children: [
                         const SizedBox(width: 12),
-                        NbIcon(Icons.android_rounded, color: iconColor, size: 22),
+                        const NbIcon(Icons.android_rounded, color: iconColor, size: 22),
                         const SizedBox(width: 12),
-                        Expanded(
+                        const Expanded(
                           child: Text(
                             'Install Android app',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              color: isDark
-                                  ? Colors.white.withValues(alpha: 0.8)
-                                  : const Color(0xFF263238),
+                              color: textColor,
                               fontWeight: FontWeight.w600,
                               fontSize: 13,
                             ),
@@ -128,7 +126,7 @@ class InstallAndroidAppButton extends StatelessWidget {
                         ),
                       ],
                     )
-                  : Center(
+                  : const Center(
                       child: NbIcon(Icons.android_rounded, color: iconColor, size: 22),
                     ),
             ),

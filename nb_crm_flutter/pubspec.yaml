@@ -68,6 +68,8 @@ flutter:
         - asset: fonts/MaterialIcons-Regular.otf
   assets:
     - assets/images/
+    - assets/images/nb-logo.png
+    - assets/images/login_bg.png
     - assets/images/earth/
     - assets/sounds/
   shaders:

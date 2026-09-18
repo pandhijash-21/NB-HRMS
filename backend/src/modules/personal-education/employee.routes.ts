@@ -30,6 +30,7 @@ function allowSelfOrDirectoryView(req: Request, res: Response, next: NextFunctio
 
 employeeRouter.get('/', requireAuth, requireEmployeeDirectoryView(), employeeController.list);
 employeeRouter.get('/names', requireAuth, employeeController.listNames);
+employeeRouter.get('/upcoming-birthdays', requireAuth, employeeController.upcomingBirthdays);
 employeeRouter.post('/full', requireAuth, requireEmployeeDirectoryWrite(), employeeController.createFull);
 employeeRouter.get('/:id', requireAuth, employeeController.getById);
 employeeRouter.get('/:id/assignments', requireAuth, allowSelfOrDirectoryView, employeeController.listAssignments);

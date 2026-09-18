@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'radial_menu.dart';
 
 import '../../features/auth/domain/permissions.dart';
@@ -18,6 +19,20 @@ import '../theme/theme_cubit.dart';
 import 'backend_env_switcher.dart';
 import 'install_android_app_button.dart';
 
+/// Sidebar palette — dark charcoal for stronger contrast with content.
+class _SideC {
+  static const brand = Color(0xFF101510);
+  static const gold = Color(0xFFC5A36A);
+  static const goldSoft = Color(0xFFD6BC85);
+  static const cream = Color(0xFFE8E4DC);
+  static const card = Color(0xFF1A201C);
+  static const ink = Color(0xFFE8E4DC);
+  static const mute = Color(0xFF9AA399);
+  static const line = Color(0xFF2A322C);
+  static const darkSurface = Color(0xFF161C18);
+  static const darkLine = Color(0xFF2A322C);
+  static const selectedBg = Color(0xFF222A25);
+}
 class ResponsiveShell extends ConsumerStatefulWidget {
   const ResponsiveShell({super.key, required this.child});
 
@@ -690,24 +705,21 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
           ],
         ),
         drawer: Drawer(
-          backgroundColor: isDark ? const Color(0xFF1A1816) : const Color(0xFFECEFF1),
+          backgroundColor: _SideC.brand,
           shape: const RoundedRectangleBorder(
             borderRadius: BorderRadius.only(
-              topRight: Radius.circular(20),
-              bottomRight: Radius.circular(20),
+              topRight: Radius.circular(16),
+              bottomRight: Radius.circular(16),
             ),
           ),
           child: Column(
             children: [
               // Custom Drawer Header matching sidebar branding
               Container(
-                padding: const EdgeInsets.fromLTRB(20, 50, 20, 20),
-                decoration: BoxDecoration(
+                padding: const EdgeInsets.fromLTRB(20, 50, 20, 18),
+                decoration: const BoxDecoration(
                   border: Border(
-                    bottom: BorderSide(
-                      color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
-                      width: 1.5,
-                    ),
+                    bottom: BorderSide(color: _SideC.line),
                   ),
                 ),
                 child: Column(
@@ -719,38 +731,38 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                         const SizedBox(width: 12),
                         Text(
                           brandTitle,
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 18,
-                            color: isDark ? Colors.white : const Color(0xFF212F3D),
-                            letterSpacing: -0.3,
+                          style: GoogleFonts.sourceSans3(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 17,
+                            color: _SideC.ink,
+                            letterSpacing: -0.2,
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 18),
+                    const SizedBox(height: 16),
                     Text(
                       auth.user?.name ?? '',
-                      style: TextStyle(
-                        color: isDark ? Colors.white.withValues(alpha: 0.9) : const Color(0xFF263238),
-                        fontWeight: FontWeight.w600,
+                      style: GoogleFonts.sourceSans3(
+                        color: _SideC.ink,
+                        fontWeight: FontWeight.w700,
                         fontSize: 15,
                       ),
                     ),
                     if (auth.user?.role != null) ...[
-                      const SizedBox(height: 2),
+                      const SizedBox(height: 4),
                       Text(
                         auth.user!.role.toUpperCase(),
-                        style: TextStyle(
-                          color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF607D8B),
+                        style: GoogleFonts.sourceSans3(
+                          color: _SideC.goldSoft,
                           fontWeight: FontWeight.w700,
                           fontSize: 10,
-                          letterSpacing: 1,
+                          letterSpacing: 1.2,
                         ),
                       ),
                     ],
-                    const SizedBox(height: 16),
-                    _buildNavSearchField(isDark, expandedHint: true),
+                    const SizedBox(height: 14),
+                    _buildNavSearchField(true, expandedHint: true),
                   ],
                 ),
               ),
@@ -777,11 +789,9 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                 margin: const EdgeInsets.all(16),
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.08) : const Color(0xFFE5ECF0),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.18) : const Color(0xFFCCD6DD),
-                  ),
+                  color: _SideC.card,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: _SideC.line),
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -947,20 +957,21 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     return TextField(
       controller: _navSearch,
       onChanged: (_) => setState(() {}),
-      style: TextStyle(
+      style: GoogleFonts.sourceSans3(
         fontSize: 13,
-        color: isDark ? Colors.white : const Color(0xFF212F3D),
+        fontWeight: FontWeight.w600,
+        color: isDark ? _SideC.cream : _SideC.ink,
       ),
       decoration: InputDecoration(
         hintText: 'Search pages',
-        hintStyle: TextStyle(
+        hintStyle: GoogleFonts.sourceSans3(
           fontSize: 13,
-          color: isDark ? Colors.white38 : const Color(0xFF90A4AE),
+          color: _SideC.mute,
         ),
         prefixIcon: NbIcon(
           Icons.search_rounded,
           size: 20,
-          color: isDark ? Colors.white54 : const Color(0xFF607D8B),
+          color: _SideC.mute,
         ),
         suffixIcon: _navSearch.text.isEmpty
             ? null
@@ -974,26 +985,19 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
               ),
         isDense: true,
         filled: true,
-        fillColor: isDark ? const Color(0xFF261F1A) : Colors.white,
+        fillColor: isDark ? _SideC.darkSurface : _SideC.card,
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(
-            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
-          ),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: isDark ? _SideC.darkLine : _SideC.line),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(
-            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
-          ),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: isDark ? _SideC.darkLine : _SideC.line),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(
-            color: isDark ? const Color(0xFFC5A059) : const Color(0xFF2563EB),
-            width: 1.4,
-          ),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: _SideC.gold, width: 1.3),
         ),
       ),
     );
@@ -1040,14 +1044,14 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
       if (expanded) {
         widgets.add(
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 14, 16, 4),
+            padding: const EdgeInsets.fromLTRB(20, 14, 16, 6),
             child: Text(
               section.toUpperCase(),
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.1,
-                color: isDark ? const Color(0xFFE2D6BE).withValues(alpha: 0.55) : const Color(0xFF78909C),
+              style: GoogleFonts.sourceSans3(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.6,
+                color: isDark ? _SideC.goldSoft.withValues(alpha: 0.7) : _SideC.mute,
               ),
             ),
           ),
@@ -1058,7 +1062,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
             child: Divider(
               height: 8,
-              color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
+              color: isDark ? _SideC.darkLine : _SideC.line,
             ),
           ),
         );
@@ -1114,8 +1118,8 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
   }) {
     final badgeCount = d.route == '/chat' ? chatUnread : (d.alertBadge ? alertCount : 0);
     final iconColor = selected
-        ? (isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238))
-        : (isDark ? Colors.white.withValues(alpha: 0.4) : const Color(0xFF607D8B).withValues(alpha: 0.7));
+        ? (isDark ? _SideC.goldSoft : _SideC.brand)
+        : (isDark ? _SideC.cream.withValues(alpha: 0.45) : _SideC.mute);
     final icon = switch (d.route) {
       '/chat' => selected
           ? NbIcon(Icons.chat, color: iconColor, size: 22)
@@ -1133,54 +1137,71 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     Widget tileBody({required VoidCallback tap}) {
       return Padding(
         padding: EdgeInsets.only(
-          left: expanded ? (isChild ? 22 : 12) : 8,
-          right: expanded ? 12 : 8,
+          left: expanded ? (isChild ? 18 : 10) : 8,
+          right: expanded ? 10 : 8,
           top: 2,
           bottom: 2,
         ),
         child: InkWell(
           onTap: tap,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(10),
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            height: isChild ? 42 : 48,
+            duration: const Duration(milliseconds: 180),
+            height: isChild ? 40 : 46,
             alignment: expanded ? Alignment.centerLeft : Alignment.center,
             decoration: BoxDecoration(
               color: selected
-                  ? (isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFDFE6E9))
+                  ? (isDark
+                      ? _SideC.gold.withValues(alpha: 0.14)
+                      : _SideC.card)
                   : Colors.transparent,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(10),
               border: selected
                   ? Border.all(
-                      color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.25) : const Color(0xFFB0BEC5),
-                      width: 1.2,
+                      color: isDark
+                          ? _SideC.gold.withValues(alpha: 0.35)
+                          : _SideC.line,
                     )
                   : null,
             ),
             child: expanded
                 ? Row(
                     children: [
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 10),
+                      if (selected)
+                        Container(
+                          width: 3,
+                          height: 18,
+                          margin: const EdgeInsets.only(right: 8),
+                          decoration: BoxDecoration(
+                            color: _SideC.gold,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        )
+                      else
+                        const SizedBox(width: 11),
                       if (isChild)
                         Padding(
                           padding: const EdgeInsets.only(right: 8),
                           child: Icon(
                             Icons.subdirectory_arrow_right_rounded,
                             size: 14,
-                            color: isDark ? Colors.white38 : const Color(0xFF90A4AE),
+                            color: isDark ? _SideC.mute : _SideC.line,
                           ),
                         ),
                       icon,
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 10),
                       Expanded(
                         child: Text(
                           d.label,
-                          style: TextStyle(
+                          style: GoogleFonts.sourceSans3(
                             color: selected
-                                ? (isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238))
-                                : (isDark ? Colors.white.withValues(alpha: 0.5) : const Color(0xFF607D8B).withValues(alpha: 0.8)),
-                            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                            fontSize: isChild ? 13 : 14,
+                                ? (isDark ? _SideC.goldSoft : _SideC.ink)
+                                : (isDark
+                                    ? _SideC.cream.withValues(alpha: 0.55)
+                                    : _SideC.mute),
+                            fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                            fontSize: isChild ? 13 : 13.5,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -1193,11 +1214,11 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                           duration: const Duration(milliseconds: 180),
                           child: Icon(
                             Icons.keyboard_arrow_down_rounded,
-                            size: 20,
-                            color: isDark ? Colors.white54 : const Color(0xFF78909C),
+                            size: 18,
+                            color: _SideC.mute,
                           ),
                         ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 6),
                     ],
                   )
                 : Stack(
@@ -1218,7 +1239,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                           child: Icon(
                             Icons.arrow_drop_down,
                             size: 14,
-                            color: isDark ? Colors.white54 : const Color(0xFF78909C),
+                            color: _SideC.mute,
                           ),
                         ),
                     ],
@@ -1263,28 +1284,26 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
   }
 
   Widget _buildLogo(BuildContext context) {
-    return Container(
-      width: 42,
-      height: 42,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          )
-        ],
-      ),
-      clipBehavior: Clip.antiAlias,
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
       child: Image.asset(
-        'assets/images/nbdeveloperlogo.png',
+        'assets/images/nb-logo.png',
+        width: 40,
+        height: 40,
         fit: BoxFit.cover,
         errorBuilder: (context, error, stackTrace) {
           return Container(
-            color: Theme.of(context).colorScheme.primary,
+            width: 40,
+            height: 40,
+            color: _SideC.brand,
             alignment: Alignment.center,
-            child: const Text('NB', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            child: Text(
+              'NB',
+              style: GoogleFonts.fraunces(
+                color: _SideC.gold,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           );
         },
       ),
@@ -1333,17 +1352,16 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     int chatUnread = 0,
   }) {
     final expanded = allowExpanded && _isExpanded;
+    // Sidebar stays dark for contrast with the cream content area.
+    const sideDark = true;
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeOutCubic,
-      width: expanded ? 260 : 80,
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1A1816) : const Color(0xFFECEFF1),
+      width: expanded ? 252 : 76,
+      decoration: const BoxDecoration(
+        color: _SideC.brand,
         border: Border(
-          right: BorderSide(
-            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCFD8DC),
-            width: 1.5,
-          ),
+          right: BorderSide(color: _SideC.line),
         ),
       ),
       child: Column(
@@ -1351,32 +1369,35 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
         children: [
           // Header
           Container(
-            height: expanded ? 90 : 108,
+            height: expanded ? 78 : 96,
             width: double.infinity,
-            padding: EdgeInsets.symmetric(horizontal: expanded ? 16 : 0),
+            padding: EdgeInsets.symmetric(horizontal: expanded ? 14 : 0),
             alignment: expanded ? Alignment.centerLeft : Alignment.center,
+            decoration: const BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: _SideC.line),
+              ),
+            ),
             child: expanded
                 ? Row(
                     children: [
                       _buildLogo(context),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 10),
                       Expanded(
                         child: Text(
                           brandTitle,
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 17,
-                            color: isDark ? Colors.white : const Color(0xFF212F3D),
-                            letterSpacing: -0.3,
+                          style: GoogleFonts.sourceSans3(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 15.5,
+                            color: _SideC.ink,
+                            letterSpacing: -0.2,
                           ),
                         ),
                       ),
                       IconButton(
-                        icon: NbIcon(
+                        icon: const NbIcon(
                           Icons.menu_open_rounded,
-                          color: isDark
-                              ? Colors.white.withValues(alpha: 0.5)
-                              : const Color(0xFF607D8B).withValues(alpha: 0.7),
+                          color: _SideC.mute,
                         ),
                         onPressed: () {
                           setState(() => _isExpanded = false);
@@ -1395,7 +1416,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                           onTap: allowExpanded
                               ? () => setState(() => _isExpanded = true)
                               : null,
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(10),
                           child: _buildLogo(context),
                         ),
                       ),
@@ -1404,12 +1425,10 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                           visualDensity: VisualDensity.compact,
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(minWidth: 36, minHeight: 32),
-                          icon: NbIcon(
+                          icon: const NbIcon(
                             Icons.menu_rounded,
                             size: 20,
-                            color: isDark
-                                ? Colors.white.withValues(alpha: 0.5)
-                                : const Color(0xFF607D8B).withValues(alpha: 0.7),
+                            color: _SideC.mute,
                           ),
                           onPressed: () {
                             setState(() => _isExpanded = true);
@@ -1422,21 +1441,21 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
           
           if (expanded)
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: _buildNavSearchField(isDark, expandedHint: true),
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+              child: _buildNavSearchField(sideDark, expandedHint: true),
             )
           else
             Padding(
-              padding: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.only(bottom: 8, top: 6),
               child: Center(
                 child: IconButton(
                   tooltip: 'Search pages',
                   onPressed: allowExpanded
                       ? () => setState(() => _isExpanded = true)
                       : null,
-                  icon: NbIcon(
+                  icon: const NbIcon(
                     Icons.search_rounded,
-                    color: isDark ? Colors.white54 : const Color(0xFF607D8B),
+                    color: _SideC.mute,
                   ),
                 ),
               ),
@@ -1448,7 +1467,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
               padding: const EdgeInsets.symmetric(vertical: 4),
               children: _buildSectionedNav(
                 destinations,
-                isDark,
+                sideDark,
                 expanded: expanded,
                 alertCount: alertCount,
                 chatUnread: chatUnread,
@@ -1463,14 +1482,12 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
           AnimatedContainer(
             duration: const Duration(milliseconds: 300),
             curve: Curves.easeOutCubic,
-            margin: EdgeInsets.fromLTRB(expanded ? 16 : 10, 8, expanded ? 16 : 10, 16),
-            padding: const EdgeInsets.symmetric(vertical: 8),
+            margin: EdgeInsets.fromLTRB(expanded ? 12 : 8, 8, expanded ? 12 : 8, 14),
+            padding: const EdgeInsets.symmetric(vertical: 6),
             decoration: BoxDecoration(
-              color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.08) : const Color(0xFFE5ECF0),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.18) : const Color(0xFFCCD6DD),
-              ),
+              color: _SideC.card,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: _SideC.line),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -1485,17 +1502,17 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                   message: isDark ? 'Light Mode' : 'Dark Mode',
                   child: InkWell(
                     onTap: () => context.read<ThemeCubit>().toggleTheme(),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(10),
                     child: SizedBox(
-                      height: 44,
+                      height: 42,
                       child: expanded
                           ? Row(
                               children: [
                                 const SizedBox(width: 12),
                                 NbIcon(
                                   isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                                  color: isDark ? Colors.white.withValues(alpha: 0.7) : const Color(0xFF263238),
-                                  size: 22,
+                                  color: _SideC.goldSoft,
+                                  size: 20,
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
@@ -1503,8 +1520,8 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                                     isDark ? 'Light Mode' : 'Dark Mode',
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      color: isDark ? Colors.white.withValues(alpha: 0.8) : const Color(0xFF263238),
+                                    style: GoogleFonts.sourceSans3(
+                                      color: _SideC.ink,
                                       fontWeight: FontWeight.w600,
                                       fontSize: 13,
                                     ),
@@ -1515,44 +1532,44 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                           : Center(
                               child: NbIcon(
                                 isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                                color: isDark ? Colors.white.withValues(alpha: 0.7) : const Color(0xFF263238),
-                                size: 22,
+                                color: _SideC.goldSoft,
+                                size: 20,
                               ),
                             ),
                     ),
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 12),
                   child: Divider(
                     height: 8,
-                    color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.15) : const Color(0xFFCCD6DD),
+                    color: _SideC.line,
                   ),
                 ),
                 Tooltip(
                   message: 'Sign out',
                   child: InkWell(
                     onTap: () => context.read<AuthBloc>().add(const AuthLogoutRequested()),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(10),
                     child: SizedBox(
-                      height: 44,
+                      height: 42,
                       child: expanded
                           ? Row(
                               children: [
                                 const SizedBox(width: 12),
                                 NbIcon(
                                   Icons.logout_rounded,
-                                  color: const Color(0xFFEF4444).withValues(alpha: 0.9),
-                                  size: 22,
+                                  color: const Color(0xFFEF5350).withValues(alpha: 0.95),
+                                  size: 20,
                                 ),
                                 const SizedBox(width: 12),
-                                const Expanded(
+                                Expanded(
                                   child: Text(
                                     'Sign out',
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      color: Color(0xFFEF4444),
+                                    style: GoogleFonts.sourceSans3(
+                                      color: const Color(0xFFEF5350),
                                       fontWeight: FontWeight.w700,
                                       fontSize: 13,
                                     ),
@@ -1563,8 +1580,8 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                           : Center(
                               child: NbIcon(
                                 Icons.logout_rounded,
-                                color: const Color(0xFFEF4444).withValues(alpha: 0.9),
-                                size: 22,
+                                color: const Color(0xFFEF5350).withValues(alpha: 0.95),
+                                size: 20,
                               ),
                             ),
                     ),

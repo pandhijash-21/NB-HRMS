@@ -637,4 +637,95 @@ export const employeeService = {
       },
     });
   },
+
+  /**
+   * Upcoming birthdays from EmployeePersonalInfo.birthDate (next N days).
+   * Skips placeholder DOBs (1970-01-01) and inactive employees.
+   */
+  async upcomingBirthdays(params: {
+    daysAhead?: number;
+    limit?: number;
+    subOrganization?: string | null;
+  }) {
+    const daysAhead = Math.min(Math.max(params.daysAhead ?? 45, 1), 90);
+    const limit = Math.min(Math.max(params.limit ?? 12, 1), 40);
+
+    const where: any = {
+      status: 'ACTIVE',
+      personalInfo: { isNot: null },
+    };
+
+    if (params.subOrganization === '__NO_INSTITUTE_SCOPE__') {
+      where.id = -1;
+    } else if (params.subOrganization) {
+      const scope = params.subOrganization.trim();
+      where.generalInfo = {
+        OR: [
+          { subOrganization: { equals: scope, mode: 'insensitive' } },
+          { organization: { equals: scope, mode: 'insensitive' } },
+          { institute: { code: { equals: scope, mode: 'insensitive' } } },
+          { institute: { name: { equals: scope, mode: 'insensitive' } } },
+        ],
+      };
+    }
+
+    const rows = await prisma.employee.findMany({
+      where,
+      select: {
+        id: true,
+        photoUrl: true,
+        generalInfo: { select: { fullName: true, employeeCode: true } },
+        personalInfo: { select: { birthDate: true } },
+      },
+      take: 2000,
+    });
+
+    const now = new Date();
+    const todayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+
+    type Item = {
+      employeeId: number;
+      name: string;
+      employeeCode: string | null;
+      photoUrl: string | null;
+      birthDate: string;
+      nextOccurrence: string;
+      daysUntil: number;
+      turningAge: number | null;
+    };
+
+    const items: Item[] = [];
+
+    for (const row of rows) {
+      const bd = row.personalInfo?.birthDate;
+      if (!bd) continue;
+      const y = bd.getUTCFullYear();
+      const m = bd.getUTCMonth();
+      const d = bd.getUTCDate();
+      // Skip placeholder / empty DOBs used as defaults
+      if (y <= 1970 && m === 0 && d === 1) continue;
+
+      let next = new Date(Date.UTC(todayUtc.getUTCFullYear(), m, d));
+      if (next < todayUtc) {
+        next = new Date(Date.UTC(todayUtc.getUTCFullYear() + 1, m, d));
+      }
+      const daysUntil = Math.round((next.getTime() - todayUtc.getTime()) / 86400000);
+      if (daysUntil > daysAhead) continue;
+
+      const turningAge = next.getUTCFullYear() - y;
+      items.push({
+        employeeId: row.id,
+        name: row.generalInfo?.fullName?.trim() || `Employee #${row.id}`,
+        employeeCode: row.generalInfo?.employeeCode ?? null,
+        photoUrl: row.photoUrl ?? null,
+        birthDate: bd.toISOString().slice(0, 10),
+        nextOccurrence: next.toISOString().slice(0, 10),
+        daysUntil,
+        turningAge: turningAge > 0 && turningAge < 120 ? turningAge : null,
+      });
+    }
+
+    items.sort((a, b) => a.daysUntil - b.daysUntil || a.name.localeCompare(b.name));
+    return { items: items.slice(0, limit), daysAhead };
+  },
 };

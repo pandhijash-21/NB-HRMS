@@ -4,6 +4,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 import '../../../../core/widgets/mobile_input_formatter.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../auth/domain/permissions.dart';
@@ -98,7 +100,13 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
             backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
             elevation: 0,
             scrolledUnderElevation: 0,
-            bottom: TabBar(
+            bottom: PreferredSize(
+              preferredSize: const Size.fromHeight(48),
+              child: TourTarget(
+                id: TourIds.step('crm.pre_sales', 2),
+                child: TourTarget(
+                  id: TourIds.step('crm.pre_sales', 3),
+                  child: TabBar(
               controller: _tabController,
               isScrollable: true,
               tabs: const [
@@ -108,6 +116,9 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                 Tab(text: 'Pipeline & Deals'),
                 Tab(text: 'Quotations'),
               ],
+            ),
+                ),
+              ),
             ),
             actions: [
               IconButton(

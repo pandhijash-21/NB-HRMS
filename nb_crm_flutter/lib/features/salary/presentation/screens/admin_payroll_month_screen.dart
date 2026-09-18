@@ -3,6 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 import '../../../../core/widgets/bloc_async_body.dart';
 import '../../../../core/widgets/header_action_button.dart';
 import '../../../auth/domain/permissions.dart';
@@ -96,11 +98,14 @@ class _AdminPayrollMonthView extends StatelessWidget {
 
           return Column(
             children: [
-              _MonthBar(
+              TourTarget(
+                id: TourIds.step('hrms.payroll', 2),
+                child: _MonthBar(
                 year: year,
                 month: month,
                 onYearChanged: (y) => bloc.add(PayrollMonthChanged(year: y, month: month)),
                 onMonthChanged: (m) => bloc.add(PayrollMonthChanged(year: year, month: m)),
+              ),
               ),
               Expanded(
                 child: BlocAsyncBody<Map<String, dynamic>>(
@@ -119,7 +124,10 @@ class _AdminPayrollMonthView extends StatelessWidget {
                     return ListView(
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                       children: [
-                        _KpiRow(kpis: kpis),
+                        TourTarget(
+                          id: TourIds.step('hrms.payroll', 2),
+                          child: _KpiRow(kpis: kpis),
+                        ),
                         const SizedBox(height: 16),
                         Text(
                           'Employees · ${_monthLabels[month - 1]} $year',

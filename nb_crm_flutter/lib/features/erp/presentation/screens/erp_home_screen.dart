@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 
 class ErpHomeScreen extends StatelessWidget {
   const ErpHomeScreen({super.key});
@@ -55,6 +57,11 @@ class ErpHomeScreen extends StatelessWidget {
           : ListView(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
               children: [
+                TourTarget(
+                  id: TourIds.step('erp.home', 2),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
                 if (canReadProjects) ...[
                   Text(
                     'Projects',
@@ -166,6 +173,9 @@ class ErpHomeScreen extends StatelessWidget {
                     onTap: () => context.go('/erp/dpr'),
                   ),
                 ],
+                    ],
+                  ),
+                ),
               ],
             ),
     );

@@ -8,6 +8,8 @@ import '../../../../core/bloc/load_status.dart';
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/utils/password_policy.dart';
 import '../../../../core/widgets/header_action_button.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 import '../../../admin/data/admin_repository.dart';
 import '../../../admin/domain/admin_models.dart';
 import '../../../auth/domain/permissions.dart';
@@ -90,7 +92,9 @@ class _AdminEmployeesScreenState extends State<AdminUsersScreen> {
           ),
           Padding(
             padding: const EdgeInsets.only(right: 16.0, left: 4.0),
-            child: SizedBox(
+            child: TourTarget(
+              id: TourIds.step('hrms.users', 2),
+              child: SizedBox(
               height: 38,
               child: FilledButton.icon(
                 onPressed: () => _showAddUserDialog(usersState.roles),
@@ -103,6 +107,7 @@ class _AdminEmployeesScreenState extends State<AdminUsersScreen> {
                 icon: const Icon(Icons.add_rounded, size: 16),
                 label: const Text('Add User', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
               ),
+            ),
             ),
           ),
         ],

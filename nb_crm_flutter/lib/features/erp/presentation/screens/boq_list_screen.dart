@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/bloc/load_status.dart';
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../data/boq_repository.dart';
@@ -83,10 +85,13 @@ class _BoqListViewState extends State<_BoqListView> {
             ],
           ),
           floatingActionButton: canWrite
-              ? FloatingActionButton.extended(
+              ? TourTarget(
+                  id: TourIds.step('erp.boq', 2),
+                  child: FloatingActionButton.extended(
                   onPressed: () => context.go('/erp/boq/new'),
                   icon: const Icon(Icons.add),
                   label: const Text('New BOQ'),
+                ),
                 )
               : null,
           body: () {

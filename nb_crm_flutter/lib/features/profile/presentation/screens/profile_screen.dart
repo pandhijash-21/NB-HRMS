@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 import '../../../../core/widgets/zoomable_photo.dart';
 import '../../../auth/presentation/auth_providers.dart';
 import '../profile_notifier.dart';
@@ -124,7 +126,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           if (canEdit)
             Padding(
               padding: const EdgeInsets.only(right: 16.0),
-              child: OutlinedButton.icon(
+              child: TourTarget(
+                id: TourIds.step('hrms.profile', 3),
+                child: OutlinedButton.icon(
                 onPressed: () => context.push(
                   widget.employeeId != null
                       ? '/profile/edit?employeeId=$empId'
@@ -153,6 +157,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                   'Edit Profile',
                   style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
                 ),
+              ),
               ),
             ),
         ],
@@ -214,7 +219,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
               return Column(
                 children: [
                   _buildProfileHeader(context, profile, isDark),
-                  _buildTabBar(context, isDark, tabItems, tabController),
+                  TourTarget(
+                    id: TourIds.step('hrms.profile', 2),
+                    child: _buildTabBar(context, isDark, tabItems, tabController),
+                  ),
                   Expanded(
                     child: TabBarView(
                       controller: tabController,

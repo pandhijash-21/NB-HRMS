@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/logging/app_logger.dart';
 import '../../../core/services/background_tracking_service.dart';
 import '../../../core/services/web_live_tracking_service.dart';
+import '../../../core/widgets/nb_brand_loader.dart';
 
 /// Hard-gates the app until location is allowed.
 /// Native: Always location + battery opt-out.
@@ -397,13 +398,13 @@ class _PermissionGuardState extends State<PermissionGuard> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isPublicMeetRoute() || _isAuthRoute()) {
+    if (_isPublicMeetRoute() || _isAuthRoute() || _currentPath().isEmpty) {
       return widget.child;
     }
     if (_checking) {
       return const Scaffold(
-        backgroundColor: Color(0xFF0F172A),
-        body: Center(child: CircularProgressIndicator(color: Colors.amberAccent)),
+        backgroundColor: Colors.black,
+        body: NbBrandLoader(),
       );
     }
 

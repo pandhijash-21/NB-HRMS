@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 import '../../../admin/domain/admin_models.dart';
 import '../../../admin/presentation/admin_notifier.dart';
 import '../../../auth/domain/permissions.dart';
@@ -68,7 +70,11 @@ class _RecruitmentHubScreenState extends ConsumerState<RecruitmentHubScreen>
       appBar: AppBar(
         title: const Text('Recruitment'),
         leading: const AppBackButton(),
-        bottom: TabBar(
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(48),
+          child: TourTarget(
+            id: TourIds.step('hrms.recruitment', 2),
+            child: TabBar(
           controller: _tabs,
           isScrollable: true,
           tabs: [
@@ -77,6 +83,8 @@ class _RecruitmentHubScreenState extends ConsumerState<RecruitmentHubScreen>
             if (canAdmin) const Tab(text: 'Requirements'),
             if (canAdmin) const Tab(text: 'Candidates'),
           ],
+        ),
+          ),
         ),
         actions: [
           IconButton(
@@ -99,7 +107,9 @@ class _RecruitmentHubScreenState extends ConsumerState<RecruitmentHubScreen>
         ],
       ),
       floatingActionButton: canAdmin
-          ? FloatingActionButton.extended(
+          ? TourTarget(
+              id: TourIds.step('hrms.recruitment', 3),
+              child: FloatingActionButton.extended(
               onPressed: () {
                 if (_tabs.index == 3) {
                   _openCandidateForm();
@@ -118,6 +128,7 @@ class _RecruitmentHubScreenState extends ConsumerState<RecruitmentHubScreen>
                 _tabs.index == 3 ? 'Add candidate' : 'Add requirement',
                 style: const TextStyle(fontWeight: FontWeight.w800),
               ),
+            ),
             )
           : null,
     );

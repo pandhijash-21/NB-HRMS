@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 import '../../../../core/widgets/header_action_button.dart';
 import '../../../auth/presentation/auth_providers.dart';
 import '../../domain/task_models.dart';
@@ -66,7 +68,11 @@ class _TasksHubScreenState extends ConsumerState<TasksHubScreen> with SingleTick
           ),
           const SizedBox(width: 8),
         ],
-        bottom: TabBar(
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(48),
+          child: TourTarget(
+            id: TourIds.step('collab.tasks', 2),
+            child: TabBar(
           controller: _tabs,
           labelColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF212F3D),
           indicatorColor: const Color(0xFFC5A059),
@@ -74,6 +80,8 @@ class _TasksHubScreenState extends ConsumerState<TasksHubScreen> with SingleTick
             Tab(text: reviewBadge > 0 ? 'Board ($reviewBadge to review)' : 'Board'),
             const Tab(text: 'Gantt'),
           ],
+        ),
+          ),
         ),
       ),
       floatingActionButton: reportees.isEmpty
@@ -93,9 +101,12 @@ class _TasksHubScreenState extends ConsumerState<TasksHubScreen> with SingleTick
               _BoardTab(tasks: tasks),
               Padding(
                 padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
-                child: TaskGanttChart(
+                child: TourTarget(
+                  id: TourIds.step('collab.tasks', 3),
+                  child: TaskGanttChart(
                   tasks: tasks,
                   onSelect: (t) => showTaskDetailSheet(context, t),
+                ),
                 ),
               ),
             ],

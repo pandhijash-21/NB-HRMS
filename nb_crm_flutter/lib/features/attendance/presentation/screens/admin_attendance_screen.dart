@@ -6,6 +6,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/bloc/load_status.dart';
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 import '../../../../core/widgets/header_action_button.dart';
 import '../../data/attendance_repository.dart';
 import '../../domain/attendance_models.dart';
@@ -78,7 +80,9 @@ class _AdminAttendanceView extends StatelessWidget {
         body: ListView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
           children: [
-            Row(
+            TourTarget(
+              id: TourIds.step('hrms.attendance', 3),
+              child: Row(
               children: [
                 Expanded(
                   child: Text(
@@ -115,6 +119,7 @@ class _AdminAttendanceView extends StatelessWidget {
                   label: Text(date, style: const TextStyle(fontWeight: FontWeight.w700)),
                 ),
               ],
+            ),
             ),
             const SizedBox(height: 16),
             if (state.policy != null)

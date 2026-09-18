@@ -32,13 +32,171 @@
 
   <title>NB CRM</title>
   <link rel="manifest" href="manifest.json">
+  <style>
+    html, body { height: 100%; margin: 0; background: #000; }
+    .flutter-loader,
+    .flutter-loader .indeterminate {
+      display: none !important;
+      visibility: hidden !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
+    }
+    #nb-splash {
+      position: fixed;
+      inset: 0;
+      z-index: 2147483647;
+      background: #000;
+      overflow: hidden;
+      opacity: 1;
+      transition: opacity 0.4s ease;
+    }
+    #nb-splash.nb-off {
+      opacity: 0;
+      pointer-events: none;
+    }
+    #nb-splash video {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      background: #000;
+    }
+    #nb-splash-loader {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(ellipse at center, #16110c 0%, #000 68%);
+      pointer-events: none;
+    }
+    .nb-loader {
+      position: relative;
+      width: 168px;
+      height: 168px;
+    }
+    .nb-loader-glow {
+      position: absolute;
+      inset: 18px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(197,163,106,0.28) 0%, rgba(197,163,106,0.04) 55%, transparent 70%);
+      animation: nbpulse 1.8s ease-in-out infinite;
+    }
+    .nb-loader-orbit {
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+    }
+    .nb-orbit-a {
+      border: 1.5px solid rgba(197,163,106,0.16);
+      border-top-color: #E8C98A;
+      border-right-color: rgba(197,163,106,0.55);
+      animation: nbspin 1.6s linear infinite;
+    }
+    .nb-orbit-b {
+      inset: 16px;
+      border: 1.5px dashed rgba(197,163,106,0.28);
+      border-bottom-color: #C5A36A;
+      animation: nbspin 2.8s linear infinite reverse;
+    }
+    .nb-loader-core {
+      position: absolute;
+      inset: 42px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(160deg, #2a2218 0%, #0c0c0c 100%);
+      box-shadow:
+        0 0 0 1px rgba(197,163,106,0.35),
+        0 0 28px rgba(197,163,106,0.22),
+        inset 0 1px 0 rgba(255,236,190,0.18);
+      color: #E8C98A;
+      font-family: "Palatino Linotype", Palatino, "Times New Roman", serif;
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: 3px;
+      animation: nbpulse 1.8s ease-in-out infinite;
+    }
+    .nb-loader-dot {
+      position: absolute;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #E8C98A;
+      box-shadow: 0 0 10px #C5A36A;
+      top: -2px;
+      left: calc(50% - 4px);
+      animation: nbspin 1.6s linear infinite;
+      transform-origin: 4px 86px;
+    }
+    @keyframes nbspin { to { transform: rotate(360deg); } }
+    @keyframes nbpulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.05); opacity: 0.82; }
+    }
+    #nb-splash-controls {
+      position: absolute;
+      right: 20px;
+      bottom: 24px;
+      display: none;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 10px;
+      z-index: 2;
+    }
+    #nb-splash-volume,
+    #nb-splash-skip {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 0;
+      background: rgba(0,0,0,0.45);
+      color: #fff;
+      cursor: pointer;
+    }
+    #nb-splash-volume {
+      width: 44px;
+      height: 44px;
+      border-radius: 22px;
+    }
+    #nb-splash-volume svg {
+      width: 22px;
+      height: 22px;
+      fill: #fff;
+    }
+    #nb-splash-skip {
+      padding: 10px 16px;
+      border-radius: 6px;
+      font-size: 14px;
+      letter-spacing: 0.2px;
+    }
+  </style>
   <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.3.0/model-viewer.min.js"></script>
 </head>
 <body>
+  <div id="nb-splash">
+    <video id="nb-splash-video" playsinline webkit-playsinline muted preload="auto"></video>
+    <div id="nb-splash-loader" aria-hidden="true">
+      <div class="nb-loader">
+        <div class="nb-loader-glow"></div>
+        <div class="nb-loader-orbit nb-orbit-a"></div>
+        <div class="nb-loader-orbit nb-orbit-b"></div>
+        <div class="nb-loader-dot"></div>
+        <div class="nb-loader-core">NB</div>
+      </div>
+    </div>
+    <div id="nb-splash-controls">
+      <button id="nb-splash-volume" type="button" aria-label="Unmute"></button>
+      <button id="nb-splash-skip" type="button">Skip</button>
+    </div>
+  </div>
   <script>
     (function () {
-      // Drop stale Flutter service-worker + Cache Storage so newly added
-      // Material icon glyphs are not served from an old tree-shaken font.
+      var ICON_OFF = '<svg viewBox="0 0 24 24"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>';
+      var ICON_ON = '<svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>';
+
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistrations().then(function (regs) {
           for (var i = 0; i < regs.length; i++) {
@@ -46,26 +204,137 @@
           }
         });
       }
-      if (window.caches && caches.keys) {
-        caches.keys().then(function (keys) {
-          for (var i = 0; i < keys.length; i++) {
-            caches.delete(keys[i]);
-          }
-        });
+
+      var overlay = document.getElementById('nb-splash');
+      var video = document.getElementById('nb-splash-video');
+      var loader = document.getElementById('nb-splash-loader');
+      var controls = document.getElementById('nb-splash-controls');
+      var volumeBtn = document.getElementById('nb-splash-volume');
+      var skip = document.getElementById('nb-splash-skip');
+
+      var started = false;
+      var dismissed = false;
+      var muted = true;
+      var rewindTries = 0;
+
+      volumeBtn.innerHTML = ICON_OFF;
+
+      function restack() {
+        if (dismissed) return;
+        if (overlay.parentNode !== document.body || overlay.nextSibling) {
+          document.body.appendChild(overlay);
+        }
+        var boot = document.querySelector('.flutter-loader');
+        if (boot && boot.parentNode) boot.parentNode.removeChild(boot);
       }
-      function unlock() {
-        try {
-          var AC = window.AudioContext || window.webkitAudioContext;
-          if (!AC) return;
-          if (!window.__nbAudioCtx) window.__nbAudioCtx = new AC();
-          if (window.__nbAudioCtx.state === 'suspended') {
-            window.__nbAudioCtx.resume();
-          }
-        } catch (e) {}
+      setInterval(restack, 250);
+
+      function stop() {
+        try { video.pause(); video.removeAttribute('src'); video.load(); } catch (e) {}
       }
-      window.addEventListener('pointerdown', unlock, true);
-      window.addEventListener('keydown', unlock, true);
-      window.addEventListener('touchstart', unlock, true);
+
+      function dismiss() {
+        if (dismissed) return;
+        dismissed = true;
+        started = true;
+        stop();
+        overlay.classList.add('nb-off');
+        setTimeout(function () { overlay.style.display = 'none'; }, 420);
+      }
+
+      function abort() {
+        dismissed = true;
+        started = true;
+        stop();
+        overlay.classList.add('nb-off');
+        overlay.style.display = 'none';
+      }
+
+      function setMuted(next) {
+        muted = next;
+        video.muted = muted;
+        video.defaultMuted = muted;
+        video.volume = muted ? 0 : 1;
+        if (muted) {
+          volumeBtn.innerHTML = ICON_OFF;
+          volumeBtn.setAttribute('aria-label', 'Unmute');
+        } else {
+          volumeBtn.innerHTML = ICON_ON;
+          volumeBtn.setAttribute('aria-label', 'Mute');
+        }
+      }
+
+      video.addEventListener('ended', dismiss);
+
+      volumeBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        setMuted(!muted);
+      });
+      skip.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        dismiss();
+      });
+
+      function showLoader() {
+        loader.style.display = 'flex';
+        controls.style.display = 'none';
+      }
+
+      function showVideo() {
+        loader.style.display = 'none';
+        controls.style.display = 'flex';
+      }
+
+      function rewindToStart() {
+        try { video.currentTime = 0; } catch (e) {}
+      }
+
+      function playFromStart() {
+        rewindToStart();
+        var play = video.play();
+        if (play && play.catch) play.catch(function () {});
+      }
+
+      video.addEventListener('loadedmetadata', function () {
+        rewindToStart();
+      });
+      video.addEventListener('playing', function () {
+        if (dismissed) return;
+        // Cached 4K files often begin at the next keyframe (~2.5s = hoodie close-up).
+        if (video.currentTime > 0.2 && rewindTries < 4) {
+          rewindTries += 1;
+          showLoader();
+          playFromStart();
+          return;
+        }
+        showVideo();
+      });
+
+      window.__nbStartSplash = function (url) {
+        if (dismissed) return;
+        started = true;
+        restack();
+        overlay.style.display = 'block';
+        overlay.classList.remove('nb-off');
+        showLoader();
+        setMuted(true);
+        rewindTries = 0;
+        video.loop = false;
+        video.controls = false;
+        video.preload = 'auto';
+        var base = url || new URL('assets/assets/clips/processed/splash_mr_nb.mp4', document.baseURI).href;
+        base = String(base).split('#')[0];
+        video.setAttribute('playsinline', '');
+        video.src = base + '#t=0,10';
+        video.load();
+        playFromStart();
+        setTimeout(function () { if (!dismissed) dismiss(); }, 22000);
+      };
+
+      window.__nbAbortSplash = abort;
+      window.__nbStopSplashSound = abort;
     })();
   </script>
   <script src="flutter_bootstrap.js?v=crmicons-1" async></script>

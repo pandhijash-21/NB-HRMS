@@ -13,6 +13,8 @@ import '../../../tracking_hub/presentation/providers.dart';
 import '../../../tracking_hub/presentation/widgets/location_availability_widgets.dart';
 import '../widgets/tracking_avatar_marker.dart';
 import 'admin_live_tracking_shared.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 
 class AdminLiveTrackingScreen extends ConsumerStatefulWidget {
   const AdminLiveTrackingScreen({super.key});
@@ -309,7 +311,10 @@ class _AdminLiveTrackingScreenState
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Employee Live Tracking'),
+        title: TourTarget(
+          id: TourIds.step('hrms.live_tracking', 2),
+          child: const Text('Employee Live Tracking'),
+        ),
         actions: [
           if (geofences.isNotEmpty)
             Padding(

@@ -5,6 +5,8 @@ import 'package:intl/intl.dart';
 
 import '../../../../core/bloc/load_status.dart';
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 import '../../data/crm_repository.dart';
 import '../../domain/crm_models.dart';
 import '../bloc/crm_headers_bloc.dart';
@@ -53,9 +55,12 @@ class _CrmHeadersView extends StatelessWidget {
         return Scaffold(
           backgroundColor: isDark ? const Color(0xFF141210) : const Color(0xFFF8FAFC),
           appBar: AppBar(
-            title: Text(selectedProject == null
+            title: TourTarget(
+              id: TourIds.step('crm.headers', 2),
+              child: Text(selectedProject == null
                 ? 'Projects & Campaign Webhooks'
                 : '${selectedProject.name} — Campaigns & Headers'),
+            ),
             leading: selectedProject != null
                 ? IconButton(
                     icon: const Icon(Icons.arrow_back_rounded),

@@ -55,6 +55,8 @@ dependencies:
   audioplayers: ">=6.7.1 <6.8.0"
   cryptography: ^2.9.0
   android_intent_plus: any
+  flutter_tts: ^4.2.5
+  video_player: ^2.10.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -70,8 +72,12 @@ flutter:
     - assets/images/
     - assets/images/nb-logo.png
     - assets/images/login_bg.png
+    - assets/images/nbbg.png
+    - assets/images/nbbglogo.jpg
+    - assets/images/mr_nb.jpg
     - assets/images/earth/
     - assets/sounds/
+    - assets/clips/processed/
   shaders:
     - shaders/earth_sphere.frag
 

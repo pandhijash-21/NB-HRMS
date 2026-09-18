@@ -5,25 +5,31 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/bloc/load_status.dart';
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/widgets/header_action_button.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
+import '../../data/work_order_repository.dart';
 import '../../domain/work_order_models.dart';
 import '../bloc/erp_work_orders_bloc.dart';
 import '../widgets/work_order_info_dialogs.dart';
 
-class WorkOrdersListScreen extends StatefulWidget {
+class WorkOrdersListScreen extends StatelessWidget {
   const WorkOrdersListScreen({super.key});
 
   @override
-  State<WorkOrdersListScreen> createState() => _WorkOrdersListScreenState();
+  Widget build(BuildContext context) {
+    return BlocProvider(
+      create: (ctx) => ErpWorkOrdersBloc(
+        workOrderRepository: ctx.read<WorkOrderRepository>(),
+      )..add(const ErpWorkOrdersListRequested()),
+      child: const _WorkOrdersListView(),
+    );
+  }
 }
 
-class _WorkOrdersListScreenState extends State<WorkOrdersListScreen> {
-  @override
-  void initState() {
-    super.initState();
-    context.read<ErpWorkOrdersBloc>().add(const ErpWorkOrdersListRequested());
-  }
+class _WorkOrdersListView extends StatelessWidget {
+  const _WorkOrdersListView();
 
   @override
   Widget build(BuildContext context) {
@@ -49,10 +55,13 @@ class _WorkOrdersListScreenState extends State<WorkOrdersListScreen> {
         ],
       ),
       floatingActionButton: canWrite
-          ? FloatingActionButton.extended(
+          ? TourTarget(
+              id: TourIds.step('erp.work_orders', 2),
+              child: FloatingActionButton.extended(
               onPressed: () => context.go('/erp/work-orders/new'),
               icon: const Icon(Icons.add),
               label: const Text('Add Work Order'),
+            ),
             )
           : null,
       body: BlocBuilder<ErpWorkOrdersBloc, ErpWorkOrdersState>(

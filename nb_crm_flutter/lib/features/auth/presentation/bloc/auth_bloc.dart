@@ -106,7 +106,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         } catch (_) {}
       }
 
-      await WebLiveTrackingService.ensureRunning();
+      await WebLiveTrackingService.start();
     } catch (_) {
       emit(const AuthState.unauthenticated());
     }
@@ -151,7 +151,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       ));
 
       _startSessionWatch();
-      await WebLiveTrackingService.ensureRunning();
+      await WebLiveTrackingService.start();
     } on ApiException catch (e) {
       emit(state.copyWith(
         isSubmitting: false,
@@ -187,9 +187,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         );
       }
 
-      await _repo.clearSession();
-      WebLiveTrackingService.stop();
+      WebLiveTrackingService.stop(preventRestart: true);
       _stopSessionWatch();
+      await _repo.clearSession();
 
       emit(AuthState.unauthenticated(
         infoMessage: message.isNotEmpty
@@ -288,9 +288,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     Emitter<AuthState> emit,
   ) async {
     if (state.status != AuthStatus.authenticated) return;
-    await _repo.clearSession();
-    WebLiveTrackingService.stop();
+    WebLiveTrackingService.stop(preventRestart: true);
     _stopSessionWatch();
+    await _repo.clearSession();
 
     emit(const AuthState.unauthenticated(
       infoMessage:
@@ -302,12 +302,13 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     AuthLogoutRequested event,
     Emitter<AuthState> emit,
   ) async {
+    WebLiveTrackingService.stop(preventRestart: true);
+    _stopSessionWatch();
     if (!event.skipRemote) {
       await _repo.logoutRemote();
     }
     await _repo.clearSession();
-    WebLiveTrackingService.stop();
-    _stopSessionWatch();
+    WebLiveTrackingService.stop(preventRestart: true);
     emit(AuthState.unauthenticated(infoMessage: event.infoMessage));
   }
 

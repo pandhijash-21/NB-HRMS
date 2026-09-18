@@ -248,7 +248,9 @@ class _ContractorFormScreenState extends State<ContractorFormScreen> {
         await repo.createContractor(body);
       }
       if (mounted) {
-        context.read<ErpWorkOrdersBloc>().add(const ErpContractorsRequested(includeInactive: true));
+        try {
+          context.read<ErpWorkOrdersBloc>().add(const ErpContractorsRequested(includeInactive: true));
+        } catch (_) {}
       }
       if (!mounted) return;
       if (andNew) {

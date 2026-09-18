@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 import '../../domain/leave_models.dart';
 import '../leave_providers.dart';
 import '../widgets/leave_shared_widgets.dart';
@@ -54,7 +56,10 @@ class LeaveHistoryScreen extends ConsumerWidget {
         },
         child: Column(
           children: [
-            _FiltersBar(filters: filters),
+            TourTarget(
+              id: TourIds.step('hrms.leave', 4),
+              child: _FiltersBar(filters: filters),
+            ),
             Expanded(
               child: LeaveAsyncBody<LeaveApplicationsPage>(
                 value: appsAsync,

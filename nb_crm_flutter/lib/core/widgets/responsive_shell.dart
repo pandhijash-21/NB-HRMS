@@ -16,8 +16,10 @@ import '../bloc/app_module_cubit.dart';
 import '../logging/app_logger.dart';
 import '../services/location_alert_sound.dart';
 import '../theme/theme_cubit.dart';
+import '../tour/models/tour_models.dart';
+import '../tour/tour_desktop.dart';
+import '../tour/widgets/tour_target.dart';
 import 'backend_env_switcher.dart';
-import 'install_android_app_button.dart';
 
 /// Sidebar palette — dark charcoal for stronger contrast with content.
 class _SideC {
@@ -53,6 +55,8 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     _navSearch.dispose();
     super.dispose();
   }
+
+  Widget _tourPageChild() => widget.child;
 
   Widget _buildSpeedDial(
     BuildContext context,
@@ -113,6 +117,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
       child: RadialMenu(
         primaryColor: mainBgColor,
         onPrimaryColor: mainIconColor,
+        tourTargetId: 'shell.suite_switcher',
         items: items,
       ),
     );
@@ -210,6 +215,8 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
         context.read<AppModuleCubit>().syncFromPath(currentPath);
       });
     }
+
+    final showSoftwareTour = TourDesktop.supported(context);
 
     final sharedCollab = <_Destination>[
       if (Permissions.canReadOrgTree(auth.permissions, auth.user?.role))
@@ -310,6 +317,15 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             section: 'Earth',
           ),
         const _Destination('/home', Icons.home_outlined, Icons.home, 'Home', section: 'Main'),
+        if (showSoftwareTour)
+          const _Destination(
+            '/software-tour',
+            Icons.school_outlined,
+            Icons.school,
+            'Software Tour',
+            section: 'Main',
+            imageAsset: 'assets/images/mr_nb.jpg',
+          ),
         const _Destination(
           '/profile',
           Icons.person_outline,
@@ -319,6 +335,15 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
         ),
       ] else if (module == AppModule.erp) ...[
         const _Destination('/erp/home', Icons.home_outlined, Icons.home, 'Home', section: 'ERP'),
+        if (showSoftwareTour)
+          const _Destination(
+            '/software-tour',
+            Icons.school_outlined,
+            Icons.school,
+            'Software Tour',
+            section: 'ERP',
+            imageAsset: 'assets/images/mr_nb.jpg',
+          ),
         if (Permissions.canReadProjects(auth.permissions, auth.user?.role))
           const _Destination(
             '/erp/projects',
@@ -395,6 +420,15 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             section: 'ERP',
           ),
       ] else if (module == AppModule.crm) ...[
+        if (showSoftwareTour)
+          const _Destination(
+            '/software-tour',
+            Icons.school_outlined,
+            Icons.school,
+            'Software Tour',
+            section: 'CRM',
+            imageAsset: 'assets/images/mr_nb.jpg',
+          ),
         if (Permissions.canReadCrmDashboard(auth.permissions, auth.user?.role))
           const _Destination(
             '/crm/dashboard',
@@ -445,7 +479,6 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             section: 'CRM',
           ),
       ],
-      ...sharedCollab,
       if (module == AppModule.hrms) ...[
         if (Permissions.canReadLeave(auth.permissions, auth.user?.role) ||
             Permissions.canWriteLeave(auth.permissions, auth.user?.role) ||
@@ -585,6 +618,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             alertBadge: true,
           ),
         ],
+      ...sharedCollab,
       ],
     ];
 
@@ -692,7 +726,11 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                 icon: const NbIcon(Icons.account_tree_rounded),
                 onPressed: () => context.go('/org-tree'),
               ),
-            if (!isSuperAdmin) const NotificationBellButton(),
+            if (!isSuperAdmin)
+              TourTarget(
+                id: 'shell.notifications',
+                child: const NotificationBellButton(),
+              ),
             IconButton(
               icon: NbIcon(isDark ? Icons.light_mode : Icons.dark_mode),
               onPressed: () =>
@@ -796,8 +834,6 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (InstallAndroidAppButton.visible)
-                      InstallAndroidAppButton.drawer(),
                     InkWell(
                       onTap: () {
                         Navigator.pop(context);
@@ -875,7 +911,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
         ),
         body: Stack(
           children: [
-            widget.child,
+            _tourPageChild(),
             if (!isSuperAdmin) _buildSpeedDial(context, accessibleSuites),
           ],
         ),
@@ -902,7 +938,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                 alertCount: alertCount,
                 chatUnread: chatUnread,
               ),
-              Expanded(child: widget.child),
+              Expanded(child: _tourPageChild()),
             ],
           ),
           if (!isSuperAdmin) _buildSpeedDial(context, accessibleSuites),
@@ -954,7 +990,9 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
   }
 
   Widget _buildNavSearchField(bool isDark, {required bool expandedHint}) {
-    return TextField(
+    return TourTarget(
+      id: 'shell.search',
+      child: TextField(
       controller: _navSearch,
       onChanged: (_) => setState(() {}),
       style: GoogleFonts.sourceSans3(
@@ -1000,6 +1038,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
           borderSide: const BorderSide(color: _SideC.gold, width: 1.3),
         ),
       ),
+    ),
     );
   }
 
@@ -1013,7 +1052,17 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     required bool Function(_Destination) isGroupOpen,
     required void Function(_Destination) onTap,
   }) {
-    const order = ['SaaS Console', 'Main', 'CRM', 'Collaboration', 'HR', 'Organisation', 'Tracking'];
+    const order = [
+      'SaaS Console',
+      'Main',
+      'Earth',
+      'ERP',
+      'CRM',
+      'HR',
+      'Organisation',
+      'Tracking',
+      'Collaboration',
+    ];
     final grouped = <String, List<_Destination>>{};
     for (final d in destinations) {
       grouped.putIfAbsent(d.section, () => []).add(d);
@@ -1102,6 +1151,24 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     return widgets;
   }
 
+  Widget _navFaceImage({
+    required String asset,
+    required Widget fallback,
+  }) {
+    const size = 22.0;
+    return ClipOval(
+      child: Image.asset(
+        asset,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        alignment: const Alignment(0, -0.78),
+        filterQuality: FilterQuality.high,
+        errorBuilder: (_, __, ___) => fallback,
+      ),
+    );
+  }
+
   Widget _buildNavTile(
     _Destination d,
     bool isDark, {
@@ -1120,7 +1187,16 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     final iconColor = selected
         ? (isDark ? _SideC.goldSoft : _SideC.brand)
         : (isDark ? _SideC.cream.withValues(alpha: 0.45) : _SideC.mute);
-    final icon = switch (d.route) {
+    final icon = d.imageAsset != null
+        ? _navFaceImage(
+            asset: d.imageAsset!,
+            fallback: NbIcon(
+              selected ? d.selectedIcon : d.icon,
+              color: iconColor,
+              size: 22,
+            ),
+          )
+        : switch (d.route) {
       '/chat' => selected
           ? NbIcon(Icons.chat, color: iconColor, size: 22)
           : NbIcon(Icons.chat_outlined, color: iconColor, size: 22),
@@ -1249,42 +1325,47 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
       );
     }
 
-    // Collapsed rail with children: popup menu.
-    if (!expanded && isGroup && childDestinations != null && onSelectChild != null) {
-      return PopupMenuButton<_Destination>(
-        tooltip: d.label,
-        offset: const Offset(56, 0),
-        onSelected: onSelectChild,
-        itemBuilder: (context) => [
-          for (final child in childDestinations)
-            PopupMenuItem<_Destination>(
-              value: child,
-              child: Row(
-                children: [
-                  Icon(child.icon, size: 18),
-                  const SizedBox(width: 10),
-                  Text(child.label),
-                ],
-              ),
-            ),
-        ],
-        child: tileBody(tap: () {}),
-      );
-    }
-
     final tile = tileBody(tap: onTap);
-    if (!expanded) {
-      return Tooltip(
-        message: d.label,
-        waitDuration: const Duration(milliseconds: 400),
-        child: tile,
+    Widget wrapped(Widget child) => TourTarget(id: TourIds.nav(d.route), child: child);
+    if (!expanded && isGroup && childDestinations != null && onSelectChild != null) {
+      return wrapped(
+        PopupMenuButton<_Destination>(
+          tooltip: d.label,
+          offset: const Offset(56, 0),
+          onSelected: onSelectChild,
+          itemBuilder: (context) => [
+            for (final child in childDestinations)
+              PopupMenuItem<_Destination>(
+                value: child,
+                child: Row(
+                  children: [
+                    Icon(child.icon, size: 18),
+                    const SizedBox(width: 10),
+                    Text(child.label),
+                  ],
+                ),
+              ),
+          ],
+          child: tileBody(tap: () {}),
+        ),
       );
     }
-    return tile;
+    if (!expanded) {
+      return wrapped(
+        Tooltip(
+          message: d.label,
+          waitDuration: const Duration(milliseconds: 400),
+          child: tile,
+        ),
+      );
+    }
+    return wrapped(tile);
   }
 
   Widget _buildLogo(BuildContext context) {
-    return ClipRRect(
+    return TourTarget(
+      id: 'shell.brand',
+      child: ClipRRect(
       borderRadius: BorderRadius.circular(10),
       child: Image.asset(
         'assets/images/nb-logo.png',
@@ -1307,6 +1388,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
           );
         },
       ),
+    ),
     );
   }
 
@@ -1364,7 +1446,9 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
           right: BorderSide(color: _SideC.line),
         ),
       ),
-      child: Column(
+      child: TourTarget(
+        id: 'shell.sidebar',
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // Header
@@ -1492,11 +1576,12 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (InstallAndroidAppButton.visible)
-                  InstallAndroidAppButton.sidebar(expanded: expanded),
-                NotificationBellButton(
-                  variant: NotificationBellVariant.sidebar,
-                  expanded: expanded,
+                TourTarget(
+                  id: 'shell.notifications',
+                  child: NotificationBellButton(
+                    variant: NotificationBellVariant.sidebar,
+                    expanded: expanded,
+                  ),
                 ),
                 Tooltip(
                   message: isDark ? 'Light Mode' : 'Dark Mode',
@@ -1592,6 +1677,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
           ),
         ],
       ),
+      ),
     );
   }
 }
@@ -1605,6 +1691,7 @@ class _Destination {
     this.section = 'Main',
     this.alertBadge = false,
     this.children,
+    this.imageAsset,
   });
   final String route;
   final IconData icon;
@@ -1613,4 +1700,5 @@ class _Destination {
   final String section;
   final bool alertBadge;
   final List<_Destination>? children;
+  final String? imageAsset;
 }

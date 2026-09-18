@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 import '../../../../core/widgets/header_action_button.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/auth_providers.dart';
@@ -40,11 +42,14 @@ class ReimbursementsHubScreen extends ConsumerWidget {
           const SizedBox(width: 8),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: TourTarget(
+        id: TourIds.step('hrms.reimbursements', 2),
+        child: FloatingActionButton.extended(
         onPressed: () => context.push('/reimbursements/apply'),
         icon: const Icon(Icons.add),
         label: const Text('Apply'),
         backgroundColor: AppColors.bronze,
+      ),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -57,9 +62,12 @@ class ReimbursementsHubScreen extends ConsumerWidget {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  TourTarget(
+                    id: TourIds.step('hrms.reimbursements', 3),
+                    child: Text(
                     'Pending for your approval (${pending.length})',
                     style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+                  ),
                   ),
                   const SizedBox(height: 8),
                   ...pending.map((c) => _ClaimCard(

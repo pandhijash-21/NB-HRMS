@@ -114,6 +114,7 @@ import '../../features/crm/presentation/screens/crm_post_sales_screen.dart';
 import '../../features/crm/presentation/screens/crm_settings_screen.dart';
 import '../../features/crm/presentation/screens/crm_bin_screen.dart';
 import '../../features/platform/presentation/screens/platform_console_screen.dart';
+import '../../features/tour/presentation/software_tour_hub_screen.dart';
 import '../../features/earth/presentation/screens/earth_hub_screen.dart';
 import '../../features/earth/presentation/screens/earth_dashboard_screen.dart';
 import '../../features/earth/data/earth_repository.dart';
@@ -405,6 +406,10 @@ GoRouter createAppRouter(AuthBloc authBloc) {
           GoRoute(
             path: '/home',
             builder: (context, state) => const HomeScreen(),
+          ),
+          GoRoute(
+            path: '/software-tour',
+            builder: (context, state) => const SoftwareTourHubScreen(),
           ),
           GoRoute(
             path: '/crm',

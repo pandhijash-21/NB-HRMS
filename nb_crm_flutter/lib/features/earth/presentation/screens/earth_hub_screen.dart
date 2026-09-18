@@ -9,6 +9,8 @@ import 'package:latlong2/latlong.dart';
 import '../../../../core/bloc/load_status.dart';
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../data/earth_repository.dart';
@@ -314,39 +316,6 @@ class _EarthHubViewState extends State<_EarthHubView> {
                   bottom: 0,
                   child: _inventoryStrip(state),
                 ),
-              if (!_mapMode)
-                Positioned(
-                  right: 16,
-                  bottom: state.properties.isEmpty ? 88 : 168,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      _globeControl(
-                        icon: _autoSpin ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                        label: _autoSpin ? 'Pause' : 'Spin',
-                        onTap: () => setState(() => _autoSpin = !_autoSpin),
-                      ),
-                      const SizedBox(height: 8),
-                      _globeControl(
-                        icon: _nightMode ? Icons.wb_sunny_outlined : Icons.nights_stay_outlined,
-                        label: _nightMode ? 'Day' : 'Night',
-                        onTap: () => setState(() => _nightMode = !_nightMode),
-                      ),
-                      const SizedBox(height: 8),
-                      _globeControl(
-                        icon: Icons.remove_rounded,
-                        label: 'Zoom −',
-                        onTap: () => _setGlobeZoom(_globeZoom * 0.82),
-                      ),
-                      const SizedBox(height: 8),
-                      _globeControl(
-                        icon: Icons.add_rounded,
-                        label: 'Zoom +',
-                        onTap: () => _setGlobeZoom(_globeZoom * 1.22),
-                      ),
-                    ],
-                  ),
-                ),
               if (_mapMode && _measure.isNotEmpty)
                 Positioned(
                   left: 16,
@@ -383,7 +352,9 @@ class _EarthHubViewState extends State<_EarthHubView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _glassBar(
+        TourTarget(
+          id: TourIds.step('hrms.earth', 2),
+          child: _glassBar(
           child: Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -485,6 +456,7 @@ class _EarthHubViewState extends State<_EarthHubView> {
               ),
             ],
           ),
+        ),
         ),
         if (_mapMode) ...[
           const SizedBox(height: 8),

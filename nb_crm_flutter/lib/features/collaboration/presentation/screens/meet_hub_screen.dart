@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/auth_providers.dart';
 import '../../domain/collab_models.dart';
@@ -267,19 +269,28 @@ class _MeetHubScreenState extends ConsumerState<MeetHubScreen> {
                 ),
                 const SizedBox(height: 24),
                 if (wide)
-                  Row(
+                  TourTarget(
+                    id: TourIds.step('collab.meet', 2),
+                    child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(child: startCard),
                       const SizedBox(width: 20),
                       Expanded(child: joinCard),
                     ],
+                  ),
                   )
-                else ...[
+                else
+                  TourTarget(
+                    id: TourIds.step('collab.meet', 2),
+                    child: Column(
+                      children: [
                   startCard,
                   const SizedBox(height: 16),
                   joinCard,
-                ],
+                      ],
+                    ),
+                  ),
                 if (_live.isNotEmpty) ...[
                   const SizedBox(height: 28),
                   Text('Live now', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: text)),
@@ -314,6 +325,11 @@ class _MeetHubScreenState extends ConsumerState<MeetHubScreen> {
                   ),
                 ],
                 const SizedBox(height: 28),
+                TourTarget(
+                  id: TourIds.step('collab.meet', 3),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                 Text('Manage meetings', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: text)),
                 const SizedBox(height: 14),
                 LayoutBuilder(
@@ -354,6 +370,9 @@ class _MeetHubScreenState extends ConsumerState<MeetHubScreen> {
                       ],
                     );
                   },
+                ),
+                    ],
+                  ),
                 ),
               ],
             ),

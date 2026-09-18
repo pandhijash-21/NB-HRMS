@@ -4,6 +4,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/bloc/load_status.dart';
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 import '../../../../core/widgets/mobile_input_formatter.dart';
 import '../../data/crm_repository.dart';
 import '../../domain/crm_models.dart';
@@ -143,7 +145,11 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
             backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
             elevation: 0,
             scrolledUnderElevation: 0,
-            bottom: TabBar(
+            bottom: PreferredSize(
+              preferredSize: const Size.fromHeight(48),
+              child: TourTarget(
+              id: TourIds.step('crm.settings', 2),
+              child: TabBar(
               controller: _tabController,
               isScrollable: true,
               tabs: const [
@@ -152,6 +158,8 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
                 Tab(text: 'Bin & Retention Policy'),
                 Tab(text: 'General Preferences'),
               ],
+            ),
+              ),
             ),
             actions: [
               IconButton(

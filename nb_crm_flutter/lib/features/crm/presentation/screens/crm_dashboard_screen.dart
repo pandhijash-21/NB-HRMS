@@ -6,6 +6,8 @@ import '../../../../core/bloc/load_status.dart';
 import '../../../../core/router/app_back_button.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 import '../../data/crm_repository.dart';
 import '../bloc/crm_dashboard_bloc.dart';
 
@@ -327,7 +329,9 @@ class _CrmDashboardView extends StatelessWidget {
                   );
                 }
 
-                return LayoutBuilder(
+                return TourTarget(
+                  id: TourIds.step('crm.dashboard', 2),
+                  child: LayoutBuilder(
                   builder: (context, constraints) {
                     final cardWidth = constraints.maxWidth;
                     final isLarge = cardWidth >= 900;
@@ -348,6 +352,7 @@ class _CrmDashboardView extends StatelessWidget {
                       children: cards,
                     );
                   },
+                ),
                 );
               })(),
             ],
@@ -489,6 +494,11 @@ class _CrmDashboardView extends StatelessWidget {
             const SizedBox(height: 24),
 
             // Quick Navigation Shortcuts
+            TourTarget(
+              id: TourIds.step('crm.dashboard', 3),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
             Text(
               'CRM Modules & Workspaces',
               style: TextStyle(
@@ -591,6 +601,9 @@ class _CrmDashboardView extends StatelessWidget {
 
                 return Column(children: rows);
               },
+            ),
+                ],
+              ),
             ),
           ],
         ),

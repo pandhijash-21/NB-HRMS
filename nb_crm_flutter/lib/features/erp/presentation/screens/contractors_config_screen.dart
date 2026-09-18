@@ -4,21 +4,25 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/bloc/load_status.dart';
 import '../../../../core/router/app_back_button.dart';
+import '../../data/work_order_repository.dart';
 import '../bloc/erp_work_orders_bloc.dart';
 
-class ContractorsConfigScreen extends StatefulWidget {
+class ContractorsConfigScreen extends StatelessWidget {
   const ContractorsConfigScreen({super.key});
 
   @override
-  State<ContractorsConfigScreen> createState() => _ContractorsConfigScreenState();
+  Widget build(BuildContext context) {
+    return BlocProvider(
+      create: (ctx) => ErpWorkOrdersBloc(
+        workOrderRepository: ctx.read<WorkOrderRepository>(),
+      )..add(const ErpContractorsRequested(includeInactive: true)),
+      child: const _ContractorsConfigView(),
+    );
+  }
 }
 
-class _ContractorsConfigScreenState extends State<ContractorsConfigScreen> {
-  @override
-  void initState() {
-    super.initState();
-    context.read<ErpWorkOrdersBloc>().add(const ErpContractorsRequested(includeInactive: true));
-  }
+class _ContractorsConfigView extends StatelessWidget {
+  const _ContractorsConfigView();
 
   @override
   Widget build(BuildContext context) {

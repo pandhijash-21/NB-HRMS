@@ -3,6 +3,8 @@ import 'package:syncfusion_flutter_charts/charts.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 import '../../../../core/widgets/header_action_button.dart';
 import '../../data/earth_repository.dart';
 import '../../domain/earth_kinds.dart';
@@ -81,7 +83,9 @@ class _EarthDashboardScreenState extends State<EarthDashboardScreen> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
       children: [
-        Wrap(
+        TourTarget(
+          id: TourIds.step('hrms.earth_dashboard', 2),
+          child: Wrap(
           spacing: 12,
           runSpacing: 12,
           children: [
@@ -99,6 +103,7 @@ class _EarthDashboardScreenState extends State<EarthDashboardScreen> {
               const Color(0xFFCA8A04),
             ),
           ],
+        ),
         ),
         const SizedBox(height: 16),
         _split(_trendCard(d), _kindCard(d), leftFlex: 3, rightFlex: 2),

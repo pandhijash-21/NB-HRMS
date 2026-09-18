@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/bloc/load_status.dart';
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../erp/domain/project_lookup_keys.dart';
@@ -144,7 +146,9 @@ class _ConfigurationsHubScreenState extends State<ConfigurationsHubScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          ConfigSearchField(
+          TourTarget(
+            id: TourIds.step('hrms.configurations', 2),
+            child: ConfigSearchField(
             controller: _searchCtrl,
             query: q,
             onChanged: (v) => setState(() => _query = v),
@@ -152,6 +156,7 @@ class _ConfigurationsHubScreenState extends State<ConfigurationsHubScreen> {
               _searchCtrl.clear();
               setState(() => _query = '');
             },
+          ),
           ),
           const SizedBox(height: 20),
           if (orgTiles.isNotEmpty) ...[

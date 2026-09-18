@@ -8,6 +8,8 @@ import 'package:latlong2/latlong.dart';
 import '../../../../core/bloc/load_status.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../data/attendance_repository.dart';
@@ -86,7 +88,9 @@ class _AttendanceView extends StatelessWidget {
         ),
       ),
       floatingActionButton: webAllowed
-          ? FloatingActionButton.extended(
+          ? TourTarget(
+              id: TourIds.step('hrms.attendance', 2),
+              child: FloatingActionButton.extended(
         onPressed: () async {
           if (kIsWeb) {
             final gate = state.webGate ?? await WebAttendanceGate.evaluate();
@@ -221,7 +225,8 @@ class _AttendanceView extends StatelessWidget {
               : (canPunchSelectedDay ? 'Punch In/Out' : 'Today only'),
           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
-      )
+      ),
+            )
           : null,
       body: TweenAnimationBuilder<double>(
         duration: const Duration(milliseconds: 500),

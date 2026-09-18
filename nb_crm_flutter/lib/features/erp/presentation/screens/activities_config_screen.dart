@@ -3,14 +3,22 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/bloc/load_status.dart';
 import '../../../../core/router/app_back_button.dart';
+import '../../data/work_order_repository.dart';
 import '../../domain/work_order_models.dart';
 import '../bloc/erp_work_orders_bloc.dart';
 
-class ActivitiesConfigScreen extends StatefulWidget {
+class ActivitiesConfigScreen extends StatelessWidget {
   const ActivitiesConfigScreen({super.key});
 
   @override
-  State<ActivitiesConfigScreen> createState() => _ActivitiesConfigScreenState();
+  Widget build(BuildContext context) {
+    return BlocProvider(
+      create: (ctx) => ErpWorkOrdersBloc(
+        workOrderRepository: ctx.read<WorkOrderRepository>(),
+      )..add(const ErpActivitiesRequested(isAdmin: true)),
+      child: const _ActivitiesConfigView(),
+    );
+  }
 }
 
 class _SubtaskDraft {
@@ -19,17 +27,18 @@ class _SubtaskDraft {
   String description;
 }
 
-class _ActivitiesConfigScreenState extends State<ActivitiesConfigScreen> {
+class _ActivitiesConfigView extends StatefulWidget {
+  const _ActivitiesConfigView();
+
+  @override
+  State<_ActivitiesConfigView> createState() => _ActivitiesConfigViewState();
+}
+
+class _ActivitiesConfigViewState extends State<_ActivitiesConfigView> {
   final _nameCtrl = TextEditingController();
   final List<_SubtaskDraft> _subtasks = [];
   String? _editingId;
   final Set<String> _expanded = {};
-
-  @override
-  void initState() {
-    super.initState();
-    context.read<ErpWorkOrdersBloc>().add(const ErpActivitiesRequested(isAdmin: true));
-  }
 
   @override
   void dispose() {

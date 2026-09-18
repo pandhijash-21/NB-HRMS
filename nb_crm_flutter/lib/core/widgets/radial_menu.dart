@@ -3,6 +3,8 @@ import 'dart:ui';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:nb_crm_flutter/core/theme/nb_icon.dart';
+import 'package:nb_crm_flutter/core/tour/engine/tour_engine.dart';
+import 'package:nb_crm_flutter/core/tour/widgets/tour_target.dart';
 
 class RadialMenu extends StatefulWidget {
   final List<RadialMenuItem> items;
@@ -10,6 +12,7 @@ class RadialMenu extends StatefulWidget {
   final Color? onPrimaryColor;
   final IconData openIcon;
   final IconData closeIcon;
+  final String? tourTargetId;
 
   const RadialMenu({
     super.key,
@@ -18,6 +21,7 @@ class RadialMenu extends StatefulWidget {
     this.onPrimaryColor,
     this.openIcon = Icons.apps_rounded,
     this.closeIcon = Icons.close_rounded,
+    this.tourTargetId,
   });
 
   @override
@@ -53,19 +57,37 @@ class _RadialMenuState extends State<RadialMenu> with SingleTickerProviderStateM
       vsync: this,
       duration: const Duration(milliseconds: 350),
     );
+    TourEngine.instance.addListener(_syncTourHighlight);
     _startHideTimer();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncTourHighlight());
   }
 
   @override
   void dispose() {
+    TourEngine.instance.removeListener(_syncTourHighlight);
     _cancelHideTimer();
     _controller.dispose();
     super.dispose();
   }
 
+  bool get _tourIsHighlighting {
+    final id = widget.tourTargetId;
+    if (id == null || id.isEmpty) return false;
+    return TourEngine.instance.snapshot.current?.step.targetId == id;
+  }
+
+  void _syncTourHighlight() {
+    if (!_tourIsHighlighting) return;
+    _cancelHideTimer();
+    if (!mounted) return;
+    if (_isStickyHidden) {
+      setState(() => _isStickyHidden = false);
+    }
+  }
+
   void _startHideTimer() {
     _cancelHideTimer();
-    if (_isOpen || _isStickyHidden) return;
+    if (_isOpen || _isStickyHidden || _tourIsHighlighting) return;
     _hideTimer = Timer(const Duration(seconds: 2), () {
       if (mounted) {
         setState(() {
@@ -301,7 +323,8 @@ class _RadialMenuState extends State<RadialMenu> with SingleTickerProviderStateM
             onHover: (_) => _resetHideTimer(),
             child: GestureDetector(
               onTapDown: (_) => _resetHideTimer(),
-              child: Container(
+              child: _wrapTourTarget(
+                child: Container(
                 width: 58,
                 height: 58,
                 decoration: BoxDecoration(
@@ -348,10 +371,17 @@ class _RadialMenuState extends State<RadialMenu> with SingleTickerProviderStateM
                   ),
                 ),
               ),
+              ),
             ),
           ),
         ),
       ],
     );
+  }
+
+  Widget _wrapTourTarget({required Widget child}) {
+    final id = widget.tourTargetId;
+    if (id == null || id.isEmpty) return child;
+    return TourTarget(id: id, child: child);
   }
 }

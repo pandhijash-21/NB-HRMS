@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/bloc/load_status.dart';
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/widgets/header_action_button.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../domain/rbac_models.dart';
@@ -95,7 +97,9 @@ class _AdminRolesScreenState extends State<AdminRolesScreen> {
         ),
         leading: const AppBackButton(),
         actions: [
-          HeaderActionButton(
+          TourTarget(
+            id: TourIds.step('hrms.roles', 2),
+            child: HeaderActionButton(
             tooltip: 'Add new custom role',
             label: 'Add Role',
             icon: const Icon(
@@ -106,6 +110,7 @@ class _AdminRolesScreenState extends State<AdminRolesScreen> {
             onPressed: () {
               _showCreateRoleDialog(rolesState.roles);
             },
+          ),
           ),
           const SizedBox(width: 8),
           HeaderActionButton(

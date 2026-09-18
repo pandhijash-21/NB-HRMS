@@ -6,6 +6,8 @@ import 'package:syncfusion_flutter_charts/charts.dart';
 import '../../../../core/bloc/load_status.dart';
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/widgets/header_action_button.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 import '../../../../core/widgets/zoomable_photo.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
@@ -164,8 +166,9 @@ class _AdminDashboardView extends StatelessWidget {
               vertical: 24,
             ),
             children: [
-              // KPI Row
-              GridView.builder(
+              TourTarget(
+                id: TourIds.step('hrms.dashboard', 2),
+                child: GridView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: kpis.length,
@@ -179,6 +182,7 @@ class _AdminDashboardView extends StatelessWidget {
                   final kpi = kpis[index];
                   return _KpiCard(kpi: kpi, isDark: isDark);
                 },
+              ),
               ),
               const SizedBox(height: 24),
               

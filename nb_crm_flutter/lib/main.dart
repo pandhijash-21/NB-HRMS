@@ -14,11 +14,20 @@ import 'core/router/app_router.dart';
 import 'core/services/app_sounds.dart';
 import 'core/services/background_tracking_service.dart';
 import 'core/services/location_alert_sound.dart';
+import 'core/services/mr_nb_tour_service.dart';
 import 'core/theme/app_breakpoints.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/icon_font_bootstrap.dart';
 import 'core/theme/material_icon_keep_alive.dart';
 import 'core/theme/theme_cubit.dart';
+import 'core/widgets/splash_video_audio.dart';
+import 'core/widgets/splash_video_host.dart';
+import 'core/tour/catalog/nb_platform_catalog.dart';
+import 'core/tour/engine/tour_engine.dart';
+import 'core/tour/onboarding/first_visit_host.dart';
+import 'core/tour/overlay/tour_overlay_host.dart';
+import 'core/tour/validation/tour_validator.dart';
+import 'core/tour/widgets/tour_debug_inspector.dart';
 import 'features/auth/presentation/auth_riverpod_bridge.dart';
 import 'features/auth/presentation/bloc/auth_bloc.dart';
 import 'features/auth/presentation/permission_guard.dart';
@@ -39,6 +48,9 @@ void main() async {
   GoogleFonts.config.allowRuntimeFetching = true;
 
   retainMaterialIconGlyphs();
+  if (kDebugMode) {
+    TourValidator.validate(NbPlatformCatalog.build());
+  }
   // Load the icon font after the first frame so the app shell renders immediately
   unawaited(loadFullMaterialIconsFont());
   if (!kIsWeb) {
@@ -80,6 +92,24 @@ void main() async {
   );
 }
 
+AuthStatus? _webSplashStatus;
+
+void _syncWebSplash(AuthStatus status) {
+  if (_webSplashStatus == status) return;
+  _webSplashStatus = status;
+  if (!kIsWeb) {
+    if (status == AuthStatus.authenticated) {
+      SplashVideoAudio.stop();
+    }
+    return;
+  }
+  if (status == AuthStatus.authenticated) {
+    SplashVideoAudio.stop();
+  } else if (status == AuthStatus.unauthenticated) {
+    SplashVideoAudio.startLoggedOut();
+  }
+}
+
 class NbCrmApp extends StatelessWidget {
   const NbCrmApp({super.key, required this.router});
 
@@ -87,6 +117,8 @@ class NbCrmApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    TourEngine.instance.attachRouter(router);
+    TourEngine.instance.attachModuleCubit(context.read<AppModuleCubit>());
     return BlocBuilder<ThemeCubit, ThemeMode>(
       buildWhen: (previous, current) => previous != current,
       builder: (context, themeMode) {
@@ -106,31 +138,54 @@ class NbCrmApp extends StatelessWidget {
             );
             return MediaQuery(
               data: mq.copyWith(textScaler: capped),
-              child: Stack(
-                children: [
-                  const MaterialIconKeepAlive(),
-                  Positioned.fill(
-                    child: Listener(
-                      behavior: HitTestBehavior.translucent,
-                      onPointerDown: (_) {
-                        LocationAlertSound.unlock();
-                        AppSounds.unlock();
-                      },
-                      child: Stack(
-                        children: [
-                          Positioned.fill(
-                            child: PermissionGuard(
-                              child: AuthRiverpodBridge(
-                                child: child ?? const SizedBox.shrink(),
+              child: BlocConsumer<AuthBloc, AuthState>(
+                listenWhen: (previous, current) => previous.status != current.status,
+                listener: (_, state) {
+                  _syncWebSplash(state.status);
+                },
+                buildWhen: (previous, current) =>
+                    previous.status != current.status,
+                builder: (context, auth) {
+                  _syncWebSplash(auth.status);
+                  return Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      const MaterialIconKeepAlive(),
+                      Positioned.fill(
+                        child: Listener(
+                          behavior: HitTestBehavior.translucent,
+                          onPointerDown: (_) {
+                            LocationAlertSound.unlock();
+                            AppSounds.unlock();
+                            MrNbTourService.instance.unlock();
+                          },
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              Positioned.fill(
+                                child: PermissionGuard(
+                                  child: AuthRiverpodBridge(
+                                    child: child ?? const SizedBox.shrink(),
+                                  ),
+                                ),
                               ),
-                            ),
+                              const IncomingCallHost(),
+                              const TourOverlayHost(),
+                              const FirstVisitHost(),
+                              const TourDebugInspector(),
+                            ],
                           ),
-                          const IncomingCallHost(),
-                        ],
+                        ),
                       ),
-                    ),
-                  ),
-                ],
+                      if (!kIsWeb && auth.status != AuthStatus.authenticated)
+                        Positioned.fill(
+                          child: auth.status == AuthStatus.unauthenticated
+                              ? const SplashVideoHost()
+                              : const ColoredBox(color: Color(0xFF000000)),
+                        ),
+                    ],
+                  );
+                },
               ),
             );
           },

@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../auth/presentation/auth_providers.dart';
 import '../../../tracking_hub/presentation/trip_recording_download.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 
 final adminTripsProvider = FutureProvider.autoDispose<List<dynamic>>((ref) async {
   final dioClient = ref.watch(dioClientProvider);
@@ -22,7 +24,10 @@ class AdminTripsScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Recorded Trips'),
+        title: TourTarget(
+          id: TourIds.step('hrms.trips', 2),
+          child: const Text('Recorded Trips'),
+        ),
       ),
       body: tripsAsync.when(
         data: (trips) {

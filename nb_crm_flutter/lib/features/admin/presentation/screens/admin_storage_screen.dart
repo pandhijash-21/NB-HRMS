@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/network/api_envelope.dart';
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 import '../../../../core/theme/nb_icon.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/auth_providers.dart';
@@ -58,10 +60,13 @@ class AdminStorageScreen extends ConsumerWidget {
           message: e is ApiException ? e.message : '$e',
           onRetry: () => ref.invalidate(_storageUsageProvider),
         ),
-        data: (usage) => _StorageBody(
+        data: (usage) => TourTarget(
+          id: TourIds.step('hrms.storage', 2),
+          child: _StorageBody(
           usage: usage,
           isDark: isDark,
           onPurged: () => ref.invalidate(_storageUsageProvider),
+        ),
         ),
       ),
     );

@@ -10,6 +10,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/network/api_envelope.dart';
 import '../../../../core/network/app_config.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 import '../../../../core/widgets/zoomable_photo.dart';
 import '../../../../core/utils/open_url.dart';
 import '../../../auth/presentation/auth_providers.dart';
@@ -1550,12 +1552,21 @@ class _ChatHubScreenState extends ConsumerState<ChatHubScreen> {
         body: wide
             ? Row(
                 children: [
-                  SizedBox(width: listWidth, child: list),
+                  SizedBox(
+                    width: listWidth,
+                    child: TourTarget(
+                      id: TourIds.step('collab.chat', 2),
+                      child: list,
+                    ),
+                  ),
                   VerticalDivider(width: 1, color: isDark ? AppColors.borderDark : const Color(0xFFE0E0E0)),
                   Expanded(child: thread),
                 ],
               )
-            : (_active == null ? list : thread),
+            : TourTarget(
+                id: TourIds.step('collab.chat', 2),
+                child: _active == null ? list : thread,
+              ),
       ),
     );
   }

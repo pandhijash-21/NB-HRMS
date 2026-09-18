@@ -6,36 +6,42 @@ import '../../../../core/bloc/load_status.dart';
 import '../../../../core/router/app_back_button.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
+import '../../data/work_order_repository.dart';
 import '../../domain/work_order_labels.dart';
 import '../../domain/work_order_models.dart';
 import '../bloc/erp_work_orders_bloc.dart';
 import '../widgets/work_order_info_dialogs.dart';
 
-class WorkOrderDetailScreen extends StatefulWidget {
+class WorkOrderDetailScreen extends StatelessWidget {
   const WorkOrderDetailScreen({super.key, required this.id});
 
   final String id;
 
   @override
-  State<WorkOrderDetailScreen> createState() => _WorkOrderDetailScreenState();
+  Widget build(BuildContext context) {
+    return BlocProvider(
+      create: (ctx) => ErpWorkOrdersBloc(
+        workOrderRepository: ctx.read<WorkOrderRepository>(),
+      )..add(ErpWorkOrderDetailRequested(id)),
+      child: _WorkOrderDetailView(id: id),
+    );
+  }
 }
 
-class _WorkOrderDetailScreenState extends State<WorkOrderDetailScreen> {
-  @override
-  void initState() {
-    super.initState();
-    context.read<ErpWorkOrdersBloc>().add(ErpWorkOrderDetailRequested(widget.id));
-  }
+class _WorkOrderDetailView extends StatelessWidget {
+  const _WorkOrderDetailView({required this.id});
 
-  void _setStatus(String status) {
+  final String id;
+
+  void _setStatus(BuildContext context, String status) {
     context.read<ErpWorkOrdersBloc>().add(
-          ErpWorkOrderStatusUpdated(id: widget.id, status: status),
+          ErpWorkOrderStatusUpdated(id: id, status: status),
         );
   }
 
-  void _setApproval(String approval) {
+  void _setApproval(BuildContext context, String approval) {
     context.read<ErpWorkOrdersBloc>().add(
-          ErpWorkOrderApprovalUpdated(id: widget.id, approvalStatus: approval),
+          ErpWorkOrderApprovalUpdated(id: id, approvalStatus: approval),
         );
   }
 
@@ -74,7 +80,7 @@ class _WorkOrderDetailScreenState extends State<WorkOrderDetailScreen> {
               if (canWrite)
                 IconButton(
                   icon: const Icon(Icons.edit_outlined),
-                  onPressed: () => context.go('/erp/work-orders/${widget.id}/edit'),
+                  onPressed: () => context.go('/erp/work-orders/$id/edit'),
                 ),
             ],
           ),
@@ -126,7 +132,7 @@ class _WorkOrderDetailScreenState extends State<WorkOrderDetailScreen> {
                                   .map(
                                     (s) => ActionChip(
                                       label: Text(WorkOrderLabels.statusLabel(s)),
-                                      onPressed: isSaving || wo.status == s ? null : () => _setStatus(s),
+                                      onPressed: isSaving || wo.status == s ? null : () => _setStatus(context, s),
                                     ),
                                   )
                                   .toList(),
@@ -152,7 +158,7 @@ class _WorkOrderDetailScreenState extends State<WorkOrderDetailScreen> {
                                     (s) => ActionChip(
                                       label: Text(WorkOrderLabels.approvalLabel(s)),
                                       onPressed:
-                                          isSaving || wo.approvalStatus == s ? null : () => _setApproval(s),
+                                          isSaving || wo.approvalStatus == s ? null : () => _setApproval(context, s),
                                     ),
                                   )
                                   .toList(),

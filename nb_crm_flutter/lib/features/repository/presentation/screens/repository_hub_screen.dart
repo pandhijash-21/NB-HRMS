@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 import '../../../../core/utils/open_stored_document.dart';
 import '../../../../core/utils/platform_file_picker.dart';
 import '../../../auth/domain/permissions.dart';
@@ -54,12 +56,15 @@ class RepositoryHubScreen extends ConsumerWidget {
         ),
       ),
       floatingActionButton: canManage
-          ? FloatingActionButton.extended(
+          ? TourTarget(
+              id: TourIds.step('hrms.repository', 2),
+              child: FloatingActionButton.extended(
               onPressed: () => _showUploadDialog(context, ref),
               icon: const Icon(Icons.upload_file_rounded),
               label: const Text('Upload'),
               backgroundColor: const Color(0xFF0369a1),
               foregroundColor: Colors.white,
+            ),
             )
           : null,
       body: docsAsync.when(

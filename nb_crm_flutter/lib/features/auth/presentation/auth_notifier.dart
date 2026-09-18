@@ -222,16 +222,16 @@ class AuthNotifier extends Notifier<AuthState> {
         // Stale token: UnauthorizedGate will sign out. Don't keep calling APIs.
       }
     }
-    await WebLiveTrackingService.ensureRunning();
+    await WebLiveTrackingService.start();
   }
 
   Future<void> _handleUnauthorized() async {
     // Ignore late 401s after user already signed out / while restoring.
     if (state.status != AuthStatus.authenticated) return;
     final repo = ref.read(authRepositoryProvider);
-    await repo.clearSession();
-    WebLiveTrackingService.stop();
+    WebLiveTrackingService.stop(preventRestart: true);
     _stopSessionWatch();
+    await repo.clearSession();
     state = const AuthState.unauthenticated(
       infoMessage:
           'You were signed out because this account signed in on another device or browser.',
@@ -278,7 +278,7 @@ class AuthNotifier extends Notifier<AuthState> {
       ref.invalidate(profileProvider);
       ref.invalidate(activeProfileEmployeeIdProvider);
       _startSessionWatch();
-      await WebLiveTrackingService.ensureRunning();
+      await WebLiveTrackingService.start();
       return true;
     } on ApiException catch (e) {
       state = state.copyWith(
@@ -317,9 +317,9 @@ class AuthNotifier extends Notifier<AuthState> {
           password: newPassword,
         );
       }
-      await repo.clearSession();
-      WebLiveTrackingService.stop();
+      WebLiveTrackingService.stop(preventRestart: true);
       _stopSessionWatch();
+      await repo.clearSession();
       state = AuthState.unauthenticated(
         infoMessage: message.isNotEmpty
             ? '$message Then verify your email address(es).'
@@ -376,10 +376,11 @@ class AuthNotifier extends Notifier<AuthState> {
 
   Future<void> logout() async {
     final repo = ref.read(authRepositoryProvider);
+    WebLiveTrackingService.stop(preventRestart: true);
+    _stopSessionWatch();
     await repo.logoutRemote();
     await repo.clearSession();
-    WebLiveTrackingService.stop();
-    _stopSessionWatch();
+    WebLiveTrackingService.stop(preventRestart: true);
     ref.invalidate(profileProvider);
     ref.invalidate(activeProfileEmployeeIdProvider);
     state = const AuthState.unauthenticated();

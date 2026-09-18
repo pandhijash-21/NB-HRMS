@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 import '../../../../core/widgets/bloc_async_body.dart';
 import '../../../../core/widgets/header_action_button.dart';
 import '../../../auth/domain/permissions.dart';
@@ -101,6 +103,11 @@ class _LeaveHubView extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
           children: [
+            TourTarget(
+              id: TourIds.step('hrms.leave', 2),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
             Row(
               children: [
                 Text(
@@ -194,6 +201,9 @@ class _LeaveHubView extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+                ],
+              ),
             ),
             if (canApprove || canAdmin) ...[
               const SizedBox(height: 20),

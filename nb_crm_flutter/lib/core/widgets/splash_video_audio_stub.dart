@@ -1,0 +1,3 @@
+void stopSplashPageAudio() {}
+
+void startSplashOverlay() {}

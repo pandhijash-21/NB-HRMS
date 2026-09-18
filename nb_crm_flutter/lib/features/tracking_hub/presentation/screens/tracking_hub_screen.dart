@@ -6,6 +6,8 @@ import 'package:go_router/go_router.dart';
 import '../../../auth/presentation/auth_providers.dart';
 import '../providers.dart';
 import '../location_alert_watch.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 import '../trip_recording_download.dart';
 import '../widgets/location_availability_widgets.dart';
 
@@ -114,7 +116,12 @@ class _TrackingHubScreenState extends ConsumerState<TrackingHubScreen> {
       ),
       body: CustomScrollView(
         slivers: [
-          SliverToBoxAdapter(child: _buildFilterBar(theme)),
+          SliverToBoxAdapter(
+            child: TourTarget(
+              id: TourIds.step('hrms.tracking', 2),
+              child: _buildFilterBar(theme),
+            ),
+          ),
           SliverToBoxAdapter(child: _buildAlertsBanner()),
           SliverToBoxAdapter(
             child: Padding(

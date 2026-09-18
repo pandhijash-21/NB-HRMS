@@ -9,6 +9,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/network/api_url_cubit.dart';
 import '../../../core/network/app_config.dart';
+import '../../../core/tour/mascot/mascot_clip_registry.dart';
 import '../../../core/widgets/backend_env_switcher.dart';
 import '../../../core/widgets/install_android_app_button.dart';
 import '../data/auth_repository.dart';
@@ -109,16 +110,28 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           fit: StackFit.expand,
           children: [
             const _LoginBackdrop(),
-            // Soft dark veil so white text stays readable.
-            const ColoredBox(color: Color(0x66000000)),
+            const DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: [
+                    Color(0xE6000000),
+                    Color(0x99000000),
+                    Color(0x00000000),
+                  ],
+                  stops: [0.0, 0.28, 0.5],
+                ),
+              ),
+            ),
             FadeTransition(
               opacity: fade,
               child: wide
                   ? Row(
                       children: [
-                        const Expanded(flex: 62, child: _BrandOverlay()),
+                        const Expanded(flex: 58, child: _BrandOverlay()),
                         Expanded(
-                          flex: 38,
+                          flex: 42,
                           child: SafeArea(
                             child: Center(
                               child: SingleChildScrollView(
@@ -189,7 +202,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
 class _LoginBackdrop extends StatelessWidget {
   const _LoginBackdrop();
 
-  static const _bg = 'assets/images/login_bg.png';
+  static const _bg = 'assets/images/nbbg.png';
 
   @override
   Widget build(BuildContext context) {
@@ -201,7 +214,7 @@ class _LoginBackdrop extends StatelessWidget {
       alignment: Alignment.center,
       filterQuality: FilterQuality.high,
       errorBuilder: (_, error, __) {
-        debugPrint('login_bg.png failed: $error');
+        debugPrint('nbbg.png failed: $error');
         return const ColoredBox(color: Color(0xFF0B100E));
       },
     );
@@ -220,17 +233,9 @@ class _BrandOverlay extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const _BrandHeader(onDark: true),
-            const Spacer(flex: 3),
-            Text(
-              'WELCOME TO',
-              style: GoogleFonts.sourceSans3(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 3.2,
-                color: _C.onImage.withValues(alpha: 0.85),
-              ),
-            ),
-            const SizedBox(height: 10),
+            const Spacer(flex: 2),
+            const _LoginMrNbHello(),
+            const SizedBox(height: 8),
             Text(
               'NB CRM',
               style: GoogleFonts.fraunces(
@@ -407,6 +412,151 @@ class _MobileBrandHeader extends StatelessWidget {
       ),
     );
   }
+}
+
+class _LoginMrNbHello extends StatefulWidget {
+  const _LoginMrNbHello();
+
+  @override
+  State<_LoginMrNbHello> createState() => _LoginMrNbHelloState();
+}
+
+class _LoginMrNbHelloState extends State<_LoginMrNbHello>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _bob;
+
+  @override
+  void initState() {
+    super.initState();
+    _bob = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2200),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _bob.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: AnimatedBuilder(
+        animation: _bob,
+        builder: (context, child) {
+          final lift = (1 - Curves.easeInOut.transform(_bob.value)) * 7;
+          return Transform.translate(offset: Offset(0, -lift), child: child);
+        },
+        child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: _C.gold.withValues(alpha: 0.45)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.18),
+                      blurRadius: 16,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Hello!',
+                      style: GoogleFonts.fraunces(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
+                        color: _C.ink,
+                        height: 1.1,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      "I'm Mr. NB. Welcome back.",
+                      style: GoogleFonts.sourceSans3(
+                        fontSize: 12.5,
+                        color: _C.mute,
+                        height: 1.25,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              CustomPaint(
+                size: const Size(16, 8),
+                painter: _HelloTailPainter(),
+              ),
+              const SizedBox(height: 2),
+              Container(
+                width: 132,
+                height: 132,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: _C.gold, width: 2.4),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.32),
+                      blurRadius: 18,
+                      offset: const Offset(0, 8),
+                    ),
+                    BoxShadow(
+                      color: _C.gold.withValues(alpha: 0.3),
+                      blurRadius: 14,
+                    ),
+                  ],
+                ),
+                child: ClipOval(
+                  child: ColoredBox(
+                    color: const Color(0xFF0B0B0B),
+                    child: Image.asset(
+                      MascotClipRegistry.wave.gif,
+                      fit: BoxFit.cover,
+                      gaplessPlayback: true,
+                      filterQuality: FilterQuality.high,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HelloTailPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path()
+      ..moveTo(size.width / 2 - 7, 0)
+      ..lineTo(size.width / 2 + 7, 0)
+      ..lineTo(size.width / 2, size.height)
+      ..close();
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.fill,
+    );
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = _C.gold.withValues(alpha: 0.45)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _LoginCard extends StatelessWidget {

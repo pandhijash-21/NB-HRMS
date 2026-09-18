@@ -7,6 +7,8 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/bloc/load_status.dart';
 import '../../../../core/utils/name_utils.dart';
 import '../../../../core/widgets/header_action_button.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 import '../../../../core/widgets/zoomable_photo.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../auth/domain/permissions.dart';
@@ -134,7 +136,9 @@ class _AdminEmployeesViewState extends State<_AdminEmployeesView> {
           ),
           Padding(
             padding: const EdgeInsets.only(right: 16.0, left: 4.0),
-            child: SizedBox(
+            child: TourTarget(
+              id: TourIds.step('hrms.workforce', 2),
+              child: SizedBox(
               height: 38,
               child: FilledButton.icon(
                 onPressed: () => _showAddEmployeeDialog(context),
@@ -147,6 +151,7 @@ class _AdminEmployeesViewState extends State<_AdminEmployeesView> {
                 icon: const Icon(Icons.add_rounded, size: 16),
                 label: const Text('Add Employee', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
               ),
+            ),
             ),
           ),
         ],

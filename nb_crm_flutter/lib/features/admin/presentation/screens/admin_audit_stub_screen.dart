@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 
 /// Audit logs were GraphQL-only in the Next.js app; `/admin/audit` was a nav orphan.
 class AdminAuditStubScreen extends StatelessWidget {
@@ -15,7 +17,9 @@ class AdminAuditStubScreen extends StatelessWidget {
         leading: const AppBackButton(),
       ),
       body: Center(
-        child: ConstrainedBox(
+        child: TourTarget(
+          id: TourIds.step('hrms.audit', 2),
+          child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),
           child: Card(
             margin: const EdgeInsets.all(24),
@@ -48,6 +52,7 @@ class AdminAuditStubScreen extends StatelessWidget {
               ),
             ),
           ),
+        ),
         ),
       ),
     );

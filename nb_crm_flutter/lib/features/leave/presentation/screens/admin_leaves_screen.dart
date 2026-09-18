@@ -6,6 +6,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 import '../../../../core/utils/platform_file_picker.dart';
 import '../../../../core/widgets/bloc_async_body.dart';
 import '../../../../core/widgets/header_action_button.dart';
@@ -88,6 +90,11 @@ class _AdminLeavesViewState extends State<_AdminLeavesView> {
             ),
             leading: const AppBackButton(fallbackLocation: '/leave'),
             actions: [
+              TourTarget(
+                id: TourIds.step('hrms.leave', 6),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
               HeaderActionButton(
                 tooltip: 'Leave Approvals',
                 label: 'Approvals',
@@ -113,6 +120,9 @@ class _AdminLeavesViewState extends State<_AdminLeavesView> {
                 onPressed: () => showAdminApplyOnBehalfDialog(context, bloc: bloc),
               ),
               const SizedBox(width: 8),
+                  ],
+                ),
+              ),
             ],
             bottom: PreferredSize(
               preferredSize: const Size.fromHeight(1.5),

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 import '../../../../core/widgets/bloc_async_body.dart';
 import '../../data/crm_repository.dart';
 import '../../domain/crm_models.dart';
@@ -91,12 +93,18 @@ class _CrmBinViewState extends State<_CrmBinView>
             backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
             elevation: 0,
             scrolledUnderElevation: 0,
-            bottom: TabBar(
+            bottom: PreferredSize(
+              preferredSize: const Size.fromHeight(48),
+              child: TourTarget(
+              id: TourIds.step('crm.bin', 2),
+              child: TabBar(
               controller: _tabController,
               tabs: const [
                 Tab(text: 'Pre-sales Leads'),
                 Tab(text: 'Post-sales Archive'),
               ],
+            ),
+              ),
             ),
             actions: [
               IconButton(

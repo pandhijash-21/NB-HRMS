@@ -3,6 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/bloc/load_status.dart';
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../data/admin_repository.dart';
@@ -70,7 +72,9 @@ class _AdminApprovalsView extends StatelessWidget {
         backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
         elevation: 0,
         scrolledUnderElevation: 0,
-        title: Text(
+        title: TourTarget(
+          id: TourIds.step('hrms.approvals', 2),
+          child: Text(
           'Profile Update Approvals',
           style: TextStyle(
             fontWeight: FontWeight.w700,
@@ -78,6 +82,7 @@ class _AdminApprovalsView extends StatelessWidget {
             color: isDark ? Colors.white : const Color(0xFF212F3D),
             letterSpacing: -0.5,
           ),
+        ),
         ),
         leading: const AppBackButton(),
         actions: [

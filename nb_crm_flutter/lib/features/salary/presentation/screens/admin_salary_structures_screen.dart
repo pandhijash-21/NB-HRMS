@@ -3,6 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 import '../../../../core/widgets/bloc_async_body.dart';
 import '../../data/salary_repository.dart';
 import '../../domain/salary_models.dart';
@@ -47,6 +49,11 @@ class _AdminSalaryStructuresView extends StatelessWidget {
         ),
         leading: const AppBackButton(fallbackLocation: '/admin/salary/records'),
         actions: [
+          TourTarget(
+            id: TourIds.step('hrms.payroll', 3),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
           TextButton.icon(
             onPressed: () => context.go('/admin/salary/commissions'),
             style: TextButton.styleFrom(
@@ -66,6 +73,9 @@ class _AdminSalaryStructuresView extends StatelessWidget {
             label: const Text('Entry'),
           ),
           const SizedBox(width: 12),
+              ],
+            ),
+          ),
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1.5),

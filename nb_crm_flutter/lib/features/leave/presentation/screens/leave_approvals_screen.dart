@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 import '../../domain/leave_models.dart';
 import '../leave_providers.dart';
 import '../widgets/leave_shared_widgets.dart';
@@ -32,7 +34,9 @@ class LeaveApprovalsScreen extends ConsumerWidget {
         ),
         leading: const AppBackButton(fallbackLocation: '/leave'),
         actions: [
-          Padding(
+          TourTarget(
+            id: TourIds.step('hrms.leave', 5),
+            child: Padding(
             padding: const EdgeInsets.only(right: 16.0),
             child: TextButton.icon(
               onPressed: () => context.go('/approvals/history'),
@@ -43,6 +47,7 @@ class LeaveApprovalsScreen extends ConsumerWidget {
               icon: const Icon(Icons.history_rounded, size: 16, color: Color(0xFFC5A059)),
               label: const Text('History'),
             ),
+          ),
           ),
         ],
         bottom: PreferredSize(

@@ -13,6 +13,8 @@ import '../../auth/presentation/bloc/auth_bloc.dart';
 import '../../auth/domain/permissions.dart';
 import '../../attendance/presentation/attendance_providers.dart';
 import '../../leave/presentation/widgets/leave_shared_widgets.dart';
+import '../../../core/tour/models/tour_models.dart';
+import '../../../core/tour/widgets/tour_target.dart';
 
 /// Home palette aligned with login branding (solid colors).
 class _HomeC {
@@ -592,10 +594,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 medium ? 28 : 16,
                 phone ? 88 : 48,
               ),
-              child: Column(
+                  child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  hero,
+                  TourTarget(
+                    id: TourIds.step('hrms.home', 2),
+                    child: hero,
+                  ),
                   const SizedBox(height: 18),
                   searchBar,
                   const SizedBox(height: 20),
@@ -604,11 +609,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     items: _birthdays,
                   ),
                   const SizedBox(height: 28),
-                  if (hasResults) ...[
-                    buildCategorySection(ModuleCategory.mySpace),
-                    buildCategorySection(ModuleCategory.management),
-                    buildCategorySection(ModuleCategory.system),
-                  ] else ...[
+                  if (hasResults) buildCategorySection(ModuleCategory.mySpace),
+                  if (hasResults)
+                    TourTarget(
+                      id: TourIds.step('hrms.home', 3),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          buildCategorySection(ModuleCategory.management),
+                          buildCategorySection(ModuleCategory.system),
+                        ],
+                      ),
+                    )
+                  else ...[
                     Center(
                       child: Padding(
                         padding: const EdgeInsets.symmetric(vertical: 48),

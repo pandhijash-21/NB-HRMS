@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 import '../../../lookups/presentation/lookup_dropdown.dart';
 import '../../data/boq_repository.dart';
 import '../../data/work_order_repository.dart';
@@ -699,7 +701,9 @@ class _StoreConfigScreenState extends State<StoreConfigScreen>
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(48),
-          child: Container(
+          child: TourTarget(
+            id: TourIds.step('erp.store', 2),
+            child: Container(
             color: isDark ? const Color(0xFF1A1816) : Colors.white,
             child: TabBar(
               controller: _storeTabController,
@@ -718,6 +722,7 @@ class _StoreConfigScreenState extends State<StoreConfigScreen>
                 ),
               ],
             ),
+          ),
           ),
         ),
       ),
@@ -1363,7 +1368,9 @@ class _StoreConfigScreenState extends State<StoreConfigScreen>
       children: [
         Container(
           color: isDark ? const Color(0xFF1F1D1B) : const Color(0xFFEEF2F6),
-          child: TabBar(
+          child: TourTarget(
+            id: TourIds.step('erp.store', 3),
+            child: TabBar(
             controller: _machineTabController,
             indicatorColor: const Color(0xFF7C3AED),
             indicatorWeight: 2,
@@ -1379,6 +1386,7 @@ class _StoreConfigScreenState extends State<StoreConfigScreen>
                 text: 'Issue & Returns',
               ),
             ],
+          ),
           ),
         ),
         Expanded(

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 
@@ -51,7 +53,11 @@ class _CrmPostSalesScreenState extends State<CrmPostSalesScreen>
         backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
         elevation: 0,
         scrolledUnderElevation: 0,
-        bottom: TabBar(
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(48),
+          child: TourTarget(
+            id: TourIds.step('crm.post_sales', 2),
+            child: TabBar(
           controller: _tabController,
           isScrollable: true,
           tabs: const [
@@ -60,6 +66,8 @@ class _CrmPostSalesScreenState extends State<CrmPostSalesScreen>
             Tab(text: 'Service & Support'),
             Tab(text: 'Feedback & Reviews'),
           ],
+        ),
+          ),
         ),
         actions: [
           if (Permissions.canWriteCrmPostSales(context.watch<AuthBloc>().state.permissions, context.watch<AuthBloc>().state.user?.role))

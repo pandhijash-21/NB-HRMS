@@ -3,6 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/platform_file_picker.dart';
 import '../../../../core/widgets/bloc_async_body.dart';
@@ -202,7 +204,9 @@ class _LeaveApplyViewState extends State<_LeaveApplyView> {
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16),
-            child: Form(
+            child: TourTarget(
+              id: TourIds.step('hrms.leave', 3),
+              child: Form(
               key: _formKey,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -359,6 +363,7 @@ class _LeaveApplyViewState extends State<_LeaveApplyView> {
                   ),
                 ],
               ),
+            ),
             ),
           );
         },

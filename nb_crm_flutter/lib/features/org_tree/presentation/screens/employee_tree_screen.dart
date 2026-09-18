@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/network/api_envelope.dart';
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 import '../../../../core/widgets/header_action_button.dart';
 import '../../../../core/widgets/mobile_input_formatter.dart';
 import '../../../admin/domain/admin_models.dart';
@@ -104,7 +106,11 @@ class _EmployeeTreeScreenState extends ConsumerState<EmployeeTreeScreen>
             ),
           const SizedBox(width: 6),
         ],
-        bottom: TabBar(
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(48),
+          child: TourTarget(
+            id: TourIds.step('collab.org_tree', 2),
+            child: TabBar(
           controller: _tabs,
           labelColor: gold,
           unselectedLabelColor: isDark ? Colors.white54 : const Color(0xFF64748B),
@@ -114,6 +120,8 @@ class _EmployeeTreeScreenState extends ConsumerState<EmployeeTreeScreen>
             Tab(icon: Icon(Icons.hub_rounded, size: 18), text: 'Graph'),
             Tab(icon: Icon(Icons.support_agent_rounded, size: 18), text: 'Contacts'),
           ],
+        ),
+          ),
         ),
       ),
       body: Column(

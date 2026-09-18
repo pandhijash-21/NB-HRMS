@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/bloc/load_status.dart';
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 import '../../../lookups/presentation/bloc/lookups_bloc.dart';
 import '../../../lookups/presentation/widgets/config_square_tiles.dart';
 import '../../domain/contractor_lookup_keys.dart';
@@ -65,10 +67,12 @@ class _ErpConfigurationsScreenState extends State<ErpConfigurationsScreen> {
           ),
         ],
       ),
-      body: ListView(
+        body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
         children: [
-          ConfigSearchField(
+          TourTarget(
+            id: TourIds.step('erp.config', 2),
+            child: ConfigSearchField(
             controller: _searchCtrl,
             query: q,
             onChanged: (v) => setState(() => _query = v),
@@ -76,6 +80,7 @@ class _ErpConfigurationsScreenState extends State<ErpConfigurationsScreen> {
               _searchCtrl.clear();
               setState(() => _query = '');
             },
+          ),
           ),
           const SizedBox(height: 20),
           BlocBuilder<LookupsBloc, LookupsState>(

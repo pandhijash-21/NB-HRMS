@@ -5,6 +5,8 @@ import 'package:intl/intl.dart';
 
 import '../../../../core/bloc/load_status.dart';
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/tour/models/tour_models.dart';
+import '../../../../core/tour/widgets/tour_target.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../data/dpr_repository.dart';
@@ -60,11 +62,14 @@ class _DprListView extends StatelessWidget {
             ],
           ),
           floatingActionButton: canWrite
-              ? FloatingActionButton.extended(
+              ? TourTarget(
+                  id: TourIds.step('erp.dpr', 2),
+                  child: FloatingActionButton.extended(
                   onPressed: () => context.go('/erp/dpr/new'),
                   icon: const Icon(Icons.add),
                   label: const Text('New DPR'),
                   backgroundColor: const Color(0xFF1e3a5f),
+                ),
                 )
               : null,
           body: Builder(

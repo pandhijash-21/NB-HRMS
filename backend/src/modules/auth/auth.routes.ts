@@ -7,11 +7,13 @@ export const authRouter = Router();
 
 // Public
 authRouter.post('/login',  authController.login);
+authRouter.get('/branding', authController.getBranding);
 
 // Authenticated
 authRouter.post('/logout',          requireAuth, authController.logout);
 authRouter.post('/change-password', requireAuth, authController.changePassword);
 authRouter.get('/me',               requireAuth, authController.getMe);
+authRouter.post('/software-tour/seen', requireAuth, authController.markSoftwareTourSeen);
 
 // HR/Admin only — reset any user's password to default (DOB)
 authRouter.post(

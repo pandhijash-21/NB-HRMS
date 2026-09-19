@@ -337,6 +337,7 @@ export const authService = {
         role:       effectiveRoleName,
         jobRole:    dbRoleName,
         companyAdminGranted,
+        softwareTourSeen: user.softwareTourSeenAt != null,
         photoUrl:   user.employee?.photoUrl ?? null,
         username:   user.username ?? null,
         subOrganization: scopeSubOrg,
@@ -548,6 +549,7 @@ export const authService = {
       role: effectiveRoleName,
       jobRole: dbRoleName,
       companyAdminGranted,
+      softwareTourSeen: dbUser?.softwareTourSeenAt != null,
       name: dbUser?.username ?? (user as any).name ?? 'User',
       username: dbUser?.username ?? null,
       permissions,
@@ -558,5 +560,13 @@ export const authService = {
       needsEmailVerification: emailStatus.needsEmailVerification,
       pendingEmails: emailStatus.emails.filter((e) => !e.verified),
     };
+  },
+
+  async markSoftwareTourSeen(userId: string) {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { softwareTourSeenAt: new Date() },
+    });
+    return { softwareTourSeen: true };
   },
 };

@@ -127,6 +127,26 @@ async function start() {
       setInterval(() => {
         trackingService.checkMissingHeartbeats().catch(console.error);
       }, 60000);
+
+      // Purge expired trips once a day (based on trip_retention_days setting)
+      let lastTripPurgeDay = '';
+      const runTripPurgeIfDue = () => {
+        const day = new Date().toISOString().slice(0, 10);
+        if (day === lastTripPurgeDay) return;
+        lastTripPurgeDay = day;
+        trackingService
+          .purgeExpiredTrips()
+          .then((r) => {
+            if (!r.skipped && (r.deletedTrips > 0 || r.deletedPoints > 0)) {
+              console.log(
+                `[tracking] purged ${r.deletedTrips} trips / ${r.deletedPoints} points (retention ${r.days}d)`,
+              );
+            }
+          })
+          .catch(console.error);
+      };
+      runTripPurgeIfDue();
+      setInterval(runTripPurgeIfDue, 60 * 60 * 1000);
       
     } catch (err) {
       console.warn('Leave jobs could not be started:', err);

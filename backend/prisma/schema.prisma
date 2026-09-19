@@ -1089,6 +1089,8 @@ model User {
   isActive          Boolean   @default(true) @map("is_active")
   /// Super Admin grant: same tenant privileges as System Admin without changing designation/roleId.
   companyAdminGranted Boolean  @default(false) @map("company_admin_granted")
+  /// When set, Mr NB software-tour welcome will not auto-show again for this account.
+  softwareTourSeenAt DateTime? @map("software_tour_seen_at")
   lastLoginAt       DateTime? @map("last_login_at")
   passwordChangedAt DateTime? @map("password_changed_at")
   /// 0 = 3 attempts, 1 = 2 attempts after 15m lock, 2 = 1 attempt after 1h lock, 3 = permanently blocked
@@ -1240,6 +1242,18 @@ model Organization {
   organizationAdminPermissions OrganizationAdminPermission[]
 
   @@map("organizations")
+}
+
+/// Platform-wide media/branding URLs (splash video, etc.) — not tenant-scoped.
+model PlatformBranding {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  url       String
+  meta      String?  // optional JSON (duration, publicId, …)
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
+
+  @@map("platform_branding")
 }
 
 /// Per-company System Admin capability matrix (shared by all ADMIN users of that company).
@@ -3370,4 +3384,33 @@ model EarthPropertyMedia {
 
   @@index([propertyId])
   @@map("earth_property_media")
+}
+
+/// In-app notifications (admin announcements, etc.) — shown in bell + Notifications screen.
+model UserNotification {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  title     String
+  body      String    @db.Text
+  kind      String    @default("announce")
+  path      String?
+  senderId  String?   @map("sender_id")
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+  @@map("user_notifications")
+}
+
+/// Tracking Hub key/value settings (e.g. trip_retention_days).
+model TrackingSetting {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       String
+  description String?
+  updatedBy   String?  @map("updated_by")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("tracking_settings")
 }

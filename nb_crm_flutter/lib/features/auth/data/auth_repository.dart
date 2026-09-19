@@ -216,4 +216,23 @@ class AuthRepository {
 
   Future<void> clearRememberedCredentials() =>
       _storage.clearRememberedCredentials();
+
+  /// Marks Mr NB software tour as completed for the signed-in account (server).
+  Future<void> markSoftwareTourSeen() {
+    return _dio.postEnvelope<void>(
+      'auth/software-tour/seen',
+      parse: (_) {},
+    );
+  }
+
+  /// Live server flag — used so restored sessions without the field don't flash welcome.
+  Future<bool> fetchSoftwareTourSeen() {
+    return _dio.getEnvelope<bool>(
+      'auth/me',
+      parse: (raw) {
+        if (raw is Map) return raw['softwareTourSeen'] == true;
+        return false;
+      },
+    );
+  }
 }

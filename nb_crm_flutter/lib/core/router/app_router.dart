@@ -29,6 +29,7 @@ import '../../features/tracking_hub/presentation/screens/tracking_hub_employee_d
 import '../../features/admin/presentation/screens/admin_trips_screen.dart';
 import '../../features/admin/presentation/screens/admin_trip_replay_screen.dart';
 import '../../features/admin/presentation/screens/admin_audit_stub_screen.dart';
+import '../../features/notifications/presentation/notifications_screen.dart';
 import '../../features/org/presentation/screens/institutes_screen.dart';
 import '../../features/org/presentation/screens/institute_detail_screen.dart';
 import '../../features/org/presentation/screens/organizations_screen.dart';
@@ -410,6 +411,10 @@ GoRouter createAppRouter(AuthBloc authBloc) {
           GoRoute(
             path: '/software-tour',
             builder: (context, state) => const SoftwareTourHubScreen(),
+          ),
+          GoRoute(
+            path: '/notifications',
+            builder: (context, state) => const NotificationsScreen(),
           ),
           GoRoute(
             path: '/crm',

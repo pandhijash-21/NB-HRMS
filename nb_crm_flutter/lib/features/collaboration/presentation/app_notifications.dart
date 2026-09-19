@@ -166,6 +166,36 @@ class AppNotifications extends Notifier<AppNotificationsState> {
     socket.onIncomingCall(_onIncoming);
     socket.onMeetingEnded(_onEnded);
     socket.onPermissionsUpdated(_onPermissionsUpdated);
+    unawaited(_pullServerInbox());
+  }
+
+  Future<void> _pullServerInbox() async {
+    try {
+      final dio = ref.read(dioClientProvider);
+      final raw = await dio.getEnvelope<List<dynamic>>(
+        'notifications',
+        queryParameters: {'limit': 40},
+        parse: (r) => r is List ? r : const [],
+      );
+      if (!ref.mounted) return;
+      final notices = <AppNotice>[];
+      for (final item in raw) {
+        if (item is! Map) continue;
+        final m = Map<String, dynamic>.from(item);
+        notices.add(
+          AppNotice(
+            id: m['id']?.toString() ?? UniqueKey().toString(),
+            kind: m['kind']?.toString() ?? 'announce',
+            title: m['title']?.toString() ?? 'Notification',
+            body: m['body']?.toString() ?? '',
+            at: DateTime.tryParse('${m['createdAt'] ?? ''}') ?? DateTime.now(),
+            path: m['path']?.toString(),
+            read: m['readAt'] != null,
+          ),
+        );
+      }
+      mergeServerNotifications(notices);
+    } catch (_) {}
   }
 
   void _detach() {
@@ -192,6 +222,22 @@ class AppNotifications extends Notifier<AppNotificationsState> {
     } catch (_) {}
   }
 
+  /// Merge server-persisted announcements into the local bell inbox.
+  void mergeServerNotifications(List<AppNotice> notices) {
+    if (notices.isEmpty) return;
+    final byId = {for (final n in state.items) n.id: n};
+    for (final n in notices) {
+      byId[n.id] = n;
+    }
+    final merged = byId.values.toList()
+      ..sort((a, b) => b.at.compareTo(a.at));
+    _set(AppNotificationsState(
+      items: merged.take(40).toList(),
+      incoming: state.incoming,
+    ));
+    unawaited(_persist());
+  }
+
   Future<void> _persist() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -209,7 +255,8 @@ class AppNotifications extends Notifier<AppNotificationsState> {
       _onIncoming(data);
     }
     final notice = AppNotice(
-      id: '${DateTime.now().microsecondsSinceEpoch}-${data['channelId'] ?? data['code'] ?? kind}',
+      id: data['id']?.toString() ??
+          '${DateTime.now().microsecondsSinceEpoch}-${data['channelId'] ?? data['code'] ?? kind}',
       kind: kind,
       title: data['title']?.toString() ?? 'Notification',
       body: data['body']?.toString() ?? '',

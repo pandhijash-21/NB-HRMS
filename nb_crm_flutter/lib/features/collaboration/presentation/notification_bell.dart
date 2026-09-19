@@ -167,6 +167,13 @@ class NotificationBellButton extends ConsumerWidget {
                                 : () => ref.read(appNotificationsProvider.notifier).clearAll(),
                             child: const Text('Clear'),
                           ),
+                          TextButton(
+                            onPressed: () {
+                              Navigator.pop(ctx);
+                              context.go('/notifications');
+                            },
+                            child: const Text('Open inbox'),
+                          ),
                         ],
                       ),
                     ),
@@ -338,8 +345,12 @@ IconData _kindIcon(String kind) {
       return Icons.videocam_rounded;
     case 'mention':
       return Icons.alternate_email_rounded;
+    case 'announce':
+      return Icons.campaign_rounded;
+    case 'leave':
+      return Icons.event_available_rounded;
     default:
-      return Icons.chat_rounded;
+      return Icons.notifications_rounded;
   }
 }
 
@@ -352,6 +363,10 @@ Color _kindColor(String kind) {
       return const Color(0xFF5B5FC7);
     case 'mention':
       return const Color(0xFFC5A059);
+    case 'announce':
+      return const Color(0xFFC5A36A);
+    case 'leave':
+      return const Color(0xFF0D9488);
     default:
       return const Color(0xFF2563EB);
   }

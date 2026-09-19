@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/auth_providers.dart';
 import '../providers.dart';
 import '../location_alert_watch.dart';
@@ -30,6 +31,9 @@ class _TrackingHubScreenState extends ConsumerState<TrackingHubScreen> {
   String? _selectedEmployeeId;
   String _statusFilter = 'All';
   final _employeeController = TextEditingController();
+  final _retentionController = TextEditingController(text: '90');
+  bool _retentionLoading = false;
+  bool _retentionSaving = false;
   Timer? _refreshTimer;
 
   @override
@@ -50,13 +54,76 @@ class _TrackingHubScreenState extends ConsumerState<TrackingHubScreen> {
         ),
       );
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadRetention());
   }
 
   @override
   void dispose() {
     _refreshTimer?.cancel();
     _employeeController.dispose();
+    _retentionController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadRetention() async {
+    final auth = ref.read(authNotifierProvider);
+    final role = auth.user?.role;
+    final canManage = Permissions.isAdmin(role) ||
+        (auth.user?.companyAdminGranted == true);
+    if (!canManage) return;
+    setState(() => _retentionLoading = true);
+    try {
+      final dio = ref.read(dioClientProvider);
+      final rows = await dio.getEnvelope<List<dynamic>>(
+        'tracking/settings',
+        parse: (raw) => raw is List ? raw : const [],
+      );
+      for (final row in rows) {
+        if (row is Map && row['key']?.toString() == 'trip_retention_days') {
+          _retentionController.text = row['value']?.toString() ?? '90';
+          break;
+        }
+      }
+    } catch (_) {
+    } finally {
+      if (mounted) setState(() => _retentionLoading = false);
+    }
+  }
+
+  Future<void> _saveRetention() async {
+    final days = int.tryParse(_retentionController.text.trim());
+    if (days == null || days < 0 || days > 3650) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter days from 0 to 3650 (0 = keep forever)')),
+      );
+      return;
+    }
+    setState(() => _retentionSaving = true);
+    try {
+      final dio = ref.read(dioClientProvider);
+      await dio.patchEnvelope(
+        'tracking/settings/trip_retention_days',
+        data: {'value': '$days'},
+        parse: (_) => null,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            days == 0
+                ? 'Trips will be kept forever'
+                : 'Trips older than $days days will be deleted automatically',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+    } finally {
+      if (mounted) setState(() => _retentionSaving = false);
+    }
   }
 
   DateTime? _parseDate(String? raw) {
@@ -85,6 +152,64 @@ class _TrackingHubScreenState extends ConsumerState<TrackingHubScreen> {
     if (picked != null) {
       setState(() => _selectedDate = picked);
     }
+  }
+
+  Widget _buildRetentionCard(ThemeData theme) {
+    final auth = ref.watch(authNotifierProvider);
+    final canManage = Permissions.isAdmin(auth.user?.role) ||
+        (auth.user?.companyAdminGranted == true);
+    if (!canManage) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Trip storage retention',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Closed trips older than this many days are deleted automatically (including GPS points). Set 0 to keep forever.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+                ),
+              ),
+              const SizedBox(height: 12),
+              if (_retentionLoading)
+                const LinearProgressIndicator()
+              else
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _retentionController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Keep trips for (days)',
+                          border: OutlineInputBorder(),
+                          suffixText: 'days',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    FilledButton(
+                      onPressed: _retentionSaving ? null : _saveRetention,
+                      child: Text(_retentionSaving ? 'Saving…' : 'Save'),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -116,6 +241,7 @@ class _TrackingHubScreenState extends ConsumerState<TrackingHubScreen> {
       ),
       body: CustomScrollView(
         slivers: [
+          SliverToBoxAdapter(child: _buildRetentionCard(theme)),
           SliverToBoxAdapter(
             child: TourTarget(
               id: TourIds.step('hrms.tracking', 2),

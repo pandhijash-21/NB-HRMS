@@ -59,17 +59,28 @@
       inset: 0;
       width: 100%;
       height: 100%;
-      object-fit: cover;
+      object-fit: contain;
       background: #000;
     }
     #nb-splash-loader {
       position: absolute;
       inset: 0;
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
+      gap: 22px;
       background: radial-gradient(ellipse at center, #16110c 0%, #000 68%);
       pointer-events: none;
+    }
+    #nb-splash-status {
+      color: rgba(232, 201, 138, 0.88);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      font-size: 13px;
+      letter-spacing: 0.3px;
+      text-align: center;
+      min-height: 1.2em;
+      padding: 0 20px;
     }
     .nb-loader {
       position: relative;
@@ -186,6 +197,7 @@
         <div class="nb-loader-dot"></div>
         <div class="nb-loader-core">NB</div>
       </div>
+      <div id="nb-splash-status">Preparing Mr NB…</div>
     </div>
     <div id="nb-splash-controls">
       <button id="nb-splash-volume" type="button" aria-label="Unmute"></button>
@@ -208,6 +220,7 @@
       var overlay = document.getElementById('nb-splash');
       var video = document.getElementById('nb-splash-video');
       var loader = document.getElementById('nb-splash-loader');
+      var statusEl = document.getElementById('nb-splash-status');
       var controls = document.getElementById('nb-splash-controls');
       var volumeBtn = document.getElementById('nb-splash-volume');
       var skip = document.getElementById('nb-splash-skip');
@@ -216,8 +229,39 @@
       var dismissed = false;
       var muted = true;
       var rewindTries = 0;
+      var statusTimer = null;
+      var failSafeTimer = null;
+      var statusLines = [
+        'Preparing Mr NB…',
+        'Fetching splash from cloud…',
+        'Buffering video…',
+        'Almost ready…'
+      ];
+      var statusIdx = 0;
 
       volumeBtn.innerHTML = ICON_OFF;
+
+      function setStatus(text) {
+        if (statusEl) statusEl.textContent = text || '';
+      }
+
+      function startStatusCycle() {
+        stopStatusCycle();
+        statusIdx = 0;
+        setStatus(statusLines[0]);
+        statusTimer = setInterval(function () {
+          if (dismissed) return;
+          statusIdx = (statusIdx + 1) % statusLines.length;
+          setStatus(statusLines[statusIdx]);
+        }, 1600);
+      }
+
+      function stopStatusCycle() {
+        if (statusTimer) {
+          clearInterval(statusTimer);
+          statusTimer = null;
+        }
+      }
 
       function restack() {
         if (dismissed) return;
@@ -237,6 +281,8 @@
         if (dismissed) return;
         dismissed = true;
         started = true;
+        stopStatusCycle();
+        if (failSafeTimer) { clearTimeout(failSafeTimer); failSafeTimer = null; }
         stop();
         overlay.classList.add('nb-off');
         setTimeout(function () { overlay.style.display = 'none'; }, 420);
@@ -245,6 +291,8 @@
       function abort() {
         dismissed = true;
         started = true;
+        stopStatusCycle();
+        if (failSafeTimer) { clearTimeout(failSafeTimer); failSafeTimer = null; }
         stop();
         overlay.classList.add('nb-off');
         overlay.style.display = 'none';
@@ -265,6 +313,20 @@
       }
 
       video.addEventListener('ended', dismiss);
+      video.addEventListener('waiting', function () {
+        if (!dismissed) setStatus('Buffering video…');
+      });
+      video.addEventListener('progress', function () {
+        if (dismissed || !video.buffered.length) return;
+        try {
+          var end = video.buffered.end(video.buffered.length - 1);
+          var dur = video.duration || 0;
+          if (dur > 0) {
+            var pct = Math.min(99, Math.round((end / dur) * 100));
+            setStatus('Buffering video… ' + pct + '%');
+          }
+        } catch (e) {}
+      });
 
       volumeBtn.addEventListener('click', function (e) {
         e.preventDefault();
@@ -283,6 +345,7 @@
       }
 
       function showVideo() {
+        stopStatusCycle();
         loader.style.display = 'none';
         controls.style.display = 'flex';
       }
@@ -299,13 +362,15 @@
 
       video.addEventListener('loadedmetadata', function () {
         rewindToStart();
+        setStatus('Starting playback…');
       });
       video.addEventListener('playing', function () {
         if (dismissed) return;
         // Cached 4K files often begin at the next keyframe (~2.5s = hoodie close-up).
-        if (video.currentTime > 0.2 && rewindTries < 4) {
+        if (video.currentTime > 0.35 && rewindTries < 6) {
           rewindTries += 1;
           showLoader();
+          setStatus('Aligning first frame…');
           playFromStart();
           return;
         }
@@ -319,22 +384,95 @@
         overlay.style.display = 'block';
         overlay.classList.remove('nb-off');
         showLoader();
+        startStatusCycle();
         setMuted(true);
         rewindTries = 0;
         video.loop = false;
         video.controls = false;
         video.preload = 'auto';
-        var base = url || new URL('assets/assets/clips/processed/splash_mr_nb.mp4', document.baseURI).href;
+        var base = url || window.__nbSplashUrl || localStorage.getItem('nb_splash_url') || new URL('assets/assets/clips/processed/splash_mr_nb.mp4', document.baseURI).href;
         base = String(base).split('#')[0];
+        try {
+          if (base.indexOf('http') === 0) localStorage.setItem('nb_splash_url', base);
+        } catch (e) {}
         video.setAttribute('playsinline', '');
-        video.src = base + '#t=0,10';
-        video.load();
-        playFromStart();
-        setTimeout(function () { if (!dismissed) dismiss(); }, 22000);
+        // Prefer Cache Storage blob URL when warmed from a previous visit.
+        function applySrc(src) {
+          video.src = src;
+          video.load();
+          playFromStart();
+        }
+        if (window.caches && base.indexOf('http') === 0) {
+          caches.open('nb-splash-v1').then(function (cache) {
+            return cache.match(base).then(function (hit) {
+              if (hit) return hit.blob().then(function (b) { return URL.createObjectURL(b); });
+              // Warm cache in background; stream from network now.
+              cache.add(base).catch(function () {});
+              return base;
+            });
+          }).then(applySrc).catch(function () { applySrc(base); });
+        } else {
+          applySrc(base);
+        }
+        if (failSafeTimer) clearTimeout(failSafeTimer);
+        // Fail fast — do not hold login behind a long buffer.
+        failSafeTimer = setTimeout(function () { if (!dismissed) dismiss(); }, 16000);
       };
 
       window.__nbAbortSplash = abort;
       window.__nbStopSplashSound = abort;
+
+      // Prefetch Cloudinary splash URL + warm video cache for next visit.
+      (function prefetchSplashUrl() {
+        var cached = null;
+        try { cached = localStorage.getItem('nb_splash_url'); } catch (e) {}
+        if (cached && cached.indexOf('http') === 0) {
+          window.__nbSplashUrl = cached;
+          setStatus('Loading cached splash…');
+          if (window.caches) {
+            caches.open('nb-splash-v1').then(function (cache) {
+              return cache.match(cached).then(function (hit) {
+                if (!hit) return cache.add(cached);
+              });
+            }).catch(function () {});
+          }
+        }
+        var origins = [];
+        try {
+          var host = location.hostname || '';
+          if (host === 'localhost' || host === '127.0.0.1') {
+            origins.push('http://localhost:4000/api/auth/branding');
+            origins.push('http://127.0.0.1:4000/api/auth/branding');
+          }
+          origins.push(new URL('/api/auth/branding', location.origin).href);
+          origins.push('https://crm.nbdeveloper.co.in/api/auth/branding');
+        } catch (e) {}
+        var i = 0;
+        function next() {
+          if (i >= origins.length) return;
+          var endpoint = origins[i++];
+          fetch(endpoint, { credentials: 'omit' })
+            .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+            .then(function (body) {
+              var data = body && (body.data || body);
+              var url = data && data.splashVideoUrl;
+              if (url && String(url).indexOf('http') === 0) {
+                window.__nbSplashUrl = String(url);
+                try { localStorage.setItem('nb_splash_url', String(url)); } catch (e) {}
+                setStatus('Fetching splash from cloud…');
+                if (window.caches) {
+                  caches.open('nb-splash-v1').then(function (cache) {
+                    return cache.add(String(url));
+                  }).catch(function () {});
+                }
+              } else {
+                next();
+              }
+            })
+            .catch(next);
+        }
+        next();
+      })();
     })();
   </script>
   <script src="flutter_bootstrap.js?v=crmicons-1" async></script>

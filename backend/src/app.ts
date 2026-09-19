@@ -120,6 +120,7 @@ app.use('/actions', actionsRouter);
 app.use('/events', eventsRouter);
 
 import { trackingRouter } from './modules/tracking/tracking.routes';
+import { notificationsRouter } from './modules/notifications';
 import { tasksRouter } from './modules/tasks';
 import { chatRouter, meetingsRouter } from './modules/collaboration';
 import { getSttHealth } from './modules/collaboration/stt.service';
@@ -162,6 +163,7 @@ app.use('/api/tenders', ...erpLicenseGuard, tenderRouter);
 app.use('/api/tender-applications', ...erpLicenseGuard, tenderApplicationRouter);
 app.use('/api/dpr', ...erpLicenseGuard, dprRouter);
 app.use('/api/tracking', trackingRouter);
+app.use('/api/notifications', notificationsRouter);
 app.use('/api/crm', ...crmLicenseGuard, crmRouter);
 app.use('/api/earth', earthRouter);
 app.use('/api/tasks', tasksRouter);

@@ -983,6 +983,98 @@ ${trkpts}
       });
     }
   },
+
+  async listSettings() {
+    const defaults = [
+      {
+        key: 'trip_retention_days',
+        value: '90',
+        description:
+          'Closed trips older than this many days are deleted automatically. Set 0 to keep forever.',
+      },
+    ];
+    const rows = await prisma.trackingSetting.findMany({ orderBy: { key: 'asc' } });
+    const map = new Map(rows.map((r) => [r.key, r]));
+    for (const d of defaults) {
+      if (!map.has(d.key)) {
+        const created = await prisma.trackingSetting.create({
+          data: { key: d.key, value: d.value, description: d.description, updatedBy: 'system' },
+        });
+        map.set(d.key, created);
+      }
+    }
+    return [...map.values()].sort((a, b) => a.key.localeCompare(b.key));
+  },
+
+  async getTripRetentionDays(): Promise<number> {
+    const row = await prisma.trackingSetting.findUnique({
+      where: { key: 'trip_retention_days' },
+    });
+    const n = Number.parseInt(String(row?.value ?? '90'), 10);
+    if (!Number.isFinite(n) || n < 0) return 90;
+    return Math.min(n, 3650);
+  },
+
+  async updateSetting(key: string, value: string, actorId: string) {
+    if (key !== 'trip_retention_days') {
+      throw new Error('Unknown tracking setting');
+    }
+    const n = Number.parseInt(String(value).trim(), 10);
+    if (!Number.isFinite(n) || n < 0 || n > 3650) {
+      throw new Error('trip_retention_days must be an integer from 0 to 3650 (0 = keep forever)');
+    }
+    return prisma.trackingSetting.upsert({
+      where: { key },
+      create: {
+        key,
+        value: String(n),
+        description:
+          'Closed trips older than this many days are deleted automatically. Set 0 to keep forever.',
+        updatedBy: actorId,
+      },
+      update: { value: String(n), updatedBy: actorId },
+    });
+  },
+
+  /** Deletes closed trips (and their points) older than the configured retention window. */
+  async purgeExpiredTrips() {
+    const days = await this.getTripRetentionDays();
+    if (days <= 0) {
+      return { skipped: true, days, deletedTrips: 0, deletedPoints: 0 };
+    }
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+    const oldTrips = await prisma.trip.findMany({
+      where: {
+        endTime: { not: null, lt: cutoff },
+      },
+      select: { id: true },
+    });
+    const tripIds = oldTrips.map((t) => t.id);
+
+    let deletedPoints = 0;
+    if (tripIds.length > 0) {
+      const pts = await prisma.locationHistory.deleteMany({
+        where: { tripId: { in: tripIds } },
+      });
+      deletedPoints += pts.count;
+      await prisma.trip.deleteMany({ where: { id: { in: tripIds } } });
+    }
+
+    // Orphan GPS points (no trip) older than cutoff
+    const orphans = await prisma.locationHistory.deleteMany({
+      where: { tripId: null, timestamp: { lt: cutoff } },
+    });
+    deletedPoints += orphans.count;
+
+    return {
+      skipped: false,
+      days,
+      cutoff: cutoff.toISOString(),
+      deletedTrips: tripIds.length,
+      deletedPoints,
+    };
+  },
 };
 
 /** Silence longer than Redis live TTL is a real GPS-off slot (native pings ~2–8s). */

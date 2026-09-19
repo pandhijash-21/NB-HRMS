@@ -73,33 +73,33 @@ class _MascotPresenterState extends State<MascotPresenter> {
   @override
   Widget build(BuildContext context) {
     final radius = BorderRadius.circular(20);
-    Widget media;
     final ctrl = _controller;
-    if (!_useGif && ctrl != null && ctrl.value.isInitialized) {
-      media = FittedBox(
-        fit: BoxFit.contain,
-        child: SizedBox(
-          width: ctrl.value.size.width,
-          height: ctrl.value.size.height,
-          child: VideoPlayer(ctrl),
-        ),
-      );
-    } else {
-      media = Image.asset(
-        widget.clip.gif,
-        fit: BoxFit.contain,
-        errorBuilder: (_, __, ___) => const Icon(Icons.pets, color: Color(0xFFC5A36A), size: 56),
-      );
-    }
 
     return ClipRRect(
       borderRadius: radius,
       child: ColoredBox(
-        color: Colors.black,
+        color: const Color(0xFF0B0B0B),
         child: SizedBox(
           width: widget.size,
           height: widget.size,
-          child: media,
+          child: !_useGif && ctrl != null && ctrl.value.isInitialized
+              ? FittedBox(
+                  fit: BoxFit.contain,
+                  child: SizedBox(
+                    width: ctrl.value.size.width,
+                    height: ctrl.value.size.height,
+                    child: VideoPlayer(ctrl),
+                  ),
+                )
+              : Image.asset(
+                  widget.clip.gif,
+                  fit: BoxFit.contain,
+                  filterQuality: FilterQuality.high,
+                  isAntiAlias: true,
+                  gaplessPlayback: true,
+                  errorBuilder: (_, __, ___) =>
+                      const Icon(Icons.pets, color: Color(0xFFC5A36A), size: 56),
+                ),
         ),
       ),
     );

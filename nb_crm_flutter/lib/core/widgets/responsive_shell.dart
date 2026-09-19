@@ -219,6 +219,13 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     final showSoftwareTour = TourDesktop.supported(context);
 
     final sharedCollab = <_Destination>[
+      const _Destination(
+        '/notifications',
+        Icons.notifications_outlined,
+        Icons.notifications,
+        'Notifications',
+        section: 'Collaboration',
+      ),
       if (Permissions.canReadOrgTree(auth.permissions, auth.user?.role))
         const _Destination(
           '/org-tree',

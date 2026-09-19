@@ -266,6 +266,7 @@ export function emitPushNotify(
     meetingId?: string;
     code?: string;
     path?: string;
+    id?: string;
   },
 ) {
   const io = ioRef;

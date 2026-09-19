@@ -65,4 +65,23 @@ export const authController = {
     const data = await authService.getMe(req.user!);
     return res.json(ok(data));
   },
+
+  async getBranding(_req: Request, res: Response) {
+    try {
+      const { brandingService } = await import('../platform/branding.service');
+      const data = await brandingService.getPublicBranding();
+      return res.json(ok(data));
+    } catch (err: unknown) {
+      return res.status(500).json(fail(err instanceof Error ? err.message : 'Failed to load branding'));
+    }
+  },
+
+  async markSoftwareTourSeen(req: Request, res: Response) {
+    try {
+      const data = await authService.markSoftwareTourSeen(req.user!.id);
+      return res.json(ok(data));
+    } catch (err: unknown) {
+      return res.status(400).json(fail(err instanceof Error ? err.message : 'Failed to save tour progress'));
+    }
+  },
 };

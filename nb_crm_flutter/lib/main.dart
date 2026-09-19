@@ -13,8 +13,10 @@ import 'core/network/app_config.dart';
 import 'core/router/app_router.dart';
 import 'core/services/app_sounds.dart';
 import 'core/services/background_tracking_service.dart';
+import 'core/services/branding_config.dart';
 import 'core/services/location_alert_sound.dart';
 import 'core/services/mr_nb_tour_service.dart';
+import 'core/services/splash_video_cache.dart';
 import 'core/theme/app_breakpoints.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/icon_font_bootstrap.dart';
@@ -43,6 +45,7 @@ void main() async {
 
   // Restore last local/live API choice before Dio and session bootstrap.
   await AppConfig.hydrate();
+  await BrandingConfig.hydrateFromCache();
 
   // Allow Google Fonts runtime fetching on web / mobile
   GoogleFonts.config.allowRuntimeFetching = true;
@@ -59,6 +62,11 @@ void main() async {
 
   // DI: Core Repositories
   final appRepositories = AppRepositories();
+  // Do not block first frame on branding API — cached URL (or asset) is enough to start splash.
+  unawaited(BrandingConfig.fetch(appRepositories.dioClient).then((_) {
+    unawaited(SplashVideoCache.prefetch(BrandingConfig.splashVideoUrl));
+  }));
+  unawaited(SplashVideoCache.prefetch(BrandingConfig.splashVideoUrl));
 
   // DI: Global BLoCs & Cubits
   final themeCubit = ThemeCubit();

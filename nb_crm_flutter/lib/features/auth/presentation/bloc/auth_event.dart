@@ -66,3 +66,13 @@ class AuthClearErrorRequested extends AuthEvent {
 class AuthClearInfoRequested extends AuthEvent {
   const AuthClearInfoRequested();
 }
+
+/// Fired after the user dismisses / completes the first-login Mr NB tour.
+class AuthSoftwareTourSeenRequested extends AuthEvent {
+  const AuthSoftwareTourSeenRequested();
+}
+
+/// Fired when /auth/me already reports softwareTourSeen — update local session only.
+class AuthSoftwareTourSeenSynced extends AuthEvent {
+  const AuthSoftwareTourSeenSynced();
+}

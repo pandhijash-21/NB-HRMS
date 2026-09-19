@@ -11,6 +11,7 @@ class AuthUser {
     this.employeeViewScope,
     this.companyAdminGranted = false,
     this.jobRole,
+    this.softwareTourSeen = false,
     this.enabledModules = const ['HRMS', 'CRM', 'ERP'],
   });
 
@@ -25,6 +26,8 @@ class AuthUser {
   final bool companyAdminGranted;
   /// Stored designation role (e.g. HR_HEAD) when company admin was granted.
   final String? jobRole;
+  /// True once Mr NB guided tour has been completed (server-backed).
+  final bool softwareTourSeen;
   final List<String> enabledModules;
 
   factory AuthUser.fromJson(Map<String, dynamic> json) {
@@ -65,6 +68,7 @@ class AuthUser {
       employeeViewScope: json['employeeViewScope']?.toString(),
       companyAdminGranted: granted,
       jobRole: (jobRole != null && jobRole.isNotEmpty) ? jobRole : null,
+      softwareTourSeen: json['softwareTourSeen'] == true,
       enabledModules: mods,
     );
   }
@@ -80,6 +84,7 @@ class AuthUser {
     String? employeeViewScope,
     bool? companyAdminGranted,
     String? jobRole,
+    bool? softwareTourSeen,
     List<String>? enabledModules,
   }) {
     return AuthUser(
@@ -93,6 +98,7 @@ class AuthUser {
       employeeViewScope: employeeViewScope ?? this.employeeViewScope,
       companyAdminGranted: companyAdminGranted ?? this.companyAdminGranted,
       jobRole: jobRole ?? this.jobRole,
+      softwareTourSeen: softwareTourSeen ?? this.softwareTourSeen,
       enabledModules: enabledModules ?? this.enabledModules,
     );
   }
@@ -108,6 +114,7 @@ class AuthUser {
         'employeeViewScope': employeeViewScope,
         'companyAdminGranted': companyAdminGranted,
         'jobRole': jobRole,
+        'softwareTourSeen': softwareTourSeen,
         'enabledModules': enabledModules,
       };
 }

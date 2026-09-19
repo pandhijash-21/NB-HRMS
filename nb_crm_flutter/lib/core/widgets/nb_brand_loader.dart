@@ -4,7 +4,13 @@ import 'package:flutter/material.dart';
 
 /// Branded full-screen loader used on splash and while the app boots.
 class NbBrandLoader extends StatefulWidget {
-  const NbBrandLoader({super.key});
+  const NbBrandLoader({
+    super.key,
+    this.statusLines = const <String>[],
+  });
+
+  /// Rotating / stacked status lines shown under the NB mark.
+  final List<String> statusLines;
 
   @override
   State<NbBrandLoader> createState() => _NbBrandLoaderState();
@@ -40,6 +46,7 @@ class _NbBrandLoaderState extends State<NbBrandLoader>
 
   @override
   Widget build(BuildContext context) {
+    final lines = widget.statusLines.where((s) => s.trim().isNotEmpty).toList();
     return DecoratedBox(
       decoration: const BoxDecoration(
         gradient: RadialGradient(
@@ -48,131 +55,154 @@ class _NbBrandLoaderState extends State<NbBrandLoader>
         ),
       ),
       child: Center(
-        child: SizedBox(
-          width: 168,
-          height: 168,
-          child: AnimatedBuilder(
-            animation: Listenable.merge([_spin, _pulse]),
-            builder: (context, _) {
-              final pulse = 0.82 + (_pulse.value * 0.18);
-              return Stack(
-                alignment: Alignment.center,
-                children: [
-                  Transform.scale(
-                    scale: pulse,
-                    child: Container(
-                      width: 132,
-                      height: 132,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: RadialGradient(
-                          colors: [
-                            _gold.withValues(alpha: 0.28),
-                            _gold.withValues(alpha: 0.04),
-                            Colors.transparent,
-                          ],
-                          stops: const [0, 0.55, 1],
-                        ),
-                      ),
-                    ),
-                  ),
-                  Transform.rotate(
-                    angle: _spin.value * math.pi * 2,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border(
-                          top: const BorderSide(color: _goldLite, width: 1.6),
-                          right: BorderSide(
-                            color: _gold.withValues(alpha: 0.55),
-                            width: 1.6,
-                          ),
-                          bottom: BorderSide(
-                            color: _gold.withValues(alpha: 0.16),
-                            width: 1.6,
-                          ),
-                          left: BorderSide(
-                            color: _gold.withValues(alpha: 0.16),
-                            width: 1.6,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Transform.rotate(
-                    angle: -_spin.value * math.pi * 1.14,
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: _gold.withValues(alpha: 0.28),
-                            width: 1.5,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Transform.rotate(
-                    angle: _spin.value * math.pi * 2,
-                    child: Align(
-                      alignment: Alignment.topCenter,
-                      child: Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: _goldLite,
-                          boxShadow: [
-                            BoxShadow(
-                              color: _gold.withValues(alpha: 0.9),
-                              blurRadius: 10,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 168,
+              height: 168,
+              child: AnimatedBuilder(
+                animation: Listenable.merge([_spin, _pulse]),
+                builder: (context, _) {
+                  final pulse = 0.82 + (_pulse.value * 0.18);
+                  return Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Transform.scale(
+                        scale: pulse,
+                        child: Container(
+                          width: 132,
+                          height: 132,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: RadialGradient(
+                              colors: [
+                                _gold.withValues(alpha: 0.28),
+                                _gold.withValues(alpha: 0.04),
+                                Colors.transparent,
+                              ],
+                              stops: const [0, 0.55, 1],
                             ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  Transform.scale(
-                    scale: pulse,
-                    child: Container(
-                      width: 84,
-                      height: 84,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: const LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [Color(0xFF2A2218), Color(0xFF0C0C0C)],
-                        ),
-                        border: Border.all(
-                          color: _gold.withValues(alpha: 0.35),
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: _gold.withValues(alpha: 0.22),
-                            blurRadius: 28,
                           ),
-                        ],
-                      ),
-                      child: const Text(
-                        'NB',
-                        style: TextStyle(
-                          color: _goldLite,
-                          fontSize: 26,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 3,
-                          fontFamily: 'serif',
                         ),
                       ),
+                      Transform.rotate(
+                        angle: _spin.value * math.pi * 2,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border(
+                              top: const BorderSide(color: _goldLite, width: 1.6),
+                              right: BorderSide(
+                                color: _gold.withValues(alpha: 0.55),
+                                width: 1.6,
+                              ),
+                              bottom: BorderSide(
+                                color: _gold.withValues(alpha: 0.16),
+                                width: 1.6,
+                              ),
+                              left: BorderSide(
+                                color: _gold.withValues(alpha: 0.16),
+                                width: 1.6,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Transform.rotate(
+                        angle: -_spin.value * math.pi * 1.14,
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: _gold.withValues(alpha: 0.28),
+                                width: 1.5,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Transform.rotate(
+                        angle: _spin.value * math.pi * 2,
+                        child: Align(
+                          alignment: Alignment.topCenter,
+                          child: Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: _goldLite,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: _gold.withValues(alpha: 0.9),
+                                  blurRadius: 10,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      Transform.scale(
+                        scale: pulse,
+                        child: Container(
+                          width: 84,
+                          height: 84,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [Color(0xFF2A2218), Color(0xFF0C0C0C)],
+                            ),
+                            border: Border.all(
+                              color: _gold.withValues(alpha: 0.35),
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: _gold.withValues(alpha: 0.22),
+                                blurRadius: 28,
+                              ),
+                            ],
+                          ),
+                          child: const Text(
+                            'NB',
+                            style: TextStyle(
+                              color: _goldLite,
+                              fontSize: 26,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 3,
+                              fontFamily: 'serif',
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+            if (lines.isNotEmpty) ...[
+              const SizedBox(height: 28),
+              ...lines.map(
+                (line) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 24),
+                  child: Text(
+                    line,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: _goldLite.withValues(alpha: 0.85),
+                      fontSize: 13,
+                      letterSpacing: 0.3,
+                      height: 1.35,
                     ),
                   ),
-                ],
-              );
-            },
-          ),
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );

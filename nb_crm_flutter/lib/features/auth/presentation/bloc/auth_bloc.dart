@@ -38,6 +38,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<AuthLogoutRequested>(_onLogout);
     on<AuthClearErrorRequested>(_onClearError);
     on<AuthClearInfoRequested>(_onClearInfo);
+    on<AuthSoftwareTourSeenRequested>(_onSoftwareTourSeen);
+    on<AuthSoftwareTourSeenSynced>(_onSoftwareTourSeenSynced);
 
     add(const AuthBootstrapRequested());
   }
@@ -248,16 +250,25 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           roleName.trim() != state.user?.role;
       final granted = me['companyAdminGranted'] == true;
       final grantedChanged = granted != (state.user?.companyAdminGranted ?? false);
+      final tourSeen = me['softwareTourSeen'] == true;
+      final tourChanged = tourSeen != (state.user?.softwareTourSeen ?? false);
 
-      if (!permsChanged && !needsChanged && !roleChanged && !grantedChanged) return;
+      if (!permsChanged &&
+          !needsChanged &&
+          !roleChanged &&
+          !grantedChanged &&
+          !tourChanged) {
+        return;
+      }
 
       final next = state.copyWith(
         permissions: permsChanged ? permissions : state.permissions,
         needsEmailVerification: needsChanged ? needs : state.needsEmailVerification,
-        user: (roleChanged || grantedChanged) && state.user != null
+        user: (roleChanged || grantedChanged || tourChanged) && state.user != null
             ? state.user!.copyWith(
                 role: roleChanged ? roleName.trim() : state.user!.role,
                 companyAdminGranted: granted,
+                softwareTourSeen: tourSeen,
               )
             : state.user,
       );
@@ -321,6 +332,51 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   void _onClearInfo(AuthClearInfoRequested event, Emitter<AuthState> emit) {
     if (state.infoMessage != null) {
       emit(state.copyWith(clearInfo: true));
+    }
+  }
+
+  Future<void> _onSoftwareTourSeen(
+    AuthSoftwareTourSeenRequested event,
+    Emitter<AuthState> emit,
+  ) async {
+    if (state.status != AuthStatus.authenticated || state.user == null) return;
+    if (state.user!.softwareTourSeen) return;
+    try {
+      await _repo.markSoftwareTourSeen();
+    } catch (_) {
+      // Still mark locally so the welcome does not reappear every session.
+    }
+    final nextUser = state.user!.copyWith(softwareTourSeen: true);
+    emit(state.copyWith(user: nextUser));
+    final token = await _storage.readToken();
+    if (token != null) {
+      await _repo.persistSession(
+        token: token,
+        user: nextUser,
+        permissions: state.permissions,
+        isFirstLogin: state.isFirstLogin,
+        needsEmailVerification: state.needsEmailVerification,
+      );
+    }
+  }
+
+  Future<void> _onSoftwareTourSeenSynced(
+    AuthSoftwareTourSeenSynced event,
+    Emitter<AuthState> emit,
+  ) async {
+    if (state.status != AuthStatus.authenticated || state.user == null) return;
+    if (state.user!.softwareTourSeen) return;
+    final nextUser = state.user!.copyWith(softwareTourSeen: true);
+    emit(state.copyWith(user: nextUser));
+    final token = await _storage.readToken();
+    if (token != null) {
+      await _repo.persistSession(
+        token: token,
+        user: nextUser,
+        permissions: state.permissions,
+        isFirstLogin: state.isFirstLogin,
+        needsEmailVerification: state.needsEmailVerification,
+      );
     }
   }
 

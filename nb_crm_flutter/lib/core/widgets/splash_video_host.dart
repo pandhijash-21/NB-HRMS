@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
+import '../services/branding_config.dart';
 import 'nb_brand_loader.dart';
 import 'splash_video_audio.dart';
 import 'splash_video_surface.dart';
@@ -11,7 +12,7 @@ import 'splash_video_surface.dart';
 class SplashVideoHost extends StatefulWidget {
   const SplashVideoHost({super.key});
 
-  static const asset = 'assets/clips/processed/splash_mr_nb.mp4';
+  static const assetFallback = 'assets/clips/processed/splash_mr_nb.mp4';
 
   @override
   State<SplashVideoHost> createState() => _SplashVideoHostState();
@@ -24,8 +25,19 @@ class _SplashVideoHostState extends State<SplashVideoHost>
   bool _playing = false;
   bool _showSkip = false;
   bool _muted = true;
+  int _progress = 0;
+  String _status = 'Preparing Mr NB…';
   Timer? _skipTimer;
   Timer? _failSafe;
+  Timer? _statusTicker;
+  int _statusIndex = 0;
+
+  static const _statusCycle = [
+    'Preparing Mr NB…',
+    'Fetching splash media…',
+    'Buffering video…',
+    'Almost ready…',
+  ];
 
   @override
   void initState() {
@@ -35,10 +47,19 @@ class _SplashVideoHostState extends State<SplashVideoHost>
       duration: const Duration(milliseconds: 420),
       value: 1,
     );
-    _skipTimer = Timer(const Duration(milliseconds: 900), () {
+    _skipTimer = Timer(const Duration(milliseconds: 600), () {
       if (mounted && !_done) setState(() => _showSkip = true);
     });
-    _failSafe = Timer(const Duration(seconds: 22), _finish);
+    // Cached/local splash should fail fast; first remote download gets a bit more room.
+    final failSeconds = BrandingConfig.hasRemoteSplash ? 18 : 12;
+    _failSafe = Timer(Duration(seconds: failSeconds), _finish);
+    _statusTicker = Timer.periodic(const Duration(milliseconds: 1600), (_) {
+      if (!mounted || _playing || _done) return;
+      setState(() {
+        _statusIndex = (_statusIndex + 1) % _statusCycle.length;
+        _status = _statusCycle[_statusIndex];
+      });
+    });
   }
 
   void _afterFrame(VoidCallback fn) {
@@ -56,7 +77,29 @@ class _SplashVideoHostState extends State<SplashVideoHost>
   void _markPlaying() {
     _afterFrame(() {
       if (!mounted || _playing) return;
-      setState(() => _playing = true);
+      setState(() {
+        _playing = true;
+        _status = 'Playing…';
+        _progress = 100;
+      });
+    });
+  }
+
+  void _onProgress(int pct) {
+    _afterFrame(() {
+      if (!mounted || _playing || _done) return;
+      setState(() {
+        _progress = pct.clamp(0, 100);
+        if (pct < 25) {
+          _status = BrandingConfig.hasRemoteSplash
+              ? 'Fetching splash from cloud…'
+              : 'Loading splash media…';
+        } else if (pct < 70) {
+          _status = 'Buffering video…';
+        } else {
+          _status = 'Almost ready…';
+        }
+      });
     });
   }
 
@@ -65,6 +108,7 @@ class _SplashVideoHostState extends State<SplashVideoHost>
     _done = true;
     _skipTimer?.cancel();
     _failSafe?.cancel();
+    _statusTicker?.cancel();
     SplashVideoAudio.stop();
     await _fade.reverse();
     if (mounted) setState(() {});
@@ -74,6 +118,7 @@ class _SplashVideoHostState extends State<SplashVideoHost>
   void dispose() {
     _skipTimer?.cancel();
     _failSafe?.cancel();
+    _statusTicker?.cancel();
     SplashVideoAudio.stop();
     _fade.dispose();
     super.dispose();
@@ -85,6 +130,8 @@ class _SplashVideoHostState extends State<SplashVideoHost>
       return const SizedBox.shrink();
     }
 
+    final source = BrandingConfig.resolveSplashSource();
+
     return FadeTransition(
       opacity: _fade,
       child: Material(
@@ -94,13 +141,19 @@ class _SplashVideoHostState extends State<SplashVideoHost>
             fit: StackFit.expand,
             children: [
               SplashVideoSurface(
-                key: const ValueKey('splash-mr-nb-surface'),
-                asset: SplashVideoHost.asset,
+                key: ValueKey('splash-mr-nb-$source'),
+                asset: source,
                 onEnded: _finish,
                 onPlaying: _markPlaying,
-                onProgress: (_) {},
+                onProgress: _onProgress,
               ),
-              if (!_playing) const NbBrandLoader(),
+              if (!_playing)
+                NbBrandLoader(
+                  statusLines: [
+                    _status,
+                    if (_progress > 0 && _progress < 100) '$_progress%',
+                  ],
+                ),
               if (_showSkip)
                 Positioned(
                   right: 20,

@@ -1,8 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'splash_video_audio.dart';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
+
+import '../services/splash_video_cache.dart';
 
 Widget buildSplashVideoSurface({
   required String asset,
@@ -52,16 +55,43 @@ class _IoSplashVideoState extends State<_IoSplashVideo> {
   Future<void> _init() async {
     widget.onProgress(1);
     var fake = 1;
-    final tick = Timer.periodic(const Duration(milliseconds: 90), (_) {
+    final tick = Timer.periodic(const Duration(milliseconds: 70), (_) {
       if (fake >= 88) return;
-      fake += 2;
+      fake += 3;
       widget.onProgress(fake);
     });
     try {
-      final controller = VideoPlayerController.asset(
-        widget.asset,
-        videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
-      );
+      final source = widget.asset.trim();
+      final isRemote =
+          source.startsWith('http://') || source.startsWith('https://');
+
+      // Prefer disk cache for instant start; otherwise stream remote and warm cache.
+      String? localFile;
+      if (isRemote) {
+        localFile = await SplashVideoCache.cachedFilePath(source);
+        if (localFile == null) {
+          unawaited(SplashVideoCache.prefetch(source));
+        }
+      }
+
+      final VideoPlayerController controller;
+      if (localFile != null) {
+        controller = VideoPlayerController.file(
+          File(localFile),
+          videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+        );
+      } else if (isRemote) {
+        controller = VideoPlayerController.networkUrl(
+          Uri.parse(source),
+          videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+        );
+      } else {
+        controller = VideoPlayerController.asset(
+          source,
+          videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+        );
+      }
+
       _controller = controller;
       await controller.initialize();
       tick.cancel();
@@ -73,6 +103,7 @@ class _IoSplashVideoState extends State<_IoSplashVideo> {
         unawaited(controller.setVolume(muted ? 0 : 1));
       };
       controller.addListener(_onTick);
+      await controller.seekTo(Duration.zero);
       await controller.play();
       if (!mounted) return;
       setState(() => _visible = true);
@@ -84,6 +115,11 @@ class _IoSplashVideoState extends State<_IoSplashVideo> {
       tick.cancel();
       debugPrint('Splash video failed: $e');
       widget.onProgress(100);
+      if (!_playingSignaled) {
+        _playingSignaled = true;
+        widget.onPlaying();
+        widget.onEnded();
+      }
     }
   }
 
@@ -120,7 +156,7 @@ class _IoSplashVideoState extends State<_IoSplashVideo> {
     return ColoredBox(
       color: Colors.black,
       child: FittedBox(
-        fit: BoxFit.cover,
+        fit: BoxFit.contain,
         clipBehavior: Clip.hardEdge,
         child: SizedBox(
           width: controller.value.size.width,

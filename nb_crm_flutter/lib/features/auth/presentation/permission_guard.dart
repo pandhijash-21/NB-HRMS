@@ -28,6 +28,7 @@ class _PermissionGuardState extends State<PermissionGuard> {
   bool _hasPermissions = false;
   bool _checking = true;
   String _errorMsg = "";
+  String _loaderStatus = 'Checking location…';
   Timer? _timer;
   DateTime? _lastServiceEnsureAt;
 
@@ -134,6 +135,11 @@ class _PermissionGuardState extends State<PermissionGuard> {
     return _probeWebGeolocation();
   }
 
+  Future<bool> _isWebLocationGrantedQuick() async {
+    final permission = await Geolocator.checkPermission();
+    return _webLocationGranted(permission);
+  }
+
   Future<void> _checkPermissions() async {
     if (_isPublicMeetRoute() || _isAuthRoute()) {
       if (kIsWeb) WebLiveTrackingService.stop();
@@ -146,7 +152,36 @@ class _PermissionGuardState extends State<PermissionGuard> {
       return;
     }
     if (kIsWeb) {
-      setState(() => _checking = true);
+      // If browser already allowed location, open the app immediately and
+      // keep fetching position in the background (do not block on GPS probe).
+      final already = await _isWebLocationGrantedQuick();
+      if (!mounted) return;
+      if (already) {
+        setState(() {
+          _hasPermissions = true;
+          _checking = false;
+          _errorMsg = '';
+          _loaderStatus = 'Fetching location…';
+        });
+        unawaited(() async {
+          final ok = await _probeWebGeolocation(
+            timeout: const Duration(seconds: 8),
+          );
+          if (!mounted) return;
+          if (ok) {
+            unawaited(WebLiveTrackingService.ensureRunning());
+          } else {
+            // Soft fail: keep UI open; quiet verify loop will re-check.
+            WebLiveTrackingService.stop();
+          }
+        }());
+        return;
+      }
+
+      setState(() {
+        _checking = true;
+        _loaderStatus = 'Requesting browser location…';
+      });
       try {
         final ok = await _isWebLocationReady();
         if (!mounted) return;
@@ -173,7 +208,10 @@ class _PermissionGuardState extends State<PermissionGuard> {
       return;
     }
 
-    setState(() => _checking = true);
+    setState(() {
+      _checking = true;
+      _loaderStatus = 'Checking location services…';
+    });
 
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
@@ -185,28 +223,37 @@ class _PermissionGuardState extends State<PermissionGuard> {
       return;
     }
 
+    if (mounted) setState(() => _loaderStatus = 'Fetching location permission…');
     var locationStatus = await Permission.location.status;
     bool needsBg = await _needsBackgroundPermission();
+    if (mounted) {
+      setState(() => _loaderStatus = needsBg
+          ? 'Checking always-on location…'
+          : 'Checking battery settings…');
+    }
     var bgStatus = needsBg ? await Permission.locationAlways.status : PermissionStatus.granted;
     var batteryStatus = await Permission.ignoreBatteryOptimizations.status;
 
     if (locationStatus.isGranted && bgStatus.isGranted && batteryStatus.isGranted) {
-      if (await Permission.notification.isDenied) {
-        await Permission.notification.request();
-      }
-      try {
-        await Future.delayed(const Duration(milliseconds: 500));
-        await startBackgroundTracking();
-      } catch (e) {
-        AppLogger.tracking.e('Failed to start background tracking: $e');
-      }
+      // Permissions already OK — show app now; start tracking in background.
       if (mounted) {
         setState(() {
           _hasPermissions = true;
           _checking = false;
+          _loaderStatus = 'Fetching location…';
         });
-        unawaited(_maybeOpenTrackingSetup());
       }
+      unawaited(() async {
+        if (await Permission.notification.isDenied) {
+          await Permission.notification.request();
+        }
+        try {
+          await startBackgroundTracking();
+        } catch (e) {
+          AppLogger.tracking.e('Failed to start background tracking: $e');
+        }
+        if (mounted) unawaited(_maybeOpenTrackingSetup());
+      }());
     } else {
       setState(() {
         _checking = false;
@@ -303,7 +350,12 @@ class _PermissionGuardState extends State<PermissionGuard> {
   }
 
   Future<void> _requestPermissions() async {
-    setState(() => _checking = true);
+    setState(() {
+      _checking = true;
+      _loaderStatus = kIsWeb
+          ? 'Requesting browser location…'
+          : 'Requesting location permission…';
+    });
 
     if (kIsWeb) {
       try {
@@ -402,9 +454,14 @@ class _PermissionGuardState extends State<PermissionGuard> {
       return widget.child;
     }
     if (_checking) {
-      return const Scaffold(
+      return Scaffold(
         backgroundColor: Colors.black,
-        body: NbBrandLoader(),
+        body: NbBrandLoader(
+          statusLines: [
+            _loaderStatus,
+            'Please wait…',
+          ],
+        ),
       );
     }
 

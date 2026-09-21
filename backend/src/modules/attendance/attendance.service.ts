@@ -513,6 +513,35 @@ async function fetchHolidayDates(
   return holidayDates;
 }
 
+function describeRegisteredDevice(
+  deviceInfo: Record<string, unknown> | null,
+  userAgent?: string | null,
+): { label: string; platform: string } {
+  const info = deviceInfo ?? {};
+  const platform = String(info.platform ?? '').trim().toLowerCase() || 'unknown';
+  const explicit = String(info.deviceLabel ?? '').trim();
+  if (explicit && explicit.toLowerCase() !== 'native app') {
+    return { label: explicit.slice(0, 120), platform };
+  }
+  if (platform === 'android') {
+    const brand = String(info.manufacturer ?? info.brand ?? '').trim();
+    const model = String(info.model ?? '').trim();
+    const label = [brand, model].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+    return { label: (label || 'Android device').slice(0, 120), platform };
+  }
+  if (platform === 'ios') {
+    const name = String(info.name ?? info.model ?? 'iPhone').trim();
+    return { label: name.slice(0, 120), platform };
+  }
+  if (platform === 'web') {
+    const browser = String(info.browserLabel ?? '').trim();
+    const label = [explicit, browser].filter(Boolean).join(' · ') || 'Web browser';
+    return { label: label.slice(0, 120), platform };
+  }
+  const ua = String(userAgent ?? '').trim();
+  return { label: (ua ? ua.slice(0, 80) : 'Unknown device'), platform };
+}
+
 export const attendanceService = {
   async getAdminPolicy() {
     // Ensure row exists so admin UI always has something to edit
@@ -1054,6 +1083,8 @@ export const attendanceService = {
       punchInBufferMinutes: row?.punchInBufferMinutes ?? null,
       punchOutBufferMinutes: row?.punchOutBufferMinutes ?? null,
       biometricToken: row?.biometricToken ?? null,
+      biometricDeviceLabel: row?.biometricDeviceLabel ?? null,
+      biometricDevicePlatform: row?.biometricDevicePlatform ?? null,
       effective: {
         source: effective.source,
         punchInTime: effective.punchInTime,
@@ -1328,12 +1359,17 @@ export const attendanceService = {
     // Biometric/Fingerprint Pinning Check
     const settings = await prisma.employeeAttendanceSettings.findUnique({
       where: { employeeId: params.employeeId },
-      select: { biometricToken: true },
+      select: { biometricToken: true, biometricDeviceLabel: true },
     });
 
     if (settings && settings.biometricToken) {
       if (!params.biometricToken || params.biometricToken !== settings.biometricToken) {
-        throw new Error('Fingerprint mismatch. You can only punch using your registered fingerprint/device.');
+        const label = settings.biometricDeviceLabel?.trim();
+        throw new Error(
+          label
+            ? `Punch in from your registered device: ${label}.`
+            : 'Punch in from the device where you first registered your fingerprint.',
+        );
       }
     } else {
       throw new Error('Fingerprint is not set. Please register your fingerprint in the app settings first.');
@@ -1455,23 +1491,34 @@ export const attendanceService = {
 
     const existing = await prisma.employeeAttendanceSettings.findUnique({
       where: { employeeId },
-      select: { biometricToken: true },
+      select: { biometricToken: true, biometricDeviceLabel: true },
     });
 
     if (existing?.biometricToken) {
-      throw new Error('Fingerprint already registered. Contact admin/HR to reset it.');
+      const label = existing.biometricDeviceLabel?.trim();
+      throw new Error(
+        label
+          ? `Fingerprint is already registered on ${label}. Punch in from that device, or ask Admin/HR to reset it.`
+          : 'Fingerprint already registered. Punch in from that device, or ask Admin/HR to reset it.',
+      );
     }
+
+    const device = describeRegisteredDevice(opts?.deviceInfo ?? null, opts?.userAgent);
 
     await prisma.employeeAttendanceSettings.upsert({
       where: { employeeId },
       update: {
         biometricToken,
+        biometricDeviceLabel: device.label,
+        biometricDevicePlatform: device.platform,
         updatedBy,
       },
       create: {
         employeeId,
         useGlobalPolicy: true,
         biometricToken,
+        biometricDeviceLabel: device.label,
+        biometricDevicePlatform: device.platform,
         updatedBy,
       },
     });
@@ -1495,12 +1542,16 @@ export const attendanceService = {
       where: { employeeId },
       update: {
         biometricToken: null,
+        biometricDeviceLabel: null,
+        biometricDevicePlatform: null,
         updatedBy,
       },
       create: {
         employeeId,
         useGlobalPolicy: true,
         biometricToken: null,
+        biometricDeviceLabel: null,
+        biometricDevicePlatform: null,
         updatedBy,
       },
     });

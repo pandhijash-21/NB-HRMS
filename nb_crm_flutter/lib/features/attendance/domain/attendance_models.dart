@@ -433,6 +433,8 @@ class EmployeeAttendanceSettings {
     this.punchInBufferMinutes,
     this.punchOutBufferMinutes,
     this.biometricToken,
+    this.biometricDeviceLabel,
+    this.biometricDevicePlatform,
     required this.effective,
     this.globalPolicy,
   });
@@ -444,6 +446,8 @@ class EmployeeAttendanceSettings {
   final int? punchInBufferMinutes;
   final int? punchOutBufferMinutes;
   final String? biometricToken;
+  final String? biometricDeviceLabel;
+  final String? biometricDevicePlatform;
   final Map<String, dynamic> effective;
   final AttendancePolicy? globalPolicy;
 
@@ -458,6 +462,8 @@ class EmployeeAttendanceSettings {
       punchInBufferMinutes: json['punchInBufferMinutes'] as int?,
       punchOutBufferMinutes: json['punchOutBufferMinutes'] as int?,
       biometricToken: json['biometricToken'] as String?,
+      biometricDeviceLabel: json['biometricDeviceLabel']?.toString(),
+      biometricDevicePlatform: json['biometricDevicePlatform']?.toString(),
       effective: effective,
       globalPolicy: global != null ? AttendancePolicy.fromJson(global) : null,
     );

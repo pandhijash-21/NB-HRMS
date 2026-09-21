@@ -100,10 +100,13 @@ class GeofencedPunchService {
 
       final token = await storage.readBiometricToken(employeeId);
       if (token == null || token.isEmpty) {
+        final registered = await _registeredDeviceLabel(employeeId);
         throw Exception(
-          kIsWeb
-              ? 'Safari is not registered for attendance. Tap “Register Safari” first.'
-              : 'Fingerprint is not set. Please set/register your fingerprint first.',
+          registered != null && registered.isNotEmpty
+              ? 'Punch in from your registered device: $registered.'
+              : (kIsWeb
+                  ? 'Safari is not registered for attendance. Tap “Register Safari” first.'
+                  : 'Fingerprint is not set. Please set/register your fingerprint first.'),
         );
       }
 
@@ -318,23 +321,49 @@ class GeofencedPunchService {
       }
       if (defaultTargetPlatform == TargetPlatform.android) {
         final androidInfo = await deviceInfoPlugin.androidInfo;
+        final manufacturer = androidInfo.manufacturer.trim();
+        final model = androidInfo.model.trim();
+        final label = [manufacturer, model].where((s) => s.isNotEmpty).join(' ');
         return {
           'platform': 'android',
-          'model': androidInfo.model,
+          'model': model,
           'brand': androidInfo.brand,
+          'manufacturer': manufacturer,
+          'deviceLabel': label.isEmpty ? 'Android device' : label,
         };
       }
       if (defaultTargetPlatform == TargetPlatform.iOS) {
         final iosInfo = await deviceInfoPlugin.iosInfo;
+        final name = iosInfo.name.trim().isNotEmpty ? iosInfo.name.trim() : iosInfo.model;
         return {
           'platform': 'ios',
           'name': iosInfo.name,
           'systemName': iosInfo.systemName,
           'model': iosInfo.model,
+          'deviceLabel': name,
         };
       }
     } catch (_) {}
     return {'platform': defaultTargetPlatform.name};
+  }
+
+  Future<String?> _registeredDeviceLabel(int employeeId) async {
+    try {
+      final data = await dio.getEnvelope<Map<String, dynamic>>(
+        'attendance/employee/$employeeId/settings',
+        parse: (raw) {
+          if (raw is Map) return Map<String, dynamic>.from(raw);
+          return <String, dynamic>{};
+        },
+      );
+      final token = data['biometricToken']?.toString() ?? '';
+      if (token.isEmpty) return null;
+      final label = data['biometricDeviceLabel']?.toString().trim();
+      if (label != null && label.isNotEmpty) return label;
+      return 'the phone where fingerprint was first registered';
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<String?> _promptForReason(BuildContext context) async {

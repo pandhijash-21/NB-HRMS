@@ -618,67 +618,18 @@ class _AttendanceView extends StatelessWidget {
               const SizedBox(height: 10),
               Text(
                 kIsWeb
-                    ? 'Attendance is registered for another device. On iPhone/iPad Safari you can link this browser after Admin/HR resets your registration (this replaces the previous token).'
-                    : 'Your fingerprint/Face ID is registered on the server, but not found on this device. '
-                        'If you reinstalled the app or switched phones, re-register here or ask Admin/HR to reset.',
+                    ? (settings.biometricDeviceLabel != null &&
+                            settings.biometricDeviceLabel!.trim().isNotEmpty
+                        ? 'Punch in from your registered device: ${settings.biometricDeviceLabel}.'
+                        : 'Attendance is registered on another device. Punch in from that device.')
+                    : (settings.biometricDeviceLabel != null &&
+                            settings.biometricDeviceLabel!.trim().isNotEmpty
+                        ? 'Punch in from your registered device: ${settings.biometricDeviceLabel}.'
+                        : 'Your fingerprint is registered on another device. Punch in from that phone.'),
                 style: TextStyle(
                   fontSize: 13,
                   color: isDark ? Colors.white.withValues(alpha: 0.7) : const Color(0xFF4A5568),
                   height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 14),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () async {
-                    final dio = context.read<DioClient>();
-                    final svc = GeofencedPunchService(dio);
-                    final empId = auth.user?.employeeId;
-                    if (empId != null) {
-                      try {
-                        await svc.registerBiometrics(context, empId);
-                        if (context.mounted) {
-                          context.read<AttendanceBloc>().add(AttendanceSettingsReloadRequested(empId));
-                        }
-                      } catch (_) {}
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFC5A059),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  icon: const Icon(kIsWeb ? Icons.link_rounded : Icons.fingerprint_rounded),
-                  label: const Text(
-                    kIsWeb ? 'Link Safari' : 'Re-register on this device',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: () {
-                    final empId = auth.user?.employeeId;
-                    if (empId != null) {
-                      context.read<AttendanceBloc>().add(AttendanceSettingsReloadRequested(empId));
-                    }
-                  },
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFFC5A059),
-                    side: const BorderSide(color: Color(0xFFC5A059)),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  icon: const Icon(Icons.refresh_rounded),
-                  label: const Text('Refresh Status', style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
               ),
             ],

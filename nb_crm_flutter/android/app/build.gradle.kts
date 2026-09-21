@@ -41,6 +41,16 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+
+    // Older Android package installers fail to parse APKs whose native
+    // libraries are stored uncompressed (AGP 16 KB alignment). Compress them
+    // the legacy way so sideload installs on test phones. Version stays as-is
+    // until Play Store.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
 }
 
 flutter {

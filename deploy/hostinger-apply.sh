@@ -82,6 +82,7 @@ server {
         return 200 'ok\n';
     }
     location ^~ /downloads/ {
+        gzip off;
         default_type application/vnd.android.package-archive;
         add_header Content-Disposition 'attachment; filename="nb-crm.apk"' always;
         add_header Cache-Control "public, max-age=300" always;

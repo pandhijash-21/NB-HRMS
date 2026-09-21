@@ -382,8 +382,9 @@ class _PolicyCard extends StatelessWidget {
               children: [
                 const Icon(Icons.fingerprint_rounded, color: Color(0xFFC5A059), size: 20),
                 const SizedBox(width: 8),
-                const Text('Biometrics (Fingerprint/Face ID)', style: TextStyle(fontWeight: FontWeight.w600)),
-                const Spacer(),
+                const Expanded(
+                  child: Text('Biometrics (Fingerprint/Face ID)', style: TextStyle(fontWeight: FontWeight.w600)),
+                ),
                 Text(
                   settings.biometricToken != null && settings.biometricToken!.isNotEmpty
                       ? 'Registered'
@@ -397,6 +398,19 @@ class _PolicyCard extends StatelessWidget {
                 ),
               ],
             ),
+            if (settings.biometricToken != null && settings.biometricToken!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                settings.biometricDeviceLabel != null && settings.biometricDeviceLabel!.trim().isNotEmpty
+                    ? 'Registered device: ${settings.biometricDeviceLabel}'
+                    : 'Registered device: not recorded yet. Reset and register again to capture the phone name.',
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.35,
+                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.75),
+                ),
+              ),
+            ],
             if (canEdit && settings.biometricToken != null && settings.biometricToken!.isNotEmpty) ...[
               const SizedBox(height: 12),
               SizedBox(

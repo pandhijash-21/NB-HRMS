@@ -954,6 +954,9 @@ model EmployeeAttendanceSettings {
   punchInBufferMinutes  Int?     @map("punch_in_buffer_minutes")
   punchOutBufferMinutes Int?     @map("punch_out_buffer_minutes")
   biometricToken        String?  @map("biometric_token")
+  /// Friendly name of the phone/browser where fingerprint was first registered.
+  biometricDeviceLabel  String?  @map("biometric_device_label")
+  biometricDevicePlatform String? @map("biometric_device_platform")
   updatedBy             String?  @map("updated_by")
   updatedAt             DateTime @updatedAt @map("updated_at")
 

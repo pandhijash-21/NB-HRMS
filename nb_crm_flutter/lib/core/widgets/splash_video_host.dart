@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
 import '../services/branding_config.dart';
+import '../services/location_access_gate.dart';
 import 'nb_brand_loader.dart';
 import 'splash_video_audio.dart';
 import 'splash_video_surface.dart';
@@ -34,6 +35,7 @@ class _SplashVideoHostState extends State<SplashVideoHost>
 
   static const _statusCycle = [
     'Preparing Mr NB…',
+    'Requesting location (mandatory)…',
     'Fetching splash media…',
     'Buffering video…',
     'Almost ready…',
@@ -47,6 +49,8 @@ class _SplashVideoHostState extends State<SplashVideoHost>
       duration: const Duration(milliseconds: 420),
       value: 1,
     );
+    // Start the system location prompt during splash so login already has permission.
+    unawaited(LocationAccessGate.requestPermissionPrompt());
     _skipTimer = Timer(const Duration(milliseconds: 600), () {
       if (mounted && !_done) setState(() => _showSkip = true);
     });

@@ -15,7 +15,7 @@ import '../logging/app_logger.dart';
 import '../network/app_config.dart';
 import '../network/transport_crypto.dart';
 
-const _notifChannelId = 'my_foreground';
+const _notifChannelId = 'hrms_tracking_mandatory';
 const _notifId = 888;
 
 Future<void> initializeBackgroundService() async {
@@ -24,8 +24,9 @@ Future<void> initializeBackgroundService() async {
   const AndroidNotificationChannel channel = AndroidNotificationChannel(
     _notifChannelId,
     'HRMS Live Tracking',
-    description: 'Tracks your location while on duty (foreground + background).',
-    importance: Importance.low,
+    description:
+        'Tracking in progress. Location is MANDATORY while you are on duty.',
+    importance: Importance.high,
   );
 
   final FlutterLocalNotificationsPlugin plugin = FlutterLocalNotificationsPlugin();
@@ -42,8 +43,8 @@ Future<void> initializeBackgroundService() async {
       autoStartOnBoot: true,
       isForegroundMode: true,
       notificationChannelId: _notifChannelId,
-      initialNotificationTitle: 'HRMS Live Tracking',
-      initialNotificationContent: 'Waiting for GPS…',
+      initialNotificationTitle: 'Tracking in progress',
+      initialNotificationContent: 'Location is MANDATORY · waiting for GPS…',
       foregroundServiceNotificationId: _notifId,
       foregroundServiceTypes: [AndroidForegroundType.location],
     ),
@@ -95,6 +96,10 @@ void onStart(ServiceInstance service) async {
     });
     // Stay as a location FGS so tracking continues with app closed / screen off.
     await service.setAsForegroundService();
+    service.setForegroundNotificationInfo(
+      title: 'Tracking in progress',
+      content: 'Location is MANDATORY · acquiring GPS…',
+    );
   }
 
   final battery = Battery();
@@ -136,7 +141,7 @@ void onStart(ServiceInstance service) async {
 
   Future<void> updateNotif(AndroidServiceInstance android, String body) async {
     android.setForegroundNotificationInfo(
-      title: 'HRMS Live Tracking',
+      title: 'Tracking in progress',
       content: body,
     );
   }
@@ -191,7 +196,7 @@ void onStart(ServiceInstance service) async {
       final mm = t.minute.toString().padLeft(2, '0');
       await updateNotif(
         service,
-        'On duty · last ping $hh:$mm',
+        'Location is MANDATORY · last ping $hh:$mm',
       );
     }
   }
@@ -266,6 +271,40 @@ void onStart(ServiceInstance service) async {
 
   StreamSubscription<Position>? posSub;
   try {
+    // Immediate first fix — do not wait for the stream (fixes "Waiting for first GPS fix").
+    unawaited(() async {
+      try {
+        final serviceOn = await Geolocator.isLocationServiceEnabled();
+        final permission = await Geolocator.checkPermission();
+        if (!serviceOn ||
+            (permission != LocationPermission.always &&
+                permission != LocationPermission.whileInUse)) {
+          if (service is AndroidServiceInstance) {
+            await updateNotif(
+              service,
+              'Location is MANDATORY · turn GPS on',
+            );
+          }
+          return;
+        }
+        final position = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            timeLimit: Duration(seconds: 25),
+          ),
+        );
+        await postLive(position);
+      } catch (e) {
+        AppLogger.tracking.w('[BackgroundTracking] initial GPS fix failed: $e');
+        if (service is AndroidServiceInstance) {
+          await updateNotif(
+            service,
+            'Location is MANDATORY · waiting for GPS fix…',
+          );
+        }
+      }
+    }());
+
     posSub = Geolocator.getPositionStream(locationSettings: locationSettings).listen(
       (position) {
         unawaited(postLive(position));

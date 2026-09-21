@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
@@ -6,9 +7,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../../core/network/api_url_cubit.dart';
 import '../../../core/network/app_config.dart';
+import '../../../core/services/location_access_gate.dart';
 import '../../../core/tour/mascot/mascot_clip_registry.dart';
 import '../../../core/widgets/backend_env_switcher.dart';
 import '../../../core/widgets/install_android_app_button.dart';
@@ -44,6 +47,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   bool _obscurePassword = true;
   bool _rememberMe = false;
   bool _loadingRemembered = true;
+  bool _checkingLocation = false;
   late final AnimationController _enter;
 
   @override
@@ -52,6 +56,10 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     _enter = AnimationController(vsync: this, duration: const Duration(milliseconds: 850));
     _enter.forward();
     _loadRememberedCredentials();
+    // Ask for location as soon as login is visible (before credentials submit).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(LocationAccessGate.requestPermissionPrompt());
+    });
   }
 
   Future<void> _loadRememberedCredentials() async {
@@ -80,11 +88,42 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     super.dispose();
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     final authBloc = context.read<AuthBloc>();
-    if (authBloc.state.isSubmitting) return;
+    if (authBloc.state.isSubmitting || _checkingLocation) return;
     authBloc.add(const AuthClearErrorRequested());
     if (!(_formKey.currentState?.validate() ?? false)) return;
+
+    setState(() => _checkingLocation = true);
+    final location = await LocationAccessGate.ensureReadyForLogin();
+    if (!mounted) return;
+    setState(() => _checkingLocation = false);
+
+    if (!location.allowed) {
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Location is MANDATORY'),
+          content: Text(location.message),
+          actions: [
+            if (!kIsWeb)
+              TextButton(
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  openAppSettings();
+                },
+                child: const Text('Open Settings'),
+              ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
 
     final identifier = _identifierController.text.trim();
     final password = _passwordController.text;
@@ -156,6 +195,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                     onRememberChanged: (v) =>
                                         setState(() => _rememberMe = v),
                                     onSubmit: _submit,
+                                    checkingLocation: _checkingLocation,
                                   ),
                                 ),
                               ),
@@ -186,6 +226,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                               onRememberChanged: (v) =>
                                   setState(() => _rememberMe = v),
                               onSubmit: _submit,
+                              checkingLocation: _checkingLocation,
                             ),
                           ],
                         ),
@@ -572,6 +613,7 @@ class _LoginCard extends StatelessWidget {
     required this.onToggleObscure,
     required this.onRememberChanged,
     required this.onSubmit,
+    this.checkingLocation = false,
   });
 
   final GlobalKey<FormState> formKey;
@@ -582,6 +624,7 @@ class _LoginCard extends StatelessWidget {
   final bool obscurePassword;
   final bool rememberMe;
   final bool loadingRemembered;
+  final bool checkingLocation;
   final VoidCallback onToggleObscure;
   final ValueChanged<bool> onRememberChanged;
   final VoidCallback onSubmit;
@@ -650,7 +693,7 @@ class _LoginCard extends StatelessWidget {
           }
         },
         builder: (context, auth) {
-          final submitting = auth.isSubmitting;
+          final submitting = auth.isSubmitting || checkingLocation;
 
           return Form(
             key: formKey,
@@ -668,7 +711,7 @@ class _LoginCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Welcome back! Access your NB CRM account.',
+                  'Welcome back! Location is MANDATORY — GPS must be on to sign in.',
                   style: GoogleFonts.sourceSans3(
                     fontSize: 14,
                     color: _C.mute,

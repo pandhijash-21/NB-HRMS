@@ -4,17 +4,18 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:disable_battery_optimization/disable_battery_optimization.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/logging/app_logger.dart';
 import '../../../core/services/background_tracking_service.dart';
+import '../../../core/services/location_access_gate.dart';
 import '../../../core/services/web_live_tracking_service.dart';
 import '../../../core/widgets/nb_brand_loader.dart';
 
-/// Hard-gates the app until location is allowed.
-/// Native: Always location + battery opt-out.
-/// Web: browser geolocation (While using the site). No access until granted.
+/// Hard-gates the app until location is allowed AND a GPS fix is obtained.
+/// Native: Always location + battery opt-out + live tracking notification.
+/// Web: browser geolocation. No access until granted.
+/// Login itself is also blocked when GPS is off (see LoginScreen).
 class PermissionGuard extends StatefulWidget {
   final Widget child;
 
@@ -63,7 +64,16 @@ class _PermissionGuardState extends State<PermissionGuard> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      if (_isPublicMeetRoute() || _isAuthRoute()) {
+      if (_isPublicMeetRoute()) {
+        if (kIsWeb) WebLiveTrackingService.stop();
+        setState(() {
+          _checking = false;
+          _errorMsg = '';
+        });
+        return;
+      }
+      // Login still asks for location itself; after auth we hard-gate.
+      if (_isAuthRoute()) {
         if (kIsWeb) WebLiveTrackingService.stop();
         setState(() {
           _checking = false;
@@ -79,13 +89,7 @@ class _PermissionGuardState extends State<PermissionGuard> {
         if (kIsWeb) WebLiveTrackingService.stop();
         return;
       }
-      if (kIsWeb) {
-        unawaited(_verifyPermissionsQuietly());
-        return;
-      }
-      if (_hasPermissions) {
-        _verifyPermissionsQuietly();
-      }
+      unawaited(_verifyPermissionsQuietly());
     });
   }
 
@@ -98,46 +102,19 @@ class _PermissionGuardState extends State<PermissionGuard> {
     super.dispose();
   }
 
-  Future<bool> _needsBackgroundPermission() async {
-    if (kIsWeb) return false;
-    return true;
-  }
-
-  bool _webLocationGranted(LocationPermission permission) {
-    return permission == LocationPermission.always ||
-        permission == LocationPermission.whileInUse;
-  }
-
-  /// On web, the only reliable grant check is an actual geolocation read.
-  /// Geolocator permission state and isLocationServiceEnabled are unreliable on desktop browsers.
-  Future<bool> _probeWebGeolocation({
-    Duration timeout = const Duration(seconds: 10),
-  }) async {
+  Future<void> _startTracking() async {
+    if (kIsWeb) {
+      await WebLiveTrackingService.ensureRunning();
+      return;
+    }
+    if (await Permission.notification.isDenied) {
+      await Permission.notification.request();
+    }
     try {
-      await Geolocator.getCurrentPosition(
-        locationSettings: LocationSettings(
-          accuracy: LocationAccuracy.low,
-          timeLimit: timeout,
-        ),
-      );
-      return true;
-    } catch (_) {
-      return false;
+      await startBackgroundTracking();
+    } catch (e) {
+      AppLogger.tracking.e('Failed to start background tracking: $e');
     }
-  }
-
-  Future<bool> _isWebLocationReady() async {
-    final permission = await Geolocator.checkPermission();
-    if (_webLocationGranted(permission)) {
-      return _probeWebGeolocation();
-    }
-    // Browser may show Allow while the plugin still reports denied/deniedForever.
-    return _probeWebGeolocation();
-  }
-
-  Future<bool> _isWebLocationGrantedQuick() async {
-    final permission = await Geolocator.checkPermission();
-    return _webLocationGranted(permission);
   }
 
   Future<void> _checkPermissions() async {
@@ -151,118 +128,52 @@ class _PermissionGuardState extends State<PermissionGuard> {
       }
       return;
     }
-    if (kIsWeb) {
-      // If browser already allowed location, open the app immediately and
-      // keep fetching position in the background (do not block on GPS probe).
-      final already = await _isWebLocationGrantedQuick();
-      if (!mounted) return;
-      if (already) {
-        setState(() {
-          _hasPermissions = true;
-          _checking = false;
-          _errorMsg = '';
-          _loaderStatus = 'Fetching location…';
-        });
-        unawaited(() async {
-          final ok = await _probeWebGeolocation(
-            timeout: const Duration(seconds: 8),
-          );
-          if (!mounted) return;
-          if (ok) {
-            unawaited(WebLiveTrackingService.ensureRunning());
-          } else {
-            // Soft fail: keep UI open; quiet verify loop will re-check.
-            WebLiveTrackingService.stop();
-          }
-        }());
-        return;
-      }
 
+    if (mounted) {
       setState(() {
         _checking = true;
-        _loaderStatus = 'Requesting browser location…';
+        _loaderStatus = 'Location is MANDATORY — checking GPS…';
       });
-      try {
-        final ok = await _isWebLocationReady();
-        if (!mounted) return;
-        setState(() {
-          _hasPermissions = ok;
-          _checking = false;
-          _errorMsg = ok
-              ? ''
-              : 'This website requires location access. Allow location in the browser prompt to continue.';
-        });
-        if (ok) {
-          unawaited(WebLiveTrackingService.ensureRunning());
-        } else {
-          WebLiveTrackingService.stop();
-        }
-      } catch (e) {
-        if (!mounted) return;
+    }
+
+    final result = await LocationAccessGate.ensureReadyForApp();
+    if (!mounted) return;
+
+    if (!result.allowed) {
+      setState(() {
+        _hasPermissions = false;
+        _checking = false;
+        _errorMsg = result.message;
+      });
+      if (kIsWeb) WebLiveTrackingService.stop();
+      return;
+    }
+
+    if (!kIsWeb) {
+      final battery = await Permission.ignoreBatteryOptimizations.status;
+      if (!battery.isGranted) {
         setState(() {
           _hasPermissions = false;
           _checking = false;
-          _errorMsg = 'Location access is required. Allow location in your browser to use this site.';
+          _errorMsg =
+              'Disable battery optimization — live tracking is MANDATORY and must keep running.';
         });
+        return;
       }
-      return;
     }
+
+    if (mounted) {
+      setState(() => _loaderStatus = 'Starting live tracking…');
+    }
+    await _startTracking();
+    if (!mounted) return;
 
     setState(() {
-      _checking = true;
-      _loaderStatus = 'Checking location services…';
+      _hasPermissions = true;
+      _checking = false;
+      _errorMsg = '';
     });
-
-    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      setState(() {
-        _checking = false;
-        _hasPermissions = false;
-        _errorMsg = "Location services are disabled. Please enable them.";
-      });
-      return;
-    }
-
-    if (mounted) setState(() => _loaderStatus = 'Fetching location permission…');
-    var locationStatus = await Permission.location.status;
-    bool needsBg = await _needsBackgroundPermission();
-    if (mounted) {
-      setState(() => _loaderStatus = needsBg
-          ? 'Checking always-on location…'
-          : 'Checking battery settings…');
-    }
-    var bgStatus = needsBg ? await Permission.locationAlways.status : PermissionStatus.granted;
-    var batteryStatus = await Permission.ignoreBatteryOptimizations.status;
-
-    if (locationStatus.isGranted && bgStatus.isGranted && batteryStatus.isGranted) {
-      // Permissions already OK — show app now; start tracking in background.
-      if (mounted) {
-        setState(() {
-          _hasPermissions = true;
-          _checking = false;
-          _loaderStatus = 'Fetching location…';
-        });
-      }
-      unawaited(() async {
-        if (await Permission.notification.isDenied) {
-          await Permission.notification.request();
-        }
-        try {
-          await startBackgroundTracking();
-        } catch (e) {
-          AppLogger.tracking.e('Failed to start background tracking: $e');
-        }
-        if (mounted) unawaited(_maybeOpenTrackingSetup());
-      }());
-    } else {
-      setState(() {
-        _checking = false;
-        _hasPermissions = false;
-        _errorMsg = needsBg
-            ? "This app strictly requires Always-On location and Battery Optimization to function."
-            : "This app strictly requires location permissions (While using the app) to function.";
-      });
-    }
+    unawaited(_maybeOpenTrackingSetup());
   }
 
   Future<void> _maybeOpenTrackingSetup() async {
@@ -288,164 +199,121 @@ class _PermissionGuardState extends State<PermissionGuard> {
       if (kIsWeb) WebLiveTrackingService.stop();
       return;
     }
-    if (kIsWeb) {
-      final ok = await _isWebLocationReady();
-      if (!mounted) return;
-      if (ok) {
-        if (!_hasPermissions) {
-          setState(() {
-            _hasPermissions = true;
-            _errorMsg = '';
-          });
-        }
-        await WebLiveTrackingService.ensureRunning();
-      } else {
-        WebLiveTrackingService.stop();
-        if (_hasPermissions || _errorMsg.isEmpty) {
-          setState(() {
-            _hasPermissions = false;
-            _errorMsg =
-                'Location was blocked. Allow location for this site in the browser address bar, then tap Enable.';
-          });
-        }
-      }
-      return;
-    }
 
-    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      if (mounted) {
+    final result = await LocationAccessGate.ensureReadyForLogin(
+      requireGpsFix: false,
+    );
+    if (!mounted) return;
+
+    if (!result.allowed) {
+      if (kIsWeb) WebLiveTrackingService.stop();
+      if (_hasPermissions || _errorMsg.isEmpty) {
         setState(() {
           _hasPermissions = false;
-          _errorMsg = "Location services are disabled. Please enable them.";
+          _errorMsg = result.message;
         });
       }
       return;
     }
 
-    var locationStatus = await Permission.location.status;
-    bool needsBg = await _needsBackgroundPermission();
-    var bgStatus = needsBg ? await Permission.locationAlways.status : PermissionStatus.granted;
-    var batteryStatus = await Permission.ignoreBatteryOptimizations.status;
-
-    if (!locationStatus.isGranted || !bgStatus.isGranted || !batteryStatus.isGranted) {
-      if (mounted) {
+    if (!kIsWeb) {
+      final battery = await Permission.ignoreBatteryOptimizations.status;
+      if (!battery.isGranted) {
         setState(() {
           _hasPermissions = false;
-          _errorMsg = needsBg
-              ? "This app strictly requires Always-On location and Battery Optimization to function."
-              : "This app strictly requires location permissions (While using the app) to function.";
+          _errorMsg =
+              'Disable battery optimization — live tracking is MANDATORY and must keep running.';
         });
+        return;
       }
-    } else {
-      final now = DateTime.now();
-      if (_lastServiceEnsureAt == null ||
-          now.difference(_lastServiceEnsureAt!) > const Duration(seconds: 20)) {
-        _lastServiceEnsureAt = now;
-        try {
-          await startBackgroundTracking();
-        } catch (_) {}
-      }
+    }
+
+    if (!_hasPermissions) {
+      setState(() {
+        _hasPermissions = true;
+        _errorMsg = '';
+      });
+    }
+
+    final now = DateTime.now();
+    if (_lastServiceEnsureAt == null ||
+        now.difference(_lastServiceEnsureAt!) > const Duration(seconds: 20)) {
+      _lastServiceEnsureAt = now;
+      await _startTracking();
     }
   }
 
   Future<void> _requestPermissions() async {
     setState(() {
       _checking = true;
-      _loaderStatus = kIsWeb
-          ? 'Requesting browser location…'
-          : 'Requesting location permission…';
+      _loaderStatus = 'Requesting location — this is MANDATORY…';
     });
 
     if (kIsWeb) {
-      try {
-        var permission = await Geolocator.checkPermission();
-        if (permission == LocationPermission.denied) {
-          permission = await Geolocator.requestPermission();
-        }
-
-        final granted =
-            _webLocationGranted(permission) || await _probeWebGeolocation();
-        if (granted) {
-          unawaited(WebLiveTrackingService.ensureRunning());
-          if (mounted) {
-            setState(() {
-              _hasPermissions = true;
-              _checking = false;
-              _errorMsg = '';
-            });
-          }
-          return;
-        }
-
-        if (mounted) {
-          setState(() {
-            _checking = false;
-            _hasPermissions = false;
-            _errorMsg = permission == LocationPermission.deniedForever
-                ? 'Location is blocked for this site. Click the lock/tune icon in the address bar, set Location to Allow, then tap Enable again.'
-                : 'You must allow location to use this website.';
-          });
-        }
-      } catch (e) {
-        if (mounted) {
-          setState(() {
-            _checking = false;
-            _hasPermissions = false;
-            _errorMsg = 'You must allow location to use this website.';
-          });
-        }
+      final result = await LocationAccessGate.ensureReadyForApp();
+      if (!mounted) return;
+      if (result.allowed) {
+        await _startTracking();
+        if (!mounted) return;
+        setState(() {
+          _hasPermissions = true;
+          _checking = false;
+          _errorMsg = '';
+        });
+      } else {
+        setState(() {
+          _checking = false;
+          _hasPermissions = false;
+          _errorMsg = result.message;
+        });
+        WebLiveTrackingService.stop();
       }
       return;
     }
 
-    var locStatus = await Permission.location.request();
-    bool needsBg = await _needsBackgroundPermission();
-
-    if (locStatus.isGranted) {
-      if (needsBg) {
-        var bgStatus = await Permission.locationAlways.request();
-        if (!bgStatus.isGranted) {
-          setState(() {
-            _checking = false;
-            _hasPermissions = false;
-            _errorMsg =
-                "You must allow location 'All the time' for live tracking. Please tap 'Open App Settings' and grant it.";
-          });
-          return;
-        }
-      }
-
-      if (await Permission.notification.isDenied) {
-        await Permission.notification.request();
-      }
-
-      if (await Permission.ignoreBatteryOptimizations.isDenied) {
-        await Permission.ignoreBatteryOptimizations.request();
-        try {
-          await DisableBatteryOptimization.showDisableBatteryOptimizationSettings();
-        } catch (_) {}
-      }
-
-      try {
-        await Future.delayed(const Duration(milliseconds: 500));
-        await startBackgroundTracking();
-      } catch (e) {
-        AppLogger.tracking.e('Failed to start background tracking: $e');
-      }
+    final result = await LocationAccessGate.ensureReadyForApp();
+    if (!mounted) return;
+    if (!result.allowed) {
       setState(() {
-        _hasPermissions = true;
         _checking = false;
+        _hasPermissions = false;
+        _errorMsg = result.message;
       });
       return;
     }
 
+    if (await Permission.ignoreBatteryOptimizations.isDenied) {
+      await Permission.ignoreBatteryOptimizations.request();
+      try {
+        await DisableBatteryOptimization.showDisableBatteryOptimizationSettings();
+      } catch (_) {}
+    }
+
+    final battery = await Permission.ignoreBatteryOptimizations.status;
+    if (!battery.isGranted) {
+      setState(() {
+        _checking = false;
+        _hasPermissions = false;
+        _errorMsg =
+            'Disable battery optimization — live tracking is MANDATORY and must keep running.';
+      });
+      return;
+    }
+
+    try {
+      await Future.delayed(const Duration(milliseconds: 400));
+      await _startTracking();
+    } catch (e) {
+      AppLogger.tracking.e('Failed to start background tracking: $e');
+    }
+
+    if (!mounted) return;
     setState(() {
+      _hasPermissions = true;
       _checking = false;
-      _hasPermissions = false;
-      _errorMsg =
-          "You must allow location 'While using the app' for live tracking. Please tap 'Open App Settings' and grant it.";
+      _errorMsg = '';
     });
+    unawaited(_maybeOpenTrackingSetup());
   }
 
   @override
@@ -459,7 +327,7 @@ class _PermissionGuardState extends State<PermissionGuard> {
         body: NbBrandLoader(
           statusLines: [
             _loaderStatus,
-            'Please wait…',
+            'Location is MANDATORY',
           ],
         ),
       );
@@ -529,11 +397,11 @@ class _PermissionGuardState extends State<PermissionGuard> {
                             ),
                             const SizedBox(height: 32),
                             const Text(
-                              "LOCATION REQUIRED",
+                              "LOCATION IS MANDATORY",
                               style: TextStyle(
-                                fontSize: 24,
+                                fontSize: 22,
                                 fontWeight: FontWeight.w900,
-                                letterSpacing: 2.0,
+                                letterSpacing: 1.6,
                                 color: Colors.white,
                               ),
                               textAlign: TextAlign.center,
@@ -543,8 +411,8 @@ class _PermissionGuardState extends State<PermissionGuard> {
                               _errorMsg.isNotEmpty
                                   ? _errorMsg
                                   : kIsWeb
-                                      ? 'Allow location in your browser to continue. Without it you cannot use this website.'
-                                      : 'Allow location All the time + disable battery optimization so live tracking continues when the app is closed.',
+                                      ? 'Allow location in your browser. Without it you cannot use this website.'
+                                      : 'Turn on GPS, allow location All the time, and disable battery optimization. Live tracking cannot be skipped.',
                               style: TextStyle(
                                 fontSize: 16,
                                 height: 1.5,
@@ -555,8 +423,8 @@ class _PermissionGuardState extends State<PermissionGuard> {
                             const SizedBox(height: 12),
                             Text(
                               kIsWeb
-                                  ? 'Required: Browser location (Allow). If you previously blocked it, use the lock icon in the address bar.'
-                                  : 'Required: Foreground · Background (Always) · Notifications · Battery unrestricted',
+                                  ? 'Required: Browser location (Allow).'
+                                  : 'Required: GPS ON · Always location · Notifications · Battery unrestricted',
                               style: TextStyle(
                                 fontSize: 12,
                                 height: 1.4,
@@ -584,7 +452,7 @@ class _PermissionGuardState extends State<PermissionGuard> {
                                 onPressed: _requestPermissions,
                                 icon: const Icon(Icons.my_location_rounded, size: 20, color: Colors.black87),
                                 label: const Text(
-                                  "ENABLE PERMISSIONS",
+                                  "ENABLE LOCATION",
                                   style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,

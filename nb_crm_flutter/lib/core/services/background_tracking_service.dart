@@ -15,18 +15,24 @@ import '../logging/app_logger.dart';
 import '../network/app_config.dart';
 import '../network/transport_crypto.dart';
 
-const _notifChannelId = 'hrms_tracking_mandatory';
+const _notifChannelId = 'hrms_tracking_quiet';
 const _notifId = 888;
 
 Future<void> initializeBackgroundService() async {
   if (kIsWeb) return;
 
+  // Importance.low keeps the FGS notification in the shade without heads-up
+  // popups. A new channel id is required — Android never lowers an existing
+  // channel's importance after first create.
   const AndroidNotificationChannel channel = AndroidNotificationChannel(
     _notifChannelId,
     'HRMS Live Tracking',
     description:
-        'Tracking in progress. Location is MANDATORY while you are on duty.',
-    importance: Importance.high,
+        'Quiet ongoing indicator: tracking in progress. Location is mandatory.',
+    importance: Importance.low,
+    playSound: false,
+    enableVibration: false,
+    showBadge: false,
   );
 
   final FlutterLocalNotificationsPlugin plugin = FlutterLocalNotificationsPlugin();
@@ -224,7 +230,24 @@ void onStart(ServiceInstance service) async {
       ..interceptors.add(transportEncryptionInterceptor());
   }
 
-  Future<void> updateNotif(AndroidServiceInstance android, String body) async {
+  String? lastNotifBody;
+  DateTime? lastNotifAt;
+
+  Future<void> updateNotif(
+    AndroidServiceInstance android,
+    String body, {
+    bool force = false,
+  }) async {
+    // Avoid rewriting the shade entry every GPS tick (feels like constant popups).
+    final now = DateTime.now();
+    if (!force &&
+        body == lastNotifBody &&
+        lastNotifAt != null &&
+        now.difference(lastNotifAt!) < const Duration(seconds: 55)) {
+      return;
+    }
+    lastNotifBody = body;
+    lastNotifAt = now;
     android.setForegroundNotificationInfo(
       title: 'Tracking in progress',
       content: body,
@@ -277,6 +300,7 @@ void onStart(ServiceInstance service) async {
         await updateNotif(
           service,
           'Location is MANDATORY · ping failed — check network',
+          force: true,
         );
       }
       return;

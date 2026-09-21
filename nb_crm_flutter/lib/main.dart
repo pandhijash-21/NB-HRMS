@@ -17,6 +17,7 @@ import 'core/services/branding_config.dart';
 import 'core/services/location_alert_sound.dart';
 import 'core/services/mr_nb_tour_service.dart';
 import 'core/services/splash_video_cache.dart';
+import 'core/storage/secure_storage_service.dart';
 import 'core/theme/app_breakpoints.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/icon_font_bootstrap.dart';
@@ -37,6 +38,7 @@ import 'features/collaboration/presentation/notification_bell.dart';
 import 'features/lookups/presentation/bloc/lookups_bloc.dart';
 import 'core/router/url_strategy.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -58,6 +60,18 @@ void main() async {
   unawaited(loadFullMaterialIconsFont());
   if (!kIsWeb) {
     unawaited(initializeBackgroundService());
+    // One-time: copy Keystore JWT into prefs so FGS can post GPS after upgrade.
+    unawaited(() async {
+      try {
+        final storage = SecureStorageService();
+        final token = await storage.readToken();
+        if (token != null && token.isNotEmpty) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('access_token', token);
+        }
+        await AppConfig.mirrorApiBaseUrlForBackground();
+      } catch (_) {}
+    }());
   }
 
   // DI: Core Repositories

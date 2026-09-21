@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -35,19 +37,45 @@ class SecureStorageService {
   String? _cachedSessionJson;
   SharedPreferences? _prefs;
 
-  Future<SharedPreferences> _webPrefs() async {
+  Future<SharedPreferences> _prefsInstance() async {
     return _prefs ??= await SharedPreferences.getInstance();
+  }
+
+  Future<SharedPreferences> _webPrefs() => _prefsInstance();
+
+  /// Mirror used by the Android/iOS background isolate (Keystore often fails there).
+  Future<void> _mirrorTokenToPrefs(String? token) async {
+    if (kIsWeb) return;
+    final prefs = await _prefsInstance();
+    if (token == null || token.isEmpty) {
+      await prefs.remove(_tokenKey);
+    } else {
+      await prefs.setString(_tokenKey, token);
+    }
   }
 
   Future<String?> readToken() async {
     if (_cachedToken != null && _cachedToken!.isNotEmpty) {
       return _cachedToken;
     }
-    final value = kIsWeb
-        ? (await _webPrefs()).getString(_tokenKey)
-        : await _secure.read(key: _tokenKey);
-    _cachedToken = value;
-    return value;
+    if (kIsWeb) {
+      final value = (await _webPrefs()).getString(_tokenKey);
+      _cachedToken = value;
+      return value;
+    }
+    try {
+      final value = await _secure.read(key: _tokenKey);
+      if (value != null && value.isNotEmpty) {
+        _cachedToken = value;
+        // Keep prefs in sync for the FGS isolate.
+        unawaited(_mirrorTokenToPrefs(value));
+        return value;
+      }
+    } catch (_) {}
+    // Fallback if Keystore read fails (same path the background service uses).
+    final prefsValue = (await _prefsInstance()).getString(_tokenKey);
+    _cachedToken = prefsValue;
+    return prefsValue;
   }
 
   Future<void> writeToken(String token) async {
@@ -56,6 +84,7 @@ class SecureStorageService {
       await (await _webPrefs()).setString(_tokenKey, token);
     } else {
       await _secure.write(key: _tokenKey, value: token);
+      await _mirrorTokenToPrefs(token);
     }
   }
 
@@ -89,6 +118,7 @@ class SecureStorageService {
     } else {
       await _secure.delete(key: _tokenKey);
       await _secure.delete(key: _sessionKey);
+      await _mirrorTokenToPrefs(null);
     }
   }
 

@@ -65,7 +65,7 @@ class _PermissionGuardState extends State<PermissionGuard> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (_isPublicMeetRoute()) {
-        if (kIsWeb) WebLiveTrackingService.stop();
+        WebLiveTrackingService.stop();
         setState(() {
           _checking = false;
           _errorMsg = '';
@@ -74,7 +74,7 @@ class _PermissionGuardState extends State<PermissionGuard> {
       }
       // Login still asks for location itself; after auth we hard-gate.
       if (_isAuthRoute()) {
-        if (kIsWeb) WebLiveTrackingService.stop();
+        WebLiveTrackingService.stop();
         setState(() {
           _checking = false;
           _errorMsg = '';
@@ -86,7 +86,7 @@ class _PermissionGuardState extends State<PermissionGuard> {
     _timer = Timer.periodic(const Duration(seconds: 2), (timer) {
       if (!mounted || _checking) return;
       if (_isPublicMeetRoute() || _isAuthRoute()) {
-        if (kIsWeb) WebLiveTrackingService.stop();
+        WebLiveTrackingService.stop();
         return;
       }
       unawaited(_verifyPermissionsQuietly());
@@ -96,17 +96,14 @@ class _PermissionGuardState extends State<PermissionGuard> {
   @override
   void dispose() {
     _timer?.cancel();
-    if (kIsWeb) {
-      WebLiveTrackingService.stop();
-    }
+    WebLiveTrackingService.stop();
     super.dispose();
   }
 
   Future<void> _startTracking() async {
-    if (kIsWeb) {
-      await WebLiveTrackingService.ensureRunning();
-      return;
-    }
+    // Main-isolate pings (works on web + native while app is open).
+    await WebLiveTrackingService.ensureRunning();
+    if (kIsWeb) return;
     if (await Permission.notification.isDenied) {
       await Permission.notification.request();
     }
@@ -119,7 +116,7 @@ class _PermissionGuardState extends State<PermissionGuard> {
 
   Future<void> _checkPermissions() async {
     if (_isPublicMeetRoute() || _isAuthRoute()) {
-      if (kIsWeb) WebLiveTrackingService.stop();
+      WebLiveTrackingService.stop();
       if (mounted) {
         setState(() {
           _checking = false;
@@ -145,7 +142,7 @@ class _PermissionGuardState extends State<PermissionGuard> {
         _checking = false;
         _errorMsg = result.message;
       });
-      if (kIsWeb) WebLiveTrackingService.stop();
+      WebLiveTrackingService.stop();
       return;
     }
 
@@ -206,7 +203,7 @@ class _PermissionGuardState extends State<PermissionGuard> {
     if (!mounted) return;
 
     if (!result.allowed) {
-      if (kIsWeb) WebLiveTrackingService.stop();
+      WebLiveTrackingService.stop();
       if (_hasPermissions || _errorMsg.isEmpty) {
         setState(() {
           _hasPermissions = false;

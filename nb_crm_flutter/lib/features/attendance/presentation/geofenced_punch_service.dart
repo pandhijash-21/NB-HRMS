@@ -7,6 +7,8 @@ import 'package:geolocator/geolocator.dart';
 import 'package:local_auth/local_auth.dart';
 
 import '../../../core/network/dio_client.dart';
+import '../../../core/services/background_tracking_service.dart';
+import '../../../core/services/web_live_tracking_service.dart';
 import '../../../core/storage/secure_storage_service.dart';
 import 'web_attendance_gate.dart';
 
@@ -209,6 +211,7 @@ class GeofencedPunchService {
 
       try {
         await sendPunchRequest();
+        await _kickLiveTracking(position);
         if (context.mounted) {
           messenger.showSnackBar(
             const SnackBar(
@@ -231,6 +234,7 @@ class GeofencedPunchService {
               );
             }
             await sendPunchRequest(reason);
+            await _kickLiveTracking(position);
             if (context.mounted) {
               messenger.showSnackBar(
                 const SnackBar(
@@ -252,6 +256,31 @@ class GeofencedPunchService {
         'Punch Failed',
         e.toString().replaceAll('Exception: ', ''),
       );
+    }
+  }
+
+  /// Immediately post live GPS + start continuous tracking after punch.
+  Future<void> _kickLiveTracking(Position position) async {
+    try {
+      await dio.postEnvelope(
+        'tracking/live',
+        data: {
+          'latitude': position.latitude,
+          'longitude': position.longitude,
+          'heading': position.heading.isNaN ? 0 : position.heading,
+          'speed': position.speed.isNaN ? 0 : position.speed,
+          'accuracy': position.accuracy,
+        },
+        parse: (r) => r,
+      );
+    } catch (_) {}
+    try {
+      await WebLiveTrackingService.start();
+    } catch (_) {}
+    if (!kIsWeb) {
+      try {
+        await startBackgroundTracking();
+      } catch (_) {}
     }
   }
 

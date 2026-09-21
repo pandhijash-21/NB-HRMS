@@ -6,6 +6,8 @@ class AppConfig {
   AppConfig._();
 
   static const _prefsKey = 'nb_crm_api_base_url';
+  /// Always mirrored for the background tracking isolate (release + debug).
+  static const bgApiPrefsKey = 'nb_crm_bg_api_base_url';
 
   static String? _runtimeOverride;
 
@@ -19,21 +21,45 @@ class AppConfig {
     _runtimeOverride = url;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_prefsKey, url);
+    await prefs.setString(bgApiPrefsKey, url);
+  }
+
+  /// Persist the URL the FGS isolate should call (works in release too).
+  static Future<void> mirrorApiBaseUrlForBackground([String? url]) async {
+    final value = (url ?? apiBaseUrl).trim();
+    if (value.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(bgApiPrefsKey, value);
   }
 
   /// Load the last debug backend choice before Dio / auth bootstrap.
   /// Debug defaults to the local API so Google Earth and other unreleased
   /// modules are reachable without silently landing on production.
   static Future<void> hydrate() async {
-    if (kReleaseMode) return;
+    if (kReleaseMode) {
+      await mirrorApiBaseUrlForBackground(liveApiBaseUrl);
+      return;
+    }
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getString(_prefsKey);
     if (saved != null && saved.isNotEmpty) {
       _runtimeOverride = saved;
+      await prefs.setString(bgApiPrefsKey, saved);
       return;
     }
     const fromEnv = String.fromEnvironment('API_BASE_URL');
     _runtimeOverride = fromEnv.isNotEmpty ? fromEnv : localApiBaseUrl;
+    await prefs.setString(bgApiPrefsKey, _runtimeOverride!);
+  }
+
+  /// Resolve API base for background isolate (prefs → compile-time → live).
+  static Future<String> resolveApiBaseUrlForBackground() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getString(bgApiPrefsKey)?.trim();
+      if (saved != null && saved.isNotEmpty) return saved;
+    } catch (_) {}
+    return apiBaseUrl;
   }
 
   static bool isLocalUrl(String url) {

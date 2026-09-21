@@ -11,10 +11,11 @@ import '../network/app_config.dart';
 import '../network/transport_crypto.dart';
 import '../storage/secure_storage_service.dart';
 
-/// Foreground live pings + heartbeats for Flutter web (Netlify).
+/// Foreground live pings + heartbeats while the app/tab is open.
 ///
-/// Native background GPS cannot run in the browser; this keeps tracking
-/// working while the tab is open and the user is signed in.
+/// On native, [background_tracking_service] continues GPS when the app is
+/// closed. This service covers the open-app case with the main-isolate token
+/// (avoids FGS Keystore failures that showed as "Waiting for first GPS fix").
 class WebLiveTrackingService {
   WebLiveTrackingService._();
 
@@ -41,7 +42,7 @@ class WebLiveTrackingService {
   }
 
   static Future<void> _start({required bool resume}) async {
-    if (!kIsWeb) return;
+    // Web: tab-open pings. Native: same while app is in foreground (FGS covers background).
     if (resume) _halted = false;
     if (_halted) return;
     final token = await _storage.readToken();
@@ -52,7 +53,11 @@ class WebLiveTrackingService {
     }
     if (_timer != null) return;
 
-    AppLogger.tracking.i('Starting web live tracking pings');
+    AppLogger.tracking.i(
+      kIsWeb
+          ? 'Starting web live tracking pings'
+          : 'Starting native foreground live tracking pings',
+    );
     final epoch = _epoch;
     _timer = Timer.periodic(const Duration(seconds: 5), (_) {
       unawaited(_tick(epoch));

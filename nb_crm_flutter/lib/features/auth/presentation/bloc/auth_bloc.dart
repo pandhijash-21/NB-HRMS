@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/network/api_envelope.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../../core/services/background_tracking_service.dart';
 import '../../../../core/services/web_live_tracking_service.dart';
 import '../../../../core/storage/secure_storage_service.dart';
 import '../../data/auth_repository.dart';
@@ -109,6 +110,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       }
 
       await WebLiveTrackingService.start();
+      unawaited(startBackgroundTracking());
     } catch (_) {
       emit(const AuthState.unauthenticated());
     }
@@ -154,6 +156,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
       _startSessionWatch();
       await WebLiveTrackingService.start();
+      unawaited(startBackgroundTracking());
     } on ApiException catch (e) {
       emit(state.copyWith(
         isSubmitting: false,
@@ -190,6 +193,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       }
 
       WebLiveTrackingService.stop(preventRestart: true);
+      unawaited(stopBackgroundTracking());
       _stopSessionWatch();
       await _repo.clearSession();
 
@@ -300,6 +304,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     if (state.status != AuthStatus.authenticated) return;
     WebLiveTrackingService.stop(preventRestart: true);
+    unawaited(stopBackgroundTracking());
     _stopSessionWatch();
     await _repo.clearSession();
 
@@ -314,6 +319,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     Emitter<AuthState> emit,
   ) async {
     WebLiveTrackingService.stop(preventRestart: true);
+    unawaited(stopBackgroundTracking());
     _stopSessionWatch();
     if (!event.skipRemote) {
       await _repo.logoutRemote();

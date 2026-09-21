@@ -58,6 +58,20 @@ Future<void> initializeBackgroundService() async {
 
 Future<void> startBackgroundTracking() async {
   if (kIsWeb) return;
+
+  // Ensure prefs hold a token the FGS isolate can read (Keystore often fails there).
+  try {
+    const secure = FlutterSecureStorage();
+    final token = await secure.read(key: 'access_token');
+    final prefs = await SharedPreferences.getInstance();
+    if (token != null && token.isNotEmpty) {
+      await prefs.setString('access_token', token);
+    }
+    await AppConfig.mirrorApiBaseUrlForBackground();
+  } catch (e) {
+    AppLogger.tracking.w('Could not mirror session for background tracking: $e');
+  }
+
   final service = FlutterBackgroundService();
   final running = await service.isRunning();
   if (!running) {
@@ -65,6 +79,19 @@ Future<void> startBackgroundTracking() async {
   } else {
     service.invoke('setAsForeground');
   }
+
+  // Push credentials into the running isolate immediately.
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('access_token');
+    final api = await AppConfig.resolveApiBaseUrlForBackground();
+    if (token != null && token.isNotEmpty) {
+      service.invoke('syncSession', {
+        'token': token,
+        'apiBaseUrl': api,
+      });
+    }
+  } catch (_) {}
 }
 
 Future<void> stopBackgroundTracking() async {
@@ -84,6 +111,9 @@ Future<bool> onIosBackground(ServiceInstance service) async {
 void onStart(ServiceInstance service) async {
   DartPluginRegistrant.ensureInitialized();
 
+  String? injectedToken;
+  String? injectedApiBase;
+
   if (service is AndroidServiceInstance) {
     service.on('setAsForeground').listen((_) {
       service.setAsForegroundService();
@@ -94,12 +124,30 @@ void onStart(ServiceInstance service) async {
     service.on('stopService').listen((_) {
       service.stopSelf();
     });
+    service.on('syncSession').listen((event) {
+      if (event == null) return;
+      final t = event['token']?.toString();
+      final api = event['apiBaseUrl']?.toString();
+      if (t != null && t.isNotEmpty) injectedToken = t;
+      if (api != null && api.isNotEmpty) injectedApiBase = api;
+    });
     // Stay as a location FGS so tracking continues with app closed / screen off.
     await service.setAsForegroundService();
     service.setForegroundNotificationInfo(
       title: 'Tracking in progress',
       content: 'Location is MANDATORY · acquiring GPS…',
     );
+  } else {
+    service.on('syncSession').listen((event) {
+      if (event == null) return;
+      final t = event['token']?.toString();
+      final api = event['apiBaseUrl']?.toString();
+      if (t != null && t.isNotEmpty) injectedToken = t;
+      if (api != null && api.isNotEmpty) injectedApiBase = api;
+    });
+    service.on('stopService').listen((_) {
+      service.stopSelf();
+    });
   }
 
   final battery = Battery();
@@ -109,23 +157,58 @@ void onStart(ServiceInstance service) async {
   double? lastLng;
   DateTime? lastPostAt;
   int tickCount = 0;
+  int noTokenTicks = 0;
 
   Future<String?> readToken() async {
+    if (injectedToken != null && injectedToken!.isNotEmpty) {
+      return injectedToken;
+    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final fromPrefs = prefs.getString('access_token');
+      if (fromPrefs != null && fromPrefs.isNotEmpty) {
+        injectedToken = fromPrefs;
+        return fromPrefs;
+      }
+    } catch (e) {
+      AppLogger.tracking.w('[BackgroundTracking] prefs token read failed: $e');
+    }
     try {
       const secureStorage = FlutterSecureStorage();
       final t = await secureStorage.read(key: 'access_token');
-      if (t != null && t.isNotEmpty) return t;
-      final prefs = await SharedPreferences.getInstance();
-      return prefs.getString('access_token');
-    } catch (_) {
-      return null;
+      if (t != null && t.isNotEmpty) {
+        injectedToken = t;
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('access_token', t);
+        } catch (_) {}
+        return t;
+      }
+    } catch (e) {
+      AppLogger.tracking.w('[BackgroundTracking] secure token read failed: $e');
     }
+    return null;
   }
 
   Future<Dio?> buildDio() async {
     final token = await readToken();
-    if (token == null || token.isEmpty) return null;
-    final rawBaseUrl = AppConfig.apiBaseUrl;
+    if (token == null || token.isEmpty) {
+      noTokenTicks++;
+      if (service is AndroidServiceInstance && noTokenTicks <= 3) {
+        service.setForegroundNotificationInfo(
+          title: 'Tracking blocked',
+          content: 'Open NB CRM and stay signed in — session missing',
+        );
+      }
+      AppLogger.tracking.w('[BackgroundTracking] no access token — cannot post GPS');
+      return null;
+    }
+    noTokenTicks = 0;
+
+    String rawBaseUrl = injectedApiBase ?? '';
+    if (rawBaseUrl.isEmpty) {
+      rawBaseUrl = await AppConfig.resolveApiBaseUrlForBackground();
+    }
     final normalizedUrl = rawBaseUrl.endsWith('/') ? rawBaseUrl : '$rawBaseUrl/';
     return Dio(BaseOptions(
       baseUrl: normalizedUrl,
@@ -133,6 +216,8 @@ void onStart(ServiceInstance service) async {
       receiveTimeout: const Duration(seconds: 12),
       headers: {
         'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
         transportEncHeader: '$transportEncVersion',
       },
     ))
@@ -188,6 +273,13 @@ void onStart(ServiceInstance service) async {
       });
     } catch (e) {
       AppLogger.tracking.w('[BackgroundTracking] live update failed: $e');
+      if (service is AndroidServiceInstance) {
+        await updateNotif(
+          service,
+          'Location is MANDATORY · ping failed — check network',
+        );
+      }
+      return;
     }
 
     if (service is AndroidServiceInstance) {

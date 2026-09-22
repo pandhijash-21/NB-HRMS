@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
 import '../../../../core/router/app_back_button.dart';
 import '../providers.dart';
 import '../widgets/gap_timeline_widget.dart';
@@ -58,13 +57,19 @@ class _TripDetailHubScreenState extends ConsumerState<TripDetailHubScreen> {
                         FlutterMap(
                           options: MapOptions(
                             initialCenter: points.first,
-                            initialZoom: 15,
+                            initialZoom: 14,
+                            minZoom: 3,
+                            maxZoom: 17,
                           ),
                           children: [
                             TileLayer(
                               urlTemplate:
                                   'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                               userAgentPackageName: 'com.nb.hrms',
+                              maxNativeZoom: 17,
+                              keepBuffer: 1,
+                              panBuffer: 0,
+                              retinaMode: false,
                             ),
                             PolylineLayer(
                               polylines: [

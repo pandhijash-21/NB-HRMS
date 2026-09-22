@@ -53,7 +53,7 @@ type TripRow = {
   endTime: Date | null;
 };
 
-const ROUTE_DISPLAY_MAX_POINTS = 300;
+const ROUTE_DISPLAY_MAX_POINTS = 150;
 
 function downsamplePoints<T>(points: T[], maxPoints: number): T[] {
   if (points.length <= maxPoints) return points;

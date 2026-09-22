@@ -91,8 +91,8 @@ final hubTripRouteProvider =
       final dioClient = ref.watch(dioClientProvider);
       final res = await dioClient.dio.get('tracking/trips/$tripId/route');
       final data = res.data['data'] as Map<String, dynamic>;
-      final rawRoute = data['route'] as List;
-      return rawRoute
+      final rawRoute = data['route'] as List? ?? const [];
+      final points = rawRoute
           .map(
             (p) => LatLng(
               (p['latitude'] as num).toDouble(),
@@ -100,6 +100,13 @@ final hubTripRouteProvider =
             ),
           )
           .toList();
+      // Cap for Flutter web map memory (same limit as admin replay).
+      if (points.length <= 120) return points;
+      final last = points.length - 1;
+      return List<LatLng>.generate(120, (i) {
+        final idx = ((i * last) / 119).round();
+        return points[idx];
+      });
     });
 
 String hubDayKey({required DateTime date, String? employeeId}) {

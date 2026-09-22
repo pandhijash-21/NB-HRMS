@@ -1000,13 +1000,38 @@ class _DayDetail extends StatelessWidget {
                           ],
                         ),
                         const SizedBox(height: 8),
-                        Text(
-                          summary.firstIn != null ? '${formatIsoTime(summary.firstIn)} IST' : '—',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w800,
-                            color: isDark ? Colors.white : const Color(0xFF212F3D),
-                          ),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                summary.firstIn != null ? '${formatIsoTime(summary.firstIn)} IST' : '—',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w800,
+                                  color: isDark ? Colors.white : const Color(0xFF212F3D),
+                                ),
+                              ),
+                            ),
+                            if (isLate && summary.firstIn != null) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.red.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: Colors.red),
+                                ),
+                                child: const Text(
+                                  'LATE',
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.red,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ],
                     ),
@@ -1267,6 +1292,10 @@ class _DayDetail extends StatelessWidget {
                 (p) {
                   final type = p.punchType?.toUpperCase() ?? 'IN';
                   final isOut = type == 'OUT';
+                  final isLatePunch = isLate &&
+                      !isOut &&
+                      summary.firstIn != null &&
+                      p.punchAt == summary.firstIn;
                   return Container(
                     margin: const EdgeInsets.only(bottom: 10),
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -1275,7 +1304,9 @@ class _DayDetail extends StatelessWidget {
                       borderRadius: BorderRadius.circular(10),
                       border: Border(
                         left: BorderSide(
-                          color: isOut ? const Color(0xFFC5A059) : Colors.green,
+                          color: isLatePunch
+                              ? Colors.orange
+                              : (isOut ? const Color(0xFFC5A059) : Colors.green),
                           width: 4,
                         ),
                       ),
@@ -1284,7 +1315,9 @@ class _DayDetail extends StatelessWidget {
                       children: [
                         Icon(
                           Icons.fingerprint_rounded,
-                          color: isOut ? const Color(0xFFC5A059) : Colors.green,
+                          color: isLatePunch
+                              ? Colors.orange
+                              : (isOut ? const Color(0xFFC5A059) : Colors.green),
                           size: 20,
                         ),
                         const SizedBox(width: 14),
@@ -1292,13 +1325,36 @@ class _DayDetail extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                '${formatIsoTime(p.punchAt)} IST',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 14,
-                                  color: isDark ? Colors.white : const Color(0xFF212F3D),
-                                ),
+                              Row(
+                                children: [
+                                  Text(
+                                    '${formatIsoTime(p.punchAt)} IST',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 14,
+                                      color: isDark ? Colors.white : const Color(0xFF212F3D),
+                                    ),
+                                  ),
+                                  if (isLatePunch) ...[
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.red.withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: Border.all(color: Colors.red),
+                                      ),
+                                      child: const Text(
+                                        'LATE',
+                                        style: TextStyle(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w800,
+                                          color: Colors.red,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
                               ),
                               const SizedBox(height: 3),
                               Text(

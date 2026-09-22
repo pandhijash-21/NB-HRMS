@@ -98,6 +98,7 @@ class AttendancePolicy {
     required this.punchInBufferMinutes,
     required this.punchOutBufferMinutes,
     this.maxBufferDaysPerMonth = 2,
+    this.halfDayWindows = const [],
     this.updatedAt,
     this.updatedBy,
   });
@@ -108,10 +109,12 @@ class AttendancePolicy {
   final int punchInBufferMinutes;
   final int punchOutBufferMinutes;
   final int maxBufferDaysPerMonth;
+  final List<HalfDayWindow> halfDayWindows;
   final String? updatedAt;
   final String? updatedBy;
 
   factory AttendancePolicy.fromJson(Map<String, dynamic> json) {
+    final windowsRaw = json['halfDayWindows'];
     return AttendancePolicy(
       id: json['id'] as String? ?? 'default',
       defaultPunchInTime: json['defaultPunchInTime'] as String? ?? '09:00',
@@ -121,6 +124,13 @@ class AttendancePolicy {
       maxBufferDaysPerMonth: json['maxBufferDaysPerMonth'] != null
           ? _asInt(json['maxBufferDaysPerMonth'])
           : 2,
+      halfDayWindows: windowsRaw is List
+          ? windowsRaw
+              .whereType<Map>()
+              .map((e) => HalfDayWindow.fromJson(Map<String, dynamic>.from(e)))
+              .where((w) => w.punchIn.isNotEmpty && w.punchOut.isNotEmpty)
+              .toList()
+          : const [],
       updatedAt: json['updatedAt']?.toString(),
       updatedBy: json['updatedBy'] as String?,
     );
@@ -132,6 +142,26 @@ class AttendancePolicy {
         'punchInBufferMinutes': punchInBufferMinutes,
         'punchOutBufferMinutes': punchOutBufferMinutes,
         'maxBufferDaysPerMonth': maxBufferDaysPerMonth,
+        'halfDayWindows': halfDayWindows.map((w) => w.toJson()).toList(),
+      };
+}
+
+class HalfDayWindow {
+  const HalfDayWindow({required this.punchIn, required this.punchOut});
+
+  final String punchIn;
+  final String punchOut;
+
+  factory HalfDayWindow.fromJson(Map<String, dynamic> json) {
+    return HalfDayWindow(
+      punchIn: (json['punchIn'] ?? json['checkIn'] ?? '').toString(),
+      punchOut: (json['punchOut'] ?? json['checkOut'] ?? '').toString(),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'punchIn': punchIn,
+        'punchOut': punchOut,
       };
 }
 

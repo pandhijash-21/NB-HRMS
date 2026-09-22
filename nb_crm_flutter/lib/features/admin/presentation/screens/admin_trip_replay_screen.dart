@@ -7,27 +7,26 @@ import '../widgets/tracking_avatar_marker.dart';
 
 import '../../../../core/logging/app_logger.dart';
 import '../../../../core/router/app_back_button.dart';
-import '../../../../core/services/map_matching_service.dart';
 import '../../../../core/utils/heading_utils.dart';
 import '../../../tracking_hub/presentation/trip_recording_download.dart';
 
 final adminTripRouteProvider = FutureProvider.autoDispose.family<Map<String, dynamic>, String>((ref, tripId) async {
   final dioClient = ref.watch(dioClientProvider);
   final res = await dioClient.dio.get('tracking/trips/$tripId/route');
-  final data = res.data['data'] as Map<String, dynamic>;
-  final rawRoute = data['route'] as List;
-  
+  final data = Map<String, dynamic>.from(res.data['data'] as Map);
+  final rawRoute = data['route'] as List? ?? const [];
+
   if (rawRoute.isNotEmpty) {
     try {
       final List<Map<String, dynamic>> computedStops = [];
       LatLng? lastPos;
       Map<String, dynamic>? currentStopStart;
-      
+
       for (int i = 0; i < rawRoute.length; i++) {
-        final p = rawRoute[i];
+        final p = Map<String, dynamic>.from(rawRoute[i] as Map);
         final pos = LatLng((p['latitude'] as num).toDouble(), (p['longitude'] as num).toDouble());
-        final time = DateTime.tryParse(p['timestamp'] ?? '');
-        
+        final time = DateTime.tryParse(p['timestamp']?.toString() ?? '');
+
         if (time == null) continue;
 
         if (lastPos == null) {
@@ -35,85 +34,66 @@ final adminTripRouteProvider = FutureProvider.autoDispose.family<Map<String, dyn
           currentStopStart = p;
           continue;
         }
-        
+
         final dist = const Distance().as(LengthUnit.Meter, lastPos, pos);
         if (dist > 5) {
-          final startTime = DateTime.tryParse(currentStopStart!['timestamp'] ?? '');
+          final startTime = DateTime.tryParse(currentStopStart!['timestamp']?.toString() ?? '');
           if (startTime != null) {
-             final duration = time.difference(startTime).inSeconds;
-             if (duration >= 10) {
-               computedStops.add({
-                 'latitude': currentStopStart['latitude'],
-                 'longitude': currentStopStart['longitude'],
-                 'duration': duration,
-               });
-             }
+            final duration = time.difference(startTime).inSeconds;
+            if (duration >= 10) {
+              computedStops.add({
+                'latitude': currentStopStart['latitude'],
+                'longitude': currentStopStart['longitude'],
+                'duration': duration,
+              });
+            }
           }
           lastPos = pos;
           currentStopStart = p;
         }
       }
-      
+
       // Check if the trip ended on a stop
       if (lastPos != null && currentStopStart != null) {
-         final p = rawRoute.last;
-         final time = DateTime.tryParse(p['timestamp'] ?? '');
-         final startTime = DateTime.tryParse(currentStopStart['timestamp'] ?? '');
-         if (time != null && startTime != null) {
-            final duration = time.difference(startTime).inSeconds;
-            if (duration >= 10) {
-               computedStops.add({
-                 'latitude': currentStopStart['latitude'],
-                 'longitude': currentStopStart['longitude'],
-                 'duration': duration,
-               });
-            }
-         }
+        final p = Map<String, dynamic>.from(rawRoute.last as Map);
+        final time = DateTime.tryParse(p['timestamp']?.toString() ?? '');
+        final startTime = DateTime.tryParse(currentStopStart['timestamp']?.toString() ?? '');
+        if (time != null && startTime != null) {
+          final duration = time.difference(startTime).inSeconds;
+          if (duration >= 10) {
+            computedStops.add({
+              'latitude': currentStopStart['latitude'],
+              'longitude': currentStopStart['longitude'],
+              'duration': duration,
+            });
+          }
+        }
       }
       // Combine stops that are within 30 meters of each other
       final List<Map<String, dynamic>> clusteredStops = [];
       for (final stop in computedStops) {
-        bool merged = false;
+        var merged = false;
         final p1 = LatLng((stop['latitude'] as num).toDouble(), (stop['longitude'] as num).toDouble());
-        
-        for (final cluster in clusteredStops) {
-           final p2 = LatLng((cluster['latitude'] as num).toDouble(), (cluster['longitude'] as num).toDouble());
-           if (const Distance().as(LengthUnit.Meter, p1, p2) <= 30) {
-              cluster['duration'] = (cluster['duration'] as num).toInt() + (stop['duration'] as num).toInt();
-              merged = true;
-              break;
-           }
-        }
-        
-        if (!merged) {
-           clusteredStops.add(Map<String, dynamic>.from(stop));
-        }
-      }
-      
-      data['stops'] = clusteredStops;
 
-      final points = rawRoute.map((p) => LatLng((p['latitude'] as num).toDouble(), (p['longitude'] as num).toDouble())).toList();
-      final snappedPoints = await MapMatchingService.matchPointsInBatches(points, batchSize: 50);
-      
-      // Replace route with snapped points and recalculate headings
-      final List<Map<String, dynamic>> snappedRoute = [];
-      for (int i = 0; i < snappedPoints.length; i++) {
-        double heading = 0.0;
-        if (i < snappedPoints.length - 1) {
-          heading = const Distance().bearing(snappedPoints[i], snappedPoints[i+1]);
-        } else if (i > 0) {
-          heading = const Distance().bearing(snappedPoints[i-1], snappedPoints[i]);
+        for (final cluster in clusteredStops) {
+          final p2 = LatLng((cluster['latitude'] as num).toDouble(), (cluster['longitude'] as num).toDouble());
+          if (const Distance().as(LengthUnit.Meter, p1, p2) <= 30) {
+            cluster['duration'] = (cluster['duration'] as num).toInt() + (stop['duration'] as num).toInt();
+            merged = true;
+            break;
+          }
         }
-        
-        snappedRoute.add({
-          'latitude': snappedPoints[i].latitude,
-          'longitude': snappedPoints[i].longitude,
-          'heading': heading,
-        });
+
+        if (!merged) {
+          clusteredStops.add(Map<String, dynamic>.from(stop));
+        }
       }
-      data['route'] = snappedRoute;
+
+      data['stops'] = clusteredStops;
+      // Keep server route as-is (already downsampled / optionally OSRM-snapped).
+      // Client-side OSRM re-match was freezing the trip open screen.
     } catch (e) {
-      AppLogger.tracking.e('Error snapping historical route: $e');
+      AppLogger.tracking.e('Error computing trip stops: $e');
     }
   }
   return data;

@@ -259,6 +259,7 @@ class _PolicyCardState extends State<_PolicyCard> {
   late TextEditingController _inBufCtrl;
   late TextEditingController _outBufCtrl;
   late TextEditingController _maxBufDaysCtrl;
+  late List<HalfDayWindow> _halfWindows;
 
   @override
   void initState() {
@@ -268,6 +269,7 @@ class _PolicyCardState extends State<_PolicyCard> {
     _inBufCtrl = TextEditingController(text: '${widget.policy.punchInBufferMinutes}');
     _outBufCtrl = TextEditingController(text: '${widget.policy.punchOutBufferMinutes}');
     _maxBufDaysCtrl = TextEditingController(text: '${widget.policy.maxBufferDaysPerMonth}');
+    _halfWindows = List<HalfDayWindow>.from(widget.policy.halfDayWindows);
   }
 
   @override
@@ -279,6 +281,7 @@ class _PolicyCardState extends State<_PolicyCard> {
       _inBufCtrl.text = '${widget.policy.punchInBufferMinutes}';
       _outBufCtrl.text = '${widget.policy.punchOutBufferMinutes}';
       _maxBufDaysCtrl.text = '${widget.policy.maxBufferDaysPerMonth}';
+      _halfWindows = List<HalfDayWindow>.from(widget.policy.halfDayWindows);
     }
   }
 
@@ -305,6 +308,73 @@ class _PolicyCardState extends State<_PolicyCard> {
     setState(() {});
   }
 
+  Future<void> _editHalfWindow(int? index) async {
+    final existing = index != null ? _halfWindows[index] : null;
+    final inCtrl = TextEditingController(text: existing?.punchIn ?? '10:00');
+    final outCtrl = TextEditingController(text: existing?.punchOut ?? '14:30');
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(index == null ? 'Add half-day window' : 'Edit half-day window'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: inCtrl,
+              readOnly: true,
+              decoration: const InputDecoration(labelText: 'Check-in (HH:MM)', border: OutlineInputBorder()),
+              onTap: () async {
+                final parts = inCtrl.text.split(':');
+                final picked = await showTimePicker(
+                  context: ctx,
+                  initialTime: TimeOfDay(
+                    hour: int.tryParse(parts.isNotEmpty ? parts[0] : '') ?? 10,
+                    minute: int.tryParse(parts.length > 1 ? parts[1] : '') ?? 0,
+                  ),
+                );
+                if (picked == null) return;
+                inCtrl.text =
+                    '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
+              },
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: outCtrl,
+              readOnly: true,
+              decoration: const InputDecoration(labelText: 'Check-out (HH:MM)', border: OutlineInputBorder()),
+              onTap: () async {
+                final parts = outCtrl.text.split(':');
+                final picked = await showTimePicker(
+                  context: ctx,
+                  initialTime: TimeOfDay(
+                    hour: int.tryParse(parts.isNotEmpty ? parts[0] : '') ?? 14,
+                    minute: int.tryParse(parts.length > 1 ? parts[1] : '') ?? 30,
+                  ),
+                );
+                if (picked == null) return;
+                outCtrl.text =
+                    '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final window = HalfDayWindow(punchIn: inCtrl.text.trim(), punchOut: outCtrl.text.trim());
+    setState(() {
+      if (index == null) {
+        _halfWindows.add(window);
+      } else {
+        _halfWindows[index] = window;
+      }
+    });
+  }
+
   void _save() {
     widget.onSave({
       'defaultPunchInTime': _inCtrl.text.trim(),
@@ -313,6 +383,7 @@ class _PolicyCardState extends State<_PolicyCard> {
       'punchOutBufferMinutes': int.tryParse(_outBufCtrl.text.trim()) ?? widget.policy.punchOutBufferMinutes,
       'maxBufferDaysPerMonth':
           int.tryParse(_maxBufDaysCtrl.text.trim()) ?? widget.policy.maxBufferDaysPerMonth,
+      'halfDayWindows': _halfWindows.map((w) => w.toJson()).toList(),
     });
   }
 
@@ -431,6 +502,65 @@ class _PolicyCardState extends State<_PolicyCard> {
               ),
             ],
           ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Half-day windows',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                    color: isDark ? Colors.white : const Color(0xFF212F3D),
+                  ),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: () => _editHalfWindow(null),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Add'),
+              ),
+            ],
+          ),
+          Text(
+            'If check-in and check-out fall entirely inside a window (e.g. 10:00–14:30), that day is half day.',
+            style: TextStyle(
+              fontSize: 11,
+              color: isDark ? Colors.white54 : const Color(0xFF607D8B),
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (_halfWindows.isEmpty)
+            Text(
+              'No half-day windows configured.',
+              style: TextStyle(
+                fontSize: 12,
+                color: isDark ? Colors.white38 : Colors.black45,
+              ),
+            )
+          else
+            ...List.generate(_halfWindows.length, (i) {
+              final w = _halfWindows[i];
+              return ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                title: Text('${w.punchIn} → ${w.punchOut}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                subtitle: const Text('Half day if punches stay in this window'),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.edit_outlined, size: 18),
+                      onPressed: () => _editHalfWindow(i),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, size: 18),
+                      onPressed: () => setState(() => _halfWindows.removeAt(i)),
+                    ),
+                  ],
+                ),
+              );
+            }),
         ],
       ),
     );

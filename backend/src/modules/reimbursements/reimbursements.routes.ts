@@ -42,6 +42,10 @@ reimbursementsRouter.post(
         openingKm: Number.isFinite(openingKm as number) ? (openingKm as number) : null,
         closingKm: Number.isFinite(closingKm as number) ? (closingKm as number) : null,
         proofUrl: req.body?.proofUrl != null ? String(req.body.proofUrl) : null,
+        openingKmPhotoUrl:
+          req.body?.openingKmPhotoUrl != null ? String(req.body.openingKmPhotoUrl) : null,
+        closingKmPhotoUrl:
+          req.body?.closingKmPhotoUrl != null ? String(req.body.closingKmPhotoUrl) : null,
         appliedBy: req.user!.id,
       });
       return res.status(201).json(ok(claim));

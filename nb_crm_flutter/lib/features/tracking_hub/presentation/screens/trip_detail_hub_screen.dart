@@ -17,8 +17,6 @@ class TripDetailHubScreen extends ConsumerStatefulWidget {
 }
 
 class _TripDetailHubScreenState extends ConsumerState<TripDetailHubScreen> {
-  List<LatLng> _routePoints = [];
-
   @override
   Widget build(BuildContext context) {
     final eventsAsync = ref.watch(tripEventsProvider(widget.tripId));
@@ -47,14 +45,7 @@ class _TripDetailHubScreenState extends ConsumerState<TripDetailHubScreen> {
             return const Center(child: Text('No location data recorded for this trip.'));
           }
 
-          if (_routePoints.isEmpty) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) setState(() => _routePoints = routePoints);
-            });
-          }
-
-          final points =
-              _routePoints.isNotEmpty ? _routePoints : routePoints;
+          final points = routePoints;
 
           return LayoutBuilder(
             builder: (context, constraints) {

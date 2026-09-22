@@ -24,9 +24,12 @@ class _ReimbursementApplyScreenState extends ConsumerState<ReimbursementApplyScr
   final _closeKmCtrl = TextEditingController();
 
   bool _submitting = false;
-  bool _uploading = false;
-  String? _proofUrl;
-  String? _proofName;
+  bool _uploadingOpening = false;
+  bool _uploadingClosing = false;
+  String? _openingPhotoUrl;
+  String? _openingPhotoName;
+  String? _closingPhotoUrl;
+  String? _closingPhotoName;
 
   @override
   void dispose() {
@@ -38,7 +41,7 @@ class _ReimbursementApplyScreenState extends ConsumerState<ReimbursementApplyScr
     super.dispose();
   }
 
-  Future<void> _pickProof() async {
+  Future<void> _pickPhoto({required bool opening}) async {
     final employeeId = ref.read(authNotifierProvider).user?.employeeId;
     if (employeeId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -46,9 +49,15 @@ class _ReimbursementApplyScreenState extends ConsumerState<ReimbursementApplyScr
       );
       return;
     }
-    final picked = await pickFileFromDevice(imagesOnly: false);
+    final picked = await pickFileFromDevice(imagesOnly: true);
     if (picked == null) return;
-    setState(() => _uploading = true);
+    setState(() {
+      if (opening) {
+        _uploadingOpening = true;
+      } else {
+        _uploadingClosing = true;
+      }
+    });
     try {
       final url = await ref.read(reimbursementsRepositoryProvider).uploadProof(
             employeeId: employeeId,
@@ -57,20 +66,39 @@ class _ReimbursementApplyScreenState extends ConsumerState<ReimbursementApplyScr
           );
       if (!mounted) return;
       setState(() {
-        _proofUrl = url;
-        _proofName = picked.name;
+        if (opening) {
+          _openingPhotoUrl = url;
+          _openingPhotoName = picked.name;
+        } else {
+          _closingPhotoUrl = url;
+          _closingPhotoName = picked.name;
+        }
       });
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
       }
     } finally {
-      if (mounted) setState(() => _uploading = false);
+      if (mounted) {
+        setState(() {
+          if (opening) {
+            _uploadingOpening = false;
+          } else {
+            _uploadingClosing = false;
+          }
+        });
+      }
     }
   }
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_openingPhotoUrl == null || _closingPhotoUrl == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Upload both opening km and closing km photos')),
+      );
+      return;
+    }
     setState(() => _submitting = true);
     try {
       final opening = _openKmCtrl.text.trim().isEmpty ? null : double.tryParse(_openKmCtrl.text.trim());
@@ -81,13 +109,14 @@ class _ReimbursementApplyScreenState extends ConsumerState<ReimbursementApplyScr
         'amount': double.parse(_amountCtrl.text.trim()),
         if (opening != null) 'openingKm': opening,
         if (closing != null) 'closingKm': closing,
-        if (_proofUrl != null) 'proofUrl': _proofUrl,
+        'openingKmPhotoUrl': _openingPhotoUrl,
+        'closingKmPhotoUrl': _closingPhotoUrl,
       });
       ref.invalidate(myReimbursementsProvider);
       ref.invalidate(pendingReimbursementsProvider);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Reimbursement submitted')),
+        const SnackBar(content: Text('Reimbursement submitted for 1st → 2nd → 3rd reporting approval')),
       );
       context.pop();
     } catch (e) {
@@ -97,6 +126,34 @@ class _ReimbursementApplyScreenState extends ConsumerState<ReimbursementApplyScr
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
+  }
+
+  Widget _photoButton({
+    required String label,
+    required String? fileName,
+    required bool uploading,
+    required VoidCallback onPick,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        OutlinedButton.icon(
+          onPressed: uploading ? null : onPick,
+          icon: uploading
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.photo_camera_outlined),
+          label: Text(fileName == null ? label : 'Replace $label'),
+        ),
+        if (fileName != null) ...[
+          const SizedBox(height: 6),
+          Text('Uploaded: $fileName', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+        ],
+      ],
+    );
   }
 
   @override
@@ -171,21 +228,24 @@ class _ReimbursementApplyScreenState extends ConsumerState<ReimbursementApplyScr
               ],
             ),
             const SizedBox(height: 16),
-            OutlinedButton.icon(
-              onPressed: _uploading ? null : _pickProof,
-              icon: _uploading
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.upload_file),
-              label: Text(_proofUrl == null ? 'Upload proof / bill' : 'Replace proof'),
+            const Text(
+              'Meter photos (mandatory)',
+              style: TextStyle(fontWeight: FontWeight.w700),
             ),
-            if (_proofName != null) ...[
-              const SizedBox(height: 8),
-              Text('Uploaded: $_proofName', style: const TextStyle(color: AppColors.textSecondary)),
-            ],
+            const SizedBox(height: 8),
+            _photoButton(
+              label: 'Opening km photo *',
+              fileName: _openingPhotoName,
+              uploading: _uploadingOpening,
+              onPick: () => _pickPhoto(opening: true),
+            ),
+            const SizedBox(height: 10),
+            _photoButton(
+              label: 'Closing km photo *',
+              fileName: _closingPhotoName,
+              uploading: _uploadingClosing,
+              onPick: () => _pickPhoto(opening: false),
+            ),
             const SizedBox(height: 24),
             FilledButton(
               onPressed: _submitting ? null : _submit,

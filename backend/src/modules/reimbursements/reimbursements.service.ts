@@ -170,7 +170,12 @@ async function postAmountToCurrentMonthSalary(params: {
   const hasReimbursementCol = record.columnValues.some(
     (c) => c.columnIdentifier === 'reimbursement' && String(c.category) === 'EARNING',
   );
-  const colId = hasReimbursementCol ? 'reimbursement' : 'other_allowance';
+  if (!hasReimbursementCol) {
+    throw new Error(
+      'Salary structure is missing the mandatory Reimbursement earning field. Add it on the pay commission, then approve again.',
+    );
+  }
+  const colId = 'reimbursement';
   const prev = overrides[colId] ?? 0;
   overrides[colId] = Number(prev) + Number(params.amount);
 
@@ -188,6 +193,8 @@ export const reimbursementsService = {
     openingKm?: number | null;
     closingKm?: number | null;
     proofUrl?: string | null;
+    openingKmPhotoUrl?: string | null;
+    closingKmPhotoUrl?: string | null;
     appliedBy: string;
   }) {
     const title = params.title.trim();
@@ -196,6 +203,12 @@ export const reimbursementsService = {
     if (!description) throw new Error('Description is required');
     if (!Number.isFinite(params.amount) || params.amount <= 0) {
       throw new Error('Amount must be greater than 0');
+    }
+    if (!params.openingKmPhotoUrl?.trim()) {
+      throw new Error('Opening km photo is required');
+    }
+    if (!params.closingKmPhotoUrl?.trim()) {
+      throw new Error('Closing km photo is required');
     }
     if (
       params.openingKm != null &&
@@ -254,6 +267,8 @@ export const reimbursementsService = {
           openingKm: params.openingKm ?? null,
           closingKm: params.closingKm ?? null,
           proofUrl: params.proofUrl ?? null,
+          openingKmPhotoUrl: params.openingKmPhotoUrl?.trim() || null,
+          closingKmPhotoUrl: params.closingKmPhotoUrl?.trim() || null,
           status: ReimbursementStatus.PENDING,
           appliedBy: params.appliedBy,
           approvalSteps: {

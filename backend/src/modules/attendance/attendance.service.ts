@@ -13,7 +13,43 @@ const DEFAULT_POLICY = {
   punchInBufferMinutes: 10,
   punchOutBufferMinutes: 10,
   maxBufferDaysPerMonth: 2,
+  halfDayWindows: [] as Array<{ punchIn: string; punchOut: string }>,
 };
+
+type HalfDayWindow = { punchIn: string; punchOut: string };
+
+function normalizeHalfDayWindows(raw: unknown): HalfDayWindow[] {
+  if (!Array.isArray(raw)) return [];
+  const out: HalfDayWindow[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const punchIn = String((item as any).punchIn ?? (item as any).checkIn ?? '').trim();
+    const punchOut = String((item as any).punchOut ?? (item as any).checkOut ?? '').trim();
+    if (!/^\d{2}:\d{2}$/.test(punchIn) || !/^\d{2}:\d{2}$/.test(punchOut)) continue;
+    const start = parseHmToMinutes(punchIn);
+    const end = parseHmToMinutes(punchOut);
+    if (end <= start) continue;
+    out.push({ punchIn, punchOut });
+  }
+  return out;
+}
+
+function fitsHalfDayWindow(
+  windows: HalfDayWindow[],
+  firstIn: string | null,
+  lastOut: string | null,
+): boolean {
+  if (!windows.length || !firstIn || !lastOut) return false;
+  const inMin = minutesInIstDayFromUtcDate(new Date(firstIn));
+  const outMin = minutesInIstDayFromUtcDate(new Date(lastOut));
+  if (!(outMin > inMin)) return false;
+  for (const w of windows) {
+    const start = parseHmToMinutes(w.punchIn);
+    const end = parseHmToMinutes(w.punchOut);
+    if (inMin >= start && outMin <= end) return true;
+  }
+  return false;
+}
 const WEEKDAY_CODES = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'] as const;
 type DayStatus = 'PRESENT' | 'LEAVE' | 'ABSENT' | 'HOLIDAY';
 
@@ -89,6 +125,7 @@ async function getAttendancePolicy() {
     punchInBufferMinutes: row.punchInBufferMinutes,
     punchOutBufferMinutes: row.punchOutBufferMinutes,
     maxBufferDaysPerMonth: row.maxBufferDaysPerMonth ?? DEFAULT_POLICY.maxBufferDaysPerMonth,
+    halfDayWindows: normalizeHalfDayWindows(row.halfDayWindows),
   };
 }
 
@@ -148,6 +185,7 @@ type EffectivePolicy = {
   punchInBufferMinutes: number;
   punchOutBufferMinutes: number;
   maxBufferDaysPerMonth: number;
+  halfDayWindows: HalfDayWindow[];
   globalPolicy: Awaited<ReturnType<typeof getAttendancePolicy>>;
   employeeSettings: {
     useGlobalPolicy: boolean;
@@ -173,6 +211,7 @@ async function resolveEffectivePolicy(employeeId: number): Promise<EffectivePoli
       punchInBufferMinutes: globalPolicy.punchInBufferMinutes,
       punchOutBufferMinutes: globalPolicy.punchOutBufferMinutes,
       maxBufferDaysPerMonth: globalPolicy.maxBufferDaysPerMonth,
+      halfDayWindows: globalPolicy.halfDayWindows,
       globalPolicy,
       employeeSettings: settings
         ? {
@@ -194,6 +233,7 @@ async function resolveEffectivePolicy(employeeId: number): Promise<EffectivePoli
     punchInBufferMinutes: settings.punchInBufferMinutes ?? globalPolicy.punchInBufferMinutes,
     punchOutBufferMinutes: settings.punchOutBufferMinutes ?? globalPolicy.punchOutBufferMinutes,
     maxBufferDaysPerMonth: globalPolicy.maxBufferDaysPerMonth,
+    halfDayWindows: globalPolicy.halfDayWindows,
     globalPolicy,
     employeeSettings: {
       useGlobalPolicy: false,
@@ -246,7 +286,11 @@ type DayPunchEval = {
 function evaluateDayPunches(
   policy: Pick<
     EffectivePolicy,
-    'punchInTime' | 'punchOutTime' | 'punchInBufferMinutes' | 'punchOutBufferMinutes'
+    | 'punchInTime'
+    | 'punchOutTime'
+    | 'punchInBufferMinutes'
+    | 'punchOutBufferMinutes'
+    | 'halfDayWindows'
   >,
   firstIn: string | null,
   lastOut: string | null,
@@ -262,6 +306,7 @@ function evaluateDayPunches(
   const lateAfterMin = defaultInMin + policy.punchInBufferMinutes;
   const eligibleOutAfterMin = defaultOutMin - policy.punchOutBufferMinutes;
   const meetsPunchOut = punchOutMin == null ? null : punchOutMin >= eligibleOutAfterMin;
+  const inHalfWindow = fitsHalfDayWindow(policy.halfDayWindows ?? [], firstIn, lastOut);
 
   if (punchInMin == null) {
     return {
@@ -278,9 +323,10 @@ function evaluateDayPunches(
   const isAfterExactIn = punchInMin > defaultInMin;
   const isOutsideBuffer = punchInMin > lateAfterMin;
   // Outside buffer → always late + half-day. In-buffer late → provisional until monthly quota applied.
+  // Also half-day if punches fall entirely inside a configured half-day window.
   const isLate = isOutsideBuffer ? true : isAfterExactIn;
-  const isHalfDay = isOutsideBuffer;
-  const usedBufferGrace = isAfterExactIn && !isOutsideBuffer;
+  const isHalfDay = isOutsideBuffer || inHalfWindow;
+  const usedBufferGrace = isAfterExactIn && !isOutsideBuffer && !inHalfWindow;
 
   return {
     totalMinutes,
@@ -548,7 +594,16 @@ export const attendanceService = {
     const row = await prisma.attendancePolicy.upsert({
       where: { id: 'default' },
       update: {},
-      create: { ...DEFAULT_POLICY, updatedBy: 'system' },
+      create: {
+        id: 'default',
+        defaultPunchInTime: DEFAULT_POLICY.defaultPunchInTime,
+        defaultPunchOutTime: DEFAULT_POLICY.defaultPunchOutTime,
+        punchInBufferMinutes: DEFAULT_POLICY.punchInBufferMinutes,
+        punchOutBufferMinutes: DEFAULT_POLICY.punchOutBufferMinutes,
+        maxBufferDaysPerMonth: DEFAULT_POLICY.maxBufferDaysPerMonth,
+        halfDayWindows: DEFAULT_POLICY.halfDayWindows,
+        updatedBy: 'system',
+      },
     });
     return {
       id: row.id,
@@ -557,6 +612,7 @@ export const attendanceService = {
       punchInBufferMinutes: row.punchInBufferMinutes,
       punchOutBufferMinutes: row.punchOutBufferMinutes,
       maxBufferDaysPerMonth: row.maxBufferDaysPerMonth ?? DEFAULT_POLICY.maxBufferDaysPerMonth,
+      halfDayWindows: normalizeHalfDayWindows(row.halfDayWindows),
       updatedAt: row.updatedAt.toISOString(),
       updatedBy: row.updatedBy ?? null,
     };
@@ -568,6 +624,7 @@ export const attendanceService = {
     punchInBufferMinutes: number;
     punchOutBufferMinutes: number;
     maxBufferDaysPerMonth: number;
+    halfDayWindows?: unknown;
     updatedBy: string;
   }) {
     // Validate early (throws friendly errors)
@@ -582,6 +639,7 @@ export const attendanceService = {
     if (!Number.isFinite(params.maxBufferDaysPerMonth) || params.maxBufferDaysPerMonth < 0 || params.maxBufferDaysPerMonth > 31) {
       throw new Error('Invalid maxBufferDaysPerMonth (expected 0-31)');
     }
+    const halfDayWindows = normalizeHalfDayWindows(params.halfDayWindows ?? []);
 
     const row = await prisma.attendancePolicy.upsert({
       where: { id: 'default' },
@@ -591,6 +649,7 @@ export const attendanceService = {
         punchInBufferMinutes: params.punchInBufferMinutes,
         punchOutBufferMinutes: params.punchOutBufferMinutes,
         maxBufferDaysPerMonth: params.maxBufferDaysPerMonth,
+        halfDayWindows,
         updatedBy: params.updatedBy,
       },
       create: {
@@ -600,6 +659,7 @@ export const attendanceService = {
         punchInBufferMinutes: params.punchInBufferMinutes,
         punchOutBufferMinutes: params.punchOutBufferMinutes,
         maxBufferDaysPerMonth: params.maxBufferDaysPerMonth,
+        halfDayWindows,
         updatedBy: params.updatedBy,
       },
     });
@@ -610,7 +670,8 @@ export const attendanceService = {
       defaultPunchOutTime: row.defaultPunchOutTime,
       punchInBufferMinutes: row.punchInBufferMinutes,
       punchOutBufferMinutes: row.punchOutBufferMinutes,
-      maxBufferDaysPerMonth: row.maxBufferDaysPerMonth,
+      maxBufferDaysPerMonth: row.maxBufferDaysPerMonth ?? DEFAULT_POLICY.maxBufferDaysPerMonth,
+      halfDayWindows: normalizeHalfDayWindows(row.halfDayWindows),
       updatedAt: row.updatedAt.toISOString(),
       updatedBy: row.updatedBy ?? null,
     };

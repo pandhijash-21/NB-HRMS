@@ -130,23 +130,62 @@ export const crmService = {
   // Campaigns Management & Webhook Token Generation
   // ---------------------------------------------------------------------------
   async ensureDefaultCampaign(module = 'PRE_SALES') {
-    let campaign = await prisma.crmCampaign.findFirst({
-      where: { module, code: 'DEFAULT' },
+    // `code` is globally unique — PRE_SALES keeps legacy `DEFAULT`; other modules use a scoped code.
+    const defaultCode = module === 'PRE_SALES' ? 'DEFAULT' : `DEFAULT_${module}`;
+
+    let campaign = await prisma.crmCampaign.findUnique({
+      where: { code: defaultCode },
     });
+
+    // Legacy rows may have code DEFAULT but a mismatched / empty module value.
+    if (!campaign && defaultCode === 'DEFAULT') {
+      campaign = await prisma.crmCampaign.findFirst({
+        where: { code: 'DEFAULT' },
+      });
+    }
 
     if (!campaign) {
       const webhookToken = crypto.randomBytes(12).toString('hex');
-      campaign = await prisma.crmCampaign.create({
-        data: {
-          name: 'Default Campaign',
-          code: 'DEFAULT',
-          description: 'Primary Pre-Sales Campaign',
-          webhookToken,
-          module,
-          isActive: true,
-        },
+      try {
+        campaign = await prisma.crmCampaign.create({
+          data: {
+            name: 'Default Campaign',
+            code: defaultCode,
+            description:
+              module === 'PRE_SALES'
+                ? 'Primary Pre-Sales Campaign'
+                : `Primary ${module} Campaign`,
+            webhookToken,
+            module,
+            isActive: true,
+          },
+        });
+      } catch (err: any) {
+        // Concurrent ensure / leftover unique code — re-fetch instead of failing the leads list.
+        if (err?.code === 'P2002') {
+          campaign = await prisma.crmCampaign.findUnique({
+            where: { code: defaultCode },
+          });
+          if (!campaign && defaultCode === 'DEFAULT') {
+            campaign = await prisma.crmCampaign.findFirst({
+              where: { code: 'DEFAULT' },
+            });
+          }
+          if (!campaign) throw err;
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    if (campaign.module !== module && campaign.code === defaultCode) {
+      campaign = await prisma.crmCampaign.update({
+        where: { id: campaign.id },
+        data: { module },
       });
-    } else if (!campaign.webhookToken) {
+    }
+
+    if (!campaign.webhookToken) {
       const webhookToken = crypto.randomBytes(12).toString('hex');
       campaign = await prisma.crmCampaign.update({
         where: { id: campaign.id },

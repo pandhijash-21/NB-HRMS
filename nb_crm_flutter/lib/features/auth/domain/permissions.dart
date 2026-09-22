@@ -391,21 +391,25 @@ class Permissions {
         const ['ADMIN', 'HR', 'HR_MANAGER'].contains(role.toUpperCase());
   }
 
-  static bool canReadSalary(PermissionMap? perms) {
+  static bool canReadSalary(PermissionMap? perms, [String? role]) {
+    if (isSuperAdmin(role)) return true;
     return hasPermission(perms, 'SALARY', 'READ') ||
         hasPermission(perms, 'PAYROLL', 'READ');
   }
 
-  static bool canWriteSalary(PermissionMap? perms) {
+  static bool canWriteSalary(PermissionMap? perms, [String? role]) {
+    if (isSuperAdmin(role)) return true;
     return hasPermission(perms, 'SALARY', 'WRITE') ||
         hasPermission(perms, 'PAYROLL', 'WRITE');
   }
 
-  static bool canReadDocuments(PermissionMap? perms) {
+  static bool canReadDocuments(PermissionMap? perms, [String? role]) {
+    if (isSuperAdmin(role)) return true;
     return hasPermission(perms, 'DOCUMENTS', 'READ');
   }
 
-  static bool canWriteDocuments(PermissionMap? perms) {
+  static bool canWriteDocuments(PermissionMap? perms, [String? role]) {
+    if (isSuperAdmin(role)) return true;
     return hasPermission(perms, 'DOCUMENTS', 'WRITE');
   }
 
@@ -421,7 +425,8 @@ class Permissions {
         hasPermission(perms, 'REIMBURSEMENTS', 'WRITE');
   }
 
-  static bool canWriteReimbursements(PermissionMap? perms) {
+  static bool canWriteReimbursements(PermissionMap? perms, [String? role]) {
+    if (isSuperAdmin(role)) return true;
     return hasPermission(perms, 'REIMBURSEMENTS', 'WRITE');
   }
 
@@ -493,9 +498,11 @@ class Permissions {
   }
 
   // ── CRM EXTENSIONS ─────────────────────────────────────────────────────────
+  /// Pre-sales nav uses CRM_PRE_SALES; DB module key is historically `CRM`.
   static bool canReadCrmPreSales(PermissionMap? perms, [String? role]) {
     if (isSuperAdmin(role)) return true;
-    return hasPermission(perms, 'CRM_PRE_SALES', 'READ');
+    return hasPermission(perms, 'CRM_PRE_SALES', 'READ') ||
+        hasPermission(perms, 'CRM', 'READ');
   }
 
   static bool canReadCrmPostSales(PermissionMap? perms, [String? role]) {
@@ -505,12 +512,96 @@ class Permissions {
 
   static bool canWriteCrmPreSales(PermissionMap? perms, [String? role]) {
     if (isSuperAdmin(role)) return true;
-    return hasPermission(perms, 'CRM_PRE_SALES', 'WRITE');
+    return hasPermission(perms, 'CRM_PRE_SALES', 'WRITE') ||
+        hasPermission(perms, 'CRM', 'WRITE');
   }
 
   static bool canWriteCrmPostSales(PermissionMap? perms, [String? role]) {
     if (isSuperAdmin(role)) return true;
     return hasPermission(perms, 'CRM_POST_SALES', 'WRITE');
+  }
+
+  // Profile tab-level access (HRMS › Profile dropdown in RBAC)
+  static bool canReadProfileGeneral(PermissionMap? perms, [String? role]) {
+    if (isSuperAdmin(role) || isAdmin(role)) return true;
+    return hasPermission(perms, 'PERSONAL_INFO', 'READ') ||
+        hasPermission(perms, 'PROFILE_GENERAL', 'READ');
+  }
+
+  static bool canWriteProfileGeneral(PermissionMap? perms, [String? role]) {
+    if (isSuperAdmin(role) || isAdmin(role)) return true;
+    return hasPermission(perms, 'PERSONAL_INFO', 'WRITE') ||
+        hasPermission(perms, 'PROFILE_GENERAL', 'WRITE');
+  }
+
+  static bool canReadProfilePersonal(PermissionMap? perms, [String? role]) {
+    if (isSuperAdmin(role) || isAdmin(role)) return true;
+    return hasPermission(perms, 'PROFILE_PERSONAL', 'READ') ||
+        hasPermission(perms, 'PERSONAL_INFO', 'READ');
+  }
+
+  static bool canWriteProfilePersonal(PermissionMap? perms, [String? role]) {
+    if (isSuperAdmin(role) || isAdmin(role)) return true;
+    return hasPermission(perms, 'PROFILE_PERSONAL', 'WRITE') ||
+        hasPermission(perms, 'PERSONAL_INFO', 'WRITE');
+  }
+
+  static bool canReadProfileAddress(PermissionMap? perms, [String? role]) {
+    if (isSuperAdmin(role) || isAdmin(role)) return true;
+    return hasPermission(perms, 'PROFILE_ADDRESS', 'READ') ||
+        hasPermission(perms, 'PERSONAL_INFO', 'READ');
+  }
+
+  static bool canWriteProfileAddress(PermissionMap? perms, [String? role]) {
+    if (isSuperAdmin(role) || isAdmin(role)) return true;
+    return hasPermission(perms, 'PROFILE_ADDRESS', 'WRITE') ||
+        hasPermission(perms, 'PERSONAL_INFO', 'WRITE');
+  }
+
+  static bool canReadProfileOther(PermissionMap? perms, [String? role]) {
+    if (isSuperAdmin(role) || isAdmin(role)) return true;
+    return hasPermission(perms, 'PROFILE_OTHER', 'READ') ||
+        hasPermission(perms, 'PERSONAL_INFO', 'READ');
+  }
+
+  static bool canWriteProfileOther(PermissionMap? perms, [String? role]) {
+    if (isSuperAdmin(role) || isAdmin(role)) return true;
+    return hasPermission(perms, 'PROFILE_OTHER', 'WRITE') ||
+        hasPermission(perms, 'PERSONAL_INFO', 'WRITE');
+  }
+
+  static bool canReadProfileFamily(PermissionMap? perms, [String? role]) {
+    if (isSuperAdmin(role) || isAdmin(role)) return true;
+    return hasPermission(perms, 'PROFILE_FAMILY', 'READ') ||
+        hasPermission(perms, 'PERSONAL_INFO', 'READ');
+  }
+
+  static bool canWriteProfileFamily(PermissionMap? perms, [String? role]) {
+    if (isSuperAdmin(role) || isAdmin(role)) return true;
+    return hasPermission(perms, 'PROFILE_FAMILY', 'WRITE') ||
+        hasPermission(perms, 'PERSONAL_INFO', 'WRITE');
+  }
+
+  static bool canReadProfileAttendance(PermissionMap? perms, [String? role]) {
+    if (isSuperAdmin(role) || isAdmin(role)) return true;
+    return hasPermission(perms, 'ATTENDANCE', 'READ') ||
+        hasPermission(perms, 'PROFILE_ATTENDANCE', 'READ');
+  }
+
+  /// True if the user may open the Profile sidebar at all.
+  static bool canOpenProfile(PermissionMap? perms, [String? role]) {
+    if (isSuperAdmin(role) || isAdmin(role)) return true;
+    return canReadProfileGeneral(perms, role) ||
+        canReadProfilePersonal(perms, role) ||
+        canReadProfileAddress(perms, role) ||
+        canReadProfileOther(perms, role) ||
+        canReadProfileFamily(perms, role) ||
+        canReadEducation(perms, role) ||
+        canReadExperience(perms, role) ||
+        canReadDocuments(perms, role) ||
+        canReadBank(perms, role) ||
+        canReadSalary(perms, role) ||
+        canReadProfileAttendance(perms, role);
   }
 
   // ── ERP EXTENSIONS ─────────────────────────────────────────────────────────

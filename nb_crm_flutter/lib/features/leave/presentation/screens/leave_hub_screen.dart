@@ -160,25 +160,27 @@ class _LeaveHubView extends StatelessWidget {
             const SizedBox(height: 24),
             Row(
               children: [
-                Expanded(
-                  child: SizedBox(
-                    height: 48,
-                    child: FilledButton.icon(
-                      onPressed: () => context.go('/leave/apply'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
-                        foregroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                if (Permissions.canWriteLeave(auth.permissions, auth.user?.role)) ...[
+                  Expanded(
+                    child: SizedBox(
+                      height: 48,
+                      child: FilledButton.icon(
+                        onPressed: () => context.go('/leave/apply'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+                          foregroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                         ),
-                        textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                        icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
+                        label: const Text('Apply Leave'),
                       ),
-                      icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
-                      label: const Text('Apply Leave'),
                     ),
                   ),
-                ),
-                const SizedBox(width: 16),
+                  const SizedBox(width: 16),
+                ],
                 Expanded(
                   child: SizedBox(
                     height: 48,

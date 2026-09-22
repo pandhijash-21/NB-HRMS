@@ -84,6 +84,13 @@ export const SYSTEM_SUBMODULES: SystemSubmoduleDef[] = [
     sortOrder: 1,
   },
   {
+    key: 'CRM_PRE_SALES',
+    name: 'CRM Pre-Sales (Nav)',
+    description: 'Same as Pre-Sales & Leads — used by mobile/web CRM navigation',
+    category: 'CRM',
+    sortOrder: 1,
+  },
+  {
     key: 'CRM_DASHBOARD',
     name: 'CRM Analytics Dashboard',
     description: 'Sales conversion KPIs, agent call stats, and lead volume analytics',
@@ -122,122 +129,164 @@ export const SYSTEM_SUBMODULES: SystemSubmoduleDef[] = [
   // ── HRMS MODULE ───────────────────────────────────────────────────────────
   {
     key: 'PERSONAL_INFO',
-    name: 'Personal Info & Workforce',
-    description: 'Employee directory, profile master data, and workforce visibility scope',
+    name: 'Profile › General & Workforce',
+    description: 'Profile General tab + employee directory / workforce visibility scope',
     category: 'HRMS',
     sortOrder: 1,
   },
   {
-    key: 'EDUCATION',
-    name: 'Education & Qualifications',
-    description: 'Academic records, qualifications, degrees, and certificates',
+    key: 'PROFILE_GENERAL',
+    name: 'Profile › General',
+    description: 'Profile General tab (identity, designation, org)',
     category: 'HRMS',
     sortOrder: 2,
   },
   {
-    key: 'EXPERIENCE',
-    name: 'Work Experience',
-    description: 'Previous employers, designations, and professional employment history',
+    key: 'PROFILE_PERSONAL',
+    name: 'Profile › Personal',
+    description: 'Profile Personal tab (DOB, gender, contacts)',
     category: 'HRMS',
     sortOrder: 3,
+  },
+  {
+    key: 'PROFILE_ADDRESS',
+    name: 'Profile › Address',
+    description: 'Profile Address tab (present / permanent address)',
+    category: 'HRMS',
+    sortOrder: 4,
+  },
+  {
+    key: 'PROFILE_OTHER',
+    name: 'Profile › Other',
+    description: 'Profile Other tab (extra personal fields)',
+    category: 'HRMS',
+    sortOrder: 5,
+  },
+  {
+    key: 'PROFILE_FAMILY',
+    name: 'Profile › Family',
+    description: 'Profile Family tab (dependents / emergency contacts)',
+    category: 'HRMS',
+    sortOrder: 6,
+  },
+  {
+    key: 'EDUCATION',
+    name: 'Profile › Academic',
+    description: 'Academic records, qualifications, degrees, and certificates',
+    category: 'HRMS',
+    sortOrder: 7,
+  },
+  {
+    key: 'EXPERIENCE',
+    name: 'Profile › Experience',
+    description: 'Previous employers, designations, and professional employment history',
+    category: 'HRMS',
+    sortOrder: 8,
+  },
+  {
+    key: 'DOCUMENTS',
+    name: 'Profile › Documents',
+    description: 'Employee documents, letters, and file uploads',
+    category: 'HRMS',
+    sortOrder: 9,
+  },
+  {
+    key: 'BANK_DETAILS',
+    name: 'Profile › Bank',
+    description: 'Bank account details for salary credit',
+    category: 'HRMS',
+    sortOrder: 10,
+  },
+  {
+    key: 'SALARY',
+    name: 'Profile › Salary',
+    description: 'Salary structures, pay commission templates, and payslips',
+    category: 'HRMS',
+    sortOrder: 11,
+  },
+  {
+    key: 'PROFILE_ATTENDANCE',
+    name: 'Profile › Attendance',
+    description: 'Attendance tab inside employee profile',
+    category: 'HRMS',
+    sortOrder: 12,
   },
   {
     key: 'LEAVE',
     name: 'Leave Management',
     description: 'Leave balances, applications, multi-level approvals, policies, and holiday calendar',
     category: 'HRMS',
-    sortOrder: 4,
+    sortOrder: 20,
   },
   {
     key: 'ATTENDANCE',
     name: 'Attendance Management',
     description: 'Daily check-in punches, live tracking, biometric sync, and attendance regularization',
     category: 'HRMS',
-    sortOrder: 5,
+    sortOrder: 21,
   },
   {
     key: 'PAYROLL',
     name: 'Payroll Processing',
     description: 'Monthly payroll generation, allowances, deductions, and salary disbursement',
     category: 'HRMS',
-    sortOrder: 6,
-  },
-  {
-    key: 'SALARY',
-    name: 'Salary Management',
-    description: 'Salary structures, 5th/6th pay commission templates, and payslips',
-    category: 'HRMS',
-    sortOrder: 7,
-  },
-  {
-    key: 'BANK_DETAILS',
-    name: 'Bank Details',
-    description: 'Employee banking info, account verification, and payment details',
-    category: 'HRMS',
-    sortOrder: 8,
-  },
-  {
-    key: 'DOCUMENTS',
-    name: 'Documents & Letters',
-    description: 'Document archive, appointment letters, experience certificates, and NDAs',
-    category: 'HRMS',
-    sortOrder: 9,
+    sortOrder: 22,
   },
   {
     key: 'REIMBURSEMENTS',
     name: 'Reimbursements',
     description: 'Employee expense claims, receipt attachments, approval workflow, and settlement',
     category: 'HRMS',
-    sortOrder: 10,
+    sortOrder: 23,
   },
   {
     key: 'RECRUITMENT',
     name: 'Recruitment & ATS',
     description: 'Job openings, applicant pipeline, candidate interview ratings, and offers',
     category: 'HRMS',
-    sortOrder: 11,
+    sortOrder: 24,
   },
   {
     key: 'REPORTS',
     name: 'Reports & Analytics',
     description: 'HR analytics, headcounts, and workforce reports',
     category: 'HRMS',
-    sortOrder: 12,
+    sortOrder: 25,
   },
   {
     key: 'USER_MGMT',
     name: 'User Management',
     description: 'System logins, credentials, and password resets',
     category: 'HRMS',
-    sortOrder: 13,
+    sortOrder: 26,
   },
   {
     key: 'ROLE_MGMT',
     name: 'Roles & Permission Matrix',
     description: 'Designation roles, permission matrix configuration, and access control levels',
     category: 'HRMS',
-    sortOrder: 14,
+    sortOrder: 27,
   },
   {
     key: 'FIELD_MGMT',
     name: 'Configurations & Lookups',
     description: 'Institutes, departments, designations, and dynamic dropdown options',
     category: 'HRMS',
-    sortOrder: 15,
+    sortOrder: 28,
   },
   {
     key: 'REPOSITORY',
     name: 'Company Repository',
     description: 'Shared company handbook, HR policies, code of conduct, and downloadable assets',
     category: 'HRMS',
-    sortOrder: 16,
+    sortOrder: 29,
   },
   {
     key: 'GOOGLE_EARTH',
     name: 'NB Earth',
     description: '3D globe property inventory, satellite map, price history, and Earth dashboard trends',
     category: 'HRMS',
-    sortOrder: 17,
+    sortOrder: 30,
   },
   {
     key: 'TASKS',
@@ -339,6 +388,72 @@ export async function ensureErpModulePermissions(): Promise<void> {
         },
       });
     }
+  }
+
+  // Mirror CRM → CRM_PRE_SALES so CRM nav works for roles already granted CRM.
+  try {
+    const crmRows = await prisma.rolePermission.findMany({ where: { moduleKey: 'CRM' } });
+    for (const row of crmRows) {
+      await prisma.rolePermission.upsert({
+        where: { roleId_moduleKey: { roleId: row.roleId, moduleKey: 'CRM_PRE_SALES' } },
+        create: {
+          roleId: row.roleId,
+          moduleKey: 'CRM_PRE_SALES',
+          canRead: row.canRead,
+          canWrite: row.canWrite,
+          canApprove: row.canApprove,
+          canDelete: row.canDelete,
+          canExport: row.canExport,
+          employeeViewScope: row.employeeViewScope,
+        },
+        update: {
+          canRead: row.canRead,
+          canWrite: row.canWrite,
+          canApprove: row.canApprove,
+          canDelete: row.canDelete,
+          canExport: row.canExport,
+        },
+      });
+    }
+  } catch {
+    // ignore mirror failures on fresh DBs
+  }
+
+  // Seed Profile tab modules for roles that already have PERSONAL_INFO READ
+  // so existing employees keep seeing their profile tabs until admins tighten RBAC.
+  try {
+    const profileTabKeys = [
+      'PROFILE_GENERAL',
+      'PROFILE_PERSONAL',
+      'PROFILE_ADDRESS',
+      'PROFILE_OTHER',
+      'PROFILE_FAMILY',
+      'PROFILE_ATTENDANCE',
+    ] as const;
+    const personalRows = await prisma.rolePermission.findMany({
+      where: { moduleKey: 'PERSONAL_INFO', canRead: true },
+    });
+    for (const row of personalRows) {
+      for (const key of profileTabKeys) {
+        const existing = await prisma.rolePermission.findUnique({
+          where: { roleId_moduleKey: { roleId: row.roleId, moduleKey: key } },
+        });
+        if (existing) continue;
+        await prisma.rolePermission.create({
+          data: {
+            roleId: row.roleId,
+            moduleKey: key,
+            canRead: row.canRead,
+            canWrite: row.canWrite,
+            canApprove: false,
+            canDelete: false,
+            canExport: false,
+          },
+        });
+      }
+    }
+  } catch {
+    // ignore
   }
 
   // ── Core Administrative & System Roles ─────────────────────────────────

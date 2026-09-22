@@ -241,6 +241,24 @@ class _HistoryDayCard extends StatelessWidget {
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (day.isHalfDay == true)
+                Container(
+                  margin: const EdgeInsets.only(right: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.deepOrange.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.deepOrange),
+                  ),
+                  child: const Text(
+                    'HALF DAY',
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.deepOrange,
+                    ),
+                  ),
+                ),
               if (day.isLate == true)
                 Container(
                   margin: const EdgeInsets.only(right: 8),
@@ -270,7 +288,11 @@ class _HistoryDayCard extends StatelessWidget {
           ),
           children: [
             ...day.punches.map(
-              (p) => ListTile(
+              (p) {
+                final isFirstIn = day.isLate == true &&
+                    day.firstIn != null &&
+                    p.punchAt == day.firstIn;
+                return ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(
                   Icons.fingerprint_rounded,
@@ -278,9 +300,32 @@ class _HistoryDayCard extends StatelessWidget {
                       ? const Color(0xFFC5A059)
                       : Colors.green,
                 ),
-                title: Text(
-                  '${formatIsoTime(p.punchAt)} IST',
-                  style: const TextStyle(fontWeight: FontWeight.w700),
+                title: Row(
+                  children: [
+                    Text(
+                      '${formatIsoTime(p.punchAt)} IST',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    if (isFirstIn) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.orange),
+                        ),
+                        child: const Text(
+                          'LATE',
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.orange,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
                 subtitle: Builder(
                   builder: (context) {
@@ -325,7 +370,8 @@ class _HistoryDayCard extends StatelessWidget {
                       icon: const Icon(Icons.edit_outlined, size: 18),
                       onPressed: () => onEdit(p),
                     ),
-              ),
+              );
+              },
             ),
             Align(
               alignment: Alignment.centerLeft,

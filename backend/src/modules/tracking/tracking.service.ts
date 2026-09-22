@@ -22,6 +22,11 @@ export interface LiveLocation {
   tripId?: string | null;
   /** ISO time when the employee last started being stationary on the current trip */
   stoppedSince?: string | null;
+  /** Last known geofence membership (for leave → start trip edge detection) */
+  geofenceInside?: boolean;
+  lastInsideGeofenceId?: string | null;
+  outsideStreak?: number;
+  insideStreak?: number;
 }
 
 function getDistanceFromLatLonInKm(lat1: number, lon1: number, lat2: number, lon2: number) {
@@ -48,7 +53,71 @@ type TripRow = {
   endTime: Date | null;
 };
 
-/** Close a trip: distance, optional OSRM geometry, hub stats. */
+const ROUTE_DISPLAY_MAX_POINTS = 300;
+
+function downsamplePoints<T>(points: T[], maxPoints: number): T[] {
+  if (points.length <= maxPoints) return points;
+  if (maxPoints < 2) return points.slice(0, maxPoints);
+  const last = points.length - 1;
+  const out: T[] = [];
+  for (let i = 0; i < maxPoints; i++) {
+    const idx = Math.round((i * last) / (maxPoints - 1));
+    out.push(points[idx]!);
+  }
+  return out;
+}
+
+function haversineDistanceKm(
+  points: Array<{ latitude: number; longitude: number }>,
+): number {
+  let total = 0;
+  for (let i = 1; i < points.length; i++) {
+    total += getDistanceFromLatLonInKm(
+      points[i - 1]!.latitude,
+      points[i - 1]!.longitude,
+      points[i]!.latitude,
+      points[i]!.longitude,
+    );
+  }
+  return total;
+}
+
+/** Best-effort OSRM snap after the trip is already closed (non-blocking). */
+async function enrichTripGeometry(tripId: string) {
+  const tripPoints = await prisma.locationHistory.findMany({
+    where: { tripId },
+    orderBy: { timestamp: 'asc' },
+    select: { latitude: true, longitude: true },
+  });
+  if (tripPoints.length < 2) return;
+
+  let samplePoints = tripPoints;
+  if (tripPoints.length > 100) {
+    const step = tripPoints.length / 100;
+    samplePoints = Array.from({ length: 100 }, (_, i) => tripPoints[Math.floor(i * step)]!);
+  }
+
+  try {
+    const coordinates = samplePoints.map((p) => `${p.longitude},${p.latitude}`).join(';');
+    const osrmUrl = `https://router.project-osrm.org/match/v1/driving/${coordinates}?geometries=geojson&overview=full`;
+    const res = await fetch(osrmUrl);
+    const osrmData = await res.json();
+    if (osrmData.code === 'Ok' && osrmData.matchings?.length > 0) {
+      const bestMatch = osrmData.matchings[0];
+      await prisma.trip.update({
+        where: { id: tripId },
+        data: {
+          distanceKm: bestMatch.distance / 1000.0,
+          routeGeometry: JSON.stringify(bestMatch.geometry),
+        },
+      });
+    }
+  } catch (err) {
+    console.error('[tracking] OSRM enrich failed', err);
+  }
+}
+
+/** Close a trip quickly (haversine + stats); OSRM runs in the background. */
 async function finalizeTrip(
   trip: TripRow,
   tip: {
@@ -58,33 +127,33 @@ async function finalizeTrip(
     endLocationId: string | null;
   },
 ) {
+  // Keep the enter/punch-out tip on the trip so the route is complete.
+  try {
+    await prisma.locationHistory.create({
+      data: {
+        employeeId: trip.employeeId,
+        latitude: tip.latitude,
+        longitude: tip.longitude,
+        heading: tip.heading,
+        tripId: trip.id,
+      },
+    });
+  } catch (err) {
+    console.error('[tracking] tip point save failed', err);
+  }
+
   const tripPoints = await prisma.locationHistory.findMany({
     where: { tripId: trip.id },
     orderBy: { timestamp: 'asc' },
+    select: { latitude: true, longitude: true, timestamp: true },
   });
 
-  const allPoints = [
-    ...tripPoints,
-    {
-      id: 'temp',
-      employeeId: trip.employeeId,
-      latitude: tip.latitude,
-      longitude: tip.longitude,
-      heading: tip.heading,
-      timestamp: new Date(),
-      tripId: trip.id,
-    },
-  ];
-
-  let totalDistanceKm = 0;
-  let routeGeometry: string | null = null;
   let activeTime = 0;
   let idleTime = 0;
-
-  let windowStartPoint = allPoints[0];
+  let windowStartPoint = tripPoints[0];
   if (windowStartPoint) {
-    for (let i = 1; i < allPoints.length; i++) {
-      const p = allPoints[i]!;
+    for (let i = 1; i < tripPoints.length; i++) {
+      const p = tripPoints[i]!;
       const timeDiffSec =
         (new Date(p.timestamp).getTime() - new Date(windowStartPoint.timestamp).getTime()) /
         1000;
@@ -94,7 +163,6 @@ async function finalizeTrip(
         p.latitude,
         p.longitude,
       );
-
       if (timeDiffSec >= 180) {
         if (distKm < 0.02) idleTime += timeDiffSec;
         else activeTime += timeDiffSec;
@@ -103,36 +171,7 @@ async function finalizeTrip(
     }
   }
 
-  if (allPoints.length >= 2) {
-    try {
-      let samplePoints = allPoints;
-      if (allPoints.length > 100) {
-        const step = allPoints.length / 100;
-        samplePoints = Array.from({ length: 100 }, (_, i) => allPoints[Math.floor(i * step)]!);
-      }
-      const coordinates = samplePoints.map((p) => `${p.longitude},${p.latitude}`).join(';');
-      const osrmUrl = `https://router.project-osrm.org/match/v1/driving/${coordinates}?geometries=geojson&overview=full`;
-      const res = await fetch(osrmUrl);
-      const osrmData = await res.json();
-      if (osrmData.code === 'Ok' && osrmData.matchings?.length > 0) {
-        const bestMatch = osrmData.matchings[0];
-        totalDistanceKm = bestMatch.distance / 1000.0;
-        routeGeometry = JSON.stringify(bestMatch.geometry);
-      }
-    } catch (err) {
-      console.error('OSRM match failed on backend', err);
-    }
-    if (totalDistanceKm <= 0) {
-      for (let i = 1; i < allPoints.length; i++) {
-        totalDistanceKm += getDistanceFromLatLonInKm(
-          allPoints[i - 1]!.latitude,
-          allPoints[i - 1]!.longitude,
-          allPoints[i]!.latitude,
-          allPoints[i]!.longitude,
-        );
-      }
-    }
-  }
+  const totalDistanceKm = haversineDistanceKm(tripPoints);
 
   let gapCount = 0;
   let totalGapDuration = 0;
@@ -160,7 +199,6 @@ async function finalizeTrip(
       endTime: new Date(),
       distanceKm: totalDistanceKm,
       endLocationId: tip.endLocationId,
-      routeGeometry,
       activeTime: Math.round(activeTime),
       idleTime: Math.round(idleTime),
       trackingUptimePercent,
@@ -168,6 +206,9 @@ async function finalizeTrip(
       totalGapDuration: Math.round(totalGapDuration),
     },
   });
+
+  // Do not block live pings / geofence enter on public OSRM.
+  void enrichTripGeometry(trip.id);
 }
 
 export const trackingService = {
@@ -267,7 +308,7 @@ export const trackingService = {
     });
     currentTripId = activeTrip?.id || null;
 
-    // Punch-out while a trip is open â†’ end & save the trip (so it shows in Trips / Hub).
+    // Punch-out while a trip is open → end & save the trip (so it shows in Trips / Hub).
     if (!isPunchedIn && activeTrip) {
       try {
         await finalizeTrip(activeTrip, {
@@ -290,99 +331,94 @@ export const trackingService = {
       currentTripId = null;
     }
 
-    if (isPunchedIn) {
-        const activeLocs = await prisma.attendanceLocation.findMany({
-          where: { isActive: true }
-        });
-        
-        if (activeLocs.length > 0) {
-          let insideAny = false;
-          let enteredGeofenceId: string | null = null;
-          for (const loc of activeLocs) {
-          if (loc) {
-            const dist = getDistanceFromLatLonInKm(params.latitude, params.longitude, loc.latitude, loc.longitude);
-            if (dist <= loc.radiusKm) {
-              insideAny = true;
-              enteredGeofenceId = loc.id;
-              break;
-            }
-          }
-        }
-        isOutsideGeofence = !insideAny;
+    const activeLocs = await prisma.attendanceLocation.findMany({
+      where: { isActive: true },
+    });
 
-        // Start a trip whenever punched-in + outside + no open trip
-        if (isOutsideGeofence && !currentTripId) {
-          try {
-            const newTrip = await prisma.trip.create({
-              data: {
-                employeeId: params.employeeId,
-                // Outside → no current geofence id (do not use enteredGeofenceId).
-                startLocationId: null,
-              },
-            });
-            currentTripId = newTrip.id;
-            console.log(`[tracking] trip started ${currentTripId} for employee ${params.employeeId}`);
-          } catch (err) {
-            console.error('[tracking] trip.create failed', err);
-          }
-        } else if (!isOutsideGeofence && currentTripId) {
-          // Employee re-entered a geofence â†’ end & save trip
-          const tripToEnd =
-            activeTrip && activeTrip.id === currentTripId
-              ? activeTrip
-              : await prisma.trip.findUnique({ where: { id: currentTripId } });
-          if (tripToEnd && !tripToEnd.endTime) {
-            try {
-              await finalizeTrip(tripToEnd, {
-                latitude: params.latitude,
-                longitude: params.longitude,
-                heading: params.heading,
-                endLocationId: enteredGeofenceId,
-              });
-              console.log(`[tracking] trip ended ${tripToEnd.id} for employee ${params.employeeId}`);
-            } catch (err) {
-              console.error('[tracking] failed to finalize trip on geofence enter', err);
-              try {
-                await prisma.trip.update({
-                  where: { id: tripToEnd.id },
-                  data: { endTime: new Date(), endLocationId: enteredGeofenceId },
-                });
-              } catch (e2) {
-                console.error('[tracking] failed hard-end trip', e2);
-              }
-            }
-          }
-          currentTripId = null;
-        }
+    const wasInside = empInfo.geofenceInside === true;
+    const lastInsideGeofenceId = empInfo.lastInsideGeofenceId ?? null;
+    let outsideStreak = Number(empInfo.outsideStreak || 0);
+    let insideStreak = Number(empInfo.insideStreak || 0);
 
-        // Store history with tripId (only while trip is open)
+    if (activeLocs.length > 0) {
+      let insideAny = false;
+      let enteredGeofenceId: string | null = null;
+      for (const loc of activeLocs) {
+        const dist = getDistanceFromLatLonInKm(
+          params.latitude,
+          params.longitude,
+          loc.latitude,
+          loc.longitude,
+        );
+        if (dist <= loc.radiusKm) {
+          insideAny = true;
+          enteredGeofenceId = loc.id;
+          break;
+        }
+      }
+      isOutsideGeofence = !insideAny;
+
+      if (insideAny) {
+        insideStreak += 1;
+        outsideStreak = 0;
+      } else {
+        outsideStreak += 1;
+        insideStreak = 0;
+      }
+
+      // Leave any geofence → start trip (edge: was inside on prior ping, or punched-in outside).
+      // Requires 2 consecutive outside pings to avoid GPS flicker.
+      // Do not use lastInsideGeofenceId alone — that would restart a trip right after punch-out.
+      const mayStartTrip = wasInside || isPunchedIn;
+      if (isOutsideGeofence && !currentTripId && mayStartTrip && outsideStreak >= 2) {
         try {
-          await prisma.locationHistory.create({
+          const newTrip = await prisma.trip.create({
             data: {
               employeeId: params.employeeId,
+              startLocationId: lastInsideGeofenceId,
+            },
+          });
+          currentTripId = newTrip.id;
+          console.log(
+            `[tracking] trip started ${currentTripId} for employee ${params.employeeId} (left geofence)`,
+          );
+        } catch (err) {
+          console.error('[tracking] trip.create failed', err);
+        }
+      } else if (!isOutsideGeofence && currentTripId && insideStreak >= 2) {
+        // Enter any geofence → complete trip
+        const tripToEnd =
+          activeTrip && activeTrip.id === currentTripId
+            ? activeTrip
+            : await prisma.trip.findUnique({ where: { id: currentTripId } });
+        if (tripToEnd && !tripToEnd.endTime) {
+          try {
+            await finalizeTrip(tripToEnd, {
               latitude: params.latitude,
               longitude: params.longitude,
               heading: params.heading,
-              tripId: currentTripId
-            }
-          });
-        } catch (err) {
-          console.error('[tracking] locationHistory.create failed', err);
-        }
-      } else {
-        // No geofences configured â€” still track trips while punched in (field mode)
-        isOutsideGeofence = true;
-        if (!currentTripId) {
-          try {
-            const newTrip = await prisma.trip.create({
-              data: { employeeId: params.employeeId },
+              endLocationId: enteredGeofenceId,
             });
-            currentTripId = newTrip.id;
-            console.log(`[tracking] field-mode trip started ${currentTripId}`);
+            console.log(
+              `[tracking] trip ended ${tripToEnd.id} for employee ${params.employeeId} (entered geofence)`,
+            );
           } catch (err) {
-            console.error('[tracking] field-mode trip.create failed', err);
+            console.error('[tracking] failed to finalize trip on geofence enter', err);
+            try {
+              await prisma.trip.update({
+                where: { id: tripToEnd.id },
+                data: { endTime: new Date(), endLocationId: enteredGeofenceId },
+              });
+            } catch (e2) {
+              console.error('[tracking] failed hard-end trip', e2);
+            }
           }
         }
+        currentTripId = null;
+      }
+
+      // Record GPS on the open trip (and while punched-in for trail continuity).
+      if (currentTripId || isPunchedIn) {
         try {
           await prisma.locationHistory.create({
             data: {
@@ -397,6 +433,47 @@ export const trackingService = {
           console.error('[tracking] locationHistory.create failed', err);
         }
       }
+
+      empInfo.geofenceInside = insideAny;
+      if (insideAny && enteredGeofenceId) {
+        empInfo.lastInsideGeofenceId = enteredGeofenceId;
+      }
+      empInfo.outsideStreak = outsideStreak;
+      empInfo.insideStreak = insideStreak;
+    } else if (isPunchedIn) {
+      // No geofences configured — still track trips while punched in (field mode)
+      isOutsideGeofence = true;
+      if (!currentTripId) {
+        try {
+          const newTrip = await prisma.trip.create({
+            data: { employeeId: params.employeeId },
+          });
+          currentTripId = newTrip.id;
+          console.log(`[tracking] field-mode trip started ${currentTripId}`);
+        } catch (err) {
+          console.error('[tracking] field-mode trip.create failed', err);
+        }
+      }
+      try {
+        await prisma.locationHistory.create({
+          data: {
+            employeeId: params.employeeId,
+            latitude: params.latitude,
+            longitude: params.longitude,
+            heading: params.heading,
+            tripId: currentTripId,
+          },
+        });
+      } catch (err) {
+        console.error('[tracking] locationHistory.create failed', err);
+      }
+      empInfo.geofenceInside = false;
+      empInfo.outsideStreak = 0;
+      empInfo.insideStreak = 0;
+    } else {
+      // Logged in but no active geofences and not punched in — keep membership flags warm.
+      empInfo.outsideStreak = outsideStreak;
+      empInfo.insideStreak = insideStreak;
     }
 
     empInfo.isPunchedIn = isPunchedIn;
@@ -572,39 +649,118 @@ export const trackingService = {
   async getAllTrips(employeeId?: number) {
     return prisma.trip.findMany({
       where: employeeId ? { employeeId } : undefined,
-      include: {
+      // Omit routeGeometry — large Text blob unused by list UIs and freezes the Trips screen.
+      select: {
+        id: true,
+        employeeId: true,
+        startLocationId: true,
+        endLocationId: true,
+        startTime: true,
+        endTime: true,
+        distanceKm: true,
+        activeTime: true,
+        idleTime: true,
+        trackingUptimePercent: true,
+        gapCount: true,
+        totalGapDuration: true,
         employee: {
           select: {
             id: true,
-            generalInfo: { select: { fullName: true, employeeCode: true, designation: true } }
-          }
-        }
+            generalInfo: {
+              select: { fullName: true, employeeCode: true, designation: true },
+            },
+          },
+        },
       },
-      orderBy: { startTime: 'desc' }
+      orderBy: { startTime: 'desc' },
     });
   },
 
-  async getTripRoute(tripId: string) {
+  async getTripRoute(tripId: string, opts?: { maxPoints?: number; preferGeometry?: boolean }) {
+    const maxPoints = opts?.maxPoints ?? ROUTE_DISPLAY_MAX_POINTS;
+    const preferGeometry = opts?.preferGeometry !== false;
+
     const trip = await prisma.trip.findUnique({
       where: { id: tripId },
-      include: {
+      select: {
+        id: true,
+        employeeId: true,
+        startLocationId: true,
+        endLocationId: true,
+        startTime: true,
+        endTime: true,
+        distanceKm: true,
+        routeGeometry: true,
+        activeTime: true,
+        idleTime: true,
+        trackingUptimePercent: true,
+        gapCount: true,
+        totalGapDuration: true,
         employee: {
           select: {
             photoUrl: true,
             generalInfo: { select: { fullName: true } },
           },
         },
-      }
+      },
     });
     if (!trip) throw new Error('Trip not found');
 
-    const route = await prisma.locationHistory.findMany({
+    const rawRoute = await prisma.locationHistory.findMany({
       where: { tripId },
       orderBy: { timestamp: 'asc' },
-      select: { latitude: true, longitude: true, heading: true, timestamp: true }
+      select: { latitude: true, longitude: true, heading: true, timestamp: true },
     });
 
-    return { trip, route };
+    type RoutePt = {
+      latitude: number;
+      longitude: number;
+      heading: number | null;
+      timestamp: Date | string;
+    };
+
+    let route: RoutePt[] = rawRoute;
+
+    // Prefer stored snapped geometry when present (far fewer points, already road-matched).
+    if (preferGeometry && trip.routeGeometry) {
+      try {
+        const geo = JSON.parse(trip.routeGeometry) as {
+          type?: string;
+          coordinates?: [number, number][];
+        };
+        if (geo?.type === 'LineString' && Array.isArray(geo.coordinates) && geo.coordinates.length > 1) {
+          const n = geo.coordinates.length;
+          route = geo.coordinates.map(([lng, lat], i) => {
+            const rawIdx =
+              rawRoute.length <= 1
+                ? 0
+                : Math.min(
+                    rawRoute.length - 1,
+                    Math.round((i * (rawRoute.length - 1)) / Math.max(1, n - 1)),
+                  );
+            const raw = rawRoute[rawIdx];
+            return {
+              latitude: lat,
+              longitude: lng,
+              heading: raw?.heading ?? null,
+              timestamp: raw?.timestamp ?? trip.startTime,
+            };
+          });
+        }
+      } catch {
+        /* keep rawRoute */
+      }
+    }
+
+    const displayRoute =
+      maxPoints > 0 ? downsamplePoints(route, maxPoints) : route;
+    const { routeGeometry: _omitGeom, ...tripSafe } = trip;
+
+    return {
+      trip: tripSafe,
+      route: displayRoute,
+      pointCount: rawRoute.length,
+    };
   },
 
   async getHubKPIs(employeeId?: number) {
@@ -857,7 +1013,10 @@ export const trackingService = {
   },
 
   async exportTripRecording(tripId: string, format: 'gpx' | 'csv' | 'json') {
-    const { trip, route } = await this.getTripRoute(tripId);
+    const { trip, route } = await this.getTripRoute(tripId, {
+      maxPoints: 0,
+      preferGeometry: false,
+    });
     const name = trip.employee?.generalInfo?.fullName ?? `employee-${trip.employeeId}`;
     const safe = name.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 40);
     const start = new Date(trip.startTime).toISOString().slice(0, 10);

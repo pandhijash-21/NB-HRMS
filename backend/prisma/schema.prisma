@@ -922,6 +922,9 @@ model AttendancePolicy {
   /// How many days/month an employee may arrive within the punch-in buffer without half-day.
   /// After this quota, even in-buffer late arrivals are half-day. Outside buffer is always half-day.
   maxBufferDaysPerMonth   Int      @default(2) @map("max_buffer_days_per_month")
+  /// Half-day sessions: [{ "punchIn": "10:00", "punchOut": "14:30" }, ...]
+  /// If first-in and last-out fall entirely inside one window → half day.
+  halfDayWindows          Json     @default("[]") @map("half_day_windows")
   updatedBy               String?  @map("updated_by")
   updatedAt               DateTime @updatedAt @map("updated_at")
 
@@ -1653,6 +1656,10 @@ model ReimbursementClaim {
   openingKm   Float?  @map("opening_km")
   closingKm   Float?  @map("closing_km")
   proofUrl    String? @map("proof_url")
+  /// Odometer / meter photo at trip start
+  openingKmPhotoUrl String? @map("opening_km_photo_url")
+  /// Odometer / meter photo at trip end
+  closingKmPhotoUrl String? @map("closing_km_photo_url")
 
   status ReimbursementStatus @default(PENDING)
 
@@ -1832,6 +1839,7 @@ model LocationHistory {
   trip     Trip?    @relation(fields: [tripId], references: [id])
 
   @@index([employeeId, timestamp])
+  @@index([tripId, timestamp])
   @@map("location_history")
 }
 

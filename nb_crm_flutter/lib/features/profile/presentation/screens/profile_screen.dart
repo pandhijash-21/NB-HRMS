@@ -68,10 +68,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     }
     final profileAsyncVal = ref.watch(profileProvider);
 
-    final userScope =
-        authState.permissions['PERSONAL_INFO']?.contains('WRITE') == true;
+    final role = authState.user?.role;
+    final perms = authState.permissions;
+    final canWriteAnyProfileTab =
+        Permissions.canWriteProfileGeneral(perms, role) ||
+        Permissions.canWriteProfilePersonal(perms, role) ||
+        Permissions.canWriteProfileAddress(perms, role) ||
+        Permissions.canWriteProfileOther(perms, role) ||
+        Permissions.canWriteProfileFamily(perms, role) ||
+        Permissions.hasPermission(perms, 'EDUCATION', 'WRITE') ||
+        Permissions.hasPermission(perms, 'EXPERIENCE', 'WRITE') ||
+        Permissions.hasPermission(perms, 'DOCUMENTS', 'WRITE') ||
+        Permissions.hasPermission(perms, 'BANK_DETAILS', 'WRITE') ||
+        Permissions.hasPermission(perms, 'SALARY', 'WRITE') ||
+        Permissions.hasPermission(perms, 'PERSONAL_INFO', 'WRITE');
     final isOwnProfile = authState.user?.employeeId == empId;
-    final canEdit = isOwnProfile || userScope;
+    final canEdit = canWriteAnyProfileTab && (isOwnProfile || Permissions.hasPermission(perms, 'PERSONAL_INFO', 'WRITE'));
 
     final canManageLetters =
         Permissions.canManageLetters(
@@ -184,6 +196,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           },
           child: Builder(
             builder: (context) {
+              final canReadGeneral = Permissions.canReadProfileGeneral(
+                authState.permissions, authState.user?.role);
+              final canReadPersonal = Permissions.canReadProfilePersonal(
+                authState.permissions, authState.user?.role);
+              final canReadAddress = Permissions.canReadProfileAddress(
+                authState.permissions, authState.user?.role);
+              final canReadOther = Permissions.canReadProfileOther(
+                authState.permissions, authState.user?.role);
+              final canReadFamily = Permissions.canReadProfileFamily(
+                authState.permissions, authState.user?.role);
               final canReadBank = Permissions.isAdmin(authState.user?.role) ||
                   Permissions.canReadBank(authState.permissions, authState.user?.role);
               final canReadAcademic = Permissions.isAdmin(authState.user?.role) ||
@@ -194,13 +216,20 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                   Permissions.canReadSalary(authState.permissions);
               final canReadDocs = Permissions.isAdmin(authState.user?.role) ||
                   Permissions.canReadDocuments(authState.permissions);
+              final canReadAttendanceTab = Permissions.canReadProfileAttendance(
+                authState.permissions, authState.user?.role);
 
               final tabItems = <(String, Widget)>[
-                ('General', GeneralViewTab(profile: profile)),
-                ('Personal', PersonalViewTab(profile: profile)),
-                ('Address', AddressViewTab(profile: profile)),
-                ('Other', OtherViewTab(profile: profile)),
-                ('Family', FamilyViewTab(profile: profile)),
+                if (canReadGeneral)
+                  ('General', GeneralViewTab(profile: profile)),
+                if (canReadPersonal)
+                  ('Personal', PersonalViewTab(profile: profile)),
+                if (canReadAddress)
+                  ('Address', AddressViewTab(profile: profile)),
+                if (canReadOther)
+                  ('Other', OtherViewTab(profile: profile)),
+                if (canReadFamily)
+                  ('Family', FamilyViewTab(profile: profile)),
                 if (canReadAcademic)
                   ('Academic', AcademicViewTab(profile: profile)),
                 if (canReadExperience)
@@ -211,8 +240,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                   ('Bank', BankViewTab(profile: profile)),
                 if (canReadSalary)
                   ('Salary', SalaryViewTab(profile: profile)),
-                ('Attendance', EmployeeAttendanceTab(employeeId: profile.id, canManageSettings: canManageAttendanceSettings)),
+                if (canReadAttendanceTab)
+                  ('Attendance', EmployeeAttendanceTab(employeeId: profile.id, canManageSettings: canManageAttendanceSettings)),
               ];
+              if (tabItems.isEmpty) {
+                return const Center(
+                  child: Text('No profile tabs are enabled for your role.'),
+                );
+              }
               _syncTabController(tabItems.length);
               final tabController = _tabController!;
 

@@ -875,18 +875,14 @@ export const salaryService = {
     const hasReimbursementCol = columnDefinitions.some(
       (d) => d.columnIdentifier === 'reimbursement' && d.category === 'EARNING',
     );
-    const reimbColId = hasReimbursementCol ? 'reimbursement' : 'other_allowance';
-    if (reimbursementTotal > 0 || hasReimbursementCol) {
-      if (hasReimbursementCol) {
-        mergedOverrides[columnKey(reimbColId, 'EARNING')] = reimbursementTotal;
-        mergedOverrides[reimbColId] = reimbursementTotal;
-      } else if (reimbursementTotal > 0) {
-        const profileBase = Number(
-          profileOverrides[columnKey(reimbColId, 'EARNING')] ?? profileOverrides[reimbColId] ?? 0,
-        );
-        mergedOverrides[columnKey(reimbColId, 'EARNING')] = profileBase + reimbursementTotal;
-        mergedOverrides[reimbColId] = profileBase + reimbursementTotal;
-      }
+    if (!hasReimbursementCol && reimbursementTotal > 0) {
+      throw new Error(
+        'Salary structure is missing the mandatory Reimbursement earning field.',
+      );
+    }
+    if (hasReimbursementCol) {
+      mergedOverrides[columnKey('reimbursement', 'EARNING')] = reimbursementTotal;
+      mergedOverrides.reimbursement = reimbursementTotal;
     }
 
     let computed = await this.computePreview(template.id, mergedOverrides, { employeeId });

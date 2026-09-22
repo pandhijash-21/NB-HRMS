@@ -220,8 +220,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final modules = <_ModuleCardData>[
       if (Permissions.canReadOrgTree(auth.permissions, auth.user?.role))
         const _ModuleCardData(
-          title: 'Employee tree',
-          subtitle: 'Org chart, leads, and who to contact',
+          title: 'Org Chart',
+          subtitle: 'Hierarchy, leads, and who to contact',
           icon: Icons.account_tree_rounded,
           route: '/org-tree',
           enabled: true,
@@ -231,7 +231,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       if (Permissions.canReadTasks(auth.permissions, auth.user?.role))
         const _ModuleCardData(
           title: 'Tasks',
-          subtitle: 'Assign work, track progress, review & Gantt',
+          subtitle: 'Assignments, subtasks, deadlines & Gantt',
           icon: Icons.task_alt_rounded,
           route: '/tasks',
           enabled: true,
@@ -257,26 +257,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           enabled: true,
           category: ModuleCategory.mySpace,
           color: Color(0xFF0f766e),
-        ),
-      if (Permissions.canReadTasks(auth.permissions, auth.user?.role))
-        const _ModuleCardData(
-          title: 'Tasks',
-          subtitle: 'Assignments, subtasks, deadlines & Gantt',
-          icon: Icons.task_alt_rounded,
-          route: '/tasks',
-          enabled: true,
-          category: ModuleCategory.mySpace,
-          color: Color(0xFF0284c7),
-        ),
-      if (Permissions.canReadOrgTree(auth.permissions, auth.user?.role))
-        const _ModuleCardData(
-          title: 'Org Chart',
-          subtitle: 'Hierarchy & reporting structure',
-          icon: Icons.account_tree_rounded,
-          route: '/org-tree',
-          enabled: true,
-          category: ModuleCategory.mySpace,
-          color: Color(0xFF059669),
         ),
       if (Permissions.canReadLeave(auth.permissions, auth.user?.role) ||
           Permissions.canWriteLeave(auth.permissions, auth.user?.role) ||

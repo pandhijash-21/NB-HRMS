@@ -67,6 +67,8 @@ class ReimbursementClaim {
     this.openingKm,
     this.closingKm,
     this.proofUrl,
+    this.openingKmPhotoUrl,
+    this.closingKmPhotoUrl,
     required this.status,
     this.salaryMonth,
     this.salaryYear,
@@ -87,6 +89,8 @@ class ReimbursementClaim {
   final double? openingKm;
   final double? closingKm;
   final String? proofUrl;
+  final String? openingKmPhotoUrl;
+  final String? closingKmPhotoUrl;
   final ReimbursementStatus status;
   final int? salaryMonth;
   final int? salaryYear;
@@ -117,6 +121,8 @@ class ReimbursementClaim {
       openingKm: json['openingKm'] != null ? (json['openingKm'] as num).toDouble() : null,
       closingKm: json['closingKm'] != null ? (json['closingKm'] as num).toDouble() : null,
       proofUrl: json['proofUrl'] as String?,
+      openingKmPhotoUrl: json['openingKmPhotoUrl'] as String?,
+      closingKmPhotoUrl: json['closingKmPhotoUrl'] as String?,
       status: ReimbursementStatus.fromString(json['status'] as String?),
       salaryMonth: json['salaryMonth'] as int?,
       salaryYear: json['salaryYear'] as int?,

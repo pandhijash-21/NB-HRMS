@@ -106,26 +106,50 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen>
         Permissions.canReadSalary(authState.permissions);
     final canReadDocs = Permissions.isAdmin(authState.user?.role) ||
         Permissions.canReadDocuments(authState.permissions);
+    final canWriteGeneral = Permissions.canWriteProfileGeneral(authState.permissions, authState.user?.role);
+    final canWritePersonal = Permissions.canWriteProfilePersonal(authState.permissions, authState.user?.role);
+    final canWriteAddress = Permissions.canWriteProfileAddress(authState.permissions, authState.user?.role);
+    final canWriteOther = Permissions.canWriteProfileOther(authState.permissions, authState.user?.role);
+    final canWriteFamily = Permissions.canWriteProfileFamily(authState.permissions, authState.user?.role);
+    final canWriteAcademic = Permissions.hasPermission(authState.permissions, 'EDUCATION', 'WRITE') ||
+        Permissions.isAdmin(authState.user?.role);
+    final canWriteExperience = Permissions.hasPermission(authState.permissions, 'EXPERIENCE', 'WRITE') ||
+        Permissions.isAdmin(authState.user?.role);
+    final canWriteDocs = Permissions.hasPermission(authState.permissions, 'DOCUMENTS', 'WRITE') ||
+        Permissions.isAdmin(authState.user?.role);
+    final canWriteBank = Permissions.hasPermission(authState.permissions, 'BANK_DETAILS', 'WRITE') ||
+        Permissions.isAdmin(authState.user?.role);
+    final canWriteSalary = Permissions.hasPermission(authState.permissions, 'SALARY', 'WRITE') ||
+        Permissions.hasPermission(authState.permissions, 'PAYROLL', 'WRITE') ||
+        Permissions.isAdmin(authState.user?.role);
+    final canWriteAttendanceTab = Permissions.hasPermission(authState.permissions, 'ATTENDANCE', 'WRITE') ||
+        Permissions.hasPermission(authState.permissions, 'PROFILE_ATTENDANCE', 'WRITE') ||
+        isAdminEditingEmployee;
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return profileAsyncVal.when(
       data: (profile) {
         final tabItems = <(String, Widget)>[
-          ('General', EditGeneralTab(profile: profile, isPrivileged: isPrivileged)),
-          ('Personal', EditPersonalTab(profile: profile, isPrivileged: isPrivileged)),
-          ('Address', EditAddressTab(
-            key: ValueKey('edit-address-${profile.id}'),
-            profile: profile,
-            isPrivileged: isPrivileged,
-          )),
-          ('Other', EditOtherTab(profile: profile, isPrivileged: isPrivileged)),
-          ('Family', EditFamilyTab(profile: profile)),
-          if (canReadAcademic)
+          if (canWriteGeneral)
+            ('General', EditGeneralTab(profile: profile, isPrivileged: isPrivileged)),
+          if (canWritePersonal)
+            ('Personal', EditPersonalTab(profile: profile, isPrivileged: isPrivileged)),
+          if (canWriteAddress)
+            ('Address', EditAddressTab(
+              key: ValueKey('edit-address-${profile.id}'),
+              profile: profile,
+              isPrivileged: isPrivileged,
+            )),
+          if (canWriteOther)
+            ('Other', EditOtherTab(profile: profile, isPrivileged: isPrivileged)),
+          if (canWriteFamily)
+            ('Family', EditFamilyTab(profile: profile)),
+          if (canReadAcademic && canWriteAcademic)
             ('Academic', EditAcademicTab(profile: profile)),
-          if (canReadExperience)
+          if (canReadExperience && canWriteExperience)
             ('Experience', EditExperienceTab(employeeId: targetEmployeeId)),
-          if (canReadDocs)
+          if (canReadDocs && canWriteDocs)
             ('Documents', DocumentsViewTab(
               profile: profile,
               canManageLetters: Permissions.canManageLetters(
@@ -133,15 +157,24 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen>
                 authState.user?.role,
               ),
             )),
-          if (canReadBank)
+          if (canReadBank && canWriteBank)
             ('Bank', EditBankTab(profile: profile, isPrivileged: isPrivileged)),
-          if (canReadSalary)
+          if (canReadSalary && canWriteSalary)
             ('Salary', EditSalaryTab(profile: profile, isPrivileged: isPrivileged)),
-          ('Attendance', EmployeeAttendanceTab(
-            employeeId: targetEmployeeId,
-            canManageSettings: isAdminEditingEmployee,
-          )),
+          if (canWriteAttendanceTab)
+            ('Attendance', EmployeeAttendanceTab(
+              employeeId: targetEmployeeId,
+              canManageSettings: isAdminEditingEmployee,
+            )),
         ];
+        if (tabItems.isEmpty) {
+          return Scaffold(
+            appBar: AppBar(title: const Text('Edit Profile')),
+            body: const Center(
+              child: Text('Read-only access — no profile tabs allow editing for your role.'),
+            ),
+          );
+        }
         _syncTabController(tabItems.length);
         final tabController = _tabController!;
 

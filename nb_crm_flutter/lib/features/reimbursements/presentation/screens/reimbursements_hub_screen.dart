@@ -42,15 +42,17 @@ class ReimbursementsHubScreen extends ConsumerWidget {
           const SizedBox(width: 8),
         ],
       ),
-      floatingActionButton: TourTarget(
-        id: TourIds.step('hrms.reimbursements', 2),
-        child: FloatingActionButton.extended(
-        onPressed: () => context.push('/reimbursements/apply'),
-        icon: const Icon(Icons.add),
-        label: const Text('Apply'),
-        backgroundColor: AppColors.bronze,
-      ),
-      ),
+      floatingActionButton: Permissions.canWriteReimbursements(auth.permissions, role)
+          ? TourTarget(
+              id: TourIds.step('hrms.reimbursements', 2),
+              child: FloatingActionButton.extended(
+                onPressed: () => context.push('/reimbursements/apply'),
+                icon: const Icon(Icons.add),
+                label: const Text('Apply'),
+                backgroundColor: AppColors.bronze,
+              ),
+            )
+          : null,
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -318,8 +320,32 @@ class _ClaimCard extends StatelessWidget {
               ),
             const SizedBox(height: 6),
             Text(claim.description, style: const TextStyle(fontSize: 13)),
-            if (claim.proofUrl != null && claim.proofUrl!.isNotEmpty) ...[
+            if (claim.openingKmPhotoUrl != null && claim.openingKmPhotoUrl!.isNotEmpty) ...[
               const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: claim.openingKmPhotoUrl!));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Opening km photo URL copied')),
+                  );
+                },
+                icon: const Icon(Icons.photo_camera_outlined, size: 16),
+                label: const Text('Copy opening km photo'),
+              ),
+            ],
+            if (claim.closingKmPhotoUrl != null && claim.closingKmPhotoUrl!.isNotEmpty) ...[
+              TextButton.icon(
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: claim.closingKmPhotoUrl!));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Closing km photo URL copied')),
+                  );
+                },
+                icon: const Icon(Icons.photo_camera_outlined, size: 16),
+                label: const Text('Copy closing km photo'),
+              ),
+            ],
+            if (claim.proofUrl != null && claim.proofUrl!.isNotEmpty) ...[
               TextButton.icon(
                 onPressed: () {
                   Clipboard.setData(ClipboardData(text: claim.proofUrl!));
@@ -329,6 +355,22 @@ class _ClaimCard extends StatelessWidget {
                 },
                 icon: const Icon(Icons.attach_file, size: 16),
                 label: const Text('Copy proof link'),
+              ),
+            ],
+            if (claim.approvalSteps.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Approval: ${claim.approvalSteps.map((s) {
+                  final role = s.approverRole
+                      .replaceAll('_', ' ')
+                      .toLowerCase()
+                      .split(' ')
+                      .map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}')
+                      .join(' ');
+                  final action = (s.action ?? 'PENDING').toUpperCase();
+                  return 'Step ${s.stepNumber} $role ($action)';
+                }).join(' → ')}',
+                style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
               ),
             ],
             if (claim.status == ReimbursementStatus.APPROVED &&

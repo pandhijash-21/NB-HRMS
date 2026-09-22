@@ -1206,7 +1206,17 @@ class _ModularMatrixTableState extends State<_ModularMatrixTable> {
                   ),
                 ),
               )
-            else
+            else ...[
+              if (category == 'HRMS') ...[
+                _buildProfileTabsDropdown(
+                  isDark: isDark,
+                  color: color,
+                  modules: categoryModules
+                      .where(_isProfileTabModule)
+                      .toList()
+                    ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder)),
+                ),
+              ],
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 physics: const BouncingScrollPhysics(),
@@ -1255,7 +1265,10 @@ class _ModularMatrixTableState extends State<_ModularMatrixTable> {
                       ),
                     ),
                   ],
-                  rows: categoryModules.map((module) {
+                  rows: (category == 'HRMS'
+                          ? categoryModules.where((m) => !_isProfileTabModule(m))
+                          : categoryModules)
+                      .map((module) {
                     final perm = _permFor(module.key, module.category);
                     final allGranted = _isAllActionsGranted(perm);
                     final isRowUpdating = _updating.any((k) => k.startsWith('${module.key}-'));
@@ -1425,7 +1438,138 @@ class _ModularMatrixTableState extends State<_ModularMatrixTable> {
                   }).toList(),
                 ),
               ),
+            ],
           ],
+        ],
+      ),
+    );
+  }
+
+  bool _isProfileTabModule(SystemModule m) {
+    const keys = {
+      'PERSONAL_INFO',
+      'PROFILE_GENERAL',
+      'PROFILE_PERSONAL',
+      'PROFILE_ADDRESS',
+      'PROFILE_OTHER',
+      'PROFILE_FAMILY',
+      'PROFILE_ATTENDANCE',
+      'EDUCATION',
+      'EXPERIENCE',
+      'DOCUMENTS',
+      'BANK_DETAILS',
+      'SALARY',
+    };
+    return keys.contains(m.key) || m.name.startsWith('Profile ›');
+  }
+
+  Widget _buildProfileTabsDropdown({
+    required bool isDark,
+    required Color color,
+    required List<SystemModule> modules,
+  }) {
+    if (modules.isEmpty) return const SizedBox.shrink();
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        initiallyExpanded: true,
+        tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        childrenPadding: const EdgeInsets.only(bottom: 8),
+        leading: Icon(Icons.person_outline_rounded, color: color),
+        title: Text(
+          'Profile tabs',
+          style: TextStyle(
+            fontWeight: FontWeight.w800,
+            fontSize: 14,
+            color: isDark ? Colors.white : const Color(0xFF212F3D),
+          ),
+        ),
+        subtitle: Text(
+          'Each profile tab has its own Read / Create·Edit access. Read-only hides edit actions.',
+          style: TextStyle(
+            fontSize: 11,
+            color: isDark ? Colors.white54 : const Color(0xFF607D8B),
+          ),
+        ),
+        children: [
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            child: DataTable(
+              columnSpacing: 28,
+              horizontalMargin: 20,
+              headingRowHeight: 44,
+              dataRowMinHeight: 56,
+              dataRowMaxHeight: 88,
+              columns: [
+                const DataColumn(label: Text('Tab', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12))),
+                ...AdminRoleDetailScreen._columns.map(
+                  (c) => DataColumn(
+                    label: Text(c.label, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 11)),
+                  ),
+                ),
+                const DataColumn(
+                  label: Text('All', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11)),
+                ),
+              ],
+              rows: modules.map((module) {
+                final perm = _permFor(module.key, module.category);
+                final allGranted = _isAllActionsGranted(perm);
+                final isRowUpdating = _updating.any((k) => k.startsWith('${module.key}-'));
+                final isSuperAdminRole = Permissions.isSuperAdmin(widget.roleName);
+                return DataRow(
+                  cells: [
+                    DataCell(
+                      SizedBox(
+                        width: 280,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(module.name, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+                            Text(module.key, style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.w700)),
+                          ],
+                        ),
+                      ),
+                    ),
+                    ...AdminRoleDetailScreen._columns.map((col) {
+                      final fieldKey = col.key;
+                      final value = isSuperAdminRole ? true : _boolForField(perm, fieldKey);
+                      final isUpdating = _updating.contains('${module.key}-$fieldKey') ||
+                          _updating.contains('${module.key}-canReadcanWritecanApprovecanDeletecanExport');
+                      return DataCell(
+                        Center(
+                          child: Switch.adaptive(
+                            value: value,
+                            onChanged: (isUpdating || isSuperAdminRole)
+                                ? null
+                                : (next) => _patch(module.key, {fieldKey: next}),
+                          ),
+                        ),
+                      );
+                    }),
+                    DataCell(
+                      IconButton(
+                        icon: isRowUpdating
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : Icon(
+                                allGranted ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                                color: allGranted ? const Color(0xFF10B981) : null,
+                              ),
+                        onPressed: (isRowUpdating || isSuperAdminRole)
+                            ? null
+                            : () => _toggleAllForModule(module, !allGranted),
+                      ),
+                    ),
+                  ],
+                );
+              }).toList(),
+            ),
+          ),
         ],
       ),
     );

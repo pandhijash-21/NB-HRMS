@@ -103,6 +103,7 @@ attendanceRouter.patch('/admin/policy', requireAuth, requirePermission('ATTENDAN
     const maxBufferDaysPerMonth = Number(
       req.body?.maxBufferDaysPerMonth ?? req.body?.maxBufferDays ?? 2,
     );
+    const halfDayWindows = req.body?.halfDayWindows;
     const updatedBy = String((req.user as any)?.id ?? (req.user as any)?.userId ?? 'unknown');
 
     const data = await attendanceService.updateAdminPolicy({
@@ -111,6 +112,7 @@ attendanceRouter.patch('/admin/policy', requireAuth, requirePermission('ATTENDAN
       punchInBufferMinutes,
       punchOutBufferMinutes,
       maxBufferDaysPerMonth,
+      halfDayWindows,
       updatedBy,
     });
     return res.json(ok(data));

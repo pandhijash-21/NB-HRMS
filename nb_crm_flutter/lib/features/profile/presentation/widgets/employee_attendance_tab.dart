@@ -630,20 +630,29 @@ class _DailyLogList extends StatelessWidget {
             final isLeave = status == 'LEAVE';
             final isHoliday = status == 'HOLIDAY';
             final isAbsent = !hasPunch && !isHoliday && !isLeave;
+            final tags = <String>[];
+            if (day.isLate == true) tags.add('LATE');
+            if (day.isHalfDay == true) tags.add('HALF DAY');
+            final tagSuffix = tags.isEmpty ? '' : ' (${tags.join(' · ')})';
             final subtitle = hasPunch
-                ? '${_formatIstTime(day.firstIn)} → ${_formatIstTime(day.lastOut)} · ${_formatHours(day.totalMinutes)}'
+                ? '${_formatIstTime(day.firstIn)}$tagSuffix → ${_formatIstTime(day.lastOut)} · ${_formatHours(day.totalMinutes)}'
                 : isHoliday
                     ? 'Holiday (weekly off / public holiday)'
                     : isLeave
                         ? 'On approved leave'
                         : 'Absent (no punch)';
             final trailing = hasPunch
-                ? (day.isLate == true
+                ? (day.isHalfDay == true
                     ? const Tooltip(
-                        message: 'Late (after punch-in + buffer)',
-                        child: Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 18),
+                        message: 'Half day',
+                        child: Icon(Icons.timelapse_rounded, color: Colors.deepOrange, size: 18),
                       )
-                    : const Icon(Icons.check_circle_outline, color: Colors.green, size: 18))
+                    : day.isLate == true
+                        ? const Tooltip(
+                            message: 'Late (after punch-in + buffer)',
+                            child: Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 18),
+                          )
+                        : const Icon(Icons.check_circle_outline, color: Colors.green, size: 18))
                 : isHoliday
                     ? const Tooltip(
                         message: 'Holiday',

@@ -333,13 +333,14 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             section: 'Main',
             imageAsset: 'assets/images/mr_nb.jpg',
           ),
-        const _Destination(
-          '/profile',
-          Icons.person_outline,
-          Icons.person,
-          'Profile',
-          section: 'Main',
-        ),
+        if (Permissions.canOpenProfile(auth.permissions, auth.user?.role))
+          const _Destination(
+            '/profile',
+            Icons.person_outline,
+            Icons.person,
+            'Profile',
+            section: 'Main',
+          ),
       ] else if (module == AppModule.erp) ...[
         const _Destination('/erp/home', Icons.home_outlined, Icons.home, 'Home', section: 'ERP'),
         if (showSoftwareTour)

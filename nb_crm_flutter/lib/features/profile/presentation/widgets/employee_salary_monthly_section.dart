@@ -172,8 +172,21 @@ class _MonthlyOverviewCardState extends State<_MonthlyOverviewCard> {
                 runSpacing: 8,
                 children: [
                   _chip(context, 'Present', '${attendance['presentDays'] ?? 0} days'),
+                  if (attendance['presentDaysForSalary'] != null)
+                    _chip(
+                      context,
+                      'Present (salary)',
+                      '${attendance['presentDaysForSalary']} / ${attendance['payableDays'] ?? attendance['daysInMonth'] ?? '—'}',
+                    ),
+                  if (attendance['payableDays'] != null)
+                    _chip(
+                      context,
+                      'Payable days',
+                      '${attendance['payableDays']} (cal ${attendance['daysInMonth'] ?? '—'} − Sun ${attendance['sundayCount'] ?? 0})',
+                    ),
                   _chip(context, 'Working hours', '${attendance['totalWorkingHours'] ?? 0}h'),
                   _chip(context, 'Late', '${attendance['lateDays'] ?? 0}'),
+                  _chip(context, 'Half day', '${attendance['halfDays'] ?? 0}'),
                   _chip(context, 'Leave', '${attendance['leaveDays'] ?? attendance['leaveDaysInMonth'] ?? 0}'),
                   _chip(context, 'Holiday', '${attendance['holidayDays'] ?? 0}'),
                   _chip(context, 'Absent', '${attendance['absentDays'] ?? 0}'),
@@ -252,12 +265,23 @@ class _MonthlyOverviewCardState extends State<_MonthlyOverviewCard> {
               _salaryRow(context, 'Deductions', formatInr(computed['totalDeductions'])),
               _salaryRow(context, 'Net pay', formatInr(computed['netPay']), bold: true),
               if (breakdown != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Calculated on basis of ${breakdown['payableDays'] ?? breakdown['daysInMonth'] ?? 0} payable days'
+                  ' (${breakdown['daysInMonth'] ?? 0} calendar − ${breakdown['sundayCount'] ?? 0} Sundays)',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
                 const SizedBox(height: 4),
                 Text(
-                  'Cut days: absent ${breakdown['trueAbsentDays'] ?? 0}'
+                  'Present for salary: ${breakdown['presentDaysForSalary'] ?? '—'} / ${breakdown['payableDays'] ?? breakdown['daysInMonth'] ?? 0}'
+                  ' · Cut days: absent ${breakdown['trueAbsentDays'] ?? 0}'
                   '${((breakdown['absentDates'] as List?)?.isNotEmpty ?? false) ? ' (${(breakdown['absentDates'] as List).join(', ')})' : ''}'
-                  ' + unpaid leave ${breakdown['unpaidLeaveDays'] ?? 0} '
-                  '(of ${breakdown['daysInMonth'] ?? 0} days)'
+                  ' + half ${(breakdown['halfDays'] ?? 0)}×0.5'
+                  ' + unpaid leave ${breakdown['unpaidLeaveDays'] ?? 0}'
                   '${breakdown['reimbursementTotal'] != null ? ' · Reimbursements ${formatInr(breakdown['reimbursementTotal'])}' : ''}',
                   style: TextStyle(
                     fontSize: 12,
@@ -265,6 +289,10 @@ class _MonthlyOverviewCardState extends State<_MonthlyOverviewCard> {
                   ),
                 ),
               ],
+              ..._buildCalculatedModules(
+                context,
+                (computed['columns'] as List?) ?? const [],
+              ),
               const SizedBox(height: 12),
             ] else if (salaryRecord == null)
               Text(
@@ -278,6 +306,10 @@ class _MonthlyOverviewCardState extends State<_MonthlyOverviewCard> {
               _salaryRow(context, 'Gross pay', formatInr(salaryRecord['grossPay'])),
               _salaryRow(context, 'Deductions', formatInr(salaryRecord['totalDeductions'])),
               _salaryRow(context, 'Net pay', formatInr(salaryRecord['netPay']), bold: true),
+              ..._buildCalculatedModules(
+                context,
+                (salaryRecord['columns'] as List?) ?? const [],
+              ),
               if (salaryRecord['canDownloadSlip'] == true) ...[
                 const SizedBox(height: 12),
                 FilledButton.icon(
@@ -396,6 +428,73 @@ class _MonthlyOverviewCardState extends State<_MonthlyOverviewCard> {
 
   TextStyle? _sectionStyle(BuildContext context) {
     return Theme.of(context).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700);
+  }
+
+  List<Widget> _buildCalculatedModules(BuildContext context, List columnsRaw) {
+    if (columnsRaw.isEmpty) return const [];
+    final columns = columnsRaw
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+    final earnings = columns
+        .where((c) {
+          final id = (c['columnIdentifier'] ?? c['column_identifier'] ?? '').toString();
+          final cat = (c['category']?.toString() ?? '').toUpperCase();
+          return cat == 'EARNING' &&
+              id != 'gross_pay' &&
+              id != 'gross_salary' &&
+              id != 'net_pay';
+        })
+        .toList();
+    final deductions = columns
+        .where((c) {
+          final id = (c['columnIdentifier'] ?? c['column_identifier'] ?? '').toString();
+          final cat = (c['category']?.toString() ?? '').toUpperCase();
+          return cat == 'DEDUCTION' &&
+              id != 'total_deductions' &&
+              id != 'net_pay';
+        })
+        .toList();
+
+    Widget section(String title, List<Map<String, dynamic>> rows) {
+      if (rows.isEmpty) return const SizedBox.shrink();
+      return Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: _sectionStyle(context)),
+            const SizedBox(height: 6),
+            for (final c in rows) ...[
+              _salaryRow(
+                context,
+                c['displayName']?.toString() ??
+                    c['columnIdentifier']?.toString() ??
+                    '—',
+                formatInr(c['effectiveValue'] ?? c['effective_value']),
+              ),
+              if ((c['formulaPreview'] ?? c['formula_preview']) != null &&
+                  (c['formulaPreview'] ?? c['formula_preview']).toString().trim().isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(left: 4, bottom: 6),
+                  child: Text(
+                    '${c['formulaPreview'] ?? c['formula_preview']}'
+                    '${c['ruleType'] != null ? ' · ${c['ruleType']}' : ''}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Theme.of(context).textTheme.bodySmall?.color,
+                    ),
+                  ),
+                ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    return [
+      section('Earnings (calculated)', earnings),
+      section('Deductions (calculated)', deductions),
+    ];
   }
 
   Widget _chip(BuildContext context, String label, String value) {

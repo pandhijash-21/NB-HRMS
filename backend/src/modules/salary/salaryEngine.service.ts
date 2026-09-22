@@ -456,14 +456,24 @@ const AGGREGATE_COLUMNS = new Set(['gross_pay', 'total_deductions', 'net_pay', '
  * (gross_salary, gross_pay, deduction mirrors, etc.) stay consistent.
  *
  * payable = A * (D - cutDays) / D
- * cutDays = (cutOnAbsent ? absentDays : 0) + (cutOnLeave ? unpaidLeaveDays : 0)
+ * D = payable working days (calendar days minus Sundays)
+ * cutDays = (cutOnAbsent ? absentDays + halfDays×0.5 : 0) + (cutOnLeave ? unpaidLeaveDays : 0)
  */
 export function buildAttendanceCutOverrides(
   result: ComputeResult,
   columnDefinitions: SalaryColumnDefinition[],
-  opts: { daysInMonth: number; absentDays: number; unpaidLeaveDays: number; halfDays?: number },
+  opts: {
+    daysInMonth: number;
+    payableDays?: number;
+    absentDays: number;
+    unpaidLeaveDays: number;
+    halfDays?: number;
+  },
 ): Record<string, number> {
-  const D = Math.max(1, Math.floor(opts.daysInMonth));
+  const D = Math.max(
+    1,
+    Math.floor(opts.payableDays ?? opts.daysInMonth),
+  );
   const X = Math.max(0, opts.absentDays);
   const L = Math.max(0, opts.unpaidLeaveDays);
   const H = Math.max(0, opts.halfDays ?? 0);

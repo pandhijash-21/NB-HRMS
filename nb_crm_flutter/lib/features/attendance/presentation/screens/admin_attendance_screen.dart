@@ -931,11 +931,25 @@ Future<void> showAdminPunchDialog(
 }) async {
   if (employeeId == null && existing == null) return;
   final isDark = Theme.of(context).brightness == Brightness.dark;
-  
+
+  DateTime selectedDate;
+  if (existing != null) {
+    selectedDate = DateTime.parse(existing.punchAt).toLocal();
+  } else if (dateYmd != null && dateYmd.length >= 10) {
+    final parts = dateYmd.split('-');
+    selectedDate = DateTime(
+      int.parse(parts[0]),
+      int.parse(parts[1]),
+      int.parse(parts[2]),
+    );
+  } else {
+    selectedDate = DateTime.now();
+  }
+
   String time = '09:00';
   String type = 'IN';
   String terminal = 'MANUAL';
-  
+
   if (existing != null) {
     final d = DateTime.parse(existing.punchAt).toLocal();
     time = '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
@@ -964,20 +978,52 @@ Future<void> showAdminPunchDialog(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  InkWell(
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: ctx,
+                        initialDate: selectedDate,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime.now().add(const Duration(days: 1)),
+                      );
+                      if (picked == null) return;
+                      setDialogState(() => selectedDate = picked);
+                    },
+                    child: InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: 'Date *',
+                        border: OutlineInputBorder(),
+                        suffixIcon: Icon(Icons.calendar_today_outlined, size: 18),
+                      ),
+                      child: Text(
+                        '${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
                   TextFormField(
-                    decoration: const InputDecoration(labelText: 'Time (HH:MM)'),
+                    decoration: const InputDecoration(
+                      labelText: 'Time (HH:MM) *',
+                      border: OutlineInputBorder(),
+                    ),
                     initialValue: time,
                     onChanged: (v) => time = v,
                   ),
                   const SizedBox(height: 10),
                   TextFormField(
-                    decoration: const InputDecoration(labelText: 'Type (IN/OUT)'),
+                    decoration: const InputDecoration(
+                      labelText: 'Type (IN/OUT)',
+                      border: OutlineInputBorder(),
+                    ),
                     initialValue: type,
                     onChanged: (v) => type = v,
                   ),
                   const SizedBox(height: 10),
                   TextFormField(
-                    decoration: const InputDecoration(labelText: 'Terminal'),
+                    decoration: const InputDecoration(
+                      labelText: 'Terminal',
+                      border: OutlineInputBorder(),
+                    ),
                     initialValue: terminal,
                     onChanged: (v) => terminal = v,
                   ),
@@ -990,62 +1036,73 @@ Future<void> showAdminPunchDialog(
                 child: const Text('Cancel'),
               ),
               FilledButton(
-                onPressed: saving ? null : () async {
-                  setDialogState(() => saving = true);
-                  try {
-                    // Use the timezone from dateYmd if possible, here defaulting to +05:30.
-                    final punchAt = '${dateYmd ?? formatDateYmd(DateTime.now())}T$time:00+05:30';
-                    if (bloc != null) {
-                      if (existing == null) {
-                        bloc.add(AdminAttendancePunchAdded(
-                          employeeId: employeeId!,
-                          punchAt: punchAt,
-                          punchType: type,
-                          terminalId: terminal,
-                        ));
-                      } else {
-                        bloc.add(AdminAttendancePunchUpdated(
-                          punchId: existing.id,
-                          punchAt: punchAt,
-                          punchType: type,
-                          terminalId: terminal,
-                        ));
-                      }
-                      if (ctx.mounted) {
-                        Navigator.pop(ctx);
-                      }
-                    } else if (ref != null) {
-                      if (existing == null) {
-                        await ref.read(attendanceRepositoryProvider).adminAddPunch(
-                          employeeId: employeeId!,
-                          punchAt: punchAt,
-                          punchType: type,
-                          terminalId: terminal,
-                        );
-                      } else {
-                        await ref.read(attendanceRepositoryProvider).adminUpdatePunch(
-                          punchId: existing.id,
-                          punchAt: punchAt,
-                          punchType: type,
-                          terminalId: terminal,
-                        );
-                      }
-                      if (ctx.mounted) {
-                        Navigator.pop(ctx);
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Punch saved successfully.')));
-                      }
-                      invalidateAttendanceAdminData(ref);
-                    }
-                  } catch (e) {
-                    if (ctx.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-                      setDialogState(() => saving = false);
-                    }
-                  }
-                },
-                child: saving 
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) 
-                  : const Text('Save'),
+                onPressed: saving
+                    ? null
+                    : () async {
+                        setDialogState(() => saving = true);
+                        try {
+                          final ymd =
+                              '${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}';
+                          final punchAt = '$ymd\T$time:00+05:30';
+                          if (bloc != null) {
+                            if (existing == null) {
+                              bloc.add(AdminAttendancePunchAdded(
+                                employeeId: employeeId!,
+                                punchAt: punchAt,
+                                punchType: type,
+                                terminalId: terminal,
+                              ));
+                            } else {
+                              bloc.add(AdminAttendancePunchUpdated(
+                                punchId: existing.id,
+                                punchAt: punchAt,
+                                punchType: type,
+                                terminalId: terminal,
+                              ));
+                            }
+                            if (ctx.mounted) {
+                              Navigator.pop(ctx);
+                            }
+                          } else if (ref != null) {
+                            if (existing == null) {
+                              await ref.read(attendanceRepositoryProvider).adminAddPunch(
+                                    employeeId: employeeId!,
+                                    punchAt: punchAt,
+                                    punchType: type,
+                                    terminalId: terminal,
+                                  );
+                            } else {
+                              await ref.read(attendanceRepositoryProvider).adminUpdatePunch(
+                                    punchId: existing.id,
+                                    punchAt: punchAt,
+                                    punchType: type,
+                                    terminalId: terminal,
+                                  );
+                            }
+                            if (ctx.mounted) {
+                              Navigator.pop(ctx);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Punch saved successfully.')),
+                              );
+                            }
+                            invalidateAttendanceAdminData(ref);
+                          }
+                        } catch (e) {
+                          if (ctx.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Error: $e')),
+                            );
+                            setDialogState(() => saving = false);
+                          }
+                        }
+                      },
+                child: saving
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Text('Save'),
               ),
             ],
           );

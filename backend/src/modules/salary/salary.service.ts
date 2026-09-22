@@ -732,6 +732,14 @@ export const salaryService = {
       }),
     ]);
 
+    const columnDefs = record
+      ? await prisma.salaryColumnDefinition.findMany({
+          where: { payCommissionId: record.payCommissionId },
+          select: { columnIdentifier: true, displayName: true, ruleType: true },
+        })
+      : [];
+    const defById = new Map(columnDefs.map((d) => [d.columnIdentifier, d]));
+
     return {
       year,
       month,
@@ -758,14 +766,19 @@ export const salaryService = {
             payCommissionCode: record.payCommissionCode,
             designation: record.template.designation.name,
             canDownloadSlip: record.status === 'PAID',
-            columns: record.columnValues.map((c) => ({
-              columnIdentifier: c.columnIdentifier,
-              category: c.category,
-              ruleComputedValue: Number(c.ruleComputedValue),
-              overrideValue: c.overrideValue != null ? Number(c.overrideValue) : null,
-              effectiveValue: Number(c.effectiveValue),
-              formulaPreview: c.formulaPreview,
-            })),
+            columns: record.columnValues.map((c) => {
+              const def = defById.get(c.columnIdentifier);
+              return {
+                columnIdentifier: c.columnIdentifier,
+                category: c.category,
+                displayName: def?.displayName ?? c.columnIdentifier,
+                ruleType: def?.ruleType ?? null,
+                ruleComputedValue: Number(c.ruleComputedValue),
+                overrideValue: c.overrideValue != null ? Number(c.overrideValue) : null,
+                effectiveValue: Number(c.effectiveValue),
+                formulaPreview: c.formulaPreview,
+              };
+            }),
           }
         : null,
     };
@@ -795,6 +808,9 @@ export const salaryService = {
       halfDays: number;
       salaryAbsentDays: number;
       daysInMonth: number;
+      sundayCount?: number;
+      payableDays?: number;
+      presentDaysForSalary?: number;
       holidayDays: number;
       leaveDays: number;
     };
@@ -886,8 +902,16 @@ export const salaryService = {
     }
 
     let computed = await this.computePreview(template.id, mergedOverrides, { employeeId });
+    const payableDays = Math.max(
+      1,
+      Number((stats as { payableDays?: number }).payableDays ?? stats.daysInMonth),
+    );
+    const sundayCount = Number((stats as { sundayCount?: number }).sundayCount ?? 0);
+    const cutDays =
+      stats.absentDays + stats.unpaidLeaveDays + stats.halfDays * 0.5;
     const cutOverrides = buildAttendanceCutOverrides(computed, columnDefinitions, {
       daysInMonth: stats.daysInMonth,
+      payableDays,
       absentDays: stats.absentDays,
       unpaidLeaveDays: stats.unpaidLeaveDays,
       halfDays: stats.halfDays,
@@ -899,14 +923,30 @@ export const salaryService = {
         { ...mergedOverrides, ...cutOverrides },
         { employeeId },
       );
+      // Annotate cut leaves so UI can show e.g. Basic × (27−0.5)/27
+      computed = {
+        ...computed,
+        columns: computed.columns.map((c) => {
+          const key = columnKey(c.column_identifier, c.category);
+          if (cutOverrides[key] == null && cutOverrides[c.column_identifier] == null) {
+            return c;
+          }
+          const base = c.formula_preview || c.column_identifier;
+          return {
+            ...c,
+            formula_preview: `${base} × (${payableDays}−${cutDays})/${payableDays} (attendance cut)`,
+          };
+        }),
+      };
     }
-
-    const cutDays = Object.keys(cutOverrides).length
-      ? stats.absentDays + stats.unpaidLeaveDays + stats.halfDays * 0.5
-      : 0;
 
     const breakdown = {
       daysInMonth: stats.daysInMonth,
+      sundayCount,
+      payableDays,
+      presentDaysForSalary:
+        (stats as { presentDaysForSalary?: number }).presentDaysForSalary ??
+        Math.max(0, payableDays - cutDays),
       trueAbsentDays: stats.absentDays,
       unpaidLeaveDays: stats.unpaidLeaveDays,
       halfDays: stats.halfDays,
@@ -922,6 +962,9 @@ export const salaryService = {
     };
 
     if (!persist) {
+      const defById = new Map(
+        columnDefinitions.map((d) => [d.columnIdentifier, d]),
+      );
       return {
         persisted: false,
         breakdown,
@@ -929,7 +972,18 @@ export const salaryService = {
           grossPay: computed.gross_pay,
           totalDeductions: computed.total_deductions,
           netPay: computed.net_pay,
-          columns: computed.columns,
+          columns: computed.columns.map((c) => {
+            const def = defById.get(c.column_identifier);
+            return {
+              columnIdentifier: c.column_identifier,
+              category: c.category,
+              displayName: def?.displayName ?? c.column_identifier,
+              ruleType: def?.ruleType ?? null,
+              ruleComputedValue: c.rule_computed_value,
+              effectiveValue: c.effective_value,
+              formulaPreview: c.formula_preview,
+            };
+          }),
         },
         salaryRecord: existing
           ? { id: existing.id, status: existing.status, salaryMonth: month, salaryYear: year }
@@ -1016,6 +1070,22 @@ export const salaryService = {
       });
     });
 
+    const defById = new Map(
+      columnDefinitions.map((d) => [d.columnIdentifier, d]),
+    );
+    const mappedColumns = computed.columns.map((c) {
+      const def = defById.get(c.column_identifier);
+      return {
+        columnIdentifier: c.column_identifier,
+        category: c.category,
+        displayName: def?.displayName ?? c.column_identifier,
+        ruleType: def?.ruleType ?? null,
+        ruleComputedValue: c.rule_computed_value,
+        effectiveValue: c.effective_value,
+        formulaPreview: c.formula_preview,
+      };
+    });
+
     return {
       persisted: true,
       breakdown,
@@ -1023,7 +1093,7 @@ export const salaryService = {
         grossPay: computed.gross_pay,
         totalDeductions: computed.total_deductions,
         netPay: computed.net_pay,
-        columns: computed.columns,
+        columns: mappedColumns,
       },
       salaryRecord: saved
         ? {
@@ -1036,14 +1106,19 @@ export const salaryService = {
             netPay: Number(saved.netPay),
             designation: saved.template.designation.name,
             payCommissionCode: saved.payCommissionCode,
-            columns: saved.columnValues.map((c) => ({
-              columnIdentifier: c.columnIdentifier,
-              category: c.category,
-              ruleComputedValue: Number(c.ruleComputedValue),
-              overrideValue: c.overrideValue != null ? Number(c.overrideValue) : null,
-              effectiveValue: Number(c.effectiveValue),
-              formulaPreview: c.formulaPreview,
-            })),
+            columns: saved.columnValues.map((c) => {
+              const def = defById.get(c.columnIdentifier);
+              return {
+                columnIdentifier: c.columnIdentifier,
+                category: c.category,
+                displayName: def?.displayName ?? c.columnIdentifier,
+                ruleType: def?.ruleType ?? null,
+                ruleComputedValue: Number(c.ruleComputedValue),
+                overrideValue: c.overrideValue != null ? Number(c.overrideValue) : null,
+                effectiveValue: Number(c.effectiveValue),
+                formulaPreview: c.formulaPreview,
+              };
+            }),
           }
         : null,
     };

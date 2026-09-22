@@ -1260,7 +1260,19 @@ export const attendanceService = {
       .filter((d) => (d as { dayStatus?: string }).dayStatus === 'ABSENT')
       .map((d) => d.date);
     const daysInMonth = history.days.length;
+    const sundayCount = history.days.filter((d) => {
+      const [yy, mm, dd] = d.date.split('-').map(Number);
+      if (!yy || !mm || !dd) return false;
+      // Calendar weekday for Y-M-D (0 = Sunday)
+      return new Date(Date.UTC(yy, mm - 1, dd)).getUTCDay() === 0;
+    }).length;
+    // Salary divisor: calendar days minus Sundays (e.g. 31−4=27, 30−4=26).
+    const payableDays = Math.max(1, daysInMonth - sundayCount);
     const salaryAbsentDays = absentDays + unpaidLeaveDays + halfDays * 0.5;
+    const presentDaysForSalary = Math.max(
+      0,
+      Math.round((payableDays - salaryAbsentDays) * 100) / 100,
+    );
 
     return {
       year: params.year,
@@ -1270,6 +1282,7 @@ export const attendanceService = {
       policy: history.policy,
       stats: {
         presentDays,
+        presentDaysForSalary,
         lateDays,
         halfDays,
         absentDays,
@@ -1279,6 +1292,8 @@ export const attendanceService = {
         unpaidLeaveDays,
         salaryAbsentDays,
         daysInMonth,
+        sundayCount,
+        payableDays,
         totalWorkingMinutes,
         totalWorkingHours: Math.round((totalWorkingMinutes / 60) * 100) / 100,
         leaveApplications: leaveApps.length,

@@ -722,7 +722,13 @@ export const salaryService = {
       prisma.employeeSalaryRecord.findFirst({
         where: { employeeId, salaryYear: year, salaryMonth: month },
         include: {
-          template: { include: { designation: true, payCommission: true } },
+          template: {
+            include: {
+              designation: true,
+              payCommission: true,
+              columnRules: { select: { columnIdentifier: true, ruleType: true } },
+            },
+          },
           columnValues: true,
         },
       }),
@@ -734,11 +740,14 @@ export const salaryService = {
 
     const columnDefs = record
       ? await prisma.salaryColumnDefinition.findMany({
-          where: { payCommissionId: record.payCommissionId },
-          select: { columnIdentifier: true, displayName: true, ruleType: true },
+          where: { payCommissionId: record.template.payCommissionId },
+          select: { columnIdentifier: true, displayName: true },
         })
       : [];
     const defById = new Map(columnDefs.map((d) => [d.columnIdentifier, d]));
+    const ruleTypeByCol = new Map(
+      (record?.template.columnRules ?? []).map((r) => [r.columnIdentifier, r.ruleType]),
+    );
 
     return {
       year,
@@ -772,7 +781,7 @@ export const salaryService = {
                 columnIdentifier: c.columnIdentifier,
                 category: c.category,
                 displayName: def?.displayName ?? c.columnIdentifier,
-                ruleType: def?.ruleType ?? null,
+                ruleType: ruleTypeByCol.get(c.columnIdentifier) ?? null,
                 ruleComputedValue: Number(c.ruleComputedValue),
                 overrideValue: c.overrideValue != null ? Number(c.overrideValue) : null,
                 effectiveValue: Number(c.effectiveValue),
@@ -868,7 +877,10 @@ export const salaryService = {
       }
     }
 
-    const { columnDefinitions } = await loadTemplateContext(template.id);
+    const { template: templateCtx, columnDefinitions } = await loadTemplateContext(template.id);
+    const ruleTypeByCol = new Map(
+      templateCtx.columnRules.map((r) => [r.columnIdentifier, r.ruleType]),
+    );
 
     // Fold all approved reimbursements for this month into salary.
     const monthStart = new Date(Date.UTC(year, month - 1, 1));
@@ -978,7 +990,7 @@ export const salaryService = {
               columnIdentifier: c.column_identifier,
               category: c.category,
               displayName: def?.displayName ?? c.column_identifier,
-              ruleType: def?.ruleType ?? null,
+              ruleType: ruleTypeByCol.get(c.column_identifier) ?? null,
               ruleComputedValue: c.rule_computed_value,
               effectiveValue: c.effective_value,
               formulaPreview: c.formula_preview,
@@ -1073,13 +1085,13 @@ export const salaryService = {
     const defById = new Map(
       columnDefinitions.map((d) => [d.columnIdentifier, d]),
     );
-    const mappedColumns = computed.columns.map((c) {
+    const mappedColumns = computed.columns.map((c) => {
       const def = defById.get(c.column_identifier);
       return {
         columnIdentifier: c.column_identifier,
         category: c.category,
         displayName: def?.displayName ?? c.column_identifier,
-        ruleType: def?.ruleType ?? null,
+        ruleType: ruleTypeByCol.get(c.column_identifier) ?? null,
         ruleComputedValue: c.rule_computed_value,
         effectiveValue: c.effective_value,
         formulaPreview: c.formula_preview,
@@ -1112,7 +1124,7 @@ export const salaryService = {
                 columnIdentifier: c.columnIdentifier,
                 category: c.category,
                 displayName: def?.displayName ?? c.columnIdentifier,
-                ruleType: def?.ruleType ?? null,
+                ruleType: ruleTypeByCol.get(c.columnIdentifier) ?? null,
                 ruleComputedValue: Number(c.ruleComputedValue),
                 overrideValue: c.overrideValue != null ? Number(c.overrideValue) : null,
                 effectiveValue: Number(c.effectiveValue),

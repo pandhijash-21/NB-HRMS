@@ -2219,6 +2219,7 @@ model ErpContractor {
   machineStockLogs   ErpMachineStockLog[]
   machineIssues      ErpMachineIssue[]
   machineReturnLogs  ErpMachineReturnLog[]
+  purchaseOrders     ErpPurchaseOrder[]
 
   @@index([isActive, name])
   @@map("erp_contractors")
@@ -2416,6 +2417,20 @@ enum ErpStockLogType {
   CONSUMPTION
 }
 
+enum ErpPurchaseOrderStatus {
+  DRAFT
+  OPEN
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+}
+
+enum ErpStoreInwardQcStatus {
+  PASSED
+  PARTIAL_PASS
+  FAIL
+}
+
 model ErpBoq {
   id         String           @id @default(uuid())
   boqNo      String           @unique @map("boq_no")
@@ -2509,6 +2524,8 @@ model ErpMaterial {
   subtask     ErpActivitySubtask?     @relation(fields: [subtaskId], references: [id], onDelete: SetNull)
   stockLogs   ErpMaterialStockLog[]
   projectUses ErpMaterialProjectUse[]
+  poItems     ErpPurchaseOrderItem[]
+  inwardLines ErpStoreInwardLine[]
 
   @@index([isActive, name])
   @@map("erp_materials")
@@ -2663,6 +2680,115 @@ model ErpLabour {
 
   @@index([isActive, name])
   @@map("erp_labour")
+}
+
+// =============================================================================
+// ERP STORE — warehouse masters + PO-based goods inward (GRN)
+// Purchase Order full UI comes later; models/API stub serve Store today.
+// =============================================================================
+
+model ErpStoreMaster {
+  id        String   @id @default(uuid())
+  name      String
+  location  String
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  inwards ErpStoreInward[]
+
+  @@index([isActive, name])
+  @@map("erp_store_masters")
+}
+
+model ErpPurchaseOrder {
+  id         String                @id @default(uuid())
+  poNumber   String                @unique @map("po_number")
+  vendorName String                @map("vendor_name")
+  vendorId   String?               @map("vendor_id")
+  projectId  String?               @map("project_id")
+  orderDate  DateTime              @default(now()) @map("order_date") @db.Date
+  status     ErpPurchaseOrderStatus @default(OPEN)
+  remarks    String?               @db.Text
+  createdBy  String?               @map("created_by")
+  createdAt  DateTime              @default(now()) @map("created_at")
+  updatedAt  DateTime              @updatedAt @map("updated_at")
+
+  vendor  ErpContractor?         @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  items   ErpPurchaseOrderItem[]
+  inwards ErpStoreInward[]
+
+  @@index([status, orderDate])
+  @@index([vendorId])
+  @@map("erp_purchase_orders")
+}
+
+model ErpPurchaseOrderItem {
+  id              String  @id @default(uuid())
+  purchaseOrderId String  @map("purchase_order_id")
+  materialId      String? @map("material_id")
+  itemName        String  @map("item_name")
+  brand           String?
+  unitCode        String? @map("unit_code")
+  size            String?
+  orderedQty      Decimal @map("ordered_qty") @db.Decimal(14, 4)
+  sortOrder       Int     @default(0) @map("sort_order")
+
+  purchaseOrder ErpPurchaseOrder   @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  material      ErpMaterial?       @relation(fields: [materialId], references: [id], onDelete: SetNull)
+  inwardLines   ErpStoreInwardLine[]
+
+  @@index([purchaseOrderId, sortOrder])
+  @@index([materialId])
+  @@map("erp_purchase_order_items")
+}
+
+model ErpStoreInward {
+  id               String                @id @default(uuid())
+  purchaseOrderId  String                @map("purchase_order_id")
+  storeId          String                @map("store_id")
+  inwardDate       DateTime              @map("inward_date") @db.Date
+  truckNumber      String?               @map("truck_number")
+  challanNumber    String?               @map("challan_number")
+  challanImageUrl  String?               @map("challan_image_url")
+  qcStatus         ErpStoreInwardQcStatus @map("qc_status")
+  quantityRejected Decimal?              @map("quantity_rejected") @db.Decimal(14, 4)
+  returnDate       DateTime?             @map("return_date") @db.Date
+  remarks          String?               @db.Text
+  createdBy        String?               @map("created_by")
+  createdAt        DateTime              @default(now()) @map("created_at")
+  updatedAt        DateTime              @updatedAt @map("updated_at")
+
+  purchaseOrder ErpPurchaseOrder    @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  store         ErpStoreMaster      @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  lines         ErpStoreInwardLine[]
+
+  @@index([purchaseOrderId, inwardDate])
+  @@index([storeId, inwardDate])
+  @@map("erp_store_inwards")
+}
+
+model ErpStoreInwardLine {
+  id                  String  @id @default(uuid())
+  inwardId            String  @map("inward_id")
+  purchaseOrderItemId String  @map("purchase_order_item_id")
+  materialId          String? @map("material_id")
+  itemName            String  @map("item_name")
+  brand               String?
+  unitCode            String? @map("unit_code")
+  size                String?
+  quantityReceived    Decimal @map("quantity_received") @db.Decimal(14, 4)
+  quantityAccepted    Decimal @map("quantity_accepted") @db.Decimal(14, 4)
+  quantityRejected    Decimal @default(0) @map("quantity_rejected") @db.Decimal(14, 4)
+  sortOrder           Int     @default(0) @map("sort_order")
+
+  inward            ErpStoreInward       @relation(fields: [inwardId], references: [id], onDelete: Cascade)
+  purchaseOrderItem ErpPurchaseOrderItem @relation(fields: [purchaseOrderItemId], references: [id], onDelete: Restrict)
+  material          ErpMaterial?         @relation(fields: [materialId], references: [id], onDelete: SetNull)
+
+  @@index([inwardId, sortOrder])
+  @@index([purchaseOrderItemId])
+  @@map("erp_store_inward_lines")
 }
 
 // =============================================================================

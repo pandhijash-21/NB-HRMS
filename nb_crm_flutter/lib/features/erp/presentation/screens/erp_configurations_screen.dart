@@ -127,6 +127,14 @@ class _ErpConfigurationsScreenState extends State<ErpConfigurationsScreen> {
                     color: const Color(0xFFea580c),
                     onTap: () => context.go('/erp/configurations/labour'),
                   ),
+                if (_matches(['Stores', 'Store', 'warehouse', 'location']))
+                  ConfigSquareItem(
+                    title: 'Stores',
+                    subtitle: 'Name & location',
+                    icon: Icons.warehouse_outlined,
+                    color: const Color(0xFF0D9488),
+                    onTap: () => context.go('/erp/configurations/stores'),
+                  ),
               ];
 
               final woStatic = [
@@ -196,7 +204,7 @@ class _ErpConfigurationsScreenState extends State<ErpConfigurationsScreen> {
                   ],
                   if (resourceTiles.isNotEmpty) ...[
                     _sectionTitle(isDark, 'BOQ & Resources'),
-                    _sectionHint(isDark, 'Materials, machines, labour for BOQ costing.'),
+                    _sectionHint(isDark, 'Materials, machines, labour, stores for ERP.'),
                     const SizedBox(height: 12),
                     ConfigSquareGrid(tiles: resourceTiles),
                     const SizedBox(height: 28),

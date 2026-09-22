@@ -92,6 +92,7 @@ import '../../features/erp/presentation/screens/contractor_form_screen.dart';
 import '../../features/erp/presentation/screens/boq_list_screen.dart';
 import '../../features/erp/presentation/screens/boq_form_screen.dart';
 import '../../features/erp/presentation/screens/store_config_screen.dart';
+import '../../features/erp/presentation/screens/store_masters_config_screen.dart';
 import '../../features/erp/presentation/screens/labour_config_screen.dart';
 import '../../features/erp/presentation/screens/tender_list_screen.dart';
 import '../../features/erp/presentation/screens/tender_form_screen.dart';
@@ -659,6 +660,10 @@ GoRouter createAppRouter(AuthBloc authBloc) {
           GoRoute(
             path: '/erp/configurations/labour',
             builder: (context, state) => const LabourConfigScreen(),
+          ),
+          GoRoute(
+            path: '/erp/configurations/stores',
+            builder: (context, state) => const StoreMastersConfigScreen(),
           ),
           GoRoute(
             path: '/chat',

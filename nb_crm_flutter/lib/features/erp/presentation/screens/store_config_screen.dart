@@ -10,11 +10,12 @@ import '../../data/work_order_repository.dart';
 import '../../domain/resource_models.dart';
 import '../../domain/work_order_lookup_keys.dart';
 import '../../domain/work_order_models.dart';
+import 'store_po_inward_panel.dart';
 
 class StoreConfigScreen extends StatefulWidget {
   const StoreConfigScreen({super.key, this.initialTab = 0});
 
-  /// 0 for Material, 1 for Machine
+  /// 0 = Material, 1 = Machine
   final int initialTab;
 
   @override
@@ -81,6 +82,24 @@ class _StoreConfigScreenState extends State<StoreConfigScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadAll();
     });
+  }
+
+  /// Hot reload can leave a TabController with the old length (e.g. 3 → 2).
+  @override
+  void reassemble() {
+    super.reassemble();
+    _ensureStoreTabControllerLength(2);
+  }
+
+  void _ensureStoreTabControllerLength(int length) {
+    if (_storeTabController.length == length) return;
+    final idx = _storeTabController.index.clamp(0, length - 1);
+    _storeTabController.dispose();
+    _storeTabController = TabController(
+      length: length,
+      vsync: this,
+      initialIndex: idx,
+    );
   }
 
   Future<void> _loadAll() async {
@@ -682,6 +701,7 @@ class _StoreConfigScreenState extends State<StoreConfigScreen>
 
   @override
   Widget build(BuildContext context) {
+    _ensureStoreTabControllerLength(2);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
@@ -794,126 +814,10 @@ class _StoreConfigScreenState extends State<StoreConfigScreen>
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Card(
-          elevation: 1,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF0D9488).withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(
-                        Icons.add_box_outlined,
-                        color: Color(0xFF0D9488),
-                        size: 20,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    const Text(
-                      'Add Material (Inward)',
-                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                TextField(
-                  controller: _matBrandCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Brand',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _matNameCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Material Name *',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                lookupDropdown(
-                  context: context,
-                  category: kWoMeasurementUnit,
-                  value: _matUnitCode,
-                  label: 'Unit',
-                  onChanged: (v) => setState(() => _matUnitCode = v),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _matSizeCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Size / Spec',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _matQtyCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Initial Qty on hand',
-                    border: OutlineInputBorder(),
-                  ),
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                ),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  initialValue: _matActivityId,
-                  decoration: const InputDecoration(
-                    labelText: 'Activity (optional)',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: _activities
-                      .map((a) => DropdownMenuItem(value: a.id, child: Text(a.name)))
-                      .toList(),
-                  onChanged: (v) => setState(() {
-                    _matActivityId = v;
-                    _matSubtaskId = null;
-                  }),
-                ),
-                if (_matActivityId != null) ...[
-                  Builder(
-                    builder: (context) {
-                      final act = _activities.where((a) => a.id == _matActivityId).firstOrNull;
-                      if (act == null) return const SizedBox.shrink();
-                      return Padding(
-                        padding: const EdgeInsets.only(top: 10),
-                        child: DropdownButtonFormField<String>(
-                          initialValue: _matSubtaskId,
-                          decoration: const InputDecoration(
-                            labelText: 'Sub-activity (optional)',
-                            border: OutlineInputBorder(),
-                          ),
-                          items: act.subtasks
-                              .map((s) => DropdownMenuItem(value: s.id, child: Text(s.name)))
-                              .toList(),
-                          onChanged: (v) => setState(() => _matSubtaskId = v),
-                        ),
-                      );
-                    },
-                  ),
-                ],
-                const SizedBox(height: 16),
-                FilledButton.icon(
-                  onPressed: _saveMaterial,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF0D9488),
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  ),
-                  icon: const Icon(Icons.check_rounded, size: 18),
-                  label: const Text('Save Material'),
-                ),
-              ],
-            ),
-          ),
+        StorePoInwardPanel(
+          isDark: isDark,
+          resourceKind: StoreInwardKind.material,
+          compact: true,
         ),
         const SizedBox(height: 20),
         Row(
@@ -943,7 +847,7 @@ class _StoreConfigScreenState extends State<StoreConfigScreen>
         else if (_materials.isEmpty)
           const Padding(
             padding: EdgeInsets.all(24),
-            child: Center(child: Text('No materials found. Add one above.')),
+            child: Center(child: Text('No materials in stock yet. Receive against a PO above.')),
           )
         else
           Column(
@@ -1407,126 +1311,10 @@ class _StoreConfigScreenState extends State<StoreConfigScreen>
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Card(
-          elevation: 1,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF7C3AED).withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(
-                        Icons.precision_manufacturing_outlined,
-                        color: Color(0xFF7C3AED),
-                        size: 20,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    const Text(
-                      'Add Machine (Equipment)',
-                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                TextField(
-                  controller: _macBrandCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Brand',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _macNameCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Machine Name *',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                lookupDropdown(
-                  context: context,
-                  category: kWoMeasurementUnit,
-                  value: _macUnitCode,
-                  label: 'Unit',
-                  onChanged: (v) => setState(() => _macUnitCode = v),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _macSizeCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Capacity / Size',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _macQtyCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Qty on hand',
-                    border: OutlineInputBorder(),
-                  ),
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                ),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  initialValue: _macActivityId,
-                  decoration: const InputDecoration(
-                    labelText: 'Activity (optional)',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: _activities
-                      .map((a) => DropdownMenuItem(value: a.id, child: Text(a.name)))
-                      .toList(),
-                  onChanged: (v) => setState(() {
-                    _macActivityId = v;
-                    _macSubtaskId = null;
-                  }),
-                ),
-                if (_macActivityId != null) ...[
-                  Builder(
-                    builder: (context) {
-                      final act = _activities.where((a) => a.id == _macActivityId).firstOrNull;
-                      if (act == null) return const SizedBox.shrink();
-                      return Padding(
-                        padding: const EdgeInsets.only(top: 10),
-                        child: DropdownButtonFormField<String>(
-                          initialValue: _macSubtaskId,
-                          decoration: const InputDecoration(
-                            labelText: 'Sub-activity (optional)',
-                            border: OutlineInputBorder(),
-                          ),
-                          items: act.subtasks
-                              .map((s) => DropdownMenuItem(value: s.id, child: Text(s.name)))
-                              .toList(),
-                          onChanged: (v) => setState(() => _macSubtaskId = v),
-                        ),
-                      );
-                    },
-                  ),
-                ],
-                const SizedBox(height: 16),
-                FilledButton.icon(
-                  onPressed: _saveMachine,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF7C3AED),
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  ),
-                  icon: const Icon(Icons.check_rounded, size: 18),
-                  label: const Text('Save Machine'),
-                ),
-              ],
-            ),
-          ),
+        StorePoInwardPanel(
+          isDark: isDark,
+          resourceKind: StoreInwardKind.machine,
+          compact: true,
         ),
         const SizedBox(height: 20),
         Row(
@@ -1556,7 +1344,7 @@ class _StoreConfigScreenState extends State<StoreConfigScreen>
         else if (_machines.isEmpty)
           const Padding(
             padding: EdgeInsets.all(24),
-            child: Center(child: Text('No machines found. Add one above.')),
+            child: Center(child: Text('No machines in stock yet. Receive against a PO above.')),
           )
         else
           Column(

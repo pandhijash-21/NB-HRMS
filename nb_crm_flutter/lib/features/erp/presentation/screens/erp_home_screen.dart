@@ -17,6 +17,7 @@ class ErpHomeScreen extends StatelessWidget {
     final canReadWorkOrders = Permissions.canReadWorkOrders(auth.permissions, auth.user?.role);
     final canReadBoq = Permissions.canReadBoq(auth.permissions, auth.user?.role);
     final canReadStore = Permissions.canReadStore(auth.permissions, auth.user?.role);
+    final canReadPurchase = Permissions.canReadPurchase(auth.permissions, auth.user?.role);
     final canReadTenders = Permissions.canReadTenders(auth.permissions, auth.user?.role);
     final canReadTenderApplications = Permissions.canReadTenderApplications(auth.permissions, auth.user?.role);
     final canReadDpr = Permissions.canReadDpr(auth.permissions, auth.user?.role);
@@ -26,6 +27,7 @@ class ErpHomeScreen extends StatelessWidget {
         canReadWorkOrders ||
         canReadBoq ||
         canReadStore ||
+        canReadPurchase ||
         canReadTenders ||
         canReadTenderApplications ||
         canReadDpr;
@@ -115,9 +117,19 @@ class ErpHomeScreen extends StatelessWidget {
                     _ErpTile(
                       icon: Icons.storefront_outlined,
                       title: 'Store',
-                      subtitle: 'Material inward/outward inventory & machine equipment',
+                      subtitle: 'Material inward/outward inventory & purchase requests',
                       color: const Color(0xFF0d9488),
                       onTap: () => context.go('/erp/store'),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
+                  if (canReadPurchase) ...[
+                    _ErpTile(
+                      icon: Icons.shopping_cart_outlined,
+                      title: 'Purchase',
+                      subtitle: 'Approvals, default approver & approved purchase requests',
+                      color: const Color(0xFFb45309),
+                      onTap: () => context.go('/erp/purchase'),
                     ),
                     const SizedBox(height: 10),
                   ],

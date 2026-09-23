@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { familyMemberSchema, type FamilyMemberFormData } from "@/lib/validators/family.schema";
@@ -20,15 +20,13 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { MaskedInput } from "@/components/shared/MaskedInput";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useUpload } from "@/lib/hooks/useUpload";
-import { toast } from "sonner";
-import { FileText, AlertCircle } from "lucide-react";
+import { AlertCircle, Phone } from "lucide-react";
 
 interface FamilyTabProps {
   employeeId: string;
@@ -63,9 +61,8 @@ export function FamilyTab({ employeeId, isAdmin }: FamilyTabProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<FamilyMemberFormData | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [aadhaarUploading, setAadhaarUploading] = useState(false);
-
-  const { upload } = useUpload(employeeId);
+  const [emergencyPromptOpen, setEmergencyPromptOpen] = useState(false);
+  const [emergencyPromptDismissed, setEmergencyPromptDismissed] = useState(false);
 
   const { register, handleSubmit, setValue, reset, watch, formState: { errors } } = useForm<FamilyMemberFormData>({
     resolver: zodResolver(familyMemberSchema) as Resolver<FamilyMemberFormData>,
@@ -75,35 +72,30 @@ export function FamilyTab({ employeeId, isAdmin }: FamilyTabProps) {
       dependent: false,
       employed: false,
       isNominee: false,
+      isEmergencyContact: false,
       city: "",
       phoneNo: "",
       personalEmail: "",
-      aadhaarUrl: "",
     },
   });
 
   const relation = watch("relation");
-  const aadhaarUrl = watch("aadhaarUrl");
-  const memberRowId = watch("id");
+  const isEmergencyContact = watch("isEmergencyContact");
 
-  const handleAadhaarUpload = async (file: File) => {
-    if (!memberRowId) {
-      toast.error("Missing member id — try reopening the form.");
-      return;
-    }
-    setAadhaarUploading(true);
-    try {
-      const url = await upload("aadhaarFamily", file, { memberId: memberRowId });
-      setValue("aadhaarUrl", url);
-      toast.success("Aadhaar uploaded successfully");
-    } catch {
-      toast.error("Failed to upload Aadhaar");
-    } finally {
-      setAadhaarUploading(false);
-    }
-  };
+  const hasEmergencyContact = members.some(
+    (m: Record<string, unknown>) => Boolean(m.isEmergencyContact)
+  );
 
-  const openAdd = () => {
+  useEffect(() => {
+    if (loading || emergencyPromptDismissed) return;
+    if (!hasEmergencyContact) {
+      setEmergencyPromptOpen(true);
+    } else {
+      setEmergencyPromptOpen(false);
+    }
+  }, [loading, hasEmergencyContact, emergencyPromptDismissed, members]);
+
+  const openAdd = (asEmergency = false) => {
     reset({
       id: crypto.randomUUID(),
       name: "",
@@ -111,26 +103,30 @@ export function FamilyTab({ employeeId, isAdmin }: FamilyTabProps) {
       dependent: false,
       employed: false,
       isNominee: false,
+      isEmergencyContact: asEmergency,
       city: "",
       phoneNo: "",
       personalEmail: "",
-      aadhaarUrl: "",
-      aadhaarNo: "",
     });
     setEditingMember(null);
     setDialogOpen(true);
   };
 
-  const openEdit = (member: FamilyMemberFormData) => {
+  const openEdit = (member: FamilyMemberFormData, forceEmergency = false) => {
     const rel = typeof (member as { relation?: string }).relation === "string"
       ? apiRelationToForm((member as { relation: string }).relation)
       : member.relation;
-    reset({ ...member, relation: rel });
+    reset({
+      ...member,
+      relation: rel,
+      isEmergencyContact: forceEmergency
+        || Boolean((member as { isEmergencyContact?: boolean }).isEmergencyContact),
+    });
     setEditingMember(member);
     setDialogOpen(true);
   };
 
-  const onSubmit = async (data: any) => {
+  const onSubmit = async (data: FamilyMemberFormData) => {
     await saveMember({ ...data, id: editingMember?.id ?? data.id });
     setDialogOpen(false);
     reset();
@@ -166,7 +162,13 @@ export function FamilyTab({ employeeId, isAdmin }: FamilyTabProps) {
                   At least 1 family member is required
                 </p>
               )}
-              {members.length > 0 && (
+              {members.length > 0 && !hasEmergencyContact && (
+                <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" />
+                  Emergency contact is required — mark one family member
+                </p>
+              )}
+              {members.length > 0 && hasEmergencyContact && (
                 <p className="text-xs text-emerald-600 mt-1">
                   {members.length} member{members.length > 1 ? "s" : ""} added
                 </p>
@@ -174,7 +176,7 @@ export function FamilyTab({ employeeId, isAdmin }: FamilyTabProps) {
             </div>
             <Button
               size="sm"
-              onClick={openAdd}
+              onClick={() => openAdd(false)}
               style={{ backgroundColor: "#1d3459" }}
               className="text-white text-xs hover:opacity-90"
             >
@@ -210,6 +212,12 @@ export function FamilyTab({ employeeId, isAdmin }: FamilyTabProps) {
                       {Boolean(m.isNominee) && (
                         <Badge className="text-xs bg-amber-100 text-amber-700">Nominee</Badge>
                       )}
+                      {Boolean(m.isEmergencyContact) && (
+                        <Badge className="text-xs bg-rose-100 text-rose-700">
+                          <Phone className="w-3 h-3 mr-0.5 inline" />
+                          Emergency
+                        </Badge>
+                      )}
                     </div>
                     <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-xs text-slate-400">
                       {Boolean(m.city) && (
@@ -226,23 +234,6 @@ export function FamilyTab({ employeeId, isAdmin }: FamilyTabProps) {
                       <p className="text-xs text-slate-400 mt-1">
                         DOB: {new Date(m.dateOfBirth as string).toLocaleDateString("en-IN")}
                       </p>
-                    )}
-                    {Boolean(m.aadhaarNoMasked) && (
-                      <div className="mt-1 flex items-center gap-2">
-                        <p className="text-xs text-slate-400">Aadhaar:</p>
-                        <MaskedInput maskedValue={m.aadhaarNoMasked as string} className="text-xs" />
-                      </div>
-                    )}
-                    {Boolean(m.aadhaarUrl) && (
-                      <a
-                        href={m.aadhaarUrl as string}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 mt-1 text-xs text-[#1d3459] hover:underline"
-                      >
-                        <FileText className="w-3 h-3" />
-                        View Aadhaar
-                      </a>
                     )}
                     {Boolean(m.employerName) && (
                       <p className="text-xs text-slate-400 mt-1">Employer: {m.employerName as string}</p>
@@ -269,6 +260,70 @@ export function FamilyTab({ employeeId, isAdmin }: FamilyTabProps) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Emergency contact required prompt — dismissible but clearly required */}
+      <Dialog
+        open={emergencyPromptOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEmergencyPromptDismissed(true);
+            setEmergencyPromptOpen(false);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-amber-500" />
+              Emergency contact required
+            </DialogTitle>
+            <DialogDescription className="text-sm text-slate-600 pt-1">
+              At least one family member must be marked as an emergency contact.
+              You can dismiss this for now, but please add or mark one before finishing your profile.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setEmergencyPromptDismissed(true);
+                setEmergencyPromptOpen(false);
+              }}
+            >
+              Remind me later
+            </Button>
+            {members.length > 0 ? (
+              <Button
+                type="button"
+                size="sm"
+                style={{ backgroundColor: "#1d3459" }}
+                className="text-white hover:opacity-90"
+                onClick={() => {
+                  setEmergencyPromptOpen(false);
+                  openEdit(members[0] as FamilyMemberFormData, true);
+                }}
+              >
+                Mark a contact
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                size="sm"
+                style={{ backgroundColor: "#1d3459" }}
+                className="text-white hover:opacity-90"
+                onClick={() => {
+                  setEmergencyPromptOpen(false);
+                  openAdd(true);
+                }}
+              >
+                Add emergency contact
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="w-full max-h-[90vh] overflow-y-auto p-6 sm:max-w-[min(98vw,88rem)] sm:p-8">
@@ -332,58 +387,7 @@ export function FamilyTab({ employeeId, isAdmin }: FamilyTabProps) {
               {errors.personalEmail && <p className="text-xs text-rose-500">{errors.personalEmail.message}</p>}
             </div>
 
-            <div className="space-y-1">
-              <Label>Aadhaar No <span className="text-rose-500">*</span></Label>
-              <MaskedInput isEditing {...register("aadhaarNo")} placeholder="12-digit" maxLength={12} />
-              {errors.aadhaarNo && <p className="text-xs text-rose-500">{errors.aadhaarNo.message}</p>}
-            </div>
-
-            <div className="space-y-2">
-              <Label>Aadhaar Upload <span className="text-rose-500">*</span></Label>
-              <div className="border-2 border-dashed border-slate-200 rounded-xl p-4">
-                {aadhaarUrl ? (
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <FileText className="w-5 h-5 text-emerald-500" />
-                      <span className="text-xs text-slate-600">Aadhaar uploaded</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setValue("aadhaarUrl", "")}
-                      className="text-xs text-rose-500 hover:underline"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ) : (
-                  <label className="flex flex-col items-center gap-2 cursor-pointer">
-                    <input
-                      type="file"
-                      accept="image/*,.pdf"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) handleAadhaarUpload(file);
-                      }}
-                      disabled={aadhaarUploading}
-                    />
-                    {aadhaarUploading ? (
-                      <div className="animate-spin w-6 h-6 border-2 border-[#1d3459] border-t-transparent rounded-full" />
-                    ) : (
-                      <>
-                        <FileText className="w-6 h-6 text-slate-300" />
-                        <span className="text-xs text-slate-400">
-                          Click to upload Aadhaar (PDF/Image)
-                        </span>
-                      </>
-                    )}
-                  </label>
-                )}
-              </div>
-              {errors.aadhaarUrl && <p className="text-xs text-rose-500">{errors.aadhaarUrl.message}</p>}
-            </div>
-
-            <div className="flex gap-6">
+            <div className="flex flex-wrap gap-6">
               <div className="flex items-center gap-2">
                 <input type="checkbox" id="dep" {...register("dependent")} />
                 <Label htmlFor="dep">Dependent</Label>
@@ -395,6 +399,15 @@ export function FamilyTab({ employeeId, isAdmin }: FamilyTabProps) {
               <div className="flex items-center gap-2">
                 <input type="checkbox" id="nom" {...register("isNominee")} />
                 <Label htmlFor="nom">Is Nominee</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="emergency"
+                  checked={Boolean(isEmergencyContact)}
+                  onChange={(e) => setValue("isEmergencyContact", e.target.checked)}
+                />
+                <Label htmlFor="emergency">Emergency contact</Label>
               </div>
             </div>
 
@@ -410,7 +423,7 @@ export function FamilyTab({ employeeId, isAdmin }: FamilyTabProps) {
               <Button
                 type="submit"
                 size="sm"
-                disabled={saving || aadhaarUploading}
+                disabled={saving}
                 style={{ backgroundColor: "#1d3459" }}
                 className="text-white hover:opacity-90"
               >

@@ -38,12 +38,51 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen>
     with SingleTickerProviderStateMixin {
   TabController? _tabController;
   int _tabCount = 0;
+  bool _emergencyPromptShown = false;
 
   void _syncTabController(int count) {
     if (_tabController != null && _tabCount == count) return;
     _tabController?.dispose();
     _tabController = TabController(length: count, vsync: this);
     _tabCount = count;
+  }
+
+  void _promptEmergencyIfNeeded({
+    required EmployeeProfile profile,
+    required bool canWriteFamily,
+    required List<(String, Widget)> tabItems,
+  }) {
+    if (!canWriteFamily || _emergencyPromptShown) return;
+    if (profile.familyMembers.any((m) => m.isEmergencyContact)) return;
+    _emergencyPromptShown = true;
+    final familyIdx = tabItems.indexWhere((t) => t.$1 == 'Family');
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => PopScope(
+          canPop: false,
+          child: AlertDialog(
+            title: const Text('Emergency contact required'),
+            content: const Text(
+              'Please add at least one family contact and mark them as an emergency contact.',
+            ),
+            actions: [
+              FilledButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  if (familyIdx >= 0 && _tabController != null) {
+                    _tabController!.animateTo(familyIdx);
+                  }
+                },
+                child: const Text('Go to Family'),
+              ),
+            ],
+          ),
+        ),
+      );
+    });
   }
 
   @override
@@ -177,6 +216,11 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen>
         }
         _syncTabController(tabItems.length);
         final tabController = _tabController!;
+        _promptEmergencyIfNeeded(
+          profile: profile,
+          canWriteFamily: canWriteFamily,
+          tabItems: tabItems,
+        );
 
         return Scaffold(
           backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -1650,7 +1694,16 @@ class _EditPersonalTabState extends ConsumerState<EditPersonalTab> {
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     final personal = widget.profile.personalInfo;
-    final payload = {
+
+    String? norm(String? v) {
+      final t = v?.trim();
+      if (t == null || t.isEmpty) return null;
+      return t;
+    }
+
+    String? dateKey(DateTime? d) => d?.toUtc().toIso8601String().substring(0, 10);
+
+    final next = <String, dynamic>{
       'birthDate': _birthDate.toUtc().toIso8601String(),
       'birthPlace': _optionalText(_birthPlaceCtrl.text),
       'homeTown': _optionalText(_homeTownCtrl.text),
@@ -1674,6 +1727,60 @@ class _EditPersonalTabState extends ConsumerState<EditPersonalTab> {
       'otherDocumentUrl': _pendingOtherDocUrl ?? personal?.otherDocumentUrl,
       if (_pendingPassportUrl != null) 'passportUrl': _pendingPassportUrl,
     };
+
+    // First create: send full payload. Later edits: only changed columns (cleaner logs).
+    final Map<String, dynamic> payload;
+    if (personal == null) {
+      payload = next;
+    } else {
+      final prev = <String, dynamic>{
+        'birthDate': personal.birthDate.toUtc().toIso8601String(),
+        'birthPlace': personal.birthPlace,
+        'homeTown': personal.homeTown,
+        'gender': personal.gender,
+        'maritalStatus': personal.maritalStatus,
+        'nationality': personal.nationality,
+        'motherTongue': personal.motherTongue,
+        'bloodGroup': personal.bloodGroup,
+        'castCategory': personal.castCategory,
+        'subCaste': personal.subCaste,
+        'nomineeName': personal.nomineeName,
+        'nomineeRelation': personal.nomineeRelation,
+        'aadhaarNo': personal.aadhaarNo,
+        'panNo': personal.panNo,
+        'passportNo': personal.passportNo,
+        'passportIssuePlace': personal.passportIssuePlace,
+        'passportIssueDate': personal.passportIssueDate?.toUtc().toIso8601String(),
+        'passportExpiryDate': personal.passportExpiryDate?.toUtc().toIso8601String(),
+        'aadhaarCardUrl': personal.aadhaarCardUrl,
+        'panCardUrl': personal.panCardUrl,
+        'otherDocumentUrl': personal.otherDocumentUrl,
+      };
+      payload = <String, dynamic>{};
+      for (final e in next.entries) {
+        final key = e.key;
+        if (key == 'passportUrl') {
+          payload[key] = e.value;
+          continue;
+        }
+        final a = e.value;
+        final b = prev[key];
+        final sameDate = key.toLowerCase().contains('date') &&
+            dateKey(a is String ? DateTime.tryParse(a) : (a is DateTime ? a : null)) ==
+                dateKey(b is String ? DateTime.tryParse(b) : (b is DateTime ? b : null));
+        final sameText = norm(a?.toString()) == norm(b?.toString());
+        if (key.toLowerCase().contains('date') ? sameDate : sameText) continue;
+        payload[key] = a;
+      }
+      if (payload.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No changes to save')),
+          );
+        }
+        return;
+      }
+    }
 
     try {
       final notifier = ref.read(profileProvider.notifier);
@@ -2362,6 +2469,58 @@ class EditFamilyTab extends ConsumerStatefulWidget {
 }
 
 class _EditFamilyTabState extends ConsumerState<EditFamilyTab> {
+  bool _emergencyPromptShown = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybePromptEmergencyContact());
+  }
+
+  @override
+  void didUpdateWidget(covariant EditFamilyTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_hasEmergencyContact) {
+      _emergencyPromptShown = false;
+      return;
+    }
+    if (oldWidget.profile.familyMembers != widget.profile.familyMembers) {
+      _emergencyPromptShown = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _maybePromptEmergencyContact());
+    }
+  }
+
+  bool get _hasEmergencyContact =>
+      widget.profile.familyMembers.any((m) => m.isEmergencyContact);
+
+  void _maybePromptEmergencyContact() {
+    if (!mounted || _emergencyPromptShown) return;
+    if (_hasEmergencyContact) return;
+    _emergencyPromptShown = true;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          title: const Text('Emergency contact required'),
+          content: const Text(
+            'Please add at least one family contact and mark them as an emergency contact.',
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _showDialog(defaultEmergency: true);
+              },
+              child: const Text('Add emergency contact'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final list = widget.profile.familyMembers;
@@ -2378,7 +2537,29 @@ class _EditFamilyTabState extends ConsumerState<EditFamilyTab> {
                   elevation: 1,
                   margin: const EdgeInsets.only(bottom: 12),
                   child: ListTile(
-                    title: Text(member.name),
+                    title: Row(
+                      children: [
+                        Expanded(child: Text(member.name)),
+                        if (member.isEmergencyContact)
+                          Container(
+                            margin: const EdgeInsets.only(left: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFF3E0),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: const Color(0xFFFFB74D)),
+                            ),
+                            child: const Text(
+                              'Emergency',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFFE65100),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                     subtitle: Text(
                       '${member.relation}  |  ${member.mobileNo ?? "No Contact"}',
                     ),
@@ -2414,12 +2595,19 @@ class _EditFamilyTabState extends ConsumerState<EditFamilyTab> {
     );
   }
 
-  void _showDialog({FamilyMember? member}) {
-    showDialog(
+  Future<void> _showDialog({FamilyMember? member, bool defaultEmergency = false}) async {
+    await showDialog(
       context: context,
-      builder: (_) =>
-          FamilyMemberDialog(employeeId: widget.profile.id, member: member),
+      builder: (_) => FamilyMemberDialog(
+        employeeId: widget.profile.id,
+        member: member,
+        defaultEmergencyContact: defaultEmergency,
+      ),
     );
+    if (mounted && !_hasEmergencyContact) {
+      _emergencyPromptShown = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _maybePromptEmergencyContact());
+    }
   }
 
   Future<void> _delete(String id) async {
@@ -2429,6 +2617,10 @@ class _EditFamilyTabState extends ConsumerState<EditFamilyTab> {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('Family member deleted')));
+      }
+      if (mounted && !_hasEmergencyContact) {
+        _emergencyPromptShown = false;
+        WidgetsBinding.instance.addPostFrameCallback((_) => _maybePromptEmergencyContact());
       }
     } catch (e) {
       if (mounted) {
@@ -3367,8 +3559,14 @@ class _EditSalaryTabState extends ConsumerState<EditSalaryTab> {
 class FamilyMemberDialog extends ConsumerStatefulWidget {
   final int employeeId;
   final FamilyMember? member;
+  final bool defaultEmergencyContact;
 
-  const FamilyMemberDialog({super.key, required this.employeeId, this.member});
+  const FamilyMemberDialog({
+    super.key,
+    required this.employeeId,
+    this.member,
+    this.defaultEmergencyContact = false,
+  });
 
   @override
   ConsumerState<FamilyMemberDialog> createState() => _FamilyMemberDialogState();
@@ -3380,7 +3578,6 @@ class _FamilyMemberDialogState extends ConsumerState<FamilyMemberDialog> {
   final _cityCtrl = TextEditingController();
   final _mobileCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
-  final _aadhaarNoCtrl = TextEditingController();
   final _employerCtrl = TextEditingController();
 
   String _relation = 'SPOUSE';
@@ -3388,8 +3585,7 @@ class _FamilyMemberDialogState extends ConsumerState<FamilyMemberDialog> {
   bool _isDependent = false;
   bool _isEmployed = false;
   bool _isNominee = false;
-  String? _aadhaarUrl;
-  PickedFileData? _pendingAadhaar;
+  bool _isEmergencyContact = false;
   bool _saving = false;
 
   @override
@@ -3400,14 +3596,13 @@ class _FamilyMemberDialogState extends ConsumerState<FamilyMemberDialog> {
     _cityCtrl.text = m?.city ?? '';
     _mobileCtrl.text = cleanMobile10(m?.mobileNo);
     _emailCtrl.text = m?.personalEmail ?? '';
-    _aadhaarNoCtrl.text = m?.aadhaarNo ?? '';
     _employerCtrl.text = m?.employerName ?? '';
     _relation = m?.relation ?? 'SPOUSE';
     _dateOfBirth = m?.dateOfBirth;
     _isDependent = m?.isDependent ?? false;
     _isEmployed = m?.isEmployed ?? false;
     _isNominee = m?.isNominee ?? false;
-    _aadhaarUrl = m?.aadhaarUrl;
+    _isEmergencyContact = m?.isEmergencyContact ?? widget.defaultEmergencyContact;
   }
 
   @override
@@ -3416,7 +3611,6 @@ class _FamilyMemberDialogState extends ConsumerState<FamilyMemberDialog> {
     _cityCtrl.dispose();
     _mobileCtrl.dispose();
     _emailCtrl.dispose();
-    _aadhaarNoCtrl.dispose();
     _employerCtrl.dispose();
     super.dispose();
   }
@@ -3436,54 +3630,12 @@ class _FamilyMemberDialogState extends ConsumerState<FamilyMemberDialog> {
     if (picked != null) setState(() => _dateOfBirth = picked);
   }
 
-  Future<void> _pickAadhaar() async {
-    // Existing member: upload immediately. New member: keep pending until save.
-    if (widget.member != null) {
-      await _pickAndUploadFile(
-        context: context,
-        ref: ref,
-        employeeId: widget.employeeId,
-        kebabType: 'aadhaar-family',
-        imagesOnly: false,
-        allowedExtensions: const ['pdf', 'jpg', 'jpeg', 'png'],
-        memberId: widget.member!.id,
-        onUploaded: (url) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) setState(() => _aadhaarUrl = url);
-          });
-        },
-      );
-      return;
-    }
-
-    try {
-      final picked = await pickFileFromDevice(
-        imagesOnly: false,
-        extensions: const ['pdf', 'jpg', 'jpeg', 'png'],
-      );
-      if (picked != null) {
-        setState(() => _pendingAadhaar = picked);
-      }
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Could not open file picker: $e'),
-          backgroundColor: AppColors.error,
-        ),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final modeText = widget.member == null ? 'Add' : 'Edit';
     final dobText = _dateOfBirth == null
         ? 'dd-mm-yyyy'
         : '${_dateOfBirth!.day.toString().padLeft(2, '0')}-${_dateOfBirth!.month.toString().padLeft(2, '0')}-${_dateOfBirth!.year}';
-    final aadhaarReady =
-        (_aadhaarUrl != null && _aadhaarUrl!.isNotEmpty) ||
-        _pendingAadhaar != null;
 
     return AlertDialog(
       title: Row(
@@ -3606,68 +3758,14 @@ class _FamilyMemberDialogState extends ConsumerState<FamilyMemberDialog> {
                 required: true,
                 hint: 'email@example.com',
               ),
-              _buildTextField(
-                'Aadhaar No',
-                _aadhaarNoCtrl,
-                required: true,
-                hint: '12-digit',
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Emergency contact'),
+                subtitle: const Text('Mark as primary emergency contact'),
+                value: _isEmergencyContact,
+                onChanged: (v) => setState(() => _isEmergencyContact = v),
               ),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: InkWell(
-                  onTap: _pickAadhaar,
-                  borderRadius: BorderRadius.circular(10),
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 20,
-                      horizontal: 16,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).brightness == Brightness.dark
-                          ? (aadhaarReady
-                                ? Theme.of(context).cardColor
-                                : const Color(0xFF242424))
-                          : (aadhaarReady
-                                ? Colors.white
-                                : AppColors.mist.withValues(alpha: 0.35)),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: aadhaarReady
-                            ? AppColors.border
-                            : Theme.of(
-                                context,
-                              ).colorScheme.primary.withValues(alpha: 0.55),
-                        style: BorderStyle.solid,
-                      ),
-                    ),
-                    child: Column(
-                      children: [
-                        Icon(
-                          aadhaarReady
-                              ? Icons.check_circle
-                              : Icons.upload_file_outlined,
-                          color: aadhaarReady
-                              ? Colors.green
-                              : Theme.of(context).colorScheme.primary,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          aadhaarReady
-                              ? (_pendingAadhaar?.name ??
-                                    'Aadhaar uploaded — tap to replace')
-                              : 'Click to upload Aadhaar (PDF/Image) *',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+              const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
                 children: [
@@ -3715,13 +3813,6 @@ class _FamilyMemberDialogState extends ConsumerState<FamilyMemberDialog> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
-    if ((_aadhaarUrl == null || _aadhaarUrl!.isEmpty) &&
-        _pendingAadhaar == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please upload Aadhaar document')),
-      );
-      return;
-    }
 
     final email = _emailCtrl.text.trim();
     final payload = <String, dynamic>{
@@ -3730,11 +3821,11 @@ class _FamilyMemberDialogState extends ConsumerState<FamilyMemberDialog> {
       'city': _cityCtrl.text.trim(),
       'mobileNo': _mobileCtrl.text.trim(),
       'personalEmail': email.isEmpty ? null : email,
-      'aadhaarNo': _aadhaarNoCtrl.text.trim(),
       'dateOfBirth': _dateOfBirth?.toUtc().toIso8601String(),
       'isNominee': _isNominee,
       'isDependent': _isDependent,
       'isEmployed': _isEmployed,
+      'isEmergencyContact': _isEmergencyContact,
       'employerName': _isEmployed ? _optional(_employerCtrl.text) : null,
     };
 
@@ -3742,20 +3833,7 @@ class _FamilyMemberDialogState extends ConsumerState<FamilyMemberDialog> {
     try {
       final notifier = ref.read(profileProvider.notifier);
       if (widget.member == null) {
-        final createdId = await notifier.addFamilyMember(payload);
-        if (createdId != null && _pendingAadhaar != null) {
-          final pending = _pendingAadhaar!;
-          await notifier.uploadFile(
-            kebabType: 'aadhaar-family',
-            bytes: pending.bytes,
-            filename: pending.name,
-            memberId: createdId,
-          );
-          // Upload skips profile state update; refresh list after dialog closes.
-          if (mounted) Navigator.pop(context);
-          await notifier.refresh();
-          return;
-        }
+        await notifier.addFamilyMember(payload);
       } else {
         await notifier.updateFamilyMember(widget.member!.id, payload);
       }

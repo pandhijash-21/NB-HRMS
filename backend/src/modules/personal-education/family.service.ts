@@ -1,6 +1,6 @@
 import type { Request } from 'express';
 import { prisma } from '../../config/prisma';
-import { decrypt, encrypt } from '../../utils/crypto';
+import { notificationsService } from '../notifications/notifications.service';
 import { diffAndAudit, pushAudit } from './audit.helpers';
 
 type FamilyCreateInput = {
@@ -11,10 +11,9 @@ type FamilyCreateInput = {
   mobileNo?: string | null;
   personalEmail?: string | null;
   dateOfBirth?: Date | null;
-  aadhaarNo?: string | null;
-  aadhaarUrl?: string | null;
   isNominee?: boolean;
   isDependent?: boolean;
+  isEmergencyContact?: boolean;
   isEmployed?: boolean;
   employerName?: string | null;
   updatedBy?: string | null;
@@ -22,18 +21,25 @@ type FamilyCreateInput = {
 
 type FamilyUpdateInput = Partial<FamilyCreateInput>;
 
+function notifyFamilyChange(employeeId: number, actorUserId: string | undefined, summary: string) {
+  void notificationsService
+    .notifyProfileChange({ employeeId, actorUserId, summary })
+    .catch(() => {});
+}
+
 export const familyService = {
   async list(employeeId: number) {
-    const rows = await prisma.familyMember.findMany({
+    return prisma.familyMember.findMany({
       where: { employeeId, isActive: true },
       orderBy: { createdAt: 'asc' },
     });
+  },
 
-    return rows.map((r) => ({
-      ...r,
-      aadhaarNo: r.aadhaarNo ? decrypt(r.aadhaarNo) : null,
-      aadhaarUrl: r.aadhaarUrl ?? null,
-    }));
+  async hasEmergencyContact(employeeId: number): Promise<boolean> {
+    const count = await prisma.familyMember.count({
+      where: { employeeId, isActive: true, isEmergencyContact: true },
+    });
+    return count > 0;
   },
 
   async create(employeeId: number, input: FamilyCreateInput, req: Request) {
@@ -47,30 +53,33 @@ export const familyService = {
         mobileNo: input.mobileNo ?? null,
         personalEmail: input.personalEmail ?? null,
         dateOfBirth: input.dateOfBirth ?? null,
-        aadhaarNo: input.aadhaarNo ? encrypt(input.aadhaarNo) : null,
-        aadhaarUrl: input.aadhaarUrl ?? null,
         isNominee: input.isNominee ?? false,
         isDependent: input.isDependent ?? false,
+        isEmergencyContact: input.isEmergencyContact ?? false,
         isEmployed: input.isEmployed ?? false,
         employerName: input.employerName ?? null,
         updatedBy: input.updatedBy ?? req.user?.id ?? null,
       },
     });
 
-    for (const [k, v] of Object.entries(input)) {
-      if (v === undefined) continue;
-      pushAudit(req, {
-        tableName: 'family_members',
-        recordId: created.id,
-        employeeId,
-        fieldName: k,
-        oldValue: null,
-        newValue: v == null ? null : String(v),
-        sensitive: k === 'aadhaarNo',
-      });
-    }
+    pushAudit(req, {
+      tableName: 'family_members',
+      recordId: created.id,
+      employeeId,
+      fieldName: 'record',
+      oldValue: null,
+      newValue: created.isEmergencyContact
+        ? `added ${created.name} (emergency)`
+        : `added ${created.name}`,
+    });
 
-    return { ...created, aadhaarNo: input.aadhaarNo ?? null, aadhaarUrl: input.aadhaarUrl ?? null };
+    notifyFamilyChange(
+      employeeId,
+      req.user?.id,
+      `added family member ${created.name}${created.isEmergencyContact ? ' (emergency contact)' : ''}`,
+    );
+
+    return created;
   },
 
   async update(employeeId: number, memberId: string, input: FamilyUpdateInput, req: Request) {
@@ -79,10 +88,7 @@ export const familyService = {
     });
     if (!existing) return null;
 
-    const before = {
-      ...existing,
-      aadhaarNo: existing.aadhaarNo ? decrypt(existing.aadhaarNo) : null,
-    };
+    const changedKeys = Object.keys(input).filter((k) => (input as any)[k] !== undefined);
 
     const updated = await prisma.familyMember.update({
       where: { id: memberId },
@@ -93,10 +99,9 @@ export const familyService = {
         mobileNo: input.mobileNo ?? undefined,
         personalEmail: input.personalEmail ?? undefined,
         dateOfBirth: input.dateOfBirth ?? undefined,
-        aadhaarNo: input.aadhaarNo !== undefined ? (input.aadhaarNo ? encrypt(input.aadhaarNo) : null) : undefined,
-        aadhaarUrl: input.aadhaarUrl !== undefined ? input.aadhaarUrl : undefined,
         isNominee: input.isNominee ?? undefined,
         isDependent: input.isDependent ?? undefined,
+        isEmergencyContact: input.isEmergencyContact ?? undefined,
         isEmployed: input.isEmployed ?? undefined,
         employerName: input.employerName ?? undefined,
         updatedBy: input.updatedBy ?? req.user?.id ?? undefined,
@@ -107,15 +112,14 @@ export const familyService = {
       tableName: 'family_members',
       recordId: updated.id,
       employeeId,
-      before,
-      after: { ...before, ...input },
-      sensitiveFields: new Set(['aadhaarNo']),
+      before: existing as unknown as Record<string, unknown>,
+      after: { ...existing, ...input } as Record<string, unknown>,
+      changedKeys,
     });
 
-    return {
-      ...updated,
-      aadhaarNo: input.aadhaarNo !== undefined ? input.aadhaarNo : before.aadhaarNo,
-    };
+    notifyFamilyChange(employeeId, req.user?.id, `updated family member ${updated.name}`);
+
+    return updated;
   },
 
   async softDelete(employeeId: number, memberId: string, req: Request) {
@@ -123,6 +127,23 @@ export const familyService = {
       where: { id: memberId, employeeId, isActive: true },
     });
     if (!existing) return null;
+
+    if (existing.isEmergencyContact) {
+      const otherEmergency = await prisma.familyMember.count({
+        where: {
+          employeeId,
+          isActive: true,
+          isEmergencyContact: true,
+          id: { not: memberId },
+        },
+      });
+      if (otherEmergency === 0) {
+        throw Object.assign(
+          new Error('At least one emergency contact is required. Mark another contact as emergency before removing this one.'),
+          { status: 400 },
+        );
+      }
+    }
 
     const updated = await prisma.familyMember.update({
       where: { id: memberId },
@@ -137,7 +158,8 @@ export const familyService = {
       after: { ...existing, isActive: false },
     });
 
+    notifyFamilyChange(employeeId, req.user?.id, `removed family member ${existing.name}`);
+
     return updated;
   },
 };
-

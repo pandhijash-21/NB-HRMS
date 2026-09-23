@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/utils/platform_file_picker.dart';
 import '../../../../core/widgets/mobile_input_formatter.dart';
+import '../../../lookups/domain/lookup_models.dart';
 import '../../../lookups/presentation/lookup_dropdown.dart';
 import '../../data/work_order_repository.dart';
 import '../../domain/contractor_lookup_keys.dart';
@@ -254,7 +255,7 @@ class _ContractorFormScreenState extends State<ContractorFormScreen> {
       }
       if (!mounted) return;
       if (andNew) {
-        context.go('/erp/configurations/contractors/new');
+        context.go('/erp/configurations/vendors/new');
         // Reset local state for new form if same route reused
         setState(() {
           _nameCtrl.clear();
@@ -275,7 +276,7 @@ class _ContractorFormScreenState extends State<ContractorFormScreen> {
           _hydrated = false;
         });
       } else {
-        context.go('/erp/configurations/contractors');
+        context.go('/erp/configurations/vendors');
       }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
@@ -357,8 +358,8 @@ class _ContractorFormScreenState extends State<ContractorFormScreen> {
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF1F5F9),
       appBar: AppBar(
-        title: Text(widget.isEdit ? 'Edit Contractor' : 'Add Contractor'),
-        leading: const AppBackButton(fallbackLocation: '/erp/configurations/contractors'),
+        title: Text(widget.isEdit ? 'Edit Vendor' : 'Add Vendor'),
+        leading: const AppBackButton(fallbackLocation: '/erp/configurations/vendors'),
       ),
       body: Form(
         key: _formKey,
@@ -366,7 +367,7 @@ class _ContractorFormScreenState extends State<ContractorFormScreen> {
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
           children: [
             _section(
-              title: 'Contractors Details',
+              title: 'Vendor Details',
               child: Column(
                 children: [
                   _grid([
@@ -424,9 +425,14 @@ class _ContractorFormScreenState extends State<ContractorFormScreen> {
                     lookupNullableDropdown(
                       context: context,
                       category: kContractorType,
-                      label: 'Contractor Type',
+                      label: 'Type of Vendor',
                       value: _contractorTypeCode,
                       onChanged: (v) => setState(() => _contractorTypeCode = v),
+                      fallback: const [
+                        LookupOption(id: 'AGENCY', category: 'CONTRACTOR_TYPE', code: 'AGENCY', label: 'Agency'),
+                        LookupOption(id: 'CONTRACTOR', category: 'CONTRACTOR_TYPE', code: 'CONTRACTOR', label: 'Contractor'),
+                        LookupOption(id: 'SUPPLIER', category: 'CONTRACTOR_TYPE', code: 'SUPPLIER', label: 'Supplier'),
+                      ],
                     ),
                     CheckboxListTile(
                       contentPadding: EdgeInsets.zero,
@@ -696,7 +702,7 @@ class _ContractorFormScreenState extends State<ContractorFormScreen> {
               ),
               const SizedBox(width: 8),
               OutlinedButton(
-                onPressed: () => context.go('/erp/configurations/contractors'),
+                onPressed: () => context.go('/erp/configurations/vendors'),
                 child: const Text('Cancel'),
               ),
             ],

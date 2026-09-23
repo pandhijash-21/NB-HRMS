@@ -85,6 +85,22 @@ resourceRouter.delete('/materials/:id', requireAuth, requirePermission('STORE', 
   }
 });
 
+resourceRouter.post(
+  '/materials/upload',
+  requireAuth,
+  requirePermission('STORE', 'WRITE'),
+  upload.single('file'),
+  async (req: Request, res: Response) => {
+    try {
+      if (!req.file) return res.status(400).json(fail('No file uploaded'));
+      const url = await uploadService.uploadToCloudinary(req.file, 'erp/inventory');
+      return res.json(ok({ url, fileName: req.file.originalname, mimeType: req.file.mimetype, fileSize: req.file.size }));
+    } catch (e: unknown) {
+      return res.status(400).json(fail(e instanceof Error ? e.message : 'Upload failed'));
+    }
+  },
+);
+
 // Machines
 resourceRouter.get('/machines', requireAuth, requirePermission('STORE', 'READ'), async (req, res) => {
   try {

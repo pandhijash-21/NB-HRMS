@@ -66,6 +66,27 @@ class BoqRepository {
     );
   }
 
+  Future<ErpMaterial> updateMaterial(String id, Map<String, dynamic> body) async {
+    return _dio.patchEnvelope<ErpMaterial>(
+      'erp/resources/materials/$id',
+      data: body,
+      parse: (raw) => ErpMaterial.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
+  Future<({String url, String? fileName})> uploadInventoryImage({
+    required List<int> bytes,
+    required String filename,
+  }) async {
+    final multipart = MultipartFile.fromBytes(bytes, filename: filename);
+    final res = await _dio.postEnvelope<Map<String, dynamic>>(
+      'erp/resources/materials/upload',
+      data: FormData.fromMap({'file': multipart}),
+      parse: (raw) => Map<String, dynamic>.from(raw as Map),
+    );
+    return (url: res['url']?.toString() ?? '', fileName: res['fileName']?.toString());
+  }
+
   Future<ErpMaterial> addMaterialStock(String id, Map<String, dynamic> body) async {
     return _dio.postEnvelope<ErpMaterial>(
       'erp/resources/materials/$id/stock',

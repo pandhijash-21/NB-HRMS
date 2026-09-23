@@ -1280,15 +1280,174 @@ export const crmService = {
     return this.getSettings();
   },
 
+  /** JSON map: { [employeeId]: { api_url, user_id, did, route_number, agent_number } } */
+  async _readTelecallerConfigMap(): Promise<
+    Record<
+      string,
+      {
+        api_url?: string;
+        user_id?: string;
+        did?: string;
+        route_number?: string;
+        agent_number?: string;
+      }
+    >
+  > {
+    const row = await prisma.crmSetting.findUnique({
+      where: { key: 'elision_telecaller_configs' },
+    });
+    if (!row?.value) return {};
+    try {
+      const parsed = JSON.parse(row.value);
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      return {};
+    }
+  },
+
+  async _writeTelecallerConfigMap(
+    map: Record<string, unknown>,
+    updatedBy?: string,
+  ) {
+    await prisma.crmSetting.upsert({
+      where: { key: 'elision_telecaller_configs' },
+      update: { value: JSON.stringify(map), updatedBy },
+      create: {
+        key: 'elision_telecaller_configs',
+        value: JSON.stringify(map),
+        description: 'Per-telecaller Elision/Greeter Click2Call credentials',
+        updatedBy,
+      },
+    });
+  },
+
+  async listTelecallerTelephony() {
+    const defaults = await this.getSettings();
+    const configs = await this._readTelecallerConfigMap();
+
+    const telecallers = await prisma.employee.findMany({
+      where: {
+        status: 'ACTIVE',
+        OR: [
+          {
+            generalInfo: {
+              designation: { equals: 'Telecaller', mode: 'insensitive' },
+            },
+          },
+          {
+            generalInfo: {
+              designationRef: {
+                name: { equals: 'Telecaller', mode: 'insensitive' },
+              },
+            },
+          },
+        ],
+      },
+      select: {
+        id: true,
+        userId: true,
+        generalInfo: {
+          select: {
+            fullName: true,
+            employeeCode: true,
+            designation: true,
+          },
+        },
+      },
+      orderBy: { generalInfo: { fullName: 'asc' } },
+    });
+
+    return {
+      defaults: {
+        api_url: defaults.elision_api_url,
+        user_id: defaults.elision_user_id,
+        did: defaults.elision_did,
+        route_number: defaults.elision_route_number,
+        agent_number: defaults.elision_default_agent_number,
+      },
+      telecallers: telecallers.map((e) => {
+        const cfg = configs[String(e.id)] ?? {};
+        return {
+          employeeId: e.id,
+          userId: e.userId,
+          name: e.generalInfo?.fullName ?? `Employee #${e.id}`,
+          employeeCode: e.generalInfo?.employeeCode ?? null,
+          designation: e.generalInfo?.designation ?? 'Telecaller',
+          configured: Boolean(
+            cfg.agent_number || cfg.user_id || cfg.did || cfg.api_url || cfg.route_number,
+          ),
+          config: {
+            api_url: cfg.api_url ?? defaults.elision_api_url,
+            user_id: cfg.user_id ?? defaults.elision_user_id,
+            did: cfg.did ?? defaults.elision_did,
+            route_number: cfg.route_number ?? defaults.elision_route_number,
+            agent_number: cfg.agent_number ?? defaults.elision_default_agent_number,
+          },
+        };
+      }),
+    };
+  },
+
+  async upsertTelecallerTelephony(
+    employeeId: number,
+    body: Record<string, unknown>,
+    updatedBy?: string,
+  ) {
+    if (!Number.isFinite(employeeId) || employeeId <= 0) {
+      throw new Error('Invalid employee id');
+    }
+    const emp = await prisma.employee.findUnique({
+      where: { id: employeeId },
+      include: {
+        generalInfo: {
+          select: {
+            designation: true,
+            designationRef: { select: { name: true } },
+          },
+        },
+      },
+    });
+    if (!emp) throw new Error('Employee not found');
+    const desig =
+      emp.generalInfo?.designationRef?.name ?? emp.generalInfo?.designation ?? '';
+    if (!/telecaller/i.test(desig)) {
+      throw new Error('Employee designation must be Telecaller');
+    }
+
+    const map = await this._readTelecallerConfigMap();
+    map[String(employeeId)] = {
+      api_url: body.api_url != null ? String(body.api_url).trim() : map[String(employeeId)]?.api_url,
+      user_id: body.user_id != null ? String(body.user_id).trim() : map[String(employeeId)]?.user_id,
+      did: body.did != null ? String(body.did).trim() : map[String(employeeId)]?.did,
+      route_number:
+        body.route_number != null
+          ? String(body.route_number).trim()
+          : map[String(employeeId)]?.route_number,
+      agent_number:
+        body.agent_number != null
+          ? String(body.agent_number).trim()
+          : map[String(employeeId)]?.agent_number,
+    };
+    await this._writeTelecallerConfigMap(map, updatedBy);
+    const list = await this.listTelecallerTelephony();
+    return list.telecallers.find((t) => t.employeeId === employeeId) ?? null;
+  },
+
   async clickToCall(leadId: string, agentPhoneOrId?: string, userContext?: any) {
     const lead = await prisma.crmLead.findUnique({ where: { id: leadId } });
     if (!lead) throw new Error('Lead not found');
 
     const settings = await this.getSettings();
-    const apiUrl = settings.elision_api_url || 'https://greeter.co.in/api/click2call';
-    const userId = settings.elision_user_id || '634550';
-    const routeNumber = settings.elision_route_number || '98';
-    const did = settings.elision_did || '9484700070';
+    const telecallerMap = await this._readTelecallerConfigMap();
+    const empId = userContext?.employeeId != null ? Number(userContext.employeeId) : null;
+    const personal =
+      empId != null && Number.isFinite(empId) ? telecallerMap[String(empId)] : undefined;
+
+    const apiUrl =
+      personal?.api_url || settings.elision_api_url || 'https://greeter.co.in/api/click2call';
+    const userId = personal?.user_id || settings.elision_user_id || '634550';
+    const routeNumber = personal?.route_number || settings.elision_route_number || '98';
+    const did = personal?.did || settings.elision_did || '9484700070';
 
     // Normalize customer phone number (strip spaces/dashes)
     let customerNumber = lead.phone.replace(/[^0-9]/g, '');
@@ -1296,8 +1455,9 @@ export const crmService = {
       customerNumber = customerNumber.substring(2);
     }
 
-    // Resolve Agent Mobile Number
-    let agentNumber: string | null | undefined = agentPhoneOrId;
+    // Resolve Agent Mobile Number — prefer personal telephony config, then explicit arg, then profile, then global default
+    let agentNumber: string | null | undefined =
+      personal?.agent_number || agentPhoneOrId || null;
     if (!agentNumber && userContext?.employeeId) {
       try {
         const emp = await prisma.employee.findUnique({

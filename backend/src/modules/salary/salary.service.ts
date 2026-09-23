@@ -715,8 +715,26 @@ export const salaryService = {
   },
 
   async getEmployeeMonthlyOverview(employeeId: number, year: number, month: number) {
+    const salaryInfo = await prisma.employeeSalaryInfo.findUnique({
+      where: { employeeId },
+      select: { payCommissionId: true },
+    });
+    let payableDaysMode: 'WORKING_DAYS_26_27' | 'CALENDAR_30_31' | undefined;
+    if (salaryInfo?.payCommissionId) {
+      const pc = await prisma.payCommission.findUnique({
+        where: { id: salaryInfo.payCommissionId },
+        select: { payableDaysMode: true },
+      });
+      payableDaysMode = pc?.payableDaysMode;
+    }
+
     const { attendanceService } = await import('../attendance/attendance.service');
-    const attendance = await attendanceService.getEmployeeMonthlySummary({ employeeId, year, month });
+    const attendance = await attendanceService.getEmployeeMonthlySummary({
+      employeeId,
+      year,
+      month,
+      payableDaysMode,
+    });
 
     const [record, balances] = await Promise.all([
       prisma.employeeSalaryRecord.findFirst({
@@ -809,21 +827,6 @@ export const salaryService = {
       throw new Error('Invalid year/month');
     }
 
-    const { attendanceService } = await import('../attendance/attendance.service');
-    const attendance = await attendanceService.getEmployeeMonthlySummary({ employeeId, year, month });
-    const stats = attendance.stats as {
-      absentDays: number;
-      unpaidLeaveDays: number;
-      halfDays: number;
-      salaryAbsentDays: number;
-      daysInMonth: number;
-      sundayCount?: number;
-      payableDays?: number;
-      presentDaysForSalary?: number;
-      holidayDays: number;
-      leaveDays: number;
-    };
-
     const existing = await prisma.employeeSalaryRecord.findUnique({
       where: {
         employeeId_salaryMonth_salaryYear: {
@@ -854,6 +857,27 @@ export const salaryService = {
       where: { id: salaryInfo.payCommissionId },
     });
     if (!payCommission) throw new Error('Employee pay commission not found');
+
+    const { attendanceService } = await import('../attendance/attendance.service');
+    const attendance = await attendanceService.getEmployeeMonthlySummary({
+      employeeId,
+      year,
+      month,
+      payableDaysMode: payCommission.payableDaysMode,
+    });
+    const stats = attendance.stats as {
+      absentDays: number;
+      unpaidLeaveDays: number;
+      halfDays: number;
+      salaryAbsentDays: number;
+      daysInMonth: number;
+      sundayCount?: number;
+      payableDays?: number;
+      payableDaysMode?: string;
+      presentDaysForSalary?: number;
+      holidayDays: number;
+      leaveDays: number;
+    };
 
     const { template } = await this.getTemplateByDesignationAndCommission(
       designationId,
@@ -956,6 +980,7 @@ export const salaryService = {
       daysInMonth: stats.daysInMonth,
       sundayCount,
       payableDays,
+      payableDaysMode: (stats as { payableDaysMode?: string }).payableDaysMode ?? payCommission.payableDaysMode,
       presentDaysForSalary:
         (stats as { presentDaysForSalary?: number }).presentDaysForSalary ??
         Math.max(0, payableDays - cutDays),

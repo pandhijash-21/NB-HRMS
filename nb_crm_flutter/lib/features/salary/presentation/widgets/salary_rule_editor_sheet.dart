@@ -329,7 +329,7 @@ class _SalaryRuleEditorSheetState extends State<SalaryRuleEditorSheet> {
                   : null,
               'result_reference_columns': c.resultType == 'PERCENTAGE_OF_COLUMN'
                   ? c.resultReferenceColumns.map((r) => r.toJson()).toList()
-                  : null,
+                  : <Map<String, dynamic>>[],
               'sort_order': c.sortOrder,
               'is_else_fallback': c.isElseFallback,
             };

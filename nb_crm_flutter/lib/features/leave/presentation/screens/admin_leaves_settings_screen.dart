@@ -268,10 +268,7 @@ class AdminLeavesSettingsScreen extends ConsumerWidget {
     final daysController = TextEditingController(
       text: existing?.defaultDaysPerYear?.toString() ?? '',
     );
-    var applicableTo = existing?.applicableTo ?? 'BOTH';
-    if (applicableTo != 'TEACHING' && applicableTo != 'NON_TEACHING' && applicableTo != 'BOTH') {
-      applicableTo = 'BOTH';
-    }
+    const applicableTo = 'BOTH';
     var isCarryForward = existing?.isCarryForward ?? false;
     var requiresDocument = existing?.requiresDocument ?? false;
     var employeeCanApply = existing?.employeeCanApply ?? true;
@@ -313,19 +310,6 @@ class AdminLeavesSettingsScreen extends ConsumerWidget {
                     controller: daysController,
                     keyboardType: TextInputType.number,
                     decoration: _styledInput('Days per Year (blank = unlimited)', isDark),
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    initialValue: applicableTo,
-                    decoration: _styledInput('Applicable To', isDark),
-                    items: const [
-                      DropdownMenuItem(value: 'TEACHING', child: Text('Teaching only')),
-                      DropdownMenuItem(value: 'NON_TEACHING', child: Text('Non-Teaching only')),
-                      DropdownMenuItem(value: 'BOTH', child: Text('Teaching & Non-Teaching')),
-                    ],
-                    onChanged: (v) {
-                      if (v != null) setLocal(() => applicableTo = v);
-                    },
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<bool>(

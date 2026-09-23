@@ -384,7 +384,7 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
                   ],
                 ),
                 TextButton.icon(
-                  onPressed: () => _showHistoryDetailsDialog(context, assignmentsAsync),
+                  onPressed: () => _showAllLogsDialog(context, assignmentsAsync),
                   style: TextButton.styleFrom(foregroundColor: const Color(0xFFC5A059)),
                   icon: const Icon(Icons.history_rounded, size: 14),
                   label: const Text('View All Logs', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
@@ -556,121 +556,172 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
     );
   }
 
-  void _showHistoryDetailsDialog(BuildContext context, AsyncValue<List<EmployeeAssignment>> asyncList) {
+  void _showAllLogsDialog(BuildContext context, AsyncValue<List<EmployeeAssignment>> assignmentsAsync) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final institutes =
-        ref.read(activeInstitutesProvider).asData?.value ?? const <Institute>[];
-
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(
-            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
-            width: 1.5,
+      builder: (ctx) => DefaultTabController(
+        length: 2,
+        child: AlertDialog(
+          backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(
+              color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
+              width: 1.5,
+            ),
           ),
-        ),
-        title: Text(
-          'Assignment Logs Timeline',
-          style: TextStyle(
-            color: isDark ? Colors.white : const Color(0xFF212F3D),
-            fontWeight: FontWeight.w800,
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'All Logs',
+                style: TextStyle(
+                  color: isDark ? Colors.white : const Color(0xFF212F3D),
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              TabBar(
+                labelColor: isDark ? const Color(0xFFC5A059) : Colors.black,
+                unselectedLabelColor: isDark ? Colors.white54 : const Color(0xFF607D8B),
+                indicatorColor: const Color(0xFFC5A059),
+                tabs: const [
+                  Tab(text: 'Profile changes'),
+                  Tab(text: 'Assignments'),
+                ],
+              ),
+            ],
           ),
-        ),
-        content: SizedBox(
-          width: 400,
-          height: 350,
-          child: asyncList.when(
-            data: (list) {
-              if (list.isEmpty) return const Center(child: Text('No historical logs.', style: TextStyle(fontWeight: FontWeight.w600)));
-              final sorted = List<EmployeeAssignment>.from(list)
-                ..sort((a, b) => b.effectiveFrom.compareTo(a.effectiveFrom));
-
-              return ListView.builder(
-                itemCount: sorted.length,
-                itemBuilder: (ctx, i) {
-                  final log = sorted[i];
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.circle, size: 8, color: Color(0xFFC5A059)),
-                          const SizedBox(width: 8),
-                          Text(
-                            assignmentEventLabel(log, i + 1 < sorted.length ? sorted[i + 1] : null),
+          content: SizedBox(
+            width: 420,
+            height: 380,
+            child: TabBarView(
+              children: [
+                FutureBuilder<List<EmployeeAuditLogEntry>>(
+                  future: ref.read(adminRepositoryProvider).listAuditLogs(widget.employeeId),
+                  builder: (context, snap) {
+                    if (snap.connectionState != ConnectionState.done) {
+                      return const Center(child: CircularProgressIndicator(color: Color(0xFFC5A059)));
+                    }
+                    if (snap.hasError) {
+                      return Text('Error: ${snap.error}', style: const TextStyle(color: Colors.red));
+                    }
+                    final logs = (snap.data ?? const <EmployeeAuditLogEntry>[])
+                        .where((l) => !l.isNoiseField)
+                        .toList();
+                    if (logs.isEmpty) {
+                      return const Center(
+                        child: Text(
+                          'No profile change logs yet.',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      );
+                    }
+                    return ListView.separated(
+                      itemCount: logs.length,
+                      separatorBuilder: (_, __) => Divider(
+                        height: 1,
+                        color: isDark
+                            ? const Color(0xFFC5A059).withValues(alpha: 0.12)
+                            : Colors.black.withValues(alpha: 0.06),
+                      ),
+                      itemBuilder: (context, i) {
+                        final log = logs[i];
+                        return ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                          title: Text(
+                            log.summary,
                             style: TextStyle(
-                              fontWeight: FontWeight.w800, 
+                              fontWeight: FontWeight.w800,
                               fontSize: 13,
                               color: isDark ? Colors.white : const Color(0xFF212F3D),
                             ),
                           ),
-                        ],
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 16.0, top: 4, bottom: 10),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Designation: ${log.designation}',
-                              style: TextStyle(color: isDark ? Colors.white70 : const Color(0xFF212F3D), fontSize: 12, fontWeight: FontWeight.w700),
+                          subtitle: Text(
+                            [
+                              if (log.changedByName != null && log.changedByName!.isNotEmpty)
+                                'By ${log.changedByName}',
+                              _formatDate(log.changedAt),
+                              if (log.fieldName == 'photoUrl')
+                                'photo'
+                              else if (log.newValue != null && log.newValue!.isNotEmpty)
+                                '→ ${log.newValue!.length > 40 ? '${log.newValue!.substring(0, 40)}…' : log.newValue}',
+                            ].where((e) => e.isNotEmpty).join(' · '),
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: isDark ? Colors.white60 : const Color(0xFF607D8B),
                             ),
-                            Builder(
-                              builder: (context) {
-                                final label = _liveInstituteLabel(
-                                  assignment: log,
-                                  institutes: institutes,
-                                );
-                                return Text(
-                                  'Institute: $label · Department: ${log.department ?? "N/A"}',
-                                  style: TextStyle(color: isDark ? Colors.white60 : const Color(0xFF607D8B), fontSize: 12),
-                                );
-                              },
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'Effective: ${_formatDate(log.effectiveFrom)} - ${log.effectiveTo != null ? _formatDate(log.effectiveTo!) : "Present"}',
-                              style: TextStyle(color: isDark ? Colors.white30 : const Color(0xFF607D8B).withValues(alpha: 0.6), fontSize: 11),
-                            ),
-                            if (log.reason != null && log.reason!.isNotEmpty) ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                'Reason: ${log.reason}', 
-                                style: const TextStyle(fontStyle: FontStyle.italic, fontSize: 11, color: Colors.orange),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+                // Reuse assignment timeline content via nested dialog builder
+                Builder(
+                  builder: (context) {
+                    // Inline assignment list (same as history dialog)
+                    return assignmentsAsync.when(
+                      data: (list) {
+                        if (list.isEmpty) {
+                          return const Center(
+                            child: Text('No assignment logs.', style: TextStyle(fontWeight: FontWeight.w600)),
+                          );
+                        }
+                        final sorted = List<EmployeeAssignment>.from(list)
+                          ..sort((a, b) => b.effectiveFrom.compareTo(a.effectiveFrom));
+                        return ListView.builder(
+                          itemCount: sorted.length,
+                          itemBuilder: (ctx, i) {
+                            final log = sorted[i];
+                            return ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              dense: true,
+                              title: Text(
+                                assignmentEventLabel(log, i + 1 < sorted.length ? sorted[i + 1] : null),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 13,
+                                  color: isDark ? Colors.white : const Color(0xFF212F3D),
+                                ),
                               ),
-                            ],
-                          ],
-                        ),
-                      ),
-                      Divider(
-                        height: 1,
-                        color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.06),
-                      ),
-                      const SizedBox(height: 8),
-                    ],
-                  );
-                },
-              );
-            },
-            loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFFC5A059))),
-            error: (err, _) => Text('Error: $err', style: const TextStyle(color: Colors.red)),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(
-              'Close',
-              style: TextStyle(
-                color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF607D8B),
-                fontWeight: FontWeight.w700,
-              ),
+                              subtitle: Text(
+                                '${log.designation} · ${_formatDate(log.effectiveFrom)}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: isDark ? Colors.white60 : const Color(0xFF607D8B),
+                                ),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                      loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFFC5A059))),
+                      error: (err, _) => Text('Error: $err', style: const TextStyle(color: Colors.red)),
+                    );
+                  },
+                ),
+              ],
             ),
           ),
-        ],
+          actions: [
+            TextButton(
+              onPressed: () {
+                ref.invalidate(employeeAuditLogsProvider(widget.employeeId));
+                Navigator.pop(ctx);
+              },
+              child: Text(
+                'Close',
+                style: TextStyle(
+                  color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF607D8B),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

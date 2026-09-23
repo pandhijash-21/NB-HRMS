@@ -13,7 +13,31 @@ export const auditController = {
       take: 500,
     });
 
-    return res.json(ok(rows));
+    const changerIds = [...new Set(rows.map((r) => r.changedBy).filter(Boolean))];
+    const users = changerIds.length
+      ? await prisma.user.findMany({
+          where: { id: { in: changerIds } },
+          select: {
+            id: true,
+            username: true,
+            employee: { select: { generalInfo: { select: { fullName: true } } } },
+          },
+        })
+      : [];
+    const nameById = new Map(
+      users.map((u) => [
+        u.id,
+        u.employee?.generalInfo?.fullName?.trim() || u.username || u.id,
+      ]),
+    );
+
+    return res.json(
+      ok(
+        rows.map((r) => ({
+          ...r,
+          changedByName: nameById.get(r.changedBy) ?? r.changedBy,
+        })),
+      ),
+    );
   },
 };
-

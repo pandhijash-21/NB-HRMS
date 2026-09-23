@@ -1204,7 +1204,13 @@ export const attendanceService = {
     return this.getEmployeeAttendanceSettings(employeeId);
   },
 
-  async getEmployeeMonthlySummary(params: { employeeId: number; year: number; month: number }) {
+  async getEmployeeMonthlySummary(params: {
+    employeeId: number;
+    year: number;
+    month: number;
+    /** WORKING_DAYS_26_27 (default) = calendar − Sundays; CALENDAR_30_31 = full calendar days. */
+    payableDaysMode?: 'WORKING_DAYS_26_27' | 'CALENDAR_30_31';
+  }) {
     const { from, to } = monthRangeYmd(params.year, params.month);
     const history = await this.getAdminEmployeeHistory({ employeeId: params.employeeId, from, to });
 
@@ -1266,8 +1272,13 @@ export const attendanceService = {
       // Calendar weekday for Y-M-D (0 = Sunday)
       return new Date(Date.UTC(yy, mm - 1, dd)).getUTCDay() === 0;
     }).length;
-    // Salary divisor: calendar days minus Sundays (e.g. 31−4=27, 30−4=26).
-    const payableDays = Math.max(1, daysInMonth - sundayCount);
+    const mode = params.payableDaysMode ?? 'WORKING_DAYS_26_27';
+    // WORKING_DAYS_26_27: calendar days minus Sundays (e.g. 31−4=27).
+    // CALENDAR_30_31: full calendar month days (legacy 30/31 basis).
+    const payableDays =
+      mode === 'CALENDAR_30_31'
+        ? Math.max(1, daysInMonth)
+        : Math.max(1, daysInMonth - sundayCount);
     const salaryAbsentDays = absentDays + unpaidLeaveDays + halfDays * 0.5;
     const presentDaysForSalary = Math.max(
       0,
@@ -1294,6 +1305,7 @@ export const attendanceService = {
         daysInMonth,
         sundayCount,
         payableDays,
+        payableDaysMode: mode,
         totalWorkingMinutes,
         totalWorkingHours: Math.round((totalWorkingMinutes / 60) * 100) / 100,
         leaveApplications: leaveApps.length,

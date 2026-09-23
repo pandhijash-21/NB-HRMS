@@ -109,6 +109,21 @@ class AdminRepository {
     );
   }
 
+  /// Profile / field change audit trail via GET `employees/{id}/audit-log`.
+  Future<List<EmployeeAuditLogEntry>> listAuditLogs(int employeeId) async {
+    return _dio.getEnvelope<List<EmployeeAuditLogEntry>>(
+      'employees/$employeeId/audit-log',
+      parse: (raw) {
+        if (raw is! List) {
+          throw const FormatException('Invalid audit log format');
+        }
+        return raw
+            .map((e) => EmployeeAuditLogEntry.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList();
+      },
+    );
+  }
+
   /// Assign position to employee via PATCH `employees/{id}/position`.
   Future<void> assignPosition(int employeeId, String? positionDesignationId) async {
     try {

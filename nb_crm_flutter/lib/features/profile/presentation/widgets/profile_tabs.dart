@@ -685,8 +685,8 @@ class FamilyViewTab extends StatelessWidget {
                   _buildWrapField(context, 'Mobile No', '—'),
                   _buildWrapField(context, 'Email', '—'),
                   _buildWrapField(context, 'City', '—'),
-                  _buildWrapField(context, 'Aadhaar No', '—'),
                   _buildWrapField(context, 'Is Nominee', '—'),
+                  _buildWrapField(context, 'Emergency Contact', '—'),
                 ],
               ),
             ),
@@ -718,25 +718,55 @@ class FamilyViewTab extends StatelessWidget {
                           ),
                         ),
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: isDark ? const Color(0xFF2B2722) : const Color(0xFFECEFF1),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
-                            width: 1,
+                      Wrap(
+                        spacing: 6,
+                        children: [
+                          if (member.isEmergencyContact)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? const Color(0xFFC5A059).withValues(alpha: 0.2)
+                                    : const Color(0xFFFFF3E0),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: isDark
+                                      ? const Color(0xFFC5A059).withValues(alpha: 0.4)
+                                      : const Color(0xFFFFB74D),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Text(
+                                'EMERGENCY',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  color: isDark ? const Color(0xFFC5A059) : const Color(0xFFE65100),
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: isDark ? const Color(0xFF2B2722) : const Color(0xFFECEFF1),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
+                                width: 1,
+                              ),
+                            ),
+                            child: Text(
+                              member.relation.toUpperCase(),
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
+                                letterSpacing: 0.5,
+                              ),
+                            ),
                           ),
-                        ),
-                        child: Text(
-                          member.relation.toUpperCase(),
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                            color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
-                            letterSpacing: 0.5,
-                          ),
-                        ),
+                        ],
                       ),
                     ],
                   ),
@@ -760,15 +790,17 @@ class FamilyViewTab extends StatelessWidget {
                       _buildWrapField(context, 'Mobile No', member.mobileNo ?? '—'),
                       _buildWrapField(context, 'Email', member.personalEmail ?? '—'),
                       _buildWrapField(context, 'City', member.city ?? '—'),
-                      _buildWrapField(context, 'Aadhaar No', member.aadhaarNo ?? '—'),
                       _buildWrapField(context, 'Dependent', member.isDependent ? 'YES' : 'NO'),
                       _buildWrapField(context, 'Employed', member.isEmployed ? 'YES' : 'NO'),
                       _buildWrapField(context, 'Employer', member.employerName ?? '—'),
                       _buildWrapField(context, 'Is Nominee', member.isNominee ? 'YES' : 'NO'),
+                      _buildWrapField(
+                        context,
+                        'Emergency Contact',
+                        member.isEmergencyContact ? 'YES' : 'NO',
+                      ),
                     ],
                   ),
-                  const SizedBox(height: 20),
-                  _buildDocItem(context, 'Aadhaar Document', member.aadhaarUrl),
                 ],
               ),
             ),

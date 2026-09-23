@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/tour/models/tour_models.dart';
@@ -713,6 +714,11 @@ class _StoreConfigScreenState extends State<StoreConfigScreen>
         ),
         leading: const AppBackButton(fallbackLocation: '/erp/home'),
         actions: [
+          TextButton.icon(
+            onPressed: () => context.push('/erp/store/purchase-requests'),
+            icon: const Icon(Icons.request_quote_outlined, size: 18),
+            label: const Text('Purchase Request'),
+          ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
             tooltip: 'Refresh Store',
@@ -1094,7 +1100,7 @@ class _StoreConfigScreenState extends State<StoreConfigScreen>
                 DropdownButtonFormField<String>(
                   initialValue: _outwardContractorId,
                   decoration: const InputDecoration(
-                    labelText: 'Used by (Contractor) *',
+                    labelText: 'Used by (Vendor) *',
                     border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.handshake_outlined),
                   ),
@@ -1619,7 +1625,7 @@ class _StoreConfigScreenState extends State<StoreConfigScreen>
                 DropdownButtonFormField<String>(
                   initialValue: _issueContractorId,
                   decoration: const InputDecoration(
-                    labelText: 'Used by (Contractor) *',
+                    labelText: 'Used by (Vendor) *',
                     border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.handshake_outlined),
                   ),

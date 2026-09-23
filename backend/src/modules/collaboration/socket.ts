@@ -169,14 +169,29 @@ export function emitChatNewMessage(
       continue;
     }
     const tagged = mentioned.has(id);
+    const title = tagged ? `${senderName} mentioned you` : senderName;
+    const kind = tagged ? 'mention' : 'chat';
     io.to(`user:${id}`).emit('push_notify', {
-      kind: tagged ? 'mention' : 'chat',
-      title: tagged ? `${senderName} mentioned you` : senderName,
+      kind,
+      title,
       body: preview,
       channelId,
       senderId: message.senderId,
       path: '/chat',
     });
+    // Persist so mobile inbox shows chat/admin-style alerts after reconnect.
+    void prisma.userNotification
+      .create({
+        data: {
+          userId: id,
+          title,
+          body: preview,
+          kind,
+          path: '/chat',
+          senderId: message.senderId,
+        },
+      })
+      .catch(() => {});
   }
 }
 

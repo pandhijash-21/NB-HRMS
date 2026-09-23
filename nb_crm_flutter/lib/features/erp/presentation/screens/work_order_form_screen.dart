@@ -405,7 +405,7 @@ class _WorkOrderFormScreenState extends State<WorkOrderFormScreen> {
                               DropdownButtonFormField<String>(
                                 isExpanded: true,
                                 initialValue: _contractorId,
-                                decoration: _dec('Contractor', required: true, hint: 'Select contractor'),
+                                decoration: _dec('Vendor', required: true, hint: 'Select vendor'),
                                 items: _contractors
                                     .where((c) => c.isActive)
                                     .map((c) => DropdownMenuItem(value: c.id, child: Text(c.name)))

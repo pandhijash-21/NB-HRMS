@@ -83,6 +83,7 @@ class PayCommission {
     this.description,
     this.isActive = true,
     this.ruleEditorEnabled = true,
+    this.payableDaysMode = 'WORKING_DAYS_26_27',
     this.sortOrder = 0,
     this.counts,
     this.columnDefinitions = const [],
@@ -94,12 +95,15 @@ class PayCommission {
   final String? description;
   final bool isActive;
   final bool ruleEditorEnabled;
+  /// WORKING_DAYS_26_27 = calendar − Sundays; CALENDAR_30_31 = full calendar month.
+  final String payableDaysMode;
   final int sortOrder;
   final PayCommissionCounts? counts;
   final List<PayCommissionColumn> columnDefinitions;
 
   factory PayCommission.fromJson(Map<String, dynamic> json) {
     final cols = json['columnDefinitions'] ?? json['column_definitions'];
+    final mode = (json['payableDaysMode'] ?? json['payable_days_mode'])?.toString();
     return PayCommission(
       id: json['id']?.toString() ?? '',
       code: json['code']?.toString() ?? '',
@@ -108,6 +112,7 @@ class PayCommission {
       isActive: json['isActive'] ?? json['is_active'] ?? true,
       ruleEditorEnabled:
           json['ruleEditorEnabled'] ?? json['rule_editor_enabled'] ?? true,
+      payableDaysMode: (mode == 'CALENDAR_30_31') ? 'CALENDAR_30_31' : 'WORKING_DAYS_26_27',
       sortOrder: _asInt(json['sortOrder'] ?? json['sort_order']),
       counts: PayCommissionCounts.fromJson(
         json['_count'] is Map

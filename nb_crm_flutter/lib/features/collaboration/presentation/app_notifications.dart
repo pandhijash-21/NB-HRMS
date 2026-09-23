@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/services/app_sounds.dart';
+import '../../../core/services/app_push_notifier.dart';
 import '../../auth/presentation/auth_providers.dart';
 import '../data/collab_socket.dart';
 import 'meet_helpers.dart';
@@ -272,6 +273,13 @@ class AppNotifications extends Notifier<AppNotificationsState> {
     unawaited(_persist());
     if (kind != 'voice_call' && kind != 'meet_call') {
       unawaited(AppSounds.playNotify());
+      unawaited(
+        AppPushNotifier.show(
+          title: notice.title,
+          body: notice.body,
+          payload: notice.path,
+        ),
+      );
     }
   }
 

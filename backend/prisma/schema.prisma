@@ -170,6 +170,12 @@ enum SalaryRecordStatus {
   PAID
 }
 
+/// How payable days are derived for salary cuts under a pay commission.
+enum PayableDaysMode {
+  WORKING_DAYS_26_27
+  CALENDAR_30_31
+}
+
 // =============================================================================
 // 1. EMPLOYEE INFO
 // Core identity row — every other section FKs here
@@ -235,6 +241,9 @@ model Employee {
   ownedErpProjects    ErpProject[]
   ownedWorkOrders     ErpWorkOrder[] @relation("WorkOrderOwner")
   workOrdersToApprove ErpWorkOrder[] @relation("WorkOrderApprover")
+  purchaseRequestsRequested ErpPurchaseRequest[] @relation("PrRequestedBy")
+  purchaseRequestsToApprove ErpPurchaseRequest[] @relation("PrApprover")
+  purchaseDefaultApproverFor ErpPurchaseSettings[] @relation("PurchaseDefaultApprover")
 
   crmAssignedLeads    CrmLead[]     @relation("CrmAssignedSales")
   crmTelecallerLeads  CrmLead[]     @relation("CrmTelecaller")
@@ -509,6 +518,7 @@ model FamilyMember {
   aadhaarUrl   String?   @map("aadhaar_url") // Cloudinary scan
   isNominee    Boolean   @default(false) @map("is_nominee")
   isDependent  Boolean   @default(false) @map("is_dependent")
+  isEmergencyContact Boolean @default(false) @map("is_emergency_contact")
   isEmployed   Boolean   @default(false) @map("is_employed")
   employerName String?   @map("employer_name")
 
@@ -1414,6 +1424,8 @@ model PayCommission {
   description       String?
   isActive          Boolean  @default(true) @map("is_active")
   ruleEditorEnabled Boolean  @default(true) @map("rule_editor_enabled")
+  /// WORKING_DAYS_26_27 = calendar days minus Sundays; CALENDAR_30_31 = full calendar month days.
+  payableDaysMode   PayableDaysMode @default(WORKING_DAYS_26_27) @map("payable_days_mode")
   sortOrder         Int      @default(0) @map("sort_order")
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
@@ -2087,6 +2099,7 @@ model ErpProject {
   dprs         ErpDpr[]
   materialUses ErpMaterialProjectUse[]
   machineUses  ErpMachineProjectUse[]
+  purchaseRequests ErpPurchaseRequest[]
 
   @@index([isActive, createdAt])
   @@index([organizationId])
@@ -2220,6 +2233,7 @@ model ErpContractor {
   machineIssues      ErpMachineIssue[]
   machineReturnLogs  ErpMachineReturnLog[]
   purchaseOrders     ErpPurchaseOrder[]
+  purchaseRequests   ErpPurchaseRequest[]
 
   @@index([isActive, name])
   @@map("erp_contractors")
@@ -2302,6 +2316,7 @@ model ErpActivity {
   materials          ErpMaterial[]
   machines           ErpMachine[]
   labourTypes        ErpLabour[]
+  purchaseRequests   ErpPurchaseRequest[]
 
   @@index([isActive, sortOrder])
   @@map("erp_activities")
@@ -2508,17 +2523,23 @@ model ErpBoqTaskResource {
 }
 
 model ErpMaterial {
-  id         String   @id @default(uuid())
-  brand      String?
-  name       String
-  unitCode   String?  @map("unit_code")
-  size       String?
-  activityId String?  @map("activity_id")
-  subtaskId  String?  @map("subtask_id")
-  qtyOnHand  Decimal  @default(0) @map("qty_on_hand") @db.Decimal(14, 4)
-  isActive   Boolean  @default(true) @map("is_active")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  id           String   @id @default(uuid())
+  itemCode     String?  @unique @map("item_code")
+  categoryCode String?  @map("category_code")
+  brandCode    String?  @map("brand_code")
+  brand        String?
+  name         String
+  unitCode     String?  @map("unit_code")
+  sizeCode     String?  @map("size_code")
+  size         String?
+  imageUrl     String?  @map("image_url")
+  description  String?  @db.Text
+  activityId   String?  @map("activity_id")
+  subtaskId    String?  @map("subtask_id")
+  qtyOnHand    Decimal  @default(0) @map("qty_on_hand") @db.Decimal(14, 4)
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   activity    ErpActivity?            @relation(fields: [activityId], references: [id], onDelete: SetNull)
   subtask     ErpActivitySubtask?     @relation(fields: [subtaskId], references: [id], onDelete: SetNull)
@@ -2526,8 +2547,10 @@ model ErpMaterial {
   projectUses ErpMaterialProjectUse[]
   poItems     ErpPurchaseOrderItem[]
   inwardLines ErpStoreInwardLine[]
+  prLines     ErpPurchaseRequestLine[]
 
   @@index([isActive, name])
+  @@index([categoryCode])
   @@map("erp_materials")
 }
 
@@ -2688,17 +2711,103 @@ model ErpLabour {
 // =============================================================================
 
 model ErpStoreMaster {
-  id        String   @id @default(uuid())
-  name      String
-  location  String
-  isActive  Boolean  @default(true) @map("is_active")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id         String   @id @default(uuid())
+  name       String
+  location   String
+  propertyId String?  @map("property_id")
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
-  inwards ErpStoreInward[]
+  property        EarthProperty?       @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  inwards         ErpStoreInward[]
+  purchaseRequests ErpPurchaseRequest[]
 
   @@index([isActive, name])
+  @@index([propertyId])
   @@map("erp_store_masters")
+}
+
+enum ErpPurchaseRequestStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model ErpPurchaseSettings {
+  id                       String   @id @default(uuid())
+  /// Singleton row — use a fixed id or always take first.
+  key                      String   @unique @default("DEFAULT")
+  defaultApproverEmployeeId Int?    @map("default_approver_employee_id")
+  updatedAt                DateTime @updatedAt @map("updated_at")
+  createdAt                DateTime @default(now()) @map("created_at")
+
+  defaultApprover Employee? @relation("PurchaseDefaultApprover", fields: [defaultApproverEmployeeId], references: [id], onDelete: SetNull)
+
+  @@map("erp_purchase_settings")
+}
+
+model ErpPurchaseRequest {
+  id                      String                   @id @default(uuid())
+  prNumber                String                   @unique @map("pr_number")
+  prDate                  DateTime                 @map("pr_date") @db.Date
+  prTypeCode              String?                  @map("pr_type_code")
+  projectId               String?                  @map("project_id")
+  activityId              String?                  @map("activity_id")
+  vendorId                String?                  @map("vendor_id")
+  requestedByEmployeeId   Int?                     @map("requested_by_employee_id")
+  requestedByUserId       String?                  @map("requested_by_user_id")
+  requiredByDate          DateTime?                @map("required_by_date") @db.Date
+  priorityCode            String?                  @map("priority_code")
+  storeId                 String?                  @map("store_id")
+  propertyId              String?                  @map("property_id")
+  status                  ErpPurchaseRequestStatus @default(DRAFT)
+  approverEmployeeId      Int?                     @map("approver_employee_id")
+  approvedAt              DateTime?                @map("approved_at")
+  rejectionReason         String?                  @map("rejection_reason") @db.Text
+  remarks                 String?                  @db.Text
+  createdBy               String?                  @map("created_by")
+  createdAt               DateTime                 @default(now()) @map("created_at")
+  updatedAt               DateTime                 @updatedAt @map("updated_at")
+
+  project     ErpProject?           @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  activity    ErpActivity?          @relation(fields: [activityId], references: [id], onDelete: SetNull)
+  vendor      ErpContractor?        @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  store       ErpStoreMaster?       @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  requestedBy Employee?             @relation("PrRequestedBy", fields: [requestedByEmployeeId], references: [id], onDelete: SetNull)
+  approver    Employee?             @relation("PrApprover", fields: [approverEmployeeId], references: [id], onDelete: SetNull)
+  lines       ErpPurchaseRequestLine[]
+
+  @@index([status, prDate])
+  @@index([approverEmployeeId, status])
+  @@index([storeId])
+  @@index([vendorId])
+  @@map("erp_purchase_requests")
+}
+
+model ErpPurchaseRequestLine {
+  id               String  @id @default(uuid())
+  purchaseRequestId String @map("purchase_request_id")
+  materialId       String? @map("material_id")
+  itemCode         String? @map("item_code")
+  categoryCode     String? @map("category_code")
+  brandCode        String? @map("brand_code")
+  brand            String?
+  itemName         String  @map("item_name")
+  unitCode         String? @map("unit_code")
+  sizeCode         String? @map("size_code")
+  size             String?
+  qty              Decimal @db.Decimal(14, 4)
+  remark           String? @db.Text
+  sortOrder        Int     @default(0) @map("sort_order")
+
+  purchaseRequest ErpPurchaseRequest @relation(fields: [purchaseRequestId], references: [id], onDelete: Cascade)
+  material        ErpMaterial?       @relation(fields: [materialId], references: [id], onDelete: SetNull)
+
+  @@index([purchaseRequestId, sortOrder])
+  @@index([materialId])
+  @@map("erp_purchase_request_lines")
 }
 
 model ErpPurchaseOrder {
@@ -3478,6 +3587,7 @@ model EarthProperty {
 
   prices EarthPropertyPrice[]
   media  EarthPropertyMedia[]
+  stores ErpStoreMaster[]
 
   @@index([isActive, createdAt])
   @@index([kind, status])

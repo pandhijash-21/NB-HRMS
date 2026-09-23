@@ -51,6 +51,16 @@ crmRouter.post('/bin/restore/:id', requireCrmSubmodule('CRM_BIN'), crmController
 // Settings & Telephony
 crmRouter.get('/settings', requireCrmSubmodule('CRM_SETTINGS'), crmController.getSettings);
 crmRouter.put('/settings', requireCrmSubmodule('CRM_SETTINGS'), crmController.updateSettings);
+crmRouter.get(
+  '/telephony/telecallers',
+  requireCrmSubmodule('CRM_SETTINGS'),
+  crmController.listTelecallerTelephony,
+);
+crmRouter.put(
+  '/telephony/telecallers/:employeeId',
+  requireCrmSubmodule('CRM_SETTINGS'),
+  crmController.upsertTelecallerTelephony,
+);
 crmRouter.post('/telephony/click-to-call', requireCrmSubmodule('CRM_SETTINGS'), crmController.clickToCall);
 crmRouter.get('/telephony/call-logs', requireCrmSubmodule('CRM_SETTINGS'), crmController.getCallLogs);
 crmRouter.patch('/telephony/call-logs/:id', requireCrmSubmodule('CRM_SETTINGS'), crmController.updateCallLog);

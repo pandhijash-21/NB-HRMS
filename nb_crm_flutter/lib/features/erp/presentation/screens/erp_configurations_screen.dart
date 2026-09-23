@@ -109,6 +109,14 @@ class _ErpConfigurationsScreenState extends State<ErpConfigurationsScreen> {
                   .where((g) => kContractorLookupKeys.contains(g.key))
                   .where((g) => _matches([g.label, g.description, g.key]))
                   .toList();
+              final inventoryLookups = groups
+                  .where((g) => kInventoryLookupKeys.contains(g.key))
+                  .where((g) => _matches([g.label, g.description, g.key]))
+                  .toList();
+              final purchaseLookups = groups
+                  .where((g) => kPurchaseLookupKeys.contains(g.key))
+                  .where((g) => _matches([g.label, g.description, g.key]))
+                  .toList();
               final wo = groups
                   .where((g) => kWoLookupKeys.contains(g.key))
                   .where((g) => _matches([g.label, g.description, g.key]))
@@ -119,6 +127,14 @@ class _ErpConfigurationsScreenState extends State<ErpConfigurationsScreen> {
                   .toList();
 
               final resourceTiles = [
+                if (_matches(['Inventory', 'Materials', 'item code', 'catalogue']))
+                  ConfigSquareItem(
+                    title: 'Inventory',
+                    subtitle: 'Item code, category, brand…',
+                    icon: Icons.inventory_2_outlined,
+                    color: const Color(0xFF2563eb),
+                    onTap: () => context.go('/erp/configurations/inventory'),
+                  ),
                 if (_matches(['Labour', 'Labor', 'rates', 'labour']))
                   ConfigSquareItem(
                     title: 'Labour',
@@ -127,10 +143,10 @@ class _ErpConfigurationsScreenState extends State<ErpConfigurationsScreen> {
                     color: const Color(0xFFea580c),
                     onTap: () => context.go('/erp/configurations/labour'),
                   ),
-                if (_matches(['Stores', 'Store', 'warehouse', 'location']))
+                if (_matches(['Stores', 'Store', 'warehouse', 'location', 'property']))
                   ConfigSquareItem(
                     title: 'Stores',
-                    subtitle: 'Name & location',
+                    subtitle: 'Name, location & property',
                     icon: Icons.warehouse_outlined,
                     color: const Color(0xFF0D9488),
                     onTap: () => context.go('/erp/configurations/stores'),
@@ -146,13 +162,13 @@ class _ErpConfigurationsScreenState extends State<ErpConfigurationsScreen> {
                     color: const Color(0xFF1e3a5f),
                     onTap: () => context.go('/erp/configurations/activities'),
                   ),
-                if (_matches(['Contractors', 'Vendors', 'contractors']))
+                if (_matches(['Contractors', 'Vendors', 'contractors', 'vendors']))
                   ConfigSquareItem(
-                    title: 'Contractors',
-                    subtitle: 'Vendors',
+                    title: 'Vendors',
+                    subtitle: 'Agency / Contractor / Supplier',
                     icon: Icons.handshake_outlined,
                     color: const Color(0xFFdc2626),
-                    onTap: () => context.go('/erp/configurations/contractors'),
+                    onTap: () => context.go('/erp/configurations/vendors'),
                   ),
                 for (final g in wo)
                   ConfigSquareItem(
@@ -168,6 +184,8 @@ class _ErpConfigurationsScreenState extends State<ErpConfigurationsScreen> {
                   resourceTiles.isNotEmpty ||
                   woStatic.isNotEmpty ||
                   contractorLookups.isNotEmpty ||
+                  inventoryLookups.isNotEmpty ||
+                  purchaseLookups.isNotEmpty ||
                   dpr.isNotEmpty;
 
               if (!any) {
@@ -204,19 +222,19 @@ class _ErpConfigurationsScreenState extends State<ErpConfigurationsScreen> {
                   ],
                   if (resourceTiles.isNotEmpty) ...[
                     _sectionTitle(isDark, 'BOQ & Resources'),
-                    _sectionHint(isDark, 'Materials, machines, labour, stores for ERP.'),
+                    _sectionHint(isDark, 'Inventory, labour, and stores for ERP.'),
                     const SizedBox(height: 12),
                     ConfigSquareGrid(tiles: resourceTiles),
                     const SizedBox(height: 28),
                   ],
                   if (woStatic.isNotEmpty || contractorLookups.isNotEmpty) ...[
                     _sectionTitle(isDark, 'Work Orders'),
-                    _sectionHint(isDark, 'Activities, contractors, and measurement units.'),
+                    _sectionHint(isDark, 'Activities, vendors, and measurement units.'),
                     const SizedBox(height: 12),
                     if (woStatic.isNotEmpty) ConfigSquareGrid(tiles: woStatic),
                     if (contractorLookups.isNotEmpty) ...[
                       const SizedBox(height: 20),
-                      _sectionTitle(isDark, 'Contractor lookups', small: true),
+                      _sectionTitle(isDark, 'Vendor lookups', small: true),
                       const SizedBox(height: 10),
                       ConfigSquareGrid(
                         tiles: [
@@ -231,6 +249,42 @@ class _ErpConfigurationsScreenState extends State<ErpConfigurationsScreen> {
                         ],
                       ),
                     ],
+                    const SizedBox(height: 28),
+                  ],
+                  if (inventoryLookups.isNotEmpty) ...[
+                    _sectionTitle(isDark, 'Inventory lookups'),
+                    _sectionHint(isDark, 'Category, brand, UoM, and size options for inventory.'),
+                    const SizedBox(height: 12),
+                    ConfigSquareGrid(
+                      tiles: [
+                        for (final g in inventoryLookups)
+                          ConfigSquareItem(
+                            title: g.label,
+                            subtitle: '${g.options.where((o) => o.isActive).length} options',
+                            icon: Icons.category_outlined,
+                            color: const Color(0xFF4f46e5),
+                            onTap: () => context.go('/erp/configurations/lookups/${g.key}'),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 28),
+                  ],
+                  if (purchaseLookups.isNotEmpty) ...[
+                    _sectionTitle(isDark, 'Purchase lookups'),
+                    _sectionHint(isDark, 'PR type and priority options.'),
+                    const SizedBox(height: 12),
+                    ConfigSquareGrid(
+                      tiles: [
+                        for (final g in purchaseLookups)
+                          ConfigSquareItem(
+                            title: g.label,
+                            subtitle: '${g.options.where((o) => o.isActive).length} options',
+                            icon: Icons.shopping_bag_outlined,
+                            color: const Color(0xFFb45309),
+                            onTap: () => context.go('/erp/configurations/lookups/${g.key}'),
+                          ),
+                      ],
+                    ),
                     const SizedBox(height: 28),
                   ],
                   if (dpr.isNotEmpty) ...[

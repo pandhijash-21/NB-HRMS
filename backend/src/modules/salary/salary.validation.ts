@@ -18,7 +18,11 @@ const conditionSchema = z.object({
   result_type: z.enum(['FIXED_AMOUNT', 'PERCENTAGE_OF_COLUMN']),
   result_value: z.number(),
   result_reference_column_identifier: z.string().nullable().optional(),
-  result_reference_columns: z.array(percentageRefSchema).optional(),
+  result_reference_columns: z
+    .preprocess(
+      (v) => (v == null ? undefined : v),
+      z.array(percentageRefSchema).optional(),
+    ),
   sort_order: z.number().int(),
   is_else_fallback: z.boolean(),
 });

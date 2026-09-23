@@ -6,6 +6,8 @@ import {
   usePayCommission,
   useCreatePayCommissionColumn,
   useDeletePayCommissionColumn,
+  useUpdatePayCommission,
+  type PayableDaysMode,
 } from "@/lib/hooks/useSalary";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,11 +32,17 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
 
+const PAYABLE_DAYS_LABELS: Record<PayableDaysMode, string> = {
+  WORKING_DAYS_26_27: "Working days (26 / 27)",
+  CALENDAR_30_31: "Calendar days (30 / 31)",
+};
+
 export default function PayCommissionColumnsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { data: pc, isLoading, refetch } = usePayCommission(id);
   const createColumn = useCreatePayCommissionColumn();
   const deleteColumn = useDeletePayCommissionColumn();
+  const updateCommission = useUpdatePayCommission();
 
   const [open, setOpen] = useState(false);
   const [displayName, setDisplayName] = useState("");
@@ -47,12 +55,24 @@ export default function PayCommissionColumnsPage({ params }: { params: Promise<{
   const earnings = columns.filter((c) => c.category === "EARNING");
   const deductions = columns.filter((c) => c.category === "DEDUCTION");
 
+  const payableDaysMode: PayableDaysMode = pc?.payableDaysMode ?? "WORKING_DAYS_26_27";
+
   const resetForm = () => {
     setDisplayName("");
     setColumnIdentifier("");
     setCategory("EARNING");
     setEvaluationOrder((columns.length + 1) * 10);
     setIsRuleConfigurable(true);
+  };
+
+  const handlePayableDaysModeChange = async (mode: PayableDaysMode) => {
+    try {
+      await updateCommission.mutateAsync({ id, payableDaysMode: mode });
+      toast.success("Payable days mode updated");
+      refetch();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message ?? "Failed to update payable days mode");
+    }
   };
 
   const handleAdd = async () => {
@@ -162,6 +182,40 @@ export default function PayCommissionColumnsPage({ params }: { params: Promise<{
         </div>
         <Button size="sm" onClick={() => { resetForm(); setOpen(true); }}>Add Column</Button>
       </div>
+
+      <Card className="p-4 space-y-3">
+        <div>
+          <h2 className="text-sm font-semibold text-slate-800">Payable days mode</h2>
+          <p className="text-xs text-slate-500 mt-1">
+            Controls how monthly payable days are counted for salary and attendance calculations.
+          </p>
+        </div>
+        <div className="max-w-md space-y-1">
+          <Label className="text-xs text-slate-600">Mode</Label>
+          <Select
+            value={payableDaysMode}
+            onValueChange={(v) => handlePayableDaysModeChange(v as PayableDaysMode)}
+            disabled={updateCommission.isPending}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="WORKING_DAYS_26_27">
+                {PAYABLE_DAYS_LABELS.WORKING_DAYS_26_27}
+              </SelectItem>
+              <SelectItem value="CALENDAR_30_31">
+                {PAYABLE_DAYS_LABELS.CALENDAR_30_31}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-[11px] text-slate-400 leading-snug">
+            {payableDaysMode === "WORKING_DAYS_26_27"
+              ? "Uses a fixed working-day base (26 or 27 days depending on the month)."
+              : "Uses calendar days in the month (30 or 31)."}
+          </p>
+        </div>
+      </Card>
 
       <Card className="p-4 bg-slate-50 border-slate-200">
         <h2 className="text-sm font-semibold text-slate-800">About column order</h2>

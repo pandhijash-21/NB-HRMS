@@ -86,11 +86,19 @@ class ProfileNotifier extends AsyncNotifier<EmployeeProfile> {
 
   /// Update personal info direct (admin write).
   Future<void> updatePersonalInfoDirect(Map<String, dynamic> data) async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
+    final previous = state.asData?.value;
+    try {
       await _repo.updatePersonalInfoDirect(employeeId, data);
-      return _repo.getProfile(employeeId);
-    });
+      state = AsyncValue.data(await _repo.getProfile(employeeId));
+    } catch (e, st) {
+      // Keep last good profile so Edit Profile does not stuck on an error screen.
+      if (previous != null) {
+        state = AsyncValue.data(previous);
+      } else {
+        state = AsyncValue.error(e, st);
+      }
+      rethrow;
+    }
   }
 
   /// Update address info direct (admin write).
@@ -163,14 +171,34 @@ class ProfileNotifier extends AsyncNotifier<EmployeeProfile> {
   /// CRUD Family
   Future<String?> addFamilyMember(Map<String, dynamic> data) async {
     // Avoid AsyncLoading while a dialog may be open (locked widget tree on web).
+    final previous = state.asData?.value;
     final createdId = await _repo.addFamilyMember(employeeId, data);
-    state = await AsyncValue.guard(() => _repo.getProfile(employeeId));
+    try {
+      state = AsyncValue.data(await _repo.getProfile(employeeId));
+    } catch (e, st) {
+      if (previous != null) {
+        state = AsyncValue.data(previous);
+      } else {
+        state = AsyncValue.error(e, st);
+      }
+      rethrow;
+    }
     return createdId;
   }
 
   Future<void> updateFamilyMember(String memberId, Map<String, dynamic> data) async {
+    final previous = state.asData?.value;
     await _repo.updateFamilyMember(employeeId, memberId, data);
-    state = await AsyncValue.guard(() => _repo.getProfile(employeeId));
+    try {
+      state = AsyncValue.data(await _repo.getProfile(employeeId));
+    } catch (e, st) {
+      if (previous != null) {
+        state = AsyncValue.data(previous);
+      } else {
+        state = AsyncValue.error(e, st);
+      }
+      rethrow;
+    }
   }
 
   Future<void> deleteFamilyMember(String memberId) async {

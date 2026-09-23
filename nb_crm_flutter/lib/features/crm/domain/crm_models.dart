@@ -489,6 +489,103 @@ class CrmSettings {
   }
 }
 
+class CrmTelecallerTelephonyConfig {
+  const CrmTelecallerTelephonyConfig({
+    required this.apiUrl,
+    required this.userId,
+    required this.did,
+    required this.routeNumber,
+    required this.agentNumber,
+  });
+
+  final String apiUrl;
+  final String userId;
+  final String did;
+  final String routeNumber;
+  final String agentNumber;
+
+  factory CrmTelecallerTelephonyConfig.fromJson(Map<String, dynamic> json) {
+    return CrmTelecallerTelephonyConfig(
+      apiUrl: json['api_url']?.toString() ?? 'https://greeter.co.in/api/click2call',
+      userId: json['user_id']?.toString() ?? '',
+      did: json['did']?.toString() ?? '',
+      routeNumber: json['route_number']?.toString() ?? '',
+      agentNumber: json['agent_number']?.toString() ?? '',
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'api_url': apiUrl,
+        'user_id': userId,
+        'did': did,
+        'route_number': routeNumber,
+        'agent_number': agentNumber,
+      };
+}
+
+class CrmTelecallerTelephony {
+  const CrmTelecallerTelephony({
+    required this.employeeId,
+    required this.name,
+    this.employeeCode,
+    this.designation,
+    this.configured = false,
+    required this.config,
+  });
+
+  final int employeeId;
+  final String name;
+  final String? employeeCode;
+  final String? designation;
+  final bool configured;
+  final CrmTelecallerTelephonyConfig config;
+
+  factory CrmTelecallerTelephony.fromJson(Map<String, dynamic> json) {
+    final cfg = json['config'];
+    return CrmTelecallerTelephony(
+      employeeId: (json['employeeId'] as num?)?.toInt() ?? 0,
+      name: json['name']?.toString() ?? 'Telecaller',
+      employeeCode: json['employeeCode']?.toString(),
+      designation: json['designation']?.toString(),
+      configured: json['configured'] == true,
+      config: cfg is Map
+          ? CrmTelecallerTelephonyConfig.fromJson(Map<String, dynamic>.from(cfg))
+          : const CrmTelecallerTelephonyConfig(
+              apiUrl: 'https://greeter.co.in/api/click2call',
+              userId: '',
+              did: '',
+              routeNumber: '',
+              agentNumber: '',
+            ),
+    );
+  }
+}
+
+class CrmTelecallerTelephonyList {
+  const CrmTelecallerTelephonyList({
+    required this.telecallers,
+    this.defaults,
+  });
+
+  final List<CrmTelecallerTelephony> telecallers;
+  final CrmTelecallerTelephonyConfig? defaults;
+
+  factory CrmTelecallerTelephonyList.fromJson(Map<String, dynamic> json) {
+    final list = json['telecallers'];
+    final defaults = json['defaults'];
+    return CrmTelecallerTelephonyList(
+      telecallers: list is List
+          ? list
+              .map((e) => CrmTelecallerTelephony.fromJson(Map<String, dynamic>.from(e as Map)))
+              .toList()
+          : const [],
+      defaults: defaults is Map
+          ? CrmTelecallerTelephonyConfig.fromJson(Map<String, dynamic>.from(defaults))
+          : null,
+    );
+  }
+}
+
 class CrmKpiMetrics {
   final int totalActiveLeads;
   final int todayFollowUps;

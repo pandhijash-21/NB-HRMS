@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../earth/data/earth_repository.dart';
+import '../../../earth/domain/earth_models.dart';
 import '../../data/boq_repository.dart';
 import '../../domain/store_models.dart';
 
-/// ERP Configurations → Stores (name + location).
+/// ERP Configurations → Stores (name + location + property).
 class StoreMastersConfigScreen extends StatefulWidget {
   const StoreMastersConfigScreen({super.key});
 
@@ -15,10 +17,12 @@ class StoreMastersConfigScreen extends StatefulWidget {
 
 class _StoreMastersConfigScreenState extends State<StoreMastersConfigScreen> {
   List<ErpStoreMaster> _stores = [];
+  List<EarthProperty> _properties = [];
   bool _loading = true;
   String? _error;
   final _nameCtrl = TextEditingController();
   final _locationCtrl = TextEditingController();
+  String? _propertyId;
   bool _saving = false;
 
   @override
@@ -40,10 +44,17 @@ class _StoreMastersConfigScreenState extends State<StoreMastersConfigScreen> {
       _error = null;
     });
     try {
-      final list = await context.read<BoqRepository>().listStoresConfig(includeInactive: true);
+      final stores = await context.read<BoqRepository>().listStoresConfig(includeInactive: true);
+      List<EarthProperty> properties = [];
+      try {
+        properties = await context.read<EarthRepository>().list();
+      } catch (_) {
+        properties = [];
+      }
       if (!mounted) return;
       setState(() {
-        _stores = list;
+        _stores = stores;
+        _properties = properties;
         _loading = false;
       });
     } catch (e) {
@@ -67,11 +78,16 @@ class _StoreMastersConfigScreenState extends State<StoreMastersConfigScreen> {
     setState(() => _saving = true);
     try {
       await context.read<BoqRepository>().createStore(
-            {'name': name, 'location': location},
+            {
+              'name': name,
+              'location': location,
+              'propertyId': _propertyId,
+            },
             fromConfig: true,
           );
       _nameCtrl.clear();
       _locationCtrl.clear();
+      _propertyId = null;
       await _load();
     } catch (e) {
       if (!mounted) return;
@@ -84,34 +100,51 @@ class _StoreMastersConfigScreenState extends State<StoreMastersConfigScreen> {
   Future<void> _edit(ErpStoreMaster store) async {
     final nameCtrl = TextEditingController(text: store.name);
     final locCtrl = TextEditingController(text: store.location);
+    String? propertyId = store.propertyId;
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Edit store'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameCtrl,
-              decoration: const InputDecoration(labelText: 'Store name'),
-            ),
-            TextField(
-              controller: locCtrl,
-              decoration: const InputDecoration(labelText: 'Location'),
-            ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: const Text('Edit store'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(labelText: 'Store name'),
+              ),
+              TextField(
+                controller: locCtrl,
+                decoration: const InputDecoration(labelText: 'Location'),
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                value: propertyId,
+                decoration: const InputDecoration(labelText: 'Property'),
+                items: [
+                  const DropdownMenuItem(value: null, child: Text('None')),
+                  ..._properties.map((p) => DropdownMenuItem(value: p.id, child: Text(p.name))),
+                ],
+                onChanged: (v) => setLocal(() => propertyId = v),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
           ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
-        ],
       ),
     );
     if (ok != true) return;
     try {
       await context.read<BoqRepository>().updateStore(
             store.id,
-            {'name': nameCtrl.text.trim(), 'location': locCtrl.text.trim()},
+            {
+              'name': nameCtrl.text.trim(),
+              'location': locCtrl.text.trim(),
+              'propertyId': propertyId,
+            },
             fromConfig: true,
           );
       await _load();
@@ -159,10 +192,7 @@ class _StoreMastersConfigScreenState extends State<StoreMastersConfigScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const Text(
-                          'Add store',
-                          style: TextStyle(fontWeight: FontWeight.w700),
-                        ),
+                        const Text('Add store', style: TextStyle(fontWeight: FontWeight.w700)),
                         const SizedBox(height: 8),
                         TextField(
                           controller: _nameCtrl,
@@ -178,6 +208,19 @@ class _StoreMastersConfigScreenState extends State<StoreMastersConfigScreen> {
                             labelText: 'Location *',
                             border: OutlineInputBorder(),
                           ),
+                        ),
+                        const SizedBox(height: 8),
+                        DropdownButtonFormField<String>(
+                          value: _propertyId,
+                          decoration: const InputDecoration(
+                            labelText: 'Property',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: [
+                            const DropdownMenuItem(value: null, child: Text('None')),
+                            ..._properties.map((p) => DropdownMenuItem(value: p.id, child: Text(p.name))),
+                          ],
+                          onChanged: (v) => setState(() => _propertyId = v),
                         ),
                         const SizedBox(height: 12),
                         FilledButton(
@@ -213,7 +256,12 @@ class _StoreMastersConfigScreenState extends State<StoreMastersConfigScreen> {
                         color: s.isActive ? const Color(0xFF0D9488) : Colors.grey,
                       ),
                       title: Text(s.name),
-                      subtitle: Text(s.location),
+                      subtitle: Text(
+                        [
+                          s.location,
+                          if (s.propertyName != null) 'Property: ${s.propertyName}',
+                        ].join(' · '),
+                      ),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [

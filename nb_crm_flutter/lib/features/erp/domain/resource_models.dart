@@ -43,10 +43,16 @@ class ErpMaterialStockLog {
 class ErpMaterial {
   const ErpMaterial({
     required this.id,
+    this.itemCode,
+    this.categoryCode,
+    this.brandCode,
     this.brand,
     required this.name,
     this.unitCode,
+    this.sizeCode,
     this.size,
+    this.imageUrl,
+    this.description,
     this.activityId,
     this.subtaskId,
     this.qtyOnHand = 0,
@@ -58,10 +64,16 @@ class ErpMaterial {
   });
 
   final String id;
+  final String? itemCode;
+  final String? categoryCode;
+  final String? brandCode;
   final String? brand;
   final String name;
   final String? unitCode;
+  final String? sizeCode;
   final String? size;
+  final String? imageUrl;
+  final String? description;
   final String? activityId;
   final String? subtaskId;
   final double qtyOnHand;
@@ -73,10 +85,16 @@ class ErpMaterial {
 
   factory ErpMaterial.fromJson(Map<String, dynamic> json) => ErpMaterial(
         id: json['id']?.toString() ?? '',
+        itemCode: json['itemCode']?.toString(),
+        categoryCode: json['categoryCode']?.toString(),
+        brandCode: json['brandCode']?.toString(),
         brand: json['brand']?.toString(),
         name: json['name']?.toString() ?? '',
         unitCode: json['unitCode']?.toString(),
+        sizeCode: json['sizeCode']?.toString(),
         size: json['size']?.toString(),
+        imageUrl: json['imageUrl']?.toString(),
+        description: json['description']?.toString(),
         activityId: json['activityId']?.toString(),
         subtaskId: json['subtaskId']?.toString(),
         qtyOnHand: _d(json['qtyOnHand']),
@@ -92,10 +110,16 @@ class ErpMaterial {
       );
 
   Map<String, dynamic> toJson() => {
-        'brand': brand,
+        if (itemCode != null) 'itemCode': itemCode,
+        if (categoryCode != null) 'categoryCode': categoryCode,
+        if (brandCode != null) 'brandCode': brandCode,
+        'brand': brand ?? brandCode,
         'name': name,
         if (unitCode != null) 'unitCode': unitCode,
+        if (sizeCode != null) 'sizeCode': sizeCode,
         if (size != null) 'size': size,
+        if (imageUrl != null) 'imageUrl': imageUrl,
+        if (description != null) 'description': description,
         if (activityId != null) 'activityId': activityId,
         if (subtaskId != null) 'subtaskId': subtaskId,
         'qtyOnHand': qtyOnHand,

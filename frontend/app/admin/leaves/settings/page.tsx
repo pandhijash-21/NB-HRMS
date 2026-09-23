@@ -50,13 +50,6 @@ function fmtCreditDate(mmdd: string): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-function applicableLabel(applicableTo: string): string {
-  if (applicableTo === "BOTH")         return "Teaching & Non-Teaching";
-  if (applicableTo === "TEACHING")     return "Teaching only";
-  if (applicableTo === "NON_TEACHING") return "Non-Teaching only";
-  return applicableTo;
-}
-
 // ─── sub-components ───────────────────────────────────────────────────────────
 
 function InfoTip({ text }: { text: string }) {
@@ -121,50 +114,6 @@ function SettingRow({
   );
 }
 
-// ─── ApplicableTo checkboxes ──────────────────────────────────────────────────
-
-function ApplicableCheckboxes({
-  value, onChange,
-}: {
-  value: "TEACHING" | "NON_TEACHING" | "BOTH";
-  onChange: (v: "TEACHING" | "NON_TEACHING" | "BOTH") => void;
-}) {
-  const teaching    = value === "TEACHING"     || value === "BOTH";
-  const nonTeaching = value === "NON_TEACHING" || value === "BOTH";
-
-  function toggle(type: "teaching" | "non_teaching") {
-    let t = type === "teaching"     ? !teaching    : teaching;
-    let n = type === "non_teaching" ? !nonTeaching : nonTeaching;
-    if (!t && !n) { t = type !== "teaching"; n = type !== "non_teaching"; }
-    if (t && n)   onChange("BOTH");
-    else if (t)   onChange("TEACHING");
-    else          onChange("NON_TEACHING");
-  }
-
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label className="flex items-center gap-2 cursor-pointer select-none">
-        <input
-          type="checkbox"
-          checked={teaching}
-          onChange={() => toggle("teaching")}
-          className="w-3.5 h-3.5 accent-[#1d3459]"
-        />
-        <span className="text-xs text-slate-700">Teaching</span>
-      </label>
-      <label className="flex items-center gap-2 cursor-pointer select-none">
-        <input
-          type="checkbox"
-          checked={nonTeaching}
-          onChange={() => toggle("non_teaching")}
-          className="w-3.5 h-3.5 accent-[#1d3459]"
-        />
-        <span className="text-xs text-slate-700">Non-Teaching</span>
-      </label>
-    </div>
-  );
-}
-
 // ─── LeaveTypeRow ─────────────────────────────────────────────────────────────
 
 function LeaveTypeRow({
@@ -179,7 +128,6 @@ function LeaveTypeRow({
   const [expanded, setExpanded]             = useState(false);
   const [name, setName]                     = useState(lt.name);
   const [daysPerYear, setDaysPerYear]       = useState<string>(String(lt.defaultDaysPerYear ?? ""));
-  const [applicableTo, setApplicableTo]     = useState<"TEACHING" | "NON_TEACHING" | "BOTH">(lt.applicableTo);
   const [isCarryForward, setIsCarryForward] = useState(lt.isCarryForward);
   const [requiresDocument, setRequiresDocument] = useState(lt.requiresDocument);
   const [isActive, setIsActive]             = useState(lt.isActive);
@@ -206,7 +154,6 @@ function LeaveTypeRow({
         </span>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-slate-800">{lt.name}</p>
-          <p className="text-xs text-slate-400">{applicableLabel(applicableTo)}</p>
         </div>
         <div className="flex items-center gap-3 shrink-0 text-xs text-slate-500">
           <span>
@@ -265,12 +212,6 @@ function LeaveTypeRow({
                 </div>
               </>
             )}
-
-            {/* Applicable To */}
-            <div className="space-y-1">
-              <p className="text-xs font-medium text-slate-600">Applicable To</p>
-              <ApplicableCheckboxes value={applicableTo} onChange={setApplicableTo} />
-            </div>
 
             {/* Carry Forward */}
             <div className="space-y-1">
@@ -355,7 +296,7 @@ function LeaveTypeRow({
                 onSave({
                   ...lt,
                   name,
-                  applicableTo,
+                  applicableTo: "BOTH",
                   defaultDaysPerYear: splitCredits
                     ? (Number(janDays) || 0) + (Number(julDays) || 0)
                     : daysPerYear !== "" ? Number(daysPerYear) : null,
@@ -380,7 +321,7 @@ function LeaveTypeRow({
 // ─── AddLeaveTypeForm ─────────────────────────────────────────────────────────
 
 const EMPTY_NEW = {
-  code: "", name: "", applicableTo: "BOTH" as "TEACHING" | "NON_TEACHING" | "BOTH",
+  code: "", name: "",
   daysPerYear: "", isCarryForward: false, requiresDocument: false, employeeCanApply: true,
   janDays: "0", julDays: "0",
 };
@@ -460,10 +401,6 @@ function AddLeaveTypeForm({
         )}
 
         <div className="space-y-1">
-          <p className="text-xs font-medium text-slate-600">Applicable To</p>
-          <ApplicableCheckboxes value={form.applicableTo} onChange={(v) => setForm((f) => ({ ...f, applicableTo: v }))} />
-        </div>
-        <div className="space-y-1">
           <p className="text-xs font-medium text-slate-600">Requires Document</p>
           <Select value={form.requiresDocument ? "yes" : "no"} onValueChange={(v) => setForm((f) => ({ ...f, requiresDocument: v === "yes" }))}>
             <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
@@ -533,7 +470,7 @@ export default function LeaveSettingsPage() {
     upsertType({
       code:               lt.code,
       name:               lt.name,
-      applicableTo:       lt.applicableTo,
+      applicableTo:       "BOTH",
       defaultDaysPerYear: lt.defaultDaysPerYear,
       isCarryForward:     lt.isCarryForward,
       allowHalfDay:       lt.allowHalfDay,
@@ -559,7 +496,7 @@ export default function LeaveSettingsPage() {
     upsertType({
       code:               form.code,
       name:               form.name,
-      applicableTo:       form.applicableTo,
+      applicableTo:       "BOTH",
       defaultDaysPerYear: splitCredits
         ? (Number(form.janDays) || 0) + (Number(form.julDays) || 0)
         : form.daysPerYear !== "" ? Number(form.daysPerYear) : null,

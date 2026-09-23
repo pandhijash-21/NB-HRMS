@@ -212,6 +212,91 @@ String assignmentEventLabel(EmployeeAssignment current, EmployeeAssignment? prev
   return current.reason?.trim().isNotEmpty == true ? current.reason! : 'Assignment update';
 }
 
+/// Field-level profile change from GET employees/:id/audit-log.
+class EmployeeAuditLogEntry {
+  const EmployeeAuditLogEntry({
+    required this.id,
+    required this.tableName,
+    required this.fieldName,
+    required this.changedAt,
+    this.oldValue,
+    this.newValue,
+    this.changedBy,
+    this.changedByName,
+    this.changeReason,
+  });
+
+  final String id;
+  final String tableName;
+  final String fieldName;
+  final DateTime changedAt;
+  final String? oldValue;
+  final String? newValue;
+  final String? changedBy;
+  final String? changedByName;
+  final String? changeReason;
+
+  factory EmployeeAuditLogEntry.fromJson(Map<String, dynamic> json) {
+    return EmployeeAuditLogEntry(
+      id: json['id']?.toString() ?? '',
+      tableName: json['tableName']?.toString() ?? json['table_name']?.toString() ?? '',
+      fieldName: json['fieldName']?.toString() ?? json['field_name']?.toString() ?? '',
+      oldValue: json['oldValue']?.toString() ?? json['old_value']?.toString(),
+      newValue: json['newValue']?.toString() ?? json['new_value']?.toString(),
+      changedBy: json['changedBy']?.toString() ?? json['changed_by']?.toString(),
+      changedByName: json['changedByName']?.toString(),
+      changeReason: json['changeReason']?.toString() ?? json['change_reason']?.toString(),
+      changedAt: DateTime.tryParse(
+            '${json['changedAt'] ?? json['changed_at'] ?? ''}',
+          ) ??
+          DateTime.now(),
+    );
+  }
+
+  String get summary {
+    final field = fieldName.isEmpty ? 'field' : fieldName;
+    if (field == 'updatedBy' || field == 'id' || field == 'employeeId') {
+      return 'Internal update';
+    }
+    const labels = {
+      'photoUrl': 'profile picture',
+      'birthPlace': 'birth place',
+      'homeTown': 'home town',
+      'birthDate': 'date of birth',
+      'maritalStatus': 'marital status',
+      'motherTongue': 'mother tongue',
+      'bloodGroup': 'blood group',
+      'castCategory': 'caste category',
+      'subCaste': 'sub caste',
+      'nomineeName': 'nominee name',
+      'nomineeRelation': 'nominee relation',
+      'aadhaarNo': 'Aadhaar number',
+      'panNo': 'PAN number',
+      'aadhaarCardUrl': 'Aadhaar card',
+      'panCardUrl': 'PAN card',
+      'otherDocumentUrl': 'other document',
+      'passportNo': 'passport number',
+      'passportIssuePlace': 'passport issue place',
+      'passportIssueDate': 'passport issue date',
+      'passportExpiryDate': 'passport expiry date',
+      'record': 'personal record',
+      'isEmergencyContact': 'emergency contact flag',
+    };
+    final label = labels[field] ?? field;
+    if (field == 'photoUrl') return 'Updated profile picture';
+    if (field == 'record' && newValue == 'created') return 'Created personal info';
+    if (oldValue == null || oldValue!.isEmpty) return 'Set $label';
+    return 'Changed $label';
+  }
+
+  bool get isNoiseField =>
+      fieldName == 'updatedBy' ||
+      fieldName == 'id' ||
+      fieldName == 'employeeId' ||
+      fieldName == 'createdAt' ||
+      fieldName == 'updatedAt';
+}
+
 int _asInt(Object? v) {
   if (v is int) return v;
   if (v is num) return v.round();

@@ -143,6 +143,67 @@ class AdminSalaryCommissionDetailScreen extends ConsumerWidget {
                   ],
                 ),
                 const SizedBox(height: 18),
+                if (canWrite)
+                  DropdownButtonFormField<String>(
+                    key: ValueKey(pc.payableDaysMode),
+                    initialValue: pc.payableDaysMode == 'CALENDAR_30_31'
+                        ? 'CALENDAR_30_31'
+                        : 'WORKING_DAYS_26_27',
+                    decoration: InputDecoration(
+                      labelText: 'Salary day basis',
+                      filled: true,
+                      fillColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(
+                          color: isDark
+                              ? const Color(0xFFC5A059).withValues(alpha: 0.2)
+                              : const Color(0xFFCFD8DC),
+                        ),
+                      ),
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'WORKING_DAYS_26_27',
+                        child: Text('Working days (26/27 — exclude Sundays)'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'CALENDAR_30_31',
+                        child: Text('Calendar days (30/31)'),
+                      ),
+                    ],
+                    onChanged: (v) async {
+                      if (v == null || v == pc.payableDaysMode) return;
+                      try {
+                        await ref.read(salaryRepositoryProvider).updatePayCommission(
+                          commissionId,
+                          {'payableDaysMode': v},
+                        );
+                        ref.invalidate(payCommissionProvider(commissionId));
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('$e')),
+                          );
+                        }
+                      }
+                    },
+                  )
+                else
+                  Text(
+                    pc.payableDaysMode == 'CALENDAR_30_31'
+                        ? 'Salary day basis: Calendar days (30/31)'
+                        : 'Salary day basis: Working days (26/27 — exclude Sundays)',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white70 : const Color(0xFF607D8B),
+                    ),
+                  ),
+                const SizedBox(height: 18),
                 Container(
                   decoration: BoxDecoration(
                     color: isDark ? const Color(0xFF1E1B18) : const Color(0xFFF0F4F8),

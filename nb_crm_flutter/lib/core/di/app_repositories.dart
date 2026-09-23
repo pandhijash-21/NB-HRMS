@@ -13,6 +13,7 @@ import '../../features/crm/data/crm_repository.dart';
 import '../../features/erp/data/boq_repository.dart';
 import '../../features/erp/data/dpr_repository.dart';
 import '../../features/erp/data/project_repository.dart';
+import '../../features/erp/data/purchase_repository.dart';
 import '../../features/erp/data/tender_repository.dart';
 import '../../features/erp/data/work_order_repository.dart';
 import '../../features/earth/data/earth_repository.dart';
@@ -116,6 +117,9 @@ class AppRepositories {
         ),
         RepositoryProvider<BoqRepository>(
           create: (_) => BoqRepository(dioClient: dioClient),
+        ),
+        RepositoryProvider<PurchaseRepository>(
+          create: (_) => PurchaseRepository(dioClient: dioClient),
         ),
         RepositoryProvider<DprRepository>(
           create: (_) => DprRepository(dioClient: dioClient),

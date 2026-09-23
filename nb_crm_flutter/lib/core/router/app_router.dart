@@ -93,6 +93,9 @@ import '../../features/erp/presentation/screens/boq_list_screen.dart';
 import '../../features/erp/presentation/screens/boq_form_screen.dart';
 import '../../features/erp/presentation/screens/store_config_screen.dart';
 import '../../features/erp/presentation/screens/store_masters_config_screen.dart';
+import '../../features/erp/presentation/screens/inventory_config_screen.dart';
+import '../../features/erp/presentation/screens/purchase_home_screen.dart';
+import '../../features/erp/presentation/screens/purchase_request_form_screen.dart';
 import '../../features/erp/presentation/screens/labour_config_screen.dart';
 import '../../features/erp/presentation/screens/tender_list_screen.dart';
 import '../../features/erp/presentation/screens/tender_form_screen.dart';
@@ -292,6 +295,8 @@ GoRouter createAppRouter(AuthBloc authBloc) {
             } else if (loc.startsWith('/erp/boq') && !Permissions.canReadBoq(perms, role)) {
               next = '/erp/home';
             } else if (loc.startsWith('/erp/store') && !Permissions.canReadStore(perms, role)) {
+              next = '/erp/home';
+            } else if (loc.startsWith('/erp/purchase') && !Permissions.canReadPurchase(perms, role)) {
               next = '/erp/home';
             } else if ((loc.startsWith('/erp/tenders') || loc.startsWith('/erp/tender-applications')) &&
                 !Permissions.canReadTenders(perms, role) &&
@@ -542,18 +547,34 @@ GoRouter createAppRouter(AuthBloc authBloc) {
             builder: (context, state) => const ActivitiesConfigScreen(),
           ),
           GoRoute(
-            path: '/erp/configurations/contractors',
+            path: '/erp/configurations/vendors',
             builder: (context, state) => const ContractorsConfigScreen(),
           ),
           GoRoute(
-            path: '/erp/configurations/contractors/new',
+            path: '/erp/configurations/vendors/new',
             builder: (context, state) => const ContractorFormScreen(),
           ),
           GoRoute(
-            path: '/erp/configurations/contractors/:id/edit',
+            path: '/erp/configurations/vendors/:id/edit',
             builder: (context, state) {
               final id = state.pathParameters['id'] ?? '';
               return ContractorFormScreen(id: id);
+            },
+          ),
+          // Legacy redirects
+          GoRoute(
+            path: '/erp/configurations/contractors',
+            redirect: (context, state) => '/erp/configurations/vendors',
+          ),
+          GoRoute(
+            path: '/erp/configurations/contractors/new',
+            redirect: (context, state) => '/erp/configurations/vendors/new',
+          ),
+          GoRoute(
+            path: '/erp/configurations/contractors/:id/edit',
+            redirect: (context, state) {
+              final id = state.pathParameters['id'] ?? '';
+              return '/erp/configurations/vendors/$id/edit';
             },
           ),
           GoRoute(
@@ -644,6 +665,29 @@ GoRouter createAppRouter(AuthBloc authBloc) {
           GoRoute(
             path: '/erp/store',
             builder: (context, state) => const StoreConfigScreen(),
+          ),
+          GoRoute(
+            path: '/erp/store/purchase-requests',
+            builder: (context, state) => const PurchaseRequestListScreen(),
+          ),
+          GoRoute(
+            path: '/erp/store/purchase-requests/new',
+            builder: (context, state) => const PurchaseRequestFormScreen(),
+          ),
+          GoRoute(
+            path: '/erp/store/purchase-requests/:id',
+            builder: (context, state) {
+              final id = state.pathParameters['id'] ?? '';
+              return PurchaseRequestFormScreen(id: id);
+            },
+          ),
+          GoRoute(
+            path: '/erp/purchase',
+            builder: (context, state) => const PurchaseHomeScreen(),
+          ),
+          GoRoute(
+            path: '/erp/configurations/inventory',
+            builder: (context, state) => const InventoryConfigScreen(),
           ),
           GoRoute(
             path: '/erp/configurations/store',

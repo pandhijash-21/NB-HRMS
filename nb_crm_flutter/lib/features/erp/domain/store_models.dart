@@ -3,20 +3,30 @@ class ErpStoreMaster {
     required this.id,
     required this.name,
     required this.location,
+    this.propertyId,
+    this.propertyName,
     this.isActive = true,
   });
 
   final String id;
   final String name;
   final String location;
+  final String? propertyId;
+  final String? propertyName;
   final bool isActive;
 
-  factory ErpStoreMaster.fromJson(Map<String, dynamic> json) => ErpStoreMaster(
-        id: json['id']?.toString() ?? '',
-        name: json['name']?.toString() ?? '',
-        location: json['location']?.toString() ?? '',
-        isActive: json['isActive'] != false,
-      );
+  factory ErpStoreMaster.fromJson(Map<String, dynamic> json) {
+    final prop = json['property'];
+    return ErpStoreMaster(
+      id: json['id']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      location: json['location']?.toString() ?? '',
+      propertyId: json['propertyId']?.toString() ??
+          (prop is Map ? prop['id']?.toString() : null),
+      propertyName: prop is Map ? prop['name']?.toString() : null,
+      isActive: json['isActive'] != false,
+    );
+  }
 }
 
 class ErpPurchaseOrderItem {

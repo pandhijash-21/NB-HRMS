@@ -5,6 +5,7 @@ import { fail, ok } from '../../utils/response';
 import { uploadService } from './upload.service';
 import { mayPersistEmployeeUpload } from './profileWriteGuard';
 import { prisma } from '../../config/prisma';
+import { notificationsService } from '../notifications/notifications.service';
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -61,14 +62,40 @@ async function respondIdentityUpload(params: {
   existingUrl: string | null | undefined;
   persist: (url: string) => Promise<unknown>;
   fieldKey: string;
+  auditLabel?: string;
 }) {
-  const { req, res, employeeId, folder, existingUrl, persist, fieldKey } = params;
+  const { req, res, employeeId, folder, existingUrl, persist, fieldKey, auditLabel } = params;
   if (!req.file) return res.status(400).json(fail('Missing file'));
   assertUploadAccess(req, employeeId);
   const url = await uploadService.uploadToCloudinary(req.file, folder);
   const persistNow = await mayPersistEmployeeUpload(req, employeeId, Boolean(existingUrl));
   if (persistNow) {
     const updated = await persist(url);
+    const changedBy = req.user?.id;
+    if (changedBy) {
+      await prisma.auditLog.create({
+        data: {
+          tableName: 'employees',
+          recordId: String(employeeId),
+          employeeId,
+          fieldName: fieldKey,
+          oldValue: existingUrl ?? null,
+          newValue: url,
+          changedBy,
+          changeReason: auditLabel ?? `${fieldKey} upload`,
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'] ? String(req.headers['user-agent']) : null,
+        },
+      });
+    }
+    void notificationsService
+      .notifyProfileChange({
+        employeeId,
+        actorUserId: changedBy,
+        summary: auditLabel ? `updated ${auditLabel}` : `updated ${fieldKey}`,
+        fieldName: fieldKey,
+      })
+      .catch(() => {});
     return res.json(ok({ url, [fieldKey]: url, persisted: true, employee: updated }));
   }
   return res.json(
@@ -99,6 +126,7 @@ export const uploadController = {
         folder: 'employee/photo',
         existingUrl: emp?.photoUrl,
         fieldKey: 'photoUrl',
+        auditLabel: 'profile picture',
         persist: (url) => uploadService.setEmployeePhoto(meta.data.employeeId, url, req.user?.id),
       });
     } catch (err: any) {

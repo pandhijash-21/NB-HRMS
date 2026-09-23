@@ -62,17 +62,24 @@ export const SYSTEM_SUBMODULES: SystemSubmoduleDef[] = [
   },
   {
     key: 'CONTRACTORS',
-    name: 'Contractors & Vendors',
-    description: 'Approved contractor profiles, contact info, banking details, and documents',
+    name: 'Vendors',
+    description: 'Vendor profiles (Agency / Contractor / Supplier), contact info, banking, and documents',
     category: 'ERP',
     sortOrder: 8,
+  },
+  {
+    key: 'PURCHASE',
+    name: 'Purchase',
+    description: 'Purchase request approvals and approved requests ready for purchasing',
+    category: 'ERP',
+    sortOrder: 9,
   },
   {
     key: 'ERP_CONFIGURATIONS',
     name: 'ERP Configurations',
     description: 'Work activities catalog, machinery master, and standard labour wage rates',
     category: 'ERP',
-    sortOrder: 9,
+    sortOrder: 10,
   },
 
   // ── CRM MODULE ────────────────────────────────────────────────────────────

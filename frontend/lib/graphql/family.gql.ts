@@ -15,8 +15,12 @@ export const GET_FAMILY_MEMBERS = gql`
       dateOfBirth
       dependent
       employed
+      isNominee
+      isEmergencyContact
       employerName
-      aadhaarNoMasked
+      city
+      phoneNo
+      personalEmail
       updatedAt
     }
   }

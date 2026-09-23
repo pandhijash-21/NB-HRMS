@@ -12,10 +12,9 @@ const memberSchema = z.object({
   phoneNo: z.string().min(1).nullable().optional(),
   personalEmail: z.string().email().nullable().optional(),
   dateOfBirth: z.string().datetime().nullable().optional(),
-  aadhaarNo: z.string().min(4).nullable().optional(), // sensitive
-  aadhaarUrl: z.string().url().nullable().optional(),
   isNominee: z.boolean().optional(),
   isDependent: z.boolean().optional(),
+  isEmergencyContact: z.boolean().optional(),
   isEmployed: z.boolean().optional(),
   employerName: z.string().min(1).nullable().optional(),
   updatedBy: z.string().min(1).nullable().optional(),
@@ -98,9 +97,13 @@ export const familyController = {
       return res.status(403).json(fail('Forbidden'));
     }
 
-    const deleted = await familyService.softDelete(employeeId, memberId, req);
-    if (!deleted) return res.status(404).json(fail('Family member not found'));
-    return res.json(ok(deleted));
+    try {
+      const deleted = await familyService.softDelete(employeeId, memberId, req);
+      if (!deleted) return res.status(404).json(fail('Family member not found'));
+      return res.json(ok(deleted));
+    } catch (err: any) {
+      return res.status(err.status ?? 500).json(fail(err.message ?? 'Delete failed'));
+    }
   },
 };
 

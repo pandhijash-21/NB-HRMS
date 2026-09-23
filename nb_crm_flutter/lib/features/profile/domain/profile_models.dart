@@ -345,7 +345,7 @@ class PersonalInfo {
   final String? subCaste;
   final String? nomineeName;
   final String? nomineeRelation;
-  final String? aadhaarNo; // encrypted from server or plain if decryped on download
+  final String? aadhaarNo;
   final String? panNo;
   final String? aadhaarCardUrl;
   final String? panCardUrl;
@@ -657,6 +657,7 @@ class FamilyMember {
   final bool isNominee;
   final bool isDependent;
   final bool isEmployed;
+  final bool isEmergencyContact;
   final String? employerName;
 
   const FamilyMember({
@@ -673,6 +674,7 @@ class FamilyMember {
     required this.isNominee,
     this.isDependent = false,
     this.isEmployed = false,
+    this.isEmergencyContact = false,
     this.employerName,
   });
 
@@ -691,6 +693,7 @@ class FamilyMember {
       isNominee: json['isNominee'] == true,
       isDependent: json['isDependent'] == true || json['dependent'] == true,
       isEmployed: json['isEmployed'] == true || json['employed'] == true,
+      isEmergencyContact: json['isEmergencyContact'] == true || json['is_emergency_contact'] == true,
       employerName: json['employerName'] as String?,
     );
   }
@@ -709,10 +712,11 @@ class FamilyMember {
         'isNominee': isNominee,
         'isDependent': isDependent,
         'isEmployed': isEmployed,
+        'isEmergencyContact': isEmergencyContact,
         'employerName': employerName,
       };
 
-  FamilyMember copyWith({String? aadhaarUrl}) {
+  FamilyMember copyWith({String? aadhaarUrl, bool? isEmergencyContact}) {
     return FamilyMember(
       id: id,
       employeeId: employeeId,
@@ -727,6 +731,7 @@ class FamilyMember {
       isNominee: isNominee,
       isDependent: isDependent,
       isEmployed: isEmployed,
+      isEmergencyContact: isEmergencyContact ?? this.isEmergencyContact,
       employerName: employerName,
     );
   }

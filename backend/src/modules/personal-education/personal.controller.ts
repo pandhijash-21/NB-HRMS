@@ -116,15 +116,19 @@ export const personalController = {
     const body = personalUpsertSchema.partial().safeParse(req.body);
     if (!body.success) return res.status(400).json(fail(body.error.message));
 
-    const updated = await personalService.update(employeeId, {
-      ...body.data,
-      birthDate: body.data.birthDate ? parseDate(body.data.birthDate) : undefined,
-      passportIssueDate: body.data.passportIssueDate ? parseDate(body.data.passportIssueDate) : undefined,
-      passportExpiryDate: body.data.passportExpiryDate ? parseDate(body.data.passportExpiryDate) : undefined,
-    }, req);
+    try {
+      const updated = await personalService.update(employeeId, {
+        ...body.data,
+        birthDate: body.data.birthDate ? parseDate(body.data.birthDate) : undefined,
+        passportIssueDate: body.data.passportIssueDate ? parseDate(body.data.passportIssueDate) : undefined,
+        passportExpiryDate: body.data.passportExpiryDate ? parseDate(body.data.passportExpiryDate) : undefined,
+      }, req);
 
-    if (!updated) return res.status(404).json(fail('Personal info not found'));
-    return res.json(ok(updated));
+      if (!updated) return res.status(404).json(fail('Personal info not found'));
+      return res.json(ok(updated));
+    } catch (err: any) {
+      return res.status(err.status ?? 500).json(fail(err.message ?? 'Update failed'));
+    }
   },
 };
 

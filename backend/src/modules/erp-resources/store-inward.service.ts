@@ -142,6 +142,9 @@ export const storeInwardService = {
     return prisma.erpStoreMaster.findMany({
       where: includeInactive ? undefined : { isActive: true },
       orderBy: { name: 'asc' },
+      include: {
+        property: { select: { id: true, name: true, city: true, locality: true } },
+      },
     });
   },
 
@@ -151,7 +154,15 @@ export const storeInwardService = {
     if (!name) throw new Error('Store name is required');
     if (!location) throw new Error('Store location is required');
     return prisma.erpStoreMaster.create({
-      data: { name, location, isActive: body.isActive !== false },
+      data: {
+        name,
+        location,
+        propertyId: str(body.propertyId),
+        isActive: body.isActive !== false,
+      },
+      include: {
+        property: { select: { id: true, name: true, city: true, locality: true } },
+      },
     });
   },
 
@@ -167,8 +178,19 @@ export const storeInwardService = {
       if (!location) throw new Error('Store location is required');
       data.location = location;
     }
+    if (body.propertyId !== undefined) {
+      data.property = str(body.propertyId)
+        ? { connect: { id: str(body.propertyId)! } }
+        : { disconnect: true };
+    }
     if (body.isActive !== undefined) data.isActive = Boolean(body.isActive);
-    return prisma.erpStoreMaster.update({ where: { id }, data });
+    return prisma.erpStoreMaster.update({
+      where: { id },
+      data,
+      include: {
+        property: { select: { id: true, name: true, city: true, locality: true } },
+      },
+    });
   },
 
   async removeStore(id: string) {

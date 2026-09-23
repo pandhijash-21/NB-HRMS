@@ -6,11 +6,6 @@ export const familyMemberSchema = z.object({
   relation: z.enum(["SPOUSE", "CHILD", "PARENT", "SIBLING", "OTHER"]),
   otherRelation: z.string().optional(),
   dateOfBirth: z.string().optional(),
-  aadhaarNo: z
-    .string()
-    .min(1, "Aadhaar number is required")
-    .regex(/^\d{12}$/, "Aadhaar must be 12 digits"),
-  aadhaarUrl: z.string().min(1, "Aadhaar upload is required"),
   city: z.string().min(1, "City is required"),
   phoneNo: z
     .string()
@@ -23,6 +18,7 @@ export const familyMemberSchema = z.object({
   dependent: z.boolean().default(false),
   employed: z.boolean().default(false),
   isNominee: z.boolean().default(false),
+  isEmergencyContact: z.boolean().default(false),
   employerName: z.string().optional(),
 });
 

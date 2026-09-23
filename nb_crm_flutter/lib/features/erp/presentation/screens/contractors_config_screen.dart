@@ -31,7 +31,7 @@ class _ContractorsConfigView extends StatelessWidget {
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF1F5F9),
       appBar: AppBar(
-        title: const Text('Contractors'),
+        title: const Text('Vendors'),
         leading: const AppBackButton(fallbackLocation: '/erp/configurations'),
         actions: [
           IconButton(
@@ -43,9 +43,9 @@ class _ContractorsConfigView extends StatelessWidget {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.go('/erp/configurations/contractors/new'),
+        onPressed: () => context.go('/erp/configurations/vendors/new'),
         icon: const Icon(Icons.add),
-        label: const Text('Add Contractor'),
+        label: const Text('Add Vendor'),
         backgroundColor: const Color(0xFF1e3a5f),
       ),
       body: BlocBuilder<ErpWorkOrdersBloc, ErpWorkOrdersState>(
@@ -54,11 +54,11 @@ class _ContractorsConfigView extends StatelessWidget {
             return const Center(child: CircularProgressIndicator());
           }
           if (state.status == LoadStatus.failure && state.contractors.isEmpty) {
-            return Center(child: Text(state.errorMessage ?? 'Error loading contractors'));
+            return Center(child: Text(state.errorMessage ?? 'Error loading vendors'));
           }
           final items = state.contractors;
           if (items.isEmpty) {
-            return const Center(child: Text('No contractors yet. Add one to get started.'));
+            return const Center(child: Text('No vendors yet. Add one to get started.'));
           }
           return RepaintBoundary(
             child: ListView.separated(
@@ -72,7 +72,7 @@ class _ContractorsConfigView extends StatelessWidget {
                   borderRadius: BorderRadius.circular(14),
                   child: InkWell(
                     borderRadius: BorderRadius.circular(14),
-                    onTap: () => context.go('/erp/configurations/contractors/${c.id}/edit'),
+                    onTap: () => context.go('/erp/configurations/vendors/${c.id}/edit'),
                     child: Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(

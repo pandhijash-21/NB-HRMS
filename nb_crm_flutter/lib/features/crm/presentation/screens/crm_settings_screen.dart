@@ -61,11 +61,26 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
   bool _kpiLoaded = false;
 
   bool _telephonyLoaded = false;
+  List<CrmTelecallerTelephony> _telecallers = [];
+  bool _telecallersLoading = false;
+  int? _selectedTelecallerId;
+  final _tcApiUrlController = TextEditingController();
+  final _tcUserIdController = TextEditingController();
+  final _tcDidController = TextEditingController();
+  final _tcRouteController = TextEditingController();
+  final _tcAgentController = TextEditingController();
+  bool _savingTelecaller = false;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    _tabController.addListener(() {
+      if (_tabController.index == 0 && _telecallers.isEmpty && !_telecallersLoading) {
+        _loadTelecallers();
+      }
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadTelecallers());
   }
 
   @override
@@ -76,9 +91,84 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
     _didController.dispose();
     _routeNumberController.dispose();
     _defaultAgentController.dispose();
+    _tcApiUrlController.dispose();
+    _tcUserIdController.dispose();
+    _tcDidController.dispose();
+    _tcRouteController.dispose();
+    _tcAgentController.dispose();
     _notInterestedDaysController.dispose();
     _binDaysController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadTelecallers() async {
+    setState(() => _telecallersLoading = true);
+    try {
+      final data = await context.read<CrmRepository>().listTelecallerTelephony();
+      if (!mounted) return;
+      setState(() {
+        _telecallers = data.telecallers;
+        _telecallersLoading = false;
+        if (_selectedTelecallerId == null && _telecallers.isNotEmpty) {
+          _selectTelecaller(_telecallers.first.employeeId);
+        } else if (_selectedTelecallerId != null) {
+          _selectTelecaller(_selectedTelecallerId!);
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _telecallersLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load telecallers: $e')),
+      );
+    }
+  }
+
+  void _selectTelecaller(int employeeId) {
+    CrmTelecallerTelephony? tc;
+    for (final t in _telecallers) {
+      if (t.employeeId == employeeId) {
+        tc = t;
+        break;
+      }
+    }
+    _selectedTelecallerId = employeeId;
+    if (tc == null) return;
+    _tcApiUrlController.text = tc.config.apiUrl;
+    _tcUserIdController.text = tc.config.userId;
+    _tcDidController.text = tc.config.did;
+    _tcRouteController.text = tc.config.routeNumber;
+    _tcAgentController.text = cleanMobile10(tc.config.agentNumber);
+  }
+
+  Future<void> _saveSelectedTelecaller() async {
+    final id = _selectedTelecallerId;
+    if (id == null) return;
+    setState(() => _savingTelecaller = true);
+    try {
+      await context.read<CrmRepository>().saveTelecallerTelephony(id, {
+        'api_url': _tcApiUrlController.text.trim(),
+        'user_id': _tcUserIdController.text.trim(),
+        'did': _tcDidController.text.trim(),
+        'route_number': _tcRouteController.text.trim(),
+        'agent_number': cleanMobile10(_tcAgentController.text.trim()),
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Telecaller telephony settings saved'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      await _loadTelecallers();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e'), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _savingTelecaller = false);
+    }
   }
 
   void _syncSettings(CrmSettings settings) {
@@ -328,6 +418,201 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
               ),
               const SizedBox(height: 24),
 
+              // Per-telecaller credentials
+              Text(
+                'Telecaller dialer credentials',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  color: isDark ? Colors.white : const Color(0xFF1E293B),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Employees with designation Telecaller. Select a name to configure their Click2Call number and Greeter credentials.',
+                style: TextStyle(fontSize: 12, color: textMuted),
+              ),
+              const SizedBox(height: 12),
+              if (_telecallersLoading)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else if (_telecallers.isEmpty)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.black26 : const Color(0xFFFFF7ED),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFFDBA74)),
+                  ),
+                  child: Text(
+                    'No active employees with designation “Telecaller” found. Add telecallers in Workforce, then refresh.',
+                    style: TextStyle(fontSize: 13, color: textMuted),
+                  ),
+                )
+              else ...[
+                DropdownButtonFormField<int>(
+                  value: _selectedTelecallerId,
+                  decoration: InputDecoration(
+                    labelText: 'Telecaller',
+                    prefixIcon: const Icon(Icons.person_search_outlined, size: 20),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  items: [
+                    for (final t in _telecallers)
+                      DropdownMenuItem(
+                        value: t.employeeId,
+                        child: Text(
+                          [
+                            t.name,
+                            if (t.employeeCode != null && t.employeeCode!.isNotEmpty) '(${t.employeeCode})',
+                            if (t.configured) '• configured',
+                          ].join(' '),
+                        ),
+                      ),
+                  ],
+                  onChanged: (id) {
+                    if (id == null) return;
+                    setState(() => _selectTelecaller(id));
+                  },
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'API Endpoint URL (API URL)',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: isDark ? Colors.white : const Color(0xFF1E293B)),
+                ),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: _tcApiUrlController,
+                  decoration: InputDecoration(
+                    hintText: 'https://greeter.co.in/api/click2call',
+                    prefixIcon: const Icon(Icons.link_rounded, size: 20),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isCompact = constraints.maxWidth < 500;
+                    final userField = Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('User ID (user_id)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: isDark ? Colors.white : const Color(0xFF1E293B))),
+                        const SizedBox(height: 6),
+                        TextField(
+                          controller: _tcUserIdController,
+                          decoration: InputDecoration(
+                            hintText: 'e.g. 634550',
+                            prefixIcon: const Icon(Icons.account_circle_outlined, size: 20),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ],
+                    );
+                    final didField = Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Virtual DID Number (did)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: isDark ? Colors.white : const Color(0xFF1E293B))),
+                        const SizedBox(height: 6),
+                        TextField(
+                          controller: _tcDidController,
+                          keyboardType: TextInputType.phone,
+                          decoration: InputDecoration(
+                            hintText: 'e.g. 9484700070',
+                            prefixIcon: const Icon(Icons.call_outlined, size: 20),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ],
+                    );
+                    if (isCompact) {
+                      return Column(children: [userField, const SizedBox(height: 14), didField]);
+                    }
+                    return Row(children: [Expanded(child: userField), const SizedBox(width: 16), Expanded(child: didField)]);
+                  },
+                ),
+                const SizedBox(height: 16),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isCompact = constraints.maxWidth < 500;
+                    final routeField = Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Route / Campaign Code (number)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: isDark ? Colors.white : const Color(0xFF1E293B))),
+                        const SizedBox(height: 6),
+                        TextField(
+                          controller: _tcRouteController,
+                          decoration: InputDecoration(
+                            hintText: 'e.g. 98',
+                            prefixIcon: const Icon(Icons.tag_rounded, size: 20),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ],
+                    );
+                    final agentField = Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Agent Mobile (agen_number)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: isDark ? Colors.white : const Color(0xFF1E293B))),
+                        const SizedBox(height: 6),
+                        TextField(
+                          controller: _tcAgentController,
+                          keyboardType: TextInputType.phone,
+                          inputFormatters: mobileInputFormatters,
+                          decoration: InputDecoration(
+                            hintText: '10-digit mobile',
+                            prefixText: '+91 ',
+                            prefixIcon: const Icon(Icons.smartphone_outlined, size: 20),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ],
+                    );
+                    if (isCompact) {
+                      return Column(children: [routeField, const SizedBox(height: 14), agentField]);
+                    }
+                    return Row(children: [Expanded(child: routeField), const SizedBox(width: 16), Expanded(child: agentField)]);
+                  },
+                ),
+                const SizedBox(height: 16),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: ElevatedButton.icon(
+                    onPressed: _savingTelecaller ? null : _saveSelectedTelecaller,
+                    icon: _savingTelecaller
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.save_rounded, size: 18),
+                    label: Text(_savingTelecaller ? 'Saving…' : 'Save Telecaller Settings'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF16A34A),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ),
+              ],
+
+              const SizedBox(height: 28),
+              Divider(color: borderColor),
+              const SizedBox(height: 16),
+              Text(
+                'Organisation defaults (fallback)',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  color: isDark ? Colors.white : const Color(0xFF1E293B),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Used when a telecaller has no personal config yet, or for non-telecaller users.',
+                style: TextStyle(fontSize: 12, color: textMuted),
+              ),
+              const SizedBox(height: 16),
+
               // API Endpoint URL
               Text(
                 'API Endpoint URL (API URL)',
@@ -433,9 +718,9 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
                         keyboardType: TextInputType.phone,
                         inputFormatters: mobileInputFormatters,
                         decoration: InputDecoration(
-                          hintText: '10-digit number',
-                          prefixIcon: buildMobilePrefix(isDark: isDark),
-                          prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+                          hintText: '10-digit mobile',
+                          prefixText: '+91 ',
+                          prefixIcon: const Icon(Icons.smartphone_outlined, size: 20),
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                         ),
                       ),
@@ -469,7 +754,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
                 child: ElevatedButton.icon(
                   onPressed: _saveTelephonySettings,
                   icon: const Icon(Icons.save_rounded, size: 18),
-                  label: const Text('Save Telephony Settings'),
+                  label: const Text('Save Default Telephony Settings'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF16A34A),
                     foregroundColor: Colors.white,

@@ -344,6 +344,30 @@ export const crmController = {
     }
   },
 
+  async listTelecallerTelephony(req: Request, res: Response) {
+    try {
+      const data = await crmService.listTelecallerTelephony();
+      res.json(ok(data));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to list telecaller telephony'));
+    }
+  },
+
+  async upsertTelecallerTelephony(req: Request, res: Response) {
+    try {
+      const authUser = (req as any).user;
+      const employeeId = parseInt(String(req.params.employeeId), 10);
+      const data = await crmService.upsertTelecallerTelephony(
+        employeeId,
+        req.body ?? {},
+        authUser?.id,
+      );
+      res.json(ok(data));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to save telecaller telephony'));
+    }
+  },
+
   async clickToCall(req: Request, res: Response) {
     try {
       const { leadId, agentId } = req.body;

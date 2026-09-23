@@ -99,7 +99,7 @@ class _WorkOrderDetailView extends StatelessWidget {
                   _kv('Date', dateFmt(wo.orderDate)),
                   if (wo.dueDate != null) _kv('Due Date', dateFmt(wo.dueDate!)),
                   _kv('Project', wo.project?.name ?? '—'),
-                  _kv('Contractor', wo.contractor?.name ?? '—'),
+                  _kv('Vendor', wo.contractor?.name ?? '—'),
                   _kv('Total Amount', '₹ ${wo.totalAmount.toStringAsFixed(2)}'),
                   _kv('WO Owner', wo.owner?.displayName ?? '—'),
                   if (wo.tenderRef != null) _kv('Tender', wo.tenderRef!),

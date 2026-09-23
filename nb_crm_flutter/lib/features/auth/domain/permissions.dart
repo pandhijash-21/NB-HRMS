@@ -122,6 +122,7 @@ class Permissions {
           'WORK_ORDERS',
           'BOQ',
           'STORE',
+          'PURCHASE',
           'DPR',
           'TENDERS',
           'TENDER_APPLICATIONS',
@@ -268,6 +269,16 @@ class Permissions {
   static bool canWriteStore(PermissionMap? perms, [String? role]) {
     if (isSuperAdmin(role)) return true;
     return hasPermission(perms, 'STORE', 'WRITE');
+  }
+
+  static bool canReadPurchase(PermissionMap? perms, [String? role]) {
+    if (isSuperAdmin(role)) return true;
+    return hasPermission(perms, 'PURCHASE', 'READ');
+  }
+
+  static bool canWritePurchase(PermissionMap? perms, [String? role]) {
+    if (isSuperAdmin(role)) return true;
+    return hasPermission(perms, 'PURCHASE', 'WRITE');
   }
 
   static bool canReadBoq(PermissionMap? perms, [String? role]) {

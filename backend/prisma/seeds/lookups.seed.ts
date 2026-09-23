@@ -217,11 +217,34 @@ const SEED: SeedOpt[] = [
   { category: 'CONTRACTOR_TDS', code: 'TCS_1', label: 'TCS 1%', sortOrder: 3 },
   { category: 'CONTRACTOR_TDS', code: 'TCS_2', label: 'TCS 2%', sortOrder: 4 },
   { category: 'CONTRACTOR_TDS', code: 'NIL', label: 'Nil', sortOrder: 5 },
-  { category: 'CONTRACTOR_TYPE', code: 'CIVIL', label: 'Civil', sortOrder: 1 },
-  { category: 'CONTRACTOR_TYPE', code: 'ELECTRICAL', label: 'Electrical', sortOrder: 2 },
-  { category: 'CONTRACTOR_TYPE', code: 'PLUMBING', label: 'Plumbing', sortOrder: 3 },
-  { category: 'CONTRACTOR_TYPE', code: 'FINISHING', label: 'Finishing', sortOrder: 4 },
-  { category: 'CONTRACTOR_TYPE', code: 'GENERAL', label: 'General', sortOrder: 5 },
+  { category: 'CONTRACTOR_TYPE', code: 'AGENCY', label: 'Agency', sortOrder: 1 },
+  { category: 'CONTRACTOR_TYPE', code: 'CONTRACTOR', label: 'Contractor', sortOrder: 2 },
+  { category: 'CONTRACTOR_TYPE', code: 'SUPPLIER', label: 'Supplier', sortOrder: 3 },
+  // keep legacy codes inactive-friendly via upsert (still available in DB if used)
+  { category: 'CONTRACTOR_TYPE', code: 'CIVIL', label: 'Civil', sortOrder: 10 },
+  { category: 'CONTRACTOR_TYPE', code: 'ELECTRICAL', label: 'Electrical', sortOrder: 11 },
+  { category: 'CONTRACTOR_TYPE', code: 'PLUMBING', label: 'Plumbing', sortOrder: 12 },
+  { category: 'CONTRACTOR_TYPE', code: 'FINISHING', label: 'Finishing', sortOrder: 13 },
+  { category: 'CONTRACTOR_TYPE', code: 'GENERAL', label: 'General', sortOrder: 14 },
+  // Inventory
+  { category: 'INVENTORY_CATEGORY', code: 'CCTV', label: 'CCTV', sortOrder: 1 },
+  { category: 'INVENTORY_CATEGORY', code: 'CEMENT', label: 'Cement', sortOrder: 2 },
+  { category: 'INVENTORY_CATEGORY', code: 'FABRICATION', label: 'Fabrication', sortOrder: 3 },
+  { category: 'INVENTORY_CATEGORY', code: 'LANDSCAPE', label: 'Landscape', sortOrder: 4 },
+  { category: 'INVENTORY_CATEGORY', code: 'ELECTRICAL', label: 'Electrical', sortOrder: 5 },
+  { category: 'INVENTORY_BRAND', code: 'GENERIC', label: 'Generic', sortOrder: 1 },
+  { category: 'INVENTORY_UOM', code: 'NOS', label: 'Nos', sortOrder: 1 },
+  { category: 'INVENTORY_UOM', code: 'KG', label: 'Kg', sortOrder: 2 },
+  { category: 'INVENTORY_UOM', code: 'MTR', label: 'Meter', sortOrder: 3 },
+  { category: 'INVENTORY_UOM', code: 'BAG', label: 'Bag', sortOrder: 4 },
+  { category: 'INVENTORY_SIZE', code: 'NA', label: 'N/A', sortOrder: 1 },
+  // Purchase request
+  { category: 'PR_TYPE', code: 'MATERIAL', label: 'Material', sortOrder: 1 },
+  { category: 'PR_TYPE', code: 'MACHINE', label: 'Machine', sortOrder: 2 },
+  { category: 'PR_TYPE', code: 'SERVICE', label: 'Service', sortOrder: 3 },
+  { category: 'PR_PRIORITY', code: 'LOW', label: 'Low', sortOrder: 1 },
+  { category: 'PR_PRIORITY', code: 'MEDIUM', label: 'Medium', sortOrder: 2 },
+  { category: 'PR_PRIORITY', code: 'HIGH', label: 'High', sortOrder: 3 },
   { category: 'CONTRACTOR_ADDRESS_TYPE', code: 'BILLING', label: 'Billing Address', sortOrder: 1 },
   { category: 'CONTRACTOR_ADDRESS_TYPE', code: 'OFFICE', label: 'Office Address', sortOrder: 2 },
   { category: 'CONTRACTOR_ADDRESS_TYPE', code: 'SITE', label: 'Site Address', sortOrder: 3 },
@@ -256,8 +279,16 @@ export async function seedSystemLookups(prisma: PrismaClient) {
     await prisma.systemLookup.upsert({
       where: { category_code: { category: row.category, code: row.code } },
       create: row,
-      update: { label: row.label, sortOrder: row.sortOrder },
+      update: { label: row.label, sortOrder: row.sortOrder, isActive: true },
     });
   }
+
+  // Prefer Agency / Contractor / Supplier as the only active vendor types.
+  const legacyVendorTypes = ['CIVIL', 'ELECTRICAL', 'PLUMBING', 'FINISHING', 'GENERAL'];
+  await prisma.systemLookup.updateMany({
+    where: { category: 'CONTRACTOR_TYPE', code: { in: legacyVendorTypes } },
+    data: { isActive: false },
+  });
+
   console.log(`Seeded ${SEED.length} system lookup options`);
 }

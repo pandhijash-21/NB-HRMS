@@ -353,6 +353,24 @@ class CrmRepository {
     );
   }
 
+  Future<CrmTelecallerTelephonyList> listTelecallerTelephony() async {
+    return _dio.getEnvelope<CrmTelecallerTelephonyList>(
+      'crm/telephony/telecallers',
+      parse: (raw) => CrmTelecallerTelephonyList.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
+  Future<CrmTelecallerTelephony> saveTelecallerTelephony(
+    int employeeId,
+    Map<String, dynamic> config,
+  ) async {
+    return _dio.putEnvelope<CrmTelecallerTelephony>(
+      'crm/telephony/telecallers/$employeeId',
+      data: config,
+      parse: (raw) => CrmTelecallerTelephony.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
   Future<Map<String, dynamic>> clickToCall(String leadId, {String? agentId}) async {
     return _dio.postEnvelope<Map<String, dynamic>>(
       'crm/telephony/click-to-call',

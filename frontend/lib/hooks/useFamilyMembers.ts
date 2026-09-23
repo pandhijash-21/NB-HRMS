@@ -36,8 +36,18 @@ export function useFamilyMembers(employeeId: string) {
     setSaveError(null);
     try {
       const payload = {
-        ...member,
+        id: member.id,
+        name: member.name,
         relation: mapRelationToApi(member.relation),
+        dateOfBirth: member.dateOfBirth || undefined,
+        city: member.city,
+        phoneNo: member.phoneNo,
+        personalEmail: member.personalEmail,
+        isDependent: member.dependent,
+        isEmployed: member.employed,
+        isNominee: member.isNominee,
+        isEmergencyContact: member.isEmergencyContact ?? false,
+        employerName: member.employerName || undefined,
       };
       if (member.id) {
         await api.patch(

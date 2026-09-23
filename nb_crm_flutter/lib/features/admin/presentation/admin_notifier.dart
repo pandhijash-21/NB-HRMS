@@ -123,6 +123,11 @@ final employeeAssignmentsProvider = FutureProvider.family.autoDispose<List<Emplo
   return ref.watch(adminRepositoryProvider).listAssignments(employeeId);
 });
 
+/// Profile field change audit trail.
+final employeeAuditLogsProvider = FutureProvider.family.autoDispose<List<EmployeeAuditLogEntry>, int>((ref, employeeId) async {
+  return ref.watch(adminRepositoryProvider).listAuditLogs(employeeId);
+});
+
 /// Holds active status filter for change requests queue.
 class ApprovalsFilter extends Notifier<String> {
   @override

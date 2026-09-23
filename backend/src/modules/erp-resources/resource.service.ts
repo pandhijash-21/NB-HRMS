@@ -181,13 +181,28 @@ export const resourceService = {
   async createMaterial(body: Record<string, unknown>, userId?: string) {
     const name = str(body.name);
     if (!name) throw new Error('Material name is required');
+    const itemCode = str(body.itemCode);
+    if (itemCode) {
+      const existing = await prisma.erpMaterial.findUnique({ where: { itemCode } });
+      if (existing) throw new Error(`Item code ${itemCode} already exists`);
+    }
+    const brandCode = str(body.brandCode);
+    const sizeCode = str(body.sizeCode);
+    const brand = str(body.brand) ?? brandCode;
+    const size = str(body.size) ?? sizeCode;
     const qtyOnHand = dec(body.qtyOnHand);
     const row = await prisma.erpMaterial.create({
       data: {
-        brand: str(body.brand),
+        itemCode,
+        categoryCode: str(body.categoryCode),
+        brandCode,
+        brand,
         name,
         unitCode: str(body.unitCode),
-        size: str(body.size),
+        sizeCode,
+        size,
+        imageUrl: str(body.imageUrl),
+        description: str(body.description),
         activityId: str(body.activityId),
         subtaskId: str(body.subtaskId),
         qtyOnHand,
@@ -211,13 +226,38 @@ export const resourceService = {
 
   async updateMaterial(id: string, body: Record<string, unknown>) {
     await prisma.erpMaterial.findUniqueOrThrow({ where: { id } });
+    if (body.itemCode !== undefined) {
+      const itemCode = str(body.itemCode);
+      if (itemCode) {
+        const conflict = await prisma.erpMaterial.findFirst({
+          where: { itemCode, NOT: { id } },
+        });
+        if (conflict) throw new Error(`Item code ${itemCode} already exists`);
+      }
+    }
+    const brandCode = body.brandCode !== undefined ? str(body.brandCode) : undefined;
+    const sizeCode = body.sizeCode !== undefined ? str(body.sizeCode) : undefined;
     return prisma.erpMaterial.update({
       where: { id },
       data: {
-        ...(body.brand !== undefined ? { brand: str(body.brand) } : {}),
+        ...(body.itemCode !== undefined ? { itemCode: str(body.itemCode) } : {}),
+        ...(body.categoryCode !== undefined ? { categoryCode: str(body.categoryCode) } : {}),
+        ...(body.brandCode !== undefined ? { brandCode } : {}),
+        ...(body.brand !== undefined
+          ? { brand: str(body.brand) }
+          : brandCode !== undefined
+            ? { brand: brandCode }
+            : {}),
         ...(body.name != null ? { name: str(body.name) ?? undefined } : {}),
         ...(body.unitCode !== undefined ? { unitCode: str(body.unitCode) } : {}),
-        ...(body.size !== undefined ? { size: str(body.size) } : {}),
+        ...(body.sizeCode !== undefined ? { sizeCode } : {}),
+        ...(body.size !== undefined
+          ? { size: str(body.size) }
+          : sizeCode !== undefined
+            ? { size: sizeCode }
+            : {}),
+        ...(body.imageUrl !== undefined ? { imageUrl: str(body.imageUrl) } : {}),
+        ...(body.description !== undefined ? { description: str(body.description) } : {}),
         ...(body.activityId !== undefined ? { activityId: str(body.activityId) } : {}),
         ...(body.subtaskId !== undefined ? { subtaskId: str(body.subtaskId) } : {}),
         ...(body.isActive != null ? { isActive: Boolean(body.isActive) } : {}),

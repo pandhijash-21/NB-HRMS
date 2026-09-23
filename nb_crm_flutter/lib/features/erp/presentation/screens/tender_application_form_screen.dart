@@ -337,8 +337,8 @@ class _TenderApplicationFormScreenState extends State<TenderApplicationFormScree
                               DropdownButtonFormField<String>(
                                 isExpanded: true,
                                 initialValue: _contractorId,
-                                decoration: _dec('Contractor', required: true),
-                                hint: const Text('Select Contractor'),
+                                decoration: _dec('Vendor', required: true),
+                                hint: const Text('Select Vendor'),
                                 items: _contractors
                                     .where((c) => c.isActive)
                                     .map(

@@ -52,6 +52,8 @@ export type SalaryColumnRule = {
   }>;
 };
 
+export type PayableDaysMode = "WORKING_DAYS_26_27" | "CALENDAR_30_31";
+
 export type PayCommission = {
   id: string;
   code: string;
@@ -59,6 +61,7 @@ export type PayCommission = {
   description?: string | null;
   isActive: boolean;
   ruleEditorEnabled: boolean;
+  payableDaysMode?: PayableDaysMode;
   sortOrder: number;
   _count?: {
     columnDefinitions: number;
@@ -166,6 +169,7 @@ export function useUpdatePayCommission() {
       description?: string | null;
       isActive?: boolean;
       ruleEditorEnabled?: boolean;
+      payableDaysMode?: PayableDaysMode;
       sortOrder?: number;
     }) => {
       const { data } = await api.patch(`salary/pay-commissions/${id}`, body);

@@ -500,7 +500,7 @@ class ErpWorkOrdersBloc extends Bloc<ErpWorkOrdersEvent, ErpWorkOrdersState> {
       emit(state.copyWith(
         isActing: false,
         contractors: updated,
-        actionMessage: 'Contractor registered successfully',
+        actionMessage: 'Vendor registered successfully',
       ));
     } catch (e) {
       emit(state.copyWith(isActing: false, errorMessage: e.toString()));
@@ -519,7 +519,7 @@ class ErpWorkOrdersBloc extends Bloc<ErpWorkOrdersEvent, ErpWorkOrdersState> {
         isActing: false,
         contractors: updated,
         selectedContractor: con,
-        actionMessage: 'Contractor details updated successfully',
+        actionMessage: 'Vendor details updated successfully',
       ));
     } catch (e) {
       emit(state.copyWith(isActing: false, errorMessage: e.toString()));
@@ -550,7 +550,7 @@ class ErpWorkOrdersBloc extends Bloc<ErpWorkOrdersEvent, ErpWorkOrdersState> {
       emit(state.copyWith(
         isActing: false,
         contractors: updated,
-        actionMessage: 'Contractor removed successfully',
+        actionMessage: 'Vendor removed successfully',
       ));
     } catch (e) {
       emit(state.copyWith(isActing: false, errorMessage: e.toString()));

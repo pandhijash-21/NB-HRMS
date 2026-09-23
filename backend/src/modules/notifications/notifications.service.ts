@@ -137,4 +137,90 @@ export const notificationsService = {
       path,
     };
   },
+
+  /**
+   * Notify company admins / HR when an employee updates their profile.
+   * Also writes UserNotification rows so mobile inbox shows them offline.
+   */
+  async notifyProfileChange(input: {
+    employeeId: number;
+    actorUserId?: string | null;
+    summary: string;
+    fieldName?: string | null;
+  }) {
+    const emp = await prisma.employee.findUnique({
+      where: { id: input.employeeId },
+      select: {
+        id: true,
+        abbreviation: true,
+        generalInfo: { select: { fullName: true } },
+        user: { select: { id: true, subOrganization: true } },
+      },
+    });
+    if (!emp) return;
+
+    const who =
+      emp.generalInfo?.fullName?.trim() ||
+      emp.abbreviation ||
+      `Employee #${emp.id}`;
+    const title = 'Profile updated';
+    const body = `${who} ${input.summary}`.trim();
+    const path = `/workforce/employees/${emp.id}`;
+    const kind = 'profile';
+
+    const org = String(emp.user?.subOrganization ?? '').trim();
+    const admins = await prisma.user.findMany({
+      where: {
+        isActive: true,
+        deletedAt: null,
+        id: input.actorUserId ? { not: input.actorUserId } : undefined,
+        OR: [
+          {
+            role: {
+              name: {
+                in: [
+                  'ADMIN',
+                  'HR',
+                  'SUPERADMIN',
+                  'SUPER_ADMIN',
+                  'SYSTEM_ADMIN',
+                  'SYSTEM_ADMINISTRATOR',
+                ],
+              },
+            },
+          },
+          { companyAdminGranted: true },
+        ],
+        ...(org
+          ? { subOrganization: { equals: org, mode: 'insensitive' as const } }
+          : {}),
+      },
+      select: { id: true },
+      take: 200,
+    });
+
+    const recipients = admins.map((a) => a.id).filter(Boolean);
+    if (!recipients.length) return;
+
+    const createdAt = new Date();
+    await prisma.userNotification.createMany({
+      data: recipients.map((userId) => ({
+        userId,
+        title,
+        body,
+        kind,
+        path,
+        senderId: input.actorUserId ?? emp.user?.id ?? null,
+        createdAt,
+      })),
+    });
+
+    emitPushNotify(recipients, {
+      kind,
+      title,
+      body,
+      path,
+      senderId: input.actorUserId ?? emp.user?.id,
+    });
+  },
 };

@@ -253,7 +253,7 @@ class _DprFormScreenState extends State<DprFormScreen> {
       return;
     }
     if (_contractorId == null || _activityId == null || _unitCode == null) {
-      _toast('Contractor, Activity and Unit (UOM) are required');
+      _toast('Vendor, Activity and Unit (UOM) are required');
       return;
     }
     final consumed = double.tryParse(_consumedCtrl.text) ?? 0;
@@ -623,8 +623,8 @@ class _DprFormScreenState extends State<DprFormScreen> {
                                   : DropdownButtonFormField<String>(
                                       isExpanded: true,
                                       initialValue: _contractorId,
-                                      decoration: _dec('Contractor', required: true),
-                                      hint: const Text('Select Contractor'),
+                                      decoration: _dec('Vendor', required: true),
+                                      hint: const Text('Select Vendor'),
                                       items: _contractors
                                           .where((c) => c.isActive)
                                           .map((c) => DropdownMenuItem(value: c.id, child: Text(c.name, overflow: TextOverflow.ellipsis)))

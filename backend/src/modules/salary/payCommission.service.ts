@@ -16,11 +16,14 @@ export async function getPayCommissionByCode(code: string) {
   return pc;
 }
 
+type PayableDaysMode = 'WORKING_DAYS_26_27' | 'CALENDAR_30_31';
+
 type CreatePayCommissionInput = {
   code: string;
   name: string;
   description?: string | null;
   ruleEditorEnabled?: boolean;
+  payableDaysMode?: PayableDaysMode;
   sortOrder?: number;
   cloneFromCommissionId?: string | null;
 };
@@ -30,6 +33,7 @@ type UpdatePayCommissionInput = {
   description?: string | null;
   isActive?: boolean;
   ruleEditorEnabled?: boolean;
+  payableDaysMode?: PayableDaysMode;
   sortOrder?: number;
 };
 
@@ -91,6 +95,7 @@ export const payCommissionService = {
           name: input.name.trim(),
           description: input.description ?? null,
           ruleEditorEnabled: input.ruleEditorEnabled ?? true,
+          payableDaysMode: input.payableDaysMode ?? 'WORKING_DAYS_26_27',
           sortOrder: input.sortOrder ?? (maxSort._max.sortOrder ?? 0) + 10,
         },
       });
@@ -135,6 +140,7 @@ export const payCommissionService = {
         ...(input.description !== undefined ? { description: input.description } : {}),
         ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
         ...(input.ruleEditorEnabled !== undefined ? { ruleEditorEnabled: input.ruleEditorEnabled } : {}),
+        ...(input.payableDaysMode !== undefined ? { payableDaysMode: input.payableDaysMode } : {}),
         ...(input.sortOrder !== undefined ? { sortOrder: input.sortOrder } : {}),
       },
       include: {

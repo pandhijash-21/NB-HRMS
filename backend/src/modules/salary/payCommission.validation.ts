@@ -1,10 +1,13 @@
 import { z } from 'zod';
 
+const payableDaysModeSchema = z.enum(['WORKING_DAYS_26_27', 'CALENDAR_30_31']);
+
 export const createPayCommissionSchema = z.object({
   code: z.string().min(1).max(40),
   name: z.string().min(1).max(120),
   description: z.string().max(500).optional().nullable(),
   ruleEditorEnabled: z.boolean().optional(),
+  payableDaysMode: payableDaysModeSchema.optional(),
   sortOrder: z.number().int().optional(),
   cloneFromCommissionId: z.string().uuid().optional().nullable(),
 });
@@ -14,6 +17,7 @@ export const updatePayCommissionSchema = z.object({
   description: z.string().max(500).optional().nullable(),
   isActive: z.boolean().optional(),
   ruleEditorEnabled: z.boolean().optional(),
+  payableDaysMode: payableDaysModeSchema.optional(),
   sortOrder: z.number().int().optional(),
 });
 

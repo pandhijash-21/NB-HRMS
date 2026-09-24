@@ -67,7 +67,7 @@ class ReimbursementsHubScreen extends ConsumerWidget {
                   TourTarget(
                     id: TourIds.step('hrms.reimbursements', 3),
                     child: Text(
-                    'Pending for your approval (${pending.length})',
+                    'Pending approval (${pending.length})',
                     style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
                   ),
                   ),
@@ -83,15 +83,33 @@ class ReimbursementsHubScreen extends ConsumerWidget {
               );
             },
           ),
-          if (canAdmin)
+          if (canAdmin) ...[
             Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: OutlinedButton.icon(
-                onPressed: () => context.push('/reimbursements/admin'),
-                icon: const Icon(Icons.admin_panel_settings_outlined),
-                label: const Text('Admin — all claims'),
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () => context.push('/reimbursements/types'),
+                    icon: const Icon(Icons.tune),
+                    label: const Text('Configure types'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => context.push('/reimbursements/apply-on-behalf'),
+                    icon: const Icon(Icons.person_add_alt_1_outlined),
+                    label: const Text('Apply on behalf'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => context.push('/reimbursements/admin'),
+                    icon: const Icon(Icons.admin_panel_settings_outlined),
+                    label: const Text('All claims'),
+                  ),
+                ],
               ),
             ),
+            const SizedBox(height: 4),
+          ],
           const Text('My claims', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
           const SizedBox(height: 8),
           myAsync.when(
@@ -296,7 +314,11 @@ class _ClaimCard extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              claim.claimNo,
+              [
+                claim.claimNo,
+                if (claim.typeName != null && claim.typeName!.isNotEmpty) claim.typeName,
+                if (claim.onBehalfBy != null) 'on behalf',
+              ].join(' · '),
               style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
             ),
             if (claim.employeeName != null) ...[

@@ -10,6 +10,70 @@ class ReimbursementsRepository {
 
   final DioClient _dio;
 
+  Future<List<ReimbursementType>> listActiveTypes() async {
+    return _dio.getEnvelope<List<ReimbursementType>>(
+      'reimbursements/types/active',
+      parse: (raw) {
+        if (raw is! List) throw const FormatException('Invalid types list');
+        return raw
+            .map((e) => ReimbursementType.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList();
+      },
+    );
+  }
+
+  Future<List<ReimbursementType>> listAllTypes() async {
+    return _dio.getEnvelope<List<ReimbursementType>>(
+      'reimbursements/types',
+      parse: (raw) {
+        if (raw is! List) throw const FormatException('Invalid types list');
+        return raw
+            .map((e) => ReimbursementType.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList();
+      },
+    );
+  }
+
+  Future<ReimbursementType> createType(Map<String, dynamic> body) async {
+    return _dio.postEnvelope<ReimbursementType>(
+      'reimbursements/types',
+      data: body,
+      parse: (raw) {
+        if (raw is! Map) throw const FormatException('Invalid create type');
+        return ReimbursementType.fromJson(Map<String, dynamic>.from(raw));
+      },
+    );
+  }
+
+  Future<ReimbursementType> updateType(String id, Map<String, dynamic> body) async {
+    return _dio.patchEnvelope<ReimbursementType>(
+      'reimbursements/types/$id',
+      data: body,
+      parse: (raw) {
+        if (raw is! Map) throw const FormatException('Invalid update type');
+        return ReimbursementType.fromJson(Map<String, dynamic>.from(raw));
+      },
+    );
+  }
+
+  Future<ReimbursementType> replaceFields(String typeId, List<Map<String, dynamic>> fields) async {
+    return _dio.putEnvelope<ReimbursementType>(
+      'reimbursements/types/$typeId/fields',
+      data: {'fields': fields},
+      parse: (raw) {
+        if (raw is! Map) throw const FormatException('Invalid replace fields');
+        return ReimbursementType.fromJson(Map<String, dynamic>.from(raw));
+      },
+    );
+  }
+
+  Future<void> deleteType(String id) async {
+    await _dio.deleteEnvelope<dynamic>(
+      'reimbursements/types/$id',
+      parse: (raw) => raw,
+    );
+  }
+
   Future<List<ReimbursementClaim>> listMine() async {
     return _dio.getEnvelope<List<ReimbursementClaim>>(
       'reimbursements/my',

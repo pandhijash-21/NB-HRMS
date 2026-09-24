@@ -907,6 +907,7 @@ export const salaryService = {
     );
 
     // Fold all approved reimbursements for this month into salary.
+    // Prefer stamped salaryMonth/Year; else match claimDate (e.g. Sept entry for August).
     const monthStart = new Date(Date.UTC(year, month - 1, 1));
     const monthEndExclusive = new Date(Date.UTC(year, month, 1));
     const approvedClaims = await prisma.reimbursementClaim.findMany({
@@ -917,7 +918,7 @@ export const salaryService = {
           { salaryMonth: month, salaryYear: year },
           {
             salaryMonth: null,
-            appliedAt: { gte: monthStart, lt: monthEndExclusive },
+            claimDate: { gte: monthStart, lt: monthEndExclusive },
           },
         ],
       },

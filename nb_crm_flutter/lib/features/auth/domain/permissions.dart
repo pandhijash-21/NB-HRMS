@@ -442,8 +442,9 @@ class Permissions {
   }
 
   static bool canAdminReimbursements(PermissionMap? perms, String role) {
-    final r = role.toUpperCase();
-    if (const ['ADMIN', 'HR', 'HR_MANAGER'].contains(r)) return true;
+    if (isSuperAdmin(role) || isSystemAdmin(role)) return true;
+    final r = role.toUpperCase().replaceAll(RegExp(r'[\s_-]+'), '');
+    if (const ['ADMIN', 'HR', 'HRMANAGER'].contains(r)) return true;
     return hasPermission(perms, 'REIMBURSEMENTS', 'APPROVE') ||
         hasPermission(perms, 'REIMBURSEMENTS', 'WRITE');
   }

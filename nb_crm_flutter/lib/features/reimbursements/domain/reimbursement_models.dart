@@ -21,6 +21,224 @@ enum ReimbursementStatus {
   }
 }
 
+enum ReimbursementAmountMode {
+  kmRate,
+  manual;
+
+  static ReimbursementAmountMode fromString(String? raw) {
+    switch ((raw ?? '').toUpperCase()) {
+      case 'MANUAL':
+        return ReimbursementAmountMode.manual;
+      default:
+        return ReimbursementAmountMode.kmRate;
+    }
+  }
+
+  String get api => this == ReimbursementAmountMode.manual ? 'MANUAL' : 'KM_RATE';
+}
+
+enum ReimbursementFieldKind {
+  text,
+  number,
+  kmOpening,
+  kmClosing,
+  date,
+  file,
+  amount;
+
+  static ReimbursementFieldKind fromString(String? raw) {
+    switch ((raw ?? '').toUpperCase()) {
+      case 'NUMBER':
+        return ReimbursementFieldKind.number;
+      case 'KM_OPENING':
+        return ReimbursementFieldKind.kmOpening;
+      case 'KM_CLOSING':
+        return ReimbursementFieldKind.kmClosing;
+      case 'DATE':
+        return ReimbursementFieldKind.date;
+      case 'FILE':
+        return ReimbursementFieldKind.file;
+      case 'AMOUNT':
+        return ReimbursementFieldKind.amount;
+      default:
+        return ReimbursementFieldKind.text;
+    }
+  }
+
+  String get api {
+    switch (this) {
+      case ReimbursementFieldKind.text:
+        return 'TEXT';
+      case ReimbursementFieldKind.number:
+        return 'NUMBER';
+      case ReimbursementFieldKind.kmOpening:
+        return 'KM_OPENING';
+      case ReimbursementFieldKind.kmClosing:
+        return 'KM_CLOSING';
+      case ReimbursementFieldKind.date:
+        return 'DATE';
+      case ReimbursementFieldKind.file:
+        return 'FILE';
+      case ReimbursementFieldKind.amount:
+        return 'AMOUNT';
+    }
+  }
+
+  String get label {
+    switch (this) {
+      case ReimbursementFieldKind.text:
+        return 'Text';
+      case ReimbursementFieldKind.number:
+        return 'Number';
+      case ReimbursementFieldKind.kmOpening:
+        return 'Opening km';
+      case ReimbursementFieldKind.kmClosing:
+        return 'Closing km';
+      case ReimbursementFieldKind.date:
+        return 'Date';
+      case ReimbursementFieldKind.file:
+        return 'File';
+      case ReimbursementFieldKind.amount:
+        return 'Amount';
+    }
+  }
+}
+
+class ReimbursementFieldDef {
+  const ReimbursementFieldDef({
+    required this.id,
+    required this.key,
+    required this.label,
+    required this.fieldKind,
+    this.requiresProof = false,
+    this.isRequired = true,
+    this.sortOrder = 0,
+  });
+
+  final String id;
+  final String key;
+  final String label;
+  final ReimbursementFieldKind fieldKind;
+  final bool requiresProof;
+  final bool isRequired;
+  final int sortOrder;
+
+  factory ReimbursementFieldDef.fromJson(Map<String, dynamic> json) {
+    return ReimbursementFieldDef(
+      id: json['id']?.toString() ?? '',
+      key: json['key']?.toString() ?? '',
+      label: json['label']?.toString() ?? '',
+      fieldKind: ReimbursementFieldKind.fromString(json['fieldKind']?.toString()),
+      requiresProof: json['requiresProof'] == true,
+      isRequired: json['isRequired'] != false,
+      sortOrder: (json['sortOrder'] is num) ? (json['sortOrder'] as num).toInt() : 0,
+    );
+  }
+
+  Map<String, dynamic> toApiJson() => {
+        'key': key,
+        'label': label,
+        'fieldKind': fieldKind.api,
+        'requiresProof': requiresProof,
+        'isRequired': isRequired,
+        'sortOrder': sortOrder,
+      };
+}
+
+class ReimbursementType {
+  const ReimbursementType({
+    required this.id,
+    required this.code,
+    required this.name,
+    this.description,
+    this.amountMode = ReimbursementAmountMode.kmRate,
+    this.ratePerUnit,
+    this.approverUserId,
+    this.approverName,
+    this.isActive = true,
+    this.sortOrder = 0,
+    this.fields = const [],
+    this.claimsCount = 0,
+  });
+
+  final String id;
+  final String code;
+  final String name;
+  final String? description;
+  final ReimbursementAmountMode amountMode;
+  final double? ratePerUnit;
+  final String? approverUserId;
+  final String? approverName;
+  final bool isActive;
+  final int sortOrder;
+  final List<ReimbursementFieldDef> fields;
+  final int claimsCount;
+
+  factory ReimbursementType.fromJson(Map<String, dynamic> json) {
+    final fieldsRaw = json['fields'];
+    final count = json['_count'];
+    return ReimbursementType(
+      id: json['id']?.toString() ?? '',
+      code: json['code']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      description: json['description']?.toString(),
+      amountMode: ReimbursementAmountMode.fromString(json['amountMode']?.toString()),
+      ratePerUnit: json['ratePerUnit'] != null
+          ? (json['ratePerUnit'] is num
+              ? (json['ratePerUnit'] as num).toDouble()
+              : double.tryParse('${json['ratePerUnit']}'))
+          : null,
+      approverUserId: json['approverUserId']?.toString(),
+      approverName: json['approverName']?.toString(),
+      isActive: json['isActive'] != false,
+      sortOrder: (json['sortOrder'] is num) ? (json['sortOrder'] as num).toInt() : 0,
+      fields: fieldsRaw is List
+          ? fieldsRaw
+              .map((e) => ReimbursementFieldDef.fromJson(Map<String, dynamic>.from(e as Map)))
+              .toList()
+          : const [],
+      claimsCount: count is Map && count['claims'] is num ? (count['claims'] as num).toInt() : 0,
+    );
+  }
+}
+
+class ReimbursementClaimValue {
+  const ReimbursementClaimValue({
+    required this.id,
+    required this.fieldDefId,
+    this.valueText,
+    this.valueNumber,
+    this.proofUrl,
+    this.fieldLabel,
+    this.fieldKind,
+  });
+
+  final String id;
+  final String fieldDefId;
+  final String? valueText;
+  final double? valueNumber;
+  final String? proofUrl;
+  final String? fieldLabel;
+  final ReimbursementFieldKind? fieldKind;
+
+  factory ReimbursementClaimValue.fromJson(Map<String, dynamic> json) {
+    final fd = json['fieldDef'];
+    Map<String, dynamic>? field;
+    if (fd is Map) field = Map<String, dynamic>.from(fd);
+    return ReimbursementClaimValue(
+      id: json['id']?.toString() ?? '',
+      fieldDefId: json['fieldDefId']?.toString() ?? '',
+      valueText: json['valueText']?.toString(),
+      valueNumber: json['valueNumber'] != null ? (json['valueNumber'] as num).toDouble() : null,
+      proofUrl: json['proofUrl']?.toString(),
+      fieldLabel: field?['label']?.toString(),
+      fieldKind: field != null
+          ? ReimbursementFieldKind.fromString(field['fieldKind']?.toString())
+          : null,
+    );
+  }
+}
+
 class ReimbursementApprovalStep {
   const ReimbursementApprovalStep({
     required this.id,
@@ -64,6 +282,10 @@ class ReimbursementClaim {
     required this.title,
     required this.description,
     required this.amount,
+    this.typeId,
+    this.typeName,
+    this.claimDate,
+    this.onBehalfBy,
     this.openingKm,
     this.closingKm,
     this.proofUrl,
@@ -77,6 +299,7 @@ class ReimbursementClaim {
     this.designation,
     this.department,
     this.approvalSteps = const [],
+    this.values = const [],
     this.appliedAt,
   });
 
@@ -86,6 +309,10 @@ class ReimbursementClaim {
   final String title;
   final String description;
   final double amount;
+  final String? typeId;
+  final String? typeName;
+  final DateTime? claimDate;
+  final String? onBehalfBy;
   final double? openingKm;
   final double? closingKm;
   final String? proofUrl;
@@ -99,6 +326,7 @@ class ReimbursementClaim {
   final String? designation;
   final String? department;
   final List<ReimbursementApprovalStep> approvalSteps;
+  final List<ReimbursementClaimValue> values;
   final DateTime? appliedAt;
 
   factory ReimbursementClaim.fromJson(Map<String, dynamic> json) {
@@ -108,7 +336,9 @@ class ReimbursementClaim {
       final g = emp['generalInfo'];
       if (g is Map) gi = Map<String, dynamic>.from(g);
     }
+    final type = json['type'];
     final stepsRaw = json['approvalSteps'];
+    final valuesRaw = json['values'];
     return ReimbursementClaim(
       id: json['id'] as String,
       claimNo: json['claimNo'] as String? ?? '',
@@ -118,6 +348,11 @@ class ReimbursementClaim {
       amount: (json['amount'] is num)
           ? (json['amount'] as num).toDouble()
           : double.tryParse('${json['amount']}') ?? 0,
+      typeId: json['typeId']?.toString(),
+      typeName: type is Map ? type['name']?.toString() : null,
+      claimDate:
+          json['claimDate'] != null ? DateTime.tryParse(json['claimDate'].toString()) : null,
+      onBehalfBy: json['onBehalfBy']?.toString(),
       openingKm: json['openingKm'] != null ? (json['openingKm'] as num).toDouble() : null,
       closingKm: json['closingKm'] != null ? (json['closingKm'] as num).toDouble() : null,
       proofUrl: json['proofUrl'] as String?,
@@ -133,6 +368,11 @@ class ReimbursementClaim {
       approvalSteps: stepsRaw is List
           ? stepsRaw
               .map((e) => ReimbursementApprovalStep.fromJson(Map<String, dynamic>.from(e as Map)))
+              .toList()
+          : const [],
+      values: valuesRaw is List
+          ? valuesRaw
+              .map((e) => ReimbursementClaimValue.fromJson(Map<String, dynamic>.from(e as Map)))
               .toList()
           : const [],
       appliedAt: json['appliedAt'] != null ? DateTime.tryParse(json['appliedAt'].toString()) : null,

@@ -49,6 +49,7 @@ import '../../features/leave/presentation/screens/admin_leaves_settings_screen.d
 import '../../features/leave/presentation/screens/admin_leaves_holidays_screen.dart';
 import '../../features/reimbursements/presentation/screens/reimbursements_hub_screen.dart';
 import '../../features/reimbursements/presentation/screens/reimbursement_apply_screen.dart';
+import '../../features/reimbursements/presentation/screens/reimbursement_types_admin_screen.dart';
 import '../../features/recruitment/presentation/screens/recruitment_hub_screen.dart';
 import '../../features/recruitment/presentation/screens/candidate_detail_screen.dart';
 import '../../features/repository/presentation/screens/repository_hub_screen.dart';
@@ -771,6 +772,14 @@ GoRouter createAppRouter(AuthBloc authBloc) {
           GoRoute(
             path: '/reimbursements/apply',
             builder: (context, state) => const ReimbursementApplyScreen(),
+          ),
+          GoRoute(
+            path: '/reimbursements/apply-on-behalf',
+            builder: (context, state) => const ReimbursementApplyScreen(onBehalf: true),
+          ),
+          GoRoute(
+            path: '/reimbursements/types',
+            builder: (context, state) => const ReimbursementTypesAdminScreen(),
           ),
           GoRoute(
             path: '/reimbursements/admin',

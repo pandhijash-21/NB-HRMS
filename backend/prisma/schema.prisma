@@ -1657,20 +1657,79 @@ enum ReimbursementStatus {
   CANCELLED
 }
 
+enum ReimbursementAmountMode {
+  KM_RATE
+  MANUAL
+}
+
+enum ReimbursementFieldKind {
+  TEXT
+  NUMBER
+  KM_OPENING
+  KM_CLOSING
+  DATE
+  FILE
+  AMOUNT
+}
+
+model ReimbursementType {
+  id          String                 @id @default(uuid())
+  code        String                 @unique
+  name        String
+  description String?
+  amountMode  ReimbursementAmountMode @default(KM_RATE) @map("amount_mode")
+  /// ₹ per km (or per unit) when amountMode = KM_RATE
+  ratePerUnit Decimal?               @map("rate_per_unit") @db.Decimal(12, 4)
+  /// User who receives & approves staff claims for this type
+  approverUserId String?             @map("approver_user_id")
+  isActive    Boolean                @default(true) @map("is_active")
+  sortOrder   Int                    @default(0) @map("sort_order")
+  createdAt   DateTime               @default(now()) @map("created_at")
+  updatedAt   DateTime               @updatedAt @map("updated_at")
+
+  fields ReimbursementFieldDef[]
+  claims ReimbursementClaim[]
+
+  @@index([approverUserId])
+  @@map("reimbursement_types")
+}
+
+model ReimbursementFieldDef {
+  id            String                @id @default(uuid())
+  typeId        String                @map("type_id")
+  key           String
+  label         String
+  fieldKind     ReimbursementFieldKind @map("field_kind")
+  requiresProof Boolean               @default(false) @map("requires_proof")
+  isRequired    Boolean               @default(true) @map("is_required")
+  sortOrder     Int                   @default(0) @map("sort_order")
+  createdAt     DateTime              @default(now()) @map("created_at")
+  updatedAt     DateTime              @updatedAt @map("updated_at")
+
+  type   ReimbursementType         @relation(fields: [typeId], references: [id], onDelete: Cascade)
+  values ReimbursementClaimValue[]
+
+  @@unique([typeId, key])
+  @@index([typeId, sortOrder])
+  @@map("reimbursement_field_defs")
+}
+
 model ReimbursementClaim {
   id         String @id @default(uuid())
   claimNo    String @unique @map("claim_no")
   employeeId Int    @map("employee_id")
+  typeId     String? @map("type_id")
 
   title       String
   description String  @db.Text
   amount      Decimal @db.Decimal(12, 2)
+  claimDate   DateTime? @map("claim_date") @db.Date
   openingKm   Float?  @map("opening_km")
   closingKm   Float?  @map("closing_km")
   proofUrl    String? @map("proof_url")
-  /// Odometer / meter photo at trip start
+  /// Odometer / meter photo at trip start (legacy)
   openingKmPhotoUrl String? @map("opening_km_photo_url")
-  /// Odometer / meter photo at trip end
+  /// Odometer / meter photo at trip end (legacy)
   closingKmPhotoUrl String? @map("closing_km_photo_url")
 
   status ReimbursementStatus @default(PENDING)
@@ -1682,17 +1741,39 @@ model ReimbursementClaim {
   salaryYear     Int?    @map("salary_year")
   salaryRecordId String? @map("salary_record_id")
 
-  appliedBy String   @map("applied_by")
-  appliedAt DateTime @default(now()) @map("applied_at")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  appliedBy  String   @map("applied_by")
+  /// Set when Admin/HR files the claim for another employee
+  onBehalfBy String?  @map("on_behalf_by")
+  appliedAt  DateTime @default(now()) @map("applied_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
   employee      Employee                    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  type          ReimbursementType?          @relation(fields: [typeId], references: [id], onDelete: SetNull)
   approvalSteps ReimbursementApprovalStep[]
+  values        ReimbursementClaimValue[]
 
   @@index([employeeId, status])
   @@index([status, appliedAt])
+  @@index([typeId])
   @@map("reimbursement_claims")
+}
+
+model ReimbursementClaimValue {
+  id         String  @id @default(uuid())
+  claimId    String  @map("claim_id")
+  fieldDefId String  @map("field_def_id")
+  valueText  String? @map("value_text") @db.Text
+  valueNumber Float? @map("value_number")
+  proofUrl   String? @map("proof_url")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  claim    ReimbursementClaim    @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  fieldDef ReimbursementFieldDef @relation(fields: [fieldDefId], references: [id], onDelete: Cascade)
+
+  @@unique([claimId, fieldDefId])
+  @@index([claimId])
+  @@map("reimbursement_claim_values")
 }
 
 model ReimbursementApprovalStep {

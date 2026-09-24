@@ -1,5 +1,9 @@
 import { Router, Request, Response } from 'express';
-import { ReimbursementStatus } from '@prisma/client';
+import {
+  ReimbursementAmountMode,
+  ReimbursementFieldKind,
+  ReimbursementStatus,
+} from '@prisma/client';
 import { requireAuth } from '../../middleware/auth';
 import { requirePermission, requireRole } from '../../middleware/rbac';
 import { ok, fail } from '../../utils/response';
@@ -11,10 +15,249 @@ const p = (v: string | string[]) => (Array.isArray(v) ? v[0] : v);
 
 function isPrivilegedAdmin(req: Request) {
   const role = String((req.user as any)?.roleName ?? (req.user as any)?.role ?? '').toUpperCase();
-  return ['ADMIN', 'HR', 'HR_MANAGER'].includes(role);
+  return ['ADMIN', 'HR', 'HR_MANAGER', 'SUPERADMIN', 'SYSTEM_ADMIN'].includes(role);
 }
 
-// ─── Employee apply / my list ────────────────────────────────────────────────
+const adminRoles = ['ADMIN', 'HR', 'HR_MANAGER'] as const;
+
+function parseFieldKind(raw: unknown): ReimbursementFieldKind | null {
+  const s = String(raw ?? '').toUpperCase();
+  return (Object.values(ReimbursementFieldKind) as string[]).includes(s)
+    ? (s as ReimbursementFieldKind)
+    : null;
+}
+
+function parseAmountMode(raw: unknown): ReimbursementAmountMode | null {
+  const s = String(raw ?? '').toUpperCase();
+  return (Object.values(ReimbursementAmountMode) as string[]).includes(s)
+    ? (s as ReimbursementAmountMode)
+    : null;
+}
+
+function parseValues(body: any) {
+  const raw = body?.values;
+  if (!Array.isArray(raw)) return [];
+  return raw.map((v: any) => ({
+    fieldKey: String(v?.fieldKey ?? v?.key ?? ''),
+    value: v?.value ?? null,
+    proofUrl: v?.proofUrl != null ? String(v.proofUrl) : null,
+  }));
+}
+
+// ─── Types (active for apply forms) ──────────────────────────────────────────
+
+reimbursementsRouter.get(
+  '/types/active',
+  requireAuth,
+  requirePermission('REIMBURSEMENTS', 'READ'),
+  async (_req: Request, res: Response) => {
+    try {
+      const data = await reimbursementsService.listTypes({ activeOnly: true });
+      return res.json(ok(data));
+    } catch (e: any) {
+      return res.status(400).json(fail(e.message));
+    }
+  },
+);
+
+// ─── Admin type/field config ─────────────────────────────────────────────────
+
+reimbursementsRouter.get(
+  '/types',
+  requireAuth,
+  requireRole([...adminRoles]),
+  async (_req: Request, res: Response) => {
+    try {
+      const data = await reimbursementsService.listTypes();
+      return res.json(ok(data));
+    } catch (e: any) {
+      return res.status(400).json(fail(e.message));
+    }
+  },
+);
+
+reimbursementsRouter.post(
+  '/types',
+  requireAuth,
+  requireRole([...adminRoles]),
+  async (req: Request, res: Response) => {
+    try {
+      const amountMode = parseAmountMode(req.body?.amountMode) ?? undefined;
+      const fieldsRaw = Array.isArray(req.body?.fields) ? req.body.fields : undefined;
+      const created = await reimbursementsService.createType({
+        code: String(req.body?.code ?? req.body?.name ?? ''),
+        name: String(req.body?.name ?? ''),
+        description: req.body?.description != null ? String(req.body.description) : null,
+        amountMode,
+        ratePerUnit:
+          req.body?.ratePerUnit != null && req.body.ratePerUnit !== ''
+            ? Number(req.body.ratePerUnit)
+            : null,
+        approverUserId:
+          req.body?.approverUserId != null && String(req.body.approverUserId).trim()
+            ? String(req.body.approverUserId).trim()
+            : null,
+        sortOrder: req.body?.sortOrder != null ? Number(req.body.sortOrder) : undefined,
+        fields: fieldsRaw?.map((f: any, i: number) => ({
+          key: f?.key != null ? String(f.key) : undefined,
+          label: String(f?.label ?? ''),
+          fieldKind: parseFieldKind(f?.fieldKind) ?? ReimbursementFieldKind.TEXT,
+          requiresProof: Boolean(f?.requiresProof),
+          isRequired: f?.isRequired !== false,
+          sortOrder: f?.sortOrder != null ? Number(f.sortOrder) : i + 1,
+        })),
+      });
+      return res.status(201).json(ok(created));
+    } catch (e: any) {
+      return res.status(400).json(fail(e.message));
+    }
+  },
+);
+
+reimbursementsRouter.patch(
+  '/types/:id',
+  requireAuth,
+  requireRole([...adminRoles]),
+  async (req: Request, res: Response) => {
+    try {
+      const amountMode = req.body?.amountMode != null ? parseAmountMode(req.body.amountMode) : undefined;
+      if (req.body?.amountMode != null && !amountMode) {
+        return res.status(400).json(fail('Invalid amountMode'));
+      }
+      const updated = await reimbursementsService.updateType(p(req.params.id), {
+        name: req.body?.name != null ? String(req.body.name) : undefined,
+        description:
+          req.body?.description !== undefined
+            ? req.body.description == null
+              ? null
+              : String(req.body.description)
+            : undefined,
+        amountMode: amountMode ?? undefined,
+        ratePerUnit:
+          req.body?.ratePerUnit !== undefined
+            ? req.body.ratePerUnit == null || req.body.ratePerUnit === ''
+              ? null
+              : Number(req.body.ratePerUnit)
+            : undefined,
+        approverUserId:
+          req.body?.approverUserId !== undefined
+            ? req.body.approverUserId == null || String(req.body.approverUserId).trim() === ''
+              ? null
+              : String(req.body.approverUserId).trim()
+            : undefined,
+        isActive: req.body?.isActive != null ? Boolean(req.body.isActive) : undefined,
+        sortOrder: req.body?.sortOrder != null ? Number(req.body.sortOrder) : undefined,
+      });
+      return res.json(ok(updated));
+    } catch (e: any) {
+      return res.status(400).json(fail(e.message));
+    }
+  },
+);
+
+reimbursementsRouter.delete(
+  '/types/:id',
+  requireAuth,
+  requireRole([...adminRoles]),
+  async (req: Request, res: Response) => {
+    try {
+      const data = await reimbursementsService.deleteType(p(req.params.id));
+      return res.json(ok(data));
+    } catch (e: any) {
+      return res.status(400).json(fail(e.message));
+    }
+  },
+);
+
+reimbursementsRouter.put(
+  '/types/:id/fields',
+  requireAuth,
+  requireRole([...adminRoles]),
+  async (req: Request, res: Response) => {
+    try {
+      const fieldsRaw = Array.isArray(req.body?.fields) ? req.body.fields : [];
+      const data = await reimbursementsService.replaceFields(
+        p(req.params.id),
+        fieldsRaw.map((f: any, i: number) => ({
+          key: f?.key != null ? String(f.key) : undefined,
+          label: String(f?.label ?? ''),
+          fieldKind: parseFieldKind(f?.fieldKind) ?? ReimbursementFieldKind.TEXT,
+          requiresProof: Boolean(f?.requiresProof),
+          isRequired: f?.isRequired !== false,
+          sortOrder: f?.sortOrder != null ? Number(f.sortOrder) : i + 1,
+        })),
+      );
+      return res.json(ok(data));
+    } catch (e: any) {
+      return res.status(400).json(fail(e.message));
+    }
+  },
+);
+
+reimbursementsRouter.post(
+  '/types/:id/fields',
+  requireAuth,
+  requireRole([...adminRoles]),
+  async (req: Request, res: Response) => {
+    try {
+      const kind = parseFieldKind(req.body?.fieldKind);
+      if (!kind) return res.status(400).json(fail('Invalid fieldKind'));
+      const created = await reimbursementsService.addField(p(req.params.id), {
+        key: req.body?.key != null ? String(req.body.key) : undefined,
+        label: String(req.body?.label ?? ''),
+        fieldKind: kind,
+        requiresProof: Boolean(req.body?.requiresProof),
+        isRequired: req.body?.isRequired !== false,
+        sortOrder: req.body?.sortOrder != null ? Number(req.body.sortOrder) : undefined,
+      });
+      return res.status(201).json(ok(created));
+    } catch (e: any) {
+      return res.status(400).json(fail(e.message));
+    }
+  },
+);
+
+reimbursementsRouter.patch(
+  '/fields/:fieldId',
+  requireAuth,
+  requireRole([...adminRoles]),
+  async (req: Request, res: Response) => {
+    try {
+      const kind =
+        req.body?.fieldKind != null ? parseFieldKind(req.body.fieldKind) : undefined;
+      if (req.body?.fieldKind != null && !kind) {
+        return res.status(400).json(fail('Invalid fieldKind'));
+      }
+      const updated = await reimbursementsService.updateField(p(req.params.fieldId), {
+        label: req.body?.label != null ? String(req.body.label) : undefined,
+        fieldKind: kind ?? undefined,
+        requiresProof:
+          req.body?.requiresProof != null ? Boolean(req.body.requiresProof) : undefined,
+        isRequired: req.body?.isRequired != null ? Boolean(req.body.isRequired) : undefined,
+        sortOrder: req.body?.sortOrder != null ? Number(req.body.sortOrder) : undefined,
+      });
+      return res.json(ok(updated));
+    } catch (e: any) {
+      return res.status(400).json(fail(e.message));
+    }
+  },
+);
+
+reimbursementsRouter.delete(
+  '/fields/:fieldId',
+  requireAuth,
+  requireRole([...adminRoles]),
+  async (req: Request, res: Response) => {
+    try {
+      const data = await reimbursementsService.deleteField(p(req.params.fieldId));
+      return res.json(ok(data));
+    } catch (e: any) {
+      return res.status(400).json(fail(e.message));
+    }
+  },
+);
+
+// ─── Apply / my list ─────────────────────────────────────────────────────────
 
 reimbursementsRouter.post(
   '/apply',
@@ -22,31 +265,45 @@ reimbursementsRouter.post(
   requirePermission('REIMBURSEMENTS', 'WRITE'),
   async (req: Request, res: Response) => {
     try {
-      const employeeId = Number(req.user!.employeeId);
-      if (!employeeId) return res.status(400).json(fail('Employee ID not found in token'));
-      const amount = Number(req.body?.amount);
-      const openingKm =
-        req.body?.openingKm != null && req.body.openingKm !== ''
-          ? Number(req.body.openingKm)
+      const selfEmployeeId = Number(req.user!.employeeId);
+      const bodyEmployeeId =
+        req.body?.employeeId != null && req.body.employeeId !== ''
+          ? Number(req.body.employeeId)
           : null;
-      const closingKm =
-        req.body?.closingKm != null && req.body.closingKm !== ''
-          ? Number(req.body.closingKm)
-          : null;
+      const explicitOnBehalf = req.body?.onBehalf === true || req.body?.onBehalf === 'true';
+      const onBehalf =
+        explicitOnBehalf ||
+        (bodyEmployeeId != null &&
+          Number.isFinite(bodyEmployeeId) &&
+          bodyEmployeeId !== selfEmployeeId);
+
+      if (onBehalf && !isPrivilegedAdmin(req)) {
+        return res.status(403).json(fail('Only Admin/HR can apply on behalf of staff'));
+      }
+
+      const employeeId = onBehalf
+        ? (bodyEmployeeId as number)
+        : selfEmployeeId;
+      if (!employeeId || !Number.isFinite(employeeId)) {
+        return res.status(400).json(fail('Employee ID is required'));
+      }
+
+      const typeId = String(req.body?.typeId ?? '');
+      if (!typeId) return res.status(400).json(fail('typeId is required'));
 
       const claim = await reimbursementsService.apply({
         employeeId,
-        title: String(req.body?.title ?? ''),
-        description: String(req.body?.description ?? ''),
-        amount,
-        openingKm: Number.isFinite(openingKm as number) ? (openingKm as number) : null,
-        closingKm: Number.isFinite(closingKm as number) ? (closingKm as number) : null,
-        proofUrl: req.body?.proofUrl != null ? String(req.body.proofUrl) : null,
-        openingKmPhotoUrl:
-          req.body?.openingKmPhotoUrl != null ? String(req.body.openingKmPhotoUrl) : null,
-        closingKmPhotoUrl:
-          req.body?.closingKmPhotoUrl != null ? String(req.body.closingKmPhotoUrl) : null,
         appliedBy: req.user!.id,
+        typeId,
+        claimDate: req.body?.claimDate ?? null,
+        title: req.body?.title != null ? String(req.body.title) : null,
+        description: req.body?.description != null ? String(req.body.description) : null,
+        values: parseValues(req.body),
+        amount:
+          req.body?.amount != null && req.body.amount !== ''
+            ? Number(req.body.amount)
+            : null,
+        onBehalf,
       });
       return res.status(201).json(ok(claim));
     } catch (e: any) {
@@ -142,7 +399,7 @@ reimbursementsRouter.post(
 reimbursementsRouter.get(
   '/admin',
   requireAuth,
-  requireRole(['ADMIN', 'HR', 'HR_MANAGER']),
+  requireRole([...adminRoles]),
   async (req: Request, res: Response) => {
     try {
       const statusRaw = req.query.status ? String(req.query.status).toUpperCase() : '';

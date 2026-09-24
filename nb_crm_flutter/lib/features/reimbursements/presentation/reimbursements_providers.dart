@@ -19,3 +19,13 @@ final pendingReimbursementsProvider = FutureProvider.autoDispose<List<Reimbursem
 final adminReimbursementsProvider = FutureProvider.autoDispose<List<ReimbursementClaim>>((ref) {
   return ref.watch(reimbursementsRepositoryProvider).listAdmin();
 });
+
+final activeReimbursementTypesProvider =
+    FutureProvider.autoDispose<List<ReimbursementType>>((ref) {
+  return ref.watch(reimbursementsRepositoryProvider).listActiveTypes();
+});
+
+final adminReimbursementTypesProvider =
+    FutureProvider.autoDispose<List<ReimbursementType>>((ref) {
+  return ref.watch(reimbursementsRepositoryProvider).listAllTypes();
+});

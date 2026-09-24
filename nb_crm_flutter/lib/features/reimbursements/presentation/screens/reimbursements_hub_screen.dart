@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -8,6 +7,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/tour/models/tour_models.dart';
 import '../../../../core/tour/widgets/tour_target.dart';
 import '../../../../core/widgets/header_action_button.dart';
+import '../../../../core/widgets/zoomable_photo.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/auth_providers.dart';
 import '../../domain/reimbursement_models.dart';
@@ -455,43 +455,7 @@ class _ClaimCard extends StatelessWidget {
               ),
             const SizedBox(height: 6),
             Text(claim.description, style: const TextStyle(fontSize: 13)),
-            if (claim.openingKmPhotoUrl != null && claim.openingKmPhotoUrl!.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              TextButton.icon(
-                onPressed: () {
-                  Clipboard.setData(ClipboardData(text: claim.openingKmPhotoUrl!));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Opening km photo URL copied')),
-                  );
-                },
-                icon: const Icon(Icons.photo_camera_outlined, size: 16),
-                label: const Text('Copy opening km photo'),
-              ),
-            ],
-            if (claim.closingKmPhotoUrl != null && claim.closingKmPhotoUrl!.isNotEmpty) ...[
-              TextButton.icon(
-                onPressed: () {
-                  Clipboard.setData(ClipboardData(text: claim.closingKmPhotoUrl!));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Closing km photo URL copied')),
-                  );
-                },
-                icon: const Icon(Icons.photo_camera_outlined, size: 16),
-                label: const Text('Copy closing km photo'),
-              ),
-            ],
-            if (claim.proofUrl != null && claim.proofUrl!.isNotEmpty) ...[
-              TextButton.icon(
-                onPressed: () {
-                  Clipboard.setData(ClipboardData(text: claim.proofUrl!));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Proof URL copied: ${claim.proofUrl}')),
-                  );
-                },
-                icon: const Icon(Icons.attach_file, size: 16),
-                label: const Text('Copy proof link'),
-              ),
-            ],
+            ..._photoSection(context),
             if (claim.approvalSteps.isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(
@@ -524,49 +488,132 @@ class _ClaimCard extends StatelessWidget {
                 style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
               ),
             ],
-            if (showActions) ...[
-              const SizedBox(height: 10),
-              Row(
+            if (showActions || onCancel != null || onDelete != null) ...[
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
-                  FilledButton(onPressed: onApprove, child: const Text('Approve')),
-                  const SizedBox(width: 8),
-                  OutlinedButton(
-                    onPressed: onReject,
-                    child: const Text('Reject', style: TextStyle(color: Colors.red)),
-                  ),
-                  if (onDelete != null) ...[
-                    const Spacer(),
-                    IconButton(
-                      tooltip: 'Delete',
-                      onPressed: onDelete,
-                      icon: const Icon(Icons.delete_outline, color: Colors.red),
-                    ),
-                  ],
-                ],
-              ),
-            ] else if (onCancel != null || onDelete != null) ...[
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  if (onCancel != null)
+                  if (showActions) ...[
+                    FilledButton(onPressed: onApprove, child: const Text('Approve')),
                     OutlinedButton(
-                      onPressed: onCancel,
-                      child: const Text('Cancel request'),
-                    ),
-                  if (onDelete != null) ...[
-                    const Spacer(),
-                    IconButton(
-                      tooltip: 'Delete',
-                      onPressed: onDelete,
-                      icon: const Icon(Icons.delete_outline, color: Colors.red),
+                      onPressed: onReject,
+                      child: const Text('Reject', style: TextStyle(color: Colors.red)),
                     ),
                   ],
+                  if (onCancel != null)
+                    OutlinedButton.icon(
+                      onPressed: onCancel,
+                      icon: const Icon(Icons.close, size: 18),
+                      label: const Text('Cancel request'),
+                    ),
+                  if (onDelete != null)
+                    FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.red.shade700,
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: onDelete,
+                      icon: const Icon(Icons.delete_outline, size: 18),
+                      label: const Text('Delete'),
+                    ),
                 ],
               ),
             ],
           ],
         ),
       ),
+    );
+  }
+
+  List<Widget> _photoSection(BuildContext context) {
+    final items = <({String label, String url})>[];
+    if (claim.openingKmPhotoUrl != null && claim.openingKmPhotoUrl!.trim().isNotEmpty) {
+      items.add((label: 'Opening km', url: claim.openingKmPhotoUrl!.trim()));
+    }
+    if (claim.closingKmPhotoUrl != null && claim.closingKmPhotoUrl!.trim().isNotEmpty) {
+      items.add((label: 'Closing km', url: claim.closingKmPhotoUrl!.trim()));
+    }
+    if (claim.proofUrl != null && claim.proofUrl!.trim().isNotEmpty) {
+      items.add((label: 'Proof', url: claim.proofUrl!.trim()));
+    }
+    for (final v in claim.values) {
+      final url = v.proofUrl?.trim();
+      if (url == null || url.isEmpty) continue;
+      if (items.any((e) => e.url == url)) continue;
+      items.add((label: v.fieldLabel ?? 'Attachment', url: url));
+    }
+    if (items.isEmpty) return const [];
+
+    return [
+      const SizedBox(height: 10),
+      const Text(
+        'Photos',
+        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+      ),
+      const SizedBox(height: 6),
+      Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        children: items
+            .map(
+              (item) => _ProofThumb(
+                label: item.label,
+                url: item.url,
+              ),
+            )
+            .toList(),
+      ),
+    ];
+  }
+}
+
+class _ProofThumb extends StatelessWidget {
+  const _ProofThumb({required this.label, required this.url});
+
+  final String label;
+  final String url;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+        const SizedBox(height: 4),
+        ZoomablePhoto(
+          url: url,
+          label: label,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: SizedBox(
+              width: 120,
+              height: 90,
+              child: Image.network(
+                url,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(
+                  color: Colors.black12,
+                  alignment: Alignment.center,
+                  child: const Icon(Icons.broken_image_outlined),
+                ),
+                loadingBuilder: (context, child, progress) {
+                  if (progress == null) return child;
+                  return Container(
+                    color: Colors.black12,
+                    alignment: Alignment.center,
+                    child: const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

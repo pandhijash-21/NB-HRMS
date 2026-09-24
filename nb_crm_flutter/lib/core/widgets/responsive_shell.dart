@@ -242,6 +242,14 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
           'Tasks',
           section: 'Collaboration',
         ),
+      if (Permissions.canReadSupport(auth.permissions, auth.user?.role))
+        const _Destination(
+          '/support',
+          Icons.support_agent_outlined,
+          Icons.support_agent,
+          'Support',
+          section: 'Collaboration',
+        ),
       if (Permissions.canReadChat(auth.permissions, auth.user?.role))
         const _Destination(
           '/chat',

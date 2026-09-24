@@ -323,6 +323,13 @@ export const SYSTEM_SUBMODULES: SystemSubmoduleDef[] = [
     category: 'COLLABORATION',
     sortOrder: 4,
   },
+  {
+    key: 'SUPPORT',
+    name: 'IT Support Tickets',
+    description: 'Employee IT helpdesk tickets, ETA tracking, resolve confirmation, and force-close',
+    category: 'COLLABORATION',
+    sortOrder: 5,
+  },
 ];
 
 const FULL = {
@@ -668,6 +675,7 @@ export async function ensureErpModulePermissions(): Promise<void> {
         'BANK_DETAILS',
         'DOCUMENTS',
         'TASKS',
+        'SUPPORT',
       ].includes(moduleKey);
 
       const perms = isInteractive

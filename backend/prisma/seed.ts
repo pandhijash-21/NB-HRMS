@@ -33,6 +33,7 @@ const MODULES = [
   { key: 'CHAT',          name: 'Chat & Collaboration', category: 'COLLABORATION' },
   { key: 'MEETINGS',      name: 'Meetings', category: 'COLLABORATION' },
   { key: 'ORG_TREE',      name: 'Org Chart & Tree', category: 'COLLABORATION' },
+  { key: 'SUPPORT',       name: 'IT Support Tickets', category: 'COLLABORATION' },
   { key: 'CRM',           name: 'CRM Pre-Sales', category: 'CRM' },
 ];
 
@@ -70,6 +71,7 @@ const PERMISSION_MATRIX: PermissionMatrix = {
     WORK_ORDERS:   RO,
     CHAT:          RW,
     MEETINGS:      RW,
+    SUPPORT:       RW,
     CRM:           RW,
   },
 };

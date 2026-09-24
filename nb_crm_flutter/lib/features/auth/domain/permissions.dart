@@ -504,6 +504,32 @@ class Permissions {
     return hasPermission(perms, 'TASKS', 'WRITE');
   }
 
+  static bool canReadSupport(PermissionMap? perms, [String? role]) {
+    if (isSuperAdmin(role) || isSystemAdmin(role)) return true;
+    return hasPermission(perms, 'SUPPORT', 'READ');
+  }
+
+  static bool canWriteSupport(PermissionMap? perms, [String? role]) {
+    if (isSuperAdmin(role) || isSystemAdmin(role)) return true;
+    return hasPermission(perms, 'SUPPORT', 'WRITE');
+  }
+
+  /// IT queue / resolve / force-close (role-based; also check API capabilities for assignees)
+  static bool canAdminSupport(PermissionMap? perms, [String? role]) {
+    if (isSuperAdmin(role) || isSystemAdmin(role)) return true;
+    final r = (role ?? '').toUpperCase().replaceAll(RegExp(r'[\s_-]+'), '');
+    if (const ['ADMIN', 'HR', 'HRMANAGER'].contains(r)) return true;
+    return hasPermission(perms, 'SUPPORT', 'APPROVE');
+  }
+
+  /// Admin configures which employees receive IT Support tickets.
+  static bool canManageSupportHandlers(String? role, {bool companyAdminGranted = false}) {
+    if (companyAdminGranted) return true;
+    if (isSuperAdmin(role) || isSystemAdmin(role)) return true;
+    final r = (role ?? '').toUpperCase().replaceAll(RegExp(r'[\s_-]+'), '');
+    return r == 'ADMIN';
+  }
+
   static bool canReadOrgTree(PermissionMap? perms, [String? role]) {
     if (isSuperAdmin(role)) return true;
     return hasPermission(perms, 'ORG_TREE', 'READ');

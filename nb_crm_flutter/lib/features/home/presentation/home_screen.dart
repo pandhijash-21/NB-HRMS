@@ -266,6 +266,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           category: ModuleCategory.mySpace,
           color: Color(0xFF4f46e5),
         ),
+      if (Permissions.canReadSupport(auth.permissions, auth.user?.role))
+        const _ModuleCardData(
+          title: 'Support',
+          subtitle: 'Raise IT tickets and track resolution',
+          icon: Icons.support_agent_rounded,
+          route: '/support',
+          enabled: true,
+          category: ModuleCategory.mySpace,
+          color: Color(0xFFB45309),
+        ),
       if (Permissions.canReadChat(auth.permissions, auth.user?.role))
         const _ModuleCardData(
           title: 'Chat',

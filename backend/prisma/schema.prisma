@@ -219,6 +219,8 @@ model Employee {
 
   letterDocuments     EmployeeLetterDocument[]
   reimbursements      ReimbursementClaim[]
+  supportTickets     SupportTicket[]
+  supportItAssignee  SupportItAssignee?
   hiredFromCandidates RecruitmentCandidate[]   @relation("HiredEmployee")
 
   hodDepartments          DepartmentApprover[] @relation("DepartmentHod")
@@ -1792,6 +1794,69 @@ model ReimbursementApprovalStep {
 
   @@index([approverUserId, action])
   @@map("reimbursement_approval_steps")
+}
+
+// =============================================================================
+// SUPPORT TICKETS — employee IT helpdesk (Collaboration)
+// =============================================================================
+
+enum SupportTicketStatus {
+  OPEN
+  IN_REVIEW
+  RESOLVED
+  CLOSED
+}
+
+model SupportTicket {
+  id          String              @id @default(uuid())
+  ticketNo    String              @unique @map("ticket_no")
+  employeeId  Int                 @map("employee_id")
+  title       String
+  description String              @db.Text
+  photoUrl    String?             @map("photo_url")
+  status      SupportTicketStatus @default(OPEN)
+  etaAt       DateTime?           @map("eta_at")
+  resolveRemarks String?          @map("resolve_remarks") @db.Text
+  denyRemarks String?             @map("deny_remarks") @db.Text
+  forceClosed Boolean             @default(false) @map("force_closed")
+  createdBy   String              @map("created_by")
+  closedAt    DateTime?           @map("closed_at")
+  createdAt   DateTime            @default(now()) @map("created_at")
+  updatedAt   DateTime            @updatedAt @map("updated_at")
+
+  employee Employee             @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  events   SupportTicketEvent[]
+
+  @@index([employeeId, status])
+  @@index([status, createdAt])
+  @@map("support_tickets")
+}
+
+model SupportTicketEvent {
+  id        String               @id @default(uuid())
+  ticketId  String               @map("ticket_id")
+  actorId   String               @map("actor_id")
+  fromStatus SupportTicketStatus? @map("from_status")
+  toStatus  SupportTicketStatus  @map("to_status")
+  note      String?              @db.Text
+  createdAt DateTime             @default(now()) @map("created_at")
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId, createdAt])
+  @@map("support_ticket_events")
+}
+
+/// Employees Admin assigns to receive / handle IT Support tickets.
+model SupportItAssignee {
+  id         String   @id @default(uuid())
+  employeeId Int      @unique @map("employee_id")
+  createdBy  String?  @map("created_by")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@map("support_it_assignees")
 }
 
 // =============================================================================

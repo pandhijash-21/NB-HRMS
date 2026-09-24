@@ -393,6 +393,18 @@ export const uploadController = {
     return res.json(ok({ url }));
   }],
 
+  supportPhoto: [single('file'), async (req: Request, res: Response) => {
+    const meta = employeeMetaSchema.safeParse(req.body);
+    if (!meta.success) return res.status(400).json(fail(meta.error.message));
+    if (!req.file) return res.status(400).json(fail('Missing file'));
+    assertUploadAccess(req, meta.data.employeeId);
+    const url = await uploadService.uploadToCloudinary(
+      req.file,
+      `support/photos/${meta.data.employeeId}`,
+    );
+    return res.json(ok({ url }));
+  }],
+
   /** Candidate resume upload (recruitment) — returns Cloudinary URL only. */
   resume: [single('file'), async (req: Request, res: Response) => {
     try {

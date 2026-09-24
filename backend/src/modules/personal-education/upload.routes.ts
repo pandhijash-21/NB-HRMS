@@ -24,6 +24,7 @@ uploadRouter.post('/cancelled-cheque', requireAuth, uploadController.cancelledCh
 uploadRouter.post('/passbook', requireAuth, uploadController.passbook);
 uploadRouter.post('/leave-document', requireAuth, uploadController.leaveDocument);
 uploadRouter.post('/reimbursement-proof', requireAuth, uploadController.reimbursementProof);
+uploadRouter.post('/support-photo', requireAuth, uploadController.supportPhoto);
 uploadRouter.post('/resume', requireAuth, uploadController.resume);
 
 /** Signed/public view URL for Cloudinary docs (fixes HTTP 401 on restricted assets). */

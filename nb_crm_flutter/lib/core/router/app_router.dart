@@ -38,6 +38,10 @@ import '../../features/lookups/presentation/screens/configurations_hub_screen.da
 import '../../features/lookups/presentation/screens/lookup_category_screen.dart';
 import '../../features/letters/presentation/screens/admin_letters_screen.dart';
 import '../../features/tasks/presentation/screens/tasks_hub_screen.dart';
+import '../../features/support/presentation/screens/support_hub_screen.dart';
+import '../../features/support/presentation/screens/support_raise_screen.dart';
+import '../../features/support/presentation/screens/support_detail_screen.dart';
+import '../../features/support/presentation/screens/support_handlers_screen.dart';
 import '../../features/leave/presentation/screens/leave_hub_screen.dart';
 import '../../features/leave/presentation/screens/leave_apply_screen.dart';
 import '../../features/leave/presentation/screens/leave_history_screen.dart';
@@ -261,6 +265,7 @@ GoRouter createAppRouter(AuthBloc authBloc) {
             final isChat = loc == '/chat' || loc.startsWith('/chat/');
             final isMeet = (loc == '/meet' || loc.startsWith('/meet/')) && !guestMeet;
             final isTasks = loc == '/tasks' || loc.startsWith('/tasks/');
+            final isSupport = loc == '/support' || loc.startsWith('/support/');
             final isOrgTree = loc == '/org-tree' || loc.startsWith('/org-tree/');
             final isLeave = loc == '/leave' ||
                 loc.startsWith('/leave/') ||
@@ -286,6 +291,8 @@ GoRouter createAppRouter(AuthBloc authBloc) {
             } else if (isMeet && !Permissions.canReadMeetings(perms, role)) {
               next = defaultRoute;
             } else if (isTasks && !Permissions.canReadTasks(perms, role)) {
+              next = defaultRoute;
+            } else if (isSupport && !Permissions.canReadSupport(perms, role)) {
               next = defaultRoute;
             } else if (isOrgTree && !Permissions.canReadOrgTree(perms, role)) {
               next = defaultRoute;
@@ -478,6 +485,28 @@ GoRouter createAppRouter(AuthBloc authBloc) {
           GoRoute(
             path: '/tasks',
             builder: (context, state) => const TasksHubScreen(),
+          ),
+          GoRoute(
+            path: '/support',
+            builder: (context, state) => const SupportHubScreen(),
+          ),
+          GoRoute(
+            path: '/support/new',
+            builder: (context, state) => const SupportRaiseScreen(),
+          ),
+          GoRoute(
+            path: '/support/handlers',
+            builder: (context, state) => const SupportHandlersScreen(),
+          ),
+          GoRoute(
+            path: '/support/:id',
+            builder: (context, state) {
+              final id = state.pathParameters['id'] ?? '';
+              if (id.isEmpty || id == 'new' || id == 'handlers') {
+                return const Scaffold(body: Center(child: Text('Invalid ticket')));
+              }
+              return SupportDetailScreen(ticketId: id);
+            },
           ),
           GoRoute(
             path: '/erp/home',

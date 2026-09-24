@@ -34,6 +34,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<AuthLoginRequested>(_onLogin);
     on<AuthChangePasswordRequested>(_onChangePassword);
     on<AuthEmailVerificationCompleted>(_onEmailVerificationCompleted);
+    on<AuthEmergencyContactCompleted>(_onEmergencyContactCompleted);
     on<AuthPermissionsRefreshRequested>(_onPermissionsRefresh);
     on<AuthUnauthorizedKicked>(_onUnauthorizedKicked);
     on<AuthLogoutRequested>(_onLogout);
@@ -81,6 +82,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         permissions: restored.permissions,
         isFirstLogin: restored.isFirstLogin,
         needsEmailVerification: restored.needsEmailVerification,
+        needsEmergencyContact: restored.needsEmergencyContact,
       ));
 
       // Only start session polling after initial password change + email
@@ -104,6 +106,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
               permissions: restored.permissions,
               isFirstLogin: restored.isFirstLogin,
               needsEmailVerification: status.needsEmailVerification,
+              needsEmergencyContact: state.needsEmergencyContact,
             );
           }
         } catch (_) {}
@@ -143,6 +146,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         permissions: result.permissions,
         isFirstLogin: result.isFirstLogin,
         needsEmailVerification: result.needsEmailVerification,
+        needsEmergencyContact: result.needsEmergencyContact,
       );
 
       emit(AuthState(
@@ -151,6 +155,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         permissions: result.permissions,
         isFirstLogin: result.isFirstLogin,
         needsEmailVerification: result.needsEmailVerification,
+        needsEmergencyContact: result.needsEmergencyContact,
         isSubmitting: false,
       ));
 
@@ -227,6 +232,26 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       permissions: state.permissions,
       isFirstLogin: state.isFirstLogin,
       needsEmailVerification: false,
+      needsEmergencyContact: state.needsEmergencyContact,
+    );
+  }
+
+  Future<void> _onEmergencyContactCompleted(
+    AuthEmergencyContactCompleted event,
+    Emitter<AuthState> emit,
+  ) async {
+    if (!state.isAuthenticated || state.user == null) return;
+    final token = await _storage.readToken();
+    if (token == null) return;
+
+    emit(state.copyWith(needsEmergencyContact: false));
+    await _repo.persistSession(
+      token: token,
+      user: state.user!,
+      permissions: state.permissions,
+      isFirstLogin: state.isFirstLogin,
+      needsEmailVerification: state.needsEmailVerification,
+      needsEmergencyContact: false,
     );
   }
 
@@ -245,9 +270,12 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       );
 
       final needs = me['needsEmailVerification'] == true;
+      final needsEmergency = me['needsEmergencyContact'] == true;
       final permissions = Permissions.mapFromJson(me['permissions']);
       final permsChanged = !Permissions.mapsEqual(permissions, state.permissions);
       final needsChanged = needs != state.needsEmailVerification && !state.isFirstLogin;
+      final emergencyChanged =
+          needsEmergency != state.needsEmergencyContact && !state.isFirstLogin;
       final roleName = me['roleName'] as String?;
       final roleChanged = roleName != null &&
           roleName.trim().isNotEmpty &&
@@ -259,6 +287,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
       if (!permsChanged &&
           !needsChanged &&
+          !emergencyChanged &&
           !roleChanged &&
           !grantedChanged &&
           !tourChanged) {
@@ -268,6 +297,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       final next = state.copyWith(
         permissions: permsChanged ? permissions : state.permissions,
         needsEmailVerification: needsChanged ? needs : state.needsEmailVerification,
+        needsEmergencyContact:
+            emergencyChanged ? needsEmergency : state.needsEmergencyContact,
         user: (roleChanged || grantedChanged || tourChanged) && state.user != null
             ? state.user!.copyWith(
                 role: roleChanged ? roleName.trim() : state.user!.role,
@@ -291,6 +322,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           permissions: state.permissions,
           isFirstLogin: state.isFirstLogin,
           needsEmailVerification: state.needsEmailVerification,
+          needsEmergencyContact: state.needsEmergencyContact,
         );
       }
     } catch (_) {
@@ -362,6 +394,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         permissions: state.permissions,
         isFirstLogin: state.isFirstLogin,
         needsEmailVerification: state.needsEmailVerification,
+        needsEmergencyContact: state.needsEmergencyContact,
       );
     }
   }
@@ -382,6 +415,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         permissions: state.permissions,
         isFirstLogin: state.isFirstLogin,
         needsEmailVerification: state.needsEmailVerification,
+        needsEmergencyContact: state.needsEmergencyContact,
       );
     }
   }

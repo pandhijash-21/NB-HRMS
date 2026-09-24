@@ -144,6 +144,13 @@ class ReimbursementsRepository {
     );
   }
 
+  Future<void> deleteClaim(String id) async {
+    await _dio.deleteEnvelope<void>(
+      'reimbursements/claims/$id',
+      parse: (_) {},
+    );
+  }
+
   Future<ReimbursementClaim> cancel(String id) async {
     return _dio.postEnvelope<ReimbursementClaim>(
       'reimbursements/claims/$id/cancel',

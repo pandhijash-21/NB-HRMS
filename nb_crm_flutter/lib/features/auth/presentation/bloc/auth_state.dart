@@ -13,6 +13,7 @@ class AuthState {
     this.permissions = const <String, List<String>>{},
     this.isFirstLogin = false,
     this.needsEmailVerification = false,
+    this.needsEmergencyContact = false,
     this.errorMessage,
     this.infoMessage,
     this.isSubmitting = false,
@@ -34,6 +35,7 @@ class AuthState {
   final Map<String, List<String>> permissions;
   final bool isFirstLogin;
   final bool needsEmailVerification;
+  final bool needsEmergencyContact;
   final String? errorMessage;
   final String? infoMessage;
   final bool isSubmitting;
@@ -47,6 +49,7 @@ class AuthState {
     Map<String, List<String>>? permissions,
     bool? isFirstLogin,
     bool? needsEmailVerification,
+    bool? needsEmergencyContact,
     String? errorMessage,
     bool clearError = false,
     String? infoMessage,
@@ -60,6 +63,8 @@ class AuthState {
       isFirstLogin: isFirstLogin ?? this.isFirstLogin,
       needsEmailVerification:
           needsEmailVerification ?? this.needsEmailVerification,
+      needsEmergencyContact:
+          needsEmergencyContact ?? this.needsEmergencyContact,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       infoMessage: clearInfo ? null : (infoMessage ?? this.infoMessage),
       isSubmitting: isSubmitting ?? this.isSubmitting,
@@ -75,6 +80,7 @@ class AuthState {
           user == other.user &&
           isFirstLogin == other.isFirstLogin &&
           needsEmailVerification == other.needsEmailVerification &&
+          needsEmergencyContact == other.needsEmergencyContact &&
           errorMessage == other.errorMessage &&
           infoMessage == other.infoMessage &&
           isSubmitting == other.isSubmitting &&
@@ -86,6 +92,7 @@ class AuthState {
       user.hashCode ^
       isFirstLogin.hashCode ^
       needsEmailVerification.hashCode ^
+      needsEmergencyContact.hashCode ^
       errorMessage.hashCode ^
       infoMessage.hashCode ^
       isSubmitting.hashCode;

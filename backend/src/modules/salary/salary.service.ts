@@ -7,7 +7,7 @@ import { prisma } from '../../config/prisma';
 import { assignmentService } from '../personal-education/assignment.service';
 import { buildFormulaPreview, computeFullSalary, mergeEmployeeRules, buildAttendanceCutOverrides } from './salaryEngine.service';
 import { getPayCommissionByCode } from './payCommission.service';
-import { columnKey, type ColumnRuleInput } from './salary.types';
+import { columnKey, findReimbursementEarningColumn, isReimbursementColumnId, type ColumnRuleInput } from './salary.types';
 import { columnRuleSchema, validateConditionalConditions } from './salary.validation';
 
 async function loadTemplateContext(templateId: string) {
@@ -895,7 +895,7 @@ export const salaryService = {
       for (const cv of existing.columnValues) {
         if (cv.overrideValue == null) continue;
         const id = cv.columnIdentifier;
-        if (id === 'reimbursement' || id === 'other_allowance') continue;
+        if (isReimbursementColumnId(id) || id === 'other_allowance') continue;
         mergedOverrides[columnKey(id, cv.category)] = Number(cv.overrideValue);
         mergedOverrides[id] = Number(cv.overrideValue);
       }
@@ -925,17 +925,16 @@ export const salaryService = {
       select: { id: true, amount: true },
     });
     const reimbursementTotal = approvedClaims.reduce((sum, c) => sum + Number(c.amount), 0);
-    const hasReimbursementCol = columnDefinitions.some(
-      (d) => d.columnIdentifier === 'reimbursement' && d.category === 'EARNING',
-    );
-    if (!hasReimbursementCol && reimbursementTotal > 0) {
+    const reimbursementCol = findReimbursementEarningColumn(columnDefinitions);
+    if (!reimbursementCol && reimbursementTotal > 0) {
       throw new Error(
         'Salary structure is missing the mandatory Reimbursement earning field.',
       );
     }
-    if (hasReimbursementCol) {
-      mergedOverrides[columnKey('reimbursement', 'EARNING')] = reimbursementTotal;
-      mergedOverrides.reimbursement = reimbursementTotal;
+    if (reimbursementCol) {
+      const colId = reimbursementCol.columnIdentifier;
+      mergedOverrides[columnKey(colId, 'EARNING')] = reimbursementTotal;
+      mergedOverrides[colId] = reimbursementTotal;
     }
 
     let computed = await this.computePreview(template.id, mergedOverrides, { employeeId });

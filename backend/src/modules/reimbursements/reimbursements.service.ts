@@ -10,6 +10,7 @@ import {
 import { prisma } from '../../config/prisma';
 import { emitPushNotify } from '../collaboration/socket';
 import { salaryService } from '../salary/salary.service';
+import { findReimbursementEarningColumn } from '../salary/salary.types';
 
 /** True when user role or employee designation is Admin (final authority). */
 async function isAdminAuthority(userId: string): Promise<boolean> {
@@ -152,20 +153,84 @@ async function postAmountToClaimMonthSalary(params: {
     }
   }
 
-  const hasReimbursementCol = record.columnValues.some(
-    (c) => c.columnIdentifier === 'reimbursement' && String(c.category) === 'EARNING',
+  const reimbursementCol = findReimbursementEarningColumn(
+    record.columnValues.map((c) => ({
+      columnIdentifier: c.columnIdentifier,
+      category: String(c.category),
+    })),
   );
-  if (!hasReimbursementCol) {
+  if (!reimbursementCol) {
     // Stamp month only — salary fold uses claimDate / salaryMonth on calculate.
     return { salaryRecordId: record.id, salaryMonth, salaryYear, missingCol: true as const };
   }
-  const colId = 'reimbursement';
+  const colId = reimbursementCol.columnIdentifier;
   const prev = overrides[colId] ?? 0;
   overrides[colId] = Number(prev) + Number(params.amount);
 
   await salaryService.updateSalaryRecord(record.id, overrides);
 
   return { salaryRecordId: record.id, salaryMonth, salaryYear };
+}
+
+/** Undo a posted reimbursement amount from an UNPAID salary record. */
+async function reverseAmountFromClaimMonthSalary(params: {
+  employeeId: number;
+  amount: number;
+  salaryRecordId?: string | null;
+  salaryMonth?: number | null;
+  salaryYear?: number | null;
+  claimDate?: Date | null;
+  actorId: string;
+}) {
+  void params.actorId;
+  let record = params.salaryRecordId
+    ? await prisma.employeeSalaryRecord.findUnique({
+        where: { id: params.salaryRecordId },
+        include: { columnValues: true },
+      })
+    : null;
+
+  if (!record) {
+    const month =
+      params.salaryMonth ??
+      (params.claimDate ? params.claimDate.getMonth() + 1 : null);
+    const year =
+      params.salaryYear ??
+      (params.claimDate ? params.claimDate.getFullYear() : null);
+    if (month == null || year == null) return;
+    record = await prisma.employeeSalaryRecord.findUnique({
+      where: {
+        employeeId_salaryMonth_salaryYear: {
+          employeeId: params.employeeId,
+          salaryMonth: month,
+          salaryYear: year,
+        },
+      },
+      include: { columnValues: true },
+    });
+  }
+
+  if (!record || record.status === SalaryRecordStatus.PAID) return;
+
+  const overrides: Record<string, number> = {};
+  for (const cv of record.columnValues) {
+    if (cv.overrideValue != null) {
+      overrides[cv.columnIdentifier] = Number(cv.overrideValue);
+    }
+  }
+
+  const reimbursementCol = findReimbursementEarningColumn(
+    record.columnValues.map((c) => ({
+      columnIdentifier: c.columnIdentifier,
+      category: String(c.category),
+    })),
+  );
+  if (!reimbursementCol) return;
+
+  const colId = reimbursementCol.columnIdentifier;
+  const prev = overrides[colId] ?? 0;
+  overrides[colId] = Math.max(0, Number(prev) - Number(params.amount));
+  await salaryService.updateSalaryRecord(record.id, overrides);
 }
 
 async function notifyApprover(params: {
@@ -909,5 +974,29 @@ export const reimbursementsService = {
       data: { status: ReimbursementStatus.CANCELLED },
       include: claimInclude,
     });
+  },
+
+  /** Admin/HR hard-delete. Reverses unpaid salary posting when present. */
+  async adminDelete(claimId: string, actorId: string) {
+    const claim = await prisma.reimbursementClaim.findUnique({ where: { id: claimId } });
+    if (!claim) throw new Error('Claim not found');
+
+    if (
+      claim.status === ReimbursementStatus.APPROVED &&
+      (claim.salaryRecordId || (claim.salaryMonth != null && claim.salaryYear != null))
+    ) {
+      await reverseAmountFromClaimMonthSalary({
+        employeeId: claim.employeeId,
+        amount: Number(claim.amount),
+        salaryRecordId: claim.salaryRecordId,
+        salaryMonth: claim.salaryMonth,
+        salaryYear: claim.salaryYear,
+        claimDate: claim.claimDate,
+        actorId,
+      });
+    }
+
+    await prisma.reimbursementClaim.delete({ where: { id: claimId } });
+    return { deleted: true, claimNo: claim.claimNo };
   },
 };

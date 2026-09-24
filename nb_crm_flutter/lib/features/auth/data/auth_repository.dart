@@ -136,6 +136,7 @@ class AuthRepository {
     required Map<String, List<String>> permissions,
     required bool isFirstLogin,
     required bool needsEmailVerification,
+    bool needsEmergencyContact = false,
   }) async {
     await _storage.writeToken(token);
     await _storage.writeSessionJson(
@@ -143,6 +144,7 @@ class AuthRepository {
         'apiBaseUrl': AppConfig.apiBaseUrl,
         'isFirstLogin': isFirstLogin,
         'needsEmailVerification': needsEmailVerification,
+        'needsEmergencyContact': needsEmergencyContact,
         'permissions': permissions,
         'user': user.toJson(),
       }),
@@ -156,6 +158,7 @@ class AuthRepository {
         Map<String, List<String>> permissions,
         bool isFirstLogin,
         bool needsEmailVerification,
+        bool needsEmergencyContact,
       })?> restoreSession() async {
     final token = await _storage.readToken();
     final sessionJson = await _storage.readSessionJson();
@@ -191,6 +194,7 @@ class AuthRepository {
         permissions: permissions,
         isFirstLogin: map['isFirstLogin'] == true,
         needsEmailVerification: map['needsEmailVerification'] == true,
+        needsEmergencyContact: map['needsEmergencyContact'] == true,
       );
     } catch (e, st) {
       AppLogger.auth.e('Error restoring session from storage: $e', error: e, stackTrace: st);

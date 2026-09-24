@@ -394,6 +394,23 @@ reimbursementsRouter.post(
   },
 );
 
+reimbursementsRouter.delete(
+  '/claims/:id',
+  requireAuth,
+  requireRole([...adminRoles]),
+  async (req: Request, res: Response) => {
+    try {
+      const data = await reimbursementsService.adminDelete(
+        p(req.params.id),
+        String(req.user!.id),
+      );
+      return res.json(ok(data));
+    } catch (e: any) {
+      return res.status(400).json(fail(e.message));
+    }
+  },
+);
+
 // ─── Admin list ──────────────────────────────────────────────────────────────
 
 reimbursementsRouter.get(

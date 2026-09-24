@@ -20,6 +20,7 @@ class AuthState {
     this.permissions = const <String, List<String>>{},
     this.isFirstLogin = false,
     this.needsEmailVerification = false,
+    this.needsEmergencyContact = false,
     this.errorMessage,
     this.infoMessage,
     this.isSubmitting = false,
@@ -41,6 +42,8 @@ class AuthState {
   final Map<String, List<String>> permissions;
   final bool isFirstLogin;
   final bool needsEmailVerification;
+  /// Own employee profile is missing an emergency family contact.
+  final bool needsEmergencyContact;
   final String? errorMessage;
   final String? infoMessage;
   final bool isSubmitting;
@@ -53,6 +56,7 @@ class AuthState {
     Map<String, List<String>>? permissions,
     bool? isFirstLogin,
     bool? needsEmailVerification,
+    bool? needsEmergencyContact,
     String? errorMessage,
     bool clearError = false,
     String? infoMessage,
@@ -66,6 +70,8 @@ class AuthState {
       isFirstLogin: isFirstLogin ?? this.isFirstLogin,
       needsEmailVerification:
           needsEmailVerification ?? this.needsEmailVerification,
+      needsEmergencyContact:
+          needsEmergencyContact ?? this.needsEmergencyContact,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       infoMessage: clearInfo ? null : (infoMessage ?? this.infoMessage),
       isSubmitting: isSubmitting ?? this.isSubmitting,
@@ -116,19 +122,25 @@ class AuthNotifier extends Notifier<AuthState> {
         },
       );
       final needs = me['needsEmailVerification'] == true;
+      final needsEmergency = me['needsEmergencyContact'] == true;
       final permissions = Permissions.mapFromJson(me['permissions']);
       final permsChanged = !Permissions.mapsEqual(permissions, state.permissions);
       final needsChanged = needs != state.needsEmailVerification && !state.isFirstLogin;
+      final emergencyChanged = needsEmergency != state.needsEmergencyContact && !state.isFirstLogin;
       final roleName = me['roleName'] as String?;
       final roleChanged = roleName != null &&
           roleName.trim().isNotEmpty &&
           roleName.trim() != state.user?.role;
       final granted = me['companyAdminGranted'] == true;
       final grantedChanged = granted != (state.user?.companyAdminGranted ?? false);
-      if (!permsChanged && !needsChanged && !roleChanged && !grantedChanged) return;
+      if (!permsChanged && !needsChanged && !emergencyChanged && !roleChanged && !grantedChanged) {
+        return;
+      }
       final next = state.copyWith(
         permissions: permsChanged ? permissions : state.permissions,
         needsEmailVerification: needsChanged ? needs : state.needsEmailVerification,
+        needsEmergencyContact:
+            emergencyChanged ? needsEmergency : state.needsEmergencyContact,
         user: (roleChanged || grantedChanged) && state.user != null
             ? state.user!.copyWith(
                 role: roleChanged ? roleName.trim() : state.user!.role,
@@ -146,6 +158,7 @@ class AuthNotifier extends Notifier<AuthState> {
           permissions: next.permissions,
           isFirstLogin: next.isFirstLogin,
           needsEmailVerification: next.needsEmailVerification,
+          needsEmergencyContact: next.needsEmergencyContact,
         );
       }
     } catch (_) {
@@ -174,6 +187,7 @@ class AuthNotifier extends Notifier<AuthState> {
       permissions: source.permissions,
       isFirstLogin: source.isFirstLogin,
       needsEmailVerification: source.needsEmailVerification,
+      needsEmergencyContact: source.needsEmergencyContact,
       errorMessage: source.errorMessage,
       infoMessage: source.infoMessage,
       isSubmitting: source.isSubmitting,
@@ -199,6 +213,7 @@ class AuthNotifier extends Notifier<AuthState> {
       permissions: restored.permissions,
       isFirstLogin: restored.isFirstLogin,
       needsEmailVerification: restored.needsEmailVerification,
+      needsEmergencyContact: restored.needsEmergencyContact,
     );
     _startSessionWatch();
     unawaited(refreshPermissions());
@@ -216,6 +231,7 @@ class AuthNotifier extends Notifier<AuthState> {
             permissions: restored.permissions,
             isFirstLogin: restored.isFirstLogin,
             needsEmailVerification: status.needsEmailVerification,
+            needsEmergencyContact: state.needsEmergencyContact,
           );
         }
       } catch (_) {
@@ -265,6 +281,7 @@ class AuthNotifier extends Notifier<AuthState> {
         permissions: result.permissions,
         isFirstLogin: result.isFirstLogin,
         needsEmailVerification: result.needsEmailVerification,
+        needsEmergencyContact: result.needsEmergencyContact,
       );
 
       state = AuthState(
@@ -273,6 +290,7 @@ class AuthNotifier extends Notifier<AuthState> {
         permissions: result.permissions,
         isFirstLogin: result.isFirstLogin,
         needsEmailVerification: result.needsEmailVerification,
+        needsEmergencyContact: result.needsEmergencyContact,
         isSubmitting: false,
       );
       ref.invalidate(profileProvider);
@@ -350,6 +368,23 @@ class AuthNotifier extends Notifier<AuthState> {
       permissions: state.permissions,
       isFirstLogin: state.isFirstLogin,
       needsEmailVerification: false,
+      needsEmergencyContact: state.needsEmergencyContact,
+    );
+  }
+
+  Future<void> markEmergencyContactComplete() async {
+    if (!state.isAuthenticated || state.user == null) return;
+    final repo = ref.read(authRepositoryProvider);
+    final token = await ref.read(secureStorageProvider).readToken();
+    if (token == null) return;
+    state = state.copyWith(needsEmergencyContact: false);
+    await repo.persistSession(
+      token: token,
+      user: state.user!,
+      permissions: state.permissions,
+      isFirstLogin: state.isFirstLogin,
+      needsEmailVerification: state.needsEmailVerification,
+      needsEmergencyContact: false,
     );
   }
 
@@ -369,6 +404,7 @@ class AuthNotifier extends Notifier<AuthState> {
           permissions: state.permissions,
           isFirstLogin: state.isFirstLogin,
           needsEmailVerification: status.needsEmailVerification,
+          needsEmergencyContact: state.needsEmergencyContact,
         );
       }
     } catch (_) {}

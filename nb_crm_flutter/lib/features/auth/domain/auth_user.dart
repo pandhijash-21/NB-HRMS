@@ -155,12 +155,14 @@ class LoginResult {
     required this.needsEmailVerification,
     required this.user,
     required this.permissions,
+    this.needsEmergencyContact = false,
     this.pendingEmails = const [],
   });
 
   final String token;
   final bool isFirstLogin;
   final bool needsEmailVerification;
+  final bool needsEmergencyContact;
   final AuthUser user;
   final Map<String, List<String>> permissions;
   final List<PendingEmail> pendingEmails;
@@ -196,6 +198,7 @@ class LoginResult {
       token: json['token'] as String? ?? '',
       isFirstLogin: json['isFirstLogin'] == true,
       needsEmailVerification: json['needsEmailVerification'] == true,
+      needsEmergencyContact: json['needsEmergencyContact'] == true,
       user: AuthUser.fromJson(Map<String, dynamic>.from(userMap)),
       permissions: permissions,
       pendingEmails: pending,

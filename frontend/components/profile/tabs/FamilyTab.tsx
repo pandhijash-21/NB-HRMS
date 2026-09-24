@@ -87,13 +87,13 @@ export function FamilyTab({ employeeId, isAdmin }: FamilyTabProps) {
   );
 
   useEffect(() => {
-    if (loading || emergencyPromptDismissed) return;
+    if (isAdmin || loading || emergencyPromptDismissed) return;
     if (!hasEmergencyContact) {
       setEmergencyPromptOpen(true);
     } else {
       setEmergencyPromptOpen(false);
     }
-  }, [loading, hasEmergencyContact, emergencyPromptDismissed, members]);
+  }, [isAdmin, loading, hasEmergencyContact, emergencyPromptDismissed, members]);
 
   const openAdd = (asEmergency = false) => {
     reset({

@@ -23,6 +23,7 @@ import {
   resolveSystemAdminPermissions,
 } from './permissions-map';
 import { parseModules } from '../platform/platform.service';
+import { familyService } from '../personal-education/family.service';
 
 const SESSION_TTL = 8 * 60 * 60; // 8 hours in seconds
 
@@ -320,10 +321,16 @@ export const authService = {
       ? { needsEmailVerification: false, emails: [] as Awaited<ReturnType<typeof otpService.getEmailVerificationStatus>>['emails'] }
       : await otpService.getEmailVerificationStatus(user.id, user.employeeId ?? null);
 
+    const needsEmergencyContact =
+      !mustChangePassword &&
+      user.employeeId != null &&
+      !(await familyService.hasEmergencyContact(user.employeeId));
+
     return {
       token,
       isFirstLogin: mustChangePassword,
       needsEmailVerification: emailStatus.needsEmailVerification,
+      needsEmergencyContact,
       pendingEmails: emailStatus.emails.filter((e) => !e.verified),
       permissions,
       exclusiveSession: true,
@@ -541,6 +548,9 @@ export const authService = {
 
     const isSuperAdmin = isSuperAdminRole(effectiveRoleName);
     const enabledModules = await resolveEnabledModules(subOrganization, isSuperAdmin);
+    const needsEmergencyContact =
+      user.employeeId != null &&
+      !(await familyService.hasEmergencyContact(user.employeeId));
     return {
       id: user.id,
       employeeId: user.employeeId,
@@ -558,6 +568,7 @@ export const authService = {
       organizationId,
       enabledModules,
       needsEmailVerification: emailStatus.needsEmailVerification,
+      needsEmergencyContact,
       pendingEmails: emailStatus.emails.filter((e) => !e.verified),
     };
   },

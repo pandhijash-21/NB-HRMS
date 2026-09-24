@@ -113,7 +113,35 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadBirthdays();
       _loadTodayPunch();
+      _promptEmergencyIfNeeded();
     });
+  }
+
+  void _promptEmergencyIfNeeded() {
+    final auth = context.read<AuthBloc>().state;
+    if (!auth.needsEmergencyContact || !mounted) return;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          title: const Text('Emergency contact required'),
+          content: const Text(
+            'Add at least one family contact and mark them as an emergency contact before using the app.',
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                context.go('/profile/edit');
+              },
+              child: const Text('Add emergency contact'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   String _todayYmdIst() {

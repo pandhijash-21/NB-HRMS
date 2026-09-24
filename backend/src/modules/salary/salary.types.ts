@@ -71,6 +71,20 @@ export function columnKey(identifier: string, category: SalaryColumnCategory): s
   return `${category}::${identifier}`;
 }
 
+/** Accepts `reimbursement` or `reimbursements` (UI often creates the plural form). */
+export function isReimbursementColumnId(columnIdentifier: string): boolean {
+  const id = columnIdentifier.trim().toLowerCase().replace(/_+/g, '_');
+  return id === 'reimbursement' || id === 'reimbursements';
+}
+
+export function findReimbursementEarningColumn<
+  T extends { columnIdentifier: string; category: string },
+>(columns: T[]): T | undefined {
+  return columns.find(
+    (c) => isReimbursementColumnId(c.columnIdentifier) && String(c.category) === 'EARNING',
+  );
+}
+
 export function resolveReferenceValue(
   values: ColumnValueMap,
   ref: string,

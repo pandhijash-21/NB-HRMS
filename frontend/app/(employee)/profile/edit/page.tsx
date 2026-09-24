@@ -92,7 +92,7 @@ export default function EmployeeProfileEditPage() {
 
         <section id="family">
           <h2 className="text-lg font-bold text-slate-700 mb-4 px-1">5. Family Members</h2>
-          <FamilyTab employeeId={employee.id} isAdmin={true} />
+          <FamilyTab employeeId={employee.id} isAdmin={isAdminEditingOther} />
         </section>
 
         <section id="education">

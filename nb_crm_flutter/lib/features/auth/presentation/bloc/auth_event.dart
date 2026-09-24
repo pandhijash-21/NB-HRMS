@@ -39,6 +39,11 @@ class AuthEmailVerificationCompleted extends AuthEvent {
   const AuthEmailVerificationCompleted();
 }
 
+/// Fired when the signed-in employee adds a required emergency contact.
+class AuthEmergencyContactCompleted extends AuthEvent {
+  const AuthEmergencyContactCompleted();
+}
+
 /// Fired periodically or on demand to refresh role permissions from server.
 class AuthPermissionsRefreshRequested extends AuthEvent {
   const AuthPermissionsRefreshRequested();

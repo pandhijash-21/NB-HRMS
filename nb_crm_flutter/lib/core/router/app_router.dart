@@ -205,6 +205,14 @@ GoRouter createAppRouter(AuthBloc authBloc) {
         next = changingPassword ? null : '/change-password';
       } else if (auth.needsEmailVerification) {
         next = verifyingEmails ? null : '/verify-emails';
+      } else if (auth.needsEmergencyContact) {
+        // Own profile edit only — block browsing until emergency contact exists.
+        final onOwnProfileEdit = loc == '/profile/edit' &&
+            (state.uri.queryParameters['employeeId'] == null ||
+                state.uri.queryParameters['employeeId'] ==
+                    '${auth.user?.employeeId ?? ''}');
+        final onHome = loc == '/home';
+        next = (onOwnProfileEdit || onHome) ? null : '/home';
       } else if (isSuperAdmin) {
         // SaaS Platform Superadmin is dedicated strictly to the platform console
         if (!isPlatformPath) {

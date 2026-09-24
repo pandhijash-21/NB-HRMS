@@ -77,6 +77,9 @@ class ReimbursementsHubScreen extends ConsumerWidget {
                         showActions: true,
                         onApprove: () => _act(context, ref, c.id, approve: true),
                         onReject: () => _act(context, ref, c.id, approve: false),
+                        onDelete: canAdmin
+                            ? () => _deleteClaim(context, ref, c.id)
+                            : null,
                       )),
                   const SizedBox(height: 20),
                 ],
@@ -127,7 +130,15 @@ class ReimbursementsHubScreen extends ConsumerWidget {
               }
               return Column(
                 children: claims
-                    .map((c) => _ClaimCard(claim: c, showActions: false))
+                    .map(
+                      (c) => _ClaimCard(
+                        claim: c,
+                        showActions: false,
+                        onCancel: c.status == ReimbursementStatus.PENDING
+                            ? () => _cancelMine(context, ref, c.id)
+                            : null,
+                      ),
+                    )
                     .toList(),
               );
             },
@@ -136,6 +147,74 @@ class ReimbursementsHubScreen extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _cancelMine(BuildContext context, WidgetRef ref, String id) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cancel claim?'),
+        content: const Text('This will withdraw your pending reimbursement request.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Cancel claim'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await ref.read(reimbursementsRepositoryProvider).cancel(id);
+      ref.invalidate(myReimbursementsProvider);
+      ref.invalidate(pendingReimbursementsProvider);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Claim cancelled')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    }
+  }
+
+  Future<void> _deleteClaim(BuildContext context, WidgetRef ref, String id) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete claim?'),
+        content: const Text(
+          'This permanently deletes the claim. If it was posted to an unpaid salary, that amount is reversed.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await ref.read(reimbursementsRepositoryProvider).deleteClaim(id);
+      ref.invalidate(myReimbursementsProvider);
+      ref.invalidate(pendingReimbursementsProvider);
+      ref.invalidate(adminReimbursementsProvider);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Claim deleted')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    }
   }
 
   Future<void> _act(
@@ -243,6 +322,36 @@ class ReimbursementsAdminScreen extends ConsumerWidget {
                     }
                   }
                 },
+                onDelete: () async {
+                  final ok = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Delete claim?'),
+                      content: const Text(
+                        'This permanently deletes the claim. If posted to unpaid salary, the amount is reversed.',
+                      ),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep')),
+                        FilledButton(
+                          style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                          onPressed: () => Navigator.pop(ctx, true),
+                          child: const Text('Delete'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (ok != true) return;
+                  try {
+                    await ref.read(reimbursementsRepositoryProvider).deleteClaim(c.id);
+                    ref.invalidate(adminReimbursementsProvider);
+                    ref.invalidate(pendingReimbursementsProvider);
+                    ref.invalidate(myReimbursementsProvider);
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+                    }
+                  }
+                },
               );
             },
           );
@@ -258,12 +367,16 @@ class _ClaimCard extends StatelessWidget {
     required this.showActions,
     this.onApprove,
     this.onReject,
+    this.onCancel,
+    this.onDelete,
   });
 
   final ReimbursementClaim claim;
   final bool showActions;
   final VoidCallback? onApprove;
   final VoidCallback? onReject;
+  final VoidCallback? onCancel;
+  final VoidCallback? onDelete;
 
   Color _statusColor() {
     switch (claim.status) {
@@ -421,6 +534,33 @@ class _ClaimCard extends StatelessWidget {
                     onPressed: onReject,
                     child: const Text('Reject', style: TextStyle(color: Colors.red)),
                   ),
+                  if (onDelete != null) ...[
+                    const Spacer(),
+                    IconButton(
+                      tooltip: 'Delete',
+                      onPressed: onDelete,
+                      icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    ),
+                  ],
+                ],
+              ),
+            ] else if (onCancel != null || onDelete != null) ...[
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  if (onCancel != null)
+                    OutlinedButton(
+                      onPressed: onCancel,
+                      child: const Text('Cancel request'),
+                    ),
+                  if (onDelete != null) ...[
+                    const Spacer(),
+                    IconButton(
+                      tooltip: 'Delete',
+                      onPressed: onDelete,
+                      icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    ),
+                  ],
                 ],
               ),
             ],

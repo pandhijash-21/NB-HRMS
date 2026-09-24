@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -11,6 +14,7 @@ import '../../../admin/presentation/admin_notifier.dart';
 import '../../../admin/domain/admin_models.dart';
 import '../../../admin/presentation/widgets/hr_employment_change_actions.dart';
 import '../../../auth/presentation/auth_providers.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../org/presentation/org_providers.dart';
 import '../../../org/domain/org_models.dart';
 import '../../../salary/domain/salary_models.dart';
@@ -51,8 +55,9 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen>
     required EmployeeProfile profile,
     required bool canWriteFamily,
     required List<(String, Widget)> tabItems,
+    required bool isOwnProfile,
   }) {
-    if (!canWriteFamily || _emergencyPromptShown) return;
+    if (!isOwnProfile || !canWriteFamily || _emergencyPromptShown) return;
     if (profile.familyMembers.any((m) => m.isEmergencyContact)) return;
     _emergencyPromptShown = true;
     final familyIdx = tabItems.indexWhere((t) => t.$1 == 'Family');
@@ -183,7 +188,10 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen>
           if (canWriteOther)
             ('Other', EditOtherTab(profile: profile, isPrivileged: isPrivileged)),
           if (canWriteFamily)
-            ('Family', EditFamilyTab(profile: profile)),
+            ('Family', EditFamilyTab(
+              profile: profile,
+              promptEmergency: !isAdminEditingEmployee,
+            )),
           if (canReadAcademic && canWriteAcademic)
             ('Academic', EditAcademicTab(profile: profile)),
           if (canReadExperience && canWriteExperience)
@@ -216,10 +224,12 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen>
         }
         _syncTabController(tabItems.length);
         final tabController = _tabController!;
+        final isOwnProfile = !isAdminEditingEmployee;
         _promptEmergencyIfNeeded(
           profile: profile,
           canWriteFamily: canWriteFamily,
           tabItems: tabItems,
+          isOwnProfile: isOwnProfile,
         );
 
         return Scaffold(
@@ -2461,8 +2471,13 @@ class _EditOtherTabState extends ConsumerState<EditOtherTab> {
 
 class EditFamilyTab extends ConsumerStatefulWidget {
   final EmployeeProfile profile;
+  final bool promptEmergency;
 
-  const EditFamilyTab({super.key, required this.profile});
+  const EditFamilyTab({
+    super.key,
+    required this.profile,
+    this.promptEmergency = true,
+  });
 
   @override
   ConsumerState<EditFamilyTab> createState() => _EditFamilyTabState();
@@ -2482,6 +2497,7 @@ class _EditFamilyTabState extends ConsumerState<EditFamilyTab> {
     super.didUpdateWidget(oldWidget);
     if (_hasEmergencyContact) {
       _emergencyPromptShown = false;
+      _clearEmergencyGateIfNeeded();
       return;
     }
     if (oldWidget.profile.familyMembers != widget.profile.familyMembers) {
@@ -2493,7 +2509,16 @@ class _EditFamilyTabState extends ConsumerState<EditFamilyTab> {
   bool get _hasEmergencyContact =>
       widget.profile.familyMembers.any((m) => m.isEmergencyContact);
 
+  void _clearEmergencyGateIfNeeded() {
+    if (!_hasEmergencyContact || !widget.promptEmergency) return;
+    unawaited(ref.read(authNotifierProvider.notifier).markEmergencyContactComplete());
+    try {
+      context.read<AuthBloc>().add(const AuthEmergencyContactCompleted());
+    } catch (_) {}
+  }
+
   void _maybePromptEmergencyContact() {
+    if (!widget.promptEmergency) return;
     if (!mounted || _emergencyPromptShown) return;
     if (_hasEmergencyContact) return;
     _emergencyPromptShown = true;
@@ -2607,6 +2632,8 @@ class _EditFamilyTabState extends ConsumerState<EditFamilyTab> {
     if (mounted && !_hasEmergencyContact) {
       _emergencyPromptShown = false;
       WidgetsBinding.instance.addPostFrameCallback((_) => _maybePromptEmergencyContact());
+    } else if (mounted && _hasEmergencyContact) {
+      _clearEmergencyGateIfNeeded();
     }
   }
 

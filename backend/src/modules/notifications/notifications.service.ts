@@ -139,8 +139,8 @@ export const notificationsService = {
   },
 
   /**
-   * Notify company admins / HR when an employee updates their profile.
-   * Also writes UserNotification rows so mobile inbox shows them offline.
+   * Notify company System Admins when an employee updates their profile.
+   * Only ADMIN / System Admin / company-admin-granted users — not HR or staff.
    */
   async notifyProfileChange(input: {
     employeeId: number;
@@ -159,12 +159,32 @@ export const notificationsService = {
     });
     if (!emp) return;
 
-    const who =
+    let actorLabel: string | null = null;
+    if (input.actorUserId) {
+      const actor = await prisma.user.findUnique({
+        where: { id: input.actorUserId },
+        select: {
+          username: true,
+          role: { select: { name: true } },
+          employee: { select: { generalInfo: { select: { fullName: true } } } },
+        },
+      });
+      actorLabel =
+        actor?.employee?.generalInfo?.fullName?.trim() ||
+        actor?.username?.trim() ||
+        actor?.role?.name?.replace(/_/g, ' ') ||
+        null;
+    }
+
+    const subject =
       emp.generalInfo?.fullName?.trim() ||
       emp.abbreviation ||
       `Employee #${emp.id}`;
     const title = 'Profile updated';
-    const body = `${who} ${input.summary}`.trim();
+    // Prefer actor in the sentence so admin edits read clearly.
+    const body = actorLabel
+      ? `${actorLabel} ${input.summary}${subject !== actorLabel ? ` for ${subject}` : ''}`
+      : `${subject} ${input.summary}`.trim();
     const path = `/workforce/employees/${emp.id}`;
     const kind = 'profile';
 
@@ -180,9 +200,7 @@ export const notificationsService = {
               name: {
                 in: [
                   'ADMIN',
-                  'HR',
-                  'SUPERADMIN',
-                  'SUPER_ADMIN',
+                  'SYSTEMADMIN',
                   'SYSTEM_ADMIN',
                   'SYSTEM_ADMINISTRATOR',
                 ],
@@ -199,7 +217,7 @@ export const notificationsService = {
       take: 200,
     });
 
-    const recipients = admins.map((a) => a.id).filter(Boolean);
+    const recipients = [...new Set(admins.map((a) => a.id).filter(Boolean))];
     if (!recipients.length) return;
 
     const createdAt = new Date();

@@ -124,16 +124,27 @@ class AppNotificationsState {
 }
 
 class AppNotifications extends Notifier<AppNotificationsState> {
-  static const _prefsKey = 'app_notifications_v1';
+  static const _prefsPrefix = 'app_notifications_v1';
   bool _listening = false;
   CollabSocket? _socket;
   String? _me;
   AppNotificationsState _latest = const AppNotificationsState();
 
+  String get _prefsKey => '$_prefsPrefix:${_me ?? 'anon'}';
+
   @override
   AppNotificationsState build() {
     final authenticated = ref.watch(authNotifierProvider.select((s) => s.isAuthenticated));
-    _me = ref.watch(authNotifierProvider.select((s) => s.user?.id));
+    final nextMe = ref.watch(authNotifierProvider.select((s) => s.user?.id));
+    // Drop previous user's cached bell items when the session switches.
+    if (nextMe != _me) {
+      _me = nextMe;
+      _latest = const AppNotificationsState();
+      _listening = false;
+      _detach();
+    } else {
+      _me = nextMe;
+    }
     ref.onDispose(_detach);
     if (!authenticated) {
       _detach();
@@ -212,6 +223,10 @@ class AppNotifications extends Notifier<AppNotificationsState> {
   Future<void> _hydrate() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      // Drop legacy shared inbox (was not user-scoped and leaked across accounts).
+      if (prefs.containsKey(_prefsPrefix)) {
+        await prefs.remove(_prefsPrefix);
+      }
       final raw = prefs.getString(_prefsKey);
       if (raw == null || !ref.mounted) return;
       final list = (jsonDecode(raw) as List)
@@ -225,10 +240,13 @@ class AppNotifications extends Notifier<AppNotificationsState> {
 
   /// Merge server-persisted announcements into the local bell inbox.
   void mergeServerNotifications(List<AppNotice> notices) {
-    if (notices.isEmpty) return;
-    final byId = {for (final n in state.items) n.id: n};
-    for (final n in notices) {
-      byId[n.id] = n;
+    // Prefer server truth for this user — do not keep another account's local leftovers.
+    final byId = {for (final n in notices) n.id: n};
+    for (final n in state.items) {
+      // Keep ephemeral push items (calls/chat) that are not yet on the server list.
+      if (!byId.containsKey(n.id) && n.kind != 'profile' && n.kind != 'announce') {
+        byId[n.id] = n;
+      }
     }
     final merged = byId.values.toList()
       ..sort((a, b) => b.at.compareTo(a.at));

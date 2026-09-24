@@ -274,7 +274,10 @@ GoRouter createAppRouter(AuthBloc authBloc) {
             final isAttendance = loc == '/attendance' ||
                 loc.startsWith('/attendance/') ||
                 loc.startsWith('/admin/attendance');
-            final isSalary = loc.startsWith('/salary') || loc.startsWith('/admin/salary');
+            final isPayroll = loc == '/admin/salary/payroll' ||
+                loc.startsWith('/admin/salary/payroll/');
+            final isSalary = !isPayroll &&
+                (loc.startsWith('/salary') || loc.startsWith('/admin/salary'));
             final isWorkforce = loc.startsWith('/admin/employees');
 
             final canLeave = Permissions.canReadLeave(perms, role) ||
@@ -284,7 +287,8 @@ GoRouter createAppRouter(AuthBloc authBloc) {
             final canAttendance = Permissions.canReadAttendance(perms, role) ||
                 Permissions.canWriteAttendance(perms, role);
             final canWorkforce = Permissions.canViewWorkforce(perms, auth.user?.employeeViewScope, role);
-            final canSalary = Permissions.canReadSalary(perms);
+            final canSalary = Permissions.canReadSalary(perms, role);
+            final canPayroll = Permissions.canReadPayroll(perms, role);
 
             if (isChat && !Permissions.canReadChat(perms, role)) {
               next = defaultRoute;
@@ -301,6 +305,8 @@ GoRouter createAppRouter(AuthBloc authBloc) {
             } else if (isAttendance && !canAttendance) {
               next = defaultRoute;
             } else if (isWorkforce && !canWorkforce) {
+              next = defaultRoute;
+            } else if (isPayroll && !canPayroll) {
               next = defaultRoute;
             } else if (isSalary && !canSalary) {
               next = defaultRoute;

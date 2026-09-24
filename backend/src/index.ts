@@ -87,7 +87,7 @@ async function start() {
         IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'system_modules') THEN
           UPDATE "system_modules"
           SET "category" = 'COLLABORATION'
-          WHERE "key" IN ('CHAT', 'MEETINGS', 'TASKS', 'ORG_TREE');
+          WHERE "key" IN ('CHAT', 'MEETINGS', 'TASKS', 'ORG_TREE', 'SUPPORT');
         END IF;
       END $$;
     `);

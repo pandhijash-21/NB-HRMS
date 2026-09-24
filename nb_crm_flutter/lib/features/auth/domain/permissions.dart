@@ -113,7 +113,7 @@ class Permissions {
   static String suiteForModuleKey(String moduleKey) {
     final k = moduleKey.trim().toUpperCase();
     if (k.startsWith('COLLAB_') ||
-        const ['CHAT', 'MEETINGS', 'TASKS', 'ORG_TREE', 'COLLABORATION'].contains(k)) {
+        const ['CHAT', 'MEETINGS', 'TASKS', 'ORG_TREE', 'SUPPORT', 'COLLABORATION'].contains(k)) {
       return 'COLLABORATION';
     }
     if (k.startsWith('ERP_') ||
@@ -404,14 +404,13 @@ class Permissions {
 
   static bool canReadSalary(PermissionMap? perms, [String? role]) {
     if (isSuperAdmin(role)) return true;
-    return hasPermission(perms, 'SALARY', 'READ') ||
-        hasPermission(perms, 'PAYROLL', 'READ');
+    // Profile › Salary tab only — does not unlock Payroll nav.
+    return hasPermission(perms, 'SALARY', 'READ');
   }
 
   static bool canWriteSalary(PermissionMap? perms, [String? role]) {
     if (isSuperAdmin(role)) return true;
-    return hasPermission(perms, 'SALARY', 'WRITE') ||
-        hasPermission(perms, 'PAYROLL', 'WRITE');
+    return hasPermission(perms, 'SALARY', 'WRITE');
   }
 
   static bool canReadDocuments(PermissionMap? perms, [String? role]) {
@@ -660,7 +659,8 @@ class Permissions {
 
   static bool canReadPayroll(PermissionMap? perms, [String? role]) {
     if (isSuperAdmin(role)) return true;
-    return hasPermission(perms, 'PAYROLL', 'READ') || hasPermission(perms, 'SALARY', 'READ');
+    // Payroll Processing module only — not Profile › Salary.
+    return hasPermission(perms, 'PAYROLL', 'READ');
   }
 
   static String resolvePostLoginPath(

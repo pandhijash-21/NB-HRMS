@@ -164,7 +164,6 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen>
     final canWriteBank = Permissions.hasPermission(authState.permissions, 'BANK_DETAILS', 'WRITE') ||
         Permissions.isAdmin(authState.user?.role);
     final canWriteSalary = Permissions.hasPermission(authState.permissions, 'SALARY', 'WRITE') ||
-        Permissions.hasPermission(authState.permissions, 'PAYROLL', 'WRITE') ||
         Permissions.isAdmin(authState.user?.role);
     final canWriteAttendanceTab = Permissions.hasPermission(authState.permissions, 'ATTENDANCE', 'WRITE') ||
         Permissions.hasPermission(authState.permissions, 'PROFILE_ATTENDANCE', 'WRITE') ||

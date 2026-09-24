@@ -207,7 +207,7 @@ export const SYSTEM_SUBMODULES: SystemSubmoduleDef[] = [
   {
     key: 'SALARY',
     name: 'Profile › Salary',
-    description: 'Salary structures, pay commission templates, and payslips',
+    description: 'Employee profile salary tab (structures / payslips). Does not control Payroll nav — use PAYROLL for that.',
     category: 'HRMS',
     sortOrder: 11,
   },
@@ -235,7 +235,7 @@ export const SYSTEM_SUBMODULES: SystemSubmoduleDef[] = [
   {
     key: 'PAYROLL',
     name: 'Payroll Processing',
-    description: 'Monthly payroll generation, allowances, deductions, and salary disbursement',
+    description: 'Monthly payroll generation, allowances, deductions, and salary disbursement (HR Payroll menu)',
     category: 'HRMS',
     sortOrder: 22,
   },
@@ -579,6 +579,32 @@ export async function ensureErpModulePermissions(): Promise<void> {
             },
           });
         }
+        // SUPPORT was added after many orgs already had a matrix — always ensure it exists
+        // (Collaboration is licensed for every company).
+        await prisma.organizationAdminPermission.upsert({
+          where: {
+            organizationId_moduleKey: {
+              organizationId: org.id,
+              moduleKey: 'SUPPORT',
+            },
+          },
+          update: {
+            canRead: true,
+            canWrite: true,
+            canApprove: true,
+            canDelete: true,
+            canExport: true,
+          },
+          create: {
+            organizationId: org.id,
+            moduleKey: 'SUPPORT',
+            canRead: true,
+            canWrite: true,
+            canApprove: true,
+            canDelete: true,
+            canExport: true,
+          },
+        });
       }
     }
   } catch (err) {
@@ -690,9 +716,56 @@ export async function ensureErpModulePermissions(): Promise<void> {
 
       await prisma.rolePermission.upsert({
         where: { roleId_moduleKey: { roleId: emp.id, moduleKey } },
-        update: {},
+        // Always refresh SUPPORT so existing EMPLOYEE rows pick up RW after the module was added.
+        update: moduleKey === 'SUPPORT' ? perms : {},
         create: { roleId: emp.id, moduleKey, ...perms },
       });
     }
+  }
+
+  // Backfill SUPPORT RW onto every employee-facing / designation role that already
+  // has Chat, Leave, Tasks, or Reimbursements — so all staff see IT Support.
+  try {
+    const employeeFacing = await prisma.rolePermission.findMany({
+      where: {
+        canRead: true,
+        moduleKey: { in: ['CHAT', 'LEAVE', 'TASKS', 'REIMBURSEMENTS', 'MEETINGS'] },
+      },
+      select: { roleId: true },
+      distinct: ['roleId'],
+    });
+    const supportRw = {
+      canRead: true,
+      canWrite: true,
+      canApprove: false,
+      canDelete: false,
+      canExport: false,
+    };
+    for (const { roleId } of employeeFacing) {
+      // Do not downgrade SUPERADMIN / HR full grants.
+      const existing = await prisma.rolePermission.findUnique({
+        where: { roleId_moduleKey: { roleId, moduleKey: 'SUPPORT' } },
+      });
+      if (existing?.canApprove || existing?.canDelete) continue;
+      await prisma.rolePermission.upsert({
+        where: { roleId_moduleKey: { roleId, moduleKey: 'SUPPORT' } },
+        create: { roleId, moduleKey: 'SUPPORT', ...supportRw },
+        update: {
+          canRead: true,
+          canWrite: true,
+        },
+      });
+    }
+  } catch (err) {
+    console.warn('SUPPORT role backfill skipped:', err);
+  }
+
+  try {
+    const { invalidateOrgAdminPermissionCache, invalidateRolePermissionCache } =
+      await import('../modules/auth/permissions-map');
+    invalidateOrgAdminPermissionCache();
+    invalidateRolePermissionCache();
+  } catch {
+    // cache helpers optional
   }
 }

@@ -79,7 +79,7 @@ export function inferCategory(
   const k = key.trim().toUpperCase();
   if (
     k.startsWith('COLLAB_') ||
-    ['CHAT', 'MEETINGS', 'TASKS', 'ORG_TREE', 'COLLABORATION'].includes(k)
+    ['CHAT', 'MEETINGS', 'TASKS', 'ORG_TREE', 'SUPPORT', 'COLLABORATION'].includes(k)
   ) {
     return 'COLLABORATION';
   }

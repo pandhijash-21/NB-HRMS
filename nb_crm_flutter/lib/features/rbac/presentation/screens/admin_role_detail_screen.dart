@@ -151,7 +151,7 @@ class _AdminRoleDetailScreenState extends State<AdminRoleDetailScreen> {
                       DropdownMenuItem(value: 'HRMS', child: Text('HRMS (Human Resources)')),
                       DropdownMenuItem(value: 'CRM', child: Text('CRM (Customer Relations)')),
                       DropdownMenuItem(value: 'ERP', child: Text('ERP (Enterprise Resource Planning)')),
-                      DropdownMenuItem(value: 'COLLABORATION', child: Text('COLLABORATION (Chat, Meets, Tasks)')),
+                      DropdownMenuItem(value: 'COLLABORATION', child: Text('COLLABORATION (Chat, Meets, Tasks, Support)')),
                       DropdownMenuItem(value: 'SYSTEM', child: Text('SYSTEM (Core Settings & Audit)')),
                     ],
                     onChanged: (v) => setLocal(() => selectedCategory = v ?? 'HRMS'),
@@ -758,6 +758,8 @@ class _ModularMatrixTableState extends State<_ModularMatrixTable> {
         return Icons.apartment_rounded;
       case 'CRM':
         return Icons.campaign_rounded;
+      case 'COLLABORATION':
+        return Icons.forum_rounded;
       case 'HRMS':
       default:
         return Icons.badge_rounded;

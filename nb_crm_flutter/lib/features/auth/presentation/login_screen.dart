@@ -869,31 +869,6 @@ class _LoginCard extends StatelessWidget {
                         ],
                       ),
                     ),
-                    const Spacer(),
-                    TextButton(
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Contact your admin to reset your password.',
-                            ),
-                          ),
-                        );
-                      },
-                      style: TextButton.styleFrom(
-                        padding: EdgeInsets.zero,
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      child: Text(
-                        'Forgot password?',
-                        style: GoogleFonts.sourceSans3(
-                          color: _C.gold,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
                   ],
                 ),
                 if (auth.errorMessage != null) ...[
@@ -978,29 +953,6 @@ class _LoginCard extends StatelessWidget {
                               const Icon(Icons.arrow_forward_rounded, size: 18),
                             ],
                           ),
-                  ),
-                ),
-                const SizedBox(height: 18),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton(
-                    onPressed: () {
-                      context.read<AuthBloc>().add(const AuthClearErrorRequested());
-                      context.go('/superadmin/login');
-                    },
-                    style: TextButton.styleFrom(
-                      padding: EdgeInsets.zero,
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    child: Text(
-                      'Platform Superadmin →',
-                      style: GoogleFonts.sourceSans3(
-                        color: _C.gold,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
                   ),
                 ),
                 if (!kReleaseMode) ...[

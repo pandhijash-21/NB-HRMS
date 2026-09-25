@@ -153,6 +153,13 @@ async function start() {
     }
   }
 
+  const { runPunchReminders } = require('./modules/attendance/punchReminder.job') as typeof import('./modules/attendance/punchReminder.job');
+  void runPunchReminders();
+  setInterval(() => {
+    void runPunchReminders();
+  }, 60 * 1000);
+  console.log('Punch reminders run every minute');
+
   server.listen(env.PORT, () => {
     console.log(`Server running on port ${env.PORT}`);
   });

@@ -1,10 +1,8 @@
 import http from 'http';
 import { Server } from 'socket.io';
-import { createAdapter } from '@socket.io/redis-adapter';
 import jwt from 'jsonwebtoken';
-import { createClient } from 'redis';
 import { env } from '../../config/env';
-import { REDIS_URL } from '../../config/redis';
+import { redis } from '../../config/redis';
 import { isAllowedCorsOrigin } from '../../utils/corsOrigins';
 import { chatService } from './chat.service';
 import { meetService, type GuestActor, type UserActor } from './meet.service';
@@ -17,7 +15,6 @@ import {
 import { prisma } from '../../config/prisma';
 
 let ioRef: Server | null = null;
-let presenceRedis: ReturnType<typeof createClient> | null = null;
 const meetingBoards = new Map<string, Array<unknown>>();
 
 export function getIo() {
@@ -315,8 +312,12 @@ export function emitMeetingInvites(inviteeIds: string[], payload: {
 }
 
 export async function isOnline(userId: string) {
-  if (presenceRedis?.isOpen) {
-    return Boolean(await presenceRedis.exists(`presence:${userId}`));
+  if (redis.isOpen) {
+    try {
+      return Boolean(await redis.exists(`presence:${userId}`));
+    } catch {
+      // Fall through to the live socket check.
+    }
   }
   const io = ioRef;
   if (!io) return false;
@@ -329,8 +330,12 @@ export async function isOnline(userId: string) {
 }
 
 async function markOnline(userId: string) {
-  if (!presenceRedis?.isOpen) return;
-  await presenceRedis.set(`presence:${userId}`, 'online', { EX: 45 });
+  if (!redis.isOpen) return;
+  try {
+    await redis.set(`presence:${userId}`, 'online', { EX: 45 });
+  } catch {
+    // Presence is optional when Redis is down.
+  }
 }
 
 type SocketUser = UserActor | GuestActor;
@@ -369,29 +374,6 @@ export async function setupCollaborationSocket(httpServer: http.Server) {
     },
     path: '/socket.io',
   });
-
-  try {
-    const pub = createClient({
-      url: REDIS_URL,
-      socket: {
-        connectTimeout: 2500,
-        reconnectStrategy: (retries) => (retries >= 2 ? false : 200),
-      },
-    });
-    pub.on('error', () => { /* fail-open when Redis is down */ });
-    const sub = pub.duplicate();
-    sub.on('error', () => { /* fail-open when Redis is down */ });
-    presenceRedis = pub;
-    await Promise.race([
-      Promise.all([pub.connect(), sub.connect()]),
-      new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('Socket.io Redis adapter timed out')), 3000);
-      }),
-    ]);
-    io.adapter(createAdapter(pub, sub));
-  } catch (err) {
-    console.warn('Socket.io Redis adapter unavailable — single-node only:', err instanceof Error ? err.message : err);
-  }
 
   io.on('connection', async (socket) => {
     const token = (socket.handshake.auth as { token?: string })?.token

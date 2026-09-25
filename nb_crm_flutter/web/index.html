@@ -183,6 +183,18 @@
       font-size: 14px;
       letter-spacing: 0.2px;
     }
+    #nb-splash-version {
+      position: absolute;
+      left: 20px;
+      bottom: max(28px, env(safe-area-inset-bottom));
+      z-index: 2;
+      color: rgba(255,255,255,0.72);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.8px;
+      pointer-events: none;
+    }
   </style>
   <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.3.0/model-viewer.min.js"></script>
 </head>
@@ -199,6 +211,7 @@
       </div>
       <div id="nb-splash-status">Preparing Mr NB…</div>
     </div>
+    <div id="nb-splash-version">v1.0.1</div>
     <div id="nb-splash-controls">
       <button id="nb-splash-volume" type="button" aria-label="Unmute"></button>
       <button id="nb-splash-skip" type="button">Skip</button>

@@ -23,6 +23,7 @@ import 'core/theme/app_theme.dart';
 import 'core/theme/icon_font_bootstrap.dart';
 import 'core/theme/material_icon_keep_alive.dart';
 import 'core/theme/theme_cubit.dart';
+import 'core/widgets/app_version_gate.dart';
 import 'core/widgets/splash_video_audio.dart';
 import 'core/widgets/splash_video_host.dart';
 import 'core/tour/catalog/nb_platform_catalog.dart';
@@ -169,7 +170,8 @@ class NbCrmApp extends StatelessWidget {
                     previous.status != current.status,
                 builder: (context, auth) {
                   _syncWebSplash(auth.status);
-                  return Stack(
+                  return AppVersionGate(
+                    child: Stack(
                     fit: StackFit.expand,
                     children: [
                       const MaterialIconKeepAlive(),
@@ -206,6 +208,7 @@ class NbCrmApp extends StatelessWidget {
                               : const ColoredBox(color: Color(0xFF000000)),
                         ),
                     ],
+                  ),
                   );
                 },
               ),

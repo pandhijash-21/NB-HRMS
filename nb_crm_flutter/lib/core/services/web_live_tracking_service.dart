@@ -20,9 +20,13 @@ class WebLiveTrackingService {
   WebLiveTrackingService._();
 
   static Timer? _timer;
+  static StreamSubscription<Position>? _positions;
   static bool _tickInFlight = false;
   static int _epoch = 0;
   static bool _halted = false;
+  static Position? _lastFix;
+  static DateTime? _lastFixAt;
+  static DateTime? _lastPostAt;
   static final SecureStorageService _storage = SecureStorageService();
   static final Battery _battery = Battery();
 
@@ -51,7 +55,10 @@ class WebLiveTrackingService {
       stop();
       return;
     }
-    if (_timer != null) return;
+    if (_timer != null) {
+      _ensurePositionStream();
+      return;
+    }
 
     AppLogger.tracking.i(
       kIsWeb
@@ -59,6 +66,7 @@ class WebLiveTrackingService {
           : 'Starting native foreground live tracking pings',
     );
     final epoch = _epoch;
+    _ensurePositionStream();
     _timer = Timer.periodic(const Duration(seconds: 5), (_) {
       unawaited(_tick(epoch));
     });
@@ -68,13 +76,79 @@ class WebLiveTrackingService {
   static void stop({bool preventRestart = false}) {
     _epoch++;
     if (preventRestart) _halted = true;
+    _positions?.cancel();
+    _positions = null;
     if (_timer == null) return;
     _timer?.cancel();
     _timer = null;
+    _tickInFlight = false;
     AppLogger.tracking.i('Stopped web live tracking pings');
   }
 
+  static void _ensurePositionStream() {
+    if (_positions != null) return;
+    _positions = Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 0,
+      ),
+    ).listen(
+      (position) {
+        _lastFix = position;
+        _lastFixAt = DateTime.now();
+      },
+      onError: (Object e) {
+        AppLogger.tracking.w('Live position stream error: $e');
+        _positions?.cancel();
+        _positions = null;
+      },
+      onDone: () {
+        _positions = null;
+      },
+    );
+  }
+
   static bool _isCurrent(int epoch) => epoch == _epoch;
+
+  static Future<Position?> _resolvePosition() async {
+    final cached = _lastFix;
+    final cachedAt = _lastFixAt;
+    if (cached != null &&
+        cachedAt != null &&
+        DateTime.now().difference(cachedAt) <= const Duration(seconds: 20)) {
+      return cached;
+    }
+
+    try {
+      final fresh = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+          timeLimit: Duration(seconds: 6),
+        ),
+      ).timeout(const Duration(seconds: 7));
+      _lastFix = fresh;
+      _lastFixAt = DateTime.now();
+      return fresh;
+    } catch (e) {
+      AppLogger.tracking.w('Fresh GPS fix unavailable, using last known: $e');
+    }
+
+    if (cached != null &&
+        cachedAt != null &&
+        DateTime.now().difference(cachedAt) <= const Duration(seconds: 90)) {
+      return cached;
+    }
+
+    try {
+      final last = await Geolocator.getLastKnownPosition();
+      if (last != null) {
+        _lastFix = last;
+        _lastFixAt ??= DateTime.now();
+        return last;
+      }
+    } catch (_) {}
+    return null;
+  }
 
   static Future<void> _tick(int epoch) async {
     if (!_isCurrent(epoch) || _tickInFlight) return;
@@ -88,27 +162,53 @@ class WebLiveTrackingService {
         return;
       }
 
-      final permission = await Geolocator.checkPermission();
+      if (_positions == null) _ensurePositionStream();
+
+      final quiet = _lastFixAt == null ||
+          DateTime.now().difference(_lastFixAt!) > const Duration(seconds: 25);
+      if (quiet) {
+        await _positions?.cancel();
+        _positions = null;
+        _ensurePositionStream();
+      }
+
+      LocationPermission permission = LocationPermission.denied;
+      try {
+        permission = await Geolocator.checkPermission();
+      } catch (_) {}
       if (!_isCurrent(epoch)) return;
 
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          timeLimit: Duration(seconds: 8),
-        ),
-      );
+      final position = await _resolvePosition();
       if (!_isCurrent(epoch)) return;
 
       final dio = _dio(token);
 
-      await dio.post(
-        'tracking/live',
-        data: {
-          'latitude': position.latitude,
-          'longitude': position.longitude,
-          'heading': position.heading.isNaN ? 0 : position.heading,
-        },
-      );
+      if (position != null) {
+        try {
+          await dio.post(
+            'tracking/live',
+            data: {
+              'latitude': position.latitude,
+              'longitude': position.longitude,
+              'heading': position.heading.isNaN ? 0 : position.heading,
+              'speed': position.speed.isNaN ? 0 : position.speed,
+              'accuracy': position.accuracy.isNaN ? null : position.accuracy,
+            },
+          );
+          _lastPostAt = DateTime.now();
+        } on DioException catch (e) {
+          if (!_isCurrent(epoch)) return;
+          if (e.response?.statusCode == 401) {
+            AppLogger.tracking.w('Web live ping unauthorized (401) — stopping until re-auth');
+            stop(preventRestart: true);
+            return;
+          }
+          AppLogger.tracking.w('Web live ping failed: $e');
+        }
+      } else if (_lastPostAt == null ||
+          DateTime.now().difference(_lastPostAt!) > const Duration(seconds: 20)) {
+        AppLogger.tracking.w('Live tracking has no GPS fix yet');
+      }
       if (!_isCurrent(epoch)) return;
 
       int? batteryLevel;
@@ -134,26 +234,27 @@ class WebLiveTrackingService {
       } catch (_) {}
       if (!_isCurrent(epoch)) return;
 
-      await dio.post(
-        'tracking/heartbeat',
-        data: {
-          'batteryLevel': batteryLevel,
-          'networkStatus': networkStatus,
-          'permissionStatus': permission.name,
-          'locationServiceEnabled': true,
-          'lastKnownGapReason': null,
-        },
-      );
-    } on DioException catch (e) {
-      if (!_isCurrent(epoch)) return;
-      final status = e.response?.statusCode;
-      if (status == 401) {
-        // Stale / kicked session — stop until login/bootstrap explicitly start().
-        AppLogger.tracking.w('Web live ping unauthorized (401) — stopping until re-auth');
-        stop(preventRestart: true);
-        return;
+      bool locationOn = position != null;
+      try {
+        locationOn = await Geolocator.isLocationServiceEnabled();
+      } catch (_) {}
+
+      try {
+        await dio.post(
+          'tracking/heartbeat',
+          data: {
+            'batteryLevel': batteryLevel,
+            'networkStatus': networkStatus,
+            'permissionStatus': permission.name,
+            'locationServiceEnabled': locationOn,
+            'lastKnownGapReason': position == null ? 'GPS_SIGNAL_LOST' : null,
+          },
+        );
+      } on DioException catch (e) {
+        if (e.response?.statusCode == 401) {
+          stop(preventRestart: true);
+        }
       }
-      AppLogger.tracking.w('Web live ping failed: $e');
     } catch (e) {
       if (!_isCurrent(epoch)) return;
       AppLogger.tracking.w('Web live ping failed: $e');

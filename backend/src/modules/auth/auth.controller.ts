@@ -27,8 +27,11 @@ export const authController = {
 
   async logout(req: Request, res: Response) {
     const user = req.user!;
-    await authService.logout(user.id, user.roleId);
-    return res.json(ok({ message: 'Logged out' }));
+    const result = await authService.logout(user.id, user.roleId);
+    if (result && 'error' in result) {
+      return res.status(result.status ?? 403).json(fail(result.error));
+    }
+    return res.json(ok({ message: result?.message ?? 'Logged out' }));
   },
 
   async changePassword(req: Request, res: Response) {

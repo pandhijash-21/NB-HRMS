@@ -133,7 +133,9 @@ class AuthNotifier extends Notifier<AuthState> {
           roleName.trim() != state.user?.role;
       final granted = me['companyAdminGranted'] == true;
       final grantedChanged = granted != (state.user?.companyAdminGranted ?? false);
-      if (!permsChanged && !needsChanged && !emergencyChanged && !roleChanged && !grantedChanged) {
+      final onTrip = me['onTrip'] == true;
+      final onTripChanged = onTrip != (state.user?.onTrip ?? false);
+      if (!permsChanged && !needsChanged && !emergencyChanged && !roleChanged && !grantedChanged && !onTripChanged) {
         return;
       }
       final next = state.copyWith(
@@ -141,10 +143,11 @@ class AuthNotifier extends Notifier<AuthState> {
         needsEmailVerification: needsChanged ? needs : state.needsEmailVerification,
         needsEmergencyContact:
             emergencyChanged ? needsEmergency : state.needsEmergencyContact,
-        user: (roleChanged || grantedChanged) && state.user != null
+        user: (roleChanged || grantedChanged || onTripChanged) && state.user != null
             ? state.user!.copyWith(
                 role: roleChanged ? roleName.trim() : state.user!.role,
                 companyAdminGranted: granted,
+                onTrip: onTrip,
               )
             : state.user,
       );
@@ -412,9 +415,17 @@ class AuthNotifier extends Notifier<AuthState> {
 
   Future<void> logout() async {
     final repo = ref.read(authRepositoryProvider);
+    try {
+      await repo.logoutRemote();
+    } on ApiException catch (e) {
+      state = state.copyWith(errorMessage: e.message);
+      return;
+    } catch (_) {
+      state = state.copyWith(errorMessage: 'Unable to sign out. Please try again.');
+      return;
+    }
     WebLiveTrackingService.stop(preventRestart: true);
     _stopSessionWatch();
-    await repo.logoutRemote();
     await repo.clearSession();
     WebLiveTrackingService.stop(preventRestart: true);
     ref.invalidate(profileProvider);

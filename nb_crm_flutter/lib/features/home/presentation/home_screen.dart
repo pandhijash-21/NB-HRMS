@@ -28,6 +28,46 @@ class _HomeC {
   static const line = Color(0xFFE2DDD5);
 }
 
+class _HomeTone {
+  const _HomeTone({
+    required this.card,
+    required this.inset,
+    required this.ink,
+    required this.mute,
+    required this.line,
+    required this.isDark,
+  });
+
+  final Color card;
+  final Color inset;
+  final Color ink;
+  final Color mute;
+  final Color line;
+  final bool isDark;
+
+  factory _HomeTone.of(BuildContext context) {
+    final theme = Theme.of(context);
+    if (theme.brightness != Brightness.dark) {
+      return const _HomeTone(
+        card: _HomeC.card,
+        inset: _HomeC.cream,
+        ink: _HomeC.ink,
+        mute: _HomeC.mute,
+        line: _HomeC.line,
+        isDark: false,
+      );
+    }
+    return _HomeTone(
+      card: theme.colorScheme.surface,
+      inset: theme.scaffoldBackgroundColor,
+      ink: theme.colorScheme.onSurface,
+      mute: theme.textTheme.bodySmall?.color ?? const Color(0xFFA8A8A8),
+      line: theme.colorScheme.outlineVariant,
+      isDark: true,
+    );
+  }
+}
+
 class UpcomingBirthday {
   const UpcomingBirthday({
     required this.employeeId,
@@ -475,11 +515,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     final searchBar = Container(
       decoration: BoxDecoration(
-        color: Theme.of(context).brightness == Brightness.dark
-            ? Theme.of(context).colorScheme.surface
-            : _HomeC.card,
+        color: _HomeTone.of(context).card,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _HomeC.line),
+        border: Border.all(color: _HomeTone.of(context).line),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 18),
       height: 52,
@@ -743,6 +781,7 @@ class _GreetingsCardState extends State<_GreetingsCard> {
         ? '${formatIsoTime(widget.punchOutIso)} IST'
         : '—';
 
+    final tone = _HomeTone.of(context);
     return Container(
       width: double.infinity,
       padding: EdgeInsets.fromLTRB(
@@ -752,9 +791,9 @@ class _GreetingsCardState extends State<_GreetingsCard> {
         phone ? 16 : 18,
       ),
       decoration: BoxDecoration(
-        color: _HomeC.card,
+        color: tone.card,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _HomeC.line),
+        border: Border.all(color: tone.line),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -786,9 +825,9 @@ class _GreetingsCardState extends State<_GreetingsCard> {
           Container(
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
             decoration: BoxDecoration(
-              color: _HomeC.cream,
+              color: tone.inset,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _HomeC.line),
+              border: Border.all(color: tone.line),
             ),
             child: widget.punchLoading
                 ? const SizedBox(
@@ -851,6 +890,7 @@ class _PunchTimesRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tone = _HomeTone.of(context);
     return Row(
       children: [
         Expanded(
@@ -860,7 +900,7 @@ class _PunchTimesRow extends StatelessWidget {
             emphasize: punchedIn,
           ),
         ),
-        Container(width: 1, height: 36, color: _HomeC.line),
+        Container(width: 1, height: 36, color: tone.line),
         Expanded(
           child: _PunchStat(
             label: 'Punch out',
@@ -886,6 +926,7 @@ class _PunchStat extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tone = _HomeTone.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Column(
@@ -897,7 +938,7 @@ class _PunchStat extends StatelessWidget {
               fontSize: 10.5,
               fontWeight: FontWeight.w700,
               letterSpacing: 1.2,
-              color: _HomeC.mute,
+              color: tone.mute,
             ),
           ),
           const SizedBox(height: 2),
@@ -906,7 +947,7 @@ class _PunchStat extends StatelessWidget {
             style: GoogleFonts.sourceSans3(
               fontSize: 15,
               fontWeight: FontWeight.w700,
-              color: emphasize ? _HomeC.ink : _HomeC.mute,
+              color: emphasize ? tone.ink : tone.mute,
             ),
           ),
         ],
@@ -922,11 +963,12 @@ class _PunchInButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tone = _HomeTone.of(context);
     return FilledButton.icon(
       onPressed: onPressed,
       style: FilledButton.styleFrom(
-        backgroundColor: _HomeC.brand,
-        foregroundColor: _HomeC.cream,
+        backgroundColor: tone.isDark ? Theme.of(context).colorScheme.primary : _HomeC.brand,
+        foregroundColor: tone.isDark ? Theme.of(context).colorScheme.onPrimary : _HomeC.cream,
         elevation: 0,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -953,6 +995,7 @@ class _GreetingIdentity extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tone = _HomeTone.of(context);
     return Row(
       children: [
         ClipRRect(
@@ -986,7 +1029,7 @@ class _GreetingIdentity extends StatelessWidget {
               Text(
                 'Welcome back',
                 style: GoogleFonts.sourceSans3(
-                  color: _HomeC.mute,
+                  color: tone.mute,
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
@@ -997,7 +1040,7 @@ class _GreetingIdentity extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.fraunces(
-                  color: _HomeC.ink,
+                  color: tone.ink,
                   fontSize: phone ? 22 : 26,
                   fontWeight: FontWeight.w600,
                   height: 1.1,
@@ -1043,15 +1086,16 @@ class _DigitalClockBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tone = _HomeTone.of(context);
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: compact ? 14 : 16,
         vertical: compact ? 10 : 12,
       ),
       decoration: BoxDecoration(
-        color: _HomeC.cream,
+        color: tone.inset,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _HomeC.line),
+        border: Border.all(color: tone.line),
       ),
       child: Column(
         crossAxisAlignment: compact ? CrossAxisAlignment.start : CrossAxisAlignment.end,
@@ -1059,7 +1103,7 @@ class _DigitalClockBlock extends StatelessWidget {
           Text(
             timeStr,
             style: GoogleFonts.sourceSans3(
-              color: _HomeC.ink,
+              color: tone.ink,
               fontSize: compact ? 20 : 24,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.8,
@@ -1070,7 +1114,7 @@ class _DigitalClockBlock extends StatelessWidget {
           Text(
             dateStr,
             style: GoogleFonts.sourceSans3(
-              color: _HomeC.mute,
+              color: tone.mute,
               fontSize: 12,
               fontWeight: FontWeight.w600,
             ),
@@ -1092,13 +1136,14 @@ class _UpcomingBirthdaysStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tone = _HomeTone.of(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
       decoration: BoxDecoration(
-        color: _HomeC.card,
+        color: tone.card,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _HomeC.line),
+        border: Border.all(color: tone.line),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1113,7 +1158,7 @@ class _UpcomingBirthdaysStrip extends StatelessWidget {
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 1.6,
-                  color: _HomeC.mute,
+                  color: tone.mute,
                 ),
               ),
             ],
@@ -1135,7 +1180,7 @@ class _UpcomingBirthdaysStrip extends StatelessWidget {
               'No upcoming birthdays in the next 45 days.',
               style: GoogleFonts.sourceSans3(
                 fontSize: 13.5,
-                color: _HomeC.mute,
+                color: tone.mute,
               ),
             )
           else
@@ -1157,12 +1202,12 @@ class _UpcomingBirthdaysStrip extends StatelessWidget {
                     width: 200,
                     padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
                     decoration: BoxDecoration(
-                      color: _HomeC.cream,
+                      color: tone.inset,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                         color: b.daysUntil == 0
                             ? _HomeC.gold.withValues(alpha: 0.55)
-                            : _HomeC.line,
+                            : tone.line,
                       ),
                     ),
                     child: Row(
@@ -1196,7 +1241,7 @@ class _UpcomingBirthdaysStrip extends StatelessWidget {
                                 style: GoogleFonts.sourceSans3(
                                   fontWeight: FontWeight.w700,
                                   fontSize: 13.5,
-                                  color: _HomeC.ink,
+                                  color: tone.ink,
                                 ),
                               ),
                               const SizedBox(height: 2),
@@ -1206,7 +1251,7 @@ class _UpcomingBirthdaysStrip extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                                 style: GoogleFonts.sourceSans3(
                                   fontSize: 12,
-                                  color: _HomeC.mute,
+                                  color: tone.mute,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
@@ -1250,7 +1295,7 @@ class _ModernModuleCardState extends State<_ModernModuleCard> {
   @override
   Widget build(BuildContext context) {
     final enabled = widget.onTap != null;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final tone = _HomeTone.of(context);
     final phone = MediaQuery.sizeOf(context).width < 600;
 
     return MouseRegion(
@@ -1261,14 +1306,12 @@ class _ModernModuleCardState extends State<_ModernModuleCard> {
         curve: Curves.easeOutCubic,
         transform: Matrix4.translationValues(0.0, _isHovered ? -3.0 : 0.0, 0.0),
         decoration: BoxDecoration(
-          color: isDark
-              ? Theme.of(context).colorScheme.surface
-              : _HomeC.card,
+          color: tone.card,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: _isHovered
                 ? _HomeC.gold.withValues(alpha: 0.45)
-                : _HomeC.line,
+                : tone.line,
           ),
           boxShadow: [
             BoxShadow(
@@ -1322,7 +1365,7 @@ class _ModernModuleCardState extends State<_ModernModuleCard> {
                             style: GoogleFonts.sourceSans3(
                               fontWeight: FontWeight.w700,
                               fontSize: 15.5,
-                              color: isDark
+                              color: tone.isDark
                                   ? Theme.of(context).colorScheme.onSurface
                                   : _HomeC.ink,
                               letterSpacing: -0.2,

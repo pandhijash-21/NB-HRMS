@@ -284,13 +284,16 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       final grantedChanged = granted != (state.user?.companyAdminGranted ?? false);
       final tourSeen = me['softwareTourSeen'] == true;
       final tourChanged = tourSeen != (state.user?.softwareTourSeen ?? false);
+      final onTrip = me['onTrip'] == true;
+      final onTripChanged = onTrip != (state.user?.onTrip ?? false);
 
       if (!permsChanged &&
           !needsChanged &&
           !emergencyChanged &&
           !roleChanged &&
           !grantedChanged &&
-          !tourChanged) {
+          !tourChanged &&
+          !onTripChanged) {
         return;
       }
 
@@ -299,11 +302,12 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         needsEmailVerification: needsChanged ? needs : state.needsEmailVerification,
         needsEmergencyContact:
             emergencyChanged ? needsEmergency : state.needsEmergencyContact,
-        user: (roleChanged || grantedChanged || tourChanged) && state.user != null
+        user: (roleChanged || grantedChanged || tourChanged || onTripChanged) && state.user != null
             ? state.user!.copyWith(
                 role: roleChanged ? roleName.trim() : state.user!.role,
                 companyAdminGranted: granted,
                 softwareTourSeen: tourSeen,
+                onTrip: onTrip,
               )
             : state.user,
       );
@@ -350,12 +354,22 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     AuthLogoutRequested event,
     Emitter<AuthState> emit,
   ) async {
+    if (!event.skipRemote) {
+      try {
+        await _repo.logoutRemote();
+      } on ApiException catch (e) {
+        emit(state.copyWith(errorMessage: e.message));
+        return;
+      } catch (_) {
+        emit(state.copyWith(
+          errorMessage: 'Unable to sign out. Please try again.',
+        ));
+        return;
+      }
+    }
     WebLiveTrackingService.stop(preventRestart: true);
     unawaited(stopBackgroundTracking());
     _stopSessionWatch();
-    if (!event.skipRemote) {
-      await _repo.logoutRemote();
-    }
     await _repo.clearSession();
     WebLiveTrackingService.stop(preventRestart: true);
     emit(AuthState.unauthenticated(infoMessage: event.infoMessage));

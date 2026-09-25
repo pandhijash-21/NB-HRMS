@@ -12,6 +12,8 @@ import '../../features/auth/presentation/bloc/auth_bloc.dart';
 import '../../features/collaboration/presentation/chat_inbox.dart';
 import '../../features/collaboration/presentation/notification_bell.dart';
 import '../../features/tracking_hub/presentation/location_alert_watch.dart';
+import '../app_version.dart';
+import '../router/app_route_history.dart';
 import '../bloc/app_module_cubit.dart';
 import '../logging/app_logger.dart';
 import '../services/location_alert_sound.dart';
@@ -49,6 +51,13 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
   final _navSearch = TextEditingController();
   final Set<String> _expandedNavGroups = {};
   final Set<String> _collapsedNavGroups = {};
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final uri = GoRouterState.of(context).uri.toString();
+    AppRouteHistory.record(uri);
+  }
 
   @override
   void dispose() {
@@ -738,13 +747,14 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
         context,
         Scaffold(
         appBar: AppBar(
-          title: Text(brandTitle),
+          title: Text(brandTitle, overflow: TextOverflow.ellipsis),
           actions: [
-            const Padding(
-              padding: EdgeInsets.only(right: 8),
-              child: Center(child: BackendEnvSwitcher.chip()),
-            ),
-            if (!isSuperAdmin && Permissions.canReadOrgTree(auth.permissions, auth.user?.role))
+            if (width >= 420)
+              const Padding(
+                padding: EdgeInsets.only(right: 4),
+                child: Center(child: BackendEnvSwitcher.chip()),
+              ),
+            if (width >= 420 && !isSuperAdmin && Permissions.canReadOrgTree(auth.permissions, auth.user?.role))
               IconButton(
                 tooltip: 'Employee tree',
                 icon: const NbIcon(Icons.account_tree_rounded),
@@ -761,8 +771,14 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                   context.read<ThemeCubit>().toggleTheme(),
             ),
             IconButton(
-              icon: const NbIcon(Icons.logout),
-              onPressed: () => context.read<AuthBloc>().add(const AuthLogoutRequested()),
+              icon: NbIcon(
+                Icons.logout,
+                color: auth.user?.onTrip == true ? Colors.white38 : null,
+              ),
+              tooltip: auth.user?.onTrip == true
+                  ? 'Sign out is available after the trip ends'
+                  : 'Sign out',
+              onPressed: () => _signOut(context),
             ),
           ],
         ),
@@ -899,7 +915,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                     InkWell(
                       onTap: () {
                         Navigator.pop(context);
-                        context.read<AuthBloc>().add(const AuthLogoutRequested());
+                        _signOut(context);
                       },
                       borderRadius: BorderRadius.circular(12),
                       child: SizedBox(
@@ -928,6 +944,18 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                       ),
                     ),
                   ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: Text(
+                  'Version $kAppVersion',
+                  style: GoogleFonts.sourceSans3(
+                    color: _SideC.goldSoft,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.6,
+                  ),
                 ),
               ),
             ],
@@ -972,6 +1000,19 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     );
   }
 
+  void _signOut(BuildContext context) {
+    final onTrip = context.read<AuthBloc>().state.user?.onTrip == true;
+    if (onTrip) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('You can\'t sign out while you are on a trip. Finish the trip first.'),
+        ),
+      );
+      return;
+    }
+    context.read<AuthBloc>().add(const AuthLogoutRequested());
+  }
+
   Widget _wrapExitConfirm(BuildContext context, Widget child) {
     return Listener(
       behavior: HitTestBehavior.translucent,
@@ -982,10 +1023,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
-        if (context.canPop()) {
-          context.pop();
-          return;
-        }
+        if (tryAppGoBack(context)) return;
         final shouldExit = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
@@ -1008,7 +1046,21 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
           SystemNavigator.pop();
         }
       },
-      child: child,
+      child: BlocListener<AuthBloc, AuthState>(
+        listenWhen: (prev, curr) =>
+            curr.isAuthenticated &&
+            curr.errorMessage != null &&
+            curr.errorMessage != prev.errorMessage,
+        listener: (context, state) {
+          final message = state.errorMessage;
+          if (message == null || message.isEmpty) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(message)),
+          );
+          context.read<AuthBloc>().add(const AuthClearErrorRequested());
+        },
+        child: child,
+      ),
     ),
     );
   }
@@ -1458,6 +1510,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     int chatUnread = 0,
   }) {
     final expanded = allowExpanded && _isExpanded;
+    final authOnTrip = context.watch<AuthBloc>().state.user?.onTrip == true;
     // Sidebar stays dark for contrast with the cream content area.
     const sideDark = true;
     return AnimatedContainer(
@@ -1590,7 +1643,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
           AnimatedContainer(
             duration: const Duration(milliseconds: 300),
             curve: Curves.easeOutCubic,
-            margin: EdgeInsets.fromLTRB(expanded ? 12 : 8, 8, expanded ? 12 : 8, 14),
+            margin: EdgeInsets.fromLTRB(expanded ? 12 : 8, 8, expanded ? 12 : 8, 6),
             padding: const EdgeInsets.symmetric(vertical: 6),
             decoration: BoxDecoration(
               color: _SideC.card,
@@ -1656,9 +1709,11 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                   ),
                 ),
                 Tooltip(
-                  message: 'Sign out',
+                  message: authOnTrip
+                      ? 'Sign out is available after the trip ends'
+                      : 'Sign out',
                   child: InkWell(
-                    onTap: () => context.read<AuthBloc>().add(const AuthLogoutRequested()),
+                    onTap: () => _signOut(context),
                     borderRadius: BorderRadius.circular(10),
                     child: SizedBox(
                       height: 42,
@@ -1668,7 +1723,8 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                                 const SizedBox(width: 12),
                                 NbIcon(
                                   Icons.logout_rounded,
-                                  color: const Color(0xFFEF5350).withValues(alpha: 0.95),
+                                  color: (authOnTrip ? const Color(0xFF9AA399) : const Color(0xFFEF5350))
+                                      .withValues(alpha: 0.95),
                                   size: 20,
                                 ),
                                 const SizedBox(width: 12),
@@ -1678,7 +1734,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: GoogleFonts.sourceSans3(
-                                      color: const Color(0xFFEF5350),
+                                      color: authOnTrip ? const Color(0xFF9AA399) : const Color(0xFFEF5350),
                                       fontWeight: FontWeight.w700,
                                       fontSize: 13,
                                     ),
@@ -1689,7 +1745,8 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                           : Center(
                               child: NbIcon(
                                 Icons.logout_rounded,
-                                color: const Color(0xFFEF5350).withValues(alpha: 0.95),
+                                color: (authOnTrip ? const Color(0xFF9AA399) : const Color(0xFFEF5350))
+                                    .withValues(alpha: 0.95),
                                 size: 20,
                               ),
                             ),
@@ -1697,6 +1754,21 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                   ),
                 ),
               ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
+            child: Text(
+              expanded ? 'Version $kAppVersion' : kAppVersion,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.sourceSans3(
+                color: _SideC.goldSoft,
+                fontSize: expanded ? 11 : 9,
+                fontWeight: FontWeight.w600,
+                letterSpacing: expanded ? 0.6 : 0.2,
+              ),
             ),
           ),
         ],

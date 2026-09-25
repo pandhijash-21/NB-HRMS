@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
+import '../app_version.dart';
 import '../services/branding_config.dart';
 import '../services/location_access_gate.dart';
 import 'nb_brand_loader.dart';
@@ -158,6 +159,19 @@ class _SplashVideoHostState extends State<SplashVideoHost>
                     if (_progress > 0 && _progress < 100) '$_progress%',
                   ],
                 ),
+              Positioned(
+                left: 20,
+                bottom: 28 + MediaQuery.paddingOf(context).bottom,
+                child: Text(
+                  'v$kAppVersion',
+                  style: const TextStyle(
+                    color: Color(0xB8FFFFFF),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+              ),
               if (_showSkip)
                 Positioned(
                   right: 20,

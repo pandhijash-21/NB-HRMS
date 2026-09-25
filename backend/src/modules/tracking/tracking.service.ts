@@ -302,11 +302,52 @@ export const trackingService = {
     let currentTripId: string | null = null;
 
     // Always resolve any open trip (even if punched out) so we can close it.
-    const activeTrip = await prisma.trip.findFirst({
+    // Collapse duplicates from overlapping pings so only one trip stays open.
+    const openTrips = await prisma.trip.findMany({
       where: { employeeId: params.employeeId, endTime: null },
       orderBy: { startTime: 'desc' },
     });
+    if (openTrips.length > 1) {
+      for (const extra of openTrips.slice(1)) {
+        try {
+          await prisma.trip.update({
+            where: { id: extra.id },
+            data: { endTime: new Date() },
+          });
+        } catch (err) {
+          console.error('[tracking] failed to close duplicate open trip', extra.id, err);
+        }
+      }
+    }
+    const activeTrip = openTrips[0] ?? null;
     currentTripId = activeTrip?.id || null;
+
+    const gateKey = `trip_gate:${params.employeeId}`;
+    try {
+      const gateRaw = await redis.get(gateKey);
+      if (gateRaw) {
+        const gate = JSON.parse(gateRaw) as {
+          geofenceInside?: boolean;
+          outsideStreak?: number;
+          insideStreak?: number;
+          lastInsideGeofenceId?: string | null;
+        };
+        if (empInfo.geofenceInside === undefined && gate.geofenceInside !== undefined) {
+          empInfo.geofenceInside = gate.geofenceInside;
+        }
+        if (empInfo.outsideStreak == null && gate.outsideStreak != null) {
+          empInfo.outsideStreak = gate.outsideStreak;
+        }
+        if (empInfo.insideStreak == null && gate.insideStreak != null) {
+          empInfo.insideStreak = gate.insideStreak;
+        }
+        if (!empInfo.lastInsideGeofenceId && gate.lastInsideGeofenceId) {
+          empInfo.lastInsideGeofenceId = gate.lastInsideGeofenceId;
+        }
+      }
+    } catch (err) {
+      console.warn('[tracking] trip gate restore skipped', err);
+    }
 
     // Punch-out while a trip is open → end & save the trip (so it shows in Trips / Hub).
     if (!isPunchedIn && activeTrip) {
@@ -343,6 +384,7 @@ export const trackingService = {
     if (activeLocs.length > 0) {
       let insideAny = false;
       let enteredGeofenceId: string | null = null;
+      let nearestExcessKm = Number.POSITIVE_INFINITY;
       for (const loc of activeLocs) {
         const dist = getDistanceFromLatLonInKm(
           params.latitude,
@@ -350,6 +392,8 @@ export const trackingService = {
           loc.latitude,
           loc.longitude,
         );
+        const excess = dist - loc.radiusKm;
+        if (excess < nearestExcessKm) nearestExcessKm = excess;
         if (dist <= loc.radiusKm) {
           insideAny = true;
           enteredGeofenceId = loc.id;
@@ -366,11 +410,18 @@ export const trackingService = {
         insideStreak = 0;
       }
 
-      // Leave any geofence → start trip (edge: was inside on prior ping, or punched-in outside).
-      // Requires 2 consecutive outside pings to avoid GPS flicker.
-      // Do not use lastInsideGeofenceId alone — that would restart a trip right after punch-out.
+      // Leave any geofence → start trip.
+      // One ping that is clearly past the fence (30m) is enough, so a dropped
+      // second ping cannot skip the trip. Barely-outside fixes still need two
+      // pings so GPS flicker at the boundary does not open a trip.
+      const clearlyOutside = nearestExcessKm >= 0.03 && nearestExcessKm < Number.POSITIVE_INFINITY;
       const mayStartTrip = wasInside || isPunchedIn;
-      if (isOutsideGeofence && !currentTripId && mayStartTrip && outsideStreak >= 2) {
+      const readyToStart =
+        isOutsideGeofence &&
+        !currentTripId &&
+        mayStartTrip &&
+        (clearlyOutside || outsideStreak >= 2);
+      if (readyToStart) {
         try {
           const newTrip = await prisma.trip.create({
             data: {
@@ -479,6 +530,21 @@ export const trackingService = {
     empInfo.isPunchedIn = isPunchedIn;
     empInfo.isOutsideGeofence = isOutsideGeofence;
     empInfo.tripId = currentTripId;
+
+    try {
+      await redis.setEx(
+        `trip_gate:${params.employeeId}`,
+        12 * 60 * 60,
+        JSON.stringify({
+          geofenceInside: empInfo.geofenceInside === true,
+          outsideStreak: Number(empInfo.outsideStreak || 0),
+          insideStreak: Number(empInfo.insideStreak || 0),
+          lastInsideGeofenceId: empInfo.lastInsideGeofenceId ?? null,
+        }),
+      );
+    } catch (err) {
+      console.warn('[tracking] trip gate save skipped', err);
+    }
 
     // Stopped timer: while on a trip, if displacement < ~20m keep/start stoppedSince
     if (currentTripId && prevLat != null && prevLng != null) {

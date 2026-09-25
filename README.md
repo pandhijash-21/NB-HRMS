@@ -1,284 +1,310 @@
-# HR Management System — Gandhinagar University (HRMS-GU)
+# NB CRM
 
-> **NB Developer fork:** This repo is being developed into NB Developer CRM+HRMS+ERP.
-> Locally it uses a **separate** Postgres database (`nb_crm_db`). Do **not** point it at
-> the college project database (`hrms_db`). See [Local databases (isolation)](#local-databases-isolation).
+**HRMS · CRM · ERP** — one product, three suites.
 
-A comprehensive Human Resource Management System for Gandhinagar University. Covers employee profile management, sensitive data handling with AES-256 encryption, document uploads via Cloudinary, family & academic records, full audit logging, JWT-based auth with Redis sessions, and a dynamic role-based permission system.
+The day-to-day client is the Flutter app in `nb_crm_flutter` (web, Android, iOS, desktop). Next.js in `frontend` is the companion site. Express in `backend` is the API.
+
+[![Flutter](https://img.shields.io/badge/Flutter-3.9+-02569B?logo=flutter&logoColor=white)](https://flutter.dev)
+[![Node](https://img.shields.io/badge/Node.js-20.x-339933?logo=node.js&logoColor=white)](https://nodejs.org)
+[![Express](https://img.shields.io/badge/Express-5-000000?logo=express&logoColor=white)](https://expressjs.com)
+[![Prisma](https://img.shields.io/badge/Prisma-6-2D3748?logo=prisma&logoColor=white)](https://www.prisma.io)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org)
+[![Redis](https://img.shields.io/badge/Redis-7%2F8-DC382D?logo=redis&logoColor=white)](https://redis.io)
+
+> This fork uses its own database, **`nb_crm_db`**. The college database **`hrms_db`** stays untouched. Same Postgres server, separate data.
 
 ---
 
-## Tech Stack
+## Contents
+
+1. [At a glance](#at-a-glance)
+2. [What you need](#what-you-need)
+3. [First-time setup](#first-time-setup)
+4. [Every day](#every-day)
+5. [Sign in](#sign-in)
+6. [What the app covers](#what-the-app-covers)
+7. [API](#api)
+8. [Access control](#access-control)
+9. [Data model](#data-model)
+10. [Repository map](#repository-map)
+11. [When something fails](#when-something-fails)
+12. [Security](#security)
+
+---
+
+## At a glance
+
+| | |
+|---|---|
+| Repository | [pandhijash-21/NB-HRMS](https://github.com/pandhijash-21/NB-HRMS) |
+| Primary client | Flutter — `flutter run -d chrome` |
+| API | `http://127.0.0.1:4000/api` |
+| Health | `http://127.0.0.1:4000/health` |
+| Database | `postgres://hrms_user:hrms_pass@localhost:5434/nb_crm_db` |
+| Sessions | `redis://localhost:6380` |
+| Seed login | Employee **`1`** · password **`01011998`** |
+| App version | `1.0.1` (`pubspec.yaml` `1.0.1+2`, `kAppVersion` in `lib/core/app_version.dart`) |
+
+| Service | Address |
+|---|---|
+| Flutter app | The port `flutter run` prints, for example `http://localhost:61905` |
+| Next.js site | http://localhost:3000 |
+| API | http://127.0.0.1:4000 |
+| Postgres | `localhost:5434` · database `nb_crm_db` |
+| Redis | `localhost:6380` |
+| Hasura | http://localhost:8080 (optional) |
 
 | Layer | Technology |
 |---|---|
-| Frontend | Next.js 14 (App Router), TypeScript, Tailwind CSS v4, Shadcn/ui |
-| Auth | NextAuth.js v5 (Credentials provider, JWT sessions) |
-| GraphQL Client | Apollo Client v4 → Hasura |
-| REST Client | Axios → Express backend |
-| Backend | Node.js + Express 5, TypeScript, Prisma v6 |
-| Database | PostgreSQL 15 |
-| GraphQL Engine | Hasura GraphQL Engine |
-| Cache / Sessions | Redis (node-redis v5) |
-| File Storage | Cloudinary v2 (via Multer memory storage) |
-| Encryption | AES-256-CBC (Node.js `crypto`) — Aadhaar & PAN encrypted at rest |
-| Audit | Append-only `AuditLog` table; every sensitive write is diffed and logged |
-| Containerization | Docker & Docker Compose |
+| App | Flutter in `nb_crm_flutter` |
+| Site | Next.js 14, TypeScript, Tailwind |
+| API | Node.js, Express 5, TypeScript, Prisma 6 |
+| Database | PostgreSQL 15 · `nb_crm_db` |
+| Sessions | Redis, one live login per account |
+| Auth | JWT checked against Redis on every request |
+| Files | Cloudinary (optional) |
+| Calls | LiveKit (optional) |
 
 ---
 
-## Local databases (isolation)
+## What you need
 
-This Postgres instance (Docker, port **5434**, user `hrms_user`) can hold **two separate databases**. They must never share a connection URL:
-
-| Database | Purpose |
-|---|---|
-| `hrms_db` | Original college HRMS project — leave untouched |
-| `nb_crm_db` | This NB Developer CRM+HRMS+ERP fork |
-
-- App / Hasura / Prisma for **this repo** → `.../nb_crm_db` only
-- College project env (e.g. `backend/.env.hrms`) → `.../hrms_db` only
-- Create & migrate NB DB: `.\scripts\create_nb_crm_db.ps1` or `bash scripts/create_nb_crm_db.sh`
-- Same user/password/port for now; ask before changing credentials or port
-- If college Docker already owns port `5434`, the setup script **reuses that instance** and only creates `nb_crm_db` inside it (it does not start a second Postgres)
+| Tool | Version | Used for |
+|---|---|---|
+| Git | current | Clone and updates |
+| Node.js | 20.x (24 runs, with an engines warning) | API and Next.js |
+| Flutter | SDK 3.9+ | The NB CRM app |
+| PostgreSQL | 15 | Database on port **5434** |
+| Redis | 7 or 8 | Sessions on port **6380** |
+| Docker Desktop | optional | Postgres, Redis, and Hasura in one command |
+| Chrome | current | Flutter web. Android Studio or Xcode only for a device build |
 
 ---
 
-## Prerequisites
-
-- **Node.js v20+** — [nodejs.org](https://nodejs.org/)
-- **Docker Desktop** — [docker.com](https://www.docker.com/products/docker-desktop/)
-- **Git** — [git-scm.com](https://git-scm.com/)
-- **Hasura CLI** *(optional, for metadata management)* — [hasura.io/docs/latest/hasura-cli/install-hasura-cli](https://hasura.io/docs/latest/hasura-cli/install-hasura-cli/)
-
----
-
-## First-time Setup
+## First-time setup
 
 ### 1. Clone
 
 ```bash
-git clone https://github.com/Cipher-Shadow-IR/HR-Management-System.git
-cd HR-Management-System
+git clone https://github.com/pandhijash-21/NB-HRMS.git
+cd NB-HRMS
 ```
 
-### 2. Install dependencies
+### 2. Postgres and Redis
+
+**Docker** (when virtualization is on):
 
 ```bash
-cd backend && npm install && cd ..
-cd frontend && npm install && cd ..
+docker compose up -d postgres redis hasura
 ```
 
-### 3. Configure environment variables
+Compose creates a bootstrap database named `hrms_db` on first volume init. Create the database this app actually uses:
 
-**Backend** — copy example and fill in secrets:
+```powershell
+.\scripts\create_nb_crm_db.ps1
+```
+
+```bash
+bash scripts/create_nb_crm_db.sh
+```
+
+Leave the Docker `backend` service stopped while you develop. Run the API on your machine so it reloads on save.
+
+**Windows without Docker** (WSL or virtualization off):
+
+Install PostgreSQL 15 and Redis yourself and match this login:
+
+| | |
+|---|---|
+| Host | `127.0.0.1` |
+| Postgres port | `5434` |
+| User | `hrms_user` |
+| Password | `hrms_pass` |
+| Database | `nb_crm_db` |
+| Redis | `127.0.0.1:6380` |
+
+Create `nb_crm_db`, then continue with the backend steps.
+
+### 3. API environment
 
 ```bash
 cd backend
+npm install
 cp .env.example .env
 ```
 
-Edit `backend/.env`:
+On Windows: `Copy-Item .env.example .env`
+
+`backend/.env` needs at least:
 
 ```env
-# MUST be nb_crm_db — never hrms_db (see Local databases below)
 DATABASE_URL=postgres://hrms_user:hrms_pass@localhost:5434/nb_crm_db
 REDIS_URL=redis://localhost:6380
-JWT_SECRET=<at_least_32_random_chars>
-ENCRYPTION_KEY=<exactly_64_hex_chars>
+JWT_SECRET=<at least 32 random characters>
+ENCRYPTION_KEY=<exactly 64 hex characters>
+TRANSPORT_SECRET=nb-crm-double-enc-v2-local
 PORT=4000
-
-# Cloudinary (optional — uploads won't work without it)
-CLOUDINARY_CLOUD_NAME=
-CLOUDINARY_API_KEY=
-CLOUDINARY_API_SECRET=
-
-# CORS
-CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:9695
 FRONTEND_URL=http://localhost:3000
-
-# Email notifications (optional — silently skipped if not set)
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_SECURE=false
-SMTP_USER=
-SMTP_PASS=
-SMTP_FROM=noreply@gandhinagaruni.ac.in
+CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:9695
 ```
 
-Generate `ENCRYPTION_KEY`:
+Generate the encryption key:
+
 ```bash
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-If you still need the college HRMS connection locally, keep it in `backend/.env.hrms` (not used by this app). Do not overwrite that file when switching projects.
+`JWT_SECRET` is any long random string. Cloudinary, SMTP, LiveKit, MinIO, and OpenAI are optional. The API starts without them. Uploads, email OTP, and Meet calls need those keys when you use those features.
 
-**Frontend** — create `frontend/.env`:
+If the browser blocks the Flutter web app, add the origin `flutter run` printed (for example `http://localhost:61905`) to `CORS_ALLOWED_ORIGINS` and restart the API.
+
+### 4. Schema and seed
+
+```bash
+npx prisma generate
+npx prisma migrate deploy
+npx prisma db seed
+```
+
+The seed prints the admin login: employee id **`1`**, password **`01011998`**.
+
+On a brand-new `nb_crm_db`, `migrate deploy` can stop because an early migration expects `organizations` or `attendance_policy` before those tables exist. Sync the Prisma schema and seed:
+
+```bash
+npx prisma db push --accept-data-loss --skip-generate
+npx prisma db seed
+```
+
+Run that only against a new local `nb_crm_db`.
+
+### 5. Start the API
+
+```bash
+npm run dev
+```
+
+Wait for Redis connected and the server on port 4000. Open http://127.0.0.1:4000/health.
+
+### 6. Flutter app
+
+```bash
+cd ../nb_crm_flutter
+flutter pub get
+flutter run -d chrome
+```
+
+The app calls `http://localhost:4000/api` (`AppConfig.localApiBaseUrl`). After login, allow location. Live tracking and attendance use GPS.
+
+Other targets:
+
+```bash
+flutter devices
+flutter run -d <device-id>
+```
+
+Ship a build by bumping both numbers together:
+
+| File | Field | Current |
+|---|---|---|
+| `nb_crm_flutter/pubspec.yaml` | `version` | `1.0.1+2` |
+| `nb_crm_flutter/lib/core/app_version.dart` | `kAppVersion` | `1.0.1` |
+
+### 7. Next.js site (optional)
+
+```bash
+cd frontend
+npm install
+```
+
+Create `frontend/.env`:
 
 ```env
 DATABASE_URL=postgres://hrms_user:hrms_pass@localhost:5434/nb_crm_db
 NEXT_PUBLIC_HASURA_URL=http://localhost:8080/v1/graphql
 NEXT_PUBLIC_API_URL=http://127.0.0.1:4000/api
 NEXTAUTH_URL=http://localhost:3000
-NEXTAUTH_SECRET=<any_random_string>
+NEXTAUTH_SECRET=<any random string>
 ```
 
-> **Note:** Use `127.0.0.1` (not `localhost`) in `NEXT_PUBLIC_API_URL` to avoid IPv6/IPv4 resolution issues on Windows.
-
-### 4. Start infrastructure
+On Windows, `NEXT_PUBLIC_API_URL` uses `127.0.0.1` so the browser stays on the same address family. Restart the site after any `.env` change.
 
 ```bash
-docker compose up -d postgres redis hasura
-```
-
-This starts **PostgreSQL** (port `5434`), **Redis** (port `6380`), and **Hasura** (port `8080`).
-
-> Do **not** start the Docker `backend` service during development — run it locally instead (step 6).
-
-### 5. Create `nb_crm_db`, run migrations & seed
-
-```powershell
-# Windows
-.\scripts\create_nb_crm_db.ps1
-```
-
-```bash
-# macOS / Linux
-bash scripts/create_nb_crm_db.sh
-```
-
-This creates `nb_crm_db` if missing and runs `prisma migrate deploy` against it only. Then:
-
-```bash
-cd backend
-npx prisma generate
-npx prisma db seed
-cd ..
-```
-
-The seed creates:
-- 12 system modules (PERSONAL_INFO, PAYROLL, LEAVE, etc.)
-- 6 default roles (ADMIN, HOI, HR, HOD, FINANCE, EMPLOYEE) with full permission matrix
-- Default admin account: **Employee ID `1`**, password **`01011990`**
-
-### 6. Start the backend locally
-
-```bash
-cd backend
 npm run dev
 ```
 
-Wait for:
-```
-Redis connected
-Server running on port 4000
-```
-
-### 7. Start the frontend
-
-```bash
-cd frontend
-npm run dev
-```
-
-App available at **[http://localhost:3000](http://localhost:3000)**
-
-### 8. (Optional) Apply Hasura metadata
-
-```bash
-cd hasura
-hasura metadata apply
-# or open the console:
-hasura console   # → http://localhost:9695
-```
+Open http://localhost:3000.
 
 ---
 
-## Daily Development Startup
+## Every day
 
-Every session (after the first-time setup):
+1. Postgres is on **5434** and Redis is on **6380**. With Docker: `docker compose up -d postgres redis`.
+2. API: `cd backend` then `npm run dev`.
+3. App: `cd nb_crm_flutter` then `flutter run -d chrome` (or your device).
+4. Start `frontend` only when you are working on the Next.js site.
 
-```powershell
-# 1. Open Docker Desktop and wait for engine to start
-
-# 2. Start infrastructure containers
-docker compose up -d postgres redis hasura
-
-# 3. Make sure Docker backend is NOT running (local dev takes port 4000)
-docker compose stop backend
-
-# 4. Terminal 1 — backend
-cd backend; npm run dev
-
-# 5. Terminal 2 — frontend
-cd frontend; npm run dev
-```
+After a Dart or API change, hot restart Flutter. Restart `npm run dev` if the API process did not reload.
 
 ---
 
-## Accessing the Application
+## Sign in
 
-| Service | URL |
-|---|---|
-| **Landing page** | http://localhost:3000 |
-| **Login** | http://localhost:3000/login |
-| **Change Password** | http://localhost:3000/change-password |
-| **Employee Portal** | http://localhost:3000/profile |
-| **Admin Dashboard** | http://localhost:3000/admin/dashboard |
-| **Employee List (Admin)** | http://localhost:3000/admin/employees |
-| **Employee Profile (Admin)** | http://localhost:3000/admin/employees/`<id>` |
-| **Backend Health** | http://localhost:4000/health |
-| **Backend API** | http://localhost:4000/api |
-| **Hasura Console** | http://localhost:8080 |
-| **Hasura Console (CLI)** | http://localhost:9695 (via `hasura console`) |
-
----
-
-## Login
-
-The login page accepts **Employee ID + Password** (not email).
-
-### Default admin account (created by seed)
+Both login screens take an **employee id or username** and a password.
 
 | Field | Value |
 |---|---|
 | Employee ID | `1` |
-| Password | `01011990` |
-| Role | ADMIN |
-| First login | Yes — you will be redirected to `/change-password` |
+| Password | `01011998` |
+| Role | Admin (seed) |
 
-### First-login flow
+First login asks for a new password, then email verification, then at least one family member marked as an emergency contact.
 
-1. Log in → system detects `isFirstLogin = true`
-2. Automatically redirected to `/change-password`
-3. Set a new password (min 8 chars, at least 1 letter + 1 number)
-4. Redirected back to `/login`
-5. Sign in with new password → land on `/admin/dashboard`
+A new employee's default password is their date of birth as `DDMMYYYY` (example `27051974`). With no date of birth on file, the fallback is `01011990`. The seeded admin account uses `01011998`.
 
-### Role-based redirects after login
+An **open trip** (`trips.end_time` is empty) locks the account:
 
-| Role | Redirect |
-|---|---|
-| ADMIN, HR, HOI, FINANCE | `/admin/dashboard` |
-| HOD, EMPLOYEE | `/profile` |
+- Another device cannot sign in while that employee still has a live session.
+- That employee cannot sign out until the trip ends (they return to a work location, or they punch out).
+- If the Redis session is already gone, the same person can sign in again and finish the trip.
 
 ---
 
-## Backend API Reference
+## What the app covers
 
-Base URL: `http://localhost:4000`
+| Suite | Screens |
+|---|---|
+| HRMS | Home, profile, attendance, leave, salary, reimbursements, recruitment, org tree |
+| CRM | Pre-sales, post-sales, dashboard |
+| ERP | Projects, work orders, BOQ, store, purchase, tenders, DPR |
+| Field | Live location and trips after punch-in, when the person leaves a work geofence |
+| Platform | Superadmin console at `/platform` — tenants, licensing, app version |
 
-### Auth endpoints
+**App version policy** lives on Platform Health. A superadmin sets a minimum version, a latest version, and three update links (web, Android, iOS). Clients read them from `GET /api/auth/branding`.
+
+- Current version below the minimum: a blocking update screen.
+- Current version below the latest, and at or above the minimum: a dismissible update prompt each time the app comes to the foreground.
+- An empty link hides the Update button on that platform.
+
+**Trip tracking.** Punch in, or be inside a work geofence, then leave it. One GPS fix at least 30 metres past the nearest fence opens the trip. A fix that is only just outside needs two readings. Punch-out, or two readings back inside a fence, closes the trip. Whether the person was last inside or outside is kept for 12 hours so a short GPS gap does not skip opening the trip. The trip row itself stays open until they return or punch out. The live map pin expires after 120 seconds.
+
+---
+
+## API
+
+Base URL: `http://127.0.0.1:4000`
+
+### Auth
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| POST | `/api/auth/login` | Public | Login with `{ employeeId, password }` → JWT |
-| POST | `/api/auth/logout` | JWT | Invalidate Redis session |
-| POST | `/api/auth/change-password` | JWT | Change own password (forces re-login) |
-| GET | `/api/auth/me` | JWT | Current user profile + permissions |
-| POST | `/api/auth/reset-password/:userId` | JWT + `USER_MGMT:WRITE` | Reset any user's password to DOB default |
+| POST | `/api/auth/login` | Public | `{ employeeId, password }` → JWT |
+| POST | `/api/auth/logout` | JWT | Drop the Redis session. Refused while an open trip exists |
+| POST | `/api/auth/change-password` | JWT | Change own password, then sign in again |
+| GET | `/api/auth/me` | JWT | Profile, permissions, and `onTrip` |
+| GET | `/api/auth/branding` | Public | Logo, colours, and the app version policy |
+| POST | `/api/auth/reset-password/:userId` | JWT + `USER_MGMT:WRITE` | Reset a password to the date-of-birth default |
 
-### User management
+### Users
 
 | Method | Path | Permission |
 |---|---|---|
@@ -288,37 +314,39 @@ Base URL: `http://localhost:4000`
 | PATCH | `/api/admin/users/:id` | `USER_MGMT:WRITE` |
 | DELETE | `/api/admin/users/:id` | `USER_MGMT:DELETE` |
 
-### Role & permission management
+### Roles and permissions
 
 | Method | Path | Permission |
 |---|---|---|
-| GET/POST | `/api/admin/roles` | `ROLE_MGMT:READ/WRITE` |
-| GET/PATCH/DELETE | `/api/admin/roles/:id` | `ROLE_MGMT:READ/WRITE/DELETE` |
+| GET, POST | `/api/admin/roles` | `ROLE_MGMT:READ` / `WRITE` |
+| GET, PATCH, DELETE | `/api/admin/roles/:id` | `ROLE_MGMT:READ` / `WRITE` / `DELETE` |
 | GET | `/api/admin/modules` | `ROLE_MGMT:READ` |
-| GET/PUT | `/api/admin/roles/:roleId/permissions` | `ROLE_MGMT:READ/WRITE` |
+| GET, PUT | `/api/admin/roles/:roleId/permissions` | `ROLE_MGMT:READ` / `WRITE` |
 | PATCH | `/api/admin/roles/:roleId/permissions/:moduleKey` | `ROLE_MGMT:WRITE` |
 
-### Employee — Personal & Education module
+### Employees
 
-All routes require JWT. HR/ADMIN/HOI guards noted where applicable.
+All routes need a JWT. Write guards are HR, ADMIN, or HOI where noted.
 
-| Method | Path | Guard | Description |
+| Method | Path | Who | What |
 |---|---|---|---|
-| POST | `/api/employees` | HR/ADMIN | Create employee |
-| GET | `/api/employees/:id` | Auth | Get employee (all sections) |
-| PATCH | `/api/employees/:id` | Auth | Update core employee fields |
-| GET/POST/PATCH | `/api/employees/:id/general` | GET: Auth · Write: HR/ADMIN/HOI | General info (name, dept, joining date) |
-| GET/POST/PATCH | `/api/employees/:id/personal` | Auth + audit | Personal info (DOB, gender — Aadhaar/PAN encrypted) |
-| GET/POST/PATCH | `/api/employees/:id/address/:type` | Auth + audit | LOCAL or PERMANENT address |
-| GET/POST/PATCH | `/api/employees/:id/other` | Auth + audit | Skills, hobbies, physical info |
-| GET/POST/PATCH/DELETE | `/api/employees/:id/family[/:memberId]` | Auth + audit | Family members (Aadhaar encrypted, soft delete) |
-| GET/POST/PATCH | `/api/employees/:id/academic[/:qualId]` | Auth | Academic qualifications |
-| DELETE | `/api/employees/:id/academic/:qualId` | HR/ADMIN | Soft-delete qualification |
-| GET | `/api/employees/:id/audit-log` | HR/ADMIN | Audit history |
+| POST | `/api/employees` | HR / ADMIN | Create an employee |
+| GET | `/api/employees/:id` | Signed in | Full profile |
+| PATCH | `/api/employees/:id` | Signed in | Core fields |
+| GET, POST, PATCH | `/api/employees/:id/general` | Write: HR / ADMIN / HOI | Name, department, joining date |
+| GET, POST, PATCH | `/api/employees/:id/personal` | Signed in, audited | Date of birth, gender. Aadhaar and PAN are encrypted |
+| GET, POST, PATCH | `/api/employees/:id/address/:type` | Signed in, audited | `LOCAL` or `PERMANENT` |
+| GET, POST, PATCH | `/api/employees/:id/other` | Signed in, audited | Skills, hobbies, physical info |
+| GET, POST, PATCH, DELETE | `/api/employees/:id/family[/:memberId]` | Signed in, audited | Family members. Aadhaar encrypted. Delete is soft |
+| GET, POST, PATCH | `/api/employees/:id/academic[/:qualId]` | Signed in | Qualifications |
+| DELETE | `/api/employees/:id/academic/:qualId` | HR / ADMIN | Soft-delete a qualification |
+| GET | `/api/employees/:id/audit-log` | HR / ADMIN | Change history |
 
-### File uploads (all require JWT + ownership check)
+### Uploads
 
-| Method | Path | Saves to |
+JWT plus an ownership check. `multipart/form-data` with a `file` field and `employeeId`. An employee uploads only to their own profile. HR, ADMIN, and HOI can upload for anyone.
+
+| Method | Path | Saved on |
 |---|---|---|
 | POST | `/api/upload/photo` | `Employee.photoUrl` |
 | POST | `/api/upload/signature` | `Employee.signatureUrl` |
@@ -327,190 +355,135 @@ All routes require JWT. HR/ADMIN/HOI guards noted where applicable.
 | POST | `/api/upload/marksheet` | `AcademicQualification.semNMarksheetUrl` |
 | POST | `/api/upload/certificate` | `AcademicQualification.certificateUrl` |
 
-All upload endpoints accept `multipart/form-data` with a `file` field + `employeeId` in the body. Employees can only upload to their own profile; HR/ADMIN/HOI can upload for anyone.
+### Platform
+
+Superadmin. Version policy is also returned on the public branding route.
+
+| Method | Path | What |
+|---|---|---|
+| GET, PUT | `/api/platform/app-version` | Minimum version, latest version, update links for web, Android, and iOS |
 
 ---
 
-## Dynamic RBAC System
+## Access control
 
-### How permissions work
+Each user has one role. Each role has a matrix: for every module, five flags — `canRead`, `canWrite`, `canApprove`, `canDelete`, `canExport`.
 
-- Every user has a **Role** (ADMIN, HR, HOD, FINANCE, HOI, EMPLOYEE — or custom)
-- Every role has a **permission matrix**: per system module, 5 boolean flags: `canRead`, `canWrite`, `canApprove`, `canDelete`, `canExport`
-- On login, the full permissions map is embedded in the JWT — no DB hit on each request
-- When permissions change for a role, **all active sessions for that role are invalidated** (users must re-login)
+The matrix is embedded in the JWT at login. Changing a role's permissions drops every live session for that role. Those people sign in again.
 
-### System modules
+**Modules:** `PERSONAL_INFO` · `EDUCATION` · `LEAVE` · `PAYROLL` · `SALARY` · `ATTENDANCE` · `BANK_DETAILS` · `DOCUMENTS` · `REPORTS` · `USER_MGMT` · `ROLE_MGMT` · `FIELD_MGMT`
 
-`PERSONAL_INFO` · `EDUCATION` · `LEAVE` · `PAYROLL` · `SALARY` · `ATTENDANCE` · `BANK_DETAILS` · `DOCUMENTS` · `REPORTS` · `USER_MGMT` · `ROLE_MGMT` · `FIELD_MGMT`
-
-### Default role permissions summary
-
-| Role | Key access |
+| Role | Access |
 |---|---|
-| **ADMIN** | Full access to everything |
-| **HOI** | Read + approve + export on all modules |
-| **HR** | Read/write/approve on PERSONAL_INFO, EDUCATION, LEAVE, DOCUMENTS; read on PAYROLL, SALARY |
-| **HOD** | Read on most; approve on LEAVE |
-| **FINANCE** | Full on PAYROLL + SALARY; read BANK_DETAILS, REPORTS |
-| **EMPLOYEE** | Read/write own PERSONAL_INFO, EDUCATION, LEAVE, DOCUMENTS; read ATTENDANCE, BANK_DETAILS |
+| ADMIN | Full access |
+| HOI | Read, approve, and export on every module |
+| HR | Read, write, and approve on personal info, education, leave, and documents. Read on payroll and salary |
+| HOD | Read on most modules. Approve on leave |
+| FINANCE | Full payroll and salary. Read bank details and reports |
+| EMPLOYEE | Read and write own personal info, education, leave, and documents. Read attendance and bank details |
 
-### Creating a new user account
+Create an account:
 
-```
+```http
 POST /api/admin/users
-{ "employeeId": 29, "roleId": "<uuid-of-role>" }
+{ "employeeId": 29, "roleId": "<role-uuid>" }
 ```
 
-- Default password = employee's DOB formatted as `DDMMYYYY` (e.g. `27051974`)
-- If no DOB on file yet → default password is `01011990`
-- `isFirstLogin = true` → user must change password on first login
-- Email notification sent automatically if SMTP is configured
+Default password is the employee's date of birth as `DDMMYYYY`. With no date of birth, it is `01011990`. `isFirstLogin` is true, so the first session must set a new password. If SMTP is configured, the account email goes out automatically.
 
 ---
 
-## Database Schema
+## Data model
 
-### Core models
+Source of truth: `backend/prisma/schema.prisma`.
 
-| Model | Table | Description |
+### People
+
+| Model | Table | Holds |
 |---|---|---|
-| `Employee` | `employees` | Core identity row — auto-increment int ID |
-| `EmployeeGeneralInfo` | `employee_general_info` | Name, dept, joining date, designation |
-| `EmployeePersonalInfo` | `employee_personal_info` | DOB, gender, Aadhaar/PAN (AES-256 encrypted) |
-| `EmployeeAddress` | `employee_addresses` | LOCAL + PERMANENT address |
+| `Employee` | `employees` | Identity. Auto-increment integer id |
+| `EmployeeGeneralInfo` | `employee_general_info` | Name, department, joining date, designation |
+| `EmployeePersonalInfo` | `employee_personal_info` | Date of birth, gender. Aadhaar and PAN encrypted with AES-256 |
+| `EmployeeAddress` | `employee_addresses` | Local and permanent address |
 | `EmployeeOtherInfo` | `employee_other_info` | Skills, hobbies, physical info |
-| `FamilyMember` | `family_members` | Family members (Aadhaar encrypted, soft delete) |
-| `AcademicQualification` | `academic_qualifications` | SSC→PHD qualifications |
-| `AuditLog` | `audit_log` | Append-only change history |
+| `FamilyMember` | `family_members` | Family. Aadhaar encrypted. Soft delete |
+| `AcademicQualification` | `academic_qualifications` | SSC through PhD |
+| `AuditLog` | `audit_log` | Append-only history |
 
-### Auth & RBAC models
+### Accounts
 
-| Model | Table | Description |
+| Model | Table | Holds |
 |---|---|---|
-| `User` | `users` | One account per employee; bcrypt password |
-| `Role` | `roles` | Dynamic roles (admin can create custom roles) |
-| `SystemModule` | `system_modules` | Seeded — maps to real code sections |
-| `RolePermission` | `role_permissions` | Junction: Role × Module with 5 action flags |
+| `User` | `users` | One account per employee. bcrypt password |
+| `Role` | `roles` | Built-in and custom roles |
+| `SystemModule` | `system_modules` | Seeded module keys |
+| `RolePermission` | `role_permissions` | Role × module × five action flags |
 
 ---
 
-## Folder Structure
+## Repository map
 
 ```
-HR-Management-System/
-├── frontend/                        # Next.js 14 app
+NB-HRMS/
+├── nb_crm_flutter/                  # Flutter app — web, Android, iOS, desktop
+│   └── lib/
+│       ├── core/                    # router, theme, tracking, API client, version
+│       └── features/                # auth, home, profile, attendance, CRM, ERP, platform
+├── frontend/                        # Next.js 14 site
 │   ├── app/
-│   │   ├── (auth)/
-│   │   │   ├── login/               # Login page + form
-│   │   │   └── change-password/     # First-login password change
-│   │   ├── (employee)/profile/      # Employee self-service portal
-│   │   ├── admin/
-│   │   │   ├── dashboard/           # Admin dashboard
-│   │   │   ├── employees/           # Employee list + profile view
-│   │   │   └── layout.tsx           # Admin shell with sidebar
-│   │   └── api/auth/[...nextauth]/  # NextAuth handler
-│   ├── components/
-│   │   ├── layout/                  # Sidebar, Topbar, PageWrapper
-│   │   ├── profile/                 # ProfileHeader, ProfileTabs, all tab components
-│   │   └── shared/                  # FileUploadInput, MaskedInput, AuditLogDrawer, etc.
-│   ├── lib/
-│   │   ├── apollo-client.ts         # Apollo Client v4 setup
-│   │   ├── axios.ts                 # Axios instance with JWT interceptor
-│   │   ├── graphql/                 # GQL queries & mutations
-│   │   ├── hooks/                   # useEmployee, usePersonalInfo, useAddress, etc.
-│   │   └── validators/              # Zod schemas for all profile sections
-│   ├── types/next-auth.d.ts         # NextAuth type extensions (role, employeeId, isFirstLogin)
-│   └── prisma/                      # Prisma schema (frontend read queries)
-│
-├── backend/                         # Express 5 + TypeScript API
+│   │   ├── (auth)/login/            # Login
+│   │   ├── (auth)/change-password/  # First-login password change
+│   │   ├── (employee)/profile/      # Employee self-service
+│   │   ├── admin/                   # Dashboard, employees, admin shell
+│   │   └── api/auth/[...nextauth]/  # NextAuth
+│   ├── components/                  # layout, profile, shared inputs
+│   ├── lib/                         # Apollo, Axios, GraphQL, hooks, Zod
+│   └── prisma/                      # Frontend read schema
+├── backend/                         # Express 5 API
 │   ├── prisma/
-│   │   ├── schema.prisma            # Full DB schema — source of truth
-│   │   ├── migrations/              # Version-controlled migrations
-│   │   └── seed.ts                  # Roles, modules, permissions, admin user
+│   │   ├── schema.prisma            # Database source of truth
+│   │   ├── migrations/
+│   │   └── seed.ts                  # Roles, modules, admin user (password 01011998)
 │   └── src/
-│       ├── index.ts                 # Entry point — Redis connect + app.listen
-│       ├── app.ts                   # Express app — middleware + router mounts
-│       ├── config/                  # env (Zod), prisma, redis, cloudinary
-│       ├── middleware/
-│       │   ├── auth.ts              # requireAuth — JWT verify + Redis session check
-│       │   ├── rbac.ts              # requirePermission + requireRole
-│       │   └── audit.ts             # startAuditContext + flushAudit
-│       ├── utils/
-│       │   ├── crypto.ts            # AES-256-CBC encrypt/decrypt/mask
-│       │   ├── response.ts          # ok() / fail() response helpers
-│       │   └── mailer.ts            # Nodemailer — account create + password reset emails
-│       └── modules/
-│           ├── auth/                # login, logout, change-password, reset-password, me
-│           ├── user-management/     # user CRUD, role CRUD, permission matrix CRUD
-│           └── personal-education/  # employee, general, personal, address, other,
-│                                    # family, academic, upload, audit
-│
-├── hasura/                          # Hasura metadata & migrations
-└── docker-compose.yml               # postgres, redis, hasura, backend (backend = dev only)
+│       ├── index.ts                 # Redis, then listen
+│       ├── app.ts                   # Middleware and routes
+│       ├── config/                  # env, Prisma, Redis, Cloudinary
+│       ├── middleware/              # JWT session, RBAC, audit
+│       ├── utils/                   # AES-256, responses, mail
+│       └── modules/                 # auth, users, employees, tracking, platform
+├── scripts/                         # create_nb_crm_db.ps1 and .sh
+├── hasura/                          # Hasura metadata
+└── docker-compose.yml               # postgres :5434, redis :6380, hasura, backend
 ```
 
 ---
 
-## Common Issues & Fixes
+## When something fails
 
-### Windows: `&&` not valid in PowerShell
-Use `;` instead of `&&` when chaining commands, or run each command separately.
-
-### Docker backend intercepting port 4000
-If you start the Docker `backend` container AND run `npm run dev` locally, the Docker container wins. Always stop it first:
-```powershell
-docker compose stop backend
-```
-
-### `ENCRYPTION_KEY` Zod validation error
-Must be exactly **64 hex characters** (32 bytes):
-```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-```
-
-### `P1000: Authentication failed` on Prisma migrate
-Your `DATABASE_URL` must use port **`5434`** (not 5432) and database **`nb_crm_db`**:
-```env
-DATABASE_URL=postgres://hrms_user:hrms_pass@localhost:5434/nb_crm_db
-```
-
-### `Database drift detected` on Prisma migrate
-The local migrations folder is out of sync with the DB. Reset cleanly:
-```bash
-npx prisma migrate reset --force
-npx prisma migrate dev --name init_all
-npx prisma db seed
-```
-
-### Frontend login always fails
-1. Check that the Docker `backend` container is **stopped** (`docker compose stop backend`)
-2. Check that the local backend is running (`npm run dev` in `backend/`)
-3. Verify `NEXT_PUBLIC_API_URL=http://127.0.0.1:4000/api` in `frontend/.env` (use `127.0.0.1`, not `localhost`)
-4. Restart the frontend dev server after any `.env` change
-
-### Redis not connecting
-Redis runs inside Docker (`redis` service). The backend connects to it via `REDIS_URL=redis://localhost:6380`. Make sure `docker compose up -d redis` is running. The auth middleware is **fail-open** on Redis downtime — logins will still work using JWT alone.
-
-### Prisma: `tsx not found`
-```bash
-cd backend && npm install
-```
-
-### Prisma version
-Both `frontend/` and `backend/` pin Prisma to **v6** (`"prisma": "^6"`). Do not upgrade to v7 without reviewing the migration guide — the `datasource.url` API changed.
-
-### Windows: Hasura CLI execution policy
-```powershell
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-```
+| Symptom | Fix |
+|---|---|
+| PowerShell rejects `&&` | Use `;` or run each command on its own line |
+| Port 4000 is taken by Docker | `docker compose stop backend`, then `npm run dev` in `backend/` |
+| `ENCRYPTION_KEY` rejected | Exactly 64 hex characters. Generate with the `node -e` command in step 3 |
+| Prisma `P1000` authentication failed | `DATABASE_URL` must be port **5434** and database **`nb_crm_db`** |
+| `migrate deploy` stops on a fresh database | `npx prisma db push --accept-data-loss --skip-generate`, then `npx prisma db seed`. Local `nb_crm_db` only |
+| Drift between migrations and the database | `npx prisma migrate reset --force`, then `npx prisma migrate dev --name init_all`, then `npx prisma db seed` |
+| Next.js login always fails | Docker backend is stopped. Local API is running. `NEXT_PUBLIC_API_URL=http://127.0.0.1:4000/api`. Restart Next after `.env` edits |
+| Flutter web cannot reach the API | Add the printed Flutter origin to `CORS_ALLOWED_ORIGINS` and restart the API |
+| Redis will not connect | `docker compose up -d redis`, or a local Redis on **6380**. `REDIS_URL=redis://localhost:6380`. Auth is fail-open if Redis is down: JWT still works, session lock does not |
+| `tsx` not found | `cd backend` and `npm install` |
+| Prisma major upgrade | Both apps pin Prisma **6**. Stay on 6 unless you follow the v7 migration guide. `datasource.url` changed in v7 |
+| Hasura CLI blocked on Windows | `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser` |
 
 ---
 
-## Security Notes
+## Security
 
-- **Aadhaar and PAN numbers** are AES-256-CBC encrypted at rest. They are never stored in plaintext in the database and are never exposed via Hasura/GraphQL — only via the Express REST API after decryption.
-- **Passwords** are bcrypt-hashed with 12 salt rounds. Plain-text passwords are never stored or logged.
-- **JWT sessions** are validated against Redis on every request. Logout, password change, role change, and permission updates all immediately invalidate active sessions.
-- **CORS** is restricted to `http://localhost:3000` and `http://localhost:9695` in development. Set `CORS_ALLOWED_ORIGINS` in production.
-- **Upload ownership**: employees can only upload files to their own profile. HR/ADMIN/HOI can upload for anyone.
+| Control | How it is applied |
+|---|---|
+| Aadhaar and PAN | AES-256-CBC at rest. Returned only by the Express API after decryption. Hasura does not expose them |
+| Passwords | bcrypt, 12 rounds. Plain text is never stored or logged |
+| Sessions | JWT checked against Redis on each request. Logout, password change, and permission edits drop the session at once |
+| One login | A new sign-in replaces `session:<userId>` unless that account is on an open trip with a live session |
+| CORS | Development allows the origins in `CORS_ALLOWED_ORIGINS`. Set that list for production |
+| Uploads | An employee can write files only on their own profile. HR, ADMIN, and HOI can write for anyone |

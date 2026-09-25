@@ -3659,181 +3659,280 @@ class _FamilyMemberDialogState extends ConsumerState<FamilyMemberDialog> {
   @override
   Widget build(BuildContext context) {
     final modeText = widget.member == null ? 'Add' : 'Edit';
-    final dobText = _dateOfBirth == null
-        ? 'dd-mm-yyyy'
-        : '${_dateOfBirth!.day.toString().padLeft(2, '0')}-${_dateOfBirth!.month.toString().padLeft(2, '0')}-${_dateOfBirth!.year}';
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surface = isDark ? AppColors.surfaceDark : Colors.white;
+    final border = isDark ? AppColors.borderDark : const Color(0xFFE6E8EC);
+    final text = isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight;
+    final muted = isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight;
+    final fieldFill = isDark ? AppColors.backgroundDark : const Color(0xFFF7F8FA);
+    final maxHeight = MediaQuery.sizeOf(context).height * 0.86;
 
-    return AlertDialog(
-      title: Row(
-        children: [
-          Expanded(child: Text('$modeText Family Member')),
-          IconButton(
-            onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.close),
-          ),
-        ],
-      ),
-      scrollable: true,
-      content: SizedBox(
-        width: 480,
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      backgroundColor: surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: 680, maxHeight: maxHeight),
         child: Form(
           key: _formKey,
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              _buildTextField('Name', _nameCtrl, required: true),
-              lookupDropdown(
-                ref: ref,
-                category: 'FAMILY_RELATION',
-                label: 'Relation',
-                value: _relation,
-                required: true,
-                fallback: const [
-                  LookupOption(
-                    id: '1',
-                    category: 'FAMILY_RELATION',
-                    code: 'FATHER',
-                    label: 'Father',
-                  ),
-                  LookupOption(
-                    id: '2',
-                    category: 'FAMILY_RELATION',
-                    code: 'MOTHER',
-                    label: 'Mother',
-                  ),
-                  LookupOption(
-                    id: '3',
-                    category: 'FAMILY_RELATION',
-                    code: 'SPOUSE',
-                    label: 'Spouse',
-                  ),
-                  LookupOption(
-                    id: '4',
-                    category: 'FAMILY_RELATION',
-                    code: 'SON',
-                    label: 'Son',
-                  ),
-                  LookupOption(
-                    id: '5',
-                    category: 'FAMILY_RELATION',
-                    code: 'DAUGHTER',
-                    label: 'Daughter',
-                  ),
-                  LookupOption(
-                    id: '6',
-                    category: 'FAMILY_RELATION',
-                    code: 'BROTHER',
-                    label: 'Brother',
-                  ),
-                  LookupOption(
-                    id: '7',
-                    category: 'FAMILY_RELATION',
-                    code: 'SISTER',
-                    label: 'Sister',
-                  ),
-                  LookupOption(
-                    id: '8',
-                    category: 'FAMILY_RELATION',
-                    code: 'OTHER',
-                    label: 'Other',
-                  ),
-                ],
-                onChanged: (v) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted) setState(() => _relation = v);
-                  });
-                },
-              ),
               Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: InkWell(
-                  onTap: _pickDob,
-                  borderRadius: BorderRadius.circular(8),
-                  child: InputDecorator(
-                    decoration: const InputDecoration(
-                      labelText: 'Date of Birth',
-                      border: OutlineInputBorder(),
-                      suffixIcon: Icon(Icons.calendar_today_outlined, size: 18),
+                padding: const EdgeInsets.fromLTRB(22, 18, 8, 16),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryBlue.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.family_restroom_outlined, color: AppColors.primaryBlue, size: 22),
                     ),
-                    child: Text(
-                      dobText,
-                      style: TextStyle(
-                        color: _dateOfBirth == null
-                            ? AppColors.textSecondary
-                            : null,
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '$modeText family member',
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: text, letterSpacing: -0.3),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Who they are, and how to reach them.',
+                            style: TextStyle(fontSize: 13, height: 1.3, color: muted),
+                          ),
+                        ],
                       ),
                     ),
+                    IconButton(
+                      onPressed: _saving ? null : () => Navigator.pop(context),
+                      icon: Icon(Icons.close, color: muted),
+                    ),
+                  ],
+                ),
+              ),
+              Divider(height: 1, color: border),
+              Flexible(
+                fit: FlexFit.loose,
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(22, 18, 22, 16),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final wide = constraints.maxWidth >= 560;
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _pair(
+                            wide,
+                            _buildTextField('Name', _nameCtrl, required: true),
+                            _relationField(),
+                          ),
+                          _pair(
+                            wide,
+                            _dobField(fieldFill, muted, text),
+                            _buildTextField('City', _cityCtrl, required: true, hint: 'e.g. Gandhinagar'),
+                          ),
+                          _pair(
+                            wide,
+                            _buildTextField('Phone Number', _mobileCtrl, required: true, hint: '10-digit phone'),
+                            _buildTextField('Personal Email', _emailCtrl, required: true, hint: 'email@example.com'),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Role',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.2, color: muted),
+                          ),
+                          const SizedBox(height: 8),
+                          _emergencyRow(border, text, muted, fieldFill),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              _roleChip('Dependent', _isDependent, (v) => setState(() => _isDependent = v)),
+                              _roleChip('Employed', _isEmployed, (v) => setState(() => _isEmployed = v)),
+                              _roleChip('Nominee', _isNominee, (v) => setState(() => _isNominee = v)),
+                            ],
+                          ),
+                          if (_isEmployed) ...[
+                            const SizedBox(height: 14),
+                            _buildTextField('Employer Name', _employerCtrl),
+                          ],
+                        ],
+                      );
+                    },
                   ),
                 ),
               ),
-              _buildTextField(
-                'City',
-                _cityCtrl,
-                required: true,
-                hint: 'e.g., Gandhinagar',
+              Divider(height: 1, color: border),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(22, 12, 22, 16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: _saving ? null : () => Navigator.pop(context),
+                      style: TextButton.styleFrom(foregroundColor: muted),
+                      child: const Text('Cancel'),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      onPressed: _saving ? null : _save,
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size(112, 42),
+                        backgroundColor: AppColors.primaryBlue,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      child: _saving
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            )
+                          : const Text('Save'),
+                    ),
+                  ],
+                ),
               ),
-              _buildTextField(
-                'Phone Number',
-                _mobileCtrl,
-                required: true,
-                hint: '10-digit phone',
-              ),
-              _buildTextField(
-                'Personal Email',
-                _emailCtrl,
-                required: true,
-                hint: 'email@example.com',
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Emergency contact'),
-                subtitle: const Text('Mark as primary emergency contact'),
-                value: _isEmergencyContact,
-                onChanged: (v) => setState(() => _isEmergencyContact = v),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                children: [
-                  FilterChip(
-                    label: const Text('Dependent'),
-                    selected: _isDependent,
-                    onSelected: (v) => setState(() => _isDependent = v),
-                  ),
-                  FilterChip(
-                    label: const Text('Employed'),
-                    selected: _isEmployed,
-                    onSelected: (v) => setState(() => _isEmployed = v),
-                  ),
-                  FilterChip(
-                    label: const Text('Is Nominee'),
-                    selected: _isNominee,
-                    onSelected: (v) => setState(() => _isNominee = v),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              if (_isEmployed) _buildTextField('Employer Name', _employerCtrl),
             ],
           ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: _saving ? null : () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: _saving ? null : _save,
-          child: _saving
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Text('Save'),
-        ),
+    );
+  }
+
+  Widget _pair(bool wide, Widget left, Widget right) {
+    if (!wide) return Column(children: [left, right]);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: left),
+        const SizedBox(width: 12),
+        Expanded(child: right),
       ],
+    );
+  }
+
+  Widget _relationField() {
+    return lookupDropdown(
+      ref: ref,
+      category: 'FAMILY_RELATION',
+      label: 'Relation',
+      value: _relation,
+      required: true,
+      fallback: const [
+        LookupOption(id: '1', category: 'FAMILY_RELATION', code: 'FATHER', label: 'Father'),
+        LookupOption(id: '2', category: 'FAMILY_RELATION', code: 'MOTHER', label: 'Mother'),
+        LookupOption(id: '3', category: 'FAMILY_RELATION', code: 'SPOUSE', label: 'Spouse'),
+        LookupOption(id: '4', category: 'FAMILY_RELATION', code: 'SON', label: 'Son'),
+        LookupOption(id: '5', category: 'FAMILY_RELATION', code: 'DAUGHTER', label: 'Daughter'),
+        LookupOption(id: '6', category: 'FAMILY_RELATION', code: 'BROTHER', label: 'Brother'),
+        LookupOption(id: '7', category: 'FAMILY_RELATION', code: 'SISTER', label: 'Sister'),
+        LookupOption(id: '8', category: 'FAMILY_RELATION', code: 'OTHER', label: 'Other'),
+      ],
+      onChanged: (v) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() => _relation = v);
+        });
+      },
+    );
+  }
+
+  Widget _dobField(Color fieldFill, Color muted, Color text) {
+    final dobText = _dateOfBirth == null
+        ? 'dd-mm-yyyy'
+        : '${_dateOfBirth!.day.toString().padLeft(2, '0')}-${_dateOfBirth!.month.toString().padLeft(2, '0')}-${_dateOfBirth!.year}';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: InkWell(
+        onTap: _pickDob,
+        borderRadius: BorderRadius.circular(10),
+        child: InputDecorator(
+          decoration: InputDecoration(
+            labelText: 'Date of Birth',
+            filled: true,
+            fillColor: fieldFill,
+            suffixIcon: Icon(Icons.calendar_today_outlined, size: 18, color: muted),
+          ),
+          child: Text(
+            dobText,
+            style: TextStyle(color: _dateOfBirth == null ? muted : text, fontSize: 14),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _emergencyRow(Color border, Color text, Color muted, Color fieldFill) {
+    final active = _isEmergencyContact;
+    return Material(
+      color: active ? AppColors.primaryBlue.withValues(alpha: 0.08) : fieldFill,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => setState(() => _isEmergencyContact = !active),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: active ? AppColors.primaryBlue.withValues(alpha: 0.45) : border,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.health_and_safety_outlined,
+                size: 20,
+                color: active ? AppColors.primaryBlue : muted,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Emergency contact',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: text),
+                    ),
+                    Text(
+                      'Use this person if we need to reach someone',
+                      style: TextStyle(fontSize: 12, color: muted),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(
+                value: active,
+                onChanged: (v) => setState(() => _isEmergencyContact = v),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _roleChip(String label, bool selected, ValueChanged<bool> onSelected) {
+    return FilterChip(
+      label: Text(label),
+      selected: selected,
+      showCheckmark: false,
+      onSelected: onSelected,
+      labelStyle: TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+        color: selected ? AppColors.primaryBlueDark : AppColors.textPrimary,
+      ),
+      selectedColor: AppColors.primaryBlue.withValues(alpha: 0.12),
+      backgroundColor: Colors.transparent,
+      side: BorderSide(color: selected ? AppColors.primaryBlue : AppColors.border),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
     );
   }
 
@@ -5072,6 +5171,7 @@ Widget _buildTextField(
           decoration: InputDecoration(
             labelText: required ? '$label *' : label,
             hintText: hint ?? (isPhone ? '10-digit number' : null),
+            floatingLabelBehavior: isPhone ? FloatingLabelBehavior.always : FloatingLabelBehavior.auto,
             prefixIcon: isPhone ? buildMobilePrefix(isDark: isDark) : null,
             prefixIconConstraints: isPhone ? const BoxConstraints(minWidth: 0, minHeight: 0) : null,
             filled: readOnly,

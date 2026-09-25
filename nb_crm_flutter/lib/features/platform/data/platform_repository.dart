@@ -1,5 +1,6 @@
 import '../../../core/network/dio_client.dart';
 import '../../rbac/domain/rbac_models.dart';
+import '../domain/app_version_policy.dart';
 import '../domain/platform_models.dart';
 
 class PlatformRepository {
@@ -222,6 +223,39 @@ class PlatformRepository {
             .whereType<Map>()
             .map((m) => CompanyPerson.fromJson(Map<String, dynamic>.from(m)))
             .toList();
+      },
+    );
+  }
+
+  Future<AppVersionPolicy> getAppVersionPolicy() async {
+    return _dio.getEnvelope<AppVersionPolicy>(
+      'platform/app-version',
+      parse: (raw) {
+        if (raw is! Map) throw const FormatException('Invalid app version policy');
+        return AppVersionPolicy.fromJson(Map<String, dynamic>.from(raw));
+      },
+    );
+  }
+
+  Future<AppVersionPolicy> saveAppVersionPolicy({
+    required String minVersion,
+    required String maxVersion,
+    required String updateUrlWeb,
+    required String updateUrlAndroid,
+    required String updateUrlIos,
+  }) async {
+    return _dio.putEnvelope<AppVersionPolicy>(
+      'platform/app-version',
+      data: {
+        'minVersion': minVersion,
+        'maxVersion': maxVersion,
+        'updateUrlWeb': updateUrlWeb,
+        'updateUrlAndroid': updateUrlAndroid,
+        'updateUrlIos': updateUrlIos,
+      },
+      parse: (raw) {
+        if (raw is! Map) throw const FormatException('Invalid app version policy');
+        return AppVersionPolicy.fromJson(Map<String, dynamic>.from(raw));
       },
     );
   }

@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:nb_crm_flutter/core/theme/nb_icon.dart';
-import 'package:go_router/go_router.dart';
 
-import '../logging/app_logger.dart';
+import 'app_route_history.dart';
 
-/// Standard AppBar back control using go_router everywhere.
+/// Standard AppBar back control.
 ///
-/// Pops when possible; otherwise [fallbackLocation] (default `/home`).
+/// Returns to the previous screen in the trail. [fallbackLocation] is used
+/// only when this page was opened directly (no earlier screen).
 class AppBackButton extends StatelessWidget {
   const AppBackButton({
     super.key,
@@ -22,15 +22,7 @@ class AppBackButton extends StatelessWidget {
     return IconButton(
       icon: NbIcon(icon),
       tooltip: 'Back',
-      onPressed: () {
-        if (context.canPop()) {
-          AppLogger.router.d('back pop @ ${GoRouterState.of(context).uri}');
-          context.pop();
-        } else {
-          AppLogger.router.d('back go → $fallbackLocation');
-          context.go(fallbackLocation);
-        }
-      },
+      onPressed: () => tryAppGoBack(context, fallback: fallbackLocation),
     );
   }
 }

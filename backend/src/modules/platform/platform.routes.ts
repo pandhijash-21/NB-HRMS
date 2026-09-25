@@ -3,6 +3,7 @@ import { requireAuth } from '../../middleware/auth';
 import { requireSuperAdmin } from '../../middleware/rbac';
 import { ok, fail } from '../../utils/response';
 import { platformService } from './platform.service';
+import { brandingService } from './branding.service';
 
 export const platformRouter = Router();
 
@@ -275,6 +276,35 @@ platformRouter.delete('/admins/:id/permanent', async (req: Request, res: Respons
     return res.json(ok(result));
   } catch (err: unknown) {
     return res.status(400).json(fail(err instanceof Error ? err.message : 'Failed to permanently delete admin'));
+  }
+});
+
+/**
+ * App release policy. Clients below min_version are blocked.
+ * Clients below max_version (the latest) see a dismissible update notice.
+ */
+platformRouter.get('/app-version', async (_req: Request, res: Response) => {
+  try {
+    const policy = await brandingService.getAppVersionPolicy();
+    return res.json(ok(policy));
+  } catch (err: unknown) {
+    return res.status(500).json(fail(err instanceof Error ? err.message : 'Failed to load app version'));
+  }
+});
+
+platformRouter.put('/app-version', async (req: Request, res: Response) => {
+  try {
+    const policy = await brandingService.setAppVersionPolicy({
+      minVersion: req.body?.minVersion,
+      maxVersion: req.body?.maxVersion,
+      updateUrlWeb: req.body?.updateUrlWeb,
+      updateUrlAndroid: req.body?.updateUrlAndroid,
+      updateUrlIos: req.body?.updateUrlIos,
+      updatedBy: req.user?.id ?? null,
+    });
+    return res.json(ok(policy));
+  } catch (err: unknown) {
+    return res.status(400).json(fail(err instanceof Error ? err.message : 'Failed to save app version'));
   }
 });
 

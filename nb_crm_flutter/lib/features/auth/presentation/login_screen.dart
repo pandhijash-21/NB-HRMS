@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../../../core/app_version.dart';
 import '../../../core/network/api_url_cubit.dart';
 import '../../../core/network/app_config.dart';
 import '../../../core/services/location_access_gate.dart';
@@ -324,6 +325,16 @@ class _BrandOverlay extends StatelessWidget {
                 color: _C.onImage.withValues(alpha: 0.55),
               ),
             ),
+            const SizedBox(height: 8),
+            Text(
+              'Version $kAppVersion',
+              style: GoogleFonts.sourceSans3(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.8,
+                color: _C.goldSoft,
+              ),
+            ),
           ],
         ),
       ),
@@ -444,6 +455,16 @@ class _MobileBrandHeader extends StatelessWidget {
                 style: GoogleFonts.fraunces(
                   fontSize: 28,
                   fontWeight: FontWeight.w600,
+                  color: _C.goldSoft,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Version $kAppVersion',
+                style: GoogleFonts.sourceSans3(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.8,
                   color: _C.goldSoft,
                 ),
               ),
@@ -1018,6 +1039,17 @@ class _LoginCard extends StatelessWidget {
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Version $kAppVersion',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.sourceSans3(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.6,
+                    color: _C.gold,
+                  ),
                 ),
               ],
             ),

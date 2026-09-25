@@ -116,18 +116,14 @@ class AuthRepository {
   }
 
   Future<void> logoutRemote() async {
-    try {
-      await _dio.postEnvelope<Map<String, dynamic>>(
-        'auth/logout',
-        parse: (raw) {
-          if (raw is Map<String, dynamic>) return raw;
-          if (raw is Map) return Map<String, dynamic>.from(raw);
-          return <String, dynamic>{};
-        },
-      );
-    } catch (_) {
-      // Local clear still proceeds even if remote logout fails.
-    }
+    await _dio.postEnvelope<Map<String, dynamic>>(
+      'auth/logout',
+      parse: (raw) {
+        if (raw is Map<String, dynamic>) return raw;
+        if (raw is Map) return Map<String, dynamic>.from(raw);
+        return <String, dynamic>{};
+      },
+    );
   }
 
   Future<void> persistSession({

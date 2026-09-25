@@ -70,6 +70,25 @@ async function deleteSession(userId: string, roleId?: string) {
   }
 }
 
+async function hasOpenTrip(employeeId: number): Promise<boolean> {
+  const trip = await prisma.trip.findFirst({
+    where: { employeeId, endTime: null },
+    select: { id: true },
+  });
+  return trip != null;
+}
+
+async function hasLiveSession(userId: string): Promise<boolean> {
+  try {
+    await connectRedis();
+    const token = await redis.get(`session:${userId}`);
+    return typeof token === 'string' && token.length > 0;
+  } catch (err) {
+    console.warn('Redis session lookup skipped:', err);
+    return false;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Service
 // ---------------------------------------------------------------------------
@@ -243,6 +262,13 @@ export const authService = {
 
     await clearLoginLock({ userId: user.id, aliases });
 
+    if (user.employeeId != null && (await hasOpenTrip(user.employeeId)) && (await hasLiveSession(user.id))) {
+      return {
+        error: 'This account is on a trip. Sign-in is blocked until the trip is completed.',
+        status: 403,
+      } as const;
+    }
+
     // 3. Build permissions map
     const dbRoleName = user.role?.name ?? (isSuperAdminRole(user.username) ? 'SUPERADMIN' : 'STAFF');
     const companyAdminGranted = user.companyAdminGranted === true;
@@ -356,7 +382,18 @@ export const authService = {
   },
 
   async logout(userId: string, roleId: string) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { employeeId: true },
+    });
+    if (user?.employeeId != null && (await hasOpenTrip(user.employeeId))) {
+      return {
+        error: 'You cannot sign out while you are on a trip. Finish the trip first.',
+        status: 403,
+      } as const;
+    }
     await deleteSession(userId, roleId);
+    return { message: 'Logged out' } as const;
   },
 
   async changePassword(userId: string, input: ChangePasswordInput) {
@@ -551,6 +588,8 @@ export const authService = {
     const needsEmergencyContact =
       user.employeeId != null &&
       !(await familyService.hasEmergencyContact(user.employeeId));
+    const onTrip =
+      user.employeeId != null && (await hasOpenTrip(user.employeeId));
     return {
       id: user.id,
       employeeId: user.employeeId,
@@ -569,6 +608,7 @@ export const authService = {
       enabledModules,
       needsEmailVerification: emailStatus.needsEmailVerification,
       needsEmergencyContact,
+      onTrip,
       pendingEmails: emailStatus.emails.filter((e) => !e.verified),
     };
   },

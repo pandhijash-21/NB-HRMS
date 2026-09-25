@@ -12,6 +12,7 @@ import '../../domain/platform_models.dart';
 import '../bloc/platform_console_bloc.dart';
 import '../bloc/platform_console_event.dart';
 import '../bloc/platform_console_state.dart';
+import 'app_version_policy_card.dart';
 import 'company_admin_access_sheet.dart';
 import 'company_grant_admin_sheet.dart';
 
@@ -1780,7 +1781,16 @@ class _PlatformConsoleScreenViewState extends State<_PlatformConsoleScreenView>
       loading: () => const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator())),
       error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: Colors.red))),
       data: (stats) {
-        return Container(
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            AppVersionPolicyCard(
+              surfaceColor: surfaceColor,
+              borderColor: borderColor,
+              textPrimary: textPrimary,
+              textSecondary: textSecondary,
+            ),
+            Container(
           decoration: BoxDecoration(
             color: surfaceColor,
             borderRadius: BorderRadius.circular(14),
@@ -1803,6 +1813,8 @@ class _PlatformConsoleScreenViewState extends State<_PlatformConsoleScreenView>
               _buildDiagRow('System Admin Accounts', '${stats.totalSystemAdmins} Active', textPrimary, textPrimary, borderColor, isLast: true),
             ],
           ),
+        ),
+          ],
         );
       },
     );

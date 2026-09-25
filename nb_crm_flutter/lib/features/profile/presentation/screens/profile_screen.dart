@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/router/app_route_history.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/tour/models/tour_models.dart';
 import '../../../../core/tour/widgets/tour_target.dart';
@@ -115,25 +116,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
             letterSpacing: -0.5,
           ),
         ),
-        leading: widget.employeeId != null
-            ? IconButton(
-                icon: Icon(
-                  Icons.arrow_back_rounded,
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.8)
-                      : const Color(0xFF212F3D),
-                ),
-                onPressed: () => context.pop(),
-              )
-            : IconButton(
-                icon: Icon(
-                  Icons.home_outlined,
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.8)
-                      : const Color(0xFF212F3D),
-                ),
-                onPressed: () => context.go('/home'),
-              ),
+        leading: IconButton(
+          icon: Icon(
+            Icons.arrow_back_rounded,
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.8)
+                : const Color(0xFF212F3D),
+          ),
+          tooltip: 'Back',
+          onPressed: () => tryAppGoBack(context, fallback: '/home'),
+        ),
         actions: [
           if (canEdit)
             Padding(

@@ -12,6 +12,7 @@ class AuthUser {
     this.companyAdminGranted = false,
     this.jobRole,
     this.softwareTourSeen = false,
+    this.onTrip = false,
     this.enabledModules = const ['HRMS', 'CRM', 'ERP'],
   });
 
@@ -28,6 +29,8 @@ class AuthUser {
   final String? jobRole;
   /// True once Mr NB guided tour has been completed (server-backed).
   final bool softwareTourSeen;
+  /// True while this employee has a trip that has not ended.
+  final bool onTrip;
   final List<String> enabledModules;
 
   factory AuthUser.fromJson(Map<String, dynamic> json) {
@@ -69,6 +72,7 @@ class AuthUser {
       companyAdminGranted: granted,
       jobRole: (jobRole != null && jobRole.isNotEmpty) ? jobRole : null,
       softwareTourSeen: json['softwareTourSeen'] == true,
+      onTrip: json['onTrip'] == true,
       enabledModules: mods,
     );
   }
@@ -85,6 +89,7 @@ class AuthUser {
     bool? companyAdminGranted,
     String? jobRole,
     bool? softwareTourSeen,
+    bool? onTrip,
     List<String>? enabledModules,
   }) {
     return AuthUser(
@@ -99,6 +104,7 @@ class AuthUser {
       companyAdminGranted: companyAdminGranted ?? this.companyAdminGranted,
       jobRole: jobRole ?? this.jobRole,
       softwareTourSeen: softwareTourSeen ?? this.softwareTourSeen,
+      onTrip: onTrip ?? this.onTrip,
       enabledModules: enabledModules ?? this.enabledModules,
     );
   }
@@ -115,6 +121,7 @@ class AuthUser {
         'companyAdminGranted': companyAdminGranted,
         'jobRole': jobRole,
         'softwareTourSeen': softwareTourSeen,
+        'onTrip': onTrip,
         'enabledModules': enabledModules,
       };
 }

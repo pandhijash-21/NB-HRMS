@@ -29,7 +29,7 @@ export const authController = {
     const user = req.user!;
     const result = await authService.logout(user.id, user.roleId);
     if (result && 'error' in result) {
-      return res.status(result.status ?? 403).json(fail(result.error));
+      return res.status(result.status ?? 403).json(fail(result.error ?? 'You cannot sign out while you are on a trip. Finish the trip first.'));
     }
     return res.json(ok({ message: result?.message ?? 'Logged out' }));
   },

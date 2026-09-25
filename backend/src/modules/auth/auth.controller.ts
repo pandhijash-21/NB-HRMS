@@ -34,6 +34,14 @@ export const authController = {
     return res.json(ok({ message: result?.message ?? 'Logged out' }));
   },
 
+  async releaseSession(req: Request, res: Response) {
+    const header = req.headers.authorization;
+    const bearer = header?.startsWith('Bearer ') ? header.slice(7) : undefined;
+    const bodyToken = typeof req.body?.token === 'string' ? req.body.token : undefined;
+    const result = await authService.releaseSession(bearer || bodyToken);
+    return res.json(ok(result));
+  },
+
   async changePassword(req: Request, res: Response) {
     const body = ChangePasswordSchema.safeParse(req.body);
     if (!body.success) {

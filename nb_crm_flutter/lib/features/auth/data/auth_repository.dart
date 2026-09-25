@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:dio/dio.dart';
+
 import '../../../core/network/app_config.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/storage/secure_storage_service.dart';
@@ -124,6 +126,23 @@ class AuthRepository {
         return <String, dynamic>{};
       },
     );
+  }
+
+  /// Clears Redis exclusive session even when trip blocks /logout.
+  /// Best-effort — never throws to the caller.
+  Future<void> releaseSessionRemote() async {
+    try {
+      final token = await _storage.readToken();
+      if (token == null || token.isEmpty) return;
+      await _dio.dio.post<Map<String, dynamic>>(
+        'auth/release-session',
+        data: {'token': token},
+        options: Options(
+          headers: {'Authorization': 'Bearer $token'},
+          validateStatus: (s) => s != null && s < 500,
+        ),
+      );
+    } catch (_) {}
   }
 
   Future<void> persistSession({

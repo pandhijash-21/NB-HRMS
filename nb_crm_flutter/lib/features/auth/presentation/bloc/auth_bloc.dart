@@ -286,6 +286,25 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       final tourChanged = tourSeen != (state.user?.softwareTourSeen ?? false);
       final onTrip = me['onTrip'] == true;
       final onTripChanged = onTrip != (state.user?.onTrip ?? false);
+      final refreshedToken = me['token']?.toString();
+
+      // Trip sessions: always persist refreshed JWT so the user is not kicked mid-trip.
+      if (refreshedToken != null &&
+          refreshedToken.isNotEmpty &&
+          state.user != null) {
+        await _repo.persistSession(
+          token: refreshedToken,
+          user: state.user!.copyWith(onTrip: onTrip),
+          permissions: state.permissions,
+          isFirstLogin: state.isFirstLogin,
+          needsEmailVerification: state.needsEmailVerification,
+          needsEmergencyContact: state.needsEmergencyContact,
+        );
+        if (onTrip) {
+          await WebLiveTrackingService.start();
+          unawaited(startBackgroundTracking());
+        }
+      }
 
       if (!permsChanged &&
           !needsChanged &&
@@ -318,7 +337,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       if (state.status != AuthStatus.authenticated) return;
       emit(next);
 
-      final token = await _storage.readToken();
+      final token = refreshedToken?.isNotEmpty == true
+          ? refreshedToken
+          : await _storage.readToken();
       if (token != null && state.user != null) {
         await _repo.persistSession(
           token: token,
@@ -328,6 +349,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           needsEmailVerification: state.needsEmailVerification,
           needsEmergencyContact: state.needsEmergencyContact,
         );
+      }
+      if (onTrip) {
+        await WebLiveTrackingService.start();
+        unawaited(startBackgroundTracking());
       }
     } catch (_) {
       // 401 is triggered via UnauthorizedGate -> AuthUnauthorizedKicked
@@ -339,14 +364,18 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     Emitter<AuthState> emit,
   ) async {
     if (state.status != AuthStatus.authenticated) return;
+    final wasOnTrip = state.user?.onTrip == true;
     WebLiveTrackingService.stop(preventRestart: true);
     unawaited(stopBackgroundTracking());
     _stopSessionWatch();
+    // Release Redis so an open trip cannot permanently block re-login.
+    await _repo.releaseSessionRemote();
     await _repo.clearSession();
 
-    emit(const AuthState.unauthenticated(
-      infoMessage:
-          'You were signed out because this account signed in on another device or browser.',
+    emit(AuthState.unauthenticated(
+      infoMessage: wasOnTrip
+          ? 'Your session ended during a trip. Sign in again — location tracking will resume.'
+          : 'You were signed out because this account signed in on another device or browser.',
     ));
   }
 

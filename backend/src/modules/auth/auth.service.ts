@@ -78,14 +78,56 @@ async function hasOpenTrip(employeeId: number): Promise<boolean> {
   return trip != null;
 }
 
+/**
+ * True only when Redis holds a JWT that still verifies.
+ * Expired/zombie tokens are deleted so an open trip cannot permanently
+ * block re-login after the client was kicked locally.
+ */
 async function hasLiveSession(userId: string): Promise<boolean> {
   try {
     await connectRedis();
     const token = await redis.get(`session:${userId}`);
-    return typeof token === 'string' && token.length > 0;
+    if (typeof token !== 'string' || token.length === 0) return false;
+    try {
+      jwt.verify(token, env.JWT_SECRET);
+      return true;
+    } catch {
+      await redis.del(`session:${userId}`);
+      return false;
+    }
   } catch (err) {
     console.warn('Redis session lookup skipped:', err);
     return false;
+  }
+}
+
+/**
+ * Clear Redis exclusive session for this token.
+ * Safe to call after a local kick even when an open trip would block /logout.
+ * Only deletes if Redis still holds this exact token (won't wipe a newer login).
+ */
+async function releaseSessionForToken(token: string | undefined | null) {
+  if (!token?.trim()) return;
+  try {
+    let userId = '';
+    let roleId: string | undefined;
+    try {
+      const decoded = jwt.verify(token, env.JWT_SECRET) as jwt.JwtPayload;
+      userId = String(decoded.sub ?? '');
+      roleId = decoded.roleId ? String(decoded.roleId) : undefined;
+    } catch {
+      const decoded = jwt.decode(token) as jwt.JwtPayload | null;
+      userId = String(decoded?.sub ?? '');
+      roleId = decoded?.roleId ? String(decoded.roleId) : undefined;
+    }
+    if (!userId) return;
+    await connectRedis();
+    const current = await redis.get(`session:${userId}`);
+    if (current === token) {
+      await deleteSession(userId, roleId);
+    }
+  } catch (err) {
+    console.warn('releaseSessionForToken skipped:', err);
   }
 }
 
@@ -262,12 +304,10 @@ export const authService = {
 
     await clearLoginLock({ userId: user.id, aliases });
 
-    if (user.employeeId != null && (await hasOpenTrip(user.employeeId)) && (await hasLiveSession(user.id))) {
-      return {
-        error: 'This account is on a trip. Sign-in is blocked until the trip is completed.',
-        status: 403,
-      } as const;
-    }
+    // Allow re-login while a trip is open (session overwrite). Blocking here
+    // left users stuck after accidental kick with an orphan Redis session.
+    const onTrip =
+      user.employeeId != null && (await hasOpenTrip(user.employeeId));
 
     // 3. Build permissions map
     const dbRoleName = user.role?.name ?? (isSuperAdminRole(user.username) ? 'SUPERADMIN' : 'STAFF');
@@ -377,6 +417,7 @@ export const authService = {
         employeeViewScope,
         permissions,
         enabledModules,
+        onTrip,
       },
     };
   },
@@ -394,6 +435,12 @@ export const authService = {
     }
     await deleteSession(userId, roleId);
     return { message: 'Logged out' } as const;
+  },
+
+  /** Always clears Redis for this token when it matches — used after client kick. */
+  async releaseSession(token: string | undefined | null) {
+    await releaseSessionForToken(token);
+    return { message: 'Session released' } as const;
   },
 
   async changePassword(userId: string, input: ChangePasswordInput) {
@@ -590,6 +637,35 @@ export const authService = {
       !(await familyService.hasEmergencyContact(user.employeeId));
     const onTrip =
       user.employeeId != null && (await hasOpenTrip(user.employeeId));
+
+    // Keep trip sessions alive: refresh JWT + Redis on every /me so the
+    // employee is not auto-kicked mid-trip when the original 8h JWT expires.
+    let refreshedToken: string | undefined;
+    if (onTrip) {
+      try {
+        refreshedToken = jwt.sign(
+          {
+            sub: user.id,
+            employeeId: user.employeeId ?? null,
+            roleId: dbUser?.roleId ?? user.roleId,
+            roleName: effectiveRoleName,
+            companyAdminGranted,
+            subOrganization,
+            organizationId,
+            employeeViewScope,
+            permissions,
+            enabledModules,
+          },
+          env.JWT_SECRET,
+          { expiresIn: '8h' },
+        );
+        await storeSession(user.id, dbUser?.roleId ?? user.roleId, refreshedToken);
+      } catch (err) {
+        console.warn('Trip session refresh skipped:', err);
+        refreshedToken = undefined;
+      }
+    }
+
     return {
       id: user.id,
       employeeId: user.employeeId,
@@ -609,6 +685,7 @@ export const authService = {
       needsEmailVerification: emailStatus.needsEmailVerification,
       needsEmergencyContact,
       onTrip,
+      ...(refreshedToken ? { token: refreshedToken } : {}),
       pendingEmails: emailStatus.emails.filter((e) => !e.verified),
     };
   },

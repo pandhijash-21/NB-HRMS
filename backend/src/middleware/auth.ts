@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
 import { redis, connectRedis } from '../config/redis';
+import { prisma } from '../config/prisma';
 import { fail } from '../utils/response';
 import {
   permissionsForRole,
@@ -10,6 +11,18 @@ import {
   isSuperAdminRole,
   resolveSystemAdminPermissions,
 } from '../modules/auth/permissions-map';
+
+const SESSION_TTL = 8 * 60 * 60;
+
+async function employeeHasOpenTrip(employeeId: unknown): Promise<boolean> {
+  const id = typeof employeeId === 'number' ? employeeId : Number(employeeId);
+  if (!Number.isFinite(id) || id <= 0) return false;
+  const trip = await prisma.trip.findFirst({
+    where: { employeeId: id, endTime: null },
+    select: { id: true },
+  });
+  return trip != null;
+}
 
 /** One active JWT per user id — newer login overwrites Redis and kicks older devices. */
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
@@ -30,12 +43,20 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       await connectRedis();
       const sessionToken = await redis.get(`session:${userId}`);
       if (!sessionToken || sessionToken !== token) {
-        return res.status(401).json(
-          fail('Session expired or logged in from another device. Please log in again.'),
-        );
+        // Mid-trip: accept a still-valid JWT and reclaim Redis so token refresh
+        // / re-login does not kick the employee off while the trip is open.
+        const onTrip = await employeeHasOpenTrip(decoded.employeeId);
+        if (onTrip) {
+          await redis.set(`session:${userId}`, token, { EX: SESSION_TTL });
+        } else {
+          return res.status(401).json(
+            fail('Session expired or logged in from another device. Please log in again.'),
+          );
+        }
+      } else {
+        // Sliding expiration window: extend active session TTL by 8 hours
+        await redis.expire(`session:${userId}`, SESSION_TTL);
       }
-      // Sliding expiration window: extend active session TTL by 8 hours
-      await redis.expire(`session:${userId}`, 8 * 60 * 60);
     } catch (err) {
       // Fail closed: exclusive sessions require Redis. Do not accept bare JWTs.
       console.error('Redis session validation failed:', err);

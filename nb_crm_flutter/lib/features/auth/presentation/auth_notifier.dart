@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_envelope.dart';
+import '../../../core/services/background_tracking_service.dart';
 import '../../../core/services/web_live_tracking_service.dart';
 import '../domain/auth_user.dart';
 import '../domain/permissions.dart';
@@ -135,6 +136,27 @@ class AuthNotifier extends Notifier<AuthState> {
       final grantedChanged = granted != (state.user?.companyAdminGranted ?? false);
       final onTrip = me['onTrip'] == true;
       final onTripChanged = onTrip != (state.user?.onTrip ?? false);
+      final refreshedToken = me['token']?.toString();
+      final repo = ref.read(authRepositoryProvider);
+
+      // Trip sessions: always persist refreshed JWT so the user is not kicked mid-trip.
+      if (refreshedToken != null &&
+          refreshedToken.isNotEmpty &&
+          state.user != null) {
+        await repo.persistSession(
+          token: refreshedToken,
+          user: state.user!.copyWith(onTrip: onTrip),
+          permissions: state.permissions,
+          isFirstLogin: state.isFirstLogin,
+          needsEmailVerification: state.needsEmailVerification,
+          needsEmergencyContact: state.needsEmergencyContact,
+        );
+        if (onTrip) {
+          await WebLiveTrackingService.start();
+          unawaited(startBackgroundTracking());
+        }
+      }
+
       if (!permsChanged && !needsChanged && !emergencyChanged && !roleChanged && !grantedChanged && !onTripChanged) {
         return;
       }
@@ -152,8 +174,9 @@ class AuthNotifier extends Notifier<AuthState> {
             : state.user,
       );
       _setState(next);
-      final repo = ref.read(authRepositoryProvider);
-      final token = await ref.read(secureStorageProvider).readToken();
+      final token = refreshedToken?.isNotEmpty == true
+          ? refreshedToken
+          : await ref.read(secureStorageProvider).readToken();
       if (token != null && next.user != null) {
         await repo.persistSession(
           token: token,
@@ -163,6 +186,10 @@ class AuthNotifier extends Notifier<AuthState> {
           needsEmailVerification: next.needsEmailVerification,
           needsEmergencyContact: next.needsEmergencyContact,
         );
+      }
+      if (onTrip) {
+        await WebLiveTrackingService.start();
+        unawaited(startBackgroundTracking());
       }
     } catch (_) {
       // 401 is handled by UnauthorizedGate → _handleUnauthorized.
@@ -249,11 +276,16 @@ class AuthNotifier extends Notifier<AuthState> {
     if (state.status != AuthStatus.authenticated) return;
     final repo = ref.read(authRepositoryProvider);
     WebLiveTrackingService.stop(preventRestart: true);
+    unawaited(stopBackgroundTracking());
     _stopSessionWatch();
+    // Release Redis so an open trip cannot permanently block re-login.
+    await repo.releaseSessionRemote();
     await repo.clearSession();
-    state = const AuthState.unauthenticated(
-      infoMessage:
-          'You were signed out because this account signed in on another device or browser.',
+    final wasOnTrip = state.user?.onTrip == true;
+    state = AuthState.unauthenticated(
+      infoMessage: wasOnTrip
+          ? 'Your session ended during a trip. Sign in again — location tracking will resume.'
+          : 'You were signed out because this account signed in on another device or browser.',
     );
   }
 
@@ -300,6 +332,7 @@ class AuthNotifier extends Notifier<AuthState> {
       ref.invalidate(activeProfileEmployeeIdProvider);
       _startSessionWatch();
       await WebLiveTrackingService.start();
+      unawaited(startBackgroundTracking());
       return true;
     } on ApiException catch (e) {
       state = state.copyWith(

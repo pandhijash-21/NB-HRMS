@@ -1,6 +1,8 @@
-﻿import { prisma } from '../../config/prisma';
+import { prisma } from '../../config/prisma';
 import { getRedisClient, connectRedis } from '../../config/redis';
 import { TrackingEventType } from '@prisma/client';
+import jwt from 'jsonwebtoken';
+import { env } from '../../config/env';
 import { deriveDayInOut } from '../attendance/dayPunch.rules';
 import {
   getRecentLocationAlerts,
@@ -415,6 +417,8 @@ export const trackingService = {
       // second ping cannot skip the trip. Barely-outside fixes still need two
       // pings so GPS flicker at the boundary does not open a trip.
       const clearlyOutside = nearestExcessKm >= 0.03 && nearestExcessKm < Number.POSITIVE_INFINITY;
+      // Symmetric: clearly inside (≥30m inside radius) ends on first ping.
+      const clearlyInside = nearestExcessKm <= -0.03;
       const mayStartTrip = wasInside || isPunchedIn;
       const readyToStart =
         isOutsideGeofence &&
@@ -436,7 +440,11 @@ export const trackingService = {
         } catch (err) {
           console.error('[tracking] trip.create failed', err);
         }
-      } else if (!isOutsideGeofence && currentTripId && insideStreak >= 2) {
+      } else if (
+        !isOutsideGeofence &&
+        currentTripId &&
+        (clearlyInside || insideStreak >= 2)
+      ) {
         // Enter any geofence → complete trip
         const tripToEnd =
           activeTrip && activeTrip.id === currentTripId
@@ -688,7 +696,89 @@ export const trackingService = {
       }
     }
 
+    await this.reconcileOrphanOpenTrips();
     await this.checkPunchWindowLocationGaps();
+  },
+
+  /**
+   * If an open trip has no live Redis session and the last GPS point is inside
+   * a geofence, close the trip. Recovers the stuck "signed out but trip active"
+   * state that blocks re-login.
+   */
+  async reconcileOrphanOpenTrips() {
+    const openTrips = await prisma.trip.findMany({
+      where: { endTime: null },
+      include: {
+        employee: { select: { userId: true } },
+      },
+    });
+    if (openTrips.length === 0) return;
+
+    await connectRedis();
+    const redis = getRedisClient();
+    const locations = await prisma.attendanceLocation.findMany({
+      where: { isActive: true },
+    });
+    if (locations.length === 0) return;
+
+    for (const trip of openTrips) {
+      try {
+        const userId = trip.employee?.userId;
+        if (userId) {
+          const sessionToken = await redis.get(`session:${userId}`);
+          if (typeof sessionToken === 'string' && sessionToken.length > 0) {
+            // Session still present — only auto-close if JWT is already dead.
+            try {
+              jwt.verify(sessionToken, env.JWT_SECRET);
+              continue; // Live session — wait for updateLocation to end trip.
+            } catch {
+              await redis.del(`session:${userId}`);
+            }
+          }
+        }
+
+        const lastPoint = await prisma.locationHistory.findFirst({
+          where: { employeeId: trip.employeeId },
+          orderBy: { timestamp: 'desc' },
+        });
+        if (!lastPoint) continue;
+
+        let insideLocId: string | null = null;
+        for (const loc of locations) {
+          const dist = getDistanceFromLatLonInKm(
+            lastPoint.latitude,
+            lastPoint.longitude,
+            loc.latitude,
+            loc.longitude,
+          );
+          if (dist <= loc.radiusKm) {
+            insideLocId = loc.id;
+            break;
+          }
+        }
+        if (!insideLocId) continue;
+
+        try {
+          await finalizeTrip(trip, {
+            latitude: lastPoint.latitude,
+            longitude: lastPoint.longitude,
+            heading: lastPoint.heading ?? 0,
+            endLocationId: insideLocId,
+          });
+          console.log(
+            `[tracking] orphan trip ${trip.id} ended (inside geofence, no live session)`,
+          );
+        } catch (err) {
+          console.error('[tracking] orphan trip finalize failed', trip.id, err);
+          await prisma.trip.update({
+            where: { id: trip.id },
+            data: { endTime: new Date(), endLocationId: insideLocId },
+          });
+        }
+      } catch (err) {
+        console.error('[tracking] orphan trip reconcile skipped', trip.id, err);
+      }
+    }
   },
 
   async getAllLiveLocations(): Promise<LiveLocation[]> {

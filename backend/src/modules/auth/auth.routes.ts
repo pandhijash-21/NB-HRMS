@@ -8,6 +8,8 @@ export const authRouter = Router();
 // Public
 authRouter.post('/login',  authController.login);
 authRouter.get('/branding', authController.getBranding);
+// Clear Redis session after local kick (works even when trip blocks /logout).
+authRouter.post('/release-session', authController.releaseSession);
 
 // Authenticated
 authRouter.post('/logout',          requireAuth, authController.logout);

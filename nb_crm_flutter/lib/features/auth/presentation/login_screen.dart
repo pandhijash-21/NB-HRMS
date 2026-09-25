@@ -15,7 +15,6 @@ import '../../../core/network/app_config.dart';
 import '../../../core/services/location_access_gate.dart';
 import '../../../core/tour/mascot/mascot_clip_registry.dart';
 import '../../../core/widgets/backend_env_switcher.dart';
-import '../../../core/widgets/install_android_app_button.dart';
 import '../data/auth_repository.dart';
 import 'bloc/auth_bloc.dart';
 import 'widgets/auth_widgets.dart';
@@ -29,7 +28,6 @@ class _C {
   static const mute = Color(0xFF6F766F);
   static const line = Color(0xFFE2DDD5);
   static const onImage = Color(0xFFF7F4EE);
-  static const apkBg = Color(0xFFF0E6D4);
 }
 
 class LoginScreen extends StatefulWidget {
@@ -270,74 +268,99 @@ class _BrandOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(48, 36, 36, 32),
+        padding: const EdgeInsets.fromLTRB(48, 24, 36, 20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const _BrandHeader(onDark: true),
-            const Spacer(flex: 2),
-            const _LoginMrNbHello(),
-            const SizedBox(height: 8),
-            Text(
-              'NB CRM',
-              style: GoogleFonts.fraunces(
-                fontSize: 64,
-                fontWeight: FontWeight.w600,
-                height: 0.95,
-                letterSpacing: -1.5,
-                color: _C.goldSoft,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Container(width: 48, height: 2, color: _C.gold),
-            const SizedBox(height: 16),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 380),
-              child: Text(
-                'People, projects, and site progress — one private workspace.',
-                style: GoogleFonts.sourceSans3(
-                  fontSize: 16,
-                  height: 1.45,
-                  color: _C.onImage.withValues(alpha: 0.88),
-                ),
-              ),
-            ),
-            const SizedBox(height: 36),
-            const Row(
-              children: [
-                _FeatureItem(icon: Icons.people_outline_rounded, label: 'Manage Teams'),
-                SizedBox(width: 28),
-                _FeatureItem(icon: Icons.bar_chart_rounded, label: 'Track Progress'),
-                SizedBox(width: 28),
-                _FeatureItem(
-                  icon: Icons.description_outlined,
-                  label: 'Streamline Operations',
-                ),
-              ],
-            ),
-            const Spacer(flex: 4),
-            Text(
-              'HRMS  ·  CRM  ·  ERP',
-              style: GoogleFonts.sourceSans3(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 2.6,
-                color: _C.onImage.withValues(alpha: 0.55),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Version $kAppVersion',
-              style: GoogleFonts.sourceSans3(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.8,
-                color: _C.goldSoft,
+            const SizedBox(height: 12),
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: SizedBox(
+                      width: constraints.maxWidth,
+                      child: const _BrandCopy(),
+                    ),
+                  );
+                },
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _BrandCopy extends StatelessWidget {
+  const _BrandCopy();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const _LoginMrNbHello(),
+        const SizedBox(height: 8),
+        Text(
+          'NB CRM',
+          style: GoogleFonts.fraunces(
+            fontSize: 64,
+            fontWeight: FontWeight.w600,
+            height: 0.95,
+            letterSpacing: -1.5,
+            color: _C.goldSoft,
+          ),
+        ),
+        const SizedBox(height: 16),
+        Container(width: 48, height: 2, color: _C.gold),
+        const SizedBox(height: 16),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 380),
+          child: Text(
+            'People, projects, and site progress — one private workspace.',
+            style: GoogleFonts.sourceSans3(
+              fontSize: 16,
+              height: 1.45,
+              color: _C.onImage.withValues(alpha: 0.88),
+            ),
+          ),
+        ),
+        const SizedBox(height: 28),
+        const Wrap(
+          spacing: 28,
+          runSpacing: 12,
+          children: [
+            _FeatureItem(icon: Icons.people_outline_rounded, label: 'Manage Teams'),
+            _FeatureItem(icon: Icons.bar_chart_rounded, label: 'Track Progress'),
+            _FeatureItem(icon: Icons.description_outlined, label: 'Streamline Operations'),
+          ],
+        ),
+        const SizedBox(height: 28),
+        Text(
+          'HRMS  ·  CRM  ·  ERP',
+          style: GoogleFonts.sourceSans3(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 2.6,
+            color: _C.onImage.withValues(alpha: 0.55),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Version $kAppVersion',
+          style: GoogleFonts.sourceSans3(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.8,
+            color: _C.goldSoft,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -980,43 +1003,6 @@ class _LoginCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (InstallAndroidAppButton.visible) ...[
-                  const SizedBox(height: 12),
-                  Material(
-                    color: _C.apkBg,
-                    borderRadius: BorderRadius.circular(14),
-                    child: InkWell(
-                      onTap: () => InstallAndroidAppButton.download(context),
-                      borderRadius: BorderRadius.circular(14),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 13,
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.android_rounded, color: _C.gold, size: 22),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                'Install Android app (.apk)',
-                                style: GoogleFonts.sourceSans3(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                  color: _C.ink,
-                                ),
-                              ),
-                            ),
-                            Icon(
-                              Icons.chevron_right_rounded,
-                              color: _C.ink.withValues(alpha: 0.4),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
                 if (!kReleaseMode) ...[
                   const SizedBox(height: 12),
                   BackendEnvSwitcher.card(enabled: !submitting),

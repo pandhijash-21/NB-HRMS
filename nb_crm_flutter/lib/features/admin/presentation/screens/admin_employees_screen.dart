@@ -494,7 +494,87 @@ class _AdminEmployeesViewState extends State<_AdminEmployeesView> {
                           ),
                         ),
                       ),
-                    ]
+                    ],
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        _buildPlatformChip(
+                          context: context,
+                          icon: Icons.phone_android_rounded,
+                          label: 'App',
+                          allowed: emp.allowApp,
+                          isDark: isDark,
+                          onToggle: () {
+                            final newVal = !emp.allowApp;
+                            context.read<AdminWorkforceBloc>().add(
+                              AdminWorkforcePlatformAccessUpdated(
+                                employeeId: emp.id,
+                                allowApp: newVal,
+                              ),
+                            );
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(newVal
+                                    ? 'Mobile App access enabled for ${emp.generalInfo?.fullName ?? "employee"}'
+                                    : 'Mobile App access disabled for ${emp.generalInfo?.fullName ?? "employee"}'),
+                                duration: const Duration(seconds: 2),
+                              ),
+                            );
+                          },
+                        ),
+                        _buildPlatformChip(
+                          context: context,
+                          icon: Icons.language_rounded,
+                          label: 'Browser',
+                          allowed: emp.allowBrowser,
+                          isDark: isDark,
+                          onToggle: () {
+                            final newVal = !emp.allowBrowser;
+                            context.read<AdminWorkforceBloc>().add(
+                              AdminWorkforcePlatformAccessUpdated(
+                                employeeId: emp.id,
+                                allowBrowser: newVal,
+                              ),
+                            );
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(newVal
+                                    ? 'Browser access enabled for ${emp.generalInfo?.fullName ?? "employee"}'
+                                    : 'Browser access disabled for ${emp.generalInfo?.fullName ?? "employee"}. Login from browser is now blocked.'),
+                                duration: const Duration(seconds: 3),
+                              ),
+                            );
+                          },
+                        ),
+                        _buildPlatformChip(
+                          context: context,
+                          icon: Icons.timer_outlined,
+                          label: 'Browser after punch-in',
+                          allowed: emp.allowBrowserAfterPunchIn,
+                          isDark: isDark,
+                          onToggle: () {
+                            final newVal = !emp.allowBrowserAfterPunchIn;
+                            context.read<AdminWorkforceBloc>().add(
+                              AdminWorkforcePlatformAccessUpdated(
+                                employeeId: emp.id,
+                                allowBrowserAfterPunchIn: newVal,
+                              ),
+                            );
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(newVal
+                                    ? 'Browser login allowed after punch-in for ${emp.generalInfo?.fullName ?? "employee"}'
+                                    : 'Browser login blocked while punched-in for ${emp.generalInfo?.fullName ?? "employee"}.'),
+                                duration: const Duration(seconds: 3),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -515,22 +595,39 @@ class _AdminEmployeesViewState extends State<_AdminEmployeesView> {
                     ),
                   ),
                   if (!emp.isSystemAdminAccount) ...[
-                  const SizedBox(height: 12),
-                  IconButton(
-                    icon: Icon(
-                      emp.status.toUpperCase() == 'TERMINATED'
-                          ? Icons.delete_forever_rounded
-                          : Icons.person_off_outlined,
-                      color: Colors.red,
-                      size: 20,
+                    const SizedBox(height: 10),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(
+                            Icons.phonelink_setup_rounded,
+                            color: Color(0xFFC5A059),
+                            size: 19,
+                          ),
+                          onPressed: () => _showPlatformAccessDialog(context, emp),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          tooltip: 'Configure App & Browser login access',
+                        ),
+                        const SizedBox(width: 10),
+                        IconButton(
+                          icon: Icon(
+                            emp.status.toUpperCase() == 'TERMINATED'
+                                ? Icons.delete_forever_rounded
+                                : Icons.person_off_outlined,
+                            color: Colors.red,
+                            size: 20,
+                          ),
+                          onPressed: () => _showConfirmDeleteDialog(context, emp),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          tooltip: emp.status.toUpperCase() == 'TERMINATED'
+                              ? 'Permanently delete'
+                              : 'Terminate employee',
+                        ),
+                      ],
                     ),
-                    onPressed: () => _showConfirmDeleteDialog(context, emp),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    tooltip: emp.status.toUpperCase() == 'TERMINATED'
-                        ? 'Permanently delete'
-                        : 'Terminate employee',
-                  ),
                   ],
                 ],
               ),
@@ -634,6 +731,174 @@ class _AdminEmployeesViewState extends State<_AdminEmployeesView> {
       default:
         return Colors.grey;
     }
+  }
+
+  Widget _buildPlatformChip({
+    required BuildContext context,
+    required IconData icon,
+    required String label,
+    required bool allowed,
+    required bool isDark,
+    required VoidCallback onToggle,
+  }) {
+    final activeBg = isDark ? const Color(0xFF1E3A2F) : const Color(0xFFE8F5E9);
+    final activeBorder = isDark ? const Color(0xFF4CAF50) : const Color(0xFF81C784);
+    final activeText = isDark ? const Color(0xFFA5D6A7) : const Color(0xFF2E7D32);
+
+    final inactiveBg = isDark ? const Color(0xFF332020) : const Color(0xFFFFEBEE);
+    final inactiveBorder = isDark ? const Color(0xFFE57373) : const Color(0xFFEF9A9A);
+    final inactiveText = isDark ? const Color(0xFFEF9A9A) : const Color(0xFFC62828);
+
+    final bg = allowed ? activeBg : inactiveBg;
+    final border = allowed ? activeBorder : inactiveBorder;
+    final fg = allowed ? activeText : inactiveText;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onToggle,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: border, width: 1),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 12, color: fg),
+              const SizedBox(width: 4),
+              Text(
+                '$label: ${allowed ? "Allowed" : "Disabled"}',
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w700,
+                  color: fg,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showPlatformAccessDialog(BuildContext context, EmployeeProfile emp) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    bool allowApp = emp.allowApp;
+    bool allowBrowser = emp.allowBrowser;
+    bool allowBrowserAfterPunchIn = emp.allowBrowserAfterPunchIn;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(
+              color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
+              width: 1.5,
+            ),
+          ),
+          title: Row(
+            children: [
+              const Icon(Icons.security_rounded, color: Color(0xFFC5A059), size: 24),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Platform Access Control',
+                  style: TextStyle(
+                    color: isDark ? Colors.white : const Color(0xFF212F3D),
+                    fontWeight: FontWeight.w800,
+                    fontSize: 18,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Control login platform permissions for ${emp.generalInfo?.fullName ?? "this employee"}:',
+                style: TextStyle(
+                  color: isDark ? Colors.white70 : const Color(0xFF607D8B),
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 16),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Allow App', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                subtitle: const Text('Permit login from official mobile apps (Android & iOS)', style: TextStyle(fontSize: 12)),
+                value: allowApp,
+                activeThumbColor: const Color(0xFFC5A059),
+                onChanged: (v) => setLocal(() => allowApp = v),
+              ),
+              const Divider(height: 16),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Allow Browser', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                subtitle: const Text('Permit login from ANY web browser. If disabled, browser login will be blocked and prompt user to use App.', style: TextStyle(fontSize: 12)),
+                value: allowBrowser,
+                activeThumbColor: const Color(0xFFC5A059),
+                onChanged: (v) => setLocal(() => allowBrowser = v),
+              ),
+              const Divider(height: 16),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Allow browser after punch in?', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                subtitle: const Text('If disabled, once punched in, and until punch out, sign-in from any web browser is strictly blocked during working hours.', style: TextStyle(fontSize: 12)),
+                value: allowBrowserAfterPunchIn,
+                activeThumbColor: const Color(0xFFC5A059),
+                onChanged: (v) => setLocal(() => allowBrowserAfterPunchIn = v),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => ctx.pop(),
+              child: Text(
+                'Cancel',
+                style: TextStyle(
+                  color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF607D8B),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            FilledButton(
+              onPressed: () {
+                final messenger = ScaffoldMessenger.of(context);
+                ctx.pop();
+                context.read<AdminWorkforceBloc>().add(
+                  AdminWorkforcePlatformAccessUpdated(
+                    employeeId: emp.id,
+                    allowApp: allowApp,
+                    allowBrowser: allowBrowser,
+                    allowBrowserAfterPunchIn: allowBrowserAfterPunchIn,
+                  ),
+                );
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Text('Platform access permissions saved for ${emp.generalInfo?.fullName ?? "employee"}'),
+                  ),
+                );
+              },
+              style: FilledButton.styleFrom(
+                backgroundColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF263238),
+                foregroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text('Save Changes', style: TextStyle(fontWeight: FontWeight.w800)),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   bool isDark(BuildContext context) => Theme.of(context).brightness == Brightness.dark;
@@ -853,6 +1118,9 @@ class _AddEmployeeDialogState extends ConsumerState<_AddEmployeeDialog> {
   String? _firstApproverUserId;
   String? _secondApproverUserId;
   String? _thirdApproverUserId;
+  bool _allowApp = true;
+  bool _allowBrowser = true;
+  bool _allowBrowserAfterPunchIn = true;
 
   @override
   void dispose() {
@@ -1036,6 +1304,51 @@ class _AddEmployeeDialogState extends ConsumerState<_AddEmployeeDialog> {
               _buildApproverDropdown(isDark, '3rd Reporting', _thirdApproverUserId, names, (v) {
                 setState(() => _thirdApproverUserId = v);
               }),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF2B2722) : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Platform Login Access', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                    const SizedBox(height: 4),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      title: const Text('Allow Mobile App', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                      subtitle: const Text('Allow login from mobile applications', style: TextStyle(fontSize: 11)),
+                      value: _allowApp,
+                      activeThumbColor: const Color(0xFFC5A059),
+                      onChanged: (v) => setState(() => _allowApp = v),
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      title: const Text('Allow Web Browser', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                      subtitle: const Text('Allow login from web browsers (Chrome, Safari, etc.)', style: TextStyle(fontSize: 11)),
+                      value: _allowBrowser,
+                      activeThumbColor: const Color(0xFFC5A059),
+                      onChanged: (v) => setState(() => _allowBrowser = v),
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      title: const Text('Allow browser after punch in?', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                      subtitle: const Text('If disabled, blocks browser login while on duty after punch-in', style: TextStyle(fontSize: 11)),
+                      value: _allowBrowserAfterPunchIn,
+                      activeThumbColor: const Color(0xFFC5A059),
+                      onChanged: (v) => setState(() => _allowBrowserAfterPunchIn = v),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
@@ -1305,6 +1618,9 @@ class _AddEmployeeDialogState extends ConsumerState<_AddEmployeeDialog> {
       'firstApproverUserId': _firstApproverUserId,
       'secondApproverUserId': _secondApproverUserId,
       'thirdApproverUserId': _thirdApproverUserId,
+      'allowApp': _allowApp,
+      'allowBrowser': _allowBrowser,
+      'allowBrowserAfterPunchIn': _allowBrowserAfterPunchIn,
     };
 
     final messenger = ScaffoldMessenger.of(context);

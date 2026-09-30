@@ -180,7 +180,12 @@ class _ErpConfigurationsScreenState extends State<ErpConfigurationsScreen> {
                   ),
               ];
 
+              final paymentTermsMatch = _matches(['Payment Terms', 'Payment', 'Terms', 'Schedule', 'milestones']);
+              final pricingFormulasMatch = _matches(['Pricing', 'Taxes', 'Formula', 'BSV', 'FRC', 'PLC', 'Maintenance', 'GST', 'Stamp Duty', 'Rates']);
+
               final any = project.isNotEmpty ||
+                  paymentTermsMatch ||
+                  pricingFormulasMatch ||
                   resourceTiles.isNotEmpty ||
                   woStatic.isNotEmpty ||
                   contractorLookups.isNotEmpty ||
@@ -202,12 +207,28 @@ class _ErpConfigurationsScreenState extends State<ErpConfigurationsScreen> {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (project.isNotEmpty) ...[
-                    _sectionTitle(isDark, 'Projects'),
-                    _sectionHint(isDark, 'Manage every dropdown used on Add Project.'),
+                  if (project.isNotEmpty || paymentTermsMatch || pricingFormulasMatch) ...[
+                    _sectionTitle(isDark, 'Projects & Commercials'),
+                    _sectionHint(isDark, 'Pricing formulas, payment terms, and dropdowns used on projects and unit pricing.'),
                     const SizedBox(height: 12),
                     ConfigSquareGrid(
                       tiles: [
+                        if (pricingFormulasMatch)
+                          ConfigSquareItem(
+                            title: 'Pricing & Tax Formulas',
+                            subtitle: 'Formulas for BSV, FRC, PLC, Taxes & Maintenance',
+                            icon: Icons.calculate_outlined,
+                            color: const Color(0xFF8B5CF6),
+                            onTap: () => context.go('/erp/configurations/pricing-formulas'),
+                          ),
+                        if (paymentTermsMatch)
+                          ConfigSquareItem(
+                            title: 'Payment Terms',
+                            subtitle: 'Milestone payment schedules & % terms',
+                            icon: Icons.payments_outlined,
+                            color: const Color(0xFF10b981),
+                            onTap: () => context.go('/erp/configurations/payment-terms'),
+                          ),
                         for (final g in project)
                           ConfigSquareItem(
                             title: g.label,

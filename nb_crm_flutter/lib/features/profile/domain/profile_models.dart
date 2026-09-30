@@ -53,6 +53,9 @@ class EmployeeProfile {
   final BankInfo? bankInfo;
   /// Login-only System Admin account (no Employee profile row).
   final bool isSystemAdminAccount;
+  final bool allowApp;
+  final bool allowBrowser;
+  final bool allowBrowserAfterPunchIn;
 
   const EmployeeProfile({
     required this.id,
@@ -70,6 +73,9 @@ class EmployeeProfile {
     this.salaryInfo,
     this.bankInfo,
     this.isSystemAdminAccount = false,
+    this.allowApp = true,
+    this.allowBrowser = true,
+    this.allowBrowserAfterPunchIn = true,
   });
 
   factory EmployeeProfile.fromJson(Map<String, dynamic> json) {
@@ -96,6 +102,15 @@ class EmployeeProfile {
       salaryInfo: salary != null ? SalaryInfo.fromJson(salary) : null,
       bankInfo: bank != null ? BankInfo.fromJson(bank) : null,
       isSystemAdminAccount: json['isSystemAdminAccount'] == true,
+      allowApp: json['allowApp'] is bool
+          ? json['allowApp'] as bool
+          : ((json['user'] as Map?)?['allowApp'] as bool? ?? true),
+      allowBrowser: json['allowBrowser'] is bool
+          ? json['allowBrowser'] as bool
+          : ((json['user'] as Map?)?['allowBrowser'] as bool? ?? true),
+      allowBrowserAfterPunchIn: json['allowBrowserAfterPunchIn'] is bool
+          ? json['allowBrowserAfterPunchIn'] as bool
+          : ((json['user'] as Map?)?['allowBrowserAfterPunchIn'] as bool? ?? true),
     );
   }
 
@@ -105,6 +120,9 @@ class EmployeeProfile {
         'status': status,
         'photoUrl': photoUrl,
         'signatureUrl': signatureUrl,
+        'allowApp': allowApp,
+        'allowBrowser': allowBrowser,
+        'allowBrowserAfterPunchIn': allowBrowserAfterPunchIn,
         'position': position != null
             ? {
                 'id': position!.id,
@@ -123,23 +141,50 @@ class EmployeeProfile {
         'bankInfo': bankInfo?.toJson(),
       };
 
-  EmployeeProfile copyWithMedia({String? photoUrl, String? signatureUrl}) {
+  EmployeeProfile copyWith({
+    int? id,
+    String? abbreviation,
+    String? status,
+    String? photoUrl,
+    String? signatureUrl,
+    EmployeePosition? position,
+    GeneralInfo? generalInfo,
+    PersonalInfo? personalInfo,
+    List<AddressInfo>? addresses,
+    OtherInfo? otherInfo,
+    List<FamilyMember>? familyMembers,
+    List<AcademicQualification>? academicQuals,
+    SalaryInfo? salaryInfo,
+    BankInfo? bankInfo,
+    bool? isSystemAdminAccount,
+    bool? allowApp,
+    bool? allowBrowser,
+    bool? allowBrowserAfterPunchIn,
+  }) {
     return EmployeeProfile(
-      id: id,
-      abbreviation: abbreviation,
-      status: status,
+      id: id ?? this.id,
+      abbreviation: abbreviation ?? this.abbreviation,
+      status: status ?? this.status,
       photoUrl: photoUrl ?? this.photoUrl,
       signatureUrl: signatureUrl ?? this.signatureUrl,
-      position: position,
-      generalInfo: generalInfo,
-      personalInfo: personalInfo,
-      addresses: addresses,
-      otherInfo: otherInfo,
-      familyMembers: familyMembers,
-      academicQuals: academicQuals,
-      salaryInfo: salaryInfo,
-      bankInfo: bankInfo,
+      position: position ?? this.position,
+      generalInfo: generalInfo ?? this.generalInfo,
+      personalInfo: personalInfo ?? this.personalInfo,
+      addresses: addresses ?? this.addresses,
+      otherInfo: otherInfo ?? this.otherInfo,
+      familyMembers: familyMembers ?? this.familyMembers,
+      academicQuals: academicQuals ?? this.academicQuals,
+      salaryInfo: salaryInfo ?? this.salaryInfo,
+      bankInfo: bankInfo ?? this.bankInfo,
+      isSystemAdminAccount: isSystemAdminAccount ?? this.isSystemAdminAccount,
+      allowApp: allowApp ?? this.allowApp,
+      allowBrowser: allowBrowser ?? this.allowBrowser,
+      allowBrowserAfterPunchIn: allowBrowserAfterPunchIn ?? this.allowBrowserAfterPunchIn,
     );
+  }
+
+  EmployeeProfile copyWithMedia({String? photoUrl, String? signatureUrl}) {
+    return copyWith(photoUrl: photoUrl, signatureUrl: signatureUrl);
   }
 
   EmployeeProfile copyWithPersonalInfo(PersonalInfo personalInfo) {

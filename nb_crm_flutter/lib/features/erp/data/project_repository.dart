@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import '../../../core/network/dio_client.dart';
 import '../domain/project_models.dart';
 import '../domain/structure_models.dart';
+import '../domain/pricing_component_models.dart';
 
 class ProjectRepository {
   const ProjectRepository({required DioClient dioClient}) : _dio = dioClient;
@@ -132,6 +133,41 @@ class ProjectRepository {
     );
   }
 
+  Future<ErpProjectTower> deleteUnit({
+    required String projectId,
+    required String towerId,
+    required String unitId,
+  }) async {
+    return _dio.deleteEnvelope<ErpProjectTower>(
+      'projects/$projectId/towers/$towerId/units/$unitId',
+      parse: (raw) => ErpProjectTower.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
+  Future<ErpProjectUnit> createUnit({
+    required String projectId,
+    required String towerId,
+    required Map<String, dynamic> body,
+  }) async {
+    return _dio.postEnvelope<ErpProjectUnit>(
+      'projects/$projectId/towers/$towerId/units',
+      data: body,
+      parse: (raw) => ErpProjectUnit.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
+  Future<ErpProjectTower> batchApplyUnits({
+    required String projectId,
+    required String towerId,
+    required Map<String, dynamic> body,
+  }) async {
+    return _dio.postEnvelope<ErpProjectTower>(
+      'projects/$projectId/towers/$towerId/units/batch-apply',
+      data: body,
+      parse: (raw) => ErpProjectTower.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
   Future<({String url, String? fileName, String? mimeType, int? fileSize})> uploadFile({
     required Uint8List bytes,
     required String filename,
@@ -180,4 +216,135 @@ class ProjectRepository {
       },
     );
   }
+
+  Future<List<ErpPaymentPlan>> listPaymentPlans({bool includeInactive = false}) async {
+    return _dio.getEnvelope<List<ErpPaymentPlan>>(
+      'projects/payment-plans',
+      queryParameters: includeInactive ? {'includeInactive': 'true'} : null,
+      parse: (raw) {
+        if (raw is! List) return const [];
+        return raw
+            .map((e) => ErpPaymentPlan.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList();
+      },
+    );
+  }
+
+  Future<ErpPaymentPlan> getPaymentPlan(String id) async {
+    return _dio.getEnvelope<ErpPaymentPlan>(
+      'projects/payment-plans/$id',
+      parse: (raw) => ErpPaymentPlan.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
+  Future<ErpPaymentPlan> createPaymentPlan(Map<String, dynamic> body) async {
+    return _dio.postEnvelope<ErpPaymentPlan>(
+      'projects/payment-plans',
+      data: body,
+      parse: (raw) => ErpPaymentPlan.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
+  Future<ErpPaymentPlan> updatePaymentPlan(String id, Map<String, dynamic> body) async {
+    return _dio.patchEnvelope<ErpPaymentPlan>(
+      'projects/payment-plans/$id',
+      data: body,
+      parse: (raw) => ErpPaymentPlan.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
+  Future<void> deletePaymentPlan(String id) async {
+    await _dio.deleteEnvelope(
+      'projects/payment-plans/$id',
+      parse: (_) => true,
+    );
+  }
+
+  Future<ErpPaymentPlan> duplicatePaymentPlan(String id) async {
+    return _dio.postEnvelope<ErpPaymentPlan>(
+      'projects/payment-plans/$id/duplicate',
+      data: {},
+      parse: (raw) => ErpPaymentPlan.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
+  Future<List<ErpPaymentTerm>> listPaymentTerms({String? planId}) async {
+    return _dio.getEnvelope<List<ErpPaymentTerm>>(
+      'projects/payment-terms',
+      queryParameters: planId != null ? {'planId': planId} : null,
+      parse: (raw) {
+        if (raw is! List) return const [];
+        return raw
+            .map((e) => ErpPaymentTerm.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList();
+      },
+    );
+  }
+
+  Future<ErpPaymentTerm> createPaymentTerm(Map<String, dynamic> body) async {
+    return _dio.postEnvelope<ErpPaymentTerm>(
+      'projects/payment-terms',
+      data: body,
+      parse: (raw) => ErpPaymentTerm.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
+  Future<ErpPaymentTerm> updatePaymentTerm(String id, Map<String, dynamic> body) async {
+    return _dio.patchEnvelope<ErpPaymentTerm>(
+      'projects/payment-terms/$id',
+      data: body,
+      parse: (raw) => ErpPaymentTerm.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
+  Future<void> deletePaymentTerm(String id) async {
+    await _dio.deleteEnvelope(
+      'projects/payment-terms/$id',
+      parse: (_) => true,
+    );
+  }
+
+  Future<List<ErpPricingComponent>> getPricingComponents({bool includeInactive = true}) async {
+    return _dio.getEnvelope<List<ErpPricingComponent>>(
+      'projects/pricing-components',
+      queryParameters: {'includeInactive': includeInactive},
+      parse: (raw) => (raw as List)
+          .map((m) => ErpPricingComponent.fromJson(Map<String, dynamic>.from(m as Map)))
+          .toList(),
+    );
+  }
+
+  Future<ErpPricingComponent> createPricingComponent(Map<String, dynamic> body) async {
+    return _dio.postEnvelope<ErpPricingComponent>(
+      'projects/pricing-components',
+      data: body,
+      parse: (raw) => ErpPricingComponent.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
+  Future<ErpPricingComponent> updatePricingComponent(String id, Map<String, dynamic> body) async {
+    return _dio.patchEnvelope<ErpPricingComponent>(
+      'projects/pricing-components/$id',
+      data: body,
+      parse: (raw) => ErpPricingComponent.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
+  Future<void> deletePricingComponent(String id) async {
+    await _dio.deleteEnvelope(
+      'projects/pricing-components/$id',
+      parse: (_) => true,
+    );
+  }
+
+  Future<List<ErpPricingComponent>> resetPricingComponents() async {
+    return _dio.postEnvelope<List<ErpPricingComponent>>(
+      'projects/pricing-components/reset',
+      data: {},
+      parse: (raw) => (raw as List)
+          .map((m) => ErpPricingComponent.fromJson(Map<String, dynamic>.from(m as Map)))
+          .toList(),
+    );
+  }
 }
+

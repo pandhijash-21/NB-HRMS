@@ -131,6 +131,32 @@ async function releaseSessionForToken(token: string | undefined | null) {
   }
 }
 
+async function isEmployeeCurrentlyPunchedIn(employeeId: number): Promise<boolean> {
+  const istNow = new Date(Date.now() + 330 * 60 * 1000);
+  const y = istNow.getUTCFullYear();
+  const m = istNow.getUTCMonth();
+  const d = istNow.getUTCDate();
+  const startOfDay = new Date(Date.UTC(y, m, d, -5, -30, 0, 0));
+  const endOfDay = new Date(Date.UTC(y, m, d, 18, 29, 59, 999));
+
+  const punches = await prisma.attendancePunch.findMany({
+    where: {
+      employeeId,
+      punchAt: { gte: startOfDay, lte: endOfDay },
+    },
+    orderBy: { punchAt: 'asc' },
+    select: { punchAt: true, source: true },
+  });
+
+  if (punches.length === 0) return false;
+
+  const mobilePunches = punches.filter((p) => String(p.source) === 'MOBILE_APP');
+  if (mobilePunches.length > 0) {
+    return mobilePunches.length % 2 === 1;
+  }
+  return punches.length % 2 === 1;
+}
+
 // ---------------------------------------------------------------------------
 // Service
 // ---------------------------------------------------------------------------
@@ -303,6 +329,39 @@ export const authService = {
     }
 
     await clearLoginLock({ userId: user.id, aliases });
+
+    // 2.5 Platform access control (Allow App / Allow Browser)
+    const clientPlatform = input.platform ?? 'browser';
+    const isSuperAdminAccount = isSuperAdminRole(user.role?.name) || isSuperAdminRole(user.username);
+    if (!isSuperAdminAccount) {
+      if (user.allowBrowser === false && user.allowApp === false) {
+        return {
+          error: 'Login is disabled for your account (both Mobile App and Browser access are disabled). Please contact your Administrator.',
+          status: 403,
+        } as const;
+      }
+      if (clientPlatform === 'browser' && user.allowBrowser === false) {
+        return {
+          error: 'You are logging in from a web browser, which is not allowed for your account. Please use the official Mobile App.',
+          status: 403,
+        } as const;
+      }
+      if (clientPlatform === 'browser' && user.allowBrowserAfterPunchIn === false && user.employeeId != null) {
+        const isPunchedIn = await isEmployeeCurrentlyPunchedIn(user.employeeId);
+        if (isPunchedIn) {
+          return {
+            error: 'You are currently punched in on duty. Signing in from a web browser is not permitted during your working hours until you punch out. Please use the official Mobile App.',
+            status: 403,
+          } as const;
+        }
+      }
+      if (clientPlatform === 'app' && user.allowApp === false) {
+        return {
+          error: 'You are logging in from the mobile application, which is not allowed for your account. Please use a web browser.',
+          status: 403,
+        } as const;
+      }
+    }
 
     // Allow re-login while a trip is open (session overwrite). Blocking here
     // left users stuck after accidental kick with an orphan Redis session.

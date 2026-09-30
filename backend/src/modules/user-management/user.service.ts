@@ -368,9 +368,20 @@ export const userService = {
       data: {
         ...(input.roleId   ? { roleId: input.roleId }     : {}),
         ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
+        ...(input.allowApp !== undefined ? { allowApp: input.allowApp } : {}),
+        ...(input.allowBrowser !== undefined ? { allowBrowser: input.allowBrowser } : {}),
+        ...(input.allowBrowserAfterPunchIn !== undefined ? { allowBrowserAfterPunchIn: input.allowBrowserAfterPunchIn } : {}),
         updatedBy: requesterId,
       },
-      select: { id: true, employeeId: true, isActive: true, role: { select: { id: true, name: true } } },
+      select: {
+        id: true,
+        employeeId: true,
+        isActive: true,
+        allowApp: true,
+        allowBrowser: true,
+        allowBrowserAfterPunchIn: true,
+        role: { select: { id: true, name: true } },
+      },
     });
 
     // Role changed → force re-login for new permissions
@@ -378,8 +389,8 @@ export const userService = {
       await invalidateSession(id, user.roleId);
     }
 
-    // Deactivated → kick session
-    if (input.isActive === false) {
+    // Deactivated or browser access restricted for another user → kick session
+    if (input.isActive === false || (input.allowBrowser === false && id !== requesterId)) {
       await invalidateSession(id, user.roleId);
     }
 

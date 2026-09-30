@@ -19,6 +19,16 @@ function attachPosition<T extends { user?: { roleId: string } | null }>(
   return { ...employee, position };
 }
 
+async function invalidateSession(userId: string, roleId?: string) {
+  try {
+    await connectRedis();
+    await redis.del(`session:${userId}`);
+    if (roleId) await redis.sRem(`role_users:${roleId}`, userId);
+  } catch {
+    // Redis unavailable — session will expire naturally
+  }
+}
+
 export const employeeService = {
   async list(params: { search?: string; status?: string; limit?: number; offset?: number; subOrganization?: string | null }) {
     const { search, status, limit = 20, offset = 0 } = params;
@@ -56,7 +66,7 @@ export const employeeService = {
         where,
         include: {
           generalInfo: true,
-          user: { select: { roleId: true, role: { select: { name: true } } } },
+          user: { select: { id: true, roleId: true, allowApp: true, allowBrowser: true, allowBrowserAfterPunchIn: true, role: { select: { name: true } } } },
         },
         take: limit,
         skip: offset,
@@ -66,7 +76,15 @@ export const employeeService = {
       loadPositionMapByRoleId(),
     ]);
 
-    const items = rawItems.map((emp) => attachPosition(emp, positionMap));
+    const items = rawItems.map((emp) => {
+      const withPos = attachPosition(emp, positionMap);
+      return {
+        ...withPos,
+        allowApp: emp.user?.allowApp ?? true,
+        allowBrowser: emp.user?.allowBrowser ?? true,
+        allowBrowserAfterPunchIn: emp.user?.allowBrowserAfterPunchIn ?? true,
+      };
+    });
 
     return { items, total };
   },
@@ -108,6 +126,9 @@ export const employeeService = {
         id: true,
         username: true,
         isActive: true,
+        allowApp: true,
+        allowBrowser: true,
+        allowBrowserAfterPunchIn: true,
         subOrganization: true,
         role: { select: { name: true } },
       },
@@ -125,6 +146,9 @@ export const employeeService = {
         abbreviation: 'ADM',
         userId: u.id,
         status: u.isActive ? 'ACTIVE' : 'INACTIVE',
+        allowApp: u.allowApp,
+        allowBrowser: u.allowBrowser,
+        allowBrowserAfterPunchIn: u.allowBrowserAfterPunchIn ?? true,
         photoUrl: null,
         signatureUrl: null,
         isSystemAdminAccount: true,
@@ -157,13 +181,19 @@ export const employeeService = {
           bankInfo: true,
           familyMembers: true,
           academicQuals: true,
-          user: { select: { id: true, roleId: true, role: { select: { id: true, name: true } } } },
+          user: { select: { id: true, roleId: true, allowApp: true, allowBrowser: true, allowBrowserAfterPunchIn: true, role: { select: { id: true, name: true } } } },
         },
       }),
       loadPositionMapByRoleId(),
     ]);
     if (!employee) return null;
-    return attachPosition(employee, positionMap);
+    const withPos = attachPosition(employee, positionMap);
+    return {
+      ...withPos,
+      allowApp: employee.user?.allowApp ?? true,
+      allowBrowser: employee.user?.allowBrowser ?? true,
+      allowBrowserAfterPunchIn: employee.user?.allowBrowserAfterPunchIn ?? true,
+    };
   },
 
   async createFull(input: {
@@ -188,6 +218,9 @@ export const employeeService = {
     instituteId?: string | null;
     subOrganization?: string | null;
     abbreviation?: string | null;
+    allowApp?: boolean;
+    allowBrowser?: boolean;
+    allowBrowserAfterPunchIn?: boolean;
   }, creatorId: string) {
     const instituteRef = await resolveInstituteRef({
       instituteId: input.instituteId,
@@ -286,6 +319,9 @@ export const employeeService = {
           passwordHash,
           adminPasswordEnc: encryptPasswordForAdmin(defaultPassword),
           isFirstLogin: true,
+          allowApp: input.allowApp ?? true,
+          allowBrowser: input.allowBrowser ?? true,
+          allowBrowserAfterPunchIn: input.allowBrowserAfterPunchIn ?? true,
           createdBy: creatorId,
         }
       });
@@ -727,5 +763,67 @@ export const employeeService = {
 
     items.sort((a, b) => a.daysUntil - b.daysUntil || a.name.localeCompare(b.name));
     return { items: items.slice(0, limit), daysAhead };
+  },
+
+  async updatePlatformAccess(
+    employeeId: number,
+    data: { allowApp?: boolean; allowBrowser?: boolean; allowBrowserAfterPunchIn?: boolean },
+    currentUserId?: string,
+  ) {
+    let user = employeeId > 0
+      ? await prisma.user.findFirst({
+          where: { employeeId },
+          include: { role: { select: { id: true, name: true } } },
+        })
+      : null;
+
+    if (!user && employeeId < 0) {
+      const admins = await prisma.user.findMany({
+        where: { deletedAt: null, employeeId: null },
+        include: { role: { select: { id: true, name: true } } },
+      });
+      user = admins.find((u, idx) => {
+        let hash = 0;
+        for (let i = 0; i < u.id.length; i++) hash = (hash * 31 + u.id.charCodeAt(i)) | 0;
+        const sId = -Math.abs(hash || idx + 1);
+        return sId === employeeId;
+      }) ?? null;
+    }
+
+    if (!user) {
+      return { error: 'No user account found for this employee', status: 404 } as const;
+    }
+
+    const updateData: any = {};
+    if (typeof data.allowApp === 'boolean') updateData.allowApp = data.allowApp;
+    if (typeof data.allowBrowser === 'boolean') updateData.allowBrowser = data.allowBrowser;
+    if (typeof data.allowBrowserAfterPunchIn === 'boolean') updateData.allowBrowserAfterPunchIn = data.allowBrowserAfterPunchIn;
+
+    const updated = await prisma.user.update({
+      where: { id: user.id },
+      data: updateData,
+      select: {
+        id: true,
+        employeeId: true,
+        allowApp: true,
+        allowBrowser: true,
+        allowBrowserAfterPunchIn: true,
+      },
+    });
+
+    // Auto-logout from browser ONLY if browser access was explicitly disabled for another employee.
+    // Toggling app access or punch-in rules must NEVER kick browser sessions.
+    // Also protect the active admin from kicking their own session while managing workforce.
+    if (data.allowBrowser === false && user.id !== currentUserId) {
+      await invalidateSession(user.id, user.roleId);
+    }
+
+    return {
+      employeeId,
+      userId: updated.id,
+      allowApp: updated.allowApp,
+      allowBrowser: updated.allowBrowser,
+      allowBrowserAfterPunchIn: updated.allowBrowserAfterPunchIn,
+    };
   },
 };

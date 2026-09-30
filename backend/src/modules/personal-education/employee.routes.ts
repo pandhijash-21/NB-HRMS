@@ -38,5 +38,6 @@ employeeRouter.post('/admin/backfill-assignments', requireAuth, requireEmployeeD
 employeeRouter.post('/:id/institute-transfer', requireAuth, requireAdminTransfer, employeeController.instituteTransfer);
 employeeRouter.post('/:id/designation-upgrade', requireAuth, requireAdminTransfer, employeeController.designationUpgrade);
 employeeRouter.patch('/:id/position', requireAuth, requireEmployeeDirectoryWrite(), employeeController.assignPosition);
+employeeRouter.patch('/:id/platform-access', requireAuth, requireEmployeeDirectoryWrite(), employeeController.updatePlatformAccess);
 employeeRouter.patch('/:id', requireAuth, employeeController.update);
 employeeRouter.delete('/:id', requireAuth, requireEmployeeDirectoryWrite(), employeeController.delete);

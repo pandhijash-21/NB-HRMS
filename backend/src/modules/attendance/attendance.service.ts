@@ -1553,6 +1553,24 @@ export const attendanceService = {
       });
     }
 
+    // If this is a punch-in and browser access during work hours is disabled, invalidate browser session
+    const isPunchIn = (todaysPunchesCount + 1) % 2 === 1;
+    if (isPunchIn) {
+      const u = await prisma.user.findFirst({
+        where: { employeeId: params.employeeId },
+        select: { id: true, roleId: true, allowBrowserAfterPunchIn: true },
+      });
+      if (u && u.allowBrowserAfterPunchIn === false) {
+        try {
+          const { connectRedis, redis } = await import('../../config/redis');
+          await connectRedis();
+          await redis.del(`session:${u.id}`);
+        } catch {
+          // Redis unavailable
+        }
+      }
+    }
+
     return {
       ...row,
       punchAt: row.punchAt.toISOString(),

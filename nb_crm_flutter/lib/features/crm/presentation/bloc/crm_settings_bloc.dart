@@ -36,6 +36,7 @@ class CrmSettingsState extends Equatable {
     this.errorMessage,
     this.settings,
     this.kpiMetrics,
+    this.employees = const [],
     this.isSaving = false,
     this.successMessage,
   });
@@ -44,6 +45,7 @@ class CrmSettingsState extends Equatable {
   final String? errorMessage;
   final CrmSettings? settings;
   final CrmKpiMetrics? kpiMetrics;
+  final List<CrmSalesUser> employees;
   final bool isSaving;
   final String? successMessage;
 
@@ -52,6 +54,7 @@ class CrmSettingsState extends Equatable {
     String? errorMessage,
     CrmSettings? settings,
     CrmKpiMetrics? kpiMetrics,
+    List<CrmSalesUser>? employees,
     bool? isSaving,
     String? successMessage,
   }) {
@@ -60,6 +63,7 @@ class CrmSettingsState extends Equatable {
       errorMessage: errorMessage,
       settings: settings ?? this.settings,
       kpiMetrics: kpiMetrics ?? this.kpiMetrics,
+      employees: employees ?? this.employees,
       isSaving: isSaving ?? this.isSaving,
       successMessage: successMessage,
     );
@@ -71,6 +75,7 @@ class CrmSettingsState extends Equatable {
         errorMessage,
         settings,
         kpiMetrics,
+        employees,
         isSaving,
         successMessage,
       ];
@@ -98,14 +103,17 @@ class CrmSettingsBloc extends Bloc<CrmSettingsEvent, CrmSettingsState> {
       final results = await Future.wait([
         _crmRepository.getSettings(),
         _crmRepository.getKpiMetrics(),
+        _crmRepository.getHrmsEmployees(),
       ]);
       final settings = results[0] as CrmSettings;
       final kpiMetrics = results[1] as CrmKpiMetrics;
+      final employees = results[2] as List<CrmSalesUser>;
 
       emit(state.copyWith(
         status: LoadStatus.success,
         settings: settings,
         kpiMetrics: kpiMetrics,
+        employees: employees,
       ));
     } catch (e) {
       emit(state.copyWith(

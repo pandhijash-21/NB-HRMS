@@ -1105,6 +1105,9 @@ model User {
   adminPasswordEnc  String?   @map("admin_password_enc")
   isFirstLogin      Boolean   @default(true) @map("is_first_login")
   isActive          Boolean   @default(true) @map("is_active")
+  allowApp          Boolean   @default(true) @map("allow_app")
+  allowBrowser      Boolean   @default(true) @map("allow_browser")
+  allowBrowserAfterPunchIn Boolean @default(true) @map("allow_browser_after_punch_in")
   /// Super Admin grant: same tenant privileges as System Admin without changing designation/roleId.
   companyAdminGranted Boolean  @default(false) @map("company_admin_granted")
   /// When set, Mr NB software-tour welcome will not auto-show again for this account.
@@ -2303,6 +2306,7 @@ model ErpProjectUnit {
   unitNo            String   @map("unit_no")
   unitTypeCode      String?  @map("unit_type_code")
   floorNo           Int      @map("floor_no")
+  isDuplex          Boolean  @default(false) @map("is_duplex")
   superBuiltUp      Decimal? @map("super_built_up") @db.Decimal(14, 2)
   carpetArea        Decimal? @map("carpet_area") @db.Decimal(14, 2)
   areaUnitCode      String?  @map("area_unit_code")
@@ -2315,8 +2319,16 @@ model ErpProjectUnit {
   plotArea          Decimal? @map("plot_area") @db.Decimal(14, 2)
   parkingAllocation String?  @map("parking_allocation")
   plc               Decimal? @db.Decimal(14, 2)
+  frc               Decimal? @map("frc") @db.Decimal(14, 2)
+  developmentCharge Decimal? @map("development_charge") @db.Decimal(14, 2)
   baseRate          Decimal? @map("base_rate") @db.Decimal(14, 2)
   totalValue        Decimal? @map("total_value") @db.Decimal(14, 2)
+  totalUnitValue    Decimal? @map("total_unit_value") @db.Decimal(14, 2)
+  taxes             Json?    @map("taxes")
+  maintenance       Json?    @map("maintenance")
+  otherCharges      Json?    @map("other_charges")
+  paymentTerms      Json?    @map("payment_terms")
+  grandTotal        Decimal? @map("grand_total") @db.Decimal(14, 2)
   remarks           String?
   sortOrder         Int      @default(0) @map("sort_order")
 
@@ -2328,6 +2340,62 @@ model ErpProjectUnit {
   @@unique([towerId, unitNo])
   @@index([towerId, floorNo])
   @@map("erp_project_units")
+}
+
+model ErpPaymentPlan {
+  id          String   @id @default(uuid())
+  name        String
+  code        String   @unique
+  description String?
+  isDefault   Boolean  @default(false) @map("is_default")
+  isActive    Boolean  @default(true) @map("is_active")
+  sequence    Int      @default(0)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  terms       ErpPaymentTerm[]
+
+  @@map("erp_payment_plans")
+}
+
+model ErpPaymentTerm {
+  id             String          @id @default(uuid())
+  planId         String?         @map("plan_id")
+  plan           ErpPaymentPlan? @relation(fields: [planId], references: [id], onDelete: Cascade)
+  name           String
+  percentPayment Decimal         @map("percent_payment") @db.Decimal(6, 2)
+  lastDayMonths  Decimal         @map("last_day_months") @db.Decimal(6, 2)
+  sequence       Int             @default(0)
+  isActive       Boolean         @default(true) @map("is_active")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+
+  @@index([planId, sequence])
+  @@index([isActive, sequence])
+  @@map("erp_payment_terms")
+}
+
+model ErpPricingComponent {
+  id             String   @id @default(uuid())
+  category       String   @map("category") // BASE_PRICE | TAX | MAINTENANCE | OTHER_CHARGE
+  code           String   @unique @map("code")
+  name           String   @map("name")
+  formulaType    String   @default("AREA_RATE") @map("formula_type") // AREA_RATE | AREA_BSV | PERCENTAGE | FIXED | DOCS_MULTIPLIER
+  formulaPreview String   @default("") @map("formula_preview")
+  referenceBase  String?  @map("reference_base") // SUPER_BUILT_UP | TOTAL_UNIT_VALUE | BASE_PRICE
+  defaultRate    Decimal? @map("default_rate") @db.Decimal(14, 2)
+  rateUnit       String?  @default("₹/sq.ft") @map("rate_unit")
+  isRequired     Boolean  @default(false) @map("is_required")
+  isActive       Boolean  @default(true) @map("is_active")
+  sequence       Int      @default(0)
+  description    String?
+  metadata       Json?
+
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@index([category, isActive, sequence])
+  @@map("erp_pricing_components")
 }
 
 // =============================================================================
@@ -3501,9 +3569,12 @@ model MeetingUtterance {
 
 enum CrmLeadStatus {
   NOT_STARTED
+  CNR
+  SCHEDULED_VISIT
+  NOT_INTERESTED
+  SITE_VISIT_DONE
   FOLLOW_UP
   INTERESTED
-  NOT_INTERESTED
 }
 
 model CrmProject {
@@ -3577,9 +3648,17 @@ model CrmLead {
   assignedToId    Int?          @map("assigned_to_id")
   telecallerId    Int?          @map("telecaller_id")
   createdById     String?       @map("created_by_id")
-  lastCallAt      DateTime?     @map("last_call_at")
-  notInterestedAt DateTime?     @map("not_interested_at")
-  isDeleted       Boolean       @default(false) @map("is_deleted")
+  lastCallAt            DateTime?     @map("last_call_at")
+  notInterestedAt       DateTime?     @map("not_interested_at")
+  notInterestedReason   String?       @map("not_interested_reason")
+  notInterestedRemark   String?       @map("not_interested_remark") @db.Text
+  scheduledVisitAt      DateTime?     @map("scheduled_visit_at")
+  visitedAt             DateTime?     @map("visited_at")
+  leadSource            String?       @map("lead_source")
+  channelPartnerName    String?       @map("channel_partner_name")
+  referenceType         String?       @map("reference_type")
+  referenceName         String?       @map("reference_name")
+  isDeleted             Boolean       @default(false) @map("is_deleted")
   deletedAt       DateTime?     @map("deleted_at")
   createdAt       DateTime      @default(now()) @map("created_at")
   updatedAt       DateTime      @updatedAt @map("updated_at")

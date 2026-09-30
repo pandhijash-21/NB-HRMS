@@ -487,6 +487,15 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             '  ↳ Headers',
             section: 'CRM',
           ),
+        if (Permissions.canReadCrmPreSales(auth.permissions, auth.user?.role) ||
+            Permissions.canReadCrmDashboard(auth.permissions, auth.user?.role))
+          const _Destination(
+            '/crm/visitor-desk',
+            Icons.meeting_room_outlined,
+            Icons.meeting_room,
+            'Visitor desk',
+            section: 'CRM',
+          ),
         if (Permissions.canReadCrmPostSales(auth.permissions, auth.user?.role))
           const _Destination(
             '/crm/post-sales',

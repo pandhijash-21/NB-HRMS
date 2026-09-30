@@ -5,6 +5,7 @@ export const LoginSchema = z.object({
   identifier: z.string().min(1, 'Employee ID or Username is required'),
   password: z.string().min(1, 'Password is required'),
   portal: z.enum(['superadmin', 'standard']).optional(),
+  platform: z.enum(['app', 'browser', 'mobile', 'web']).optional(),
 });
 
 export const ChangePasswordSchema = z.object({

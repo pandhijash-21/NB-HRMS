@@ -887,12 +887,15 @@ export const crmService = {
 
   async updateLeadStatus(
     leadId: string,
-    status: 'NOT_STARTED' | 'FOLLOW_UP' | 'INTERESTED' | 'NOT_INTERESTED',
+    status: 'NOT_STARTED' | 'CNR' | 'SCHEDULED_VISIT' | 'NOT_INTERESTED' | 'SITE_VISIT_DONE' | 'FOLLOW_UP' | 'INTERESTED',
     payload: {
       scheduledDate?: string;
       scheduledTime?: string;
+      scheduledVisitAt?: string | Date;
       remarks?: string;
       assignedToId?: number;
+      notInterestedReason?: string;
+      notInterestedRemark?: string;
     },
     userContext?: { userId?: string; employeeId?: number; role?: string },
   ) {
@@ -915,8 +918,26 @@ export const crmService = {
 
     if (status === 'NOT_INTERESTED') {
       updateData.notInterestedAt = new Date();
+      if (payload.notInterestedReason) {
+        updateData.notInterestedReason = payload.notInterestedReason;
+      }
+      if (payload.notInterestedRemark) {
+        updateData.notInterestedRemark = payload.notInterestedRemark;
+      }
     } else {
       updateData.notInterestedAt = null;
+    }
+
+    if (status === 'SCHEDULED_VISIT') {
+      if (payload.scheduledVisitAt) {
+        updateData.scheduledVisitAt = new Date(payload.scheduledVisitAt);
+      } else if (payload.scheduledDate) {
+        updateData.scheduledVisitAt = new Date(payload.scheduledDate);
+      }
+    }
+
+    if (status === 'SITE_VISIT_DONE') {
+      updateData.visitedAt = new Date();
     }
 
     let safeAssignedId = existing.assignedToId;
@@ -925,7 +946,7 @@ export const crmService = {
       if (emp) safeAssignedId = emp.id;
     }
 
-    if (status === 'INTERESTED' && safeAssignedId) {
+    if ((status === 'INTERESTED' || status === 'SITE_VISIT_DONE') && safeAssignedId) {
       updateData.assignedToId = safeAssignedId;
     }
 
@@ -937,13 +958,19 @@ export const crmService = {
         orderBy: { createdAt: 'desc' },
       });
 
+      const defaultRemark = status === 'CNR'
+          ? 'CNR - Call rescheduled (Call Not Received)'
+          : (status === 'SCHEDULED_VISIT'
+              ? 'Site Visit Scheduled'
+              : (status === 'INTERESTED' ? 'Interested client sales meeting scheduled' : 'Follow-up scheduled'));
+
       if (existingPending) {
         await prisma.crmFollowUp.update({
           where: { id: existingPending.id },
           data: {
             scheduledDate: scheduledDateTime,
             scheduledTime: payload.scheduledTime,
-            remarks: payload.remarks || (status === 'INTERESTED' ? 'Interested client sales meeting scheduled' : 'Follow-up scheduled'),
+            remarks: payload.remarks || defaultRemark,
             assignedToId: safeAssignedId,
             ...(userContext?.userId && { createdById: userContext.userId }),
           },
@@ -954,7 +981,7 @@ export const crmService = {
             leadId,
             scheduledDate: scheduledDateTime,
             scheduledTime: payload.scheduledTime,
-            remarks: payload.remarks || (status === 'INTERESTED' ? 'Interested client sales meeting scheduled' : 'Follow-up scheduled'),
+            remarks: payload.remarks || defaultRemark,
             assignedToId: safeAssignedId,
             createdById: userContext?.userId,
           },
@@ -979,7 +1006,16 @@ export const crmService = {
 
   async updateLead(
     leadId: string,
-    dto: UpdateLeadDto,
+    dto: UpdateLeadDto & {
+      notInterestedReason?: string;
+      notInterestedRemark?: string;
+      scheduledVisitAt?: string | Date;
+      visitedAt?: string | Date;
+      leadSource?: string;
+      channelPartnerName?: string;
+      referenceType?: string;
+      referenceName?: string;
+    },
     userContext?: { userId?: string; employeeId?: number; role?: string },
   ) {
     const existing = await prisma.crmLead.findUnique({ where: { id: leadId } });
@@ -1019,6 +1055,14 @@ export const crmService = {
           },
         }),
         ...(safeAssignedToId !== undefined && { assignedToId: safeAssignedToId }),
+        ...(dto.notInterestedReason !== undefined && { notInterestedReason: dto.notInterestedReason }),
+        ...(dto.notInterestedRemark !== undefined && { notInterestedRemark: dto.notInterestedRemark }),
+        ...(dto.scheduledVisitAt !== undefined && { scheduledVisitAt: dto.scheduledVisitAt ? new Date(dto.scheduledVisitAt) : null }),
+        ...(dto.visitedAt !== undefined && { visitedAt: dto.visitedAt ? new Date(dto.visitedAt) : null }),
+        ...(dto.leadSource !== undefined && { leadSource: dto.leadSource }),
+        ...(dto.channelPartnerName !== undefined && { channelPartnerName: dto.channelPartnerName }),
+        ...(dto.referenceType !== undefined && { referenceType: dto.referenceType }),
+        ...(dto.referenceName !== undefined && { referenceName: dto.referenceName }),
       },
       include: {
         assignedTo: {
@@ -1232,6 +1276,194 @@ export const crmService = {
   },
 
   // ---------------------------------------------------------------------------
+  // Visitor Lookup & Check-In (Front Desk / Site Visit Desk)
+  // ---------------------------------------------------------------------------
+  async visitorLookup(phone: string) {
+    if (!phone || !phone.trim()) {
+      return { exists: false, message: 'Phone number is required' };
+    }
+    const cleanDigits = phone.replace(/\D/g, '');
+    const last10 = cleanDigits.length >= 10 ? cleanDigits.slice(-10) : cleanDigits;
+
+    const leads = await prisma.crmLead.findMany({
+      where: {
+        isDeleted: false,
+        phone: {
+          contains: last10,
+        },
+      },
+      include: {
+        assignedTo: {
+          include: {
+            generalInfo: {
+              select: { fullName: true, designation: true },
+            },
+          },
+        },
+        followUps: {
+          where: { status: 'PENDING' },
+          orderBy: { scheduledDate: 'desc' },
+          take: 1,
+        },
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    if (!leads || leads.length === 0) {
+      return { exists: false, phone: last10 };
+    }
+
+    const lead = leads[0];
+
+    // Check if scheduled for today
+    let isScheduledToday = false;
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+    if (lead.scheduledVisitAt) {
+      const visitDate = new Date(lead.scheduledVisitAt);
+      const visitStr = `${visitDate.getFullYear()}-${String(visitDate.getMonth() + 1).padStart(2, '0')}-${String(visitDate.getDate()).padStart(2, '0')}`;
+      if (visitStr === todayStr) {
+        isScheduledToday = true;
+      }
+    }
+
+    if (!isScheduledToday && lead.followUps && lead.followUps.length > 0) {
+      const fu = lead.followUps[0];
+      const fuDate = new Date(fu.scheduledDate);
+      const fuStr = `${fuDate.getFullYear()}-${String(fuDate.getMonth() + 1).padStart(2, '0')}-${String(fuDate.getDate()).padStart(2, '0')}`;
+      if (fuStr === todayStr && lead.status === 'SCHEDULED_VISIT') {
+        isScheduledToday = true;
+      }
+    }
+
+    return {
+      exists: true,
+      isScheduledToday,
+      lead,
+    };
+  },
+
+  async visitorCheckin(
+    dto: {
+      leadId?: string;
+      phone: string;
+      name?: string;
+      assignedToId: number;
+      leadSource?: string;
+      channelPartnerName?: string;
+      referenceType?: string;
+      referenceName?: string;
+      remarks?: string;
+    },
+    userContext?: { userId?: string; employeeId?: number; role?: string },
+  ) {
+    if (!dto.assignedToId) {
+      throw new Error('Assigned Sales Representative is required for visitor check-in');
+    }
+
+    const emp = await prisma.employee.findUnique({
+      where: { id: dto.assignedToId },
+      include: { generalInfo: { select: { fullName: true } } },
+    });
+    if (!emp) {
+      throw new Error('Assigned sales representative not found');
+    }
+
+    const now = new Date();
+
+    if (dto.leadId) {
+      const existing = await prisma.crmLead.findUnique({
+        where: { id: dto.leadId },
+      });
+      if (!existing) throw new Error('Lead not found');
+
+      const updated = await prisma.crmLead.update({
+        where: { id: dto.leadId },
+        data: {
+          status: 'SITE_VISIT_DONE',
+          visitedAt: now,
+          scheduledVisitAt: existing.scheduledVisitAt || now,
+          assignedToId: emp.id,
+          ...(dto.leadSource && { leadSource: dto.leadSource }),
+          ...(dto.channelPartnerName && { channelPartnerName: dto.channelPartnerName }),
+          ...(dto.referenceType && { referenceType: dto.referenceType }),
+          ...(dto.referenceName && { referenceName: dto.referenceName }),
+        },
+        include: {
+          assignedTo: {
+            include: { generalInfo: { select: { fullName: true } } },
+          },
+        },
+      });
+
+      await prisma.crmFollowUp.create({
+        data: {
+          leadId: existing.id,
+          scheduledDate: now,
+          scheduledTime: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
+          status: 'COMPLETED',
+          remarks: dto.remarks || `Visitor checked in at site. Assigned to ${emp.generalInfo?.fullName || 'Sales Rep'}. Status: Site Done.`,
+          assignedToId: emp.id,
+          createdById: userContext?.userId,
+        },
+      });
+
+      return updated;
+    }
+
+    // New visitor registration
+    if (!dto.phone || !dto.name) {
+      throw new Error('Name and Phone are required for new visitor check-in');
+    }
+
+    const cleanDigits = dto.phone.replace(/\D/g, '');
+    const defaultCamp = await this.ensureDefaultCampaign('PRE_SALES');
+
+    const newLead = await prisma.crmLead.create({
+      data: {
+        campaignId: defaultCamp.id,
+        phone: cleanDigits || dto.phone,
+        name: dto.name.trim(),
+        status: 'SITE_VISIT_DONE',
+        scheduledVisitAt: now,
+        visitedAt: now,
+        assignedToId: emp.id,
+        leadSource: dto.leadSource || 'Walk IN',
+        channelPartnerName: dto.channelPartnerName,
+        referenceType: dto.referenceType,
+        referenceName: dto.referenceName,
+        createdById: userContext?.userId,
+        customFields: {
+          source: dto.leadSource || 'Walk IN',
+          ...(dto.channelPartnerName && { channel_partner: dto.channelPartnerName }),
+          ...(dto.referenceType && { reference_type: dto.referenceType }),
+          ...(dto.referenceName && { reference_name: dto.referenceName }),
+        },
+      },
+      include: {
+        assignedTo: {
+          include: { generalInfo: { select: { fullName: true } } },
+        },
+      },
+    });
+
+    await prisma.crmFollowUp.create({
+      data: {
+        leadId: newLead.id,
+        scheduledDate: now,
+        scheduledTime: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
+        status: 'COMPLETED',
+        remarks: dto.remarks || `New visitor registered at site desk. Assigned to ${emp.generalInfo?.fullName || 'Sales Rep'}. Status: Site Done.`,
+        assignedToId: emp.id,
+        createdById: userContext?.userId,
+      },
+    });
+
+    return newLead;
+  },
+
+  // ---------------------------------------------------------------------------
   // Settings & Elision Telephony
   // ---------------------------------------------------------------------------
   async getSettings() {
@@ -1247,6 +1479,23 @@ export const crmService = {
       elision_agent_id: '',
       not_interested_retention_days: '30',
       bin_retention_days: '30',
+      not_interested_reasons: JSON.stringify([
+        'Budget mismatch',
+        'Found somewhere else',
+        'Locality mismatch',
+        'Others',
+      ]),
+      lead_sources: JSON.stringify([
+        'Walk IN',
+        'Channel Partner',
+        'Reference',
+      ]),
+      reference_types: JSON.stringify([
+        'B2B',
+        'Employee',
+        'Other Client',
+      ]),
+      site_visit_desk_employee_id: '',
       kpi_show_active_leads: 'true',
       kpi_show_today_followups: 'true',
       kpi_show_interested_deals: 'true',

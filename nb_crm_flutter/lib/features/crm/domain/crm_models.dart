@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 class CrmProject {
   final String id;
   final String name;
@@ -189,20 +191,29 @@ class CrmColumnConfig {
 
 enum CrmStatus {
   notStarted,
+  cnr,
+  scheduledVisit,
+  notInterested,
+  siteVisitDone,
   followUp,
-  interested,
-  notInterested;
+  interested;
 
   String get backendValue {
     switch (this) {
       case CrmStatus.notStarted:
         return 'NOT_STARTED';
+      case CrmStatus.cnr:
+        return 'CNR';
+      case CrmStatus.scheduledVisit:
+        return 'SCHEDULED_VISIT';
+      case CrmStatus.notInterested:
+        return 'NOT_INTERESTED';
+      case CrmStatus.siteVisitDone:
+        return 'SITE_VISIT_DONE';
       case CrmStatus.followUp:
         return 'FOLLOW_UP';
       case CrmStatus.interested:
         return 'INTERESTED';
-      case CrmStatus.notInterested:
-        return 'NOT_INTERESTED';
     }
   }
 
@@ -210,17 +221,29 @@ enum CrmStatus {
     switch (this) {
       case CrmStatus.notStarted:
         return 'Not started';
+      case CrmStatus.cnr:
+        return 'CNR (Call Not received)';
+      case CrmStatus.scheduledVisit:
+        return 'Schedule A Visit';
+      case CrmStatus.notInterested:
+        return 'Not Interested';
+      case CrmStatus.siteVisitDone:
+        return 'Site Done';
       case CrmStatus.followUp:
         return 'Follow up';
       case CrmStatus.interested:
         return 'Interested';
-      case CrmStatus.notInterested:
-        return 'Not interested';
     }
   }
 
   static CrmStatus fromString(String? val) {
     switch (val?.toUpperCase()) {
+      case 'CNR':
+        return CrmStatus.cnr;
+      case 'SCHEDULED_VISIT':
+        return CrmStatus.scheduledVisit;
+      case 'SITE_VISIT_DONE':
+        return CrmStatus.siteVisitDone;
       case 'FOLLOW_UP':
         return CrmStatus.followUp;
       case 'INTERESTED':
@@ -248,6 +271,14 @@ class CrmLead {
   final String? telecallerName;
   final DateTime? lastCallAt;
   final DateTime? notInterestedAt;
+  final String? notInterestedReason;
+  final String? notInterestedRemark;
+  final DateTime? scheduledVisitAt;
+  final DateTime? visitedAt;
+  final String? leadSource;
+  final String? channelPartnerName;
+  final String? referenceType;
+  final String? referenceName;
   final bool isDeleted;
   final DateTime? deletedAt;
   final DateTime createdAt;
@@ -268,6 +299,14 @@ class CrmLead {
     this.telecallerName,
     this.lastCallAt,
     this.notInterestedAt,
+    this.notInterestedReason,
+    this.notInterestedRemark,
+    this.scheduledVisitAt,
+    this.visitedAt,
+    this.leadSource,
+    this.channelPartnerName,
+    this.referenceType,
+    this.referenceName,
     required this.isDeleted,
     this.deletedAt,
     required this.createdAt,
@@ -313,6 +352,14 @@ class CrmLead {
       telecallerName: teleName,
       lastCallAt: json['lastCallAt'] != null ? DateTime.tryParse(json['lastCallAt'].toString()) : null,
       notInterestedAt: json['notInterestedAt'] != null ? DateTime.tryParse(json['notInterestedAt'].toString()) : null,
+      notInterestedReason: json['notInterestedReason'] as String?,
+      notInterestedRemark: json['notInterestedRemark'] as String?,
+      scheduledVisitAt: json['scheduledVisitAt'] != null ? DateTime.tryParse(json['scheduledVisitAt'].toString())?.toLocal() : null,
+      visitedAt: json['visitedAt'] != null ? DateTime.tryParse(json['visitedAt'].toString())?.toLocal() : null,
+      leadSource: json['leadSource'] as String?,
+      channelPartnerName: json['channelPartnerName'] as String?,
+      referenceType: json['referenceType'] as String?,
+      referenceName: json['referenceName'] as String?,
       isDeleted: json['isDeleted'] as bool? ?? false,
       deletedAt: json['deletedAt'] != null ? DateTime.tryParse(json['deletedAt'].toString()) : null,
       createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ?? DateTime.now(),
@@ -428,6 +475,12 @@ class CrmSettings {
   final int notInterestedRetentionDays;
   final int binRetentionDays;
 
+  // Pre-Sales and Visitor Check-in Configurations
+  final List<String> notInterestedReasons;
+  final List<String> leadSources;
+  final List<String> referenceTypes;
+  final int? siteVisitDeskEmployeeId;
+
   // KPI Management Toggles
   final bool kpiShowActiveLeads;
   final bool kpiShowTodayFollowups;
@@ -451,6 +504,23 @@ class CrmSettings {
     required this.elisionAgentId,
     required this.notInterestedRetentionDays,
     required this.binRetentionDays,
+    this.notInterestedReasons = const [
+      'Budget mismatch',
+      'Found somewhere else',
+      'Locality mismatch',
+      'Others',
+    ],
+    this.leadSources = const [
+      'Walk IN',
+      'Channel Partner',
+      'Reference',
+    ],
+    this.referenceTypes = const [
+      'B2B',
+      'Employee',
+      'Other Client',
+    ],
+    this.siteVisitDeskEmployeeId,
     this.kpiShowActiveLeads = true,
     this.kpiShowTodayFollowups = true,
     this.kpiShowInterestedDeals = true,
@@ -462,6 +532,22 @@ class CrmSettings {
     this.kpiShowFreshLeads = true,
     this.kpiShowConversionRate = true,
   });
+
+  static List<String> _parseList(dynamic raw, List<String> fallback) {
+    if (raw == null) return fallback;
+    if (raw is List) return raw.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
+    if (raw is String && raw.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is List) {
+          return decoded.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
+        }
+      } catch (_) {
+        return raw.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+      }
+    }
+    return fallback;
+  }
 
   factory CrmSettings.fromJson(Map<String, dynamic> json) {
     return CrmSettings(
@@ -475,6 +561,23 @@ class CrmSettings {
       elisionAgentId: json['elision_agent_id'] as String? ?? '',
       notInterestedRetentionDays: int.tryParse(json['not_interested_retention_days']?.toString() ?? '30') ?? 30,
       binRetentionDays: int.tryParse(json['bin_retention_days']?.toString() ?? '30') ?? 30,
+      notInterestedReasons: _parseList(json['not_interested_reasons'], const [
+        'Budget mismatch',
+        'Found somewhere else',
+        'Locality mismatch',
+        'Others',
+      ]),
+      leadSources: _parseList(json['lead_sources'], const [
+        'Walk IN',
+        'Channel Partner',
+        'Reference',
+      ]),
+      referenceTypes: _parseList(json['reference_types'], const [
+        'B2B',
+        'Employee',
+        'Other Client',
+      ]),
+      siteVisitDeskEmployeeId: int.tryParse(json['site_visit_desk_employee_id']?.toString() ?? ''),
       kpiShowActiveLeads: json['kpi_show_active_leads']?.toString() != 'false',
       kpiShowTodayFollowups: json['kpi_show_today_followups']?.toString() != 'false',
       kpiShowInterestedDeals: json['kpi_show_interested_deals']?.toString() != 'false',

@@ -312,6 +312,50 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                         ),
                       ),
                       DropdownMenuItem(
+                        value: 'CNR',
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFFF59E0B), shape: BoxShape.circle)),
+                            const SizedBox(width: 8),
+                            Text('CNR', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: isDark ? Colors.white : const Color(0xFF1E293B))),
+                          ],
+                        ),
+                      ),
+                      DropdownMenuItem(
+                        value: 'SCHEDULED_VISIT',
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFF2563EB), shape: BoxShape.circle)),
+                            const SizedBox(width: 8),
+                            Text('Scheduled Visit', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: isDark ? Colors.white : const Color(0xFF1E293B))),
+                          ],
+                        ),
+                      ),
+                      DropdownMenuItem(
+                        value: 'SITE_VISIT_DONE',
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFF10B981), shape: BoxShape.circle)),
+                            const SizedBox(width: 8),
+                            Text('Site Done', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: isDark ? Colors.white : const Color(0xFF1E293B))),
+                          ],
+                        ),
+                      ),
+                      DropdownMenuItem(
+                        value: 'NOT_INTERESTED',
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFFEF4444), shape: BoxShape.circle)),
+                            const SizedBox(width: 8),
+                            Text('Not interested', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: isDark ? Colors.white : const Color(0xFF1E293B))),
+                          ],
+                        ),
+                      ),
+                      DropdownMenuItem(
                         value: 'FOLLOW_UP',
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -330,17 +374,6 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                             Container(width: 8, height: 8, decoration: BoxDecoration(color: isDark ? const Color(0xFF4ADE80) : const Color(0xFF16A34A), shape: BoxShape.circle)),
                             const SizedBox(width: 8),
                             Text('Interested', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: isDark ? Colors.white : const Color(0xFF1E293B))),
-                          ],
-                        ),
-                      ),
-                      DropdownMenuItem(
-                        value: 'NOT_INTERESTED',
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(width: 8, height: 8, decoration: BoxDecoration(color: isDark ? const Color(0xFFF87171) : const Color(0xFFEF4444), shape: BoxShape.circle)),
-                            const SizedBox(width: 8),
-                            Text('Not interested', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: isDark ? Colors.white : const Color(0xFF1E293B))),
                           ],
                         ),
                       ),
@@ -549,15 +582,14 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                           ),
                         ),
                         const DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
-                        const DataColumn(label: Text('Assigned Sales Rep', style: TextStyle(fontWeight: FontWeight.bold))),
                         ...columns.map((c) => DataColumn(label: Text(c.label, style: const TextStyle(fontWeight: FontWeight.bold)))),
                         const DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold))),
                       ],
                       rows: List.generate(leads.length, (index) {
                         final lead = leads[index];
 
-                        // Telecaller Edit Lock Rule:
-                        // If lead is assigned, ONLY Admin or the Assigned Sales Rep can alter it.
+                        // Telecaller Limitation:
+                        // Telecallers only alter status, schedule calls/visits, or mark not interested.
                         final isAssigned = lead.assignedToId != null;
                         final isAssignedSalesRep = userEmployeeId != null && userEmployeeId == lead.assignedToId;
                         final canAlterLead = canWrite && (!isAssigned || isAdmin || isAssignedSalesRep);
@@ -582,22 +614,9 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                               ),
                             ),
 
-                            // Status Column (Editable if permitted, locked badge if telecaller on assigned lead)
+                            // Status Column (4 telecaller statuses)
                             DataCell(
                               _buildStatusDropdown(context, lead, canAlterLead, salesUsers),
-                            ),
-
-                            // Assigned Sales User Column (Interactive if permitted, locked badge if telecaller)
-                            DataCell(
-                              _buildAssignedUserDropdown(
-                                context,
-                                lead,
-                                salesUsers,
-                                isDark,
-                                primaryColor,
-                                textMuted,
-                                canAlterLead,
-                              ),
                             ),
 
                             // Dynamic Columns (Honoring column visibility)
@@ -669,140 +688,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // Interactive Assigned Sales User Dropdown in Table Cell (With Telecaller Lock)
-  // ---------------------------------------------------------------------------
-  Widget _buildAssignedUserDropdown(
-    BuildContext context,
-    CrmLead lead,
-    List<CrmSalesUser> salesUsers,
-    bool isDark,
-    Color primaryColor,
-    Color textMuted,
-    bool canAlter,
-  ) {
-    // 1. Build a map of unique users by employeeId
-    final uniqueUsers = <int, CrmSalesUser>{};
-    for (final u in salesUsers) {
-      uniqueUsers[u.employeeId] = u;
-    }
 
-    // 2. If the lead has an assignedToId that isn't in uniqueUsers yet, add it
-    if (lead.assignedToId != null && !uniqueUsers.containsKey(lead.assignedToId)) {
-      uniqueUsers[lead.assignedToId!] = CrmSalesUser(
-        employeeId: lead.assignedToId!,
-        fullName: lead.assignedToName ?? 'Employee #${lead.assignedToId}',
-        designation: 'Sales',
-      );
-    }
-
-    // 3. Dropdown value must either be null or one of the unique keys
-    final selectedValue = (lead.assignedToId != null && uniqueUsers.containsKey(lead.assignedToId))
-        ? lead.assignedToId
-        : null;
-
-    final isAssigned = selectedValue != null;
-    final assignedName = isAssigned ? uniqueUsers[selectedValue]!.fullName : 'Unassigned';
-
-    // If telecaller is locked out of altering this assigned lead:
-    if (!canAlter && isAssigned) {
-      return Tooltip(
-        message: 'Assigned to $assignedName — Only Admins and assigned rep can alter.',
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          decoration: BoxDecoration(
-            color: Colors.amber.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.amber.withValues(alpha: 0.35)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.lock_rounded, size: 14, color: Colors.amber),
-              const SizedBox(width: 6),
-              Text(
-                assignedName,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.amber,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: isAssigned
-            ? primaryColor.withValues(alpha: 0.08)
-            : (isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFF1F5F9)),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: isAssigned
-              ? primaryColor.withValues(alpha: 0.3)
-              : (isDark ? Colors.white.withValues(alpha: 0.15) : const Color(0xFFCBD5E1)),
-        ),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<int?>(
-          value: selectedValue,
-          isDense: true,
-          dropdownColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
-          borderRadius: BorderRadius.circular(10),
-          icon: Icon(Icons.arrow_drop_down_rounded, size: 18, color: isAssigned ? primaryColor : (isDark ? Colors.white70 : textMuted)),
-          hint: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.person_outline_rounded, size: 14, color: isDark ? Colors.white70 : textMuted),
-              const SizedBox(width: 4),
-              Text('Unassigned', style: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : textMuted)),
-            ],
-          ),
-          items: [
-            DropdownMenuItem<int?>(
-              value: null,
-              child: Text('Unassigned', style: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : textMuted)),
-            ),
-            ...uniqueUsers.values.map((u) {
-              return DropdownMenuItem<int?>(
-                value: u.employeeId,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.badge_outlined, size: 14, color: primaryColor),
-                    const SizedBox(width: 6),
-                    Text(
-                      u.fullName,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: isDark ? Colors.white : const Color(0xFF1E293B),
-                      ),
-                    ),
-                    if (u.designation != null && u.designation!.isNotEmpty) ...[
-                      const SizedBox(width: 4),
-                      Text('(${u.designation})', style: TextStyle(fontSize: 11, color: textMuted)),
-                    ],
-                  ],
-                ),
-              );
-            }),
-          ],
-          onChanged: (newEmpId) {
-            if (newEmpId == selectedValue) return;
-
-            context.read<CrmLeadsBloc>().add(
-              CrmLeadsLeadUpdated(lead.id, {'assignedToId': newEmpId}),
-            );
-          },
-        ),
-      ),
-    );
-  }
 
   // ---------------------------------------------------------------------------
   // Status Dropdown with Modal Triggers (With Telecaller Lock)
@@ -825,6 +711,26 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
         badgeFg = isDark ? const Color(0xFFE2E8F0) : const Color(0xFF475569);
         badgeBorder = isDark ? Colors.white.withValues(alpha: 0.20) : const Color(0xFFCBD5E1);
         break;
+      case CrmStatus.cnr:
+        badgeBg = const Color(0xFFF59E0B).withValues(alpha: isDark ? 0.22 : 0.12);
+        badgeFg = isDark ? const Color(0xFFFBBF24) : const Color(0xFFD97706);
+        badgeBorder = const Color(0xFFF59E0B).withValues(alpha: isDark ? 0.45 : 0.35);
+        break;
+      case CrmStatus.scheduledVisit:
+        badgeBg = const Color(0xFF2563EB).withValues(alpha: isDark ? 0.22 : 0.12);
+        badgeFg = isDark ? const Color(0xFF60A5FA) : const Color(0xFF1D4ED8);
+        badgeBorder = const Color(0xFF2563EB).withValues(alpha: isDark ? 0.45 : 0.35);
+        break;
+      case CrmStatus.notInterested:
+        badgeBg = const Color(0xFFEF4444).withValues(alpha: isDark ? 0.22 : 0.12);
+        badgeFg = isDark ? const Color(0xFFF87171) : const Color(0xFFB91C1C);
+        badgeBorder = const Color(0xFFEF4444).withValues(alpha: isDark ? 0.45 : 0.35);
+        break;
+      case CrmStatus.siteVisitDone:
+        badgeBg = const Color(0xFF10B981).withValues(alpha: isDark ? 0.22 : 0.12);
+        badgeFg = isDark ? const Color(0xFF34D399) : const Color(0xFF047857);
+        badgeBorder = const Color(0xFF10B981).withValues(alpha: isDark ? 0.45 : 0.35);
+        break;
       case CrmStatus.followUp:
         badgeBg = const Color(0xFFEA580C).withValues(alpha: isDark ? 0.22 : 0.12);
         badgeFg = isDark ? const Color(0xFFFB923C) : const Color(0xFFC2410C);
@@ -834,11 +740,6 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
         badgeBg = const Color(0xFF16A34A).withValues(alpha: isDark ? 0.22 : 0.12);
         badgeFg = isDark ? const Color(0xFF4ADE80) : const Color(0xFF15803D);
         badgeBorder = const Color(0xFF16A34A).withValues(alpha: isDark ? 0.45 : 0.35);
-        break;
-      case CrmStatus.notInterested:
-        badgeBg = const Color(0xFFEF4444).withValues(alpha: isDark ? 0.22 : 0.12);
-        badgeFg = isDark ? const Color(0xFFF87171) : const Color(0xFFB91C1C);
-        badgeBorder = const Color(0xFFEF4444).withValues(alpha: isDark ? 0.45 : 0.35);
         break;
     }
 
@@ -868,6 +769,17 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
       );
     }
 
+    // Telecaller 4 primary statuses: Not started, CNR, Schedule A Visit, Not Interested
+    final dropdownItems = <CrmStatus>[
+      CrmStatus.notStarted,
+      CrmStatus.cnr,
+      CrmStatus.scheduledVisit,
+      CrmStatus.notInterested,
+    ];
+    if (!dropdownItems.contains(lead.status)) {
+      dropdownItems.add(lead.status);
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
@@ -884,12 +796,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
           icon: Icon(Icons.arrow_drop_down_rounded, size: 18, color: badgeFg),
           style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: badgeFg),
           selectedItemBuilder: (BuildContext ctx) {
-            return const [
-              CrmStatus.notStarted,
-              CrmStatus.followUp,
-              CrmStatus.interested,
-              CrmStatus.notInterested,
-            ].map((s) {
+            return dropdownItems.map((s) {
               return Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
@@ -899,25 +806,29 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
               );
             }).toList();
           },
-          items: const [
-            CrmStatus.notStarted,
-            CrmStatus.followUp,
-            CrmStatus.interested,
-            CrmStatus.notInterested,
-          ].map((s) {
+          items: dropdownItems.map((s) {
             Color dotColor;
             switch (s) {
               case CrmStatus.notStarted:
                 dotColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+                break;
+              case CrmStatus.cnr:
+                dotColor = const Color(0xFFF59E0B);
+                break;
+              case CrmStatus.scheduledVisit:
+                dotColor = const Color(0xFF2563EB);
+                break;
+              case CrmStatus.notInterested:
+                dotColor = const Color(0xFFEF4444);
+                break;
+              case CrmStatus.siteVisitDone:
+                dotColor = const Color(0xFF10B981);
                 break;
               case CrmStatus.followUp:
                 dotColor = isDark ? const Color(0xFFFB923C) : const Color(0xFFEA580C);
                 break;
               case CrmStatus.interested:
                 dotColor = isDark ? const Color(0xFF4ADE80) : const Color(0xFF16A34A);
-                break;
-              case CrmStatus.notInterested:
-                dotColor = isDark ? const Color(0xFFF87171) : const Color(0xFFEF4444);
                 break;
             }
             return DropdownMenuItem<CrmStatus>(
@@ -949,14 +860,18 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
           onChanged: (newStatus) {
             if (newStatus == null || newStatus == lead.status) return;
 
-            if (newStatus == CrmStatus.followUp) {
+            if (newStatus == CrmStatus.cnr) {
+              _showCnrModal(context, lead);
+            } else if (newStatus == CrmStatus.scheduledVisit) {
+              _showScheduleVisitModal(context, lead);
+            } else if (newStatus == CrmStatus.notInterested) {
+              _showNotInterestedModal(context, lead, context.read<CrmLeadsBloc>().state.settings);
+            } else if (newStatus == CrmStatus.notStarted) {
+              _updateLeadStatus(lead.id, 'NOT_STARTED');
+            } else if (newStatus == CrmStatus.followUp) {
               _showFollowUpSchedulingModal(context, lead);
             } else if (newStatus == CrmStatus.interested) {
               _showInterestedSalesAssignmentModal(context, lead);
-            } else if (newStatus == CrmStatus.notInterested) {
-              _updateLeadStatus(lead.id, 'NOT_INTERESTED');
-            } else {
-              _updateLeadStatus(lead.id, 'NOT_STARTED');
             }
           },
         ),
@@ -2561,13 +2476,575 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     );
   }
 
+  void _showCnrModal(BuildContext context, CrmLead lead) {
+    final tomorrow = DateTime.now().add(const Duration(hours: 24));
+    DateTime selectedDate = tomorrow;
+    TimeOfDay selectedTime = TimeOfDay.fromDateTime(tomorrow);
+    final remarkController = TextEditingController(text: 'CNR - Call Not Received. Auto rescheduled after 24 hours.');
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            final isDark = Theme.of(ctx).brightness == Brightness.dark;
+            final dateStr = DateFormat('yyyy-MM-dd').format(selectedDate);
+            final timeStr = '${selectedTime.hour.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}';
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.phone_missed_rounded, color: Color(0xFFF59E0B), size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'CNR — Auto Reschedule',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 440,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF59E0B).withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.25)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.info_outline_rounded, size: 16, color: Color(0xFFD97706)),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Call Not Received: Auto-scheduled for +24 hours.',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: isDark ? Colors.amber.shade200 : const Color(0xFFB45309),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Client: ${lead.name.isNotEmpty ? lead.name : "Unnamed"} • ${lead.phone}',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: isDark ? Colors.white : const Color(0xFF1E293B),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      const Text('Rescheduled Date', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      InkWell(
+                        onTap: () async {
+                          final picked = await showDatePicker(
+                            context: ctx,
+                            initialDate: selectedDate,
+                            firstDate: DateTime.now(),
+                            lastDate: DateTime.now().add(const Duration(days: 365)),
+                          );
+                          if (picked != null) {
+                            setModalState(() => selectedDate = picked);
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: isDark ? Colors.white24 : Colors.grey.shade400),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(DateFormat('dd MMM yyyy (EEE)').format(selectedDate), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                              const Icon(Icons.calendar_today_rounded, size: 18),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      const Text('Rescheduled Time', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      InkWell(
+                        onTap: () async {
+                          final picked = await showTimePicker(
+                            context: ctx,
+                            initialTime: selectedTime,
+                          );
+                          if (picked != null) {
+                            setModalState(() => selectedTime = picked);
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: isDark ? Colors.white24 : Colors.grey.shade400),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(selectedTime.format(ctx), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                              const Icon(Icons.access_time_rounded, size: 18),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      const Text('Remark', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: remarkController,
+                        maxLines: 2,
+                        decoration: InputDecoration(
+                          hintText: 'Enter call remark...',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogCtx),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.check_circle_rounded, size: 18),
+                  label: const Text('Confirm Reschedule'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFD97706),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: () {
+                    Navigator.pop(dialogCtx);
+                    _updateLeadStatus(
+                      lead.id,
+                      'CNR',
+                      scheduledDate: dateStr,
+                      scheduledTime: timeStr,
+                      remarks: remarkController.text.trim(),
+                    );
+                  },
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showScheduleVisitModal(BuildContext context, CrmLead lead) {
+    final tomorrow = DateTime.now().add(const Duration(days: 1));
+    DateTime selectedDate = tomorrow;
+    TimeOfDay selectedTime = const TimeOfDay(hour: 11, minute: 0);
+    final remarkController = TextEditingController(text: 'Site visit scheduled.');
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            final isDark = Theme.of(ctx).brightness == Brightness.dark;
+            final dateStr = DateFormat('yyyy-MM-dd').format(selectedDate);
+            final timeStr = '${selectedTime.hour.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}';
+            final visitDateTime = DateTime(
+              selectedDate.year,
+              selectedDate.month,
+              selectedDate.day,
+              selectedTime.hour,
+              selectedTime.minute,
+            );
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2563EB).withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.calendar_month_rounded, color: Color(0xFF2563EB), size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Schedule A Site Visit',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 460,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Client Details Card
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: isDark ? Colors.white12 : const Color(0xFFE2E8F0)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'CLIENT DETAILS',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.8,
+                                color: Color(0xFF2563EB),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                const Icon(Icons.person_outline_rounded, size: 16),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    lead.name.isNotEmpty ? lead.name : 'Client Name Not Set',
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Row(
+                              children: [
+                                const Icon(Icons.phone_outlined, size: 16),
+                                const SizedBox(width: 8),
+                                Text(
+                                  lead.phone.isNotEmpty ? '+91 ${lead.phone}' : 'No phone',
+                                  style: const TextStyle(fontSize: 13),
+                                ),
+                              ],
+                            ),
+                            if (lead.campaignName != null && lead.campaignName!.isNotEmpty) ...[
+                              const SizedBox(height: 6),
+                              Row(
+                                children: [
+                                  const Icon(Icons.campaign_rounded, size: 16),
+                                  const SizedBox(width: 8),
+                                  Text('Campaign: ${lead.campaignName}', style: const TextStyle(fontSize: 13)),
+                                ],
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      const Text('Site Visit Date', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      InkWell(
+                        onTap: () async {
+                          final picked = await showDatePicker(
+                            context: ctx,
+                            initialDate: selectedDate,
+                            firstDate: DateTime.now(),
+                            lastDate: DateTime.now().add(const Duration(days: 365)),
+                          );
+                          if (picked != null) {
+                            setModalState(() => selectedDate = picked);
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: isDark ? Colors.white24 : Colors.grey.shade400),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(DateFormat('dd MMMM yyyy (EEEE)').format(selectedDate), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                              const Icon(Icons.calendar_today_rounded, size: 18),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      const Text('Site Visit Time', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      InkWell(
+                        onTap: () async {
+                          final picked = await showTimePicker(
+                            context: ctx,
+                            initialTime: selectedTime,
+                          );
+                          if (picked != null) {
+                            setModalState(() => selectedTime = picked);
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: isDark ? Colors.white24 : Colors.grey.shade400),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(selectedTime.format(ctx), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                              const Icon(Icons.access_time_rounded, size: 18),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      const Text('Notes / Visit Instructions', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: remarkController,
+                        maxLines: 2,
+                        decoration: InputDecoration(
+                          hintText: 'e.g. Client interested in 3BHK tower A...',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogCtx),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.schedule_rounded, size: 18),
+                  label: const Text('Confirm Site Visit'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2563EB),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: () {
+                    Navigator.pop(dialogCtx);
+                    _updateLeadStatus(
+                      lead.id,
+                      'SCHEDULED_VISIT',
+                      scheduledDate: dateStr,
+                      scheduledTime: timeStr,
+                      scheduledVisitAt: visitDateTime.toIso8601String(),
+                      remarks: remarkController.text.trim(),
+                    );
+                  },
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showNotInterestedModal(BuildContext context, CrmLead lead, CrmSettings? settings) {
+    final configuredReasons = settings?.notInterestedReasons ?? [];
+    final reasons = configuredReasons.isNotEmpty
+        ? configuredReasons
+        : [
+            'Budget mismatch',
+            'Found somewhere else',
+            'Locality mismatch',
+            'Others',
+          ];
+
+    String selectedReason = reasons.contains('Budget mismatch') ? 'Budget mismatch' : reasons.first;
+    final remarkController = TextEditingController();
+    String? remarkError;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            final isOthers = selectedReason.trim().toLowerCase() == 'others';
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEF4444).withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.thumb_down_alt_rounded, color: Color(0xFFEF4444), size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Mark as Not Interested',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 440,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Select the reason why ${lead.name.isNotEmpty ? lead.name : "the client"} is not interested:',
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                      const SizedBox(height: 14),
+
+                      const Text('Reason', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        initialValue: reasons.contains(selectedReason) ? selectedReason : reasons.first,
+                        decoration: InputDecoration(
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        items: reasons.map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setModalState(() {
+                              selectedReason = val;
+                              remarkError = null;
+                            });
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 14),
+
+                      Row(
+                        children: [
+                          const Text('Remark', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                          if (isOthers) ...[
+                            const SizedBox(width: 6),
+                            const Text('(Mandatory for "Others")', style: TextStyle(fontSize: 11, color: Colors.redAccent, fontWeight: FontWeight.w600)),
+                          ] else ...[
+                            const SizedBox(width: 6),
+                            const Text('(Optional)', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: remarkController,
+                        maxLines: 3,
+                        decoration: InputDecoration(
+                          hintText: isOthers ? 'Please describe reason in detail...' : 'Additional notes (optional)...',
+                          errorText: remarkError,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        onChanged: (_) {
+                          if (remarkError != null) {
+                            setModalState(() => remarkError = null);
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogCtx),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.close_rounded, size: 18),
+                  label: const Text('Mark Not Interested'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFEF4444),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: () {
+                    final remark = remarkController.text.trim();
+                    if (isOthers && remark.isEmpty) {
+                      setModalState(() {
+                        remarkError = 'Please enter a remark explaining the reason.';
+                      });
+                      return;
+                    }
+
+                    Navigator.pop(dialogCtx);
+                    _updateLeadStatus(
+                      lead.id,
+                      'NOT_INTERESTED',
+                      notInterestedReason: selectedReason,
+                      notInterestedRemark: remark,
+                    );
+                  },
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _updateLeadStatus(
     String leadId,
     String status, {
     String? scheduledDate,
     String? scheduledTime,
+    String? scheduledVisitAt,
     String? remarks,
     int? assignedToId,
+    String? notInterestedReason,
+    String? notInterestedRemark,
   }) {
     context.read<CrmLeadsBloc>().add(
           CrmLeadsLeadStatusUpdated(
@@ -2575,8 +3052,11 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
             status: status,
             scheduledDate: scheduledDate,
             scheduledTime: scheduledTime,
+            scheduledVisitAt: scheduledVisitAt,
             remarks: remarks,
             assignedToId: assignedToId,
+            notInterestedReason: notInterestedReason,
+            notInterestedRemark: notInterestedRemark,
           ),
         );
   }

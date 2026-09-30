@@ -17,8 +17,11 @@ export const CreateUserSchema = z.object({
 export const UpdateUserSchema = z.object({
   roleId:   z.string().uuid().optional(),
   isActive: z.boolean().optional(),
-}).refine((d) => d.roleId !== undefined || d.isActive !== undefined, {
-  message: 'At least one field (roleId or isActive) must be provided',
+  allowApp: z.boolean().optional(),
+  allowBrowser: z.boolean().optional(),
+  allowBrowserAfterPunchIn: z.boolean().optional(),
+}).refine((d) => d.roleId !== undefined || d.isActive !== undefined || d.allowApp !== undefined || d.allowBrowser !== undefined || d.allowBrowserAfterPunchIn !== undefined, {
+  message: 'At least one field must be provided',
 });
 
 export const CreateRoleSchema = z.object({

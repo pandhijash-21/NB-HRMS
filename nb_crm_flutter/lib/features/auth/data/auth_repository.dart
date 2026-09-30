@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 import '../../../core/network/app_config.dart';
 import '../../../core/network/dio_client.dart';
@@ -28,6 +29,7 @@ class AuthRepository {
       data: {
         'identifier': identifier.trim(),
         'password': password,
+        'platform': kIsWeb ? 'browser' : 'app',
         if (portal != null) 'portal': portal,
       },
       parse: (raw) {

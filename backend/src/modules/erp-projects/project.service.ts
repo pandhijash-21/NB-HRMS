@@ -59,12 +59,16 @@ function parseDocuments(raw: unknown): DocInput[] {
   return out;
 }
 
-function amenitiesCode(raw: unknown): string | null {
+function multiCode(raw: unknown): string | null {
   if (Array.isArray(raw)) {
     const codes = raw.map((v) => str(v)).filter((v): v is string => Boolean(v));
     return codes.length ? codes.join(',') : null;
   }
   return str(raw);
+}
+
+function amenitiesCode(raw: unknown): string | null {
+  return multiCode(raw);
 }
 
 function mapBody(body: Record<string, unknown>) {
@@ -94,11 +98,15 @@ function mapBody(body: Record<string, unknown>) {
     areaCode: str(body.areaCode),
     pincode: str(body.pincode),
     totalPlotArea: dec(body.totalPlotArea),
-    amenitiesCode: amenitiesCode(body.amenitiesCodes ?? body.amenitiesCode),
-    livabilityCode: str(body.livabilityCode),
-    bankTieUpCode: str(body.bankTieUpCode),
-    developmentAuthorityCode: str(body.developmentAuthorityCode),
-    electricityProviderCode: str(body.electricityProviderCode),
+    amenitiesCode: multiCode(body.amenitiesCodes ?? body.amenitiesCode),
+    livabilityCode: multiCode(body.livabilityCodes ?? body.livabilityCode),
+    bankTieUpCode: multiCode(body.bankTieUpCodes ?? body.bankTieUpCode),
+    developmentAuthorityCode: multiCode(
+      body.developmentAuthorityCodes ?? body.devAuthorityCodes ?? body.developmentAuthorityCode,
+    ),
+    electricityProviderCode: multiCode(
+      body.electricityProviderCodes ?? body.elecProviderCodes ?? body.electricityProviderCode,
+    ),
     specNotes: str(body.specNotes),
   };
 }

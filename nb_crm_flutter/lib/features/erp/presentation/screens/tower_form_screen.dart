@@ -218,8 +218,8 @@ class _TowerFormScreenState extends State<TowerFormScreen> {
                   const SizedBox(height: 6),
                   Text(
                     total > 0
-                        ? 'This will create $total units ($floors × $flats) on $floorRange.'
-                        : 'Total units = number of floors × flats per floor.',
+                        ? 'This will create $total units ($floors × $flats) on $floorRange. Duplex units (occupying 2 floors) and floor-wise units can be customized under Manage Tower.'
+                        : 'Total units = number of floors × flats per floor. Duplex units and floor-wise customizations can be configured under Manage Tower.',
                     style: TextStyle(
                       fontSize: 13,
                       color: isDark ? Colors.white54 : const Color(0xFF607D8B),

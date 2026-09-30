@@ -3,6 +3,35 @@ import { ok, fail } from '../../utils/response';
 import { authService } from './auth.service';
 import { LoginSchema, ChangePasswordSchema } from './auth.types';
 
+export function detectClientPlatform(req: Request, bodyPlatform?: string): 'browser' | 'app' {
+  const explicit = (bodyPlatform || (req.headers['x-client-platform'] as string) || '').toLowerCase().trim();
+
+  const hasSecChUa = Boolean(req.headers['sec-ch-ua']);
+  const hasSecFetch = Boolean(req.headers['sec-fetch-mode'] || req.headers['sec-fetch-dest'] || req.headers['sec-fetch-site']);
+  const userAgent = String(req.headers['user-agent'] || '');
+  const isDartIo = /dart/i.test(userAgent);
+  const isStandardBrowser = /mozilla.*(chrome|safari|firefox|edge|opera|trident)/i.test(userAgent);
+
+  // If request contains browser headers (sec-ch-ua, sec-fetch, etc.), it is definitely a browser, even if someone claims platform=app
+  if (hasSecChUa || hasSecFetch || (isStandardBrowser && !isDartIo)) {
+    return 'browser';
+  }
+
+  if (explicit === 'browser' || explicit === 'web') {
+    return 'browser';
+  }
+
+  if (explicit === 'app' || explicit === 'mobile' || isDartIo) {
+    return 'app';
+  }
+
+  if (req.headers['origin'] || req.headers['referer']) {
+    return 'browser';
+  }
+
+  return 'app';
+}
+
 export const authController = {
   async login(req: Request, res: Response) {
     const body = LoginSchema.safeParse(req.body);
@@ -12,7 +41,8 @@ export const authController = {
 
     try {
       const portal = body.data.portal ?? (req.headers['x-auth-portal'] === 'superadmin' ? 'superadmin' : undefined);
-      const result = await authService.login({ ...body.data, portal });
+      const platform = detectClientPlatform(req, body.data.platform);
+      const result = await authService.login({ ...body.data, portal, platform });
 
       if ('error' in result) {
         return res.status(result.status ?? 400).json(fail(result.error ?? 'Error'));

@@ -216,6 +216,24 @@ class AdminRepository {
     );
   }
 
+  /// Update platform login permissions (allowApp, allowBrowser, allowBrowserAfterPunchIn).
+  Future<Map<String, dynamic>> updatePlatformAccess(
+    int employeeId, {
+    bool? allowApp,
+    bool? allowBrowser,
+    bool? allowBrowserAfterPunchIn,
+  }) async {
+    return _dio.patchEnvelope<Map<String, dynamic>>(
+      'employees/$employeeId/platform-access',
+      data: {
+        if (allowApp != null) 'allowApp': allowApp,
+        if (allowBrowser != null) 'allowBrowser': allowBrowser,
+        if (allowBrowserAfterPunchIn != null) 'allowBrowserAfterPunchIn': allowBrowserAfterPunchIn,
+      },
+      parse: (raw) => Map<String, dynamic>.from(raw as Map),
+    );
+  }
+
   Exception _mapDioException(DioException e) {
     final data = e.response?.data;
     if (data is Map) {

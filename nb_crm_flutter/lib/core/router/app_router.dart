@@ -82,6 +82,8 @@ import '../../features/rbac/presentation/screens/admin_role_detail_screen.dart';
 import '../../features/org_tree/presentation/screens/employee_tree_screen.dart';
 import '../../features/erp/presentation/screens/erp_home_screen.dart';
 import '../../features/erp/presentation/screens/erp_configurations_screen.dart';
+import '../../features/erp/presentation/screens/payment_terms_config_screen.dart';
+import '../../features/erp/presentation/screens/pricing_formulas_config_screen.dart';
 import '../../features/erp/presentation/screens/projects_list_screen.dart';
 import '../../features/erp/presentation/screens/project_form_screen.dart';
 import '../../features/erp/presentation/screens/project_structure_screen.dart';
@@ -123,6 +125,7 @@ import '../../features/crm/presentation/screens/crm_headers_screen.dart';
 import '../../features/crm/presentation/screens/crm_post_sales_screen.dart';
 import '../../features/crm/presentation/screens/crm_settings_screen.dart';
 import '../../features/crm/presentation/screens/crm_bin_screen.dart';
+import '../../features/crm/presentation/screens/crm_visitor_desk_screen.dart';
 import '../../features/platform/presentation/screens/platform_console_screen.dart';
 import '../../features/tour/presentation/software_tour_hub_screen.dart';
 import '../../features/earth/presentation/screens/earth_hub_screen.dart';
@@ -485,6 +488,10 @@ GoRouter createAppRouter(AuthBloc authBloc) {
             builder: (context, state) => const CrmSettingsScreen(),
           ),
           GoRoute(
+            path: '/crm/visitor-desk',
+            builder: (context, state) => const CrmVisitorDeskScreen(),
+          ),
+          GoRoute(
             path: '/org-tree',
             builder: (context, state) => const EmployeeTreeScreen(),
           ),
@@ -585,6 +592,14 @@ GoRouter createAppRouter(AuthBloc authBloc) {
           GoRoute(
             path: '/erp/configurations',
             builder: (context, state) => const ErpConfigurationsScreen(),
+          ),
+          GoRoute(
+            path: '/erp/configurations/payment-terms',
+            builder: (context, state) => const PaymentTermsConfigScreen(),
+          ),
+          GoRoute(
+            path: '/erp/configurations/pricing-formulas',
+            builder: (context, state) => const PricingFormulasConfigScreen(),
           ),
           GoRoute(
             path: '/erp/configurations/activities',

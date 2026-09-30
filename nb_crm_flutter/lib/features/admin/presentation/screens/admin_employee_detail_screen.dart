@@ -341,9 +341,163 @@ class _AdminEmployeeDetailScreenState extends ConsumerState<AdminEmployeeDetailS
               ],
             ),
           ),
+          const SizedBox(width: 16),
+          // Platform Access Control Card
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF2B2722) : const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
+                width: 1,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.security_rounded, size: 14, color: Color(0xFFC5A059)),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Platform Login Access',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: isDark ? Colors.white70 : const Color(0xFF212F3D),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    _buildAccessChip(
+                      icon: Icons.phone_android_rounded,
+                      label: 'App',
+                      allowed: profile.allowApp,
+                      isDark: isDark,
+                      onToggle: () => _updatePlatformAccess(profile.id, allowApp: !profile.allowApp),
+                    ),
+                    _buildAccessChip(
+                      icon: Icons.language_rounded,
+                      label: 'Browser',
+                      allowed: profile.allowBrowser,
+                      isDark: isDark,
+                      onToggle: () => _updatePlatformAccess(profile.id, allowBrowser: !profile.allowBrowser),
+                    ),
+                    _buildAccessChip(
+                      icon: Icons.timer_outlined,
+                      label: 'Browser After Punch-In',
+                      allowed: profile.allowBrowserAfterPunchIn,
+                      isDark: isDark,
+                      onToggle: () => _updatePlatformAccess(
+                        profile.id,
+                        allowBrowserAfterPunchIn: !profile.allowBrowserAfterPunchIn,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
+  }
+
+  Widget _buildAccessChip({
+    required IconData icon,
+    required String label,
+    required bool allowed,
+    required bool isDark,
+    required VoidCallback onToggle,
+  }) {
+    final activeBg = isDark ? const Color(0xFF1E3A2F) : const Color(0xFFE8F5E9);
+    final activeBorder = isDark ? const Color(0xFF4CAF50) : const Color(0xFF81C784);
+    final activeText = isDark ? const Color(0xFFA5D6A7) : const Color(0xFF2E7D32);
+
+    final inactiveBg = isDark ? const Color(0xFF332020) : const Color(0xFFFFEBEE);
+    final inactiveBorder = isDark ? const Color(0xFFE57373) : const Color(0xFFEF9A9A);
+    final inactiveText = isDark ? const Color(0xFFEF9A9A) : const Color(0xFFC62828);
+
+    final bg = allowed ? activeBg : inactiveBg;
+    final border = allowed ? activeBorder : inactiveBorder;
+    final fg = allowed ? activeText : inactiveText;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onToggle,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: border, width: 1),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 14, color: fg),
+              const SizedBox(width: 5),
+              Text(
+                '$label: ${allowed ? "Allowed" : "Disabled"}',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: fg,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _updatePlatformAccess(
+    int employeeId, {
+    bool? allowApp,
+    bool? allowBrowser,
+    bool? allowBrowserAfterPunchIn,
+  }) async {
+    try {
+      final repo = ref.read(adminRepositoryProvider);
+      await repo.updatePlatformAccess(
+        employeeId,
+        allowApp: allowApp,
+        allowBrowser: allowBrowser,
+        allowBrowserAfterPunchIn: allowBrowserAfterPunchIn,
+      );
+      ref.invalidate(employeeProfileByIdProvider(employeeId));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(allowBrowserAfterPunchIn != null
+              ? (allowBrowserAfterPunchIn
+                  ? 'Browser access after punch-in allowed'
+                  : 'Browser access after punch-in disabled (Blocked while on duty)')
+              : (allowBrowser != null
+                  ? (allowBrowser
+                      ? 'Browser access enabled'
+                      : 'Browser access disabled (Login from browser blocked)')
+                  : (allowApp! ? 'Mobile App access enabled' : 'Mobile App access disabled'))),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to update platform access: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
 
   Widget _buildAssignmentSection(BuildContext context, AsyncValue<List<EmployeeAssignment>> assignmentsAsync) {

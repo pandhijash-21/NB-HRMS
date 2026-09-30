@@ -220,13 +220,30 @@ export const crmController = {
   async updateLeadStatus(req: Request, res: Response) {
     try {
       const id = String(req.params.id);
-      const { status, scheduledDate, scheduledTime, remarks, assignedToId } = req.body;
+      const {
+        status,
+        scheduledDate,
+        scheduledTime,
+        remarks,
+        assignedToId,
+        notInterestedReason,
+        notInterestedRemark,
+        scheduledVisitAt,
+      } = req.body;
       const authUser = (req as any).user;
 
       const updated = await crmService.updateLeadStatus(
         id,
         status,
-        { scheduledDate, scheduledTime, remarks, assignedToId },
+        {
+          scheduledDate,
+          scheduledTime,
+          remarks,
+          assignedToId,
+          notInterestedReason,
+          notInterestedRemark,
+          scheduledVisitAt,
+        },
         {
           userId: authUser?.id,
           employeeId: authUser?.employeeId,
@@ -236,6 +253,30 @@ export const crmController = {
       res.json(ok(updated));
     } catch (err: any) {
       res.status(400).json(fail(err.message || 'Failed to update lead status'));
+    }
+  },
+
+  async visitorLookup(req: Request, res: Response) {
+    try {
+      const phone = String(req.query.phone || '');
+      const result = await crmService.visitorLookup(phone);
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to lookup visitor'));
+    }
+  },
+
+  async visitorCheckin(req: Request, res: Response) {
+    try {
+      const authUser = (req as any).user;
+      const result = await crmService.visitorCheckin(req.body, {
+        userId: authUser?.id,
+        employeeId: authUser?.employeeId,
+        role: authUser?.role,
+      });
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to check-in visitor'));
     }
   },
 

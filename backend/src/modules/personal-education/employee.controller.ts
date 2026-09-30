@@ -235,6 +235,9 @@ export const employeeController = {
       positionDesignationId: z.string().uuid().optional().nullable(),
       roleId: z.string().uuid().optional().nullable(),
       abbreviation: z.string().min(1).max(10).optional().nullable(),
+      allowApp: z.boolean().optional(),
+      allowBrowser: z.boolean().optional(),
+      allowBrowserAfterPunchIn: z.boolean().optional(),
     }).superRefine((data, ctx) => {
       const personal = data.personalEmail?.trim() || '';
       const institute = data.institutionalEmail?.trim() || '';
@@ -305,5 +308,31 @@ export const employeeController = {
     const deleted = await employeeService.softDelete(id, req.user!.id);
     if (!deleted) return res.status(404).json(fail('Employee not found'));
     return res.json(ok({ message: 'Employee terminated successfully', status: 'TERMINATED' }));
+  },
+
+  async updatePlatformAccess(req: Request, res: Response) {
+    const employeeId = Number(req.params.id);
+    if (!Number.isFinite(employeeId)) return res.status(400).json(fail('Invalid employee id'));
+
+    const Schema = z.object({
+      allowApp: z.boolean().optional(),
+      allowBrowser: z.boolean().optional(),
+      allowBrowserAfterPunchIn: z.boolean().optional(),
+    }).refine((d) => d.allowApp !== undefined || d.allowBrowser !== undefined || d.allowBrowserAfterPunchIn !== undefined, {
+      message: 'At least one field (allowApp, allowBrowser, or allowBrowserAfterPunchIn) must be provided',
+    });
+
+    const body = Schema.safeParse(req.body);
+    if (!body.success) return res.status(400).json(fail(body.error.issues[0]?.message ?? 'Validation error'));
+
+    if (!canWriteEmployeeDirectory(req.user)) {
+      return res.status(403).json(fail('You do not have permission to manage platform access'));
+    }
+    const allowed = await employeeMatchesDirectoryScope(employeeId, req.user);
+    if (!allowed) return res.status(403).json(fail('Employee is outside your access scope'));
+
+    const result = await employeeService.updatePlatformAccess(employeeId, body.data, req.user?.id);
+    if ('error' in result) return res.status(result.status ?? 400).json(fail(result.error ?? 'Error'));
+    return res.json(ok(result));
   },
 };

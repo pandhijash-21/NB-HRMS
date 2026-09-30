@@ -99,6 +99,10 @@ crmRouter.get('/follow-ups', generalCrmGuard, crmController.getFollowUps);
 crmRouter.post('/follow-ups', generalCrmGuard, crmController.createFollowUp);
 crmRouter.patch('/follow-ups/:id/complete', generalCrmGuard, crmController.completeFollowUp);
 
+// Visitor Check-In Desk
+crmRouter.get('/visitor-lookup', generalCrmGuard, crmController.visitorLookup);
+crmRouter.post('/visitor-checkin', generalCrmGuard, crmController.visitorCheckin);
+
 // HRMS Sales Users
 crmRouter.get('/sales-users', generalCrmGuard, crmController.getSalesUsers);
 

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -60,6 +61,29 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
   bool _kpiShowConversionRate = true;
   bool _kpiLoaded = false;
 
+  // Pre-Sales & Front Desk Configuration
+  bool _presalesConfigLoaded = false;
+  List<String> _notInterestedReasons = [
+    'Budget mismatch',
+    'Found somewhere else',
+    'Locality mismatch',
+    'Others',
+  ];
+  List<String> _leadSources = [
+    'Walk IN',
+    'Channel Partner',
+    'Reference',
+  ];
+  List<String> _referenceTypes = [
+    'B2B',
+    'Employee',
+    'Other Client',
+  ];
+  int? _siteVisitDeskEmployeeId;
+  final _newReasonController = TextEditingController();
+  final _newSourceController = TextEditingController();
+  final _newRefTypeController = TextEditingController();
+
   bool _telephonyLoaded = false;
   List<CrmTelecallerTelephony> _telecallers = [];
   bool _telecallersLoading = false;
@@ -74,9 +98,9 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _tabController.addListener(() {
-      if (_tabController.index == 0 && _telecallers.isEmpty && !_telecallersLoading) {
+      if (_tabController.index == 1 && _telecallers.isEmpty && !_telecallersLoading) {
         _loadTelecallers();
       }
     });
@@ -98,6 +122,9 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
     _tcAgentController.dispose();
     _notInterestedDaysController.dispose();
     _binDaysController.dispose();
+    _newReasonController.dispose();
+    _newSourceController.dispose();
+    _newRefTypeController.dispose();
     super.dispose();
   }
 
@@ -195,6 +222,13 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
       _kpiShowConversionRate = settings.kpiShowConversionRate;
       _kpiLoaded = true;
     }
+    if (!_presalesConfigLoaded) {
+      _notInterestedReasons = List<String>.from(settings.notInterestedReasons);
+      _leadSources = List<String>.from(settings.leadSources);
+      _referenceTypes = List<String>.from(settings.referenceTypes);
+      _siteVisitDeskEmployeeId = settings.siteVisitDeskEmployeeId;
+      _presalesConfigLoaded = true;
+    }
   }
 
   @override
@@ -243,6 +277,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
               controller: _tabController,
               isScrollable: true,
               tabs: const [
+                Tab(text: 'Pre-Sales & Front Desk'),
                 Tab(text: 'Elision Telephony API'),
                 Tab(text: 'Dashboard KPI Management'),
                 Tab(text: 'Bin & Retention Policy'),
@@ -258,6 +293,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
                 onPressed: () {
                   _telephonyLoaded = false;
                   _kpiLoaded = false;
+                  _presalesConfigLoaded = false;
                   context.read<CrmSettingsBloc>().add(const CrmSettingsLoadRequested());
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
@@ -273,6 +309,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
             controller: _tabController,
             physics: const NeverScrollableScrollPhysics(),
             children: [
+              _buildPresalesFrontDeskTab(state, isDark, cardBg, borderColor, textMuted, primaryGold),
               _buildElisionTelephonyTab(isDark, cardBg, borderColor, textMuted, primaryGold),
               _buildKpiManagementTab(state, isDark, cardBg, borderColor, textMuted, primaryGold),
               _buildRetentionPolicyTab(isDark, cardBg, borderColor, textMuted, primaryGold),
@@ -1368,6 +1405,449 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
     context.read<CrmSettingsBloc>().add(CrmSettingsSaved({
       'not_interested_retention_days': _notInterestedDaysController.text.trim(),
       'bin_retention_days': _binDaysController.text.trim(),
+    }));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Tab 0: Pre-Sales & Front Desk Configuration
+  // ---------------------------------------------------------------------------
+  Widget _buildPresalesFrontDeskTab(
+    CrmSettingsState state,
+    bool isDark,
+    Color cardBg,
+    Color borderColor,
+    Color textMuted,
+    Color primaryColor,
+  ) {
+    final employees = state.employees;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Section 1: Designated Front-Desk / Site Visit Desk Employee
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: cardBg,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: borderColor),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: primaryColor.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(Icons.how_to_reg_rounded, color: primaryColor, size: 22),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Designated Site Visit Desk In-Charge',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: isDark ? Colors.white : const Color(0xFF1E293B),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Select the employee authorized to check in visitors at the site reception, verify scheduled visits, and assign Sales Representatives.',
+                            style: TextStyle(fontSize: 13, color: textMuted),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                DropdownButtonFormField<int?>(
+                  value: _siteVisitDeskEmployeeId,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    labelText: 'Front Desk Employee',
+                    prefixIcon: const Icon(Icons.badge_outlined),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  items: [
+                    const DropdownMenuItem<int?>(
+                      value: null,
+                      child: Text('None (Only System Admins can perform Check-in)'),
+                    ),
+                    ...employees.map((e) => DropdownMenuItem<int?>(
+                          value: e.employeeId,
+                          child: Text(
+                            '${e.fullName} (${e.designation ?? "Employee"}${e.department != null ? " • ${e.department}" : ""}) - Emp #${e.employeeId}',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        )),
+                  ],
+                  onChanged: (val) {
+                    setState(() {
+                      _siteVisitDeskEmployeeId = val;
+                    });
+                  },
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Section 2: Not Interested Reasons
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: cardBg,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: borderColor),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.thumb_down_alt_outlined, color: Colors.redAccent, size: 22),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Pre-Sales: "Not Interested" Reasons',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: isDark ? Colors.white : const Color(0xFF1E293B),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Dropdown options displayed to telecallers when marking a lead as Not Interested. (Selecting "Others" prompts for a manual remark).',
+                            style: TextStyle(fontSize: 13, color: textMuted),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _notInterestedReasons.map((reason) {
+                    final isOthers = reason.toLowerCase() == 'others';
+                    return Chip(
+                      label: Text(reason),
+                      deleteIcon: isOthers ? null : const Icon(Icons.close_rounded, size: 16),
+                      onDeleted: isOthers
+                          ? null
+                          : () {
+                              setState(() {
+                                _notInterestedReasons.remove(reason);
+                              });
+                            },
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _newReasonController,
+                        decoration: InputDecoration(
+                          hintText: 'Add new reason (e.g. Price too high, Location far)...',
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        onSubmitted: (_) => _addReason(),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    ElevatedButton.icon(
+                      onPressed: _addReason,
+                      icon: const Icon(Icons.add_rounded, size: 18),
+                      label: const Text('Add'),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Section 3: Lead Sources
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: cardBg,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: borderColor),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.source_rounded, color: Colors.blue, size: 22),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Front Desk: Lead Sources',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: isDark ? Colors.white : const Color(0xFF1E293B),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Sources available during new visitor check-in (e.g. Walk IN, Channel Partner, Reference).',
+                            style: TextStyle(fontSize: 13, color: textMuted),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _leadSources.map((source) {
+                    return Chip(
+                      label: Text(source),
+                      deleteIcon: _leadSources.length <= 1 ? null : const Icon(Icons.close_rounded, size: 16),
+                      onDeleted: _leadSources.length <= 1
+                          ? null
+                          : () {
+                              setState(() {
+                                _leadSources.remove(source);
+                              });
+                            },
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _newSourceController,
+                        decoration: InputDecoration(
+                          hintText: 'Add new lead source...',
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        onSubmitted: (_) => _addSource(),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    ElevatedButton.icon(
+                      onPressed: _addSource,
+                      icon: const Icon(Icons.add_rounded, size: 18),
+                      label: const Text('Add'),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Section 4: Reference Categories
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: cardBg,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: borderColor),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.purple.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.people_outline_rounded, color: Colors.purple, size: 22),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Reference Sub-Categories',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: isDark ? Colors.white : const Color(0xFF1E293B),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Sub-types displayed when a visitor indicates they were referred (e.g. B2B, Employee, Other Client).',
+                            style: TextStyle(fontSize: 13, color: textMuted),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _referenceTypes.map((type) {
+                    return Chip(
+                      label: Text(type),
+                      deleteIcon: _referenceTypes.length <= 1 ? null : const Icon(Icons.close_rounded, size: 16),
+                      onDeleted: _referenceTypes.length <= 1
+                          ? null
+                          : () {
+                              setState(() {
+                                _referenceTypes.remove(type);
+                              });
+                            },
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _newRefTypeController,
+                        decoration: InputDecoration(
+                          hintText: 'Add new reference category...',
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        onSubmitted: (_) => _addRefType(),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    ElevatedButton.icon(
+                      onPressed: _addRefType,
+                      icon: const Icon(Icons.add_rounded, size: 18),
+                      label: const Text('Add'),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // Save Button
+          Align(
+            alignment: Alignment.centerRight,
+            child: ElevatedButton.icon(
+              onPressed: state.isSaving ? null : _savePresalesSettings,
+              icon: state.isSaving
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.save_rounded, size: 20),
+              label: Text(state.isSaving ? 'Saving...' : 'Save Pre-Sales Configurations'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryColor,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 40),
+        ],
+      ),
+    );
+  }
+
+  void _addReason() {
+    final text = _newReasonController.text.trim();
+    if (text.isEmpty) return;
+    if (!_notInterestedReasons.contains(text)) {
+      setState(() {
+        _notInterestedReasons.add(text);
+        _newReasonController.clear();
+      });
+    }
+  }
+
+  void _addSource() {
+    final text = _newSourceController.text.trim();
+    if (text.isEmpty) return;
+    if (!_leadSources.contains(text)) {
+      setState(() {
+        _leadSources.add(text);
+        _newSourceController.clear();
+      });
+    }
+  }
+
+  void _addRefType() {
+    final text = _newRefTypeController.text.trim();
+    if (text.isEmpty) return;
+    if (!_referenceTypes.contains(text)) {
+      setState(() {
+        _referenceTypes.add(text);
+        _newRefTypeController.clear();
+      });
+    }
+  }
+
+  void _savePresalesSettings() {
+    context.read<CrmSettingsBloc>().add(CrmSettingsSaved({
+      'not_interested_reasons': jsonEncode(_notInterestedReasons),
+      'lead_sources': jsonEncode(_leadSources),
+      'reference_types': jsonEncode(_referenceTypes),
+      'site_visit_desk_employee_id': _siteVisitDeskEmployeeId?.toString() ?? '',
     }));
   }
 }

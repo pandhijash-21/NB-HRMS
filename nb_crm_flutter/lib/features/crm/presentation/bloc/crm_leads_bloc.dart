@@ -79,16 +79,22 @@ class CrmLeadsLeadStatusUpdated extends CrmLeadsEvent {
     required this.status,
     this.scheduledDate,
     this.scheduledTime,
+    this.scheduledVisitAt,
     this.remarks,
     this.assignedToId,
+    this.notInterestedReason,
+    this.notInterestedRemark,
   });
 
   final String leadId;
   final String status;
   final String? scheduledDate;
   final String? scheduledTime;
+  final String? scheduledVisitAt;
   final String? remarks;
   final int? assignedToId;
+  final String? notInterestedReason;
+  final String? notInterestedRemark;
 
   @override
   List<Object?> get props => [
@@ -96,8 +102,11 @@ class CrmLeadsLeadStatusUpdated extends CrmLeadsEvent {
         status,
         scheduledDate,
         scheduledTime,
+        scheduledVisitAt,
         remarks,
         assignedToId,
+        notInterestedReason,
+        notInterestedRemark,
       ];
 }
 
@@ -141,6 +150,14 @@ class CrmLeadsFollowUpCompleted extends CrmLeadsEvent {
 
   @override
   List<Object?> get props => [id, remarks];
+}
+
+class CrmLeadsVisitorCheckinSubmitted extends CrmLeadsEvent {
+  const CrmLeadsVisitorCheckinSubmitted(this.payload);
+  final Map<String, dynamic> payload;
+
+  @override
+  List<Object?> get props => [payload];
 }
 
 class CrmLeadsCallLogsFilterChanged extends CrmLeadsEvent {
@@ -218,6 +235,7 @@ class CrmLeadsState extends Equatable {
     this.isActing = false,
     this.errorMessage,
     this.actionSuccessMessage,
+    this.settings,
   });
 
   final LoadStatus status;
@@ -240,6 +258,7 @@ class CrmLeadsState extends Equatable {
   final bool isActing;
   final String? errorMessage;
   final String? actionSuccessMessage;
+  final CrmSettings? settings;
 
   CrmLeadsState copyWith({
     LoadStatus? status,
@@ -264,6 +283,7 @@ class CrmLeadsState extends Equatable {
     bool? isActing,
     String? errorMessage,
     String? actionSuccessMessage,
+    CrmSettings? settings,
   }) {
     return CrmLeadsState(
       status: status ?? this.status,
@@ -293,6 +313,7 @@ class CrmLeadsState extends Equatable {
       isActing: isActing ?? this.isActing,
       errorMessage: errorMessage,
       actionSuccessMessage: actionSuccessMessage,
+      settings: settings ?? this.settings,
     );
   }
 
@@ -318,6 +339,7 @@ class CrmLeadsState extends Equatable {
         isActing,
         errorMessage,
         actionSuccessMessage,
+        settings,
       ];
 }
 
@@ -342,6 +364,7 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
     on<CrmLeadsFollowUpFilterChanged>(_onFollowUpFilterChanged);
     on<CrmLeadsFollowUpScheduled>(_onFollowUpScheduled);
     on<CrmLeadsFollowUpCompleted>(_onFollowUpCompleted);
+    on<CrmLeadsVisitorCheckinSubmitted>(_onVisitorCheckinSubmitted);
     on<CrmLeadsCallLogsFilterChanged>(_onCallLogsFilterChanged);
     on<CrmLeadsClickToCallRequested>(_onClickToCallRequested);
     on<CrmLeadsColumnVisibilityToggled>(_onColumnVisibilityToggled);
@@ -381,6 +404,7 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
           callStatus: state.callRecordingFilterStatus == 'ALL' ? null : state.callRecordingFilterStatus,
           hasRecording: state.callRecordingsOnlyWithAudio ? true : null,
         ),
+        _crmRepository.getSettings(),
       ]);
 
       emit(state.copyWith(
@@ -392,6 +416,7 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
         salesUsers: results[4] as List<CrmSalesUser>,
         followUps: results[5] as List<CrmFollowUp>,
         callLogs: results[6] as List<CrmCallLog>,
+        settings: results[7] as CrmSettings,
       ));
     } catch (e) {
       emit(state.copyWith(status: LoadStatus.failure, errorMessage: e.toString()));
@@ -533,8 +558,11 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
         status: event.status,
         scheduledDate: event.scheduledDate,
         scheduledTime: event.scheduledTime,
+        scheduledVisitAt: event.scheduledVisitAt,
         remarks: event.remarks,
         assignedToId: event.assignedToId,
+        notInterestedReason: event.notInterestedReason,
+        notInterestedRemark: event.notInterestedRemark,
       );
       emit(state.copyWith(
         isActing: false,
@@ -641,6 +669,27 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
       ));
       final list = await _crmRepository.getFollowUps(filter: state.followUpFilter);
       emit(state.copyWith(followUps: list));
+    } catch (e) {
+      emit(state.copyWith(isActing: false, errorMessage: e.toString()));
+    }
+  }
+
+  Future<void> _onVisitorCheckinSubmitted(
+    CrmLeadsVisitorCheckinSubmitted event,
+    Emitter<CrmLeadsState> emit,
+  ) async {
+    emit(state.copyWith(isActing: true));
+    try {
+      await _crmRepository.visitorCheckin(event.payload);
+      emit(state.copyWith(
+        isActing: false,
+        actionSuccessMessage: 'Visitor check-in completed & status updated to Site Done!',
+      ));
+      await _fetchData(
+        emit,
+        projectId: state.selectedProjectId,
+        campaignId: state.selectedCampaignId,
+      );
     } catch (e) {
       emit(state.copyWith(isActing: false, errorMessage: e.toString()));
     }

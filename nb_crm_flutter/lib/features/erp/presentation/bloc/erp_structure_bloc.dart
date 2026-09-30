@@ -116,6 +116,51 @@ class ErpStructureUnitUpdated extends ErpStructureEvent {
   List<Object?> get props => [projectId, towerId, unitId, body];
 }
 
+class ErpStructureUnitDeleted extends ErpStructureEvent {
+  const ErpStructureUnitDeleted({
+    required this.projectId,
+    required this.towerId,
+    required this.unitId,
+  });
+
+  final String projectId;
+  final String towerId;
+  final String unitId;
+
+  @override
+  List<Object?> get props => [projectId, towerId, unitId];
+}
+
+class ErpStructureUnitCreated extends ErpStructureEvent {
+  const ErpStructureUnitCreated({
+    required this.projectId,
+    required this.towerId,
+    required this.body,
+  });
+
+  final String projectId;
+  final String towerId;
+  final Map<String, dynamic> body;
+
+  @override
+  List<Object?> get props => [projectId, towerId, body];
+}
+
+class ErpStructureUnitsBatchApplied extends ErpStructureEvent {
+  const ErpStructureUnitsBatchApplied({
+    required this.projectId,
+    required this.towerId,
+    required this.body,
+  });
+
+  final String projectId;
+  final String towerId;
+  final Map<String, dynamic> body;
+
+  @override
+  List<Object?> get props => [projectId, towerId, body];
+}
+
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
@@ -193,6 +238,9 @@ class ErpStructureBloc extends Bloc<ErpStructureEvent, ErpStructureState> {
     on<ErpStructureTowerDeleted>(_onTowerDeleted);
     on<ErpStructureUnitsRegenerated>(_onUnitsRegenerated);
     on<ErpStructureUnitUpdated>(_onUnitUpdated);
+    on<ErpStructureUnitDeleted>(_onUnitDeleted);
+    on<ErpStructureUnitCreated>(_onUnitCreated);
+    on<ErpStructureUnitsBatchApplied>(_onUnitsBatchApplied);
   }
 
   final ProjectRepository _projectRepository;
@@ -352,6 +400,76 @@ class ErpStructureBloc extends Bloc<ErpStructureEvent, ErpStructureState> {
         towers: updatedList,
         selectedTower: tower,
         actionMessage: 'Unit updated successfully',
+      ));
+    } catch (e) {
+      emit(state.copyWith(isActing: false, errorMessage: e.toString()));
+    }
+  }
+
+  Future<void> _onUnitDeleted(
+    ErpStructureUnitDeleted event,
+    Emitter<ErpStructureState> emit,
+  ) async {
+    emit(state.copyWith(isActing: true));
+    try {
+      final tower = await _projectRepository.deleteUnit(
+        projectId: event.projectId,
+        towerId: event.towerId,
+        unitId: event.unitId,
+      );
+      final updatedList = state.towers.map((t) => t.id == tower.id ? tower : t).toList();
+      emit(state.copyWith(
+        isActing: false,
+        towers: updatedList,
+        selectedTower: tower,
+        actionMessage: 'Unit deleted successfully',
+      ));
+    } catch (e) {
+      emit(state.copyWith(isActing: false, errorMessage: e.toString()));
+    }
+  }
+
+  Future<void> _onUnitCreated(
+    ErpStructureUnitCreated event,
+    Emitter<ErpStructureState> emit,
+  ) async {
+    emit(state.copyWith(isActing: true));
+    try {
+      await _projectRepository.createUnit(
+        projectId: event.projectId,
+        towerId: event.towerId,
+        body: event.body,
+      );
+      final tower = await _projectRepository.getTower(event.projectId, event.towerId);
+      final updatedList = state.towers.map((t) => t.id == tower.id ? tower : t).toList();
+      emit(state.copyWith(
+        isActing: false,
+        towers: updatedList,
+        selectedTower: tower,
+        actionMessage: 'Unit created successfully',
+      ));
+    } catch (e) {
+      emit(state.copyWith(isActing: false, errorMessage: e.toString()));
+    }
+  }
+
+  Future<void> _onUnitsBatchApplied(
+    ErpStructureUnitsBatchApplied event,
+    Emitter<ErpStructureState> emit,
+  ) async {
+    emit(state.copyWith(isActing: true));
+    try {
+      final tower = await _projectRepository.batchApplyUnits(
+        projectId: event.projectId,
+        towerId: event.towerId,
+        body: event.body,
+      );
+      final updatedList = state.towers.map((t) => t.id == tower.id ? tower : t).toList();
+      emit(state.copyWith(
+        isActing: false,
+        towers: updatedList,
+        selectedTower: tower,
+        actionMessage: 'Units configured successfully',
       ));
     } catch (e) {
       emit(state.copyWith(isActing: false, errorMessage: e.toString()));

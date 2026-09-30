@@ -70,6 +70,23 @@ class AdminWorkforceEmployeeCreated extends AdminWorkforceEvent {
   List<Object?> get props => [data];
 }
 
+class AdminWorkforcePlatformAccessUpdated extends AdminWorkforceEvent {
+  const AdminWorkforcePlatformAccessUpdated({
+    required this.employeeId,
+    this.allowApp,
+    this.allowBrowser,
+    this.allowBrowserAfterPunchIn,
+  });
+
+  final int employeeId;
+  final bool? allowApp;
+  final bool? allowBrowser;
+  final bool? allowBrowserAfterPunchIn;
+
+  @override
+  List<Object?> get props => [employeeId, allowApp, allowBrowser, allowBrowserAfterPunchIn];
+}
+
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
@@ -149,6 +166,7 @@ class AdminWorkforceBloc
     on<AdminWorkforcePageChanged>(_onPageChanged);
     on<AdminWorkforceEmployeeDeleted>(_onDeleteEmployee);
     on<AdminWorkforceEmployeeCreated>(_onCreateEmployee);
+    on<AdminWorkforcePlatformAccessUpdated>(_onUpdatePlatformAccess);
   }
 
   final AdminRepository _adminRepository;
@@ -287,6 +305,39 @@ class AdminWorkforceBloc
       );
     } catch (e) {
       event.completer.completeError(e);
+    }
+  }
+
+  Future<void> _onUpdatePlatformAccess(
+    AdminWorkforcePlatformAccessUpdated event,
+    Emitter<AdminWorkforceState> emit,
+  ) async {
+    // Optimistically update in state
+    final updatedList = state.employees.map((emp) {
+      if (emp.id == event.employeeId) {
+        return emp.copyWith(
+          allowApp: event.allowApp ?? emp.allowApp,
+          allowBrowser: event.allowBrowser ?? emp.allowBrowser,
+          allowBrowserAfterPunchIn: event.allowBrowserAfterPunchIn ?? emp.allowBrowserAfterPunchIn,
+        );
+      }
+      return emp;
+    }).toList();
+
+    emit(state.copyWith(employees: updatedList));
+
+    try {
+      await _adminRepository.updatePlatformAccess(
+        event.employeeId,
+        allowApp: event.allowApp,
+        allowBrowser: event.allowBrowser,
+        allowBrowserAfterPunchIn: event.allowBrowserAfterPunchIn,
+      );
+    } catch (e) {
+      emit(state.copyWith(
+        errorMessage: 'Failed to update platform access: $e',
+      ));
+      add(const AdminWorkforceRefreshRequested());
     }
   }
 }

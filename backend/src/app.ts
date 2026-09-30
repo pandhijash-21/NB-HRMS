@@ -49,8 +49,6 @@ export const app = express();
 
 app.set('trust proxy', 1);
 
-app.use(vpnBlockMiddleware);
-
 app.use(cors({
   origin: (origin, callback) => {
     if (isAllowedCorsOrigin(origin)) {
@@ -61,8 +59,20 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-NB-Enc'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'Accept',
+    'X-NB-Enc',
+    'x-nb-enc',
+    'X-Client-Platform',
+    'x-client-platform',
+    'X-Requested-With',
+  ],
+  exposedHeaders: ['X-NB-Enc', 'x-nb-enc', 'Content-Disposition'],
 }));
+
+app.use(vpnBlockMiddleware);
 // Allow Flutter/web on Netlify/Vercel to read API responses (default helmet CORP is same-origin).
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },

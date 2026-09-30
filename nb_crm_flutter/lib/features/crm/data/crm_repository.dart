@@ -247,8 +247,11 @@ class CrmRepository {
     required String status,
     String? scheduledDate,
     String? scheduledTime,
+    String? scheduledVisitAt,
     String? remarks,
     int? assignedToId,
+    String? notInterestedReason,
+    String? notInterestedRemark,
   }) async {
     return _dio.patchEnvelope<CrmLead>(
       'crm/leads/$leadId/status',
@@ -256,9 +259,28 @@ class CrmRepository {
         'status': status,
         if (scheduledDate != null) 'scheduledDate': scheduledDate,
         if (scheduledTime != null) 'scheduledTime': scheduledTime,
+        if (scheduledVisitAt != null) 'scheduledVisitAt': scheduledVisitAt,
         if (remarks != null) 'remarks': remarks,
         if (assignedToId != null) 'assignedToId': assignedToId,
+        if (notInterestedReason != null) 'notInterestedReason': notInterestedReason,
+        if (notInterestedRemark != null) 'notInterestedRemark': notInterestedRemark,
       },
+      parse: (raw) => CrmLead.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
+  Future<Map<String, dynamic>> visitorLookup(String phone) async {
+    return _dio.getEnvelope<Map<String, dynamic>>(
+      'crm/visitor-lookup',
+      queryParameters: {'phone': phone},
+      parse: (raw) => raw is Map ? Map<String, dynamic>.from(raw) : {'exists': false},
+    );
+  }
+
+  Future<CrmLead> visitorCheckin(Map<String, dynamic> data) async {
+    return _dio.postEnvelope<CrmLead>(
+      'crm/visitor-checkin',
+      data: data,
       parse: (raw) => CrmLead.fromJson(Map<String, dynamic>.from(raw as Map)),
     );
   }

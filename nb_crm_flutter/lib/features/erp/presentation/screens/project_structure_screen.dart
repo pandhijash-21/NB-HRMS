@@ -130,7 +130,9 @@ class _TowerCard extends StatelessWidget {
       builder: (ctx) => AlertDialog(
         title: const Text('Delete tower?'),
         content: Text(
-          'This will delete ${tower.name} and all ${tower.unitCount} units in it.',
+          tower.duplexCount > 0
+              ? 'This will delete ${tower.name} and all ${tower.sellableUnitsCount} units (${tower.physicalUnitsCount} physical units) in it.'
+              : 'This will delete ${tower.name} and all ${tower.unitCount} units in it.',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
@@ -186,19 +188,43 @@ class _TowerCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        tower.name,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 16,
-                          color: isDark ? Colors.white : const Color(0xFF212F3D),
-                        ),
+                      Row(
+                        children: [
+                          Text(
+                            tower.name,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 16,
+                              color: isDark ? Colors.white : const Color(0xFF212F3D),
+                            ),
+                          ),
+                          if (tower.duplexCount > 0) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF2563eb).withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                '${tower.sellableUnitsCount} Units (${tower.duplexCount} Duplex)',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF2563eb),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                       const SizedBox(height: 2),
                       Text(
                         [
                           if (tower.phase != null && tower.phase!.isNotEmpty) tower.phase,
-                          '${tower.floorCount} floors × ${tower.flatsPerFloor} flats = ${tower.plannedUnits} units',
+                          tower.duplexCount > 0
+                              ? '${tower.sellableUnitsCount} units (${tower.physicalUnitsCount} physical units • ${tower.floorCount} floors × ${tower.flatsPerFloor} flats)'
+                              : '${tower.floorCount} floors × ${tower.flatsPerFloor} flats = ${tower.plannedUnits} units',
                           tower.hasGround ? 'GF flats (from 0)' : 'GF parking (from 1)',
                           if (tower.basementCount > 0) '${tower.basementCount} basement(s)',
                           tower.statusCode,

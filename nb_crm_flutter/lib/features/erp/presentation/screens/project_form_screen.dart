@@ -76,10 +76,10 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
   String? _areaCode;
 
   final _amenitiesCodes = <String>{};
-  String? _livabilityCode;
-  String? _bankTieUpCode;
-  String? _devAuthorityCode;
-  String? _elecProviderCode;
+  final _livabilityCodes = <String>{};
+  final _bankTieUpCodes = <String>{};
+  final _devAuthorityCodes = <String>{};
+  final _elecProviderCodes = <String>{};
 
   final _docs = <_DocDraft>[];
   bool _saving = false;
@@ -183,10 +183,18 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
     _amenitiesCodes
       ..clear()
       ..addAll(p.amenitiesCodes);
-    _livabilityCode = p.livabilityCode;
-    _bankTieUpCode = p.bankTieUpCode;
-    _devAuthorityCode = p.developmentAuthorityCode;
-    _elecProviderCode = p.electricityProviderCode;
+    _livabilityCodes
+      ..clear()
+      ..addAll(p.livabilityCode?.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty) ?? const []);
+    _bankTieUpCodes
+      ..clear()
+      ..addAll(p.bankTieUpCode?.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty) ?? const []);
+    _devAuthorityCodes
+      ..clear()
+      ..addAll(p.developmentAuthorityCode?.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty) ?? const []);
+    _elecProviderCodes
+      ..clear()
+      ..addAll(p.electricityProviderCode?.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty) ?? const []);
     _specNotes.text = p.specNotes ?? '';
     _docs
       ..clear()
@@ -286,6 +294,18 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
       );
       return;
     }
+    if (_devAuthorityCodes.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('At least one Development authority is required')),
+      );
+      return;
+    }
+    if (_elecProviderCodes.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('At least one Electricity provider is required')),
+      );
+      return;
+    }
     setState(() => _saving = true);
     final projectNo = int.tryParse(_projectId.text.trim());
     final body = {
@@ -316,10 +336,14 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
       'pincode': _pincode.text.trim(),
       'totalPlotArea': double.tryParse(_plotArea.text) ?? 0,
       'amenitiesCodes': _amenitiesCodes.toList(),
-      'livabilityCode': _livabilityCode,
-      'bankTieUpCode': _bankTieUpCode,
-      'developmentAuthorityCode': _devAuthorityCode,
-      'electricityProviderCode': _elecProviderCode,
+      'livabilityCode': _livabilityCodes.join(','),
+      'livabilityCodes': _livabilityCodes.toList(),
+      'bankTieUpCode': _bankTieUpCodes.join(','),
+      'bankTieUpCodes': _bankTieUpCodes.toList(),
+      'developmentAuthorityCode': _devAuthorityCodes.join(','),
+      'developmentAuthorityCodes': _devAuthorityCodes.toList(),
+      'electricityProviderCode': _elecProviderCodes.join(','),
+      'electricityProviderCodes': _elecProviderCodes.toList(),
       'specNotes': _specNotes.text.trim(),
       'documents': _docs
           .where((d) => d.fileUrl != null && d.fileUrl!.isNotEmpty)
@@ -730,40 +754,58 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
                   value: _areaUnitCode,
                   onChanged: (v) => setState(() => _areaUnitCode = v),
                 ),
-                lookupNullableDropdown(
-                  context: context,
-                  category: 'PROJECT_LIVABILITY',
-                  label: 'Livability',
-                  value: _livabilityCode,
-                  onChanged: (v) => setState(() => _livabilityCode = v),
-                ),
-                lookupNullableDropdown(
-                  context: context,
-                  category: 'PROJECT_BANK_TIE_UP',
-                  label: 'Bank Tie-Ups for Customer Loan',
-                  value: _bankTieUpCode,
-                  onChanged: (v) => setState(() => _bankTieUpCode = v),
-                ),
-                lookupDropdown(
-                  context: context,
-                  category: 'PROJECT_DEV_AUTHORITY',
-                  label: 'Development Authority',
-                  value: _devAuthorityCode,
-                  required: true,
-                  onChanged: (v) => setState(() => _devAuthorityCode = v),
-                ),
-                lookupDropdown(
-                  context: context,
-                  category: 'PROJECT_ELEC_PROVIDER',
-                  label: 'Electricity Provider',
-                  value: _elecProviderCode,
-                  required: true,
-                  onChanged: (v) => setState(() => _elecProviderCode = v),
-                ),
               ],
               fullWidth: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  lookupMultiCheckbox(
+                    context: context,
+                    category: 'PROJECT_LIVABILITY',
+                    label: 'Livability',
+                    selected: _livabilityCodes,
+                    onChanged: (v) => setState(() {
+                      _livabilityCodes
+                        ..clear()
+                        ..addAll(v);
+                    }),
+                  ),
+                  const SizedBox(height: 12),
+                  lookupMultiCheckbox(
+                    context: context,
+                    category: 'PROJECT_BANK_TIE_UP',
+                    label: 'Bank Tie-Ups for Customer Loan',
+                    selected: _bankTieUpCodes,
+                    onChanged: (v) => setState(() {
+                      _bankTieUpCodes
+                        ..clear()
+                        ..addAll(v);
+                    }),
+                  ),
+                  const SizedBox(height: 12),
+                  lookupMultiCheckbox(
+                    context: context,
+                    category: 'PROJECT_DEV_AUTHORITY',
+                    label: 'Development Authority *',
+                    selected: _devAuthorityCodes,
+                    onChanged: (v) => setState(() {
+                      _devAuthorityCodes
+                        ..clear()
+                        ..addAll(v);
+                    }),
+                  ),
+                  const SizedBox(height: 12),
+                  lookupMultiCheckbox(
+                    context: context,
+                    category: 'PROJECT_ELEC_PROVIDER',
+                    label: 'Electricity Provider *',
+                    selected: _elecProviderCodes,
+                    onChanged: (v) => setState(() {
+                      _elecProviderCodes
+                        ..clear()
+                        ..addAll(v);
+                    }),
+                  ),
+                  const SizedBox(height: 12),
                   lookupMultiCheckbox(
                     context: context,
                     category: 'PROJECT_AMENITY',

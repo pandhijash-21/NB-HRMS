@@ -1,5 +1,7 @@
 import 'package:dio/dio.dart';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
+
 import '../logging/app_logger.dart';
 import 'api_envelope.dart';
 import 'app_config.dart';
@@ -29,9 +31,10 @@ class DioClient {
         baseUrl: _normalizeBaseUrl(baseUrl ?? AppConfig.apiBaseUrl),
         connectTimeout: const Duration(seconds: 15),
         receiveTimeout: const Duration(seconds: 20),
-        headers: const {
+        headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
+          'x-client-platform': kIsWeb ? 'browser' : 'app',
           transportEncHeader: '$transportEncVersion',
         },
       ),

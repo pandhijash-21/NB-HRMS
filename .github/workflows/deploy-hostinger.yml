@@ -127,28 +127,21 @@ jobs:
             fi
           fi
 
+      - name: Every schema field has a migration
+        run: node deploy/ci-check-schema-coverage.js
+
   build-flutter-web:
-    name: Flutter web + Android APK
+    name: Flutter web
     needs: [test-flutter]
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
-
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: "17"
 
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
-
-      # ubuntu-latest already has ANDROID_HOME; do not use setup-android@v3
-      # (Node 20 + mismatched cmdline-tools, sdkmanager --licenses fails).
-      - name: Accept Android SDK licenses
-        run: yes | flutter doctor --android-licenses >/dev/null 2>&1 || true
 
       - name: Build web release
         working-directory: nb_crm_flutter
@@ -168,25 +161,6 @@ jobs:
           flutter build web --release --no-tree-shake-icons --pwa-strategy=none \
             --dart-define=API_BASE_URL="$API" \
             --dart-define=TRANSPORT_SECRET="$SECRET"
-
-      - name: Build Android APK
-        working-directory: nb_crm_flutter
-        env:
-          API_BASE_URL: ${{ secrets.API_BASE_URL }}
-          TRANSPORT_SECRET: ${{ secrets.TRANSPORT_SECRET }}
-        run: |
-          SECRET="${TRANSPORT_SECRET:-ci-transport-protocol-key}"
-          API="${API_BASE_URL:-https://crm.nbdeveloper.co.in/api}"
-          if [ "${{ github.ref }}" = "refs/heads/main" ] && [ -z "${TRANSPORT_SECRET}" ]; then
-            echo "Missing TRANSPORT_SECRET for main APK build"
-            exit 1
-          fi
-          flutter build apk --release --no-tree-shake-icons \
-            --dart-define=API_BASE_URL="$API" \
-            --dart-define=TRANSPORT_SECRET="$SECRET"
-          mkdir -p build/web/downloads
-          cp build/app/outputs/flutter-apk/app-release.apk build/web/downloads/nb-crm.apk
-          ls -lh build/web/downloads/nb-crm.apk
 
       - name: Upload web artifact
         uses: actions/upload-artifact@v4
@@ -348,7 +322,8 @@ jobs:
           rsync -az --delete -e "$rsh" backend/prisma/ "$remote:/opt/nb-crm/backend/prisma/"
           rsync -az --delete -e "$rsh" backend/docker/ "$remote:/opt/nb-crm/backend/docker/"
           rsync -az --delete -e "$rsh" whisper/ "$remote:/opt/nb-crm/whisper/"
-          rsync -az --delete -e "$rsh" deploy/frontend/ "$remote:/opt/nb-crm/deploy/frontend/"
+          # downloads/ holds the manually uploaded APK — never delete it on web deploys
+          rsync -az --delete --exclude 'downloads/' -e "$rsh" deploy/frontend/ "$remote:/opt/nb-crm/deploy/frontend/"
           rsync -az --delete -e "$rsh" deploy/nginx/ "$remote:/opt/nb-crm/deploy/nginx/"
 
           # scp uses -P for port (-p means preserve timestamps)

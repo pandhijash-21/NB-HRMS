@@ -3287,7 +3287,7 @@ model ErpDprMaterialLine {
   materialId     String? @map("material_id")
   itemCode       String? @map("item_code")
   category       String?
-  itemName       String
+  itemName       String  @map("item_name")
   brand          String?
   unitCode       String? @map("unit_code")
   size           String?

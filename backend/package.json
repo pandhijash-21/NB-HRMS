@@ -13,6 +13,7 @@
     "db:seed": "prisma db seed",
     "wipe:admin": "npx tsx prisma/wipe-to-admin.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "check:schema": "node ../deploy/ci-check-schema-coverage.js",
     "test": "npm run typecheck"
   },
   "prisma": {

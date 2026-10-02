@@ -3575,6 +3575,9 @@ enum CrmLeadStatus {
   SITE_VISIT_DONE
   FOLLOW_UP
   INTERESTED
+  PROPOSAL_SENT
+  BOOKING_CONFIRMED
+  REJECTED
 }
 
 model CrmProject {

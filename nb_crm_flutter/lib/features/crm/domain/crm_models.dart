@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:intl/intl.dart';
 
 class CrmProject {
   final String id;
@@ -196,7 +197,10 @@ enum CrmStatus {
   notInterested,
   siteVisitDone,
   followUp,
-  interested;
+  interested,
+  proposalSent,
+  bookingConfirmed,
+  rejected;
 
   String get backendValue {
     switch (this) {
@@ -214,6 +218,12 @@ enum CrmStatus {
         return 'FOLLOW_UP';
       case CrmStatus.interested:
         return 'INTERESTED';
+      case CrmStatus.proposalSent:
+        return 'PROPOSAL_SENT';
+      case CrmStatus.bookingConfirmed:
+        return 'BOOKING_CONFIRMED';
+      case CrmStatus.rejected:
+        return 'REJECTED';
     }
   }
 
@@ -228,11 +238,17 @@ enum CrmStatus {
       case CrmStatus.notInterested:
         return 'Not Interested';
       case CrmStatus.siteVisitDone:
-        return 'Site Done';
+        return 'Site Visit Done';
       case CrmStatus.followUp:
         return 'Follow up';
       case CrmStatus.interested:
         return 'Interested';
+      case CrmStatus.proposalSent:
+        return 'Proposal Sent';
+      case CrmStatus.bookingConfirmed:
+        return 'Booking Confirmed';
+      case CrmStatus.rejected:
+        return 'Rejected';
     }
   }
 
@@ -248,6 +264,12 @@ enum CrmStatus {
         return CrmStatus.followUp;
       case 'INTERESTED':
         return CrmStatus.interested;
+      case 'PROPOSAL_SENT':
+        return CrmStatus.proposalSent;
+      case 'BOOKING_CONFIRMED':
+        return CrmStatus.bookingConfirmed;
+      case 'REJECTED':
+        return CrmStatus.rejected;
       case 'NOT_INTERESTED':
         return CrmStatus.notInterested;
       case 'NOT_STARTED':
@@ -334,7 +356,10 @@ class CrmLead {
     if (json['followUps'] is List && (json['followUps'] as List).isNotEmpty) {
       final first = (json['followUps'] as List).first;
       if (first is Map) {
-        followUp = CrmFollowUp.fromJson(Map<String, dynamic>.from(first));
+        final parsed = CrmFollowUp.fromJson(Map<String, dynamic>.from(first));
+        if (parsed.status.toUpperCase() == 'PENDING') {
+          followUp = parsed;
+        }
       }
     }
 
@@ -366,6 +391,51 @@ class CrmLead {
       updatedAt: DateTime.tryParse(json['updatedAt']?.toString() ?? '') ?? DateTime.now(),
       latestFollowUp: followUp,
     );
+  }
+
+  List<CrmProposal> get proposals {
+    final raw = customFields['proposals'];
+    if (raw is List) {
+      return raw
+          .whereType<Map>()
+          .map((m) => CrmProposal.fromJson(Map<String, dynamic>.from(m)))
+          .toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    }
+    return const [];
+  }
+
+  Map<String, dynamic>? get unitShown {
+    final raw = customFields['unitShown'];
+    if (raw is Map) return Map<String, dynamic>.from(raw);
+    return null;
+  }
+
+  String? get email {
+    final e = customFields['Email'] ?? customFields['email'] ?? customFields['client_email'];
+    if (e != null && e.toString().trim().isNotEmpty) return e.toString().trim();
+    return null;
+  }
+
+  String? get address {
+    final a = customFields['Address'] ?? customFields['address'] ?? customFields['Location'] ?? customFields['location'];
+    if (a != null && a.toString().trim().isNotEmpty) return a.toString().trim();
+    return null;
+  }
+
+  List<CrmCustomerLog> get activityLogs {
+    final raw = customFields['activityLogs'];
+    final logs = <CrmCustomerLog>[];
+    if (raw is List) {
+      for (final item in raw) {
+        if (item is Map) {
+          try {
+            logs.add(CrmCustomerLog.fromJson(Map<String, dynamic>.from(item)));
+          } catch (_) {}
+        }
+      }
+    }
+    return logs..sort((a, b) => b.timestamp.compareTo(a.timestamp));
   }
 }
 
@@ -787,4 +857,273 @@ class CrmCallLog {
       leadStatus: leadStatus,
     );
   }
+}
+
+class CrmProposal {
+  final String id;
+  final String leadId;
+  final int revision;
+  final String status; // 'ACTIVE', 'REJECTED', 'BOOKED'
+  final DateTime createdAt;
+  final DateTime expiryDate;
+
+  // Client details
+  final String clientName;
+  final String clientPhone;
+  final String clientEmail;
+  final String clientAddress;
+
+  // Unit details
+  final String projectId;
+  final String projectName;
+  final String towerId;
+  final String towerName;
+  final String unitId;
+  final String unitNo;
+  final String unitType;
+  final int floorNo;
+  final double carpetArea;
+  final double superBuiltUp;
+  final String areaUnit;
+
+  // Financial details (every value can be changed by sales guy)
+  final double baseRate;
+  final double basePrice;
+  final double plc;
+  final double frc;
+  final double developmentCharges;
+  final double parkingCharges;
+  final double maintenanceCharges;
+  final double gstPercentage;
+  final double gstAmount;
+  final double stampDutyPercentage;
+  final double stampDutyAmount;
+  final double registrationCharges;
+  final double otherChargesAmount;
+  final double discountAmount;
+  final double grandTotal;
+
+  // Additional Payment Schedule (optional milestones)
+  final List<Map<String, dynamic>> paymentSchedule;
+
+  // Notes & Disclaimers
+  final String description;
+  final String disclaimer;
+
+  // Sales guy metadata
+  final int? createdById;
+  final String? createdByName;
+
+  const CrmProposal({
+    required this.id,
+    required this.leadId,
+    this.revision = 1,
+    this.status = 'ACTIVE',
+    required this.createdAt,
+    required this.expiryDate,
+    required this.clientName,
+    required this.clientPhone,
+    this.clientEmail = '',
+    this.clientAddress = '',
+    this.projectId = '',
+    this.projectName = '',
+    this.towerId = '',
+    this.towerName = '',
+    this.unitId = '',
+    required this.unitNo,
+    this.unitType = '',
+    this.floorNo = 0,
+    this.carpetArea = 0.0,
+    this.superBuiltUp = 0.0,
+    this.areaUnit = 'sq.ft',
+    this.baseRate = 0.0,
+    this.basePrice = 0.0,
+    this.plc = 0.0,
+    this.frc = 0.0,
+    this.developmentCharges = 0.0,
+    this.parkingCharges = 0.0,
+    this.maintenanceCharges = 0.0,
+    this.gstPercentage = 5.0,
+    this.gstAmount = 0.0,
+    this.stampDutyPercentage = 6.0,
+    this.stampDutyAmount = 0.0,
+    this.registrationCharges = 0.0,
+    this.otherChargesAmount = 0.0,
+    this.discountAmount = 0.0,
+    required this.grandTotal,
+    this.paymentSchedule = const [],
+    this.description = '',
+    this.disclaimer = '',
+    this.createdById,
+    this.createdByName,
+  });
+
+  bool get isExpired {
+    final now = DateTime.now();
+    final endOfExpiryDay = DateTime(expiryDate.year, expiryDate.month, expiryDate.day, 23, 59, 59);
+    return now.isAfter(endOfExpiryDay);
+  }
+
+  bool get isRejected => status.toUpperCase() == 'REJECTED';
+  bool get isBooked => status.toUpperCase() == 'BOOKED' || status.toUpperCase() == 'BOOKING_CONFIRMED';
+
+  String get displayStatus {
+    if (isBooked) return 'BOOKING CONFIRMED';
+    if (isRejected) return 'REJECTED';
+    if (isExpired) return 'EXPIRED';
+    return 'PROPOSAL SENT';
+  }
+
+  String get validityNotice =>
+      'This proposal is valid till ${DateFormat('dd MMMM yyyy').format(expiryDate)}';
+
+  factory CrmProposal.fromJson(Map<String, dynamic> json) {
+    return CrmProposal(
+      id: json['id']?.toString() ?? '',
+      leadId: json['leadId']?.toString() ?? '',
+      revision: (json['revision'] as num?)?.toInt() ?? 1,
+      status: json['status']?.toString() ?? 'ACTIVE',
+      createdAt: json['createdAt'] != null
+          ? (DateTime.tryParse(json['createdAt'].toString())?.toLocal() ?? DateTime.now())
+          : DateTime.now(),
+      expiryDate: json['expiryDate'] != null
+          ? (DateTime.tryParse(json['expiryDate'].toString())?.toLocal() ??
+              DateTime.now().add(const Duration(days: 7)))
+          : DateTime.now().add(const Duration(days: 7)),
+      clientName: json['clientName']?.toString() ?? '',
+      clientPhone: json['clientPhone']?.toString() ?? '',
+      clientEmail: json['clientEmail']?.toString() ?? '',
+      clientAddress: json['clientAddress']?.toString() ?? '',
+      projectId: json['projectId']?.toString() ?? '',
+      projectName: json['projectName']?.toString() ?? '',
+      towerId: json['towerId']?.toString() ?? '',
+      towerName: json['towerName']?.toString() ?? '',
+      unitId: json['unitId']?.toString() ?? '',
+      unitNo: json['unitNo']?.toString() ?? '',
+      unitType: json['unitType']?.toString() ?? '',
+      floorNo: (json['floorNo'] as num?)?.toInt() ?? 0,
+      carpetArea: (json['carpetArea'] as num?)?.toDouble() ?? 0.0,
+      superBuiltUp: (json['superBuiltUp'] as num?)?.toDouble() ?? 0.0,
+      areaUnit: json['areaUnit']?.toString() ?? 'sq.ft',
+      baseRate: (json['baseRate'] as num?)?.toDouble() ?? 0.0,
+      basePrice: (json['basePrice'] as num?)?.toDouble() ?? 0.0,
+      plc: (json['plc'] as num?)?.toDouble() ?? 0.0,
+      frc: (json['frc'] as num?)?.toDouble() ?? 0.0,
+      developmentCharges: (json['developmentCharges'] as num?)?.toDouble() ?? 0.0,
+      parkingCharges: (json['parkingCharges'] as num?)?.toDouble() ?? 0.0,
+      maintenanceCharges: (json['maintenanceCharges'] as num?)?.toDouble() ?? 0.0,
+      gstPercentage: (json['gstPercentage'] as num?)?.toDouble() ?? 5.0,
+      gstAmount: (json['gstAmount'] as num?)?.toDouble() ?? 0.0,
+      stampDutyPercentage: (json['stampDutyPercentage'] as num?)?.toDouble() ?? 6.0,
+      stampDutyAmount: (json['stampDutyAmount'] as num?)?.toDouble() ?? 0.0,
+      registrationCharges: (json['registrationCharges'] as num?)?.toDouble() ?? 0.0,
+      otherChargesAmount: (json['otherChargesAmount'] as num?)?.toDouble() ??
+          (json['otherCharges'] as num?)?.toDouble() ??
+          0.0,
+      discountAmount: (json['discountAmount'] as num?)?.toDouble() ?? 0.0,
+      grandTotal: (json['grandTotal'] as num?)?.toDouble() ?? 0.0,
+      paymentSchedule: (json['paymentSchedule'] is List)
+          ? (json['paymentSchedule'] as List)
+              .whereType<Map>()
+              .map((m) => Map<String, dynamic>.from(m))
+              .toList()
+          : const [],
+      description: json['description']?.toString() ?? '',
+      disclaimer: json['disclaimer']?.toString() ?? '',
+      createdById: (json['createdById'] as num?)?.toInt(),
+      createdByName: json['createdByName']?.toString(),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'leadId': leadId,
+        'revision': revision,
+        'status': status,
+        'createdAt': createdAt.toIso8601String(),
+        'expiryDate': expiryDate.toIso8601String(),
+        'clientName': clientName,
+        'clientPhone': clientPhone,
+        'clientEmail': clientEmail,
+        'clientAddress': clientAddress,
+        'projectId': projectId,
+        'projectName': projectName,
+        'towerId': towerId,
+        'towerName': towerName,
+        'unitId': unitId,
+        'unitNo': unitNo,
+        'unitType': unitType,
+        'floorNo': floorNo,
+        'carpetArea': carpetArea,
+        'superBuiltUp': superBuiltUp,
+        'areaUnit': areaUnit,
+        'baseRate': baseRate,
+        'basePrice': basePrice,
+        'plc': plc,
+        'frc': frc,
+        'developmentCharges': developmentCharges,
+        'parkingCharges': parkingCharges,
+        'maintenanceCharges': maintenanceCharges,
+        'gstPercentage': gstPercentage,
+        'gstAmount': gstAmount,
+        'stampDutyPercentage': stampDutyPercentage,
+        'stampDutyAmount': stampDutyAmount,
+        'registrationCharges': registrationCharges,
+        'otherChargesAmount': otherChargesAmount,
+        'discountAmount': discountAmount,
+        'grandTotal': grandTotal,
+        'paymentSchedule': paymentSchedule,
+        'description': description,
+        'disclaimer': disclaimer,
+        'createdById': createdById,
+        'createdByName': createdByName,
+      };
+}
+
+class CrmCustomerLog {
+  final String id;
+  final String title;
+  final String description;
+  final String type; // 'CALL', 'VISIT_SCHEDULED', 'VISIT_DONE', 'SALES_MANAGER_APPOINTED', 'FOLLOW_UP', 'UNIT_SHOWN', 'PROPOSAL_GENERATED', 'STATUS_CHANGE'
+  final DateTime timestamp;
+  final String? performedByName;
+  final int? performedById;
+  final Map<String, dynamic>? metadata;
+
+  const CrmCustomerLog({
+    required this.id,
+    required this.title,
+    required this.description,
+    required this.type,
+    required this.timestamp,
+    this.performedByName,
+    this.performedById,
+    this.metadata,
+  });
+
+  factory CrmCustomerLog.fromJson(Map<String, dynamic> json) {
+    return CrmCustomerLog(
+      id: json['id']?.toString() ?? '',
+      title: json['title']?.toString() ?? '',
+      description: json['description']?.toString() ?? '',
+      type: json['type']?.toString() ?? 'NOTE',
+      timestamp: json['timestamp'] != null
+          ? (DateTime.tryParse(json['timestamp'].toString())?.toLocal() ?? DateTime.now())
+          : DateTime.now(),
+      performedByName: json['performedByName']?.toString(),
+      performedById: (json['performedById'] as num?)?.toInt(),
+      metadata: json['metadata'] is Map ? Map<String, dynamic>.from(json['metadata'] as Map) : null,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'description': description,
+        'type': type,
+        'timestamp': timestamp.toIso8601String(),
+        'performedByName': performedByName,
+        'performedById': performedById,
+        if (metadata != null) 'metadata': metadata,
+      };
 }

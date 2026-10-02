@@ -542,6 +542,20 @@ class Permissions {
         hasPermission(perms, 'CRM', 'READ');
   }
 
+  static bool canReadCrmSales(PermissionMap? perms, [String? role]) {
+    if (isSuperAdmin(role)) return true;
+    return hasPermission(perms, 'CRM_SALES', 'READ') ||
+        hasPermission(perms, 'CRM_PRE_SALES', 'READ') ||
+        hasPermission(perms, 'CRM', 'READ');
+  }
+
+  static bool canWriteCrmSales(PermissionMap? perms, [String? role]) {
+    if (isSuperAdmin(role)) return true;
+    return hasPermission(perms, 'CRM_SALES', 'WRITE') ||
+        hasPermission(perms, 'CRM_PRE_SALES', 'WRITE') ||
+        hasPermission(perms, 'CRM', 'WRITE');
+  }
+
   static bool canReadCrmPostSales(PermissionMap? perms, [String? role]) {
     if (isSuperAdmin(role)) return true;
     return hasPermission(perms, 'CRM_POST_SALES', 'READ');

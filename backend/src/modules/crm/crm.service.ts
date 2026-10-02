@@ -764,6 +764,7 @@ export const crmService = {
             include: { generalInfo: { select: { fullName: true } } },
           },
           followUps: {
+            where: { status: 'PENDING' },
             orderBy: { scheduledDate: 'desc' },
             take: 1,
           },
@@ -938,6 +939,12 @@ export const crmService = {
 
     if (status === 'SITE_VISIT_DONE') {
       updateData.visitedAt = new Date();
+      if (!payload.scheduledDate) {
+        await prisma.crmFollowUp.updateMany({
+          where: { leadId, status: 'PENDING' },
+          data: { status: 'COMPLETED' },
+        });
+      }
     }
 
     let safeAssignedId = existing.assignedToId;
@@ -997,6 +1004,7 @@ export const crmService = {
           include: { generalInfo: { select: { fullName: true } } },
         },
         followUps: {
+          where: { status: 'PENDING' },
           orderBy: { scheduledDate: 'desc' },
           take: 1,
         },
@@ -1042,16 +1050,30 @@ export const crmService = {
       }
     }
 
-    return prisma.crmLead.update({
+    if (dto.status === 'SITE_VISIT_DONE' || dto.status === 'PROPOSAL_SENT' || dto.status === 'BOOKING_CONFIRMED' || dto.visitedAt) {
+      await prisma.crmFollowUp.updateMany({
+        where: {
+          leadId,
+          status: 'PENDING',
+        },
+        data: { status: 'COMPLETED' },
+      });
+    }
+
+    const validPrismaStatuses = Object.values(CrmLeadStatus || {}) as string[];
+    const isStatusValid = dto.status && validPrismaStatuses.includes(dto.status);
+
+    return await prisma.crmLead.update({
       where: { id: leadId },
       data: {
         ...(dto.name && { name: dto.name }),
         ...(dto.phone && { phone: dto.phone }),
-        ...(dto.status && { status: dto.status as CrmLeadStatus }),
-        ...(dto.customFields && {
+        ...(isStatusValid ? { status: dto.status as CrmLeadStatus } : {}),
+        ...((dto.customFields || (!isStatusValid && dto.status)) && {
           customFields: {
             ...((existing.customFields as Record<string, any>) || {}),
-            ...dto.customFields,
+            ...(dto.customFields || {}),
+            ...(!isStatusValid && dto.status ? { status: dto.status } : {}),
           },
         }),
         ...(safeAssignedToId !== undefined && { assignedToId: safeAssignedToId }),
@@ -1067,6 +1089,11 @@ export const crmService = {
       include: {
         assignedTo: {
           include: { generalInfo: { select: { fullName: true } } },
+        },
+        followUps: {
+          where: { status: 'PENDING' },
+          orderBy: { scheduledDate: 'desc' },
+          take: 1,
         },
       },
     });

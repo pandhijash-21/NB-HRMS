@@ -79,7 +79,7 @@ export interface CreateLeadDto {
 export interface UpdateLeadDto {
   phone?: string;
   name?: string;
-  status?: 'NOT_STARTED' | 'FOLLOW_UP' | 'INTERESTED' | 'NOT_INTERESTED';
+  status?: string;
   customFields?: Record<string, any>;
   assignedToId?: number | null;
   telecallerId?: number | null;

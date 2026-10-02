@@ -4,7 +4,6 @@ import 'package:nb_crm_flutter/core/tour/catalog/nb_platform_catalog.dart';
 import 'package:nb_crm_flutter/core/tour/mascot/mr_nb_intro.dart';
 import 'package:nb_crm_flutter/core/tour/models/tour_models.dart';
 import 'package:nb_crm_flutter/core/tour/validation/tour_validator.dart';
-import 'package:nb_crm_flutter/features/auth/domain/permissions.dart';
 
 void main() {
   final catalog = NbPlatformCatalog.build();

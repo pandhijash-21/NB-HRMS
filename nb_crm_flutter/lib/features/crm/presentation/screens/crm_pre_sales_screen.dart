@@ -47,7 +47,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -114,7 +114,6 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                 Tab(text: 'Follow-ups & Scheduled Calls'),
                 Tab(text: 'Call Recordings'),
                 Tab(text: 'Pipeline & Deals'),
-                Tab(text: 'Quotations'),
               ],
             ),
                 ),
@@ -138,7 +137,6 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
               _buildFollowUpsTab(context, state, isDark, cardBg, borderColor, textMuted, primaryGold),
               _buildCallRecordingsTab(context, state, isDark, cardBg, borderColor, textMuted, primaryGold),
               _buildPipelineTab(isDark, cardBg, borderColor, textMuted),
-              _buildQuotationsTab(isDark, cardBg, borderColor, textMuted),
             ],
           ),
         );
@@ -741,6 +739,21 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
         badgeFg = isDark ? const Color(0xFF4ADE80) : const Color(0xFF15803D);
         badgeBorder = const Color(0xFF16A34A).withValues(alpha: isDark ? 0.45 : 0.35);
         break;
+      case CrmStatus.proposalSent:
+        badgeBg = const Color(0xFFF59E0B).withValues(alpha: isDark ? 0.22 : 0.12);
+        badgeFg = isDark ? const Color(0xFFFBBF24) : const Color(0xFFD97706);
+        badgeBorder = const Color(0xFFF59E0B).withValues(alpha: isDark ? 0.45 : 0.35);
+        break;
+      case CrmStatus.bookingConfirmed:
+        badgeBg = const Color(0xFF16A34A).withValues(alpha: isDark ? 0.22 : 0.12);
+        badgeFg = isDark ? const Color(0xFF4ADE80) : const Color(0xFF15803D);
+        badgeBorder = const Color(0xFF16A34A).withValues(alpha: isDark ? 0.45 : 0.35);
+        break;
+      case CrmStatus.rejected:
+        badgeBg = const Color(0xFFEF4444).withValues(alpha: isDark ? 0.22 : 0.12);
+        badgeFg = isDark ? const Color(0xFFF87171) : const Color(0xFFB91C1C);
+        badgeBorder = const Color(0xFFEF4444).withValues(alpha: isDark ? 0.45 : 0.35);
+        break;
     }
 
     // If telecaller cannot alter this assigned lead, render locked badge
@@ -829,6 +842,15 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                 break;
               case CrmStatus.interested:
                 dotColor = isDark ? const Color(0xFF4ADE80) : const Color(0xFF16A34A);
+                break;
+              case CrmStatus.proposalSent:
+                dotColor = const Color(0xFFF59E0B);
+                break;
+              case CrmStatus.bookingConfirmed:
+                dotColor = const Color(0xFF16A34A);
+                break;
+              case CrmStatus.rejected:
+                dotColor = const Color(0xFFEF4444);
                 break;
             }
             return DropdownMenuItem<CrmStatus>(
@@ -1517,24 +1539,6 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
           Text('Pipeline Kanban Board', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDark ? Colors.white : const Color(0xFF1E293B))),
           const SizedBox(height: 4),
           Text('Deals categorized by stages (Discovery, Site Visit, Negotiation, Won).', style: TextStyle(fontSize: 13, color: textMuted)),
-        ],
-      ),
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // TAB 4: Quotations
-  // ---------------------------------------------------------------------------
-  Widget _buildQuotationsTab(bool isDark, Color cardBg, Color borderColor, Color textMuted) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.request_quote_outlined, size: 54, color: textMuted),
-          const SizedBox(height: 12),
-          Text('Quotations & Estimates', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDark ? Colors.white : const Color(0xFF1E293B))),
-          const SizedBox(height: 4),
-          Text('Generate, share, and track property price quotes.', style: TextStyle(fontSize: 13, color: textMuted)),
         ],
       ),
     );

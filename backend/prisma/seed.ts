@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
-import { seedSalaryCatalog } from './seeds/designationSalary.seed';
+import { seedSalaryCatalog, seedCompanyRolesAndDesignations } from './seeds/designationSalary.seed';
 import { seedSystemLookups } from './seeds/lookups.seed';
 import { seedInstitutes } from './seeds/institutes.seed';
 import { seedOrganizations } from './seeds/organizations.seed';
@@ -140,8 +140,8 @@ async function main() {
   await seedSystemLookups(prisma);
   await seedOrganizations(prisma);
   await seedInstitutes(prisma);
-  // Pay commissions / salary column catalog only (no institutes, no designations)
   await seedSalaryCatalog(prisma);
+  await seedCompanyRolesAndDesignations(prisma);
 
   // ── Leave Settings (catalog empty — configure leave types in UI) ─────────
   console.log('⏳  Seeding leave settings…');

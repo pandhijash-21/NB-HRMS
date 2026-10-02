@@ -9,6 +9,7 @@ export const LOOKUP_CATEGORIES = [
   { key: 'MOTHER_TONGUE', label: 'Mother Tongue', description: 'Mother tongue options' },
   { key: 'CASTE_CATEGORY', label: 'Caste Category', description: 'Cast / category options' },
   { key: 'EMPLOYEE_CATEGORY', label: 'Employee Category', description: 'Teaching / Non-teaching / …' },
+  { key: 'DEPARTMENT', label: 'Department', description: 'Employee departments' },
   { key: 'APPOINTMENT_TYPE', label: 'Appointment Type', description: 'Full-time, contract, …' },
   { key: 'SHIFT', label: 'Shift', description: 'Work shifts' },
   { key: 'FAMILY_RELATION', label: 'Family Relation', description: 'Family member relations' },

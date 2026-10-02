@@ -161,10 +161,129 @@ export async function seedSalaryCatalog(prisma: PrismaClient) {
   console.log('✅  Salary column catalog seeded');
 }
 
+/** Seed company roles and designations */
+export async function seedCompanyRolesAndDesignations(prisma: PrismaClient) {
+  console.log('⏳  Seeding company roles…');
+  const roleMap = new Map<string, string>();
+  for (const name of COMPANY_ROLES) {
+    const role = await prisma.role.upsert({
+      where: { name },
+      update: { isActive: true },
+      create: {
+        name,
+        description: `${name} company role`,
+        isSystem: false,
+        isActive: true,
+      },
+    });
+    roleMap.set(name, role.id);
+  }
+  console.log(`✅  ${COMPANY_ROLES.length} company roles seeded`);
+
+  console.log('⏳  Seeding designations…');
+  let sort = 1;
+  for (const d of COMPANY_DESIGNATIONS) {
+    const linkedRoleId = roleMap.get(d.linkedRole) || null;
+    await prisma.designation.upsert({
+      where: { name: d.name },
+      update: {
+        slug: d.slug,
+        linkedRoleId,
+        isActive: true,
+        sortOrder: sort++,
+      },
+      create: {
+        name: d.name,
+        slug: d.slug,
+        linkedRoleId,
+        isActive: true,
+        sortOrder: sort++,
+      },
+    });
+  }
+  console.log(`✅  ${COMPANY_DESIGNATIONS.length} designations seeded`);
+}
+
+export const COMPANY_ROLES = [
+  'Accountant',
+  'Admin Sales',
+  'BDM',
+  'CEO',
+  'Closing Manager',
+  'Data Analytics',
+  'Digital Marketing',
+  'Director',
+  'Driver',
+  'HR & Admin',
+  'Housekeeping',
+  'IT Intern',
+  'Land Co-ordinator',
+  'Legal Co-ordinator',
+  'Loan Executive',
+  'Loan Manager',
+  'Marketing & Operation',
+  'Marketing Consultant',
+  'Marketing Manager',
+  'PA to Chairman',
+  'Pantry',
+  'Pantry & Field',
+  'Project Co-ordinator',
+  'Purchase',
+  'Reception',
+  'Rental Executive',
+  'Sales Associate',
+  'Sales Co-ordinator',
+  'Sales Executive',
+  'Sales Manager',
+  'Sales Operations',
+  'Site Supervision',
+  'Social Media Marketing Executive',
+  'Store',
+  'Tax & Finance Executive',
+  'Telecalling',
+];
+
+export const COMPANY_DESIGNATIONS = [
+  { name: 'Accountant', slug: 'accountant', linkedRole: 'Accountant' },
+  { name: 'Admin Executive', slug: 'admin_executive', linkedRole: 'Admin Sales' },
+  { name: 'Asst. Purchase Manager', slug: 'asst_purchase_manager', linkedRole: 'Purchase' },
+  { name: 'Billing Engineer', slug: 'billing_engineer', linkedRole: 'Project Co-ordinator' },
+  { name: 'CEO', slug: 'ceo', linkedRole: 'CEO' },
+  { name: 'Closing Manager', slug: 'closing_manager', linkedRole: 'Closing Manager' },
+  { name: 'Data Analytics', slug: 'data_analytics', linkedRole: 'Data Analytics' },
+  { name: 'Digital Marketing Executive', slug: 'digital_marketing_executive', linkedRole: 'Digital Marketing' },
+  { name: 'Director', slug: 'director', linkedRole: 'Director' },
+  { name: 'Driver', slug: 'driver', linkedRole: 'Driver' },
+  { name: 'Field Executive', slug: 'field_executive', linkedRole: 'Pantry & Field' },
+  { name: 'HK Boy', slug: 'hk_boy', linkedRole: 'Housekeeping' },
+  { name: 'HOD - BDM', slug: 'hod_bdm', linkedRole: 'BDM' },
+  { name: 'HR Head', slug: 'hr_head', linkedRole: 'HR & Admin' },
+  { name: 'IT Intern', slug: 'it_intern', linkedRole: 'IT Intern' },
+  { name: 'Legal Co-ordinator', slug: 'legal_coordinator', linkedRole: 'Legal Co-ordinator' },
+  { name: 'Loan Executive', slug: 'loan_executive', linkedRole: 'Loan Executive' },
+  { name: 'Loan Manager', slug: 'loan_manager', linkedRole: 'Loan Manager' },
+  { name: 'Marketing & Operation Head', slug: 'marketing_operation_head', linkedRole: 'Marketing & Operation' },
+  { name: 'Marketing Consultant', slug: 'marketing_consultant', linkedRole: 'Marketing Consultant' },
+  { name: 'Marketing Manager', slug: 'marketing_manager', linkedRole: 'Marketing Manager' },
+  { name: 'PA to Chairman', slug: 'pa_to_chairman', linkedRole: 'PA to Chairman' },
+  { name: 'Pantry Boy', slug: 'pantry_boy', linkedRole: 'Pantry' },
+  { name: 'Project Head', slug: 'project_head', linkedRole: 'Sales Operations' },
+  { name: 'Receptionist', slug: 'receptionist', linkedRole: 'Reception' },
+  { name: 'Rental Executive', slug: 'rental_executive', linkedRole: 'Rental Executive' },
+  { name: 'Sales Associate', slug: 'sales_associate', linkedRole: 'Sales Associate' },
+  { name: 'Sales Executive', slug: 'sales_executive', linkedRole: 'Sales Executive' },
+  { name: 'Site Engineer', slug: 'site_engineer', linkedRole: 'Site Supervision' },
+  { name: 'Social Media Marketing Executive', slug: 'social_media_marketing_executive', linkedRole: 'Social Media Marketing Executive' },
+  { name: 'Store Executive', slug: 'store_executive', linkedRole: 'Store' },
+  { name: 'Tax & Finance Executive', slug: 'tax_finance_executive', linkedRole: 'Tax & Finance Executive' },
+  { name: 'Telecaller', slug: 'telecaller', linkedRole: 'Telecalling' },
+];
+
 /** @deprecated Prefer seedSalaryCatalog — designations/positions are configured in-app. */
 export async function seedDesignationsAndSalaryCatalog(
   prisma: PrismaClient,
   _roleIdMap: Record<string, string>,
 ) {
   await seedSalaryCatalog(prisma);
+  await seedCompanyRolesAndDesignations(prisma);
 }

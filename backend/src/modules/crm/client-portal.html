@@ -528,9 +528,11 @@
         <label class="form-label" for="input-mobile">Registered Mobile Number</label>
         <div class="input-wrapper">
           <span class="input-prefix">+91</span>
-          <input type="tel" id="input-mobile" class="form-input has-prefix" placeholder="Enter 10-digit mobile number" maxlength="10">
+          <input type="tel" id="input-mobile" class="form-input has-prefix" placeholder="Enter 10-digit mobile number" maxlength="16" autofocus>
         </div>
       </div>
+
+      <div id="step-mobile-error" class="alert alert-danger" style="display: none; margin-bottom: 16px;"></div>
 
       <button id="btn-send-otp" class="btn btn-primary" onclick="sendOtp()">
         <span>Send Verification Code</span>
@@ -544,9 +546,15 @@
         <h2 class="portal-card-title">Step 2: Enter Email Verification Code</h2>
       </div>
 
+      <div id="otp-auto-banner" class="alert alert-success" style="display: none;">
+        <span>✓ <strong>Code Ready</strong>: Your 6-digit verification code <span id="otp-banner-code" style="font-family: monospace; font-size: 16px; font-weight: 800; background: rgba(0,0,0,0.2); padding: 2px 8px; border-radius: 6px; letter-spacing: 2px;"></span> has been generated and pre-filled below. Click <strong>Verify Code</strong> to access your dashboard.</span>
+      </div>
+
       <div class="alert alert-info">
         <span>📧 Verification code sent to: <strong id="masked-email-display">your email</strong>. Please check your inbox and enter the 6-digit code below.</span>
       </div>
+
+      <div id="step-otp-error" class="alert alert-danger" style="display: none; margin-bottom: 16px;"></div>
 
       <div class="otp-container">
         <input type="text" class="otp-input" maxlength="1" pattern="[0-9]" inputmode="numeric">
@@ -676,7 +684,10 @@
         }
       });
       input.addEventListener('keydown', (e) => {
-        if (e.key === 'Backspace' && !e.target.value && index > 0) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          verifyOtp();
+        } else if (e.key === 'Backspace' && !e.target.value && index > 0) {
           otpInputs[index - 1].focus();
         }
       });
@@ -690,6 +701,19 @@
           otpInputs[otpInputs.length - 1].focus();
         }
       });
+    });
+
+    // Enter key listener on mobile input
+    window.addEventListener('DOMContentLoaded', () => {
+      const mobileInput = document.getElementById('input-mobile');
+      if (mobileInput) {
+        mobileInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            sendOtp();
+          }
+        });
+      }
     });
 
     function getEnteredOtp() {
@@ -724,10 +748,22 @@
 
     // Step 1: Send OTP
     async function sendOtp() {
+      const errBox = document.getElementById('step-mobile-error');
+      if (errBox) { errBox.style.display = 'none'; errBox.textContent = ''; }
+
       const mobileInput = document.getElementById('input-mobile');
-      const mobile = mobileInput.value.trim().replace(/\D/g, '');
+      let mobile = (mobileInput.value || '').trim().replace(/\D/g, '');
+      if (mobile.length > 10) {
+        mobile = mobile.slice(-10);
+      }
+
       if (mobile.length !== 10) {
-        showToast('Please enter a valid 10-digit mobile number', true);
+        const msg = 'Please enter your valid 10-digit registered mobile number';
+        if (errBox) {
+          errBox.innerHTML = `⚠️ <strong>Error</strong>: ${msg}`;
+          errBox.style.display = 'flex';
+        }
+        showToast(msg, true);
         return;
       }
 
@@ -756,10 +792,20 @@
           code.split('').forEach((ch, idx) => {
             if (otpInputs[idx]) otpInputs[idx].value = ch;
           });
+          const autoBanner = document.getElementById('otp-auto-banner');
+          const codeEl = document.getElementById('otp-banner-code');
+          if (autoBanner && codeEl) {
+            codeEl.textContent = code;
+            autoBanner.style.display = 'flex';
+          }
         }
         otpInputs[0].focus();
         showToast(data.data.message || 'Verification code sent!');
       } catch (err) {
+        if (errBox) {
+          errBox.innerHTML = `⚠️ <strong>Verification Error</strong>: ${escapeHtml(err.message)}`;
+          errBox.style.display = 'flex';
+        }
         showToast(err.message, true);
       } finally {
         btn.disabled = false;
@@ -782,6 +828,12 @@
           code.split('').forEach((ch, idx) => {
             if (otpInputs[idx]) otpInputs[idx].value = ch;
           });
+          const autoBanner = document.getElementById('otp-auto-banner');
+          const codeEl = document.getElementById('otp-banner-code');
+          if (autoBanner && codeEl) {
+            codeEl.textContent = code;
+            autoBanner.style.display = 'flex';
+          }
         }
         showToast(data.data.message || 'New verification code sent!');
       } catch (err) {
@@ -791,9 +843,17 @@
 
     // Step 2: Verify OTP
     async function verifyOtp() {
+      const errBox = document.getElementById('step-otp-error');
+      if (errBox) { errBox.style.display = 'none'; errBox.textContent = ''; }
+
       const otp = getEnteredOtp();
       if (otp.length !== 6) {
-        showToast('Please enter all 6 digits of your verification code', true);
+        const msg = 'Please enter all 6 digits of your verification code';
+        if (errBox) {
+          errBox.innerHTML = `⚠️ <strong>Error</strong>: ${msg}`;
+          errBox.style.display = 'flex';
+        }
+        showToast(msg, true);
         return;
       }
 
@@ -819,6 +879,10 @@
         document.getElementById('step-dashboard').style.display = 'block';
         showToast('Verified successfully! Welcome.');
       } catch (err) {
+        if (errBox) {
+          errBox.innerHTML = `⚠️ <strong>Invalid Code</strong>: ${escapeHtml(err.message)}`;
+          errBox.style.display = 'flex';
+        }
         showToast(err.message, true);
       } finally {
         btn.disabled = false;

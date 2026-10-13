@@ -657,7 +657,7 @@ export const chatService = {
     return members.map((m) => m.userId);
   },
 
-  async uploadAndAttach(file: Express.Multer.File) {
+  async uploadAndAttach(file: { buffer: Buffer; originalname?: string; mimetype?: string }) {
     return collabStorage.uploadBuffer({
       buffer: file.buffer,
       fileName: file.originalname || 'file',

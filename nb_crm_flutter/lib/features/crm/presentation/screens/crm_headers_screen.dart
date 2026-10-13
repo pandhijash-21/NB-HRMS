@@ -10,6 +10,7 @@ import '../../../../core/tour/widgets/tour_target.dart';
 import '../../data/crm_repository.dart';
 import '../../domain/crm_models.dart';
 import '../bloc/crm_headers_bloc.dart';
+import '../widgets/crm_scope_selector.dart';
 
 class CrmHeadersScreen extends StatelessWidget {
   const CrmHeadersScreen({super.key});
@@ -73,6 +74,12 @@ class _CrmHeadersView extends StatelessWidget {
             elevation: 0,
             scrolledUnderElevation: 0,
             actions: [
+              CrmScopeSelectorWidget(
+                onScopeChanged: () {
+                  context.read<CrmHeadersBloc>().add(const CrmHeadersLoadRequested());
+                },
+              ),
+              const SizedBox(width: 8),
               if (selectedProject == null)
                 Padding(
                   padding: const EdgeInsets.only(right: 12),

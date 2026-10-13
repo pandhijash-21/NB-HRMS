@@ -8,6 +8,7 @@ import '../../../../core/widgets/bloc_async_body.dart';
 import '../../data/crm_repository.dart';
 import '../../domain/crm_models.dart';
 import '../bloc/crm_bin_bloc.dart';
+import '../widgets/crm_scope_selector.dart';
 
 class CrmBinScreen extends StatelessWidget {
   const CrmBinScreen({super.key});
@@ -107,6 +108,12 @@ class _CrmBinViewState extends State<_CrmBinView>
               ),
             ),
             actions: [
+              CrmScopeSelectorWidget(
+                onScopeChanged: () {
+                  context.read<CrmBinBloc>().add(const CrmBinRefreshRequested());
+                },
+              ),
+              const SizedBox(width: 8),
               IconButton(
                 tooltip: 'Refresh Bin',
                 icon: const Icon(Icons.refresh_rounded),
@@ -114,6 +121,7 @@ class _CrmBinViewState extends State<_CrmBinView>
                   context.read<CrmBinBloc>().add(const CrmBinRefreshRequested());
                 },
               ),
+              const SizedBox(width: 8),
             ],
           ),
           body: TabBarView(

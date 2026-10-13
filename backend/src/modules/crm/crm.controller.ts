@@ -1,12 +1,19 @@
 import { Request, Response } from 'express';
+import * as path from 'path';
 import { crmService } from './crm.service';
 import { ok, fail } from '../../utils/response';
+
+function getScope(req: Request): string {
+  const fromParam = (req.query?.scope || req.body?.scope || req.headers['x-crm-scope'] || '').toString().toUpperCase().trim();
+  if (fromParam === 'NB_FINSERVE') return 'NB_FINSERVE';
+  return (req as any).crmScope || 'NB_DEVELOPER';
+}
 
 export const crmController = {
   // Projects
   async getProjects(req: Request, res: Response) {
     try {
-      const projects = await crmService.getProjects();
+      const projects = await crmService.getProjects(getScope(req));
       res.json(ok(projects));
     } catch (err: any) {
       res.status(500).json(fail(err.message || 'Failed to fetch projects'));
@@ -15,7 +22,7 @@ export const crmController = {
 
   async createProject(req: Request, res: Response) {
     try {
-      const project = await crmService.createProject(req.body);
+      const project = await crmService.createProject(req.body, getScope(req));
       res.json(ok(project));
     } catch (err: any) {
       res.status(400).json(fail(err.message || 'Failed to create project'));
@@ -47,7 +54,7 @@ export const crmController = {
     try {
       const module = (req.query.module as string) || 'PRE_SALES';
       const projectId = req.query.projectId as string | undefined;
-      const campaigns = await crmService.getCampaigns(module, projectId);
+      const campaigns = await crmService.getCampaigns(module, projectId, getScope(req));
       res.json(ok(campaigns));
     } catch (err: any) {
       res.status(500).json(fail(err.message || 'Failed to fetch campaigns'));
@@ -56,7 +63,7 @@ export const crmController = {
 
   async createCampaign(req: Request, res: Response) {
     try {
-      const campaign = await crmService.createCampaign(req.body);
+      const campaign = await crmService.createCampaign(req.body, getScope(req));
       res.json(ok(campaign));
     } catch (err: any) {
       res.status(400).json(fail(err.message || 'Failed to create campaign'));
@@ -129,7 +136,7 @@ export const crmController = {
     try {
       const module = (req.query.module as string) || 'PRE_SALES';
       const campaignId = req.query.campaignId as string | undefined;
-      const cols = await crmService.getColumns(module, campaignId);
+      const cols = await crmService.getColumns(module, campaignId, getScope(req));
       res.json(ok(cols));
     } catch (err: any) {
       res.status(500).json(fail(err.message || 'Failed to fetch columns'));
@@ -138,7 +145,7 @@ export const crmController = {
 
   async createColumn(req: Request, res: Response) {
     try {
-      const col = await crmService.createColumn(req.body);
+      const col = await crmService.createColumn(req.body, getScope(req));
       res.json(ok(col));
     } catch (err: any) {
       res.status(400).json(fail(err.message || 'Failed to create column'));
@@ -168,6 +175,7 @@ export const crmController = {
   // Leads
   async getLeads(req: Request, res: Response) {
     try {
+      const authUser = (req as any).user;
       const leads = await crmService.getLeads({
         projectId: req.query.projectId as string,
         campaignId: req.query.campaignId as string,
@@ -175,8 +183,12 @@ export const crmController = {
         search: req.query.search as string,
         assignedToId: req.query.assignedToId ? parseInt(req.query.assignedToId as string, 10) : undefined,
         telecallerId: req.query.telecallerId ? parseInt(req.query.telecallerId as string, 10) : undefined,
+        leadFlow: req.query.leadFlow as string,
+        userRole: authUser?.role,
+        userEmployeeId: authUser?.employeeId,
         page: req.query.page ? parseInt(req.query.page as string, 10) : 1,
         limit: req.query.limit ? parseInt(req.query.limit as string, 10) : 50,
+        scope: getScope(req),
       });
       res.json(ok(leads));
     } catch (err: any) {
@@ -191,6 +203,7 @@ export const crmController = {
         req.body,
         authUser?.id,
         authUser?.employeeId,
+        getScope(req),
       );
       res.json(ok(lead));
     } catch (err: any) {
@@ -210,6 +223,7 @@ export const crmController = {
         authUser?.id,
         authUser?.employeeId,
         campaignId,
+        getScope(req),
       );
       res.json(ok(result));
     } catch (err: any) {
@@ -323,7 +337,7 @@ export const crmController = {
   async getBin(req: Request, res: Response) {
     try {
       const module = (req.query.module as string) || 'PRE_SALES';
-      const items = await crmService.getBinLeads(module);
+      const items = await crmService.getBinLeads(module, getScope(req));
       res.json(ok(items));
     } catch (err: any) {
       res.status(500).json(fail(err.message || 'Failed to fetch bin leads'));
@@ -337,6 +351,7 @@ export const crmController = {
         leadId: req.query.leadId as string,
         filter: req.query.filter as any,
         date: req.query.date as string,
+        scope: getScope(req),
       });
       res.json(ok(followUps));
     } catch (err: any) {
@@ -368,7 +383,7 @@ export const crmController = {
   // Settings & Telephony
   async getSettings(req: Request, res: Response) {
     try {
-      const settings = await crmService.getSettings();
+      const settings = await crmService.getSettings(getScope(req));
       res.json(ok(settings));
     } catch (err: any) {
       res.status(500).json(fail(err.message || 'Failed to fetch CRM settings'));
@@ -378,7 +393,7 @@ export const crmController = {
   async updateSettings(req: Request, res: Response) {
     try {
       const authUser = (req as any).user;
-      const settings = await crmService.updateSettings(req.body, authUser?.id);
+      const settings = await crmService.updateSettings(req.body, authUser?.id, getScope(req));
       res.json(ok(settings));
     } catch (err: any) {
       res.status(400).json(fail(err.message || 'Failed to update CRM settings'));
@@ -387,7 +402,7 @@ export const crmController = {
 
   async listTelecallerTelephony(req: Request, res: Response) {
     try {
-      const data = await crmService.listTelecallerTelephony();
+      const data = await crmService.listTelecallerTelephony(getScope(req));
       res.json(ok(data));
     } catch (err: any) {
       res.status(400).json(fail(err.message || 'Failed to list telecaller telephony'));
@@ -402,6 +417,7 @@ export const crmController = {
         employeeId,
         req.body ?? {},
         authUser?.id,
+        getScope(req),
       );
       res.json(ok(data));
     } catch (err: any) {
@@ -425,6 +441,7 @@ export const crmController = {
       const metrics = await crmService.getKpiMetrics(
         req.query.projectId as string | undefined,
         req.query.campaignId as string | undefined,
+        getScope(req),
       );
       res.json(ok(metrics));
     } catch (err: any) {
@@ -483,5 +500,249 @@ export const crmController = {
       res.status(400).json(fail(err.message || 'Failed to update call log'));
     }
   },
+
+  // WhatsApp Automation
+  async getWhatsappConfig(req: Request, res: Response) {
+    try {
+      const config = await crmService.getWhatsappConfig(getScope(req));
+      res.json(ok(config));
+    } catch (err: any) {
+      res.status(500).json(fail(err.message || 'Failed to fetch WhatsApp configuration'));
+    }
+  },
+
+  async updateWhatsappConfig(req: Request, res: Response) {
+    try {
+      const authUser = (req as any).user;
+      const config = await crmService.updateWhatsappConfig(req.body, authUser?.id, getScope(req));
+      res.json(ok(config));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to update WhatsApp configuration'));
+    }
+  },
+
+  async testWhatsappConnection(req: Request, res: Response) {
+    try {
+      const result = await crmService.testWhatsappConnection(getScope(req));
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(500).json(fail(err.message || 'Failed to test BotBiz WhatsApp connection'));
+    }
+  },
+
+  async syncWhatsappTemplates(req: Request, res: Response) {
+    try {
+      const result = await crmService.syncWhatsappTemplates(getScope(req));
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(500).json(fail(err.message || 'Failed to sync templates from BotBiz'));
+    }
+  },
+
+  async getWhatsappTemplates(req: Request, res: Response) {
+    try {
+      const result = await crmService.getWhatsappTemplates(getScope(req));
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(500).json(fail(err.message || 'Failed to fetch cached WhatsApp templates'));
+    }
+  },
+
+  async checkWhatsappTemplateStatus(req: Request, res: Response) {
+    try {
+      const templateId = String(req.params.templateId);
+      if (!templateId) return res.status(400).json(fail('Template ID is required'));
+      const result = await crmService.checkWhatsappTemplateStatus(templateId, getScope(req));
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(500).json(fail(err.message || 'Failed to check template status'));
+    }
+  },
+
+  async retryWhatsappLog(req: Request, res: Response) {
+    try {
+      const logId = String(req.params.logId);
+      if (!logId) return res.status(400).json(fail('Log ID is required'));
+      const result = await crmService.retryWhatsappLog(logId, getScope(req));
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to retry WhatsApp message'));
+    }
+  },
+
+  async sendTestWhatsappMessage(req: Request, res: Response) {
+    try {
+      const { phone, message, templateId } = req.body;
+      if (!phone) return res.status(400).json(fail('Phone number is required'));
+      const result = await crmService.sendTestWhatsappMessage(phone, message, templateId, getScope(req));
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to send test WhatsApp message'));
+    }
+  },
+
+  async getWhatsappLogs(req: Request, res: Response) {
+    try {
+      const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : 50;
+      const logs = await crmService.getWhatsappLogs(limit, getScope(req));
+      res.json(ok(logs));
+    } catch (err: any) {
+      res.status(500).json(fail(err.message || 'Failed to fetch WhatsApp logs'));
+    }
+  },
+
+  async sendLeadWhatsapp(req: Request, res: Response) {
+    try {
+      const leadId = String(req.params.id);
+      const result = await crmService.sendLeadWhatsapp(leadId, req.body);
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to send lead WhatsApp message'));
+    }
+  },
+
+  async uploadBrochure(req: Request, res: Response) {
+    try {
+      if (!req.file) {
+        return res.status(400).json(fail('No brochure file uploaded'));
+      }
+      const authUser = (req as any).user;
+      const result = await crmService.uploadBrochure(req.file, authUser?.id);
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to upload brochure'));
+    }
+  },
+
+  async getVirtualBuilding(req: Request, res: Response) {
+    try {
+      const { projectId, towerId } = req.query as { projectId?: string; towerId?: string };
+      if (!projectId || !towerId) {
+        return res.status(400).json(fail('projectId and towerId query parameters are required'));
+      }
+      const result = await crmService.getVirtualBuilding(projectId, towerId, (req as any).crmScope);
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(500).json(fail(err.message || 'Failed to fetch virtual building elevation'));
+    }
+  },
+
+  async updateVirtualBuildingUnit(req: Request, res: Response) {
+    try {
+      const authUser = (req as any).user;
+      const result = await crmService.updateVirtualBuildingUnit({
+        ...req.body,
+        updatedBy: authUser?.name || 'CRM User',
+      });
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to update unit'));
+    }
+  },
+
+  // ---------------------------------------------------------------------------
+  // Finserve Application Details & Client Portal
+  // ---------------------------------------------------------------------------
+  async updateLeadApplicationDetails(req: Request, res: Response) {
+    try {
+      const authUser = (req as any).user;
+      const leadId = String(req.params.id);
+      const result = await crmService.updateLeadApplicationDetails(
+        leadId,
+        req.body,
+        authUser?.id,
+      );
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to update application details'));
+    }
+  },
+
+  async generateClientPortalLink(req: Request, res: Response) {
+    try {
+      const leadId = String(req.params.id);
+      const origin = String(req.headers.origin || `${req.protocol}://${req.get('host')}`);
+      const result = await crmService.generateClientPortalLink(leadId, origin);
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to generate client portal link'));
+    }
+  },
+
+  async uploadLeadDoc(req: Request, res: Response) {
+    try {
+      const authUser = (req as any).user;
+      const leadId = String(req.params.id);
+      const file = req.file;
+      if (!file) return res.status(400).json(fail('No document file uploaded'));
+      const { docTypeId, docName } = req.body;
+      const result = await crmService.uploadLeadDoc(
+        leadId,
+        docTypeId || 'document',
+        docName || '',
+        file,
+        authUser?.name || 'SALES_REP',
+      );
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to upload lead document'));
+    }
+  },
+
+  // Public Client Portal
+  async getClientPortalInfo(req: Request, res: Response) {
+    try {
+      const token = String(req.params.token || req.query.token || '');
+      const result = await crmService.getClientPortalInfo(token);
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to fetch portal info'));
+    }
+  },
+
+  async sendClientPortalOtp(req: Request, res: Response) {
+    try {
+      const token = String(req.params.token || req.body.token || '');
+      const { mobile } = req.body;
+      const result = await crmService.sendClientPortalOtp(token, mobile);
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to send verification code'));
+    }
+  },
+
+  async verifyClientPortalOtp(req: Request, res: Response) {
+    try {
+      const token = String(req.params.token || req.body.token || '');
+      const { mobile, otp } = req.body;
+      const result = await crmService.verifyClientPortalOtp(token, mobile, otp);
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to verify code'));
+    }
+  },
+
+  async uploadClientPortalDoc(req: Request, res: Response) {
+    try {
+      const token = String(req.params.token || req.body.token || '');
+      const file = req.file;
+      if (!file) return res.status(400).json(fail('No file provided for upload'));
+      const { docTypeId, docName } = req.body;
+      const result = await crmService.uploadClientPortalDoc(token, docTypeId || 'doc', docName || '', file);
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to upload document'));
+    }
+  },
+
+  renderClientPortalPage(_req: Request, res: Response) {
+    const htmlPath = path.join(__dirname, 'client-portal.html');
+    res.sendFile(htmlPath, (err) => {
+      if (err) {
+        res.status(404).send('Client portal page not found');
+      }
+    });
+  },
 };
+
 

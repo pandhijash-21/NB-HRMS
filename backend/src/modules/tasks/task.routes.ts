@@ -16,7 +16,7 @@ const upload = multer({
 
 const p = (v: string | string[]) => (Array.isArray(v) ? v[0] : v);
 
-function isAllowedAttachment(file: Express.Multer.File) {
+function isAllowedAttachment(file: any) {
   const name = (file.originalname || '').toLowerCase();
   const mime = (file.mimetype || '').toLowerCase();
   return (

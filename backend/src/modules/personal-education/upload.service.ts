@@ -55,7 +55,7 @@ export function parseCloudinaryDeliveryUrl(rawUrl: string): ParsedCloudinaryUrl 
 }
 
 export const uploadService = {
-  async uploadToCloudinary(file: Express.Multer.File, folder: string): Promise<string> {
+  async uploadToCloudinary(file: { buffer: Buffer; originalname?: string; mimetype?: string }, folder: string): Promise<string> {
     ensureCloudinaryConfigured();
 
     const base64 = file.buffer.toString('base64');

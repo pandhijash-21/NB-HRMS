@@ -2,7 +2,12 @@ import type { Request, Response } from 'express';
 import { CrmLeadStatus } from '@prisma/client';
 import { prisma } from '../../config/prisma';
 import * as crypto from 'crypto';
+import * as path from 'path';
+import * as fs from 'fs';
 import * as xlsx from 'xlsx';
+import { uploadService } from '../personal-education/upload.service';
+import { whatsappService } from './whatsapp.service';
+import { sendFinserveClientOtpEmail } from '../../utils/mailer';
 import {
   CreateProjectDto,
   UpdateProjectDto,
@@ -15,6 +20,7 @@ import {
   UpdateLeadDto,
   ScheduleFollowUpDto,
   UpdateCrmSettingsDto,
+  UpdateLeadApplicationDetailsDto,
 } from './crm.types';
 
 const DEFAULT_PRE_SALES_COLUMNS: Array<{
@@ -31,6 +37,41 @@ const DEFAULT_PRE_SALES_COLUMNS: Array<{
   { columnKey: 'Email', label: 'Email Address', dataType: 'EMAIL', isRequired: false, isSystem: false, displayOrder: 3 },
   { columnKey: 'Project_Type', label: 'Requirement / Project', dataType: 'TEXT', isRequired: false, isSystem: false, displayOrder: 4 },
   { columnKey: 'Budget', label: 'Budget', dataType: 'TEXT', isRequired: false, isSystem: false, displayOrder: 5 },
+  { columnKey: 'Location', label: 'Location / City', dataType: 'TEXT', isRequired: false, isSystem: false, displayOrder: 6 },
+  {
+    columnKey: 'Source',
+    label: 'Lead Source',
+    dataType: 'SELECT',
+    options: ['Website', 'Direct Call', 'Referral', 'Walk-in', 'Social Media', 'Excel Import', 'Meta Ads', 'Google Ads'],
+    isRequired: false,
+    isSystem: false,
+    displayOrder: 7,
+  },
+  { columnKey: 'Notes', label: 'Remarks / Notes', dataType: 'TEXT', isRequired: false, isSystem: false, displayOrder: 8 },
+];
+
+const DEFAULT_FINSERVE_PRE_SALES_COLUMNS: Array<{
+  columnKey: string;
+  label: string;
+  dataType: string;
+  options?: string[];
+  isRequired: boolean;
+  isSystem: boolean;
+  displayOrder: number;
+}> = [
+  { columnKey: 'Client_Name', label: 'Client Name', dataType: 'TEXT', isRequired: true, isSystem: true, displayOrder: 1 },
+  { columnKey: 'Phone', label: 'Phone Number', dataType: 'PHONE', isRequired: true, isSystem: true, displayOrder: 2 },
+  { columnKey: 'Email', label: 'Email Address', dataType: 'EMAIL', isRequired: false, isSystem: false, displayOrder: 3 },
+  {
+    columnKey: 'Loan_Type',
+    label: 'Type of Loan',
+    dataType: 'SELECT',
+    options: ['Home Loan', 'Personal Loan', 'Business Loan', 'Mortgage / LAP', 'Auto Loan', 'Education Loan'],
+    isRequired: false,
+    isSystem: false,
+    displayOrder: 4,
+  },
+  { columnKey: 'Amount', label: 'Amount', dataType: 'TEXT', isRequired: false, isSystem: false, displayOrder: 5 },
   { columnKey: 'Location', label: 'Location / City', dataType: 'TEXT', isRequired: false, isSystem: false, displayOrder: 6 },
   {
     columnKey: 'Source',
@@ -66,12 +107,13 @@ export const crmService = {
   // ---------------------------------------------------------------------------
   // Projects Management
   // ---------------------------------------------------------------------------
-  async getProjects() {
+  async getProjects(scope: string = 'NB_DEVELOPER') {
     return prisma.crmProject.findMany({
+      where: { scope },
       orderBy: { createdAt: 'desc' },
       include: {
         campaigns: {
-          where: { isActive: true },
+          where: { isActive: true, scope },
           select: {
             id: true,
             name: true,
@@ -80,17 +122,17 @@ export const crmService = {
             webhookToken: true,
             startDate: true,
             isActive: true,
-            _count: { select: { leads: { where: { isDeleted: false } } } },
+            _count: { select: { leads: { where: { isDeleted: false, scope } } } },
           },
         },
         _count: {
-          select: { campaigns: { where: { isActive: true } } },
+          select: { campaigns: { where: { isActive: true, scope } } },
         },
       },
     });
   },
 
-  async createProject(dto: CreateProjectDto) {
+  async createProject(dto: CreateProjectDto, scope: string = 'NB_DEVELOPER') {
     const code = (dto.code && dto.code.trim())
       ? dto.code.trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_')
       : dto.name.trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_') + '_' + Date.now().toString().slice(-4);
@@ -99,6 +141,7 @@ export const crmService = {
       data: {
         name: dto.name.trim(),
         code,
+        scope,
         description: dto.description?.trim() || null,
         location: dto.location?.trim() || null,
         startDate: dto.startDate ? new Date(dto.startDate) : null,
@@ -129,9 +172,11 @@ export const crmService = {
   // ---------------------------------------------------------------------------
   // Campaigns Management & Webhook Token Generation
   // ---------------------------------------------------------------------------
-  async ensureDefaultCampaign(module = 'PRE_SALES') {
-    // `code` is globally unique — PRE_SALES keeps legacy `DEFAULT`; other modules use a scoped code.
-    const defaultCode = module === 'PRE_SALES' ? 'DEFAULT' : `DEFAULT_${module}`;
+  async ensureDefaultCampaign(module = 'PRE_SALES', scope: string = 'NB_DEVELOPER') {
+    const isFinserve = scope === 'NB_FINSERVE';
+    const defaultCode = isFinserve
+      ? (module === 'PRE_SALES' ? 'FINSERVE_DEFAULT' : `FINSERVE_DEFAULT_${module}`)
+      : (module === 'PRE_SALES' ? 'DEFAULT' : `DEFAULT_${module}`);
 
     let campaign = await prisma.crmCampaign.findUnique({
       where: { code: defaultCode },
@@ -149,14 +194,16 @@ export const crmService = {
       try {
         campaign = await prisma.crmCampaign.create({
           data: {
-            name: 'Default Campaign',
+            name: isFinserve ? 'NB Finserve Primary Campaign' : 'Default Campaign',
             code: defaultCode,
-            description:
-              module === 'PRE_SALES'
+            description: isFinserve
+              ? 'Primary NB Finserve Campaign'
+              : (module === 'PRE_SALES'
                 ? 'Primary Pre-Sales Campaign'
-                : `Primary ${module} Campaign`,
+                : `Primary ${module} Campaign`),
             webhookToken,
             module,
+            scope,
             isActive: true,
           },
         });
@@ -178,6 +225,13 @@ export const crmService = {
       }
     }
 
+    if (campaign.scope !== scope) {
+      campaign = await prisma.crmCampaign.update({
+        where: { id: campaign.id },
+        data: { scope },
+      });
+    }
+
     if (campaign.module !== module && campaign.code === defaultCode) {
       campaign = await prisma.crmCampaign.update({
         where: { id: campaign.id },
@@ -193,50 +247,65 @@ export const crmService = {
       });
     }
 
-    // Attach any orphan columns/leads with null campaignId to this default campaign
+    // Attach any orphan columns/leads with null campaignId to this default campaign if same scope
     await prisma.crmColumnConfig.updateMany({
-      where: { module, campaignId: null },
+      where: { module, campaignId: null, scope },
       data: { campaignId: campaign.id },
     });
 
     await prisma.crmLead.updateMany({
-      where: { campaignId: null },
+      where: { campaignId: null, scope },
       data: { campaignId: campaign.id },
     });
 
     // Check if columns exist for this campaign
-    const columnCount = await prisma.crmColumnConfig.count({
-      where: { module, campaignId: campaign.id },
-    });
+    if (module === 'PRE_SALES') {
+      const existingColKeys = new Set(
+        (
+          await prisma.crmColumnConfig.findMany({
+            where: { module, campaignId: campaign.id, scope },
+            select: { columnKey: true },
+          })
+        ).map((c) => c.columnKey)
+      );
 
-    if (columnCount === 0 && module === 'PRE_SALES') {
-      for (const col of DEFAULT_PRE_SALES_COLUMNS) {
-        await prisma.crmColumnConfig.create({
-          data: {
-            module,
-            campaignId: campaign.id,
-            columnKey: col.columnKey,
-            label: col.label,
-            dataType: col.dataType,
-            options: col.options || [],
-            isRequired: col.isRequired,
-            isSystem: col.isSystem,
-            displayOrder: col.displayOrder,
-            isVisibleInTable: true,
-            isActive: true,
-          },
-        });
+      const defaultCols = isFinserve ? DEFAULT_FINSERVE_PRE_SALES_COLUMNS : DEFAULT_PRE_SALES_COLUMNS;
+      for (const col of defaultCols) {
+        if (!existingColKeys.has(col.columnKey)) {
+          try {
+            await prisma.crmColumnConfig.create({
+              data: {
+                scope,
+                module,
+                campaignId: campaign.id,
+                columnKey: col.columnKey,
+                label: col.label,
+                dataType: col.dataType,
+                options: col.options || [],
+                isRequired: col.isRequired,
+                isSystem: col.isSystem,
+                displayOrder: col.displayOrder,
+                isVisibleInTable: true,
+                isActive: true,
+              },
+            });
+          } catch (err: any) {
+            if (err?.code !== 'P2002') {
+              throw err;
+            }
+          }
+        }
       }
     }
 
     return campaign;
   },
 
-  async getCampaigns(module = 'PRE_SALES', projectId?: string) {
+  async getCampaigns(module = 'PRE_SALES', projectId?: string, scope: string = 'NB_DEVELOPER') {
     if (!projectId) {
-      await this.ensureDefaultCampaign(module);
+      await this.ensureDefaultCampaign(module, scope);
     }
-    const where: any = { module, isActive: true };
+    const where: any = { module, isActive: true, scope };
     if (projectId) {
       where.projectId = projectId;
     }
@@ -249,8 +318,8 @@ export const crmService = {
         },
         _count: {
           select: {
-            columns: { where: { isActive: true } },
-            leads: { where: { isDeleted: false } },
+            columns: { where: { isActive: true, scope } },
+            leads: { where: { isDeleted: false, scope } },
           },
         },
       },
@@ -276,9 +345,9 @@ export const crmService = {
     }));
   },
 
-  async createCampaign(dto: CreateCampaignDto) {
+  async createCampaign(dto: CreateCampaignDto, scope: string = 'NB_DEVELOPER') {
     const module = dto.module || 'PRE_SALES';
-    const defaultCamp = await this.ensureDefaultCampaign(module);
+    const defaultCamp = await this.ensureDefaultCampaign(module, scope);
 
     const generatedCode = (dto.code && dto.code.trim())
       ? dto.code.trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_')
@@ -296,6 +365,7 @@ export const crmService = {
         description: dto.description?.trim() || null,
         startDate: dto.startDate ? new Date(dto.startDate) : null,
         module,
+        scope,
         isActive: true,
       },
       include: {
@@ -306,7 +376,7 @@ export const crmService = {
     // Clone columns from source campaign (or default campaign)
     const sourceCampaignId = dto.copyFromCampaignId || defaultCamp.id;
     const sourceColumns = await prisma.crmColumnConfig.findMany({
-      where: { campaignId: sourceCampaignId, isActive: true },
+      where: { campaignId: sourceCampaignId, isActive: true, scope },
       orderBy: { displayOrder: 'asc' },
     });
 
@@ -314,6 +384,7 @@ export const crmService = {
       for (const col of sourceColumns) {
         await prisma.crmColumnConfig.create({
           data: {
+            scope,
             module,
             campaignId: created.id,
             columnKey: col.columnKey,
@@ -333,6 +404,7 @@ export const crmService = {
       for (const col of DEFAULT_PRE_SALES_COLUMNS) {
         await prisma.crmColumnConfig.create({
           data: {
+            scope,
             module,
             campaignId: created.id,
             columnKey: col.columnKey,
@@ -444,6 +516,7 @@ export const crmService = {
       where: {
         campaignId: campaign.id,
         module: campaign.module,
+        scope: campaign.scope || 'NB_DEVELOPER',
       },
     });
     const existingKeys = new Set(existingColumns.map((c) => c.columnKey));
@@ -454,6 +527,7 @@ export const crmService = {
         const label = key.replace(/_/g, ' ');
         await prisma.crmColumnConfig.create({
           data: {
+            scope: campaign.scope || 'NB_DEVELOPER',
             campaignId: campaign.id,
             module: campaign.module,
             columnKey: key,
@@ -495,15 +569,39 @@ export const crmService = {
       (rawPhone ? `Lead (${rawPhone})` : 'New Inbound Lead')
     ).trim();
 
+    const campaignScope = campaign.scope || 'NB_DEVELOPER';
+    const pools = await this.getAssignedTelecallerPools(campaignScope);
+    let webhookTelecallerId: number | undefined;
+
+    if (pools.webhookIds.length > 0) {
+      const existingWebhookCount = await prisma.crmLead.count({
+        where: {
+          scope: campaignScope,
+          leadSource: { in: ['WEBHOOK', 'META'] },
+        },
+      });
+      webhookTelecallerId = pools.webhookIds[existingWebhookCount % pools.webhookIds.length];
+    }
+
     const lead = await prisma.crmLead.create({
       data: {
+        scope: campaignScope,
         campaignId: campaign.id,
         phone: rawPhone || '0000000000',
         name,
         status: 'NOT_STARTED',
         customFields: normalizedPayload,
+        leadSource: 'WEBHOOK',
+        telecallerId: webhookTelecallerId || undefined,
       },
     });
+
+    // WhatsApp Automation: Auto-welcome message with brochure on new webhook lead
+    whatsappService
+      .triggerEvent('LEAD_CREATED', lead, {
+        projectName: campaign.project?.name || (campaign.scope === 'NB_FINSERVE' ? 'NB Finserve' : 'Legacy Tower'),
+      })
+      .catch((err) => console.error('[CRM WhatsApp Hook Error - Webhook]:', err));
 
     return {
       status: 'success',
@@ -598,47 +696,116 @@ export const crmService = {
   // ---------------------------------------------------------------------------
   // Column Configuration (Campaign-Scoped)
   // ---------------------------------------------------------------------------
-  async ensureDefaultColumns(module = 'PRE_SALES') {
-    await this.ensureDefaultCampaign(module);
+  async ensureDefaultColumns(module = 'PRE_SALES', scope: string = 'NB_DEVELOPER') {
+    await this.ensureDefaultCampaign(module, scope);
   },
 
-  async getColumns(module = 'PRE_SALES', campaignId?: string) {
-    const defaultCamp = await this.ensureDefaultCampaign(module);
+  async getColumns(module = 'PRE_SALES', campaignId?: string, scope: string = 'NB_DEVELOPER') {
+    const isFinserve = scope === 'NB_FINSERVE';
+    const defaultCamp = await this.ensureDefaultCampaign(module, scope);
     const targetCampaignId = campaignId || defaultCamp.id;
+
+    // For Finserve Pre-Sales, dynamically migrate and sync Type of Loan and Amount
+    if (isFinserve && module === 'PRE_SALES') {
+      const settings = await this.getSettings('NB_FINSERVE');
+      let loanTypeOptions = ['Home Loan', 'Personal Loan', 'Business Loan', 'Mortgage / LAP', 'Auto Loan', 'Education Loan'];
+      try {
+        if (settings.loan_types) {
+          const parsed = typeof settings.loan_types === 'string' ? JSON.parse(settings.loan_types) : settings.loan_types;
+          if (Array.isArray(parsed) && parsed.length > 0) loanTypeOptions = parsed;
+        }
+      } catch (_) {}
+
+      // Safely migrate and deduplicate Project_Type and Budget columns without unique constraint collisions
+      try {
+        const existingCols = await prisma.crmColumnConfig.findMany({
+          where: {
+            scope: 'NB_FINSERVE',
+            module: 'PRE_SALES',
+            campaignId: targetCampaignId,
+          },
+        });
+
+        const hasLoanType = existingCols.some((c) => c.columnKey === 'Loan_Type');
+        const hasAmount = existingCols.some((c) => c.columnKey === 'Amount');
+
+        for (const col of existingCols) {
+          const isProjectCol = col.columnKey === 'Project_Type' || col.label.includes('Requirement') || col.label.includes('Project');
+          if (isProjectCol) {
+            if (!hasLoanType) {
+              await prisma.crmColumnConfig.update({
+                where: { id: col.id },
+                data: { columnKey: 'Loan_Type', label: 'Type of Loan', dataType: 'SELECT', options: loanTypeOptions },
+              });
+            } else if (col.columnKey !== 'Loan_Type') {
+              await prisma.crmColumnConfig.delete({ where: { id: col.id } });
+            }
+          } else if (col.columnKey === 'Loan_Type') {
+            await prisma.crmColumnConfig.update({
+              where: { id: col.id },
+              data: { label: 'Type of Loan', dataType: 'SELECT', options: loanTypeOptions },
+            });
+          }
+
+          const isBudgetCol = col.columnKey === 'Budget' || col.label === 'Budget';
+          if (isBudgetCol) {
+            if (!hasAmount) {
+              await prisma.crmColumnConfig.update({
+                where: { id: col.id },
+                data: { columnKey: 'Amount', label: 'Amount' },
+              });
+            } else if (col.columnKey !== 'Amount') {
+              await prisma.crmColumnConfig.delete({ where: { id: col.id } });
+            }
+          }
+        }
+      } catch (err: any) {
+        console.warn('[CRM Finserve Column Sync Warning]:', err?.message || err);
+      }
+    }
 
     // Check if columns exist for this campaign, if not clone default
     const count = await prisma.crmColumnConfig.count({
-      where: { module, campaignId: targetCampaignId, isActive: true },
+      where: { module, campaignId: targetCampaignId, isActive: true, scope },
     });
 
-    if (count === 0) {
-      for (const col of DEFAULT_PRE_SALES_COLUMNS) {
-        await prisma.crmColumnConfig.create({
-          data: {
-            module,
-            campaignId: targetCampaignId,
-            columnKey: col.columnKey,
-            label: col.label,
-            dataType: col.dataType,
-            options: col.options || [],
-            isRequired: col.isRequired,
-            isSystem: col.isSystem,
-            displayOrder: col.displayOrder,
-            isActive: true,
-          },
-        });
+    const defaultCols = isFinserve ? DEFAULT_FINSERVE_PRE_SALES_COLUMNS : DEFAULT_PRE_SALES_COLUMNS;
+
+    if (count === 0 && module === 'PRE_SALES') {
+      for (const col of defaultCols) {
+        try {
+          await prisma.crmColumnConfig.create({
+            data: {
+              scope,
+              module,
+              campaignId: targetCampaignId,
+              columnKey: col.columnKey,
+              label: col.label,
+              dataType: col.dataType,
+              options: col.options || [],
+              isRequired: col.isRequired,
+              isSystem: col.isSystem,
+              displayOrder: col.displayOrder,
+              isActive: true,
+            },
+          });
+        } catch (err: any) {
+          if (err?.code !== 'P2002') {
+            throw err;
+          }
+        }
       }
     }
 
     return prisma.crmColumnConfig.findMany({
-      where: { module, campaignId: targetCampaignId, isActive: true },
+      where: { module, campaignId: targetCampaignId, isActive: true, scope },
       orderBy: { displayOrder: 'asc' },
     });
   },
 
-  async createColumn(dto: CreateColumnDto) {
+  async createColumn(dto: CreateColumnDto, scope: string = 'NB_DEVELOPER') {
     const module = dto.module || 'PRE_SALES';
-    const defaultCamp = await this.ensureDefaultCampaign(module);
+    const defaultCamp = await this.ensureDefaultCampaign(module, scope);
     const campaignId = dto.campaignId || defaultCamp.id;
 
     const key = dto.columnKey
@@ -648,13 +815,20 @@ export const crmService = {
 
     // Determine max order
     const last = await prisma.crmColumnConfig.findFirst({
-      where: { module, campaignId },
+      where: { module, campaignId, scope },
       orderBy: { displayOrder: 'desc' },
     });
     const nextOrder = dto.displayOrder ?? (last ? last.displayOrder + 1 : 1);
 
     return prisma.crmColumnConfig.upsert({
-      where: { module_campaignId_columnKey: { module, campaignId, columnKey: key } },
+      where: {
+        module_campaignId_columnKey_scope: {
+          module,
+          campaignId,
+          columnKey: key,
+          scope,
+        },
+      },
       update: {
         label: dto.label,
         dataType: dto.dataType || 'TEXT',
@@ -664,6 +838,7 @@ export const crmService = {
         displayOrder: nextOrder,
       },
       create: {
+        scope,
         module,
         campaignId,
         columnKey: key,
@@ -711,21 +886,62 @@ export const crmService = {
     search?: string;
     assignedToId?: number;
     telecallerId?: number;
+    leadFlow?: string;
+    userRole?: string;
+    userEmployeeId?: number;
     page?: number;
     limit?: number;
+    scope?: string;
   }) {
+    const scope = query.scope || 'NB_DEVELOPER';
     const page = Math.max(1, query.page || 1);
     const limit = Math.min(100, query.limit || 50);
     const skip = (page - 1) * limit;
 
     const where: any = {
       isDeleted: false,
+      scope,
     };
+
+    const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(
+      query.userRole?.toUpperCase() || ''
+    );
+
+    // If non-admin user is logged in, enforce flow and telecaller scoping
+    if (!isAdmin && query.userEmployeeId) {
+      const pools = await this.getAssignedTelecallerPools(scope);
+      const isExcelAssigned = pools.excelIds.includes(query.userEmployeeId);
+      const isWebhookAssigned = pools.webhookIds.includes(query.userEmployeeId);
+
+      // Non-admin telecallers only see leads assigned directly to them
+      where.telecallerId = query.userEmployeeId;
+
+      if (isExcelAssigned && !isWebhookAssigned) {
+        where.OR = [{ leadSource: 'EXCEL' }, { leadSource: 'MANUAL' }, { leadSource: null }];
+      } else if (isWebhookAssigned && !isExcelAssigned) {
+        where.leadSource = { in: ['WEBHOOK', 'META'] };
+      }
+    }
+
+    if (query.leadFlow && query.leadFlow !== 'ALL') {
+      const flow = query.leadFlow.toUpperCase();
+      if (flow === 'EXCEL') {
+        const excelCond = [{ leadSource: 'EXCEL' }, { leadSource: 'MANUAL' }, { leadSource: null }];
+        if (where.OR) {
+          where.AND = [{ OR: where.OR }, { OR: excelCond }];
+          delete where.OR;
+        } else {
+          where.OR = excelCond;
+        }
+      } else if (flow === 'WEBHOOK' || flow === 'META') {
+        where.leadSource = { in: ['WEBHOOK', 'META'] };
+      }
+    }
 
     if (query.campaignId && query.campaignId !== 'ALL') {
       where.campaignId = query.campaignId;
     } else if (query.projectId && query.projectId !== 'ALL') {
-      where.campaign = { projectId: query.projectId };
+      where.campaign = { projectId: query.projectId, scope };
     }
 
     if (query.status && query.status !== 'ALL') {
@@ -742,10 +958,16 @@ export const crmService = {
 
     if (query.search && query.search.trim()) {
       const s = query.search.trim();
-      where.OR = [
+      const searchCond = [
         { name: { contains: s, mode: 'insensitive' } },
         { phone: { contains: s, mode: 'insensitive' } },
       ];
+      if (where.OR) {
+        where.AND = [{ OR: where.OR }, { OR: searchCond }];
+        delete where.OR;
+      } else {
+        where.OR = searchCond;
+      }
     }
 
     const [total, items] = await Promise.all([
@@ -781,31 +1003,70 @@ export const crmService = {
     };
   },
 
-  async createLead(dto: CreateLeadDto, createdById?: string, telecallerId?: number) {
+  async createLead(dto: CreateLeadDto, createdById?: string, telecallerId?: number, scope: string = 'NB_DEVELOPER') {
     const custom = (dto.customFields && typeof dto.customFields === 'object') ? dto.customFields : {};
     const phone = (dto.phone || custom.phone || custom.Phone || custom.Phone_Number || custom.phone_number || '').toString().trim();
     const name = (dto.name || custom.client_name || custom.Client_Name || custom.full_name || custom.Full_Name || custom.Name || custom.name || 'Unnamed Lead').toString().trim();
-    const defaultCamp = await this.ensureDefaultCampaign('PRE_SALES');
+    const defaultCamp = await this.ensureDefaultCampaign('PRE_SALES', scope);
     const campaignId = dto.campaignId || defaultCamp.id;
 
-    return prisma.crmLead.create({
+    const requestedSource = (dto.leadSource || custom.leadSource || custom.lead_source || 'EXCEL').toString().toUpperCase();
+    const finalSource = requestedSource.includes('WEBHOOK') || requestedSource.includes('META') ? 'WEBHOOK' : 'EXCEL';
+
+    let assignedTelecallerId = telecallerId || dto.telecallerId;
+    if (!assignedTelecallerId) {
+      const pools = await this.getAssignedTelecallerPools(scope);
+      if (finalSource === 'WEBHOOK' && pools.webhookIds.length > 0) {
+        const count = await prisma.crmLead.count({
+          where: { scope, leadSource: { in: ['WEBHOOK', 'META'] } },
+        });
+        assignedTelecallerId = pools.webhookIds[count % pools.webhookIds.length];
+      } else if (finalSource === 'EXCEL' && pools.excelIds.length > 0) {
+        const count = await prisma.crmLead.count({
+          where: { scope, leadSource: 'EXCEL' },
+        });
+        assignedTelecallerId = pools.excelIds[count % pools.excelIds.length];
+      }
+    }
+
+    const newLead = await prisma.crmLead.create({
       data: {
+        scope,
         campaignId,
         phone: phone || '0000000000',
         name,
         status: (dto.status as CrmLeadStatus) || CrmLeadStatus.NOT_STARTED,
         customFields: custom,
+        leadSource: finalSource,
         assignedToId: dto.assignedToId,
-        telecallerId: telecallerId || dto.telecallerId,
+        telecallerId: assignedTelecallerId,
         createdById,
       },
       include: {
-        campaign: { select: { id: true, name: true, code: true, projectId: true } },
+        campaign: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            projectId: true,
+            project: { select: { name: true } },
+          },
+        },
         assignedTo: {
           include: { generalInfo: { select: { fullName: true } } },
         },
       },
     });
+
+    // WhatsApp Automation: Auto-welcome message with brochure on manual lead creation
+    whatsappService
+      .triggerEvent('LEAD_CREATED', newLead, {
+        projectName: (newLead.campaign as any)?.project?.name || (scope === 'NB_FINSERVE' ? 'NB Finserve' : 'Legacy Tower'),
+        agentName: newLead.assignedTo?.generalInfo?.fullName,
+      })
+      .catch((err) => console.error('[CRM WhatsApp Hook Error - Manual Lead]:', err));
+
+    return newLead;
   },
 
   async importExcelLeads(
@@ -813,6 +1074,7 @@ export const crmService = {
     createdById?: string,
     telecallerId?: number,
     campaignId?: string,
+    scope: string = 'NB_DEVELOPER',
   ) {
     const workbook = xlsx.read(fileBuffer, { type: 'buffer' });
     const firstSheetName = workbook.SheetNames[0];
@@ -823,16 +1085,24 @@ export const crmService = {
       return { count: 0, message: 'No rows found in Excel sheet' };
     }
 
-    const defaultCamp = await this.ensureDefaultCampaign('PRE_SALES');
+    const defaultCamp = await this.ensureDefaultCampaign('PRE_SALES', scope);
     const targetCampaignId = campaignId || defaultCamp.id;
 
+    const targetCampaign = await prisma.crmCampaign.findUnique({
+      where: { id: targetCampaignId },
+      include: { project: true },
+    });
+    const campaignScope = targetCampaign?.scope || scope;
+
     // Fetch column configs to map header aliases for THIS campaign
-    const cols = await this.getColumns('PRE_SALES', targetCampaignId);
+    const cols = await this.getColumns('PRE_SALES', targetCampaignId, campaignScope);
     const colMap: Record<string, string> = {};
     for (const c of cols) {
       colMap[c.label.toLowerCase().trim()] = c.columnKey;
       colMap[c.columnKey.toLowerCase().trim()] = c.columnKey;
     }
+
+    const pools = await this.getAssignedTelecallerPools(campaignScope);
 
     let insertedCount = 0;
     const leadsToInsert: any[] = [];
@@ -860,22 +1130,38 @@ export const crmService = {
       if (!name && customFields.client_name) name = String(customFields.client_name);
 
       if (phone || name) {
+        let rowTelecallerId = telecallerId;
+        if (pools.excelIds.length > 0) {
+          rowTelecallerId = pools.excelIds[leadsToInsert.length % pools.excelIds.length];
+        }
+
         leadsToInsert.push({
           campaignId: targetCampaignId,
+          scope: campaignScope,
           phone: phone || 'N/A',
           name: name || 'Unnamed Lead',
           status: CrmLeadStatus.NOT_STARTED,
           customFields,
-          telecallerId,
+          leadSource: 'EXCEL',
+          telecallerId: rowTelecallerId,
           createdById,
         });
       }
     }
 
+    const campaignProjectName = targetCampaign?.project?.name || (campaignScope === 'NB_FINSERVE' ? 'NB Finserve' : 'Legacy Tower');
+
     if (leadsToInsert.length > 0) {
       for (const lead of leadsToInsert) {
-        await prisma.crmLead.create({ data: lead });
+        const createdLead = await prisma.crmLead.create({ data: lead });
         insertedCount++;
+
+        // WhatsApp Automation: Auto-welcome message with brochure on Excel imported lead
+        whatsappService
+          .triggerEvent('LEAD_CREATED', createdLead, {
+            projectName: campaignProjectName,
+          })
+          .catch((err) => console.error('[CRM WhatsApp Hook Error - Excel]:', err));
       }
     }
 
@@ -888,7 +1174,7 @@ export const crmService = {
 
   async updateLeadStatus(
     leadId: string,
-    status: 'NOT_STARTED' | 'CNR' | 'SCHEDULED_VISIT' | 'NOT_INTERESTED' | 'SITE_VISIT_DONE' | 'FOLLOW_UP' | 'INTERESTED',
+    status: 'NOT_STARTED' | 'ASSIGNED' | 'CNR' | 'SCHEDULED_VISIT' | 'NOT_INTERESTED' | 'SITE_VISIT_DONE' | 'FOLLOW_UP' | 'INTERESTED',
     payload: {
       scheduledDate?: string;
       scheduledTime?: string;
@@ -908,8 +1194,11 @@ export const crmService = {
 
     const isSuperAdmin = ['ADMIN', 'SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(userContext?.role?.toUpperCase() || '');
     const isAssignedSalesRep = userContext?.employeeId != null && userContext?.employeeId === existing.assignedToId;
+    const isFinserve = existing.scope === 'NB_FINSERVE';
 
-    if (existing.assignedToId && !isSuperAdmin && !isAssignedSalesRep) {
+    // In Real Estate CRM, once assigned to sales, telecallers have view-only access.
+    // In Finserve CRM, telecallers can assign and manage leads with sales managers freely.
+    if (!isFinserve && existing.assignedToId && !isSuperAdmin && !isAssignedSalesRep) {
       throw new Error('This lead is assigned to a sales representative. Telecallers have view-only access.');
     }
 
@@ -953,7 +1242,7 @@ export const crmService = {
       if (emp) safeAssignedId = emp.id;
     }
 
-    if ((status === 'INTERESTED' || status === 'SITE_VISIT_DONE') && safeAssignedId) {
+    if ((isFinserve || status === 'ASSIGNED' || status === 'INTERESTED' || status === 'SITE_VISIT_DONE') && safeAssignedId) {
       updateData.assignedToId = safeAssignedId;
     }
 
@@ -996,10 +1285,19 @@ export const crmService = {
       }
     }
 
-    return prisma.crmLead.update({
+    const updatedLead = await prisma.crmLead.update({
       where: { id: leadId },
       data: updateData,
       include: {
+        campaign: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            projectId: true,
+            project: { select: { name: true, location: true } },
+          },
+        },
         assignedTo: {
           include: { generalInfo: { select: { fullName: true } } },
         },
@@ -1010,6 +1308,20 @@ export const crmService = {
         },
       },
     });
+
+    // WhatsApp Automation: Trigger event on status changes (e.g. SCHEDULED_VISIT with calendar reminder & map, SITE_VISIT_DONE, FOLLOW_UP, etc.)
+    const projectName = (updatedLead.campaign as any)?.project?.name || 'Legacy Tower';
+    whatsappService
+      .triggerEvent(status, updatedLead, {
+        projectName,
+        visitDate: payload.scheduledVisitAt || payload.scheduledDate,
+        visitTime: payload.scheduledTime,
+        remarks: payload.remarks,
+        agentName: updatedLead.assignedTo?.generalInfo?.fullName,
+      })
+      .catch((err) => console.error('[CRM WhatsApp Hook Error - Status Update]:', err));
+
+    return updatedLead;
   },
 
   async updateLead(
@@ -1035,8 +1347,9 @@ export const crmService = {
     // they can only VIEW and cannot alter customFields or name/phone.
     const isSuperAdmin = ['ADMIN', 'SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(userContext?.role?.toUpperCase() || '');
     const isAssignedSalesRep = userContext?.employeeId != null && userContext?.employeeId === existing.assignedToId;
+    const isFinserve = existing.scope === 'NB_FINSERVE';
 
-    if (existing.assignedToId && !isSuperAdmin && !isAssignedSalesRep) {
+    if (!isFinserve && existing.assignedToId && !isSuperAdmin && !isAssignedSalesRep) {
       throw new Error('This lead is assigned to a sales representative. Telecallers have view-only access.');
     }
 
@@ -1060,15 +1373,21 @@ export const crmService = {
       });
     }
 
-    const validPrismaStatuses = Object.values(CrmLeadStatus || {}) as string[];
+    const validPrismaStatuses = [
+      ...Object.values(CrmLeadStatus || {}),
+      'ASSIGNED',
+    ] as string[];
     const isStatusValid = dto.status && validPrismaStatuses.includes(dto.status);
+    const targetStatus = isStatusValid
+      ? (dto.status as CrmLeadStatus)
+      : (safeAssignedToId && safeAssignedToId > 0 && !dto.status ? ('ASSIGNED' as any) : undefined);
 
-    return await prisma.crmLead.update({
+    const updated = await prisma.crmLead.update({
       where: { id: leadId },
       data: {
         ...(dto.name && { name: dto.name }),
         ...(dto.phone && { phone: dto.phone }),
-        ...(isStatusValid ? { status: dto.status as CrmLeadStatus } : {}),
+        ...(targetStatus ? { status: targetStatus } : {}),
         ...((dto.customFields || (!isStatusValid && dto.status)) && {
           customFields: {
             ...((existing.customFields as Record<string, any>) || {}),
@@ -1095,8 +1414,50 @@ export const crmService = {
           orderBy: { scheduledDate: 'desc' },
           take: 1,
         },
+        campaign: {
+          select: { project: { select: { name: true } } },
+        },
       },
     });
+
+    // WhatsApp Automation: Triggers for Lead Updates
+    try {
+      const projectName = (updated.campaign as any)?.project?.name || 'Legacy Tower';
+      const agentName = updated.assignedTo?.generalInfo?.fullName;
+      const agentPhone = '';
+
+      if (dto.status === 'BOOKING_CONFIRMED' && existing.status !== 'BOOKING_CONFIRMED') {
+        whatsappService
+          .triggerEvent('BOOKING_CONFIRMED', updated, { projectName, agentName, agentPhone })
+          .catch((err) => console.error('[CRM WhatsApp Hook Error - Booking Confirmed]:', err));
+      } else if (dto.status === 'SITE_VISIT_DONE' && existing.status !== 'SITE_VISIT_DONE') {
+        whatsappService
+          .triggerEvent('SITE_VISIT_DONE', updated, { projectName, agentName, agentPhone })
+          .catch((err) => console.error('[CRM WhatsApp Hook Error - Site Visit Done]:', err));
+      }
+
+      if (safeAssignedToId && safeAssignedToId !== existing.assignedToId) {
+        whatsappService
+          .triggerEvent('LEAD_ASSIGNED', updated, { projectName, agentName, agentPhone })
+          .catch((err) => console.error('[CRM WhatsApp Hook Error - Lead Assigned]:', err));
+      }
+
+      if (dto.scheduledVisitAt && String(dto.scheduledVisitAt) !== String(existing.scheduledVisitAt)) {
+        const visitEvent = existing.scheduledVisitAt ? 'SITE_VISIT_RESCHEDULED' : 'SITE_VISIT_SCHEDULED';
+        whatsappService
+          .triggerEvent(visitEvent, updated, {
+            projectName,
+            agentName,
+            agentPhone,
+            visitDate: dto.scheduledVisitAt,
+          })
+          .catch((err) => console.error(`[CRM WhatsApp Hook Error - ${visitEvent}]:`, err));
+      }
+    } catch (whErr) {
+      console.error('[CRM WhatsApp Hook Error in updateLead]:', whErr);
+    }
+
+    return updated;
   },
 
   async moveToBin(
@@ -1108,8 +1469,9 @@ export const crmService = {
 
     const isSuperAdmin = ['ADMIN', 'SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(userContext?.role?.toUpperCase() || '');
     const isAssignedSalesRep = userContext?.employeeId != null && userContext?.employeeId === existing.assignedToId;
+    const isFinserve = existing.scope === 'NB_FINSERVE';
 
-    if (existing.assignedToId && !isSuperAdmin && !isAssignedSalesRep) {
+    if (!isFinserve && existing.assignedToId && !isSuperAdmin && !isAssignedSalesRep) {
       throw new Error('This lead is assigned to a sales representative. Telecallers have view-only access.');
     }
 
@@ -1140,10 +1502,11 @@ export const crmService = {
     });
   },
 
-  async getBinLeads(module = 'PRE_SALES') {
+  async getBinLeads(module = 'PRE_SALES', scope: string = 'NB_DEVELOPER') {
     // Return leads marked as isDeleted: true OR marked as NOT_INTERESTED
+    const retentionKey = scope === 'NB_FINSERVE' ? 'finserve_not_interested_retention_days' : 'not_interested_retention_days';
     const retentionSetting = await prisma.crmSetting.findUnique({
-      where: { key: 'not_interested_retention_days' },
+      where: { key: retentionKey },
     });
     const retentionDays = parseInt(retentionSetting?.value || '30', 10);
     const thresholdDate = new Date();
@@ -1151,6 +1514,7 @@ export const crmService = {
 
     return prisma.crmLead.findMany({
       where: {
+        scope,
         OR: [
           { isDeleted: true },
           {
@@ -1178,7 +1542,9 @@ export const crmService = {
     leadId?: string;
     filter?: 'today' | 'upcoming' | 'all' | 'overdue';
     date?: string;
+    scope?: string;
   }) {
+    const scope = query.scope || 'NB_DEVELOPER';
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -1189,6 +1555,7 @@ export const crmService = {
     const where: any = {
       lead: {
         isDeleted: false,
+        scope,
       },
     };
 
@@ -1436,6 +1803,14 @@ export const crmService = {
         },
       });
 
+      // WhatsApp Automation: Post Site Visit Follow-up & Feedback
+      whatsappService
+        .triggerEvent('SITE_VISIT_DONE', updated, {
+          projectName: (updated as any).campaign?.project?.name || 'Legacy Tower',
+          agentName: emp.generalInfo?.fullName,
+        })
+        .catch((err) => console.error('[CRM WhatsApp Hook Error - Visitor Checkin]:', err));
+
       return updated;
     }
 
@@ -1487,13 +1862,22 @@ export const crmService = {
       },
     });
 
+    // WhatsApp Automation: Post Site Visit Follow-up & Feedback on new walk-in registration
+    whatsappService
+      .triggerEvent('SITE_VISIT_DONE', newLead, {
+        projectName: 'Legacy Tower',
+        agentName: emp.generalInfo?.fullName,
+      })
+      .catch((err) => console.error('[CRM WhatsApp Hook Error - Walkin Visitor]:', err));
+
     return newLead;
   },
 
   // ---------------------------------------------------------------------------
   // Settings & Elision Telephony
   // ---------------------------------------------------------------------------
-  async getSettings() {
+  async getSettings(scope: string = 'NB_DEVELOPER') {
+    const isFinserve = scope === 'NB_FINSERVE';
     const settings = await prisma.crmSetting.findMany();
     const map: Record<string, string> = {
       elision_api_url: 'https://greeter.co.in/api/click2call',
@@ -1533,31 +1917,160 @@ export const crmService = {
       kpi_show_talk_time: 'true',
       kpi_show_fresh_leads: 'true',
       kpi_show_conversion_rate: 'true',
+      excel_assigned_telecaller_ids: JSON.stringify([]),
+      webhook_assigned_telecaller_ids: JSON.stringify([]),
+      loan_types: JSON.stringify([
+        'Home Loan',
+        'Personal Loan',
+        'Business Loan',
+        'Mortgage / LAP',
+        'Auto Loan',
+        'Education Loan',
+      ]),
+      loan_doc_types: JSON.stringify([
+        { id: 'pan_card', name: 'PAN Card', maxFileSizeMb: 5, allowedFormats: ['pdf', 'jpg', 'jpeg', 'png'] },
+        { id: 'aadhaar_card', name: 'Aadhaar Card', maxFileSizeMb: 5, allowedFormats: ['pdf', 'jpg', 'jpeg', 'png'] },
+        { id: 'salary_slips', name: 'Salary Slips (Last 3 Months)', maxFileSizeMb: 10, allowedFormats: ['pdf', 'jpg', 'png'] },
+        { id: 'bank_statement', name: 'Bank Statement (Last 6 Months)', maxFileSizeMb: 15, allowedFormats: ['pdf'] },
+        { id: 'itr_docs', name: 'ITR / Form 16 (Last 2 Years)', maxFileSizeMb: 10, allowedFormats: ['pdf'] },
+        { id: 'property_docs', name: 'Property Chain Deeds / Title / Registry', maxFileSizeMb: 25, allowedFormats: ['pdf'] },
+        { id: 'business_proof', name: 'Business Registration / GST Certificate', maxFileSizeMb: 10, allowedFormats: ['pdf', 'jpg', 'png'] },
+        { id: 'utility_bill', name: 'Utility Bill / Residence Proof', maxFileSizeMb: 5, allowedFormats: ['pdf', 'jpg', 'jpeg', 'png'] },
+      ]),
+      loan_type_docs_map: JSON.stringify({
+        'Home Loan': ['pan_card', 'aadhaar_card', 'salary_slips', 'bank_statement', 'property_docs'],
+        'Personal Loan': ['pan_card', 'aadhaar_card', 'salary_slips', 'bank_statement'],
+        'Business Loan': ['pan_card', 'aadhaar_card', 'bank_statement', 'itr_docs', 'business_proof'],
+        'Mortgage / LAP': ['pan_card', 'aadhaar_card', 'bank_statement', 'property_docs', 'itr_docs'],
+        'Auto Loan': ['pan_card', 'aadhaar_card', 'salary_slips', 'bank_statement'],
+        'Education Loan': ['pan_card', 'aadhaar_card', 'bank_statement', 'salary_slips'],
+      }),
+      finserve_application_fields: JSON.stringify([
+        { key: 'mobileNo', label: 'Mobile No', section: 'PERSONAL', type: 'phone', required: true, enabled: true },
+        { key: 'alternateNo', label: 'Alternate No', section: 'PERSONAL', type: 'phone', required: false, enabled: true },
+        { key: 'personalEmail', label: 'Personal Mail ID', section: 'PERSONAL', type: 'email', required: true, enabled: true },
+        { key: 'maritalStatus', label: 'Marital Status', section: 'PERSONAL', type: 'select', options: ['Single', 'Married', 'Divorced', 'Widowed'], required: true, enabled: true },
+        { key: 'motherName', label: 'Mother Name', section: 'PERSONAL', type: 'text', required: true, enabled: true },
+        { key: 'spouseName', label: 'Spouse Name', section: 'PERSONAL', type: 'text', required: false, enabled: true },
+        { key: 'education', label: 'Education', section: 'PERSONAL', type: 'select', options: ['High School', 'Graduate', 'Post Graduate', 'Doctorate', 'Professional', 'Other'], required: true, enabled: true },
+        { key: 'currentAddress', label: 'Current Address', section: 'PERSONAL', type: 'textarea', required: true, enabled: true },
+        { key: 'currentAddressType', label: 'Current Address (Rent/Owned)', section: 'PERSONAL', type: 'select', options: ['Owned', 'Rented', 'Parental', 'Company Provided'], required: true, enabled: true },
+        { key: 'permanentAddress', label: 'Permanent Address', section: 'PERSONAL', type: 'textarea', required: true, enabled: true },
+        { key: 'permanentAddressType', label: 'Permanent Address (Rent/Owned)', section: 'PERSONAL', type: 'select', options: ['Owned', 'Rented', 'Parental'], required: true, enabled: true },
+        { key: 'requiredLoanAmount', label: 'Require Loan Amount', section: 'PERSONAL', type: 'number', required: true, enabled: true },
+        { key: 'loanPurpose', label: 'Loan Purpose', section: 'PERSONAL', type: 'text', required: true, enabled: true },
+
+        { key: 'companyName', label: 'Company Name', section: 'COMPANY', type: 'text', required: true, enabled: true },
+        { key: 'companyAddress', label: 'Company Address', section: 'COMPANY', type: 'textarea', required: true, enabled: true },
+        { key: 'currentWorkExp', label: 'Current Work Exp', section: 'COMPANY', type: 'text', required: true, enabled: true },
+        { key: 'totalWorkExp', label: 'Total Work Exp', section: 'COMPANY', type: 'text', required: true, enabled: true },
+        { key: 'officialEmail', label: 'Official Mail ID', section: 'COMPANY', type: 'email', required: false, enabled: true },
+        { key: 'officeLandlineNo', label: 'Office Landline No', section: 'COMPANY', type: 'phone', required: false, enabled: true },
+
+        { key: 'ref1Name', label: '1. Name', section: 'REFERENCE', type: 'text', required: true, enabled: true },
+        { key: 'ref1Mobile', label: '1. Mobile No', section: 'REFERENCE', type: 'phone', required: true, enabled: true },
+        { key: 'ref1Relation', label: '1. Relation', section: 'REFERENCE', type: 'text', required: true, enabled: true },
+        { key: 'ref1Address', label: '1. Address', section: 'REFERENCE', type: 'textarea', required: true, enabled: true },
+
+        { key: 'ref2Name', label: '2. Name', section: 'REFERENCE', type: 'text', required: true, enabled: true },
+        { key: 'ref2Mobile', label: '2. Mobile No', section: 'REFERENCE', type: 'phone', required: true, enabled: true },
+        { key: 'ref2Relation', label: '2. Relation', section: 'REFERENCE', type: 'text', required: true, enabled: true },
+        { key: 'ref2Address', label: '2. Address', section: 'REFERENCE', type: 'textarea', required: true, enabled: true },
+      ]),
     };
-    for (const s of settings) {
-      if (s.value !== undefined && s.value !== null) {
-        map[s.key] = s.value;
+
+    if (isFinserve) {
+      for (const s of settings) {
+        if (s.key.startsWith('finserve_')) {
+          const rawKey = s.key.substring('finserve_'.length);
+          if (s.value !== undefined && s.value !== null) {
+            map[rawKey] = s.value;
+          }
+        }
+      }
+    } else {
+      for (const s of settings) {
+        if (!s.key.startsWith('finserve_')) {
+          if (s.value !== undefined && s.value !== null) {
+            map[s.key] = s.value;
+          }
+        }
       }
     }
     return map;
   },
 
-  async updateSettings(dto: UpdateCrmSettingsDto, updatedBy?: string) {
+  async updateSettings(dto: UpdateCrmSettingsDto, updatedBy?: string, scope: string = 'NB_DEVELOPER') {
+    const isFinserve = scope === 'NB_FINSERVE';
     const entries = Object.entries(dto);
     for (const [key, value] of entries) {
       if (value !== undefined) {
+        const dbKey = isFinserve ? `finserve_${key}` : key;
+        const serializedValue = Array.isArray(value) || (typeof value === 'object' && value !== null)
+          ? JSON.stringify(value)
+          : String(value);
         await prisma.crmSetting.upsert({
-          where: { key },
-          update: { value: String(value), updatedBy },
-          create: { key, value: String(value), updatedBy },
+          where: { key: dbKey },
+          update: { value: serializedValue, updatedBy },
+          create: { key: dbKey, value: serializedValue, updatedBy },
         });
       }
     }
-    return this.getSettings();
+
+    // If Finserve loan_types were updated, synchronize options in crm_column_configs safely
+    if (isFinserve && dto.loan_types !== undefined) {
+      let optionsList: string[] = [];
+      try {
+        optionsList = Array.isArray(dto.loan_types)
+          ? dto.loan_types
+          : JSON.parse(dto.loan_types);
+      } catch (_) {}
+      if (Array.isArray(optionsList) && optionsList.length > 0) {
+        await prisma.crmColumnConfig.updateMany({
+          where: {
+            scope: 'NB_FINSERVE',
+            columnKey: 'Loan_Type',
+          },
+          data: {
+            label: 'Type of Loan',
+            dataType: 'SELECT',
+            options: optionsList,
+          },
+        });
+      }
+    }
+
+    return this.getSettings(scope);
+  },
+
+  async getAssignedTelecallerPools(scope: string = 'NB_DEVELOPER') {
+    const settings = await this.getSettings(scope);
+    let excelIds: number[] = [];
+    let webhookIds: number[] = [];
+    try {
+      excelIds = typeof settings.excel_assigned_telecaller_ids === 'string'
+        ? JSON.parse(settings.excel_assigned_telecaller_ids)
+        : (settings.excel_assigned_telecaller_ids || []);
+      if (!Array.isArray(excelIds)) excelIds = [];
+    } catch {
+      excelIds = [];
+    }
+    try {
+      webhookIds = typeof settings.webhook_assigned_telecaller_ids === 'string'
+        ? JSON.parse(settings.webhook_assigned_telecaller_ids)
+        : (settings.webhook_assigned_telecaller_ids || []);
+      if (!Array.isArray(webhookIds)) webhookIds = [];
+    } catch {
+      webhookIds = [];
+    }
+    return {
+      excelIds: excelIds.map(Number).filter((n) => !isNaN(n) && n > 0),
+      webhookIds: webhookIds.map(Number).filter((n) => !isNaN(n) && n > 0),
+    };
   },
 
   /** JSON map: { [employeeId]: { api_url, user_id, did, route_number, agent_number } } */
-  async _readTelecallerConfigMap(): Promise<
+  async _readTelecallerConfigMap(scope: string = 'NB_DEVELOPER'): Promise<
     Record<
       string,
       {
@@ -1569,8 +2082,10 @@ export const crmService = {
       }
     >
   > {
+    const isFinserve = scope === 'NB_FINSERVE';
+    const key = isFinserve ? 'finserve_elision_telecaller_configs' : 'elision_telecaller_configs';
     const row = await prisma.crmSetting.findUnique({
-      where: { key: 'elision_telecaller_configs' },
+      where: { key },
     });
     if (!row?.value) return {};
     try {
@@ -1584,22 +2099,25 @@ export const crmService = {
   async _writeTelecallerConfigMap(
     map: Record<string, unknown>,
     updatedBy?: string,
+    scope: string = 'NB_DEVELOPER',
   ) {
+    const isFinserve = scope === 'NB_FINSERVE';
+    const key = isFinserve ? 'finserve_elision_telecaller_configs' : 'elision_telecaller_configs';
     await prisma.crmSetting.upsert({
-      where: { key: 'elision_telecaller_configs' },
+      where: { key },
       update: { value: JSON.stringify(map), updatedBy },
       create: {
-        key: 'elision_telecaller_configs',
+        key,
         value: JSON.stringify(map),
-        description: 'Per-telecaller Elision/Greeter Click2Call credentials',
+        description: `Per-telecaller Elision/Greeter Click2Call credentials for ${isFinserve ? 'NB Finserve' : 'NB Developer'}`,
         updatedBy,
       },
     });
   },
 
-  async listTelecallerTelephony() {
-    const defaults = await this.getSettings();
-    const configs = await this._readTelecallerConfigMap();
+  async listTelecallerTelephony(scope: string = 'NB_DEVELOPER') {
+    const defaults = await this.getSettings(scope);
+    const configs = await this._readTelecallerConfigMap(scope);
 
     const telecallers = await prisma.employee.findMany({
       where: {
@@ -1668,6 +2186,7 @@ export const crmService = {
     employeeId: number,
     body: Record<string, unknown>,
     updatedBy?: string,
+    scope: string = 'NB_DEVELOPER',
   ) {
     if (!Number.isFinite(employeeId) || employeeId <= 0) {
       throw new Error('Invalid employee id');
@@ -1690,7 +2209,7 @@ export const crmService = {
       throw new Error('Employee designation must be Telecaller');
     }
 
-    const map = await this._readTelecallerConfigMap();
+    const map = await this._readTelecallerConfigMap(scope);
     map[String(employeeId)] = {
       api_url: body.api_url != null ? String(body.api_url).trim() : map[String(employeeId)]?.api_url,
       user_id: body.user_id != null ? String(body.user_id).trim() : map[String(employeeId)]?.user_id,
@@ -1704,8 +2223,8 @@ export const crmService = {
           ? String(body.agent_number).trim()
           : map[String(employeeId)]?.agent_number,
     };
-    await this._writeTelecallerConfigMap(map, updatedBy);
-    const list = await this.listTelecallerTelephony();
+    await this._writeTelecallerConfigMap(map, updatedBy, scope);
+    const list = await this.listTelecallerTelephony(scope);
     return list.telecallers.find((t) => t.employeeId === employeeId) ?? null;
   },
 
@@ -1713,8 +2232,9 @@ export const crmService = {
     const lead = await prisma.crmLead.findUnique({ where: { id: leadId } });
     if (!lead) throw new Error('Lead not found');
 
-    const settings = await this.getSettings();
-    const telecallerMap = await this._readTelecallerConfigMap();
+    const leadScope = lead.scope || 'NB_DEVELOPER';
+    const settings = await this.getSettings(leadScope);
+    const telecallerMap = await this._readTelecallerConfigMap(leadScope);
     const empId = userContext?.employeeId != null ? Number(userContext.employeeId) : null;
     const personal =
       empId != null && Number.isFinite(empId) ? telecallerMap[String(empId)] : undefined;
@@ -2028,6 +2548,30 @@ export const crmService = {
       });
     }
 
+    // WhatsApp Automation: Post-call relationship greeting message
+    if (leadId && (callStatus === 'ANSWERED' || callStatus === 'COMPLETED' || duration > 0)) {
+      prisma.crmLead
+        .findUnique({
+          where: { id: leadId },
+          include: {
+            campaign: { select: { project: { select: { name: true } } } },
+            assignedTo: { include: { generalInfo: { select: { fullName: true } } } },
+          },
+        })
+        .then((matchedLead) => {
+          if (matchedLead) {
+            whatsappService
+              .triggerEvent('AFTER_CALL', matchedLead, {
+                projectName: (matchedLead.campaign as any)?.project?.name || 'Legacy Tower',
+                callDuration: duration,
+                agentName: matchedLead.assignedTo?.generalInfo?.fullName,
+              })
+              .catch((err) => console.error('[CRM WhatsApp Hook Error - After Call]:', err));
+          }
+        })
+        .catch(() => {});
+    }
+
     return {
       status: 'success',
       message: 'Call log saved successfully',
@@ -2211,17 +2755,17 @@ export const crmService = {
   // ---------------------------------------------------------------------------
   // KPI Metrics for Dashboard
   // ---------------------------------------------------------------------------
-  async getKpiMetrics(projectId?: string, campaignId?: string) {
+  async getKpiMetrics(projectId?: string, campaignId?: string, scope: string = 'NB_DEVELOPER') {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    const leadWhere: Record<string, unknown> = { isDeleted: false };
+    const leadWhere: Record<string, unknown> = { isDeleted: false, scope };
     if (campaignId && campaignId !== 'ALL') {
       leadWhere.campaignId = campaignId;
     } else if (projectId && projectId !== 'ALL') {
-      leadWhere.campaign = { projectId };
+      leadWhere.campaign = { projectId, scope };
     }
 
     const followUpWhere: Record<string, unknown> = {
@@ -2250,10 +2794,11 @@ export const crmService = {
       prisma.crmLead.count({
         where: {
           isDeleted: true,
+          scope,
           ...(campaignId && campaignId !== 'ALL'
             ? { campaignId }
             : projectId && projectId !== 'ALL'
-              ? { campaign: { projectId } }
+              ? { campaign: { projectId, scope } }
               : {}),
         },
       }),
@@ -2333,6 +2878,836 @@ export const crmService = {
       department: emp.generalInfo?.department || 'Sales & Marketing',
       role: emp.user?.role?.name || 'SALES',
     }));
+  },
+
+  // ---------------------------------------------------------------------------
+  // WhatsApp Automation Configuration & Execution (BotBiz WhatsApp API)
+  // ---------------------------------------------------------------------------
+  async getWhatsappConfig(scope: string = 'NB_DEVELOPER') {
+    return whatsappService.getConfig(scope);
+  },
+
+  async updateWhatsappConfig(dto: any, updatedBy?: string, scope: string = 'NB_DEVELOPER') {
+    return whatsappService.updateConfig(dto, updatedBy, scope);
+  },
+
+  async testWhatsappConnection(scope: string = 'NB_DEVELOPER') {
+    return whatsappService.testConnection(scope);
+  },
+
+  async syncWhatsappTemplates(scope: string = 'NB_DEVELOPER') {
+    return whatsappService.syncTemplates(scope);
+  },
+
+  async getWhatsappTemplates(scope: string = 'NB_DEVELOPER') {
+    return whatsappService.getCachedTemplates(scope);
+  },
+
+  async checkWhatsappTemplateStatus(templateId: string, scope: string = 'NB_DEVELOPER') {
+    return whatsappService.checkTemplateStatus(templateId, scope);
+  },
+
+  async retryWhatsappLog(logId: string, scope: string = 'NB_DEVELOPER') {
+    return whatsappService.retryLog(logId, scope);
+  },
+
+  async sendTestWhatsappMessage(phone: string, message?: string, templateId?: string, scope: string = 'NB_DEVELOPER') {
+    const isFinserve = scope === 'NB_FINSERVE';
+    if (templateId) {
+      const cached = await whatsappService.getCachedTemplates(scope);
+      const tmpl = cached.templates.find(
+        (t) =>
+          t.id === templateId ||
+          String(t.raw?.id) === templateId ||
+          t.name === templateId,
+      );
+      return whatsappService.sendDirect({
+        phone,
+        message:
+          message ||
+          (tmpl ? `Test of template: ${tmpl.name}` : `Test template dispatch (${isFinserve ? 'NB Finserve' : 'NB Developer'})`),
+        event: 'TEST_CONNECTION',
+        messageType: 'TEMPLATE',
+        templateId: tmpl?.id || templateId,
+        templateName: tmpl?.name,
+        scope,
+      });
+    }
+
+    const text =
+      message ||
+      (isFinserve
+        ? 'Hello from NB Finserve WhatsApp Automation! 💼 Test notification for NB Finserve.'
+        : 'Hello from NB CRM WhatsApp Automation! 🏢 Test notification for Legacy Tower.');
+    return whatsappService.sendDirect({
+      phone,
+      message: text,
+      event: 'TEST_CONNECTION',
+      scope,
+    });
+  },
+
+  async getWhatsappLogs(limit = 50, scope: string = 'NB_DEVELOPER') {
+    return whatsappService.getLogs(limit, scope);
+  },
+
+  async sendLeadWhatsapp(
+    leadId: string,
+    payload: { event?: string; message?: string; mediaUrl?: string; messageType?: any; templateId?: string; templateEndpoint?: string },
+  ) {
+    const lead = await prisma.crmLead.findUnique({
+      where: { id: leadId },
+      include: {
+        campaign: { select: { project: { select: { name: true } } } },
+        assignedTo: { include: { generalInfo: { select: { fullName: true } } } },
+      },
+    });
+    if (!lead) throw new Error('Lead not found');
+
+    const leadScope = lead.scope || 'NB_DEVELOPER';
+
+    if (payload.event) {
+      await whatsappService.triggerEvent(payload.event, lead, {
+        projectName: (lead.campaign as any)?.project?.name || (leadScope === 'NB_FINSERVE' ? 'NB Finserve' : 'Legacy Tower'),
+        agentName: lead.assignedTo?.generalInfo?.fullName,
+        scope: leadScope,
+      });
+      return { success: true, message: `Triggered ${payload.event} for lead` };
+    }
+
+    if (!payload.message && !payload.templateId) throw new Error('Message content or Template ID is required');
+    return whatsappService.sendDirect({
+      phone: lead.phone,
+      message: payload.message || '',
+      mediaUrl: payload.mediaUrl,
+      event: 'MANUAL_DISPATCH',
+      leadId: lead.id,
+      messageType: payload.messageType,
+      templateId: payload.templateId,
+      templateEndpoint: payload.templateEndpoint,
+      scope: leadScope,
+    });
+  },
+
+  async uploadBrochure(
+    file: { buffer: Buffer; originalname?: string; mimetype?: string },
+    updatedBy?: string,
+  ) {
+    const url = await uploadService.uploadToCloudinary(file, 'crm/brochures');
+    await prisma.crmSetting.upsert({
+      where: { key: 'whatsapp_default_brochure_url' },
+      update: { value: url, updatedBy },
+      create: {
+        key: 'whatsapp_default_brochure_url',
+        value: url,
+        description: 'Uploaded Legacy Tower Brochure PDF URL',
+        updatedBy,
+      },
+    });
+    const filename = file.originalname || 'Legacy_Tower_Brochure.pdf';
+    await prisma.crmSetting.upsert({
+      where: { key: 'whatsapp_default_brochure_name' },
+      update: { value: filename, updatedBy },
+      create: {
+        key: 'whatsapp_default_brochure_name',
+        value: filename,
+        description: 'Uploaded Legacy Tower Brochure Filename',
+        updatedBy,
+      },
+    });
+    return {
+      url,
+      filename,
+      message: 'Brochure PDF uploaded and stored permanently',
+    };
+  },
+
+  async getVirtualBuilding(projectId: string, towerId: string, scope = 'NB_DEVELOPER') {
+    const project = await prisma.erpProject.findUnique({
+      where: { id: projectId },
+      select: { id: true, name: true, projectNo: true, address: true },
+    });
+    if (!project) throw new Error('Project not found');
+
+    const tower = await prisma.erpProjectTower.findFirst({
+      where: { id: towerId, projectId },
+      include: {
+        units: {
+          orderBy: [
+            { floorNo: 'desc' },
+            { sortOrder: 'asc' },
+            { unitNo: 'asc' },
+          ],
+        },
+      },
+    });
+    if (!tower) throw new Error('Tower not found');
+
+    // Fetch active CRM leads in current scope
+    const leads = await prisma.crmLead.findMany({
+      where: {
+        isDeleted: false,
+        scope,
+      },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        status: true,
+        scheduledVisitAt: true,
+        visitedAt: true,
+        customFields: true,
+        createdAt: true,
+        assignedTo: {
+          select: {
+            id: true,
+            generalInfo: {
+              select: { fullName: true },
+            },
+          },
+        },
+      },
+    });
+
+    interface VisitorItem {
+      leadId: string;
+      leadName: string;
+      leadPhone: string;
+      status: string;
+      visitDate: string;
+      salesAgent: string;
+      remarks?: string;
+    }
+
+    const enrichedUnits = tower.units.map((unit) => {
+      const visitors: VisitorItem[] = [];
+      let heldBy: {
+        leadId?: string;
+        name: string;
+        phone: string;
+        heldAt?: string;
+        expiryAt?: string;
+        salesAgent?: string;
+        notes?: string;
+      } | null = null;
+
+      let bookedBy: {
+        leadId?: string;
+        name: string;
+        phone: string;
+        bookedAt?: string;
+        agreementValue?: number | null;
+        notes?: string;
+      } | null = null;
+
+      const unitNoUpper = unit.unitNo.toUpperCase().trim();
+
+      for (const lead of leads) {
+        const cf = (lead.customFields || {}) as Record<string, any>;
+        const unitShown = cf.unitShown as Record<string, any> | undefined;
+        let isMatch = false;
+        let visitRemark = '';
+
+        if (unitShown) {
+          const shownUnitNo = (unitShown.unitNo || '').toString().toUpperCase().trim();
+          const shownUnitId = (unitShown.unitId || '').toString();
+          if (shownUnitId === unit.id || shownUnitNo === unitNoUpper) {
+            isMatch = true;
+            visitRemark = unitShown.remarks || '';
+          }
+        }
+
+        // Also check activityLogs
+        if (!isMatch && Array.isArray(cf.activityLogs)) {
+          for (const log of cf.activityLogs) {
+            if (log && typeof log === 'object') {
+              const desc = (log.description || log.title || '').toString().toUpperCase();
+              if (desc.includes(unitNoUpper) || (log.unitNo && log.unitNo.toString().toUpperCase() === unitNoUpper)) {
+                isMatch = true;
+                visitRemark = log.description || '';
+                break;
+              }
+            }
+          }
+        }
+
+        // Also check proposals
+        if (!isMatch && Array.isArray(cf.proposals)) {
+          for (const prop of cf.proposals) {
+            if (prop && (prop.unitNo || '').toString().toUpperCase().trim() === unitNoUpper) {
+              isMatch = true;
+              break;
+            }
+          }
+        }
+
+        if (isMatch) {
+          const vDate = lead.visitedAt
+            ? lead.visitedAt.toISOString()
+            : (unitShown?.shownAt ? new Date(unitShown.shownAt).toISOString() : lead.createdAt.toISOString());
+
+          const agentName = lead.assignedTo?.generalInfo?.fullName || unitShown?.shownByName || 'Sales Rep';
+
+          visitors.push({
+            leadId: lead.id,
+            leadName: lead.name || 'Prospect',
+            leadPhone: lead.phone,
+            status: lead.status,
+            visitDate: vDate,
+            salesAgent: agentName,
+            remarks: visitRemark,
+          });
+
+          // Check if booked
+          if (lead.status === 'BOOKING_CONFIRMED' || cf.bookingConfirmedUnit === unit.unitNo) {
+            bookedBy = {
+              leadId: lead.id,
+              name: lead.name || 'Confirmed Buyer',
+              phone: lead.phone,
+              bookedAt: lead.visitedAt?.toISOString() || lead.createdAt.toISOString(),
+              agreementValue: unit.totalValue ? Number(unit.totalValue) : null,
+              notes: `Booking confirmed for ${lead.name || lead.phone}`,
+            };
+          }
+
+          // Check if held
+          if (cf.unitHold && cf.unitHold.unitNo === unit.unitNo) {
+            heldBy = {
+              leadId: lead.id,
+              name: lead.name || 'Prospect',
+              phone: lead.phone,
+              heldAt: cf.unitHold.heldAt || lead.createdAt.toISOString(),
+              expiryAt: cf.unitHold.expiryAt,
+              salesAgent: agentName,
+              notes: cf.unitHold.notes,
+            };
+          }
+        }
+      }
+
+      // Check ERP unit status fallback if not bound to a lead
+      if (unit.statusCode === 'HOLD' && !heldBy) {
+        heldBy = {
+          name: unit.remarks ? unit.remarks.replace(/^HOLD:?\s*/i, '') : 'On Hold',
+          phone: '',
+          notes: unit.remarks || 'Reserved unit',
+        };
+      }
+
+      if ((unit.statusCode === 'BOOKED' || unit.statusCode === 'SOLD') && !bookedBy) {
+        bookedBy = {
+          name: unit.remarks ? unit.remarks.replace(/^(BOOKED|SOLD):?\s*/i, '') : 'Booked',
+          phone: '',
+          agreementValue: unit.totalValue ? Number(unit.totalValue) : null,
+          notes: unit.remarks || 'Booked unit',
+        };
+      }
+
+      // Effective status
+      let effectiveStatus = unit.statusCode;
+      if (bookedBy) effectiveStatus = 'BOOKED';
+      else if (heldBy && unit.statusCode !== 'BOOKED' && unit.statusCode !== 'SOLD') effectiveStatus = 'HOLD';
+
+      return {
+        id: unit.id,
+        unitNo: unit.unitNo,
+        floorNo: unit.floorNo,
+        unitTypeCode: unit.unitTypeCode || 'Flat',
+        statusCode: effectiveStatus,
+        carpetArea: unit.carpetArea ? Number(unit.carpetArea) : null,
+        superBuiltUp: unit.superBuiltUp ? Number(unit.superBuiltUp) : null,
+        baseRate: unit.baseRate ? Number(unit.baseRate) : null,
+        totalValue: unit.totalValue ? Number(unit.totalValue) : (unit.totalUnitValue ? Number(unit.totalUnitValue) : null),
+        grandTotal: unit.grandTotal ? Number(unit.grandTotal) : null,
+        isDuplex: unit.isDuplex,
+        facingCode: unit.facingCode,
+        remarks: unit.remarks,
+        sortOrder: unit.sortOrder,
+        visitorCount: visitors.length,
+        visitors,
+        heldBy,
+        bookedBy,
+      };
+    });
+
+    // Group units by floor
+    const floorMap = new Map<number, typeof enrichedUnits>();
+    for (const u of enrichedUnits) {
+      if (!floorMap.has(u.floorNo)) {
+        floorMap.set(u.floorNo, []);
+      }
+      floorMap.get(u.floorNo)!.push(u);
+    }
+
+    const sortedFloorNumbers = Array.from(floorMap.keys()).sort((a, b) => b - a);
+
+    const floors = sortedFloorNumbers.map((floorNo) => {
+      let floorLabel = `Floor ${floorNo}`;
+      if (floorNo === 0) floorLabel = 'Ground Floor (GF)';
+      else if (floorNo < 0) floorLabel = `Basement ${Math.abs(floorNo)} (B${Math.abs(floorNo)})`;
+
+      const units = floorMap.get(floorNo) || [];
+      units.sort((a, b) => a.sortOrder - b.sortOrder || a.unitNo.localeCompare(b.unitNo));
+
+      return {
+        floorNo,
+        floorLabel,
+        units,
+      };
+    });
+
+    const totalUnits = enrichedUnits.length;
+    const availableCount = enrichedUnits.filter((u) => u.statusCode === 'AVAILABLE').length;
+    const holdCount = enrichedUnits.filter((u) => u.statusCode === 'HOLD').length;
+    const bookedCount = enrichedUnits.filter((u) => u.statusCode === 'BOOKED' || u.statusCode === 'SOLD').length;
+    const duplexCount = enrichedUnits.filter((u) => u.isDuplex).length;
+    const totalVisits = enrichedUnits.reduce((sum, u) => sum + u.visitorCount, 0);
+
+    return {
+      project,
+      tower: {
+        id: tower.id,
+        name: tower.name,
+        phase: tower.phase,
+        floorCount: tower.floorCount,
+        flatsPerFloor: tower.flatsPerFloor,
+        hasGround: tower.hasGround,
+        basementCount: tower.basementCount,
+      },
+      summary: {
+        totalUnits,
+        availableCount,
+        holdCount,
+        bookedCount,
+        duplexCount,
+        totalVisits,
+      },
+      floors,
+    };
+  },
+
+  async updateVirtualBuildingUnit(payload: {
+    unitId: string;
+    statusCode: string;
+    leadId?: string;
+    heldByName?: string;
+    heldByPhone?: string;
+    holdExpiryDate?: string;
+    ownerName?: string;
+    ownerPhone?: string;
+    remarks?: string;
+    updatedBy?: string;
+  }) {
+    const unit = await prisma.erpProjectUnit.findUnique({
+      where: { id: payload.unitId },
+      include: { tower: { include: { project: true } } },
+    });
+    if (!unit) throw new Error('Unit not found');
+
+    let newRemarks = payload.remarks || unit.remarks || '';
+    if (payload.statusCode === 'HOLD') {
+      newRemarks = `HOLD: ${payload.heldByName || 'Reserved'} (${payload.heldByPhone || ''}) ${payload.holdExpiryDate ? `until ${payload.holdExpiryDate}` : ''}. ${payload.remarks || ''}`.trim();
+    } else if (payload.statusCode === 'BOOKED' || payload.statusCode === 'SOLD') {
+      newRemarks = `BOOKED: ${payload.ownerName || 'Owner'} (${payload.ownerPhone || ''}). ${payload.remarks || ''}`.trim();
+    } else if (payload.statusCode === 'AVAILABLE') {
+      newRemarks = payload.remarks || '';
+    }
+
+    const updatedUnit = await prisma.erpProjectUnit.update({
+      where: { id: payload.unitId },
+      data: {
+        statusCode: payload.statusCode,
+        remarks: newRemarks,
+      },
+    });
+
+    // If unit is part of a duplex, also sync the counterpart unit (upper or lower level)
+    if (unit.isDuplex) {
+      const counterpartUnitNo = unit.unitNo.endsWith('-2')
+        ? unit.unitNo.slice(0, -2)
+        : `${unit.unitNo}-2`;
+
+      await prisma.erpProjectUnit.updateMany({
+        where: {
+          towerId: unit.towerId,
+          unitNo: counterpartUnitNo,
+        },
+        data: {
+          statusCode: payload.statusCode,
+          remarks: newRemarks,
+        },
+      });
+    }
+
+    if (payload.leadId) {
+      const lead = await prisma.crmLead.findUnique({ where: { id: payload.leadId } });
+      if (lead) {
+        const cf = (lead.customFields || {}) as Record<string, any>;
+        const activityLogs = Array.isArray(cf.activityLogs) ? [...cf.activityLogs] : [];
+
+        let newLeadStatus = lead.status;
+        if (payload.statusCode === 'BOOKED' || payload.statusCode === 'SOLD') {
+          newLeadStatus = 'BOOKING_CONFIRMED' as any;
+          cf.bookingConfirmedUnit = unit.unitNo;
+          activityLogs.unshift({
+            id: `LOG-${Date.now()}`,
+            title: `Unit ${unit.unitNo} Booking Confirmed`,
+            description: `Unit ${unit.unitNo} in ${unit.tower.name} booked. ${payload.remarks || ''}`,
+            type: 'UNIT_BOOKED',
+            timestamp: new Date().toISOString(),
+            performedByName: payload.updatedBy || 'Sales Manager',
+          });
+        } else if (payload.statusCode === 'HOLD') {
+          cf.unitHold = {
+            unitNo: unit.unitNo,
+            unitId: unit.id,
+            towerName: unit.tower.name,
+            heldAt: new Date().toISOString(),
+            expiryAt: payload.holdExpiryDate,
+            notes: payload.remarks,
+          };
+          activityLogs.unshift({
+            id: `LOG-${Date.now()}`,
+            title: `Unit ${unit.unitNo} Placed On Hold`,
+            description: `Unit ${unit.unitNo} in ${unit.tower.name} placed on hold. Expiry: ${payload.holdExpiryDate || 'N/A'}. ${payload.remarks || ''}`,
+            type: 'UNIT_HOLD',
+            timestamp: new Date().toISOString(),
+            performedByName: payload.updatedBy || 'Sales Manager',
+          });
+        }
+
+        cf.activityLogs = activityLogs;
+
+        await prisma.crmLead.update({
+          where: { id: payload.leadId },
+          data: {
+            status: newLeadStatus,
+            customFields: cf,
+          },
+        });
+      }
+    }
+
+    return updatedUnit;
+  },
+
+  // ---------------------------------------------------------------------------
+  // Finserve Application Form, Details & Client Portal
+  // ---------------------------------------------------------------------------
+  async updateLeadApplicationDetails(
+    leadId: string,
+    dto: UpdateLeadApplicationDetailsDto,
+    _updatedById?: string,
+  ) {
+    const lead = await prisma.crmLead.findUnique({ where: { id: leadId } });
+    if (!lead) throw new Error('Lead not found');
+
+    const currentCustom = (lead.customFields as any) || {};
+    const updatedCustom = {
+      ...currentCustom,
+      ...(dto.loanType && { loanType: dto.loanType }),
+      applicationDetails: {
+        ...(currentCustom.applicationDetails || {}),
+        ...(dto.applicationDetails || {}),
+        ...(dto.loanType && { loanType: dto.loanType }),
+      },
+    };
+
+    if (dto.applicationDetails?.personalEmail) {
+      updatedCustom.email = dto.applicationDetails.personalEmail;
+    }
+
+    const updateData: any = {
+      customFields: updatedCustom,
+      updatedAt: new Date(),
+    };
+
+    if (dto.status) {
+      updateData.status = dto.status;
+    }
+
+    const updated = await prisma.crmLead.update({
+      where: { id: leadId },
+      data: updateData,
+      include: {
+        assignedTo: {
+          include: { generalInfo: { select: { fullName: true } } },
+        },
+        telecaller: {
+          include: { generalInfo: { select: { fullName: true } } },
+        },
+      },
+    });
+
+    return updated;
+  },
+
+  async generateClientPortalLink(leadId: string, baseUrl?: string) {
+    const lead = await prisma.crmLead.findUnique({ where: { id: leadId } });
+    if (!lead) throw new Error('Lead not found');
+
+    const custom = (lead.customFields as any) || {};
+    let token = custom.portalToken;
+    if (!token) {
+      token = crypto.randomBytes(16).toString('hex');
+      custom.portalToken = token;
+    }
+
+    const base = (baseUrl || 'http://localhost:5000').replace(/\/+$/, '');
+    const link = `${base}/client-portal?token=${token}`;
+    custom.portalLink = link;
+
+    const updatedLead = await prisma.crmLead.update({
+      where: { id: leadId },
+      data: { customFields: custom },
+    });
+
+    return {
+      token,
+      link,
+      portalUrl: link,
+      leadId: lead.id,
+      leadName: lead.name,
+      phone: lead.phone,
+      lead: updatedLead,
+    };
+  },
+
+  async getClientPortalInfo(token: string) {
+    if (!token) throw new Error('Portal token is required');
+    const leads = await prisma.crmLead.findMany({
+      where: { isDeleted: false },
+    });
+    const lead = leads.find((l) => (l.customFields as any)?.portalToken === token);
+    if (!lead) throw new Error('Invalid or expired application link');
+
+    const custom = (lead.customFields as any) || {};
+    const appDetails = custom.applicationDetails || {};
+    const phone = appDetails.mobileNo || lead.phone || '';
+    const maskedPhone = phone.length >= 10
+      ? `${phone.slice(0, 2)}******${phone.slice(-4)}`
+      : '******';
+
+    return {
+      valid: true,
+      leadName: lead.name || 'Valued Client',
+      maskedPhone,
+      loanType: custom.loanType || appDetails.loanType || 'Financial Services Loan',
+    };
+  },
+
+  async sendClientPortalOtp(token: string, mobile: string) {
+    if (!token || !mobile) throw new Error('Token and registered mobile number are required');
+    const leads = await prisma.crmLead.findMany({
+      where: { isDeleted: false },
+    });
+    const lead = leads.find((l) => (l.customFields as any)?.portalToken === token);
+    if (!lead) throw new Error('Invalid or expired application link');
+
+    const cleanInput = mobile.replace(/\D/g, '').slice(-10);
+    const custom = (lead.customFields as any) || {};
+    const appDetails = custom.applicationDetails || {};
+    const leadPhone = (appDetails.mobileNo || lead.phone || '').replace(/\D/g, '').slice(-10);
+
+    if (cleanInput !== leadPhone) {
+      throw new Error('Entered mobile number does not match registered application phone number');
+    }
+
+    const email = appDetails.personalEmail || custom.email;
+    if (!email) {
+      throw new Error('No email address registered for this application. Please contact your loan advisor.');
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    custom.portalOtp = {
+      code: otp,
+      expiresAt: Date.now() + 10 * 60 * 1000,
+      mobile: cleanInput,
+    };
+
+    await prisma.crmLead.update({
+      where: { id: lead.id },
+      data: { customFields: custom },
+    });
+
+    await sendFinserveClientOtpEmail(email, lead.name || 'Valued Client', otp);
+
+    const parts = email.split('@');
+    const maskedEmail = parts[0].length > 2
+      ? `${parts[0].slice(0, 2)}***@${parts[1]}`
+      : `*@${parts[1]}`;
+
+    return {
+      success: true,
+      maskedEmail,
+      message: `Verification code sent to registered email (${maskedEmail})`,
+      ...(process.env.NODE_ENV !== 'production' && { devOtp: otp }),
+    };
+  },
+
+  async verifyClientPortalOtp(token: string, mobile: string, otp: string) {
+    if (!token || !mobile || !otp) throw new Error('Token, mobile number, and OTP are required');
+    const leads = await prisma.crmLead.findMany({
+      where: { isDeleted: false },
+    });
+    const lead = leads.find((l) => (l.customFields as any)?.portalToken === token);
+    if (!lead) throw new Error('Invalid or expired application link');
+
+    const cleanInput = mobile.replace(/\D/g, '').slice(-10);
+    const custom = (lead.customFields as any) || {};
+    const portalOtp = custom.portalOtp;
+
+    if (!portalOtp || portalOtp.code !== otp.trim()) {
+      throw new Error('Invalid verification code entered');
+    }
+    if (Date.now() > portalOtp.expiresAt) {
+      throw new Error('Verification code has expired. Please request a new code.');
+    }
+
+    const settings = await this.getSettings('NB_FINSERVE');
+    const loanTypeDocsMap: Record<string, string[]> = JSON.parse(settings.loan_type_docs_map || '{}');
+    const loanDocTypes: any[] = JSON.parse(settings.loan_doc_types || '[]');
+
+    const appDetails = custom.applicationDetails || {};
+    const loanType = custom.loanType || appDetails.loanType || 'Home Loan';
+    const requiredDocIds = loanTypeDocsMap[loanType] || loanTypeDocsMap['Home Loan'] || [];
+
+    const uploadedDocs: any[] = custom.documents || [];
+
+    const requiredDocsList = requiredDocIds.map((docId) => {
+      const docDef = loanDocTypes.find((d) => d.id === docId) || {
+        id: docId,
+        name: docId.replace(/_/g, ' ').toUpperCase(),
+        maxFileSizeMb: 10,
+        allowedFormats: ['pdf', 'jpg', 'png'],
+      };
+      const uploaded = uploadedDocs.find((u) => u.docTypeId === docId);
+      return {
+        id: docDef.id,
+        name: docDef.name,
+        maxFileSizeMb: docDef.maxFileSizeMb || 10,
+        allowedFormats: docDef.allowedFormats || ['pdf', 'jpg', 'jpeg', 'png'],
+        isUploaded: !!uploaded,
+        uploadedItem: uploaded || null,
+      };
+    });
+
+    return {
+      success: true,
+      lead: {
+        id: lead.id,
+        name: lead.name,
+        phone: lead.phone,
+        loanType,
+        applicationDetails: appDetails,
+        requiredDocs: requiredDocsList,
+        uploadedDocs,
+      },
+    };
+  },
+
+  async uploadClientPortalDoc(token: string, docTypeId: string, docName: string, file: { originalname: string; buffer: Buffer; size: number; mimetype: string }) {
+    if (!token || !docTypeId || !file) throw new Error('Token, document type, and file are required');
+    const leads = await prisma.crmLead.findMany({
+      where: { isDeleted: false },
+    });
+    const lead = leads.find((l) => (l.customFields as any)?.portalToken === token);
+    if (!lead) throw new Error('Invalid or expired application link');
+
+    const uploadsDir = path.join(process.cwd(), 'uploads', 'crm', 'client-docs');
+    fs.mkdirSync(uploadsDir, { recursive: true });
+
+    const ext = path.extname(file.originalname) || '.pdf';
+    const safeName = `${lead.id}_${docTypeId}_${Date.now()}${ext}`;
+    const filePath = path.join(uploadsDir, safeName);
+    fs.writeFileSync(filePath, file.buffer);
+
+    const fileUrl = `/uploads/crm/client-docs/${safeName}`;
+
+    const custom = (lead.customFields as any) || {};
+    const documents: any[] = custom.documents || [];
+
+    const existingIndex = documents.findIndex((d) => d.docTypeId === docTypeId);
+    const newDocItem = {
+      id: `doc_${Date.now()}`,
+      docTypeId,
+      docName: docName || docTypeId.replace(/_/g, ' ').toUpperCase(),
+      fileName: file.originalname,
+      fileUrl,
+      fileSize: file.size,
+      uploadedAt: new Date().toISOString(),
+      uploadedBy: 'CLIENT',
+      status: 'VERIFIED',
+    };
+
+    if (existingIndex >= 0) {
+      documents[existingIndex] = newDocItem;
+    } else {
+      documents.push(newDocItem);
+    }
+
+    custom.documents = documents;
+
+    await prisma.crmLead.update({
+      where: { id: lead.id },
+      data: { customFields: custom },
+    });
+
+    return {
+      success: true,
+      document: newDocItem,
+      uploadedDocs: documents,
+    };
+  },
+
+  async uploadLeadDoc(leadId: string, docTypeId: string, docName: string, file: { originalname: string; buffer: Buffer; size: number; mimetype: string }, uploadedBy?: string) {
+    const lead = await prisma.crmLead.findUnique({ where: { id: leadId } });
+    if (!lead) throw new Error('Lead not found');
+
+    const uploadsDir = path.join(process.cwd(), 'uploads', 'crm', 'client-docs');
+    fs.mkdirSync(uploadsDir, { recursive: true });
+
+    const ext = path.extname(file.originalname) || '.pdf';
+    const safeName = `${lead.id}_${docTypeId}_${Date.now()}${ext}`;
+    const filePath = path.join(uploadsDir, safeName);
+    fs.writeFileSync(filePath, file.buffer);
+
+    const fileUrl = `/uploads/crm/client-docs/${safeName}`;
+
+    const custom = (lead.customFields as any) || {};
+    const documents: any[] = custom.documents || [];
+
+    const existingIndex = documents.findIndex((d) => d.docTypeId === docTypeId);
+    const newDocItem = {
+      id: `doc_${Date.now()}`,
+      docTypeId,
+      docName: docName || docTypeId.replace(/_/g, ' ').toUpperCase(),
+      fileName: file.originalname,
+      fileUrl,
+      fileSize: file.size,
+      uploadedAt: new Date().toISOString(),
+      uploadedBy: uploadedBy || 'SALES_REP',
+      status: 'VERIFIED',
+    };
+
+    if (existingIndex >= 0) {
+      documents[existingIndex] = newDocItem;
+    } else {
+      documents.push(newDocItem);
+    }
+
+    custom.documents = documents;
+
+    await prisma.crmLead.update({
+      where: { id: lead.id },
+      data: { customFields: custom },
+    });
+
+    return {
+      success: true,
+      document: newDocItem,
+      uploadedDocs: documents,
+    };
   },
 };
 

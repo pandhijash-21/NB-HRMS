@@ -215,3 +215,38 @@ export async function sendOtpEmail(to: string, otp: string): Promise<void> {
     `,
   });
 }
+
+export async function sendFinserveClientOtpEmail(to: string, clientName: string, otp: string): Promise<void> {
+  const t = getTransporter();
+  if (!t) {
+    console.log(`[SMTP SIMULATED - DEV] Client Portal OTP for ${clientName} (${to}): ${otp}`);
+    return;
+  }
+  if (!to) return;
+
+  await t.sendMail({
+    from: `"NB Finserve" <${env.SMTP_FROM ?? env.SMTP_USER}>`,
+    to,
+    subject: `Your NB Finserve Verification OTP: ${otp}`,
+    html: `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%); padding: 30px; text-align: center; border-radius: 12px 12px 0 0;">
+          <h1 style="color: #F59E0B; margin: 0; font-size: 24px; font-weight: 700; letter-spacing: 1px;">NB FINSERVE</h1>
+          <p style="color: rgba(255,255,255,0.85); margin: 8px 0 0; font-size: 14px;">Secure Client Document & Application Portal</p>
+        </div>
+        <div style="padding: 32px; background: #ffffff; border: 1px solid #E2E8F0; border-top: none; border-radius: 0 0 12px 12px;">
+          <p style="font-size: 15px; color: #1E293B; margin-top: 0;">Dear <strong>${escapeHtml(clientName || 'Valued Client')}</strong>,</p>
+          <p style="font-size: 14px; color: #475569; line-height: 1.6;">
+            We received a request to access your loan application details and upload pending documents. Please use the one-time verification code below:
+          </p>
+          <div style="background: #F8FAFC; border: 2px dashed #CBD5E1; border-radius: 10px; padding: 22px; text-align: center; margin: 26px 0;">
+            <span style="font-size: 38px; font-weight: 800; color: #0F172A; letter-spacing: 10px; font-family: monospace;">${otp}</span>
+          </div>
+          <p style="font-size: 13px; color: #64748B; margin-bottom: 4px;">⏰ This code is valid for <strong>10 minutes</strong>. For your security, do not share this OTP with anyone.</p>
+          <hr style="border: none; border-top: 1px solid #E2E8F0; margin: 26px 0 18px 0;" />
+          <p style="font-size: 12px; color: #94A3B8; margin: 0; text-align: center;">NB Finserve • Financial Services & Loan Advisory</p>
+        </div>
+      </div>
+    `,
+  });
+}

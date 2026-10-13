@@ -8,6 +8,7 @@ import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../data/crm_repository.dart';
 import '../../domain/crm_models.dart';
 import '../bloc/crm_leads_bloc.dart';
+import '../widgets/crm_scope_selector.dart';
 
 class CrmVisitorDeskScreen extends StatelessWidget {
   const CrmVisitorDeskScreen({super.key});
@@ -130,6 +131,8 @@ class _CrmVisitorDeskViewState extends State<_CrmVisitorDeskView> {
               ],
             ),
             actions: [
+              const CrmScopeSelectorWidget(),
+              const SizedBox(width: 8),
               IconButton(
                 icon: const Icon(Icons.refresh_rounded),
                 tooltip: 'Refresh Desk',

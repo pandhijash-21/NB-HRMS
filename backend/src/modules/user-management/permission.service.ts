@@ -101,9 +101,13 @@ export function inferCategory(
   }
   if (
     k.startsWith('CRM_') ||
+    k.startsWith('FIN_CRM_') ||
     [
       'CRM',
       'CRM_PRE_SALES',
+      'CRM_SALES',
+      'CRM_VISITOR_DESK',
+      'SALES',
       'CRM_POST_SALES',
       'CRM_HEADERS',
       'CRM_BIN',

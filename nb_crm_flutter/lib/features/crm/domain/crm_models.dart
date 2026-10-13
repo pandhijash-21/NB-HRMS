@@ -192,6 +192,7 @@ class CrmColumnConfig {
 
 enum CrmStatus {
   notStarted,
+  assigned,
   cnr,
   scheduledVisit,
   notInterested,
@@ -206,6 +207,8 @@ enum CrmStatus {
     switch (this) {
       case CrmStatus.notStarted:
         return 'NOT_STARTED';
+      case CrmStatus.assigned:
+        return 'ASSIGNED';
       case CrmStatus.cnr:
         return 'CNR';
       case CrmStatus.scheduledVisit:
@@ -231,14 +234,16 @@ enum CrmStatus {
     switch (this) {
       case CrmStatus.notStarted:
         return 'Not started';
+      case CrmStatus.assigned:
+        return 'Assigned';
       case CrmStatus.cnr:
         return 'CNR (Call Not received)';
       case CrmStatus.scheduledVisit:
-        return 'Schedule A Visit';
+        return 'Visit Scheduled';
       case CrmStatus.notInterested:
         return 'Not Interested';
       case CrmStatus.siteVisitDone:
-        return 'Site Visit Done';
+        return 'Visit Done';
       case CrmStatus.followUp:
         return 'Follow up';
       case CrmStatus.interested:
@@ -254,6 +259,8 @@ enum CrmStatus {
 
   static CrmStatus fromString(String? val) {
     switch (val?.toUpperCase()) {
+      case 'ASSIGNED':
+        return CrmStatus.assigned;
       case 'CNR':
         return CrmStatus.cnr;
       case 'SCHEDULED_VISIT':
@@ -281,6 +288,7 @@ enum CrmStatus {
 
 class CrmLead {
   final String id;
+  final String scope;
   final String? campaignId;
   final String? campaignName;
   final String phone;
@@ -309,6 +317,7 @@ class CrmLead {
 
   const CrmLead({
     required this.id,
+    this.scope = 'NB_DEVELOPER',
     this.campaignId,
     this.campaignName,
     required this.phone,
@@ -338,18 +347,18 @@ class CrmLead {
 
   factory CrmLead.fromJson(Map<String, dynamic> json) {
     String? assignedName;
-    if (json['assignedTo'] != null && json['assignedTo']['generalInfo'] != null) {
-      assignedName = json['assignedTo']['generalInfo']['fullName'] as String?;
+    if (json['assignedTo'] is Map && (json['assignedTo'] as Map)['generalInfo'] is Map) {
+      assignedName = (json['assignedTo'] as Map)['generalInfo']['fullName']?.toString();
     }
 
     String? teleName;
-    if (json['telecaller'] != null && json['telecaller']['generalInfo'] != null) {
-      teleName = json['telecaller']['generalInfo']['fullName'] as String?;
+    if (json['telecaller'] is Map && (json['telecaller'] as Map)['generalInfo'] is Map) {
+      teleName = (json['telecaller'] as Map)['generalInfo']['fullName']?.toString();
     }
 
     String? campName;
-    if (json['campaign'] != null) {
-      campName = json['campaign']['name'] as String?;
+    if (json['campaign'] is Map) {
+      campName = (json['campaign'] as Map)['name']?.toString();
     }
 
     CrmFollowUp? followUp;
@@ -364,12 +373,13 @@ class CrmLead {
     }
 
     return CrmLead(
-      id: json['id'] as String? ?? '',
-      campaignId: json['campaignId'] as String?,
+      id: json['id']?.toString() ?? '',
+      scope: json['scope']?.toString().toUpperCase() ?? 'NB_DEVELOPER',
+      campaignId: json['campaignId']?.toString(),
       campaignName: campName,
-      phone: json['phone'] as String? ?? '',
-      name: json['name'] as String? ?? '',
-      status: CrmStatus.fromString(json['status'] as String?),
+      phone: json['phone']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      status: CrmStatus.fromString(json['status']?.toString()),
       customFields: json['customFields'] is Map ? Map<String, dynamic>.from(json['customFields'] as Map) : {},
       assignedToId: (json['assignedToId'] as num?)?.toInt(),
       assignedToName: assignedName,
@@ -377,14 +387,14 @@ class CrmLead {
       telecallerName: teleName,
       lastCallAt: json['lastCallAt'] != null ? DateTime.tryParse(json['lastCallAt'].toString()) : null,
       notInterestedAt: json['notInterestedAt'] != null ? DateTime.tryParse(json['notInterestedAt'].toString()) : null,
-      notInterestedReason: json['notInterestedReason'] as String?,
-      notInterestedRemark: json['notInterestedRemark'] as String?,
+      notInterestedReason: json['notInterestedReason']?.toString(),
+      notInterestedRemark: json['notInterestedRemark']?.toString(),
       scheduledVisitAt: json['scheduledVisitAt'] != null ? DateTime.tryParse(json['scheduledVisitAt'].toString())?.toLocal() : null,
       visitedAt: json['visitedAt'] != null ? DateTime.tryParse(json['visitedAt'].toString())?.toLocal() : null,
-      leadSource: json['leadSource'] as String?,
-      channelPartnerName: json['channelPartnerName'] as String?,
-      referenceType: json['referenceType'] as String?,
-      referenceName: json['referenceName'] as String?,
+      leadSource: json['leadSource']?.toString(),
+      channelPartnerName: json['channelPartnerName']?.toString(),
+      referenceType: json['referenceType']?.toString(),
+      referenceName: json['referenceName']?.toString(),
       isDeleted: json['isDeleted'] as bool? ?? false,
       deletedAt: json['deletedAt'] != null ? DateTime.tryParse(json['deletedAt'].toString()) : null,
       createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ?? DateTime.now(),
@@ -470,24 +480,24 @@ class CrmFollowUp {
     String? name;
     String? phone;
     if (json['lead'] is Map) {
-      name = json['lead']['name'] as String?;
-      phone = json['lead']['phone'] as String?;
+      name = (json['lead'] as Map)['name']?.toString();
+      phone = (json['lead'] as Map)['phone']?.toString();
     }
 
     String? assignedName;
-    if (json['assignedTo'] != null && json['assignedTo']['generalInfo'] != null) {
-      assignedName = json['assignedTo']['generalInfo']['fullName'] as String?;
+    if (json['assignedTo'] is Map && (json['assignedTo'] as Map)['generalInfo'] is Map) {
+      assignedName = (json['assignedTo'] as Map)['generalInfo']['fullName']?.toString();
     }
 
     return CrmFollowUp(
-      id: json['id'] as String? ?? '',
-      leadId: json['leadId'] as String? ?? '',
+      id: json['id']?.toString() ?? '',
+      leadId: json['leadId']?.toString() ?? '',
       leadName: name,
       leadPhone: phone,
       scheduledDate: DateTime.tryParse(json['scheduledDate']?.toString() ?? '') ?? DateTime.now(),
-      scheduledTime: json['scheduledTime'] as String? ?? '10:00 AM',
-      remarks: json['remarks'] as String?,
-      status: json['status'] as String? ?? 'PENDING',
+      scheduledTime: json['scheduledTime']?.toString() ?? '10:00 AM',
+      remarks: json['remarks']?.toString(),
+      status: json['status']?.toString() ?? 'PENDING',
       assignedToId: (json['assignedToId'] as num?)?.toInt(),
       assignedToName: assignedName,
       createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ?? DateTime.now(),
@@ -512,16 +522,19 @@ class CrmSalesUser {
     final empId = (json['employeeId'] as num?)?.toInt() ??
         (json['id'] as num?)?.toInt() ??
         0;
-    String name = (json['fullName'] as String?) ?? 'Sales User';
-    String? desig = json['designation'] as String?;
-    String? dept = json['department'] as String?;
+    String name = json['fullName']?.toString() ??
+        json['name']?.toString() ??
+        'Sales User';
+    String? desig = json['designation']?.toString();
+    String? dept = json['department']?.toString();
 
     if (json['generalInfo'] is Map) {
-      name = json['generalInfo']['fullName'] as String? ?? name;
-      desig = json['generalInfo']['designation'] as String? ?? desig;
-      dept = json['generalInfo']['department'] as String? ?? dept;
-    } else if (json['name'] is String) {
-      name = json['name'] as String;
+      final gi = json['generalInfo'] as Map;
+      if (gi['fullName'] != null && gi['fullName'].toString().trim().isNotEmpty) {
+        name = gi['fullName'].toString().trim();
+      }
+      if (gi['designation'] != null) desig = gi['designation'].toString().trim();
+      if (gi['department'] != null) dept = gi['department'].toString().trim();
     }
 
     return CrmSalesUser(
@@ -563,6 +576,69 @@ class CrmSettings {
   final bool kpiShowFreshLeads;
   final bool kpiShowConversionRate;
 
+  // Dual-Flow Lead Routing & Assignment
+  final List<int> excelAssignedTelecallerIds;
+  final List<int> webhookAssignedTelecallerIds;
+
+  // Loan Types & Document Configs (Finserve CRM)
+  final List<String> loanTypes;
+  final List<CrmLoanDocType> loanDocTypes;
+  final Map<String, List<String>> loanTypeDocsMap;
+  final List<FinserveApplicationField> finserveApplicationFields;
+
+  static const List<CrmLoanDocType> defaultLoanDocTypes = [
+    CrmLoanDocType(id: 'pan_card', name: 'PAN Card', maxFileSizeMb: 5),
+    CrmLoanDocType(id: 'aadhaar_card', name: 'Aadhaar Card', maxFileSizeMb: 5),
+    CrmLoanDocType(id: 'salary_slips', name: 'Salary Slips (Last 3 Months)', maxFileSizeMb: 10),
+    CrmLoanDocType(id: 'bank_statement', name: 'Bank Statement (Last 6 Months)', maxFileSizeMb: 15),
+    CrmLoanDocType(id: 'itr_docs', name: 'ITR / Form 16 (Last 2 Years)', maxFileSizeMb: 10),
+    CrmLoanDocType(id: 'property_docs', name: 'Property Chain Deeds / Title / Registry', maxFileSizeMb: 25),
+    CrmLoanDocType(id: 'business_proof', name: 'Business Registration / GST Certificate', maxFileSizeMb: 10),
+    CrmLoanDocType(id: 'utility_bill', name: 'Utility Bill / Residence Proof', maxFileSizeMb: 5),
+  ];
+
+  static const Map<String, List<String>> defaultLoanTypeDocsMap = {
+    'Home Loan': ['pan_card', 'aadhaar_card', 'salary_slips', 'bank_statement', 'property_docs'],
+    'Personal Loan': ['pan_card', 'aadhaar_card', 'salary_slips', 'bank_statement'],
+    'Business Loan': ['pan_card', 'aadhaar_card', 'bank_statement', 'itr_docs', 'business_proof'],
+    'Mortgage / LAP': ['pan_card', 'aadhaar_card', 'bank_statement', 'property_docs', 'itr_docs'],
+    'Auto Loan': ['pan_card', 'aadhaar_card', 'salary_slips', 'bank_statement'],
+    'Education Loan': ['pan_card', 'aadhaar_card', 'bank_statement', 'salary_slips'],
+  };
+
+  static const List<FinserveApplicationField> defaultFinserveApplicationFields = [
+    FinserveApplicationField(key: 'mobileNo', label: 'Mobile No', section: 'PERSONAL', type: 'phone', required: true, enabled: true),
+    FinserveApplicationField(key: 'alternateNo', label: 'Alternate No', section: 'PERSONAL', type: 'phone', required: false, enabled: true),
+    FinserveApplicationField(key: 'personalEmail', label: 'Personal Mail ID', section: 'PERSONAL', type: 'email', required: true, enabled: true),
+    FinserveApplicationField(key: 'maritalStatus', label: 'Marital Status', section: 'PERSONAL', type: 'select', options: ['Single', 'Married', 'Divorced', 'Widowed'], required: true, enabled: true),
+    FinserveApplicationField(key: 'motherName', label: 'Mother Name', section: 'PERSONAL', type: 'text', required: true, enabled: true),
+    FinserveApplicationField(key: 'spouseName', label: 'Spouse Name', section: 'PERSONAL', type: 'text', required: false, enabled: true),
+    FinserveApplicationField(key: 'education', label: 'Education', section: 'PERSONAL', type: 'select', options: ['High School', 'Graduate', 'Post Graduate', 'Doctorate', 'Professional', 'Other'], required: true, enabled: true),
+    FinserveApplicationField(key: 'currentAddress', label: 'Current Address', section: 'PERSONAL', type: 'textarea', required: true, enabled: true),
+    FinserveApplicationField(key: 'currentAddressType', label: 'Current Address (Rent/Owned)', section: 'PERSONAL', type: 'select', options: ['Owned', 'Rented', 'Parental', 'Company Provided'], required: true, enabled: true),
+    FinserveApplicationField(key: 'permanentAddress', label: 'Permanent Address', section: 'PERSONAL', type: 'textarea', required: true, enabled: true),
+    FinserveApplicationField(key: 'permanentAddressType', label: 'Permanent Address (Rent/Owned)', section: 'PERSONAL', type: 'select', options: ['Owned', 'Rented', 'Parental'], required: true, enabled: true),
+    FinserveApplicationField(key: 'requiredLoanAmount', label: 'Require Loan Amount', section: 'PERSONAL', type: 'number', required: true, enabled: true),
+    FinserveApplicationField(key: 'loanPurpose', label: 'Loan Purpose', section: 'PERSONAL', type: 'text', required: true, enabled: true),
+
+    FinserveApplicationField(key: 'companyName', label: 'Company Name', section: 'COMPANY', type: 'text', required: true, enabled: true),
+    FinserveApplicationField(key: 'companyAddress', label: 'Company Address', section: 'COMPANY', type: 'textarea', required: true, enabled: true),
+    FinserveApplicationField(key: 'currentWorkExp', label: 'Current Work Exp', section: 'COMPANY', type: 'text', required: true, enabled: true),
+    FinserveApplicationField(key: 'totalWorkExp', label: 'Total Work Exp', section: 'COMPANY', type: 'text', required: true, enabled: true),
+    FinserveApplicationField(key: 'officialEmail', label: 'Official Mail ID', section: 'COMPANY', type: 'email', required: false, enabled: true),
+    FinserveApplicationField(key: 'officeLandlineNo', label: 'Office Landline No', section: 'COMPANY', type: 'phone', required: false, enabled: true),
+
+    FinserveApplicationField(key: 'ref1Name', label: '1. Name', section: 'REFERENCE', type: 'text', required: true, enabled: true),
+    FinserveApplicationField(key: 'ref1Mobile', label: '1. Mobile No', section: 'REFERENCE', type: 'phone', required: true, enabled: true),
+    FinserveApplicationField(key: 'ref1Relation', label: '1. Relation', section: 'REFERENCE', type: 'text', required: true, enabled: true),
+    FinserveApplicationField(key: 'ref1Address', label: '1. Address', section: 'REFERENCE', type: 'textarea', required: true, enabled: true),
+
+    FinserveApplicationField(key: 'ref2Name', label: '2. Name', section: 'REFERENCE', type: 'text', required: true, enabled: true),
+    FinserveApplicationField(key: 'ref2Mobile', label: '2. Mobile No', section: 'REFERENCE', type: 'phone', required: true, enabled: true),
+    FinserveApplicationField(key: 'ref2Relation', label: '2. Relation', section: 'REFERENCE', type: 'text', required: true, enabled: true),
+    FinserveApplicationField(key: 'ref2Address', label: '2. Address', section: 'REFERENCE', type: 'textarea', required: true, enabled: true),
+  ];
+
   const CrmSettings({
     required this.elisionApiUrl,
     required this.elisionUserId,
@@ -601,7 +677,38 @@ class CrmSettings {
     this.kpiShowTalkTime = true,
     this.kpiShowFreshLeads = true,
     this.kpiShowConversionRate = true,
+    this.excelAssignedTelecallerIds = const [],
+    this.webhookAssignedTelecallerIds = const [],
+    this.loanTypes = const [
+      'Home Loan',
+      'Personal Loan',
+      'Business Loan',
+      'Mortgage / LAP',
+      'Auto Loan',
+      'Education Loan',
+    ],
+    this.loanDocTypes = defaultLoanDocTypes,
+    this.loanTypeDocsMap = defaultLoanTypeDocsMap,
+    this.finserveApplicationFields = defaultFinserveApplicationFields,
   });
+
+  static List<int> _parseIntList(dynamic raw) {
+    if (raw == null) return const [];
+    if (raw is List) {
+      return raw.map((e) => int.tryParse(e.toString())).whereType<int>().toList();
+    }
+    if (raw is String && raw.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is List) {
+          return decoded.map((e) => int.tryParse(e.toString())).whereType<int>().toList();
+        }
+      } catch (_) {
+        return raw.split(',').map((e) => int.tryParse(e.trim())).whereType<int>().toList();
+      }
+    }
+    return const [];
+  }
 
   static List<String> _parseList(dynamic raw, List<String> fallback) {
     if (raw == null) return fallback;
@@ -619,16 +726,60 @@ class CrmSettings {
     return fallback;
   }
 
+  static List<CrmLoanDocType> _parseLoanDocTypes(dynamic raw) {
+    if (raw == null) return defaultLoanDocTypes;
+    List list = [];
+    if (raw is List) {
+      list = raw;
+    } else if (raw is String && raw.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is List) list = decoded;
+      } catch (_) {}
+    }
+    if (list.isNotEmpty) {
+      return list.map((e) {
+        if (e is Map<String, dynamic>) return CrmLoanDocType.fromJson(e);
+        if (e is Map) return CrmLoanDocType.fromJson(Map<String, dynamic>.from(e));
+        return CrmLoanDocType(id: e.toString(), name: e.toString());
+      }).toList();
+    }
+    return defaultLoanDocTypes;
+  }
+
+  static Map<String, List<String>> _parseLoanTypeDocsMap(dynamic raw) {
+    if (raw == null) return defaultLoanTypeDocsMap;
+    Map map = {};
+    if (raw is Map) {
+      map = raw;
+    } else if (raw is String && raw.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map) map = decoded;
+      } catch (_) {}
+    }
+    if (map.isNotEmpty) {
+      final res = <String, List<String>>{};
+      map.forEach((k, v) {
+        if (v is List) {
+          res[k.toString()] = v.map((e) => e.toString()).toList();
+        }
+      });
+      return res;
+    }
+    return defaultLoanTypeDocsMap;
+  }
+
   factory CrmSettings.fromJson(Map<String, dynamic> json) {
     return CrmSettings(
-      elisionApiUrl: json['elision_api_url'] as String? ?? 'https://greeter.co.in/api/click2call',
-      elisionUserId: json['elision_user_id'] as String? ?? '634550',
-      elisionDid: json['elision_did'] as String? ?? '9484700070',
-      elisionRouteNumber: json['elision_route_number'] as String? ?? '98',
-      elisionDefaultAgentNumber: json['elision_default_agent_number'] as String? ?? '8511139384',
-      elisionApiKey: json['elision_api_key'] as String? ?? '',
-      elisionCampaignId: json['elision_campaign_id'] as String? ?? '',
-      elisionAgentId: json['elision_agent_id'] as String? ?? '',
+      elisionApiUrl: json['elision_api_url']?.toString() ?? 'https://greeter.co.in/api/click2call',
+      elisionUserId: json['elision_user_id']?.toString() ?? '634550',
+      elisionDid: json['elision_did']?.toString() ?? '9484700070',
+      elisionRouteNumber: json['elision_route_number']?.toString() ?? '98',
+      elisionDefaultAgentNumber: json['elision_default_agent_number']?.toString() ?? '8511139384',
+      elisionApiKey: json['elision_api_key']?.toString() ?? '',
+      elisionCampaignId: json['elision_campaign_id']?.toString() ?? '',
+      elisionAgentId: json['elision_agent_id']?.toString() ?? '',
       notInterestedRetentionDays: int.tryParse(json['not_interested_retention_days']?.toString() ?? '30') ?? 30,
       binRetentionDays: int.tryParse(json['bin_retention_days']?.toString() ?? '30') ?? 30,
       notInterestedReasons: _parseList(json['not_interested_reasons'], const [
@@ -658,6 +809,136 @@ class CrmSettings {
       kpiShowTalkTime: json['kpi_show_talk_time']?.toString() != 'false',
       kpiShowFreshLeads: json['kpi_show_fresh_leads']?.toString() != 'false',
       kpiShowConversionRate: json['kpi_show_conversion_rate']?.toString() != 'false',
+      excelAssignedTelecallerIds: _parseIntList(json['excel_assigned_telecaller_ids']),
+      webhookAssignedTelecallerIds: _parseIntList(json['webhook_assigned_telecaller_ids']),
+      loanTypes: _parseList(json['loan_types'], const [
+        'Home Loan',
+        'Personal Loan',
+        'Business Loan',
+        'Mortgage / LAP',
+        'Auto Loan',
+        'Education Loan',
+      ]),
+      loanDocTypes: _parseLoanDocTypes(json['loan_doc_types']),
+      loanTypeDocsMap: _parseLoanTypeDocsMap(json['loan_type_docs_map']),
+      finserveApplicationFields: _parseFinserveAppFields(json['finserve_application_fields'] ?? json['application_fields']),
+    );
+  }
+
+  static List<FinserveApplicationField> _parseFinserveAppFields(dynamic raw) {
+    if (raw == null) return defaultFinserveApplicationFields;
+    List list = [];
+    if (raw is List) {
+      list = raw;
+    } else if (raw is String && raw.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is List) list = decoded;
+      } catch (_) {}
+    }
+    if (list.isNotEmpty) {
+      return list.map((e) {
+        if (e is Map<String, dynamic>) return FinserveApplicationField.fromJson(e);
+        if (e is Map) return FinserveApplicationField.fromJson(Map<String, dynamic>.from(e));
+        return FinserveApplicationField(key: e.toString(), label: e.toString());
+      }).toList();
+    }
+    return defaultFinserveApplicationFields;
+  }
+}
+
+class CrmLoanDocType {
+  final String id;
+  final String name;
+  final int maxFileSizeMb;
+  final List<String> allowedFormats;
+
+  const CrmLoanDocType({
+    required this.id,
+    required this.name,
+    this.maxFileSizeMb = 5,
+    this.allowedFormats = const ['pdf', 'jpg', 'jpeg', 'png'],
+  });
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'maxFileSizeMb': maxFileSizeMb,
+    'allowedFormats': allowedFormats,
+  };
+
+  factory CrmLoanDocType.fromJson(Map<String, dynamic> json) {
+    return CrmLoanDocType(
+      id: json['id']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      maxFileSizeMb: int.tryParse(json['maxFileSizeMb']?.toString() ?? '5') ?? 5,
+      allowedFormats: (json['allowedFormats'] as List?)
+              ?.map((e) => e.toString().trim().toLowerCase())
+              .where((e) => e.isNotEmpty)
+              .toList() ??
+          const ['pdf', 'jpg', 'jpeg', 'png'],
+    );
+  }
+}
+
+class FinserveApplicationField {
+  final String key;
+  final String label;
+  final String section; // PERSONAL, COMPANY, REFERENCE, CUSTOM
+  final String type; // text, number, phone, email, select, textarea
+  final List<String> options;
+  final bool required;
+  final bool enabled;
+
+  const FinserveApplicationField({
+    required this.key,
+    required this.label,
+    this.section = 'PERSONAL',
+    this.type = 'text',
+    this.options = const [],
+    this.required = true,
+    this.enabled = true,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'key': key,
+    'label': label,
+    'section': section,
+    'type': type,
+    'options': options,
+    'required': required,
+    'enabled': enabled,
+  };
+
+  factory FinserveApplicationField.fromJson(Map<String, dynamic> json) {
+    return FinserveApplicationField(
+      key: json['key']?.toString() ?? '',
+      label: json['label']?.toString() ?? '',
+      section: json['section']?.toString().toUpperCase() ?? 'PERSONAL',
+      type: json['type']?.toString().toLowerCase() ?? 'text',
+      options: (json['options'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+      required: json['required'] == true,
+      enabled: json['enabled'] != false,
+    );
+  }
+
+  FinserveApplicationField copyWith({
+    String? key,
+    String? label,
+    String? section,
+    String? type,
+    List<String>? options,
+    bool? required,
+    bool? enabled,
+  }) {
+    return FinserveApplicationField(
+      key: key ?? this.key,
+      label: label ?? this.label,
+      section: section ?? this.section,
+      type: type ?? this.type,
+      options: options ?? this.options,
+      required: required ?? this.required,
+      enabled: enabled ?? this.enabled,
     );
   }
 }
@@ -1126,4 +1407,297 @@ class CrmCustomerLog {
         'performedById': performedById,
         if (metadata != null) 'metadata': metadata,
       };
+}
+
+// ---------------------------------------------------------------------------
+// WhatsApp Automation Models
+// ---------------------------------------------------------------------------
+
+class CrmWhatsappTrigger {
+  const CrmWhatsappTrigger({
+    required this.id,
+    required this.event,
+    required this.name,
+    required this.enabled,
+    required this.messageTemplate,
+    this.messageType = 'TEXT',
+    this.templateId,
+    this.templateName,
+    this.templateEndpoint,
+    this.language = 'en_US',
+    this.mediaUrl = '',
+    this.includeCalendarLink = false,
+    this.locationUrl = '',
+  });
+
+  final String id;
+  final String event;
+  final String name;
+  final bool enabled;
+  final String messageTemplate;
+  final String messageType; // 'TEXT' | 'TEMPLATE'
+  final String? templateId;
+  final String? templateName;
+  final String? templateEndpoint;
+  final String language;
+  final String mediaUrl;
+  final bool includeCalendarLink;
+  final String locationUrl;
+
+  CrmWhatsappTrigger copyWith({
+    String? id,
+    String? event,
+    String? name,
+    bool? enabled,
+    String? messageTemplate,
+    String? messageType,
+    String? templateId,
+    String? templateName,
+    String? templateEndpoint,
+    String? language,
+    String? mediaUrl,
+    bool? includeCalendarLink,
+    String? locationUrl,
+  }) {
+    return CrmWhatsappTrigger(
+      id: id ?? this.id,
+      event: event ?? this.event,
+      name: name ?? this.name,
+      enabled: enabled ?? this.enabled,
+      messageTemplate: messageTemplate ?? this.messageTemplate,
+      messageType: messageType ?? this.messageType,
+      templateId: templateId ?? this.templateId,
+      templateName: templateName ?? this.templateName,
+      templateEndpoint: templateEndpoint ?? this.templateEndpoint,
+      language: language ?? this.language,
+      mediaUrl: mediaUrl ?? this.mediaUrl,
+      includeCalendarLink: includeCalendarLink ?? this.includeCalendarLink,
+      locationUrl: locationUrl ?? this.locationUrl,
+    );
+  }
+
+  factory CrmWhatsappTrigger.fromJson(Map<String, dynamic> json) {
+    return CrmWhatsappTrigger(
+      id: json['id']?.toString() ?? '',
+      event: json['event']?.toString() ?? 'LEAD_CREATED',
+      name: json['name']?.toString() ?? '',
+      enabled: json['enabled'] != false,
+      messageTemplate: json['messageTemplate']?.toString() ?? '',
+      messageType: json['messageType']?.toString() ?? 'TEXT',
+      templateId: json['templateId']?.toString(),
+      templateName: json['templateName']?.toString(),
+      templateEndpoint: json['templateEndpoint']?.toString(),
+      language: json['language']?.toString() ?? 'en_US',
+      mediaUrl: json['mediaUrl']?.toString() ?? '',
+      includeCalendarLink: json['includeCalendarLink'] == true,
+      locationUrl: json['locationUrl']?.toString() ?? '',
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'event': event,
+        'name': name,
+        'enabled': enabled,
+        'messageTemplate': messageTemplate,
+        'messageType': messageType,
+        'templateId': templateId,
+        'templateName': templateName,
+        'templateEndpoint': templateEndpoint,
+        'language': language,
+        'mediaUrl': mediaUrl,
+        'includeCalendarLink': includeCalendarLink,
+        'locationUrl': locationUrl,
+      };
+}
+
+class CrmWhatsappConfig {
+  const CrmWhatsappConfig({
+    required this.enabled,
+    required this.provider,
+    required this.apiBase,
+    required this.apiUrl,
+    required this.apiKey,
+    this.hasApiKey = false,
+    required this.senderId,
+    required this.defaultBrochureUrl,
+    this.defaultBrochureName = 'Legacy_Tower_Brochure.pdf',
+    required this.defaultLocationUrl,
+    required this.defaultProjectName,
+    this.connectionStatus = 'NOT_CONFIGURED',
+    this.lastVerifiedAt,
+    this.lastVerificationResult,
+    required this.triggers,
+  });
+
+  final bool enabled;
+  final String provider;
+  final String apiBase;
+  final String apiUrl;
+  final String apiKey;
+  final bool hasApiKey;
+  final String senderId;
+  final String defaultBrochureUrl;
+  final String defaultBrochureName;
+  final String defaultLocationUrl;
+  final String defaultProjectName;
+  final String connectionStatus; // 'NOT_CONFIGURED' | 'CONFIGURED_UNVERIFIED' | 'CONNECTED_VERIFIED'
+  final String? lastVerifiedAt;
+  final String? lastVerificationResult;
+  final List<CrmWhatsappTrigger> triggers;
+
+  CrmWhatsappConfig copyWith({
+    bool? enabled,
+    String? provider,
+    String? apiBase,
+    String? apiUrl,
+    String? apiKey,
+    bool? hasApiKey,
+    String? senderId,
+    String? defaultBrochureUrl,
+    String? defaultBrochureName,
+    String? defaultLocationUrl,
+    String? defaultProjectName,
+    String? connectionStatus,
+    String? lastVerifiedAt,
+    String? lastVerificationResult,
+    List<CrmWhatsappTrigger>? triggers,
+  }) {
+    return CrmWhatsappConfig(
+      enabled: enabled ?? this.enabled,
+      provider: provider ?? this.provider,
+      apiBase: apiBase ?? this.apiBase,
+      apiUrl: apiUrl ?? this.apiUrl,
+      apiKey: apiKey ?? this.apiKey,
+      hasApiKey: hasApiKey ?? this.hasApiKey,
+      senderId: senderId ?? this.senderId,
+      defaultBrochureUrl: defaultBrochureUrl ?? this.defaultBrochureUrl,
+      defaultBrochureName: defaultBrochureName ?? this.defaultBrochureName,
+      defaultLocationUrl: defaultLocationUrl ?? this.defaultLocationUrl,
+      defaultProjectName: defaultProjectName ?? this.defaultProjectName,
+      connectionStatus: connectionStatus ?? this.connectionStatus,
+      lastVerifiedAt: lastVerifiedAt ?? this.lastVerifiedAt,
+      lastVerificationResult: lastVerificationResult ?? this.lastVerificationResult,
+      triggers: triggers ?? this.triggers,
+    );
+  }
+
+  factory CrmWhatsappConfig.fromJson(Map<String, dynamic> json) {
+    final rawTriggers = json['triggers'];
+    final list = <CrmWhatsappTrigger>[];
+    if (rawTriggers is List) {
+      for (final t in rawTriggers) {
+        if (t is Map) {
+          list.add(CrmWhatsappTrigger.fromJson(Map<String, dynamic>.from(t)));
+        }
+      }
+    }
+    return CrmWhatsappConfig(
+      enabled: json['enabled'] != false,
+      provider: json['provider']?.toString() ?? 'botbiz',
+      apiBase: json['apiBase']?.toString() ?? 'https://dash.botbiz.io/api/v1',
+      apiUrl: json['apiUrl']?.toString() ?? 'https://dash.botbiz.io/api/v1/whatsapp/send',
+      apiKey: json['apiKey']?.toString() ?? '',
+      hasApiKey: json['hasApiKey'] == true,
+      senderId: json['senderId']?.toString() ?? '',
+      defaultBrochureUrl: json['defaultBrochureUrl']?.toString() ?? '',
+      defaultBrochureName: json['defaultBrochureName']?.toString() ?? 'Legacy_Tower_Brochure.pdf',
+      defaultLocationUrl: json['defaultLocationUrl']?.toString() ?? '',
+      defaultProjectName: json['defaultProjectName']?.toString() ?? 'Legacy Tower',
+      connectionStatus: json['connectionStatus']?.toString() ?? 'NOT_CONFIGURED',
+      lastVerifiedAt: json['lastVerifiedAt']?.toString(),
+      lastVerificationResult: json['lastVerificationResult']?.toString(),
+      triggers: list,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'enabled': enabled,
+        'provider': provider,
+        'apiBase': apiBase,
+        'apiUrl': apiUrl,
+        'apiKey': apiKey,
+        'senderId': senderId,
+        'defaultBrochureUrl': defaultBrochureUrl,
+        'defaultBrochureName': defaultBrochureName,
+        'defaultLocationUrl': defaultLocationUrl,
+        'defaultProjectName': defaultProjectName,
+        'triggers': triggers.map((t) => t.toJson()).toList(),
+      };
+}
+
+class BotbizTemplateModel {
+  const BotbizTemplateModel({
+    required this.id,
+    required this.name,
+    required this.language,
+    this.category,
+    required this.status,
+    this.variableCount,
+  });
+
+  final String id;
+  final String name;
+  final String language;
+  final String? category;
+  final String status; // 'APPROVED' | 'PENDING' | 'REJECTED' | 'PAUSED' | 'DISABLED' | 'UNKNOWN'
+  final int? variableCount;
+
+  factory BotbizTemplateModel.fromJson(Map<String, dynamic> json) {
+    return BotbizTemplateModel(
+      id: json['id']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      language: json['language']?.toString() ?? 'en_US',
+      category: json['category']?.toString(),
+      status: json['status']?.toString() ?? 'UNKNOWN',
+      variableCount: json['variableCount'] is num ? (json['variableCount'] as num).toInt() : null,
+    );
+  }
+}
+
+class CrmWhatsappLogItem {
+  const CrmWhatsappLogItem({
+    required this.id,
+    required this.phone,
+    required this.event,
+    this.leadId,
+    required this.message,
+    this.messageType,
+    this.templateId,
+    this.waMessageId,
+    this.mediaUrl,
+    required this.status,
+    this.error,
+    required this.timestamp,
+  });
+
+  final String id;
+  final String phone;
+  final String event;
+  final String? leadId;
+  final String message;
+  final String? messageType;
+  final String? templateId;
+  final String? waMessageId;
+  final String? mediaUrl;
+  final String status;
+  final String? error;
+  final String timestamp;
+
+  factory CrmWhatsappLogItem.fromJson(Map<String, dynamic> json) {
+    return CrmWhatsappLogItem(
+      id: json['id']?.toString() ?? '',
+      phone: json['phone']?.toString() ?? '',
+      event: json['event']?.toString() ?? '',
+      leadId: json['leadId']?.toString(),
+      message: json['message']?.toString() ?? '',
+      messageType: json['messageType']?.toString(),
+      templateId: json['templateId']?.toString(),
+      waMessageId: json['waMessageId']?.toString(),
+      mediaUrl: json['mediaUrl']?.toString(),
+      status: json['status']?.toString() ?? 'SENT',
+      error: json['error']?.toString(),
+      timestamp: json['timestamp']?.toString() ?? '',
+    );
+  }
 }

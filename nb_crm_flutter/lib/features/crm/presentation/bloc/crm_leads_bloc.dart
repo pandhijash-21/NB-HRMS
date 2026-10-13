@@ -48,6 +48,14 @@ class CrmLeadsStatusFilterChanged extends CrmLeadsEvent {
   List<Object?> get props => [status];
 }
 
+class CrmLeadsLeadFlowFilterChanged extends CrmLeadsEvent {
+  const CrmLeadsLeadFlowFilterChanged(this.leadFlow);
+  final String leadFlow;
+
+  @override
+  List<Object?> get props => [leadFlow];
+}
+
 class CrmLeadsSearchChanged extends CrmLeadsEvent {
   const CrmLeadsSearchChanged(this.search);
   final String search;
@@ -223,6 +231,7 @@ class CrmLeadsState extends Equatable {
     this.columns = const [],
     this.leads = const [],
     this.statusFilter = 'ALL',
+    this.leadFlowFilter = 'ALL',
     this.search = '',
     this.salesUsers = const [],
     this.followUps = const [],
@@ -246,6 +255,7 @@ class CrmLeadsState extends Equatable {
   final List<CrmColumnConfig> columns;
   final List<CrmLead> leads;
   final String statusFilter;
+  final String leadFlowFilter;
   final String search;
   final List<CrmSalesUser> salesUsers;
   final List<CrmFollowUp> followUps;
@@ -271,6 +281,7 @@ class CrmLeadsState extends Equatable {
     List<CrmColumnConfig>? columns,
     List<CrmLead>? leads,
     String? statusFilter,
+    String? leadFlowFilter,
     String? search,
     List<CrmSalesUser>? salesUsers,
     List<CrmFollowUp>? followUps,
@@ -298,6 +309,7 @@ class CrmLeadsState extends Equatable {
       columns: columns ?? this.columns,
       leads: leads ?? this.leads,
       statusFilter: statusFilter ?? this.statusFilter,
+      leadFlowFilter: leadFlowFilter ?? this.leadFlowFilter,
       search: search ?? this.search,
       salesUsers: salesUsers ?? this.salesUsers,
       followUps: followUps ?? this.followUps,
@@ -327,6 +339,7 @@ class CrmLeadsState extends Equatable {
         columns,
         leads,
         statusFilter,
+        leadFlowFilter,
         search,
         salesUsers,
         followUps,
@@ -355,6 +368,7 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
     on<CrmLeadsProjectSelected>(_onProjectSelected);
     on<CrmLeadsCampaignSelected>(_onCampaignSelected);
     on<CrmLeadsStatusFilterChanged>(_onStatusFilterChanged);
+    on<CrmLeadsLeadFlowFilterChanged>(_onLeadFlowFilterChanged);
     on<CrmLeadsSearchChanged>(_onSearchChanged);
     on<CrmLeadsLeadCreated>(_onLeadCreated);
     on<CrmLeadsLeadUpdated>(_onLeadUpdated);
@@ -378,11 +392,13 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
     String? projectId,
     String? campaignId,
     String? statusFilter,
+    String? leadFlowFilter,
     String? search,
     String? followUpFilter,
   }) async {
     try {
       final effectiveStatus = statusFilter ?? state.statusFilter;
+      final effectiveLeadFlow = leadFlowFilter ?? state.leadFlowFilter;
       final effectiveSearch = search ?? state.search;
       final effectiveFollowUp = followUpFilter ?? state.followUpFilter;
 
@@ -394,6 +410,7 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
           projectId: projectId,
           campaignId: campaignId,
           status: effectiveStatus == 'ALL' ? null : effectiveStatus,
+          leadFlow: effectiveLeadFlow == 'ALL' ? null : effectiveLeadFlow,
           search: effectiveSearch.isEmpty ? null : effectiveSearch,
         ),
         _crmRepository.getHrmsEmployees(),
@@ -421,6 +438,19 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
     } catch (e) {
       emit(state.copyWith(status: LoadStatus.failure, errorMessage: e.toString()));
     }
+  }
+
+  Future<void> _onLeadFlowFilterChanged(
+    CrmLeadsLeadFlowFilterChanged event,
+    Emitter<CrmLeadsState> emit,
+  ) async {
+    emit(state.copyWith(leadFlowFilter: event.leadFlow));
+    await _fetchData(
+      emit,
+      projectId: state.selectedProjectId,
+      campaignId: state.selectedCampaignId,
+      leadFlowFilter: event.leadFlow,
+    );
   }
 
   Future<void> _onLoad(

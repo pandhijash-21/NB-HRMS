@@ -70,10 +70,11 @@ export interface CreateLeadDto {
   campaignId?: string | null;
   phone: string;
   name?: string;
-  status?: 'NOT_STARTED' | 'FOLLOW_UP' | 'INTERESTED' | 'NOT_INTERESTED';
+  status?: 'NOT_STARTED' | 'ASSIGNED' | 'CNR' | 'SCHEDULED_VISIT' | 'NOT_INTERESTED' | 'SITE_VISIT_DONE' | 'FOLLOW_UP' | 'INTERESTED';
   customFields?: Record<string, any>;
   assignedToId?: number | null;
   telecallerId?: number | null;
+  leadSource?: string;
 }
 
 export interface UpdateLeadDto {
@@ -83,6 +84,7 @@ export interface UpdateLeadDto {
   customFields?: Record<string, any>;
   assignedToId?: number | null;
   telecallerId?: number | null;
+  leadSource?: string;
 }
 
 export interface ScheduleFollowUpDto {
@@ -104,6 +106,8 @@ export interface UpdateCrmSettingsDto {
   elision_agent_id?: string;
   not_interested_retention_days?: string;
   bin_retention_days?: string;
+  excel_assigned_telecaller_ids?: string | number[];
+  webhook_assigned_telecaller_ids?: string | number[];
   [key: string]: any;
 }
 
@@ -119,4 +123,32 @@ export interface TelephonyWebhookDto {
   did?: string;
   call_id?: string;
   [key: string]: any;
+}
+
+export interface FinserveApplicationField {
+  key: string;
+  label: string;
+  section: 'PERSONAL' | 'COMPANY' | 'REFERENCE' | 'CUSTOM';
+  type: 'text' | 'number' | 'phone' | 'email' | 'select' | 'textarea';
+  options?: string[];
+  required: boolean;
+  enabled: boolean;
+}
+
+export interface FinserveDocumentItem {
+  id: string;
+  docTypeId: string;
+  docName: string;
+  fileUrl: string;
+  fileName: string;
+  fileSize?: number;
+  uploadedAt: string;
+  uploadedBy?: string;
+  status?: 'PENDING' | 'VERIFIED' | 'REJECTED';
+}
+
+export interface UpdateLeadApplicationDetailsDto {
+  loanType?: string;
+  applicationDetails?: Record<string, any>;
+  status?: string;
 }

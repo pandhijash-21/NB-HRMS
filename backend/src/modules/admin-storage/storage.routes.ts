@@ -11,6 +11,8 @@ function requireStorageAdmin(req: Request, res: Response, next: NextFunction) {
   if (!req.user) return res.status(401).json(fail('Unauthenticated'));
   const role = req.user.roleName ?? req.user.role;
   if (isSuperAdminRole(role)) return next();
+  const heldStorage = req.user.permissions?.ADMIN_STORAGE ?? [];
+  if (heldStorage.includes('READ') || heldStorage.includes('WRITE') || heldStorage.includes('DELETE')) return next();
   const held = req.user.permissions?.USER_MGMT ?? [];
   if (held.includes('WRITE') || held.includes('DELETE')) return next();
   return res.status(403).json(fail('You do not have permission to manage storage'));

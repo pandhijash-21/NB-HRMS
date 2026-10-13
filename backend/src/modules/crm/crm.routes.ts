@@ -2,7 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import { crmController } from './crm.controller';
 import { requireAuth } from '../../middleware/auth';
-import { requirePermission, type PermissionAction } from '../../middleware/rbac';
+import { requirePermission, requireAnyPermission, type PermissionAction } from '../../middleware/rbac';
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -10,21 +10,48 @@ const upload = multer({
 });
 
 export const crmRouter = Router();
+export const crmPublicRouter = Router();
+export const clientPortalPageRouter = Router();
+
+// Public Client Portal Webpage
+clientPortalPageRouter.get('/', crmController.renderClientPortalPage);
 
 // Public Webhook for Greeter / Elision Call Logs (No auth required)
+crmPublicRouter.post('/telephony/webhook', crmController.handleTelephonyWebhook);
 crmRouter.post('/telephony/webhook', crmController.handleTelephonyWebhook);
 
-// Audio stream proxy for in-app call recording playback (supports browser audio elements)
+// Audio stream proxy for in-app call recording playback
+crmPublicRouter.get('/telephony/recordings/:id/audio', crmController.streamCallAudio);
 crmRouter.get('/telephony/recordings/:id/audio', crmController.streamCallAudio);
 
-// Public Webhook for Campaign Lead Ingestion (No auth required)
-crmRouter.get('/campaigns/:token/webhook', crmController.handleCampaignWebhookVerification);
-crmRouter.post('/campaigns/:token/webhook', crmController.handleCampaignWebhook);
-crmRouter.get('/webhook/:token', crmController.handleCampaignWebhookVerification);
-crmRouter.post('/webhook/:token', crmController.handleCampaignWebhook);
+// Public Webhooks for Campaign Lead Ingestion
+crmPublicRouter.get('/campaigns/:token/webhook', crmController.handleCampaignWebhookVerification);
+crmPublicRouter.post('/campaigns/:token/webhook', crmController.handleCampaignWebhook);
+crmPublicRouter.get('/webhook/:token', crmController.handleCampaignWebhookVerification);
+crmPublicRouter.post('/webhook/:token', crmController.handleCampaignWebhook);
+
+// Public Client Verification & Document Upload Portal Endpoints
+crmPublicRouter.get('/client-portal/:token/info', crmController.getClientPortalInfo);
+crmPublicRouter.post('/client-portal/:token/send-otp', crmController.sendClientPortalOtp);
+crmPublicRouter.post('/client-portal/:token/verify-otp', crmController.verifyClientPortalOtp);
+crmPublicRouter.post(
+  '/client-portal/:token/upload-doc',
+  upload.single('document'),
+  crmController.uploadClientPortalDoc,
+);
 
 // Apply auth to all protected CRM routes
 crmRouter.use(requireAuth);
+
+function getCrmScope(req: any): string {
+  const scopeHeader = (req.headers['x-crm-scope'] || req.query?.scope || req.body?.scope || '').toString().toUpperCase().trim();
+  return scopeHeader === 'NB_FINSERVE' ? 'NB_FINSERVE' : 'NB_DEVELOPER';
+}
+
+crmRouter.use((req: any, _res: any, next: any) => {
+  req.crmScope = getCrmScope(req);
+  next();
+});
 
 function actionFor(method: string): PermissionAction {
   return ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) ? 'WRITE' : 'READ';
@@ -32,7 +59,9 @@ function actionFor(method: string): PermissionAction {
 
 function requireCrmSubmodule(submodule: string) {
   return (req: any, res: any, next: any) => {
-    return requirePermission(submodule, actionFor(req.method))(req, res, next);
+    const isFinserve = req.crmScope === 'NB_FINSERVE';
+    const effectiveModule = isFinserve ? `FIN_${submodule}` : submodule;
+    return requirePermission(effectiveModule, actionFor(req.method))(req, res, next);
   };
 }
 
@@ -65,12 +94,44 @@ crmRouter.post('/telephony/click-to-call', requireCrmSubmodule('CRM_SETTINGS'), 
 crmRouter.get('/telephony/call-logs', requireCrmSubmodule('CRM_SETTINGS'), crmController.getCallLogs);
 crmRouter.patch('/telephony/call-logs/:id', requireCrmSubmodule('CRM_SETTINGS'), crmController.updateCallLog);
 
+// WhatsApp Automation Configuration, Testing & Logs (BotBiz WhatsApp Integration)
+crmRouter.get('/whatsapp/config', requireCrmSubmodule('CRM_SETTINGS'), crmController.getWhatsappConfig);
+crmRouter.put('/whatsapp/config', requireCrmSubmodule('CRM_SETTINGS'), crmController.updateWhatsappConfig);
+crmRouter.post('/whatsapp/test-connection', requireCrmSubmodule('CRM_SETTINGS'), crmController.testWhatsappConnection);
+crmRouter.post('/whatsapp/test', requireCrmSubmodule('CRM_SETTINGS'), crmController.sendTestWhatsappMessage);
+crmRouter.post('/whatsapp/sync-templates', requireCrmSubmodule('CRM_SETTINGS'), crmController.syncWhatsappTemplates);
+crmRouter.get('/whatsapp/templates', requireCrmSubmodule('CRM_SETTINGS'), crmController.getWhatsappTemplates);
+crmRouter.post('/whatsapp/template-status/:templateId', requireCrmSubmodule('CRM_SETTINGS'), crmController.checkWhatsappTemplateStatus);
+crmRouter.get('/whatsapp/logs', requireCrmSubmodule('CRM_SETTINGS'), crmController.getWhatsappLogs);
+crmRouter.post('/whatsapp/retry/:logId', requireCrmSubmodule('CRM_SETTINGS'), crmController.retryWhatsappLog);
+crmRouter.post(
+  '/whatsapp/upload-brochure',
+  requireCrmSubmodule('CRM_SETTINGS'),
+  upload.single('brochure'),
+  crmController.uploadBrochure,
+);
+
 // KPI Metrics & Dashboard
 crmRouter.get('/kpi', requireCrmSubmodule('CRM_DASHBOARD'), crmController.getKpiMetrics);
 
-// General CRM (Leads, Campaigns, Follow-ups, Projects) - gated on CRM
+// General CRM (Leads, Campaigns, Follow-ups, Projects, Sales) - gated on CRM / PRE_SALES / SALES
 const generalCrmGuard = (req: any, res: any, next: any) => {
-  return requirePermission('CRM', actionFor(req.method))(req, res, next);
+  const isFinserve = req.crmScope === 'NB_FINSERVE';
+  const modules = isFinserve
+    ? ['FIN_CRM_PRE_SALES', 'FIN_CRM_SALES', 'FIN_CRM_DASHBOARD']
+    : ['CRM', 'CRM_PRE_SALES', 'CRM_SALES'];
+  return requireAnyPermission(modules, actionFor(req.method))(req, res, next);
+};
+
+const visitorDeskGuard = (req: any, res: any, next: any) => {
+  if (req.crmScope === 'NB_FINSERVE') {
+    return res.status(403).json({
+      success: false,
+      message: 'Visitor desk is not available for NB Finserve CRM',
+    });
+  }
+  const modules = ['CRM_VISITOR_DESK', 'CRM', 'CRM_PRE_SALES', 'CRM_DASHBOARD'];
+  return requireAnyPermission(modules, actionFor(req.method))(req, res, next);
 };
 
 // Projects
@@ -91,8 +152,12 @@ crmRouter.post('/leads', generalCrmGuard, crmController.createLead);
 crmRouter.post('/leads/import-excel', generalCrmGuard, upload.single('file'), crmController.importExcel);
 crmRouter.patch('/leads/:id/status', generalCrmGuard, crmController.updateLeadStatus);
 crmRouter.patch('/leads/:id', generalCrmGuard, crmController.updateLead);
+crmRouter.post('/leads/:id/whatsapp', generalCrmGuard, crmController.sendLeadWhatsapp);
 crmRouter.delete('/leads/:id', generalCrmGuard, crmController.moveToBin);
 crmRouter.patch('/leads/:id/restore', generalCrmGuard, crmController.restoreFromBin);
+crmRouter.put('/leads/:id/application-details', generalCrmGuard, crmController.updateLeadApplicationDetails);
+crmRouter.post('/leads/:id/portal-link', generalCrmGuard, crmController.generateClientPortalLink);
+crmRouter.post('/leads/:id/upload-doc', generalCrmGuard, upload.single('document'), crmController.uploadLeadDoc);
 
 // Follow-ups
 crmRouter.get('/follow-ups', generalCrmGuard, crmController.getFollowUps);
@@ -100,10 +165,15 @@ crmRouter.post('/follow-ups', generalCrmGuard, crmController.createFollowUp);
 crmRouter.patch('/follow-ups/:id/complete', generalCrmGuard, crmController.completeFollowUp);
 
 // Visitor Check-In Desk
-crmRouter.get('/visitor-lookup', generalCrmGuard, crmController.visitorLookup);
-crmRouter.post('/visitor-checkin', generalCrmGuard, crmController.visitorCheckin);
+crmRouter.get('/visitor-lookup', visitorDeskGuard, crmController.visitorLookup);
+crmRouter.post('/visitor-checkin', visitorDeskGuard, crmController.visitorCheckin);
 
 // HRMS Sales Users
 crmRouter.get('/sales-users', generalCrmGuard, crmController.getSalesUsers);
+
+// Virtual Building Elevation & Inventory Matrix
+crmRouter.get('/virtual-building', generalCrmGuard, crmController.getVirtualBuilding);
+crmRouter.post('/virtual-building/unit-action', generalCrmGuard, crmController.updateVirtualBuildingUnit);
+
 
 

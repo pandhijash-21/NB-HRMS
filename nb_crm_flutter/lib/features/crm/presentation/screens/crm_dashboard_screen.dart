@@ -10,6 +10,7 @@ import '../../../../core/tour/models/tour_models.dart';
 import '../../../../core/tour/widgets/tour_target.dart';
 import '../../data/crm_repository.dart';
 import '../bloc/crm_dashboard_bloc.dart';
+import '../widgets/crm_scope_selector.dart';
 
 class CrmDashboardScreen extends StatelessWidget {
   const CrmDashboardScreen({super.key});
@@ -69,6 +70,17 @@ class _CrmDashboardView extends StatelessWidget {
             elevation: 0,
             scrolledUnderElevation: 0,
             actions: [
+              CrmScopeSelectorWidget(
+                onScopeChanged: () {
+                  bloc.add(const CrmDashboardRefreshRequested());
+                },
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                tooltip: 'Virtual Building Elevation',
+                icon: const Icon(Icons.apartment_rounded),
+                onPressed: () => context.go('/crm/virtual-building'),
+              ),
               if (canAccessBin)
                 IconButton(
                   tooltip: 'Bin / Archive',

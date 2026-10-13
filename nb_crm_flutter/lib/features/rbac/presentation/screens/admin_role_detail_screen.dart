@@ -353,13 +353,12 @@ class _AdminRoleDetailScreenState extends State<AdminRoleDetailScreen> {
             final auth = context.watch<AuthBloc>().state;
             final viewerRole = auth.user?.role;
             final allModules = detailState.modules;
-            final modules = Permissions.isSystemAdmin(viewerRole) &&
-                    !Permissions.isSuperAdmin(viewerRole)
+            final modules = Permissions.isAdmin(viewerRole)
                 ? allModules
+                : allModules
                     .where((m) =>
                         Permissions.hasPermission(auth.permissions, m.key, 'READ'))
-                    .toList()
-                : allModules;
+                    .toList();
             final permissions = detailState.permissions;
             final permByKey = {
               for (final p in permissions) p.moduleKey: p,
@@ -1208,7 +1207,25 @@ class _ModularMatrixTableState extends State<_ModularMatrixTable> {
                   ),
                 ),
               )
-            else ...[
+            else if (category == 'CRM') ...[
+              // ── DUAL CRM CARDS: NB DEVELOPER CRM vs NB FINSERVE CRM ─────────
+              _buildCrmSubCard(
+                title: 'NB Developer CRM',
+                subtitle: 'Real estate pipeline, tower campaigns, site visits, and visitor desk',
+                icon: Icons.apartment_rounded,
+                color: const Color(0xFF0D9488), // Teal
+                modules: categoryModules.where((m) => !m.key.startsWith('FIN_')).toList(),
+                isDark: isDark,
+              ),
+              _buildCrmSubCard(
+                title: 'NB Finserve CRM',
+                subtitle: 'Financial services pre-sales, campaigns, pipelines, and Elision telephony',
+                icon: Icons.account_balance_wallet_rounded,
+                color: const Color(0xFF2563EB), // Sapphire blue
+                modules: categoryModules.where((m) => m.key.startsWith('FIN_')).toList(),
+                isDark: isDark,
+              ),
+            ] else ...[
               if (category == 'HRMS') ...[
                 _buildProfileTabsDropdown(
                   isDark: isDark,
@@ -1219,230 +1236,388 @@ class _ModularMatrixTableState extends State<_ModularMatrixTable> {
                     ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder)),
                 ),
               ],
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                physics: const BouncingScrollPhysics(),
-                child: DataTable(
-                  columnSpacing: 28,
-                  horizontalMargin: 20,
-                  headingRowHeight: 48,
-                  dataRowMinHeight: 64,
-                  dataRowMaxHeight: 96,
-                  headingRowColor: WidgetStateProperty.all(
-                    isDark
-                        ? const Color(0xFF121212).withValues(alpha: 0.4)
-                        : const Color(0xFFF8FAFC),
-                  ),
-                  columns: [
-                    DataColumn(
-                      label: Text(
-                        'Submodule',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 12,
-                          color: isDark ? Colors.white : const Color(0xFF212F3D),
-                        ),
-                      ),
-                    ),
-                    ...AdminRoleDetailScreen._columns.map(
-                      (c) => DataColumn(
-                        label: Text(
-                          c.label,
-                          style: TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 11,
-                            color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
-                          ),
-                        ),
-                      ),
-                    ),
-                    DataColumn(
-                      label: Text(
-                        'All Actions',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 11,
-                          color: isDark ? const Color(0xFFC5A059) : const Color(0xFF475569),
-                        ),
-                      ),
-                    ),
-                  ],
-                  rows: (category == 'HRMS'
-                          ? categoryModules.where((m) => !_isProfileTabModule(m))
-                          : categoryModules)
-                      .map((module) {
-                    final perm = _permFor(module.key, module.category);
-                    final allGranted = _isAllActionsGranted(perm);
-                    final isRowUpdating = _updating.any((k) => k.startsWith('${module.key}-'));
-
-                    return DataRow(
-                      cells: [
-                        // 1. Submodule Name & Info
-                        DataCell(
-                          SizedBox(
-                            width: 320,
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        module.name,
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 13,
-                                          color: isDark ? Colors.white : const Color(0xFF212F3D),
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: color.withValues(alpha: isDark ? 0.2 : 0.1),
-                                        borderRadius: BorderRadius.circular(6),
-                                        border: Border.all(
-                                          color: color.withValues(alpha: 0.3),
-                                          width: 0.8,
-                                        ),
-                                      ),
-                                      child: Text(
-                                        module.key,
-                                        style: TextStyle(
-                                          fontSize: 9,
-                                          fontWeight: FontWeight.w800,
-                                          color: color,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                if (module.description != null && module.description!.isNotEmpty) ...[
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    module.description!,
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w500,
-                                      color: isDark ? Colors.white38 : const Color(0xFF607D8B),
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                                if (module.key == 'PERSONAL_INFO') ...[
-                                  const SizedBox(height: 4),
-                                  DropdownButtonHideUnderline(
-                                    child: DropdownButton<EmployeeViewScope>(
-                                      value: perm.employeeViewScope,
-                                      isDense: true,
-                                      items: const [
-                                        DropdownMenuItem(
-                                          value: EmployeeViewScope.none,
-                                          child: Text('Scope: Off', style: TextStyle(fontSize: 11)),
-                                        ),
-                                        DropdownMenuItem(
-                                          value: EmployeeViewScope.self,
-                                          child: Text('Scope: Self', style: TextStyle(fontSize: 11)),
-                                        ),
-                                        DropdownMenuItem(
-                                          value: EmployeeViewScope.institute,
-                                          child: Text('Scope: Institute', style: TextStyle(fontSize: 11)),
-                                        ),
-                                        DropdownMenuItem(
-                                          value: EmployeeViewScope.university,
-                                          child: Text('Scope: University', style: TextStyle(fontSize: 11)),
-                                        ),
-                                      ],
-                                      onChanged: (isRowUpdating || Permissions.isSuperAdmin(widget.roleName))
-                                          ? null
-                                          : (scope) {
-                                              if (scope == null) return;
-                                              _patch(module.key, {
-                                                'employeeViewScope': employeeViewScopeToJson(scope),
-                                              });
-                                            },
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                        ),
-
-                        // 2-6: Individual 5 Action Toggles
-                        ...AdminRoleDetailScreen._columns.map((col) {
-                          final fieldKey = col.key;
-                          final isSuperAdminRole = Permissions.isSuperAdmin(widget.roleName);
-                          final value = isSuperAdminRole ? true : _boolForField(perm, fieldKey);
-                          final isUpdating = _updating.contains('${module.key}-$fieldKey') ||
-                              _updating.contains('${module.key}-canReadcanWritecanApprovecanDeletecanExport');
-
-                          return DataCell(
-                            Center(
-                              child: Switch.adaptive(
-                                value: value,
-                                activeThumbColor: isDark
-                                    ? const Color(0xFFC5A059)
-                                    : const Color(0xFF212F3D),
-                                activeTrackColor: isDark
-                                    ? const Color(0xFFC5A059).withValues(alpha: 0.35)
-                                    : const Color(0xFF212F3D).withValues(alpha: 0.25),
-                                onChanged: (isUpdating || isSuperAdminRole)
-                                    ? null
-                                    : (next) => _patch(module.key, {fieldKey: next}),
-                              ),
-                            ),
-                          );
-                        }),
-
-                        // 7. Master Toggle for this Submodule (turns all 5 on/off)
-                        DataCell(
-                          Center(
-                            child: Tooltip(
-                              message: Permissions.isSuperAdmin(widget.roleName)
-                                  ? 'Superadmin access is permanent'
-                                  : (allGranted ? 'Revoke all actions' : 'Grant all 5 actions'),
-                              child: IconButton(
-                                icon: isRowUpdating
-                                    ? const SizedBox(
-                                        width: 18,
-                                        height: 18,
-                                        child: CircularProgressIndicator(strokeWidth: 2),
-                                      )
-                                    : Icon(
-                                        (allGranted || Permissions.isSuperAdmin(widget.roleName))
-                                            ? Icons.check_circle_rounded
-                                            : (perm.canRead
-                                                ? Icons.radio_button_checked_rounded
-                                                : Icons.radio_button_unchecked_rounded),
-                                        size: 22,
-                                        color: (allGranted || Permissions.isSuperAdmin(widget.roleName))
-                                            ? const Color(0xFF10B981) // Emerald green
-                                            : (perm.canRead
-                                                ? (isDark ? const Color(0xFFC5A059) : const Color(0xFF212F3D))
-                                                : (isDark ? Colors.white24 : Colors.black26)),
-                                      ),
-                                onPressed: (isRowUpdating || Permissions.isSuperAdmin(widget.roleName))
-                                    ? null
-                                    : () => _toggleAllForModule(module, !allGranted),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    );
-                  }).toList(),
-                ),
+              _buildModulesDataTable(
+                modules: categoryModules,
+                color: color,
+                isDark: isDark,
+                category: category,
               ),
             ],
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildCrmSubCard({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
+    required List<SystemModule> modules,
+    required bool isDark,
+  }) {
+    final activeCount = modules
+        .where((m) => _hasAnyActionGranted(_permFor(m.key, m.category)))
+        .length;
+    final totalCount = modules.length;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF161412) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: color.withValues(alpha: isDark ? 0.35 : 0.45),
+          width: 1.2,
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            color: color.withValues(alpha: isDark ? 0.15 : 0.08),
+            child: Row(
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: isDark ? 0.25 : 0.18),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: color.withValues(alpha: 0.5), width: 1),
+                  ),
+                  child: Icon(icon, size: 18, color: color),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            title,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 15,
+                              color: isDark ? Colors.white : const Color(0xFF1E293B),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: color.withValues(alpha: isDark ? 0.25 : 0.12),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: color.withValues(alpha: 0.35), width: 0.8),
+                            ),
+                            child: Text(
+                              '$activeCount / $totalCount Active',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                color: color,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: isDark ? Colors.white54 : const Color(0xFF64748B),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (modules.isNotEmpty) ...[
+                  _buildSectionBatchBtn(
+                    label: 'Grant All',
+                    icon: Icons.done_all_rounded,
+                    color: const Color(0xFF10B981),
+                    isDark: isDark,
+                    onPressed: () => _batchAction(modules, 'grant_all'),
+                  ),
+                  const SizedBox(width: 6),
+                  _buildSectionBatchBtn(
+                    label: 'Read Only',
+                    icon: Icons.visibility_outlined,
+                    color: const Color(0xFF0284C7),
+                    isDark: isDark,
+                    onPressed: () => _batchAction(modules, 'read_only'),
+                  ),
+                  const SizedBox(width: 6),
+                  _buildSectionBatchBtn(
+                    label: 'Revoke All',
+                    icon: Icons.remove_circle_outline_rounded,
+                    color: const Color(0xFFEF4444),
+                    isDark: isDark,
+                    onPressed: () => _batchAction(modules, 'revoke_all'),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          _buildModulesDataTable(
+            modules: modules,
+            color: color,
+            isDark: isDark,
+            category: 'CRM',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModulesDataTable({
+    required List<SystemModule> modules,
+    required Color color,
+    required bool isDark,
+    String? category,
+  }) {
+    final rowsList = (category == 'HRMS'
+        ? modules.where((m) => !_isProfileTabModule(m)).toList()
+        : modules);
+
+    if (rowsList.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+        child: Center(
+          child: Text(
+            'No submodules available.',
+            style: TextStyle(
+              color: isDark ? Colors.white54 : const Color(0xFF607D8B),
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      physics: const BouncingScrollPhysics(),
+      child: DataTable(
+        columnSpacing: 28,
+        horizontalMargin: 20,
+        headingRowHeight: 48,
+        dataRowMinHeight: 64,
+        dataRowMaxHeight: 96,
+        headingRowColor: WidgetStateProperty.all(
+          isDark
+              ? const Color(0xFF121212).withValues(alpha: 0.4)
+              : const Color(0xFFF8FAFC),
+        ),
+        columns: [
+          DataColumn(
+            label: Text(
+              'Submodule',
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 12,
+                color: isDark ? Colors.white : const Color(0xFF212F3D),
+              ),
+            ),
+          ),
+          ...AdminRoleDetailScreen._columns.map(
+            (c) => DataColumn(
+              label: Text(
+                c.label,
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 11,
+                  color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
+                ),
+              ),
+            ),
+          ),
+          DataColumn(
+            label: Text(
+              'All Actions',
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 11,
+                color: isDark ? const Color(0xFFC5A059) : const Color(0xFF475569),
+              ),
+            ),
+          ),
+        ],
+        rows: rowsList.map((module) {
+          final perm = _permFor(module.key, module.category);
+          final allGranted = _isAllActionsGranted(perm);
+          final isRowUpdating = _updating.any((k) => k.startsWith('${module.key}-'));
+
+          return DataRow(
+            cells: [
+              // 1. Submodule Name & Info
+              DataCell(
+                SizedBox(
+                  width: 320,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              module.name,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 13,
+                                color: isDark ? Colors.white : const Color(0xFF212F3D),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: color.withValues(alpha: isDark ? 0.2 : 0.1),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: color.withValues(alpha: 0.3),
+                                width: 0.8,
+                              ),
+                            ),
+                            child: Text(
+                              module.key,
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                color: color,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (module.description != null && module.description!.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          module.description!,
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                            color: isDark ? Colors.white38 : const Color(0xFF607D8B),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                      if (module.key == 'PERSONAL_INFO') ...[
+                        const SizedBox(height: 4),
+                        DropdownButtonHideUnderline(
+                          child: DropdownButton<EmployeeViewScope>(
+                            value: perm.employeeViewScope,
+                            isDense: true,
+                            items: const [
+                              DropdownMenuItem(
+                                value: EmployeeViewScope.none,
+                                child: Text('Scope: Off', style: TextStyle(fontSize: 11)),
+                              ),
+                              DropdownMenuItem(
+                                value: EmployeeViewScope.self,
+                                child: Text('Scope: Self', style: TextStyle(fontSize: 11)),
+                              ),
+                              DropdownMenuItem(
+                                value: EmployeeViewScope.institute,
+                                child: Text('Scope: Institute', style: TextStyle(fontSize: 11)),
+                              ),
+                              DropdownMenuItem(
+                                value: EmployeeViewScope.university,
+                                child: Text('Scope: University', style: TextStyle(fontSize: 11)),
+                              ),
+                            ],
+                            onChanged: (isRowUpdating || Permissions.isSuperAdmin(widget.roleName))
+                                ? null
+                                : (scope) {
+                                    if (scope == null) return;
+                                    _patch(module.key, {
+                                      'employeeViewScope': employeeViewScopeToJson(scope),
+                                    });
+                                  },
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+
+              // 2-6: Individual 5 Action Toggles
+              ...AdminRoleDetailScreen._columns.map((col) {
+                final fieldKey = col.key;
+                final isSuperAdminRole = Permissions.isSuperAdmin(widget.roleName);
+                final value = isSuperAdminRole ? true : _boolForField(perm, fieldKey);
+                final isUpdating = _updating.contains('${module.key}-$fieldKey') ||
+                    _updating.contains('${module.key}-canReadcanWritecanApprovecanDeletecanExport');
+
+                return DataCell(
+                  Center(
+                    child: Switch.adaptive(
+                      value: value,
+                      activeThumbColor: isDark
+                          ? const Color(0xFFC5A059)
+                          : const Color(0xFF212F3D),
+                      activeTrackColor: isDark
+                          ? const Color(0xFFC5A059).withValues(alpha: 0.35)
+                          : const Color(0xFF212F3D).withValues(alpha: 0.25),
+                      onChanged: (isUpdating || isSuperAdminRole)
+                          ? null
+                          : (next) => _patch(module.key, {fieldKey: next}),
+                    ),
+                  ),
+                );
+              }),
+
+              // 7. Master Toggle for this Submodule (turns all 5 on/off)
+              DataCell(
+                Center(
+                  child: Tooltip(
+                    message: Permissions.isSuperAdmin(widget.roleName)
+                        ? 'Superadmin access is permanent'
+                        : (allGranted ? 'Revoke all actions' : 'Grant all 5 actions'),
+                    child: IconButton(
+                      icon: isRowUpdating
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : Icon(
+                              (allGranted || Permissions.isSuperAdmin(widget.roleName))
+                                  ? Icons.check_circle_rounded
+                                  : (perm.canRead
+                                      ? Icons.radio_button_checked_rounded
+                                      : Icons.radio_button_unchecked_rounded),
+                              size: 22,
+                              color: (allGranted || Permissions.isSuperAdmin(widget.roleName))
+                                  ? const Color(0xFF10B981)
+                                  : (perm.canRead
+                                      ? (isDark ? const Color(0xFFC5A059) : const Color(0xFF212F3D))
+                                      : (isDark ? Colors.white24 : Colors.black26)),
+                            ),
+                      onPressed: (isRowUpdating || Permissions.isSuperAdmin(widget.roleName))
+                          ? null
+                          : () => _toggleAllForModule(module, !allGranted),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        }).toList(),
       ),
     );
   }

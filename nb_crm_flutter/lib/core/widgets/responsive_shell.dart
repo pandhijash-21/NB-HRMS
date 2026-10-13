@@ -11,6 +11,8 @@ import '../../features/auth/domain/permissions.dart';
 import '../../features/auth/presentation/bloc/auth_bloc.dart';
 import '../../features/collaboration/presentation/chat_inbox.dart';
 import '../../features/collaboration/presentation/notification_bell.dart';
+import '../../features/crm/data/crm_repository.dart';
+import '../../features/crm/presentation/widgets/crm_scope_selector.dart';
 import '../../features/tracking_hub/presentation/location_alert_watch.dart';
 import '../app_version.dart';
 import '../router/app_route_history.dart';
@@ -155,7 +157,8 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
       'SYSTEMADMIN',
       'SYSTEM_ADMINISTRATOR',
     ].contains(auth.user?.role.toUpperCase() ?? '');
-    final canTrackField = canAccessFieldTracking(auth.user?.role);
+    final canTrackField = canAccessFieldTracking(auth.user?.role) ||
+        Permissions.canReadTracking(auth.permissions, auth.user?.role);
     final canApproveLeave = isSuperAdmin || Permissions.canApproveLeave(auth.permissions);
     final canAccessAdmin = Permissions.canAccessAdminPortal(
       auth.permissions,
@@ -226,6 +229,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     }
 
     final showSoftwareTour = TourDesktop.supported(context);
+    final crmScope = context.watch<CrmRepository>().scope;
 
     final sharedCollab = <_Destination>[
       const _Destination(
@@ -462,7 +466,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             section: 'CRM',
             imageAsset: 'assets/images/mr_nb.jpg',
           ),
-        if (Permissions.canReadCrmDashboard(auth.permissions, auth.user?.role))
+        if (Permissions.canReadCrmDashboard(auth.permissions, auth.user?.role, crmScope))
           const _Destination(
             '/crm/dashboard',
             Icons.dashboard_outlined,
@@ -470,7 +474,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             'Dashboard',
             section: 'CRM',
           ),
-        if (Permissions.canReadCrmPreSales(auth.permissions, auth.user?.role))
+        if (Permissions.canReadCrmPreSales(auth.permissions, auth.user?.role, crmScope))
           const _Destination(
             '/crm/pre-sales',
             Icons.point_of_sale_outlined,
@@ -479,7 +483,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             section: 'CRM',
           ),
         if (currentPath.startsWith('/crm/pre-sales') &&
-            Permissions.canReadCrmHeaders(auth.permissions, auth.user?.role))
+            Permissions.canReadCrmHeaders(auth.permissions, auth.user?.role, crmScope))
           const _Destination(
             '/crm/pre-sales/headers',
             Icons.view_column_outlined,
@@ -487,8 +491,8 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             '  ↳ Headers',
             section: 'CRM',
           ),
-        if (Permissions.canReadCrmPreSales(auth.permissions, auth.user?.role) ||
-            Permissions.canReadCrmDashboard(auth.permissions, auth.user?.role))
+        if (crmScope != 'NB_FINSERVE' &&
+            Permissions.canReadCrmVisitorDesk(auth.permissions, auth.user?.role, crmScope))
           const _Destination(
             '/crm/visitor-desk',
             Icons.meeting_room_outlined,
@@ -496,7 +500,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             'Visitor desk',
             section: 'CRM',
           ),
-        if (Permissions.canReadCrmSales(auth.permissions, auth.user?.role))
+        if (Permissions.canReadCrmSales(auth.permissions, auth.user?.role, crmScope))
           const _Destination(
             '/crm/sales',
             Icons.storefront_outlined,
@@ -504,7 +508,17 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             'Sales',
             section: 'CRM',
           ),
-        if (Permissions.canReadCrmPostSales(auth.permissions, auth.user?.role))
+        if (crmScope != 'NB_FINSERVE' &&
+            (Permissions.canReadCrmSales(auth.permissions, auth.user?.role, crmScope) ||
+             Permissions.canReadCrmVisitorDesk(auth.permissions, auth.user?.role, crmScope)))
+          const _Destination(
+            '/crm/virtual-building',
+            Icons.apartment_outlined,
+            Icons.apartment,
+            'Virtual building',
+            section: 'CRM',
+          ),
+        if (Permissions.canReadCrmPostSales(auth.permissions, auth.user?.role, crmScope))
           const _Destination(
             '/crm/post-sales',
             Icons.support_agent_outlined,
@@ -512,7 +526,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             'Post sales',
             section: 'CRM',
           ),
-        if (Permissions.canReadCrmBin(auth.permissions, auth.user?.role))
+        if (Permissions.canReadCrmBin(auth.permissions, auth.user?.role, crmScope))
           const _Destination(
             '/crm/bin',
             Icons.delete_outline,
@@ -520,7 +534,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             'Bin',
             section: 'CRM',
           ),
-        if (Permissions.canReadCrmSettings(auth.permissions, auth.user?.role))
+        if (Permissions.canReadCrmSettings(auth.permissions, auth.user?.role, crmScope))
           const _Destination(
             '/crm/settings',
             Icons.settings_outlined,
@@ -618,7 +632,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             'Configurations',
             section: 'Organisation',
           ),
-        if (isAdmin)
+        if (isAdmin || Permissions.canReadStorage(auth.permissions, auth.user?.role))
           const _Destination(
             '/admin/storage',
             Icons.cloud_outlined,
@@ -626,7 +640,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             'Storage',
             section: 'Organisation',
           ),
-        if (canAccessAdmin)
+        if (canAccessAdmin || Permissions.canReadAudit(auth.permissions, auth.user?.role))
           const _Destination(
             '/admin/audit',
             Icons.history_edu_outlined,
@@ -858,6 +872,13 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                     ],
                     const SizedBox(height: 14),
                     _buildNavSearchField(true, expandedHint: true),
+                    if (module == AppModule.crm) ...[
+                      const SizedBox(height: 10),
+                      const SizedBox(
+                        width: double.infinity,
+                        child: CrmScopeSelectorWidget(isSidebar: true),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -1006,6 +1027,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                 allowExpanded: allowExpandedSidebar,
                 alertCount: alertCount,
                 chatUnread: chatUnread,
+                module: module,
               ),
               Expanded(child: _tourPageChild()),
             ],
@@ -1522,6 +1544,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     void Function(_Destination d, {bool closeDrawer}) goTo,
     bool isDark, {
     required String brandTitle,
+    required AppModule module,
     bool allowExpanded = true,
     int alertCount = 0,
     int chatUnread = 0,
@@ -1637,6 +1660,24 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                   ),
                 ),
               ),
+            ),
+
+          if (module == AppModule.crm)
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                expanded ? 12 : 8,
+                2,
+                expanded ? 12 : 8,
+                8,
+              ),
+              child: expanded
+                  ? const SizedBox(
+                      width: double.infinity,
+                      child: CrmScopeSelectorWidget(isSidebar: true),
+                    )
+                  : const Center(
+                      child: CrmScopeSelectorWidget(iconOnly: true, isSidebar: true),
+                    ),
             ),
 
           // Destinations

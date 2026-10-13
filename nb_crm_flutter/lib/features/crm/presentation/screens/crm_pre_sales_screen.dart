@@ -13,6 +13,7 @@ import '../../data/crm_repository.dart';
 import '../../domain/crm_models.dart';
 import '../bloc/crm_leads_bloc.dart';
 import '../widgets/crm_audio_player_dialog.dart';
+import '../widgets/crm_scope_selector.dart';
 
 class CrmPreSalesScreen extends StatelessWidget {
   const CrmPreSalesScreen({super.key});
@@ -48,10 +49,19 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    CrmRepository.crmScopeNotifier.addListener(_onScopeChanged);
+  }
+
+  void _onScopeChanged() {
+    if (mounted) {
+      setState(() {});
+      context.read<CrmLeadsBloc>().add(const CrmLeadsLoadRequested());
+    }
   }
 
   @override
   void dispose() {
+    CrmRepository.crmScopeNotifier.removeListener(_onScopeChanged);
     _tabController.dispose();
     _searchController.dispose();
     _horizontalScrollController.dispose();
@@ -120,6 +130,13 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
               ),
             ),
             actions: [
+              CrmScopeSelectorWidget(
+                onScopeChanged: () {
+                  setState(() {});
+                  context.read<CrmLeadsBloc>().add(const CrmLeadsLoadRequested());
+                },
+              ),
+              const SizedBox(width: 8),
               IconButton(
                 tooltip: 'Refresh',
                 icon: const Icon(Icons.refresh_rounded),
@@ -127,6 +144,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   context.read<CrmLeadsBloc>().add(const CrmLeadsRefreshRequested());
                 },
               ),
+              const SizedBox(width: 8),
             ],
           ),
           body: TabBarView(
@@ -170,6 +188,28 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     final userEmployeeId = currentUser?.employeeId;
     final isAdmin = ['ADMIN', 'SUPER_ADMIN', 'SYSTEM_ADMIN'].contains(userRole);
     final canWrite = Permissions.canWriteCrmPreSales(authState.permissions, authState.user?.role);
+    final repo = context.read<CrmRepository>();
+    final isFinserve = repo.scope == 'NB_FINSERVE';
+
+    final excelAssignedIds = state.settings?.excelAssignedTelecallerIds ?? [];
+    final webhookAssignedIds = state.settings?.webhookAssignedTelecallerIds ?? [];
+
+    final isExcelAssigned = userEmployeeId != null && excelAssignedIds.contains(userEmployeeId);
+    final isWebhookAssigned = userEmployeeId != null && webhookAssignedIds.contains(userEmployeeId);
+
+    final isOnlyExcel = !isAdmin && isExcelAssigned && !isWebhookAssigned;
+    final isOnlyWebhook = !isAdmin && isWebhookAssigned && !isExcelAssigned;
+    final effectiveFlow = isOnlyExcel ? 'EXCEL' : (isOnlyWebhook ? 'WEBHOOK' : state.leadFlowFilter);
+
+    final filteredLeads = leads.where((l) {
+      if (l.scope != repo.scope) return false;
+      if (effectiveFlow == 'EXCEL') {
+        return l.leadSource == 'EXCEL' || l.leadSource == null || l.leadSource == 'MANUAL';
+      } else if (effectiveFlow == 'WEBHOOK') {
+        return l.leadSource == 'WEBHOOK' || l.leadSource == 'META';
+      }
+      return true;
+    }).toList();
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -321,6 +361,17 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                         ),
                       ),
                       DropdownMenuItem(
+                        value: 'ASSIGNED',
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFF6366F1), shape: BoxShape.circle)),
+                            const SizedBox(width: 8),
+                            Text('Assigned', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: isDark ? Colors.white : const Color(0xFF1E293B))),
+                          ],
+                        ),
+                      ),
+                      DropdownMenuItem(
                         value: 'SCHEDULED_VISIT',
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -389,20 +440,22 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   if (expand) {
                     return Row(
                       children: [
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: () => _handleExcelImport(context),
-                            icon: const Icon(Icons.upload_file_rounded, size: 18),
-                            label: const Text('Import Excel'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF16A34A),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        if (!isOnlyWebhook) ...[
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () => _handleExcelImport(context),
+                              icon: const Icon(Icons.upload_file_rounded, size: 18),
+                              label: const Text('Import Excel'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF16A34A),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 10),
+                          const SizedBox(width: 10),
+                        ],
                         Expanded(
                           child: ElevatedButton.icon(
                             onPressed: () => _showAddLeadDialog(context, state.columns),
@@ -435,18 +488,20 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                         ),
                       ),
                       const SizedBox(width: 8),
-                      ElevatedButton.icon(
-                        onPressed: () => _handleExcelImport(context),
-                        icon: const Icon(Icons.upload_file_rounded, size: 18),
-                        label: const Text('Import Excel'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF16A34A),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      if (!isOnlyWebhook) ...[
+                        ElevatedButton.icon(
+                          onPressed: () => _handleExcelImport(context),
+                          icon: const Icon(Icons.upload_file_rounded, size: 18),
+                          label: const Text('Import Excel'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF16A34A),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
+                        const SizedBox(width: 8),
+                      ],
                       ElevatedButton.icon(
                         onPressed: () => _showAddLeadDialog(context, state.columns),
                         icon: const Icon(Icons.person_add_rounded, size: 18),
@@ -519,14 +574,109 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
               },
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
+
+          // Flow Switcher / Assignment Enforced Banner
+          if (isOnlyExcel)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF16A34A).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFF16A34A).withValues(alpha: 0.3)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.table_chart_rounded, size: 18, color: Color(0xFF16A34A)),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      '📊 Excel Leads Desk — You are assigned to handle Excel / Manual leads.',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF16A34A)),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else if (isOnlyWebhook)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2563EB).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFF2563EB).withValues(alpha: 0.3)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.campaign_rounded, size: 18, color: Color(0xFF2563EB)),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      '⚡ Meta & Webhook Campaigns Desk — You are assigned to handle online campaign leads.',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: borderColor),
+              ),
+              child: Wrap(
+                spacing: 10,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.alt_route_rounded, size: 16, color: primaryColor),
+                      const SizedBox(width: 6),
+                      Text('Lead Flow Desk:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: isDark ? Colors.white : const Color(0xFF1E293B))),
+                    ],
+                  ),
+                  ChoiceChip(
+                    label: Text('All Flows (${leads.length})'),
+                    selected: state.leadFlowFilter == 'ALL',
+                    onSelected: (val) {
+                      if (val) context.read<CrmLeadsBloc>().add(const CrmLeadsLeadFlowFilterChanged('ALL'));
+                    },
+                  ),
+                  ChoiceChip(
+                    avatar: const Icon(Icons.table_chart_rounded, size: 14, color: Color(0xFF16A34A)),
+                    label: Text('Excel Leads (${leads.where((l) => l.leadSource == 'EXCEL' || l.leadSource == null || l.leadSource == 'MANUAL').length})'),
+                    selected: state.leadFlowFilter == 'EXCEL',
+                    onSelected: (val) {
+                      if (val) context.read<CrmLeadsBloc>().add(const CrmLeadsLeadFlowFilterChanged('EXCEL'));
+                    },
+                  ),
+                  ChoiceChip(
+                    avatar: const Icon(Icons.campaign_rounded, size: 14, color: Color(0xFF2563EB)),
+                    label: Text('Meta / Webhook Leads (${leads.where((l) => l.leadSource == 'WEBHOOK' || l.leadSource == 'META').length})'),
+                    selected: state.leadFlowFilter == 'WEBHOOK',
+                    onSelected: (val) {
+                      if (val) context.read<CrmLeadsBloc>().add(const CrmLeadsLeadFlowFilterChanged('WEBHOOK'));
+                    },
+                  ),
+                ],
+              ),
+            ),
+          const SizedBox(height: 14),
 
           // Dynamic Data Table with Custom Scrollbar
-          if (state.status.isLoading && leads.isEmpty)
+          if (state.status.isLoading && filteredLeads.isEmpty)
             const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator()))
-          else if (state.status.isFailure && leads.isEmpty)
+          else if (state.status.isFailure && filteredLeads.isEmpty)
             Center(child: Text('Error loading leads: ${state.errorMessage}', style: const TextStyle(color: Colors.red)))
-          else if (leads.isEmpty)
+          else if (filteredLeads.isEmpty)
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(40),
@@ -540,9 +690,12 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   children: [
                     Icon(Icons.assignment_late_outlined, size: 48, color: textMuted),
                     const SizedBox(height: 12),
-                    Text('No Pre-Sales Leads Found', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: isDark ? Colors.white : const Color(0xFF1E293B))),
+                    Text('No Pre-Sales Leads Found in this Flow', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: isDark ? Colors.white : const Color(0xFF1E293B))),
                     const SizedBox(height: 6),
-                    Text('Click "Import Excel" to upload leads or "Add Lead" to enter manually.', style: TextStyle(fontSize: 13, color: textMuted)),
+                    Text(isOnlyWebhook
+                        ? 'New leads from Meta / Webhooks will appear here automatically.'
+                        : 'Click "Import Excel" to upload leads or "Add Lead" to enter manually.',
+                        style: TextStyle(fontSize: 13, color: textMuted)),
                   ],
                 ),
               ),
@@ -570,6 +723,9 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                       columnSpacing: 20,
                       columns: [
                         const DataColumn(label: Text('#', style: TextStyle(fontWeight: FontWeight.bold))),
+                        const DataColumn(label: Text('Flow', style: TextStyle(fontWeight: FontWeight.bold))),
+                        if (isFinserve)
+                          const DataColumn(label: Text('Sales Manager', style: TextStyle(fontWeight: FontWeight.bold))),
                         const DataColumn(
                           label: Row(
                             children: [
@@ -580,21 +736,101 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                           ),
                         ),
                         const DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
-                        ...columns.map((c) => DataColumn(label: Text(c.label, style: const TextStyle(fontWeight: FontWeight.bold)))),
+                        ...columns.map((c) {
+                          String labelText = c.label;
+                          if (isFinserve) {
+                            final lower = c.label.toLowerCase();
+                            final keyLower = c.columnKey.toLowerCase();
+                            if (lower.contains('requirement') || lower.contains('project') || keyLower.contains('loan')) {
+                              labelText = 'Type of Loan';
+                            } else if (lower == 'budget' || keyLower == 'budget') {
+                              labelText = 'Amount';
+                            }
+                          }
+                          return DataColumn(label: Text(labelText, style: const TextStyle(fontWeight: FontWeight.bold)));
+                        }),
                         const DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold))),
                       ],
-                      rows: List.generate(leads.length, (index) {
-                        final lead = leads[index];
+                      rows: List.generate(filteredLeads.length, (index) {
+                        final lead = filteredLeads[index];
 
                         // Telecaller Limitation:
-                        // Telecallers only alter status, schedule calls/visits, or mark not interested.
+                        // In Real Estate CRM, once assigned, telecallers have view-only access.
+                        // In Finserve CRM, telecallers can assign and manage leads with Sales Managers.
                         final isAssigned = lead.assignedToId != null;
                         final isAssignedSalesRep = userEmployeeId != null && userEmployeeId == lead.assignedToId;
-                        final canAlterLead = canWrite && (!isAssigned || isAdmin || isAssignedSalesRep);
+                        final canAlterLead = canWrite && (!isAssigned || isAdmin || isAssignedSalesRep || isFinserve);
 
                         return DataRow(
                           cells: [
                             DataCell(Text('${index + 1}')),
+                            DataCell(
+                              lead.leadSource == 'WEBHOOK' || lead.leadSource == 'META'
+                                  ? Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF2563EB).withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: const Text('⚡ Meta', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF2563EB))),
+                                    )
+                                  : Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF16A34A).withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: const Text('📊 Excel', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF16A34A))),
+                                    ),
+                            ),
+
+                            // Sales Manager Assignment Column (Finserve CRM)
+                            if (isFinserve)
+                              DataCell(
+                                InkWell(
+                                  borderRadius: BorderRadius.circular(8),
+                                  onTap: () => _showAssignSalesManagerModal(context, lead, salesUsers),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                    decoration: BoxDecoration(
+                                      color: lead.assignedToId != null
+                                          ? const Color(0xFF2563EB).withValues(alpha: 0.12)
+                                          : (isDark ? Colors.white.withValues(alpha: 0.06) : Colors.grey.withValues(alpha: 0.12)),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: lead.assignedToId != null
+                                            ? const Color(0xFF2563EB).withValues(alpha: 0.35)
+                                            : (isDark ? Colors.white12 : Colors.grey.withValues(alpha: 0.25)),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          lead.assignedToId != null ? Icons.person_rounded : Icons.person_add_outlined,
+                                          size: 13,
+                                          color: lead.assignedToId != null ? const Color(0xFF2563EB) : (isDark ? Colors.white70 : Colors.grey.shade700),
+                                        ),
+                                        const SizedBox(width: 5),
+                                        Text(
+                                          lead.assignedToName ?? 'Assign Manager',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                            color: lead.assignedToId != null ? const Color(0xFF2563EB) : (isDark ? Colors.white70 : Colors.grey.shade700),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Icon(
+                                          Icons.arrow_drop_down_rounded,
+                                          size: 16,
+                                          color: lead.assignedToId != null ? const Color(0xFF2563EB) : (isDark ? Colors.white70 : Colors.grey.shade700),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
 
                             // Elision Phone Icon Column
                             DataCell(
@@ -621,10 +857,23 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                             ...columns.map((c) {
                               String cellValue = '';
                               final keyLower = c.columnKey.toLowerCase().replaceAll(' ', '_');
+                              final labelLower = c.label.toLowerCase();
                               if (keyLower == 'client_name' || keyLower == 'name' || keyLower == 'customer_name') {
                                 cellValue = lead.name.isNotEmpty ? lead.name : (lead.customFields[c.columnKey]?.toString() ?? '');
                               } else if (keyLower == 'phone' || keyLower == 'mobile' || keyLower == 'contact' || keyLower == 'phone_number') {
                                 cellValue = lead.phone.isNotEmpty ? lead.phone : (lead.customFields[c.columnKey]?.toString() ?? '');
+                              } else if (isFinserve && (keyLower.contains('loan') || keyLower == 'project_type' || labelLower.contains('requirement') || labelLower.contains('project'))) {
+                                cellValue = lead.customFields['Loan_Type']?.toString() ??
+                                    lead.customFields['loan_type']?.toString() ??
+                                    lead.customFields['Project_Type']?.toString() ??
+                                    lead.customFields['project_type']?.toString() ??
+                                    (lead.customFields[c.columnKey]?.toString() ?? '-');
+                              } else if (isFinserve && (keyLower == 'budget' || keyLower == 'amount' || labelLower == 'budget' || labelLower == 'amount')) {
+                                cellValue = lead.customFields['Amount']?.toString() ??
+                                    lead.customFields['amount']?.toString() ??
+                                    lead.customFields['Budget']?.toString() ??
+                                    lead.customFields['budget']?.toString() ??
+                                    (lead.customFields[c.columnKey]?.toString() ?? '-');
                               } else {
                                 cellValue = lead.customFields[c.columnKey]?.toString() ??
                                     lead.customFields[c.columnKey.toLowerCase()]?.toString() ??
@@ -647,6 +896,22 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                               Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
+                                  if (isFinserve) ...[
+                                    IconButton(
+                                      icon: const Icon(Icons.assignment_turned_in_outlined, size: 18, color: Color(0xFF10B981)),
+                                      tooltip: 'Loan Documents Checklist',
+                                      onPressed: () => _showLeadDocsModal(
+                                        context,
+                                        lead,
+                                        context.read<CrmLeadsBloc>().state.settings,
+                                      ),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.person_add_alt_1_rounded, size: 18, color: Color(0xFF2563EB)),
+                                      tooltip: lead.assignedToName != null ? 'Reassign Sales Manager (${lead.assignedToName})' : 'Assign to Sales Manager',
+                                      onPressed: () => _showAssignSalesManagerModal(context, lead, salesUsers),
+                                    ),
+                                  ],
                                   IconButton(
                                     icon: Icon(
                                       canAlterLead ? Icons.edit_outlined : Icons.lock_outline_rounded,
@@ -708,6 +973,11 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
         badgeBg = isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFF1F5F9);
         badgeFg = isDark ? const Color(0xFFE2E8F0) : const Color(0xFF475569);
         badgeBorder = isDark ? Colors.white.withValues(alpha: 0.20) : const Color(0xFFCBD5E1);
+        break;
+      case CrmStatus.assigned:
+        badgeBg = const Color(0xFF6366F1).withValues(alpha: isDark ? 0.22 : 0.12);
+        badgeFg = isDark ? const Color(0xFF818CF8) : const Color(0xFF4F46E5);
+        badgeBorder = const Color(0xFF6366F1).withValues(alpha: isDark ? 0.45 : 0.35);
         break;
       case CrmStatus.cnr:
         badgeBg = const Color(0xFFF59E0B).withValues(alpha: isDark ? 0.22 : 0.12);
@@ -782,13 +1052,25 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
       );
     }
 
-    // Telecaller 4 primary statuses: Not started, CNR, Schedule A Visit, Not Interested
-    final dropdownItems = <CrmStatus>[
-      CrmStatus.notStarted,
-      CrmStatus.cnr,
-      CrmStatus.scheduledVisit,
-      CrmStatus.notInterested,
-    ];
+    final isFinserve = CrmRepository.crmScopeNotifier.value == 'NB_FINSERVE';
+
+    // Telecaller statuses:
+    // In Finserve CRM: Not started, CNR, Follow Up, Not Interested, Assigned
+    // In Real Estate CRM: Not started, CNR, Schedule A Visit, Not Interested
+    final dropdownItems = isFinserve
+        ? <CrmStatus>[
+            CrmStatus.notStarted,
+            CrmStatus.cnr,
+            CrmStatus.followUp,
+            CrmStatus.notInterested,
+            CrmStatus.assigned,
+          ]
+        : <CrmStatus>[
+            CrmStatus.notStarted,
+            CrmStatus.cnr,
+            CrmStatus.scheduledVisit,
+            CrmStatus.notInterested,
+          ];
     if (!dropdownItems.contains(lead.status)) {
       dropdownItems.add(lead.status);
     }
@@ -824,6 +1106,9 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
             switch (s) {
               case CrmStatus.notStarted:
                 dotColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+                break;
+              case CrmStatus.assigned:
+                dotColor = const Color(0xFF6366F1);
                 break;
               case CrmStatus.cnr:
                 dotColor = const Color(0xFFF59E0B);
@@ -884,14 +1169,20 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
 
             if (newStatus == CrmStatus.cnr) {
               _showCnrModal(context, lead);
-            } else if (newStatus == CrmStatus.scheduledVisit) {
-              _showScheduleVisitModal(context, lead);
-            } else if (newStatus == CrmStatus.notInterested) {
-              _showNotInterestedModal(context, lead, context.read<CrmLeadsBloc>().state.settings);
-            } else if (newStatus == CrmStatus.notStarted) {
-              _updateLeadStatus(lead.id, 'NOT_STARTED');
             } else if (newStatus == CrmStatus.followUp) {
               _showFollowUpSchedulingModal(context, lead);
+            } else if (newStatus == CrmStatus.notInterested) {
+              _showNotInterestedModal(context, lead, context.read<CrmLeadsBloc>().state.settings);
+            } else if (newStatus == CrmStatus.assigned) {
+              if (lead.assignedToId != null) {
+                _updateLeadStatus(lead.id, 'ASSIGNED');
+              } else {
+                _showAssignSalesManagerModal(context, lead, salesUsers);
+              }
+            } else if (newStatus == CrmStatus.scheduledVisit) {
+              _showScheduleVisitModal(context, lead);
+            } else if (newStatus == CrmStatus.notStarted) {
+              _updateLeadStatus(lead.id, 'NOT_STARTED');
             } else if (newStatus == CrmStatus.interested) {
               _showInterestedSalesAssignmentModal(context, lead);
             }
@@ -1868,12 +2159,210 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
   }
 
   // ---------------------------------------------------------------------------
+  // Modal: Assign Sales Manager (Finserve CRM)
+  // ---------------------------------------------------------------------------
+  void _showAssignSalesManagerModal(
+    BuildContext context,
+    CrmLead lead,
+    List<CrmSalesUser> salesUsers,
+  ) {
+    final uniqueUsers = <int, CrmSalesUser>{};
+    for (final u in salesUsers) {
+      uniqueUsers[u.employeeId] = u;
+    }
+    if (lead.assignedToId != null && !uniqueUsers.containsKey(lead.assignedToId)) {
+      uniqueUsers[lead.assignedToId!] = CrmSalesUser(
+        employeeId: lead.assignedToId!,
+        fullName: lead.assignedToName ?? 'Employee #${lead.assignedToId}',
+        designation: 'Sales Manager',
+      );
+    }
+
+    int? selectedManagerId = lead.assignedToId;
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setModalState) {
+          final isDark = Theme.of(ctx).brightness == Brightness.dark;
+          return AlertDialog(
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2563EB).withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.person_add_alt_1_rounded, color: Color(0xFF2563EB), size: 20),
+                ),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text(
+                    'Assign Sales Manager',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            content: Container(
+              constraints: const BoxConstraints(maxWidth: 460),
+              width: double.maxFinite,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Info banner
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2563EB).withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFF2563EB).withValues(alpha: 0.2)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.info_outline_rounded, color: Color(0xFF2563EB), size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Telecallers can assign or reassign this lead to a Sales Manager for finance advisory & loan closure.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isDark ? Colors.white70 : const Color(0xFF1E293B),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Client details summary
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.grey.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.person_outline_rounded, size: 16, color: Colors.grey),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  lead.name.isNotEmpty ? lead.name : 'Client Name Not Set',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              const Icon(Icons.phone_outlined, size: 16, color: Colors.grey),
+                              const SizedBox(width: 8),
+                              Text(
+                                lead.phone.isNotEmpty ? '+91 ${lead.phone}' : 'No phone',
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    const Text(
+                      'Select Sales Manager *',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 6),
+                    if (uniqueUsers.isEmpty)
+                      const Text('Loading sales managers from HRMS...', style: TextStyle(fontSize: 12, color: Colors.grey))
+                    else
+                      DropdownButtonFormField<int?>(
+                        isExpanded: true,
+                        initialValue: selectedManagerId,
+                        decoration: const InputDecoration(
+                          prefixIcon: Icon(Icons.badge_outlined, size: 20),
+                          border: OutlineInputBorder(),
+                        ),
+                        items: [
+                          const DropdownMenuItem<int?>(
+                            value: null,
+                            child: Text('Unassigned (None)', style: TextStyle(color: Colors.grey)),
+                          ),
+                          ...uniqueUsers.values.map((u) {
+                            final label = u.designation != null && u.designation!.isNotEmpty
+                                ? '${u.fullName} (${u.designation})'
+                                : u.fullName;
+                            return DropdownMenuItem<int?>(
+                              value: u.employeeId,
+                              child: Text(label, style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis),
+                            );
+                          }),
+                        ],
+                        onChanged: (val) => setModalState(() => selectedManagerId = val),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogCtx),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2563EB),
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: () {
+                  Navigator.pop(dialogCtx);
+                  context.read<CrmLeadsBloc>().add(
+                        CrmLeadsLeadUpdated(
+                          lead.id,
+                          {
+                            'assignedToId': selectedManagerId,
+                            if (selectedManagerId != null) 'status': 'ASSIGNED',
+                          },
+                        ),
+                      );
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        selectedManagerId != null
+                            ? 'Lead assigned to ${uniqueUsers[selectedManagerId]?.fullName ?? "Sales Manager"}'
+                            : 'Lead unassigned',
+                      ),
+                      backgroundColor: const Color(0xFF16A34A),
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                },
+                child: const Text('Confirm Assignment'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
   // Modal: Interested Status with HRMS Sales User Assignment
   // ---------------------------------------------------------------------------
   void _showInterestedSalesAssignmentModal(BuildContext context, CrmLead lead) {
     DateTime selectedDate = DateTime.now().add(const Duration(days: 1));
     TimeOfDay selectedTime = const TimeOfDay(hour: 14, minute: 0);
     final remarksCtrl = TextEditingController();
+    final isFinserve = CrmRepository.crmScopeNotifier.value == 'NB_FINSERVE';
 
     final salesUsers = context.read<CrmLeadsBloc>().state.salesUsers;
     final uniqueUsers = <int, CrmSalesUser>{};
@@ -1884,7 +2373,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
       uniqueUsers[lead.assignedToId!] = CrmSalesUser(
         employeeId: lead.assignedToId!,
         fullName: lead.assignedToName ?? 'Employee #${lead.assignedToId}',
-        designation: 'Sales',
+        designation: isFinserve ? 'Sales Manager' : 'Sales',
       );
     }
 
@@ -1914,17 +2403,19 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.blue.withValues(alpha: 0.08),
+                      color: isFinserve ? const Color(0xFF2563EB).withValues(alpha: 0.08) : Colors.blue.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Row(
+                    child: Row(
                       children: [
-                        Icon(Icons.info_outline_rounded, color: Colors.blue, size: 20),
-                        SizedBox(width: 8),
+                        Icon(Icons.info_outline_rounded, color: isFinserve ? const Color(0xFF2563EB) : Colors.blue, size: 20),
+                        const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'Assigning to a Sales Representative will hand over the deal. Telecallers will have view-only access thereafter.',
-                            style: TextStyle(fontSize: 12),
+                            isFinserve
+                                ? 'Assigning to a Sales Manager routes the lead for financial consultation. Telecallers retain full ability to manage and reassign.'
+                                : 'Assigning to a Sales Representative will hand over the deal. Telecallers will have view-only access thereafter.',
+                            style: const TextStyle(fontSize: 12),
                           ),
                         ),
                       ],
@@ -1933,10 +2424,16 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   const SizedBox(height: 16),
 
                   // Sales User Dropdown from HRMS
-                  const Text('Assign Sales Representative (HRMS) *', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                  Text(
+                    isFinserve ? 'Assign Sales Manager (HRMS) *' : 'Assign Sales Representative (HRMS) *',
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                  ),
                   const SizedBox(height: 6),
                   if (uniqueUsers.isEmpty)
-                    const Text('Loading sales representatives...', style: TextStyle(fontSize: 12, color: Colors.grey))
+                    Text(
+                      isFinserve ? 'Loading sales managers...' : 'Loading sales representatives...',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    )
                   else
                     DropdownButtonFormField<int?>(
                       isExpanded: true,
@@ -2055,7 +2552,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   assignedToId: selectedEmployeeId,
                 );
               },
-              child: const Text('Assign & Schedule Meeting'),
+              child: Text(isFinserve ? 'Assign Sales Manager' : 'Assign & Schedule Meeting'),
             ),
           ],
         ),
@@ -2108,6 +2605,346 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
   }
 
   // ---------------------------------------------------------------------------
+  // Finserve: Loan Documents Auto-Checklist Widget & Inspection Modal
+  // ---------------------------------------------------------------------------
+  Widget _buildLeadDocChecklistWidget({
+    required BuildContext context,
+    required String selectedLoanType,
+    required CrmSettings? settings,
+    required Map<String, Map<String, dynamic>> uploadedDocs,
+    required void Function(String docId, Map<String, dynamic> docData) onDocUploaded,
+    required void Function(String docId) onDocRemoved,
+    bool isReadOnly = false,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final requiredDocIds = settings?.loanTypeDocsMap[selectedLoanType] ?? [];
+    final docTypesPool = settings?.loanDocTypes ?? CrmSettings.defaultLoanDocTypes;
+
+    final attachedCount = requiredDocIds.where((id) => uploadedDocs.containsKey(id)).length;
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 8, bottom: 14),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF24201D) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFF2563EB).withValues(alpha: 0.35),
+          width: 1.2,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2563EB).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Icon(Icons.assignment_turned_in_outlined, size: 18, color: Color(0xFF2563EB)),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Application Documents ($selectedLoanType)',
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: (attachedCount == requiredDocIds.length && requiredDocIds.isNotEmpty)
+                      ? const Color(0xFF10B981).withValues(alpha: 0.15)
+                      : const Color(0xFF2563EB).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '$attachedCount of ${requiredDocIds.length} Attached',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: (attachedCount == requiredDocIds.length && requiredDocIds.isNotEmpty)
+                        ? const Color(0xFF10B981)
+                        : const Color(0xFF2563EB),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (requiredDocIds.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                'No documents configured for "$selectedLoanType" in Settings.',
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            )
+          else
+            ...requiredDocIds.map((docId) {
+              final doc = docTypesPool.firstWhere(
+                (d) => d.id == docId,
+                orElse: () => CrmLoanDocType(
+                  id: docId,
+                  name: docId.replaceAll('_', ' ').toUpperCase(),
+                  maxFileSizeMb: 5,
+                ),
+              );
+              final isUploaded = uploadedDocs.containsKey(docId);
+              final uploadedInfo = uploadedDocs[docId];
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF1E1B18) : Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: isUploaded
+                        ? const Color(0xFF10B981).withValues(alpha: 0.6)
+                        : (isDark ? Colors.white12 : const Color(0xFFE2E8F0)),
+                    width: isUploaded ? 1.5 : 1,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      isUploaded ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                      size: 18,
+                      color: isUploaded ? const Color(0xFF10B981) : Colors.grey,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  doc.name,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: isUploaded ? FontWeight.w600 : FontWeight.w500,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  'Max ${doc.maxFileSizeMb} MB',
+                                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (isUploaded && uploadedInfo != null) ...[
+                            const SizedBox(height: 3),
+                            Text(
+                              '${uploadedInfo['fileName']} • ${uploadedInfo['fileSizeFormatted'] ?? ""}',
+                              style: const TextStyle(fontSize: 11, color: Color(0xFF10B981), fontWeight: FontWeight.w500),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    if (isUploaded) ...[
+                      if (!isReadOnly)
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.redAccent),
+                          tooltip: 'Remove document',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+                          onPressed: () => onDocRemoved(docId),
+                        ),
+                    ] else if (!isReadOnly) ...[
+                      ElevatedButton.icon(
+                        onPressed: () async {
+                          try {
+                            final res = await FilePicker.pickFiles(
+                              type: FileType.custom,
+                              allowedExtensions: const ['pdf', 'jpg', 'jpeg', 'png'],
+                              withData: true,
+                            );
+                            if (res != null && res.files.isNotEmpty) {
+                              final file = res.files.first;
+                              final maxBytes = doc.maxFileSizeMb * 1024 * 1024;
+                              if (file.size > maxBytes) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        'File size (${(file.size / (1024 * 1024)).toStringAsFixed(1)} MB) exceeds maximum allowed limit of ${doc.maxFileSizeMb} MB.',
+                                      ),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                }
+                                return;
+                              }
+                              final sizeFormatted = file.size > 1024 * 1024
+                                  ? '${(file.size / (1024 * 1024)).toStringAsFixed(1)} MB'
+                                  : '${(file.size / 1024).toStringAsFixed(0)} KB';
+                              onDocUploaded(docId, {
+                                'docId': docId,
+                                'docName': doc.name,
+                                'fileName': file.name,
+                                'fileSize': file.size,
+                                'fileSizeFormatted': sizeFormatted,
+                                'uploadedAt': DateTime.now().toIso8601String(),
+                              });
+                            }
+                          } catch (err) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('File selection failed: $err'), backgroundColor: Colors.red),
+                              );
+                            }
+                          }
+                        },
+                        icon: const Icon(Icons.upload_file_rounded, size: 14),
+                        label: const Text('Attach', style: TextStyle(fontSize: 11)),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+
+  void _showLeadDocsModal(BuildContext context, CrmLead lead, CrmSettings? settings) {
+    String currentLoanType = lead.customFields['Loan_Type']?.toString() ??
+        lead.customFields['loan_type']?.toString() ??
+        lead.customFields['Project_Type']?.toString() ??
+        (settings?.loanTypes.isNotEmpty == true ? settings!.loanTypes.first : 'Home Loan');
+
+    final uploadedDocs = <String, Map<String, dynamic>>{};
+    try {
+      final rawDocs = lead.customFields['loan_documents'];
+      if (rawDocs is List) {
+        for (final item in rawDocs) {
+          if (item is Map) {
+            final docId = item['docId']?.toString() ?? item['id']?.toString() ?? '';
+            if (docId.isNotEmpty) {
+              uploadedDocs[docId] = Map<String, dynamic>.from(item);
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (modalCtx, setModalState) {
+          return AlertDialog(
+            title: Row(
+              children: [
+                const Icon(Icons.folder_shared_rounded, color: Color(0xFF10B981)),
+                const SizedBox(width: 10),
+                Expanded(child: Text('Loan Documents: ${lead.name}')),
+              ],
+            ),
+            content: Container(
+              constraints: const BoxConstraints(maxWidth: 520),
+              width: double.maxFinite,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Loan Type Selector
+                    Row(
+                      children: [
+                        const Text('Type of Loan:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            value: settings?.loanTypes.contains(currentLoanType) == true
+                                ? currentLoanType
+                                : (settings?.loanTypes.firstOrNull ?? currentLoanType),
+                            isExpanded: true,
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            ),
+                            items: (settings?.loanTypes ?? [currentLoanType])
+                                .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                                .toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setModalState(() => currentLoanType = val);
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    _buildLeadDocChecklistWidget(
+                      context: modalCtx,
+                      selectedLoanType: currentLoanType,
+                      settings: settings,
+                      uploadedDocs: uploadedDocs,
+                      onDocUploaded: (docId, data) {
+                        setModalState(() => uploadedDocs[docId] = data);
+                      },
+                      onDocRemoved: (docId) {
+                        setModalState(() => uploadedDocs.remove(docId));
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(modalCtx), child: const Text('Close')),
+              ElevatedButton.icon(
+                onPressed: () {
+                  final updatedCustomFields = Map<String, dynamic>.from(lead.customFields);
+                  updatedCustomFields['Loan_Type'] = currentLoanType;
+                  updatedCustomFields['loan_documents'] = uploadedDocs.values.toList();
+                  context.read<CrmLeadsBloc>().add(
+                        CrmLeadsLeadUpdated(lead.id, {
+                          'customFields': updatedCustomFields,
+                        }),
+                      );
+                  Navigator.pop(modalCtx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Loan documents updated successfully'), backgroundColor: Colors.green),
+                  );
+                },
+                icon: const Icon(Icons.save_rounded, size: 16),
+                label: const Text('Save Documents'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
   // Dialog: Add Lead Dynamically
   // ---------------------------------------------------------------------------
   void _showAddLeadDialog(BuildContext context, List<CrmColumnConfig> columns) {
@@ -2115,29 +2952,105 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     for (final col in columns) {
       controllers[col.columnKey] = TextEditingController();
     }
+    String selectedFlow = (context.read<CrmLeadsBloc>().state.leadFlowFilter == 'WEBHOOK') ? 'WEBHOOK' : 'EXCEL';
+    final settings = context.read<CrmLeadsBloc>().state.settings;
+    String? selectedLoanType;
+    final uploadedDocs = <String, Map<String, dynamic>>{};
 
     showDialog(
       context: context,
-      builder: (dialogCtx) => AlertDialog(
-        title: const Text('Add New Pre-Sales Lead'),
-        content: Container(
-          constraints: const BoxConstraints(maxWidth: 500),
-          width: double.maxFinite,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: columns.map((col) {
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Add New Pre-Sales Lead'),
+          content: Container(
+            constraints: const BoxConstraints(maxWidth: 520),
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Lead Flow Selection
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Lead Flow / Acquisition Channel *', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 6),
+                        DropdownButtonFormField<String>(
+                          value: selectedFlow,
+                          isExpanded: true,
+                          decoration: const InputDecoration(border: OutlineInputBorder(), prefixIcon: Icon(Icons.alt_route_rounded)),
+                          items: const [
+                            DropdownMenuItem(value: 'EXCEL', child: Text('📊 Excel / Manual Flow (Auto-assign to Excel telecallers)', overflow: TextOverflow.ellipsis)),
+                            DropdownMenuItem(value: 'WEBHOOK', child: Text('⚡ Meta / Webhook Flow (Auto-assign to Meta telecallers)', overflow: TextOverflow.ellipsis)),
+                          ],
+                          onChanged: (val) {
+                            if (val != null) setDialogState(() => selectedFlow = val);
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  ...columns.map((col) {
+                    final isFinserve = CrmRepository.crmScopeNotifier.value == 'NB_FINSERVE';
+                    final labelLower = col.label.toLowerCase();
+                    final keyLower = col.columnKey.toLowerCase();
+                    final isLoanTypeCol = isFinserve && (labelLower.contains('requirement') ||
+                        labelLower.contains('project') ||
+                        keyLower.contains('loan') ||
+                        keyLower.contains('project'));
+                    final isBudgetCol = isFinserve && (labelLower == 'budget' || keyLower == 'budget' || labelLower == 'amount' || keyLower == 'amount');
+
+                    final displayLabel = isLoanTypeCol ? 'Type of Loan' : (isBudgetCol ? 'Amount' : col.label);
+
+                    final settingsLoanTypes = settings?.loanTypes ?? const [
+                      'Home Loan', 'Personal Loan', 'Business Loan', 'Mortgage / LAP', 'Auto Loan', 'Education Loan'
+                    ];
+                    final loanOptions = col.options.isNotEmpty ? col.options : settingsLoanTypes;
+
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 14),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '${col.label}${col.isRequired ? " *" : ""}',
+                        '$displayLabel${col.isRequired ? " *" : ""}',
                         style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 6),
-                      if (col.dataType == 'SELECT' && col.options.isNotEmpty)
+                      if (isLoanTypeCol)
+                        DropdownButtonFormField<String>(
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            hintText: 'Select type of loan',
+                            prefixIcon: Icon(Icons.account_balance_rounded, size: 20),
+                            border: OutlineInputBorder(),
+                          ),
+                          items: loanOptions
+                              .map((opt) => DropdownMenuItem(value: opt, child: Text(opt, overflow: TextOverflow.ellipsis)))
+                              .toList(),
+                          onChanged: (val) {
+                            if (val != null) {
+                              controllers[col.columnKey]?.text = val;
+                              controllers['Loan_Type']?.text = val;
+                              setDialogState(() {
+                                selectedLoanType = val;
+                              });
+                            }
+                          },
+                        )
+                      else if (isBudgetCol)
+                        TextField(
+                          controller: controllers[col.columnKey],
+                          keyboardType: TextInputType.text,
+                          decoration: const InputDecoration(
+                            hintText: 'Enter amount',
+                            prefixIcon: Icon(Icons.currency_rupee_rounded, size: 20),
+                            border: OutlineInputBorder(),
+                          ),
+                        )
+                      else if (col.dataType == 'SELECT' && col.options.isNotEmpty)
                         DropdownButtonFormField<String>(
                           isExpanded: true,
                           decoration: const InputDecoration(border: OutlineInputBorder()),
@@ -2175,73 +3088,109 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   ),
                 );
               }).toList(),
-            ),
+
+              // Auto-Listed Documents Checklist for Selected Loan
+              if (CrmRepository.crmScopeNotifier.value == 'NB_FINSERVE' &&
+                  selectedLoanType != null &&
+                  selectedLoanType!.isNotEmpty)
+                _buildLeadDocChecklistWidget(
+                  context: ctx,
+                  selectedLoanType: selectedLoanType!,
+                  settings: settings,
+                  uploadedDocs: uploadedDocs,
+                  onDocUploaded: (docId, data) {
+                    setDialogState(() => uploadedDocs[docId] = data);
+                  },
+                  onDocRemoved: (docId) {
+                    setDialogState(() => uploadedDocs.remove(docId));
+                  },
+                ),
+            ],
           ),
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () async {
-              final customFields = <String, dynamic>{};
-              String phone = '';
-              String name = '';
-
-              for (final col in columns) {
-                final val = controllers[col.columnKey]?.text.trim() ?? '';
-                final lowerKey = col.columnKey.toLowerCase();
-                if (lowerKey == 'phone' || lowerKey.contains('phone') || col.dataType == 'PHONE') {
-                  if (phone.isEmpty && val.isNotEmpty) phone = val;
-                } else if (lowerKey == 'name' || lowerKey.contains('name') || lowerKey.contains('client')) {
-                  if (name.isEmpty && val.isNotEmpty) name = val;
-                }
-                customFields[col.columnKey] = val;
-              }
-
-              if (phone.isEmpty) {
-                phone = customFields['phone']?.toString() ??
-                    customFields['Phone']?.toString() ??
-                    customFields['Phone_Number']?.toString() ??
-                    '';
-              }
-              if (name.isEmpty) {
-                name = customFields['name']?.toString() ??
-                    customFields['client_name']?.toString() ??
-                    customFields['Client_Name']?.toString() ??
-                    customFields['Full_Name']?.toString() ??
-                    '';
-              }
-
-              if (phone.isEmpty || phone.length != 10) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Phone number must be exactly 10 digits.')),
-                );
-                return;
-              }
-
-              final leadsState = context.read<CrmLeadsBloc>().state;
-              final activeCampaignId = leadsState.selectedCampaignId;
-              final campaigns = leadsState.campaigns;
-              final effectiveCampaignId = (activeCampaignId != null && activeCampaignId.isNotEmpty)
-                  ? activeCampaignId
-                  : (campaigns.isNotEmpty ? campaigns.first.id : null);
-
-              Navigator.pop(dialogCtx);
-
-              context.read<CrmLeadsBloc>().add(
-                    CrmLeadsLeadCreated({
-                      'name': name.isEmpty ? 'Unnamed Lead' : name,
-                      'phone': phone,
-                      'status': 'NOT_STARTED',
-                      'campaignId': effectiveCampaignId,
-                      'customFields': customFields,
-                    }),
-                  );
-            },
-            child: const Text('Create Lead'),
-          ),
-        ],
       ),
-    );
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancel')),
+        ElevatedButton(
+          onPressed: () async {
+            final customFields = <String, dynamic>{};
+            String phone = '';
+            String name = '';
+            final isFinserve = CrmRepository.crmScopeNotifier.value == 'NB_FINSERVE';
+
+            for (final col in columns) {
+              final val = controllers[col.columnKey]?.text.trim() ?? '';
+              final lowerKey = col.columnKey.toLowerCase();
+              if (lowerKey == 'phone' || lowerKey.contains('phone') || col.dataType == 'PHONE') {
+                if (phone.isEmpty && val.isNotEmpty) phone = val;
+              } else if (lowerKey == 'name' || lowerKey.contains('name') || lowerKey.contains('client')) {
+                if (name.isEmpty && val.isNotEmpty) name = val;
+              }
+              customFields[col.columnKey] = val;
+              if (isFinserve) {
+                if (lowerKey.contains('loan') || lowerKey.contains('project')) {
+                  customFields['Loan_Type'] = val;
+                }
+                if (lowerKey == 'budget' || lowerKey == 'amount') {
+                  customFields['Amount'] = val;
+                }
+              }
+            }
+
+            if (isFinserve) {
+              if (selectedLoanType != null && selectedLoanType!.isNotEmpty) {
+                customFields['Loan_Type'] = selectedLoanType;
+              }
+              customFields['loan_documents'] = uploadedDocs.values.toList();
+            }
+
+            if (phone.isEmpty) {
+              phone = customFields['phone']?.toString() ??
+                  customFields['Phone']?.toString() ??
+                  customFields['Phone_Number']?.toString() ??
+                  '';
+            }
+            if (name.isEmpty) {
+              name = customFields['name']?.toString() ??
+                  customFields['client_name']?.toString() ??
+                  customFields['Client_Name']?.toString() ??
+                  customFields['Full_Name']?.toString() ??
+                  '';
+            }
+
+            if (phone.isEmpty || phone.length != 10) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Phone number must be exactly 10 digits.')),
+              );
+              return;
+            }
+
+            final leadsState = context.read<CrmLeadsBloc>().state;
+            final activeCampaignId = leadsState.selectedCampaignId;
+            final campaigns = leadsState.campaigns;
+            final effectiveCampaignId = (activeCampaignId != null && activeCampaignId.isNotEmpty)
+                ? activeCampaignId
+                : (campaigns.isNotEmpty ? campaigns.first.id : null);
+
+            Navigator.pop(dialogCtx);
+
+            context.read<CrmLeadsBloc>().add(
+                  CrmLeadsLeadCreated({
+                    'name': name.isEmpty ? 'Unnamed Lead' : name,
+                    'phone': phone,
+                    'status': 'NOT_STARTED',
+                    'leadSource': selectedFlow,
+                    'campaignId': effectiveCampaignId,
+                    'customFields': customFields,
+                  }),
+                );
+          },
+          child: const Text('Create Lead'),
+        ),
+      ],
+    ),
+  ),
+);
   }
 
   // ---------------------------------------------------------------------------
@@ -2254,15 +3203,57 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     List<CrmSalesUser> salesUsers, {
     bool isReadOnly = false,
   }) {
+    final isFinserve = CrmRepository.crmScopeNotifier.value == 'NB_FINSERVE';
+    final effectiveReadOnly = isReadOnly && !isFinserve;
+
     final controllers = <String, TextEditingController>{};
     for (final col in columns) {
-      final initialVal = col.columnKey == 'client_name' || col.columnKey == 'name'
-          ? lead.name
-          : (col.columnKey == 'phone'
-              ? cleanMobile10(lead.phone)
-              : (lead.customFields[col.columnKey]?.toString() ?? ''));
+      String initialVal = '';
+      if (col.columnKey == 'client_name' || col.columnKey == 'name') {
+        initialVal = lead.name;
+      } else if (col.columnKey == 'phone') {
+        initialVal = cleanMobile10(lead.phone);
+      } else if (isFinserve && (col.columnKey.toLowerCase().contains('loan') || col.columnKey.toLowerCase().contains('project') || col.label.toLowerCase().contains('project') || col.label.toLowerCase().contains('requirement'))) {
+        initialVal = lead.customFields['Loan_Type']?.toString() ??
+            lead.customFields['loan_type']?.toString() ??
+            lead.customFields['Project_Type']?.toString() ??
+            lead.customFields['project_type']?.toString() ??
+            (lead.customFields[col.columnKey]?.toString() ?? '');
+      } else if (isFinserve && (col.columnKey.toLowerCase() == 'budget' || col.columnKey.toLowerCase() == 'amount' || col.label.toLowerCase() == 'budget' || col.label.toLowerCase() == 'amount')) {
+        initialVal = lead.customFields['Amount']?.toString() ??
+            lead.customFields['amount']?.toString() ??
+            lead.customFields['Budget']?.toString() ??
+            lead.customFields['budget']?.toString() ??
+            (lead.customFields[col.columnKey]?.toString() ?? '');
+      } else {
+        initialVal = lead.customFields[col.columnKey]?.toString() ?? '';
+      }
       controllers[col.columnKey] = TextEditingController(text: initialVal);
     }
+
+    final settings = context.read<CrmLeadsBloc>().state.settings;
+    String selectedLoanType = '';
+    if (isFinserve) {
+      selectedLoanType = lead.customFields['Loan_Type']?.toString() ??
+          lead.customFields['loan_type']?.toString() ??
+          lead.customFields['Project_Type']?.toString() ??
+          lead.customFields['project_type']?.toString() ??
+          (settings?.loanTypes.isNotEmpty == true ? settings!.loanTypes.first : 'Home Loan');
+    }
+    final uploadedDocs = <String, Map<String, dynamic>>{};
+    try {
+      final rawDocs = lead.customFields['loan_documents'];
+      if (rawDocs is List) {
+        for (final item in rawDocs) {
+          if (item is Map) {
+            final docId = item['docId']?.toString() ?? item['id']?.toString() ?? '';
+            if (docId.isNotEmpty) {
+              uploadedDocs[docId] = Map<String, dynamic>.from(item);
+            }
+          }
+        }
+      }
+    } catch (_) {}
 
     final uniqueUsers = <int, CrmSalesUser>{};
     for (final u in salesUsers) {
@@ -2272,7 +3263,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
       uniqueUsers[lead.assignedToId!] = CrmSalesUser(
         employeeId: lead.assignedToId!,
         fullName: lead.assignedToName ?? 'Employee #${lead.assignedToId}',
-        designation: 'Sales',
+        designation: isFinserve ? 'Sales Manager' : 'Sales',
       );
     }
 
@@ -2286,26 +3277,26 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
         builder: (ctx, setEditState) => AlertDialog(
           title: Row(
             children: [
-              if (isReadOnly) ...[
+              if (effectiveReadOnly) ...[
                 const Icon(Icons.lock_outline_rounded, color: Colors.amber),
                 const SizedBox(width: 8),
               ],
               Expanded(
                 child: Text(
-                  isReadOnly ? 'Lead Details (Read-Only)' : 'Edit Lead: ${lead.name}',
+                  effectiveReadOnly ? 'Lead Details (Read-Only)' : 'Edit Lead: ${lead.name}',
                 ),
               ),
             ],
           ),
           content: Container(
-            constraints: const BoxConstraints(maxWidth: 500),
+            constraints: const BoxConstraints(maxWidth: 520),
             width: double.maxFinite,
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (isReadOnly) ...[
+                  if (effectiveReadOnly) ...[
                     Container(
                       padding: const EdgeInsets.all(12),
                       margin: const EdgeInsets.only(bottom: 16),
@@ -2330,9 +3321,12 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   ],
 
                   // Assigned Sales User dropdown
-                  const Text('Assigned Sales Representative', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                  Text(
+                    isFinserve ? 'Assigned Sales Manager' : 'Assigned Sales Representative',
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                  ),
                   const SizedBox(height: 6),
-                  if (isReadOnly)
+                  if (effectiveReadOnly)
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -2373,17 +3367,85 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   const SizedBox(height: 8),
 
                   ...columns.map((col) {
+                    final labelLower = col.label.toLowerCase();
+                    final keyLower = col.columnKey.toLowerCase();
+                    final isLoanTypeCol = isFinserve && (labelLower.contains('requirement') ||
+                        labelLower.contains('project') ||
+                        keyLower.contains('loan') ||
+                        keyLower.contains('project'));
+                    final isBudgetCol = isFinserve && (labelLower == 'budget' || keyLower == 'budget' || labelLower == 'amount' || keyLower == 'amount');
+
+                    final displayLabel = isLoanTypeCol ? 'Type of Loan' : (isBudgetCol ? 'Amount' : col.label);
+
+                    final settingsLoanTypes = context.read<CrmLeadsBloc>().state.settings?.loanTypes ?? const [
+                      'Home Loan', 'Personal Loan', 'Business Loan', 'Mortgage / LAP', 'Auto Loan', 'Education Loan'
+                    ];
+                    final loanOptions = col.options.isNotEmpty ? col.options : settingsLoanTypes;
+
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 14),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(col.label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                          Text(displayLabel, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                           const SizedBox(height: 6),
-                          if (col.dataType == 'PHONE' || col.columnKey == 'phone' || col.label.toLowerCase().contains('phone') || col.label.toLowerCase().contains('mobile'))
+                          if (isLoanTypeCol)
+                            if (effectiveReadOnly)
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                decoration: BoxDecoration(
+                                  border: Border.all(color: Colors.grey.shade300),
+                                  borderRadius: BorderRadius.circular(8),
+                                  color: Colors.grey.withValues(alpha: 0.08),
+                                ),
+                                child: Text(controllers[col.columnKey]?.text ?? 'Not specified'),
+                              )
+                            else
+                              DropdownButtonFormField<String>(
+                                isExpanded: true,
+                                initialValue: loanOptions.contains(controllers[col.columnKey]?.text)
+                                    ? controllers[col.columnKey]?.text
+                                    : null,
+                                decoration: const InputDecoration(
+                                  hintText: 'Select type of loan',
+                                  prefixIcon: Icon(Icons.account_balance_rounded, size: 20),
+                                  border: OutlineInputBorder(),
+                                ),
+                                items: [
+                                  if (controllers[col.columnKey]?.text.isNotEmpty == true &&
+                                      !loanOptions.contains(controllers[col.columnKey]?.text))
+                                    DropdownMenuItem(
+                                      value: controllers[col.columnKey]?.text,
+                                      child: Text(controllers[col.columnKey]!.text, overflow: TextOverflow.ellipsis),
+                                    ),
+                                  ...loanOptions.map(
+                                    (opt) => DropdownMenuItem(value: opt, child: Text(opt, overflow: TextOverflow.ellipsis)),
+                                  ),
+                                ],
+                                onChanged: (val) {
+                                  if (val != null) {
+                                    controllers[col.columnKey]?.text = val;
+                                    setEditState(() => selectedLoanType = val);
+                                  }
+                                },
+                              )
+                          else if (isBudgetCol)
                             TextField(
                               controller: controllers[col.columnKey],
-                              readOnly: isReadOnly,
+                              readOnly: effectiveReadOnly,
+                              decoration: InputDecoration(
+                                hintText: 'Enter amount',
+                                prefixIcon: const Icon(Icons.currency_rupee_rounded, size: 20),
+                                border: const OutlineInputBorder(),
+                                filled: effectiveReadOnly,
+                                fillColor: effectiveReadOnly ? Colors.grey.withValues(alpha: 0.08) : null,
+                              ),
+                            )
+                          else if (col.dataType == 'PHONE' || col.columnKey == 'phone' || col.label.toLowerCase().contains('phone') || col.label.toLowerCase().contains('mobile'))
+                            TextField(
+                              controller: controllers[col.columnKey],
+                              readOnly: effectiveReadOnly,
                               keyboardType: TextInputType.phone,
                               inputFormatters: mobileInputFormatters,
                               decoration: InputDecoration(
@@ -2391,25 +3453,41 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                 prefixIcon: buildMobilePrefix(isDark: Theme.of(context).brightness == Brightness.dark),
                                 prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
                                 border: const OutlineInputBorder(),
-                                filled: isReadOnly,
-                                fillColor: isReadOnly ? Colors.grey.withValues(alpha: 0.08) : null,
+                                filled: effectiveReadOnly,
+                                fillColor: effectiveReadOnly ? Colors.grey.withValues(alpha: 0.08) : null,
                               ),
                             )
                           else
                             TextField(
                               controller: controllers[col.columnKey],
-                              readOnly: isReadOnly,
+                              readOnly: effectiveReadOnly,
                               decoration: InputDecoration(
                                 hintText: 'Enter ${col.label.toLowerCase()}',
                                 border: const OutlineInputBorder(),
-                                filled: isReadOnly,
-                                fillColor: isReadOnly ? Colors.grey.withValues(alpha: 0.08) : null,
+                                filled: effectiveReadOnly,
+                                fillColor: effectiveReadOnly ? Colors.grey.withValues(alpha: 0.08) : null,
                               ),
                             ),
                         ],
                       ),
                     );
                   }),
+
+                  // Auto-Listed Documents Checklist for Selected Loan
+                  if (isFinserve && selectedLoanType.isNotEmpty)
+                    _buildLeadDocChecklistWidget(
+                      context: ctx,
+                      selectedLoanType: selectedLoanType,
+                      settings: settings,
+                      uploadedDocs: uploadedDocs,
+                      isReadOnly: effectiveReadOnly,
+                      onDocUploaded: (docId, data) {
+                        setEditState(() => uploadedDocs[docId] = data);
+                      },
+                      onDocRemoved: (docId) {
+                        setEditState(() => uploadedDocs.remove(docId));
+                      },
+                    ),
                 ],
               ),
             ),
@@ -2428,9 +3506,25 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
 
                   for (final col in columns) {
                     final val = controllers[col.columnKey]?.text.trim() ?? '';
+                    final lowerKey = col.columnKey.toLowerCase();
                     if (col.columnKey == 'phone') phone = val;
                     if (col.columnKey == 'client_name') name = val;
                     customFields[col.columnKey] = val;
+                    if (isFinserve) {
+                      if (lowerKey.contains('loan') || lowerKey.contains('project')) {
+                        customFields['Loan_Type'] = val;
+                      }
+                      if (lowerKey == 'budget' || lowerKey == 'amount') {
+                        customFields['Amount'] = val;
+                      }
+                    }
+                  }
+
+                  if (isFinserve) {
+                    if (selectedLoanType.isNotEmpty) {
+                      customFields['Loan_Type'] = selectedLoanType;
+                    }
+                    customFields['loan_documents'] = uploadedDocs.values.toList();
                   }
 
                   if (phone.isNotEmpty && phone.length != 10) {

@@ -6,8 +6,21 @@ import '../../auth/presentation/auth_providers.dart';
 import '../data/crm_repository.dart';
 import '../domain/crm_models.dart';
 
+class CrmScopeNotifier extends Notifier<String> {
+  @override
+  String build() => 'NB_DEVELOPER';
+
+  void setScope(String scope) => state = scope;
+}
+
+final crmScopeProvider =
+    NotifierProvider<CrmScopeNotifier, String>(CrmScopeNotifier.new);
+
 final crmRepositoryProvider = Provider<CrmRepository>((ref) {
-  return CrmRepository(dioClient: ref.watch(dioClientProvider));
+  final repo = CrmRepository(dioClient: ref.watch(dioClientProvider));
+  final scope = ref.watch(crmScopeProvider);
+  repo.setScope(scope);
+  return repo;
 });
 
 // -----------------------------------------------------------------------------

@@ -82,55 +82,120 @@ export const SYSTEM_SUBMODULES: SystemSubmoduleDef[] = [
     sortOrder: 10,
   },
 
-  // ── CRM MODULE ────────────────────────────────────────────────────────────
+  // ── CRM MODULE (NB DEVELOPER) ────────────────────────────────────────────
   {
     key: 'CRM',
-    name: 'Pre-Sales & Leads',
-    description: 'Lead management pipeline, calls, follow-ups, and lead conversion workflow',
+    name: 'NB Developer - Pre-Sales & Leads',
+    description: 'Lead management pipeline, calls, follow-ups, and lead conversion workflow for NB Developer',
     category: 'CRM',
     sortOrder: 1,
   },
   {
     key: 'CRM_PRE_SALES',
-    name: 'CRM Pre-Sales (Nav)',
+    name: 'NB Developer - Pre-Sales (Nav)',
     description: 'Same as Pre-Sales & Leads — used by mobile/web CRM navigation',
     category: 'CRM',
     sortOrder: 1,
   },
   {
     key: 'CRM_DASHBOARD',
-    name: 'CRM Analytics Dashboard',
-    description: 'Sales conversion KPIs, agent call stats, and lead volume analytics',
+    name: 'NB Developer - Analytics Dashboard',
+    description: 'Sales conversion KPIs, agent call stats, and lead volume analytics for NB Developer',
     category: 'CRM',
     sortOrder: 2,
   },
   {
     key: 'CRM_HEADERS',
-    name: 'Pipeline Stages & Headers',
-    description: 'Customize dynamic pipeline stages, headers, and lead metadata columns',
+    name: 'NB Developer - Pipeline Stages & Headers',
+    description: 'Customize dynamic pipeline stages, headers, and lead metadata columns for NB Developer',
     category: 'CRM',
     sortOrder: 3,
   },
   {
-    key: 'CRM_POST_SALES',
-    name: 'Post-Sales & Bookings',
-    description: 'Customer bookings, unit allocations, payment milestones, and handover tracking',
+    key: 'CRM_SALES',
+    name: 'NB Developer - Sales Management',
+    description: 'Assigned customer leads, site visits, unit selection, and quotation lifecycle for NB Developer',
     category: 'CRM',
     sortOrder: 4,
   },
   {
-    key: 'CRM_SETTINGS',
-    name: 'CRM Settings & Integrations',
-    description: 'Telephony webhooks, campaign tokens, Excel import templates, and CRM configurations',
+    key: 'CRM_VISITOR_DESK',
+    name: 'NB Developer - Visitor Check-In Desk',
+    description: 'Visitor reception log, visitor check-in, contact lookup, and visit pass recording for NB Developer',
     category: 'CRM',
     sortOrder: 5,
   },
   {
-    key: 'CRM_BIN',
-    name: 'Recycle Bin',
-    description: 'Archived and soft-deleted leads with restore or permanent deletion capability',
+    key: 'CRM_POST_SALES',
+    name: 'NB Developer - Post-Sales & Bookings',
+    description: 'Customer bookings, unit allocations, payment milestones, and handover tracking for NB Developer',
     category: 'CRM',
     sortOrder: 6,
+  },
+  {
+    key: 'CRM_SETTINGS',
+    name: 'NB Developer - Settings & Integrations',
+    description: 'Telephony webhooks, campaign tokens, Excel import templates, and CRM configurations for NB Developer',
+    category: 'CRM',
+    sortOrder: 7,
+  },
+  {
+    key: 'CRM_BIN',
+    name: 'NB Developer - Recycle Bin',
+    description: 'Archived and soft-deleted leads with restore or permanent deletion capability for NB Developer',
+    category: 'CRM',
+    sortOrder: 8,
+  },
+
+  // ── CRM MODULE (NB FINSERVE) ───────────────────────────────────────────────
+  {
+    key: 'FIN_CRM_PRE_SALES',
+    name: 'NB Finserve - Pre-Sales & Leads',
+    description: 'Financial leads pipeline, campaigns, calls, and follow-ups for NB Finserve',
+    category: 'CRM',
+    sortOrder: 11,
+  },
+  {
+    key: 'FIN_CRM_DASHBOARD',
+    name: 'NB Finserve - Analytics Dashboard',
+    description: 'Conversion KPIs, agent metrics, and lead acquisition trends for NB Finserve',
+    category: 'CRM',
+    sortOrder: 12,
+  },
+  {
+    key: 'FIN_CRM_HEADERS',
+    name: 'NB Finserve - Pipeline Stages & Headers',
+    description: 'Customize pipeline stages, metadata columns, and Excel mapping for NB Finserve',
+    category: 'CRM',
+    sortOrder: 13,
+  },
+  {
+    key: 'FIN_CRM_SALES',
+    name: 'NB Finserve - Sales & Conversions',
+    description: 'Assigned client applications, product advisory, and loan/finserve conversions',
+    category: 'CRM',
+    sortOrder: 14,
+  },
+  {
+    key: 'FIN_CRM_POST_SALES',
+    name: 'NB Finserve - Post-Sales & Operations',
+    description: 'Disbursements, documentation, account management, and recurring service',
+    category: 'CRM',
+    sortOrder: 16,
+  },
+  {
+    key: 'FIN_CRM_SETTINGS',
+    name: 'NB Finserve - Settings & Integrations',
+    description: 'Finserve telephony DID, campaign webhook tokens, and WhatsApp configurations',
+    category: 'CRM',
+    sortOrder: 17,
+  },
+  {
+    key: 'FIN_CRM_BIN',
+    name: 'NB Finserve - Recycle Bin',
+    description: 'Archived and soft-deleted financial leads for NB Finserve',
+    category: 'CRM',
+    sortOrder: 18,
   },
 
   // ── HRMS MODULE ───────────────────────────────────────────────────────────
@@ -296,6 +361,27 @@ export const SYSTEM_SUBMODULES: SystemSubmoduleDef[] = [
     sortOrder: 30,
   },
   {
+    key: 'TRACKING',
+    name: 'Live Tracking & Trips',
+    description: 'Real-time GPS tracking, employee field movement, route playback, and tracking hub alerts',
+    category: 'HRMS',
+    sortOrder: 31,
+  },
+  {
+    key: 'ADMIN_STORAGE',
+    name: 'Storage & Document Quotas',
+    description: 'System storage usage, document quotas, text/document data purge, and disk metrics',
+    category: 'HRMS',
+    sortOrder: 32,
+  },
+  {
+    key: 'AUDIT',
+    name: 'Audit Logs',
+    description: 'System activity logs, authentication history, and administrative audit trails',
+    category: 'HRMS',
+    sortOrder: 33,
+  },
+  {
     key: 'TASKS',
     name: 'Tasks & Projects Hub',
     description: 'Employee task assignments, subtasks, deadlines, and interactive Gantt charts',
@@ -404,30 +490,32 @@ export async function ensureErpModulePermissions(): Promise<void> {
     }
   }
 
-  // Mirror CRM → CRM_PRE_SALES so CRM nav works for roles already granted CRM.
+  // Mirror CRM → CRM_PRE_SALES, CRM_SALES, CRM_VISITOR_DESK so CRM nav works for roles already granted CRM.
   try {
     const crmRows = await prisma.rolePermission.findMany({ where: { moduleKey: 'CRM' } });
     for (const row of crmRows) {
-      await prisma.rolePermission.upsert({
-        where: { roleId_moduleKey: { roleId: row.roleId, moduleKey: 'CRM_PRE_SALES' } },
-        create: {
-          roleId: row.roleId,
-          moduleKey: 'CRM_PRE_SALES',
-          canRead: row.canRead,
-          canWrite: row.canWrite,
-          canApprove: row.canApprove,
-          canDelete: row.canDelete,
-          canExport: row.canExport,
-          employeeViewScope: row.employeeViewScope,
-        },
-        update: {
-          canRead: row.canRead,
-          canWrite: row.canWrite,
-          canApprove: row.canApprove,
-          canDelete: row.canDelete,
-          canExport: row.canExport,
-        },
-      });
+      for (const targetKey of ['CRM_PRE_SALES', 'CRM_SALES', 'CRM_VISITOR_DESK']) {
+        await prisma.rolePermission.upsert({
+          where: { roleId_moduleKey: { roleId: row.roleId, moduleKey: targetKey } },
+          create: {
+            roleId: row.roleId,
+            moduleKey: targetKey,
+            canRead: row.canRead,
+            canWrite: row.canWrite,
+            canApprove: row.canApprove,
+            canDelete: row.canDelete,
+            canExport: row.canExport,
+            employeeViewScope: row.employeeViewScope,
+          },
+          update: {
+            canRead: row.canRead,
+            canWrite: row.canWrite,
+            canApprove: row.canApprove,
+            canDelete: row.canDelete,
+            canExport: row.canExport,
+          },
+        });
+      }
     }
   } catch {
     // ignore mirror failures on fresh DBs
@@ -559,25 +647,61 @@ export async function ensureErpModulePermissions(): Promise<void> {
         );
       } else {
         const enabled = parseModules(org.tagLine);
-        if (enabled.map((e) => e.toUpperCase()).includes('HRMS')) {
-          await prisma.organizationAdminPermission.upsert({
-            where: {
-              organizationId_moduleKey: {
-                organizationId: org.id,
-                moduleKey: 'GOOGLE_EARTH',
+        const enabledUpper = enabled.map((e) => e.toUpperCase());
+        if (enabledUpper.includes('CRM')) {
+          for (const k of [
+            'CRM_PRE_SALES',
+            'CRM_SALES',
+            'CRM_VISITOR_DESK',
+            'FIN_CRM_PRE_SALES',
+            'FIN_CRM_DASHBOARD',
+            'FIN_CRM_HEADERS',
+            'FIN_CRM_SALES',
+            'FIN_CRM_POST_SALES',
+            'FIN_CRM_SETTINGS',
+            'FIN_CRM_BIN',
+          ]) {
+            await prisma.organizationAdminPermission.upsert({
+              where: {
+                organizationId_moduleKey: {
+                  organizationId: org.id,
+                  moduleKey: k,
+                },
               },
-            },
-            update: {},
-            create: {
-              organizationId: org.id,
-              moduleKey: 'GOOGLE_EARTH',
-              canRead: true,
-              canWrite: true,
-              canApprove: true,
-              canDelete: true,
-              canExport: true,
-            },
-          });
+              update: {},
+              create: {
+                organizationId: org.id,
+                moduleKey: k,
+                canRead: true,
+                canWrite: true,
+                canApprove: true,
+                canDelete: true,
+                canExport: true,
+              },
+            });
+          }
+        }
+        if (enabledUpper.includes('HRMS')) {
+          for (const k of ['GOOGLE_EARTH', 'TRACKING', 'ADMIN_STORAGE', 'AUDIT']) {
+            await prisma.organizationAdminPermission.upsert({
+              where: {
+                organizationId_moduleKey: {
+                  organizationId: org.id,
+                  moduleKey: k,
+                },
+              },
+              update: {},
+              create: {
+                organizationId: org.id,
+                moduleKey: k,
+                canRead: true,
+                canWrite: true,
+                canApprove: true,
+                canDelete: true,
+                canExport: true,
+              },
+            });
+          }
         }
         // SUPPORT was added after many orgs already had a matrix — always ensure it exists
         // (Collaboration is licensed for every company).
@@ -693,6 +817,9 @@ export async function ensureErpModulePermissions(): Promise<void> {
         'CHAT',
         'MEETINGS',
         'CRM',
+        'CRM_PRE_SALES',
+        'CRM_SALES',
+        'CRM_VISITOR_DESK',
         'LEAVE',
         'REIMBURSEMENTS',
         'PERSONAL_INFO',

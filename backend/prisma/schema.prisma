@@ -3569,6 +3569,7 @@ model MeetingUtterance {
 
 enum CrmLeadStatus {
   NOT_STARTED
+  ASSIGNED
   CNR
   SCHEDULED_VISIT
   NOT_INTERESTED
@@ -3582,6 +3583,7 @@ enum CrmLeadStatus {
 
 model CrmProject {
   id          String    @id @default(uuid())
+  scope       String    @default("NB_DEVELOPER") @map("scope")
   name        String
   code        String    @unique
   description String?
@@ -3593,11 +3595,13 @@ model CrmProject {
 
   campaigns CrmCampaign[]
 
+  @@index([scope])
   @@map("crm_projects")
 }
 
 model CrmCampaign {
   id           String    @id @default(uuid())
+  scope        String    @default("NB_DEVELOPER") @map("scope")
   projectId    String?   @map("project_id")
   name         String
   code         String    @unique
@@ -3614,11 +3618,13 @@ model CrmCampaign {
   columns CrmColumnConfig[]
   leads   CrmLead[]
 
+  @@index([scope])
   @@map("crm_campaigns")
 }
 
 model CrmColumnConfig {
   id               String   @id @default(uuid())
+  scope            String   @default("NB_DEVELOPER") @map("scope")
   module           String   @default("PRE_SALES") @map("module")
   campaignId       String?  @map("campaign_id")
   columnKey        String   @map("column_key")
@@ -3637,12 +3643,14 @@ model CrmColumnConfig {
 
   campaign CrmCampaign? @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
-  @@unique([module, campaignId, columnKey])
+  @@unique([module, campaignId, columnKey, scope])
+  @@index([scope])
   @@map("crm_column_configs")
 }
 
 model CrmLead {
   id              String        @id @default(uuid())
+  scope           String        @default("NB_DEVELOPER") @map("scope")
   campaignId      String?       @map("campaign_id")
   phone           String
   name            String?
@@ -3672,6 +3680,7 @@ model CrmLead {
   followUps  CrmFollowUp[]
   callLogs   CrmCallLog[]
 
+  @@index([scope])
   @@index([campaignId])
   @@index([status])
   @@index([phone])

@@ -10,6 +10,9 @@ import {
 export const trackingRouter = Router();
 
 function canAccessTracking(user?: Express.Request['user']): boolean {
+  if (user?.permissions?.TRACKING?.includes('READ')) {
+    return true;
+  }
   const role = String(user?.role ?? user?.roleName ?? '')
     .toUpperCase()
     .replace(/[\s_]/g, '');
@@ -24,6 +27,9 @@ function canAccessTracking(user?: Express.Request['user']): boolean {
 }
 
 function canManageTrackingSettings(user?: Express.Request['user']): boolean {
+  if (user?.permissions?.TRACKING?.includes('WRITE')) {
+    return true;
+  }
   return (
     isSuperAdminRole(user?.role ?? user?.roleName) ||
     hasCompanyAdminPrivileges(user?.role ?? user?.roleName, user?.companyAdminGranted)

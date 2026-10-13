@@ -35,6 +35,11 @@ const MODULES = [
   { key: 'ORG_TREE',      name: 'Org Chart & Tree', category: 'COLLABORATION' },
   { key: 'SUPPORT',       name: 'IT Support Tickets', category: 'COLLABORATION' },
   { key: 'CRM',           name: 'CRM Pre-Sales', category: 'CRM' },
+  { key: 'CRM_SALES',     name: 'Sales Management', category: 'CRM' },
+  { key: 'CRM_VISITOR_DESK', name: 'Visitor Check-In Desk', category: 'CRM' },
+  { key: 'TRACKING',      name: 'Live Tracking & Trips', category: 'HRMS' },
+  { key: 'ADMIN_STORAGE', name: 'Storage & Document Quotas', category: 'HRMS' },
+  { key: 'AUDIT',         name: 'Audit Logs', category: 'HRMS' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -73,6 +78,8 @@ const PERMISSION_MATRIX: PermissionMatrix = {
     MEETINGS:      RW,
     SUPPORT:       RW,
     CRM:           RW,
+    CRM_SALES:     RW,
+    CRM_VISITOR_DESK: RW,
   },
 };
 

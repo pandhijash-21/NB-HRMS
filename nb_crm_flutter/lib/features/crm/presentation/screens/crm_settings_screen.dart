@@ -11,6 +11,8 @@ import '../../../../core/widgets/mobile_input_formatter.dart';
 import '../../data/crm_repository.dart';
 import '../../domain/crm_models.dart';
 import '../bloc/crm_settings_bloc.dart';
+import '../widgets/crm_whatsapp_settings_widget.dart';
+import '../widgets/crm_scope_selector.dart';
 
 class CrmSettingsScreen extends StatelessWidget {
   const CrmSettingsScreen({super.key});
@@ -80,6 +82,26 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
     'Other Client',
   ];
   int? _siteVisitDeskEmployeeId;
+  List<int> _excelAssignedTelecallerIds = [];
+  List<int> _webhookAssignedTelecallerIds = [];
+  List<String> _loanTypes = [
+    'Home Loan',
+    'Personal Loan',
+    'Business Loan',
+    'Mortgage / LAP',
+    'Auto Loan',
+    'Education Loan',
+  ];
+  List<CrmLoanDocType> _loanDocTypes = List<CrmLoanDocType>.from(CrmSettings.defaultLoanDocTypes);
+  Map<String, List<String>> _loanTypeDocsMap = Map<String, List<String>>.from(
+    CrmSettings.defaultLoanTypeDocsMap.map((k, v) => MapEntry(k, List<String>.from(v))),
+  );
+  List<FinserveApplicationField> _finserveApplicationFields = List<FinserveApplicationField>.from(
+    CrmSettings.defaultFinserveApplicationFields,
+  );
+  final _newLoanTypeController = TextEditingController();
+  final _newDocNameController = TextEditingController();
+  final _newDocMaxMbController = TextEditingController(text: '5');
   final _newReasonController = TextEditingController();
   final _newSourceController = TextEditingController();
   final _newRefTypeController = TextEditingController();
@@ -98,17 +120,30 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 6, vsync: this);
     _tabController.addListener(() {
-      if (_tabController.index == 1 && _telecallers.isEmpty && !_telecallersLoading) {
+      if (_tabController.index == 2 && _telecallers.isEmpty && !_telecallersLoading) {
         _loadTelecallers();
       }
     });
+    CrmRepository.crmScopeNotifier.addListener(_onScopeUpdated);
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadTelecallers());
+  }
+
+  void _onScopeUpdated() {
+    if (mounted) {
+      _presalesConfigLoaded = false;
+      _telephonyLoaded = false;
+      _kpiLoaded = false;
+      _loadTelecallers();
+      context.read<CrmSettingsBloc>().add(const CrmSettingsLoadRequested());
+      setState(() {});
+    }
   }
 
   @override
   void dispose() {
+    CrmRepository.crmScopeNotifier.removeListener(_onScopeUpdated);
     _tabController.dispose();
     _apiUrlController.dispose();
     _userIdController.dispose();
@@ -122,6 +157,9 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
     _tcAgentController.dispose();
     _notInterestedDaysController.dispose();
     _binDaysController.dispose();
+    _newLoanTypeController.dispose();
+    _newDocNameController.dispose();
+    _newDocMaxMbController.dispose();
     _newReasonController.dispose();
     _newSourceController.dispose();
     _newRefTypeController.dispose();
@@ -227,6 +265,14 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
       _leadSources = List<String>.from(settings.leadSources);
       _referenceTypes = List<String>.from(settings.referenceTypes);
       _siteVisitDeskEmployeeId = settings.siteVisitDeskEmployeeId;
+      _excelAssignedTelecallerIds = List<int>.from(settings.excelAssignedTelecallerIds);
+      _webhookAssignedTelecallerIds = List<int>.from(settings.webhookAssignedTelecallerIds);
+      _loanTypes = List<String>.from(settings.loanTypes);
+      _loanDocTypes = List<CrmLoanDocType>.from(settings.loanDocTypes);
+      _loanTypeDocsMap = Map<String, List<String>>.from(
+        settings.loanTypeDocsMap.map((k, v) => MapEntry(k, List<String>.from(v))),
+      );
+      _finserveApplicationFields = List<FinserveApplicationField>.from(settings.finserveApplicationFields);
       _presalesConfigLoaded = true;
     }
   }
@@ -240,6 +286,9 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
         : const Color(0xFFE2E8F0);
     final textMuted = isDark ? Colors.white.withValues(alpha: 0.6) : const Color(0xFF64748B);
     final primaryGold = isDark ? const Color(0xFFC5A059) : const Color(0xFF2563EB);
+
+    final repo = context.read<CrmRepository>();
+    final isFinserve = repo.scope == 'NB_FINSERVE';
 
     return BlocConsumer<CrmSettingsBloc, CrmSettingsState>(
       listener: (context, state) {
@@ -264,7 +313,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
         return Scaffold(
           backgroundColor: isDark ? const Color(0xFF141210) : const Color(0xFFF8FAFC),
           appBar: AppBar(
-            title: const Text('CRM Settings & Configuration'),
+            title: Text(isFinserve ? 'Finserve CRM Settings' : 'CRM Settings & Configuration'),
             leading: const AppBackButton(fallbackLocation: '/crm/dashboard'),
             backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
             elevation: 0,
@@ -276,17 +325,36 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
               child: TabBar(
               controller: _tabController,
               isScrollable: true,
-              tabs: const [
-                Tab(text: 'Pre-Sales & Front Desk'),
-                Tab(text: 'Elision Telephony API'),
-                Tab(text: 'Dashboard KPI Management'),
-                Tab(text: 'Bin & Retention Policy'),
-                Tab(text: 'General Preferences'),
+              tabs: [
+                Tab(text: isFinserve ? 'Pre-Sales Settings' : 'Pre-Sales & Front Desk'),
+                const Tab(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.chat_bubble_outline_rounded, size: 16, color: Color(0xFF25D366)),
+                      SizedBox(width: 6),
+                      Text('WhatsApp Automation'),
+                    ],
+                  ),
+                ),
+                const Tab(text: 'Elision Telephony API'),
+                const Tab(text: 'Dashboard KPI Management'),
+                const Tab(text: 'Bin & Retention Policy'),
+                const Tab(text: 'General Preferences'),
               ],
             ),
               ),
             ),
             actions: [
+              CrmScopeSelectorWidget(
+                onScopeChanged: () {
+                  _telephonyLoaded = false;
+                  _kpiLoaded = false;
+                  _presalesConfigLoaded = false;
+                  context.read<CrmSettingsBloc>().add(const CrmSettingsLoadRequested());
+                },
+              ),
+              const SizedBox(width: 8),
               IconButton(
                 tooltip: 'Refresh Settings',
                 icon: const Icon(Icons.refresh_rounded),
@@ -309,7 +377,14 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
             controller: _tabController,
             physics: const NeverScrollableScrollPhysics(),
             children: [
-              _buildPresalesFrontDeskTab(state, isDark, cardBg, borderColor, textMuted, primaryGold),
+              _buildPresalesFrontDeskTab(state, isDark, cardBg, borderColor, textMuted, primaryGold, isFinserve),
+              CrmWhatsappSettingsWidget(
+                isDark: isDark,
+                cardBg: cardBg,
+                borderColor: borderColor,
+                textMuted: textMuted,
+                primaryColor: primaryGold,
+              ),
               _buildElisionTelephonyTab(isDark, cardBg, borderColor, textMuted, primaryGold),
               _buildKpiManagementTab(state, isDark, cardBg, borderColor, textMuted, primaryGold),
               _buildRetentionPolicyTab(isDark, cardBg, borderColor, textMuted, primaryGold),
@@ -1335,41 +1410,103 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Center(
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 700),
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: cardBg,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: borderColor),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('General Preferences', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: isDark ? Colors.white : const Color(0xFF1E293B))),
-              const SizedBox(height: 16),
-              const ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.currency_rupee_rounded),
-                title: Text('Default Currency'),
-                trailing: Text('INR (₹)', style: TextStyle(fontWeight: FontWeight.bold)),
-              ),
-              const Divider(),
-              const ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.access_time_rounded),
-                title: Text('Telecaller Calling Window'),
-                trailing: Text('09:30 AM – 07:00 PM', style: TextStyle(fontWeight: FontWeight.bold)),
-              ),
-              const Divider(),
-              const ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.security_rounded),
-                title: Text('Sales Rep Assignment Access Control'),
-                subtitle: Text('Telecallers have view-only access once assigned to sales user.'),
-                trailing: Icon(Icons.check_circle_rounded, color: Colors.green),
-              ),
-            ],
+        child: Material(
+          color: cardBg,
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 700),
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: borderColor),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'General Preferences',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: isDark ? Colors.white : const Color(0xFF1E293B),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.currency_rupee_rounded, size: 22),
+                      const SizedBox(width: 14),
+                      const Expanded(
+                        child: Text(
+                          'Default Currency',
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                      Text(
+                        'INR (₹)',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.white : const Color(0xFF1E293B),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.access_time_rounded, size: 22),
+                      const SizedBox(width: 14),
+                      const Expanded(
+                        child: Text(
+                          'Telecaller Calling Window',
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                      Text(
+                        '09:30 AM – 07:00 PM',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.white : const Color(0xFF1E293B),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.security_rounded, size: 22),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Sales Rep Assignment Access Control',
+                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Telecallers have view-only access once assigned to sales user.',
+                              style: TextStyle(fontSize: 12, color: textMuted),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.check_circle_rounded, color: Colors.green, size: 20),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1418,6 +1555,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
     Color borderColor,
     Color textMuted,
     Color primaryColor,
+    bool isFinserve,
   ) {
     final employees = state.employees;
 
@@ -1426,7 +1564,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Section 1: Designated Front-Desk / Site Visit Desk Employee
+          // Section 0: Dual-Flow Lead Routing & Telecaller Assignment
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
@@ -1442,10 +1580,10 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: primaryColor.withValues(alpha: 0.15),
+                        color: const Color(0xFF6366F1).withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Icon(Icons.how_to_reg_rounded, color: primaryColor, size: 22),
+                      child: const Icon(Icons.alt_route_rounded, color: Color(0xFF6366F1), size: 22),
                     ),
                     const SizedBox(width: 14),
                     Expanded(
@@ -1453,7 +1591,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Designated Site Visit Desk In-Charge',
+                            'Lead Flow Routing & Telecaller Assignment',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
@@ -1462,7 +1600,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Select the employee authorized to check in visitors at the site reception, verify scheduled visits, and assign Sales Representatives.',
+                            'Configure separate telecaller teams for Excel uploads and Meta/Webhook campaigns. Leads will automatically be round-robin distributed among selected members, and team members will only see their respective modules.',
                             style: TextStyle(fontSize: 13, color: textMuted),
                           ),
                         ],
@@ -1470,40 +1608,551 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
                     ),
                   ],
                 ),
-                const SizedBox(height: 18),
-                DropdownButtonFormField<int?>(
-                  value: _siteVisitDeskEmployeeId,
-                  isExpanded: true,
-                  decoration: InputDecoration(
-                    labelText: 'Front Desk Employee',
-                    prefixIcon: const Icon(Icons.badge_outlined),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  items: [
-                    const DropdownMenuItem<int?>(
-                      value: null,
-                      child: Text('None (Only System Admins can perform Check-in)'),
-                    ),
-                    ...employees.map((e) => DropdownMenuItem<int?>(
-                          value: e.employeeId,
-                          child: Text(
-                            '${e.fullName} (${e.designation ?? "Employee"}${e.department != null ? " • ${e.department}" : ""}) - Emp #${e.employeeId}',
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        )),
-                  ],
-                  onChanged: (val) {
-                    setState(() {
-                      _siteVisitDeskEmployeeId = val;
-                    });
-                  },
+                const SizedBox(height: 20),
+                _buildMultiSelectTelecallerCard(
+                  context: context,
+                  title: 'Assign Excel leads to',
+                  description: 'Select team members/telecallers who will handle leads uploaded via Excel or created manually under Excel flow.',
+                  icon: Icons.table_chart_rounded,
+                  iconColor: const Color(0xFF16A34A),
+                  selectedIds: _excelAssignedTelecallerIds,
+                  employees: employees,
+                  onChanged: (updated) => setState(() => _excelAssignedTelecallerIds = updated),
+                  isDark: isDark,
+                  cardBg: cardBg,
+                  borderColor: borderColor,
+                  textMuted: textMuted,
+                  primaryColor: primaryColor,
+                ),
+                const SizedBox(height: 16),
+                _buildMultiSelectTelecallerCard(
+                  context: context,
+                  title: 'Assign Meta / Campaign leads to',
+                  description: 'Select team members/telecallers who will handle online webhook leads arriving from Meta Graph API or Ads campaigns.',
+                  icon: Icons.campaign_rounded,
+                  iconColor: const Color(0xFF2563EB),
+                  selectedIds: _webhookAssignedTelecallerIds,
+                  employees: employees,
+                  onChanged: (updated) => setState(() => _webhookAssignedTelecallerIds = updated),
+                  isDark: isDark,
+                  cardBg: cardBg,
+                  borderColor: borderColor,
+                  textMuted: textMuted,
+                  primaryColor: primaryColor,
                 ),
               ],
             ),
           ),
           const SizedBox(height: 20),
 
-          // Section 2: Not Interested Reasons
+          // Section 1A (Finserve only): Master Document Types & Max File Size Configurations
+          if (isFinserve) ...[
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: borderColor),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.file_copy_outlined, color: Color(0xFF10B981), size: 22),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Finserve: Master Document Types & File Size Limits',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: isDark ? Colors.white : const Color(0xFF1E293B),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Define the master pool of document types and max allowed file size (MB) for loan applications.',
+                              style: TextStyle(fontSize: 13, color: textMuted),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+
+                  // Add New Document Type Form
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF24201D) : const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: borderColor),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Add New Document Type',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? Colors.white70 : const Color(0xFF334155),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: TextField(
+                                controller: _newDocNameController,
+                                decoration: InputDecoration(
+                                  hintText: 'Document Name (e.g. PAN Card, Bank Statement)...',
+                                  isDense: true,
+                                  prefixIcon: const Icon(Icons.description_outlined, size: 20),
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                                onSubmitted: (_) => _addLoanDocType(),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            SizedBox(
+                              width: 130,
+                              child: TextField(
+                                controller: _newDocMaxMbController,
+                                keyboardType: TextInputType.number,
+                                decoration: InputDecoration(
+                                  labelText: 'Max Size',
+                                  suffixText: 'MB',
+                                  isDense: true,
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                                onSubmitted: (_) => _addLoanDocType(),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            ElevatedButton.icon(
+                              onPressed: _addLoanDocType,
+                              icon: const Icon(Icons.add_rounded, size: 18),
+                              label: const Text('Add Document'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF10B981),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Display List of Added Master Document Types
+                  Text(
+                    'Configured Document Pool (${_loanDocTypes.length} Available)',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white70 : const Color(0xFF475569),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: _loanDocTypes.map((doc) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF26221E) : Colors.white,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: borderColor),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.insert_drive_file_outlined, size: 18, color: Color(0xFF10B981)),
+                            const SizedBox(width: 8),
+                            Text(
+                              doc.name,
+                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF2563EB).withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                'Max ${doc.maxFileSizeMb} MB',
+                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            IconButton(
+                              icon: const Icon(Icons.close_rounded, size: 16, color: Colors.redAccent),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
+                              tooltip: 'Remove ${doc.name}',
+                              onPressed: () => _removeLoanDocType(doc.id),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Section 1B (Finserve only): Types of Loans & Document Selection Checklists
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: borderColor),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2563EB).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.account_balance_rounded, color: Color(0xFF2563EB), size: 22),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Finserve: Types of Loan & Required Document Checklists',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: isDark ? Colors.white : const Color(0xFF1E293B),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Configure loan products and check which documents are required for each loan type. These documents will auto-list for customer loans.',
+                              style: TextStyle(fontSize: 13, color: textMuted),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+
+                  // Add New Loan Type
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _newLoanTypeController,
+                          decoration: InputDecoration(
+                            hintText: 'Add new loan product (e.g. LAP, Gold Loan, MSME Loan)...',
+                            isDense: true,
+                            prefixIcon: const Icon(Icons.add_business_rounded, size: 20),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          onSubmitted: (_) => _addLoanType(),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      ElevatedButton.icon(
+                        onPressed: _addLoanType,
+                        icon: const Icon(Icons.add_rounded, size: 18),
+                        label: const Text('Add Loan Product'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Loan Products Cards with Document Checklists
+                  ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: _loanTypes.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 14),
+                    itemBuilder: (context, index) {
+                      final loanType = _loanTypes[index];
+                      final requiredDocIds = _loanTypeDocsMap[loanType] ?? [];
+
+                      return Container(
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF24201D) : const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: borderColor),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Header Strip
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: isDark ? const Color(0xFF2B2621) : const Color(0xFFF1F5F9),
+                                borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(6),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF2563EB).withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: const Icon(Icons.payments_outlined, color: Color(0xFF2563EB), size: 18),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Row(
+                                      children: [
+                                        Text(
+                                          loanType,
+                                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                          decoration: BoxDecoration(
+                                            color: requiredDocIds.isEmpty
+                                                ? Colors.amber.withValues(alpha: 0.15)
+                                                : const Color(0xFF10B981).withValues(alpha: 0.15),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: Text(
+                                            '${requiredDocIds.length} of ${_loanDocTypes.length} Docs Required',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                              color: requiredDocIds.isEmpty ? Colors.amber.shade800 : const Color(0xFF10B981),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  TextButton(
+                                    onPressed: () => _toggleAllDocsForLoanType(loanType, true),
+                                    child: const Text('Select All', style: TextStyle(fontSize: 12)),
+                                  ),
+                                  TextButton(
+                                    onPressed: () => _toggleAllDocsForLoanType(loanType, false),
+                                    child: const Text('Clear All', style: TextStyle(fontSize: 12)),
+                                  ),
+                                  if (_loanTypes.length > 1)
+                                    IconButton(
+                                      icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.redAccent),
+                                      tooltip: 'Delete $loanType',
+                                      onPressed: () => _removeLoanType(loanType),
+                                    ),
+                                ],
+                              ),
+                            ),
+
+                            // Document Checkboxes
+                            Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: _loanDocTypes.isEmpty
+                                  ? const Text(
+                                      'No document types available. Please add document types in the master pool above.',
+                                      style: TextStyle(fontSize: 13, color: Colors.grey),
+                                    )
+                                  : Wrap(
+                                      spacing: 12,
+                                      runSpacing: 10,
+                                      children: _loanDocTypes.map((doc) {
+                                        final isChecked = requiredDocIds.contains(doc.id);
+
+                                        return InkWell(
+                                          onTap: () => _toggleDocForLoanType(loanType, doc.id, !isChecked),
+                                          borderRadius: BorderRadius.circular(8),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                            decoration: BoxDecoration(
+                                              color: isChecked
+                                                  ? (isDark ? const Color(0xFF1E3A8A).withValues(alpha: 0.25) : const Color(0xFFEFF6FF))
+                                                  : (isDark ? const Color(0xFF1F1C19) : Colors.white),
+                                              borderRadius: BorderRadius.circular(8),
+                                              border: Border.all(
+                                                color: isChecked
+                                                    ? const Color(0xFF3B82F6)
+                                                    : (isDark ? Colors.white12 : const Color(0xFFCBD5E1)),
+                                                width: isChecked ? 1.5 : 1,
+                                              ),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Checkbox(
+                                                  value: isChecked,
+                                                  activeColor: const Color(0xFF2563EB),
+                                                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                                  visualDensity: VisualDensity.compact,
+                                                  onChanged: (val) => _toggleDocForLoanType(loanType, doc.id, val ?? false),
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  doc.name,
+                                                  style: TextStyle(
+                                                    fontSize: 13,
+                                                    fontWeight: isChecked ? FontWeight.w600 : FontWeight.normal,
+                                                    color: isDark ? Colors.white : const Color(0xFF1E293B),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 6),
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                                  decoration: BoxDecoration(
+                                                    color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+                                                    borderRadius: BorderRadius.circular(4),
+                                                  ),
+                                                  child: Text(
+                                                    '${doc.maxFileSizeMb}MB',
+                                                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: textMuted),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        );
+                                      }).toList(),
+                                    ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Finserve Application Form Schema & Required Fields Card
+            _buildFinserveApplicationFieldsCard(
+              context: context,
+              isDark: isDark,
+              cardBg: cardBg,
+              borderColor: borderColor,
+              textMuted: textMuted,
+              primaryColor: primaryColor,
+            ),
+            const SizedBox(height: 20),
+          ],
+
+          // Section 2: Designated Front-Desk / Site Visit Desk Employee (Real Estate / NB Developer only)
+          if (!isFinserve) ...[
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: borderColor),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: primaryColor.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(Icons.how_to_reg_rounded, color: primaryColor, size: 22),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Designated Site Visit Desk In-Charge',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: isDark ? Colors.white : const Color(0xFF1E293B),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Select the employee authorized to check in visitors at the site reception, verify scheduled visits, and assign Sales Representatives.',
+                              style: TextStyle(fontSize: 13, color: textMuted),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  DropdownButtonFormField<int?>(
+                    value: _siteVisitDeskEmployeeId,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      labelText: 'Front Desk Employee',
+                      prefixIcon: const Icon(Icons.badge_outlined),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    items: [
+                      const DropdownMenuItem<int?>(
+                        value: null,
+                        child: Text('None (Only System Admins can perform Check-in)'),
+                      ),
+                      ...employees.map((e) => DropdownMenuItem<int?>(
+                            value: e.employeeId,
+                            child: Text(
+                              '${e.fullName} (${e.designation ?? "Employee"}${e.department != null ? " • ${e.department}" : ""}) - Emp #${e.employeeId}',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          )),
+                    ],
+                    onChanged: (val) {
+                      setState(() {
+                        _siteVisitDeskEmployeeId = val;
+                      });
+                    },
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+          ],
+
+          // Section 2: Not Interested Reasons (Both CRMs)
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
@@ -1598,193 +2247,197 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
           ),
           const SizedBox(height: 20),
 
-          // Section 3: Lead Sources
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: cardBg,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: borderColor),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(Icons.source_rounded, color: Colors.blue, size: 22),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Front Desk: Lead Sources',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: isDark ? Colors.white : const Color(0xFF1E293B),
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Sources available during new visitor check-in (e.g. Walk IN, Channel Partner, Reference).',
-                            style: TextStyle(fontSize: 13, color: textMuted),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: _leadSources.map((source) {
-                    return Chip(
-                      label: Text(source),
-                      deleteIcon: _leadSources.length <= 1 ? null : const Icon(Icons.close_rounded, size: 16),
-                      onDeleted: _leadSources.length <= 1
-                          ? null
-                          : () {
-                              setState(() {
-                                _leadSources.remove(source);
-                              });
-                            },
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: 14),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _newSourceController,
-                        decoration: InputDecoration(
-                          hintText: 'Add new lead source...',
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          // Section 3: Lead Sources (Real Estate / NB Developer only)
+          if (!isFinserve) ...[
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: borderColor),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10),
                         ),
-                        onSubmitted: (_) => _addSource(),
+                        child: const Icon(Icons.source_rounded, color: Colors.blue, size: 22),
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    ElevatedButton.icon(
-                      onPressed: _addSource,
-                      icon: const Icon(Icons.add_rounded, size: 18),
-                      label: const Text('Add'),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Front Desk: Lead Sources',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: isDark ? Colors.white : const Color(0xFF1E293B),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Sources available during new visitor check-in (e.g. Walk IN, Channel Partner, Reference).',
+                              style: TextStyle(fontSize: 13, color: textMuted),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-              ],
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _leadSources.map((source) {
+                      return Chip(
+                        label: Text(source),
+                        deleteIcon: _leadSources.length <= 1 ? null : const Icon(Icons.close_rounded, size: 16),
+                        onDeleted: _leadSources.length <= 1
+                            ? null
+                            : () {
+                                setState(() {
+                                  _leadSources.remove(source);
+                                });
+                              },
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _newSourceController,
+                          decoration: InputDecoration(
+                            hintText: 'Add new lead source...',
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          onSubmitted: (_) => _addSource(),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      ElevatedButton.icon(
+                        onPressed: _addSource,
+                        icon: const Icon(Icons.add_rounded, size: 18),
+                        label: const Text('Add'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 20),
+            const SizedBox(height: 20),
+          ],
 
-          // Section 4: Reference Categories
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: cardBg,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: borderColor),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Colors.purple.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(Icons.people_outline_rounded, color: Colors.purple, size: 22),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Reference Sub-Categories',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: isDark ? Colors.white : const Color(0xFF1E293B),
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Sub-types displayed when a visitor indicates they were referred (e.g. B2B, Employee, Other Client).',
-                            style: TextStyle(fontSize: 13, color: textMuted),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: _referenceTypes.map((type) {
-                    return Chip(
-                      label: Text(type),
-                      deleteIcon: _referenceTypes.length <= 1 ? null : const Icon(Icons.close_rounded, size: 16),
-                      onDeleted: _referenceTypes.length <= 1
-                          ? null
-                          : () {
-                              setState(() {
-                                _referenceTypes.remove(type);
-                              });
-                            },
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: 14),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _newRefTypeController,
-                        decoration: InputDecoration(
-                          hintText: 'Add new reference category...',
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          // Section 4: Reference Categories (Real Estate / NB Developer only)
+          if (!isFinserve) ...[
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: borderColor),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.purple.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10),
                         ),
-                        onSubmitted: (_) => _addRefType(),
+                        child: const Icon(Icons.people_outline_rounded, color: Colors.purple, size: 22),
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    ElevatedButton.icon(
-                      onPressed: _addRefType,
-                      icon: const Icon(Icons.add_rounded, size: 18),
-                      label: const Text('Add'),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Reference Sub-Categories',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: isDark ? Colors.white : const Color(0xFF1E293B),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Sub-types displayed when a visitor indicates they were referred (e.g. B2B, Employee, Other Client).',
+                              style: TextStyle(fontSize: 13, color: textMuted),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-              ],
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _referenceTypes.map((type) {
+                      return Chip(
+                        label: Text(type),
+                        deleteIcon: _referenceTypes.length <= 1 ? null : const Icon(Icons.close_rounded, size: 16),
+                        onDeleted: _referenceTypes.length <= 1
+                            ? null
+                            : () {
+                                setState(() {
+                                  _referenceTypes.remove(type);
+                                });
+                              },
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _newRefTypeController,
+                          decoration: InputDecoration(
+                            hintText: 'Add new reference category...',
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          onSubmitted: (_) => _addRefType(),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      ElevatedButton.icon(
+                        onPressed: _addRefType,
+                        icon: const Icon(Icons.add_rounded, size: 18),
+                        label: const Text('Add'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 24),
+            const SizedBox(height: 24),
+          ],
 
           // Save Button
           Align(
@@ -1794,7 +2447,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
               icon: state.isSaving
                   ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                   : const Icon(Icons.save_rounded, size: 20),
-              label: Text(state.isSaving ? 'Saving...' : 'Save Pre-Sales Configurations'),
+              label: Text(state.isSaving ? 'Saving...' : (isFinserve ? 'Save Pre-Sales Settings' : 'Save Pre-Sales Configurations')),
               style: ElevatedButton.styleFrom(
                 backgroundColor: primaryColor,
                 foregroundColor: Colors.white,
@@ -1807,6 +2460,83 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
         ],
       ),
     );
+  }
+
+  void _addLoanType() {
+    final text = _newLoanTypeController.text.trim();
+    if (text.isEmpty) return;
+    if (!_loanTypes.contains(text)) {
+      setState(() {
+        _loanTypes.add(text);
+        _loanTypeDocsMap[text] = _loanDocTypes.take(2).map((d) => d.id).toList();
+        _newLoanTypeController.clear();
+      });
+    }
+  }
+
+  void _removeLoanType(String type) {
+    if (_loanTypes.length <= 1) return;
+    setState(() {
+      _loanTypes.remove(type);
+      _loanTypeDocsMap.remove(type);
+    });
+  }
+
+  void _addLoanDocType() {
+    final name = _newDocNameController.text.trim();
+    if (name.isEmpty) return;
+    final mb = int.tryParse(_newDocMaxMbController.text.trim()) ?? 5;
+    final id = name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_').replaceAll(RegExp(r'_+'), '_');
+
+    if (_loanDocTypes.any((d) => d.id == id || d.name.toLowerCase() == name.toLowerCase())) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Document type with this name already exists')),
+      );
+      return;
+    }
+
+    setState(() {
+      final newDoc = CrmLoanDocType(
+        id: id,
+        name: name,
+        maxFileSizeMb: mb > 0 ? mb : 5,
+        allowedFormats: const ['pdf', 'jpg', 'jpeg', 'png'],
+      );
+      _loanDocTypes.add(newDoc);
+      _newDocNameController.clear();
+      _newDocMaxMbController.text = '5';
+    });
+  }
+
+  void _removeLoanDocType(String docId) {
+    setState(() {
+      _loanDocTypes.removeWhere((d) => d.id == docId);
+      for (final list in _loanTypeDocsMap.values) {
+        list.remove(docId);
+      }
+    });
+  }
+
+  void _toggleDocForLoanType(String loanType, String docId, bool isSelected) {
+    setState(() {
+      final list = List<String>.from(_loanTypeDocsMap[loanType] ?? []);
+      if (isSelected) {
+        if (!list.contains(docId)) list.add(docId);
+      } else {
+        list.remove(docId);
+      }
+      _loanTypeDocsMap[loanType] = list;
+    });
+  }
+
+  void _toggleAllDocsForLoanType(String loanType, bool selectAll) {
+    setState(() {
+      if (selectAll) {
+        _loanTypeDocsMap[loanType] = _loanDocTypes.map((d) => d.id).toList();
+      } else {
+        _loanTypeDocsMap[loanType] = [];
+      }
+    });
   }
 
   void _addReason() {
@@ -1842,12 +2572,837 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
     }
   }
 
+  Widget _buildFinserveApplicationFieldsCard({
+    required BuildContext context,
+    required bool isDark,
+    required Color cardBg,
+    required Color borderColor,
+    required Color textMuted,
+    required Color primaryColor,
+  }) {
+    final personalFields = _finserveApplicationFields.where((f) => f.section.toUpperCase() == 'PERSONAL').toList();
+    final companyFields = _finserveApplicationFields.where((f) => f.section.toUpperCase() == 'COMPANY').toList();
+    final referenceFields = _finserveApplicationFields.where((f) => f.section.toUpperCase() == 'REFERENCE').toList();
+    final customFields = _finserveApplicationFields.where((f) {
+      final s = f.section.toUpperCase();
+      return s != 'PERSONAL' && s != 'COMPANY' && s != 'REFERENCE';
+    }).toList();
+
+    final totalActive = _finserveApplicationFields.where((f) => f.enabled).length;
+    final totalRequired = _finserveApplicationFields.where((f) => f.required && f.enabled).length;
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFC5A059).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.assignment_turned_in_rounded, color: Color(0xFFC5A059), size: 24),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Loan Application Form Schema & Required Fields',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : const Color(0xFF1E293B),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Configure intake fields taken when a client is marked Interested. Toggle "Mandatory" to enforce required fields in client submission, and "Active" to show/hide.',
+                      style: TextStyle(fontSize: 13, color: textMuted),
+                    ),
+                  ],
+                ),
+              ),
+              Wrap(
+                spacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.restore_rounded, size: 16),
+                    label: const Text('Reset Defaults', style: TextStyle(fontSize: 12)),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    ),
+                    onPressed: _resetApplicationFieldsToDefault,
+                  ),
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.add_rounded, size: 16),
+                    label: const Text('Add Field', style: TextStyle(fontSize: 12)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2563EB),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                    onPressed: _showAddCustomFieldDialog,
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '${_finserveApplicationFields.length} Total Fields',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF2563EB)),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '$totalActive Active',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF16A34A)),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '$totalRequired Mandatory',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.amber.shade800),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          // Group 1: Personal Details
+          _buildAppFieldSection(
+            title: '🎗️ PERSONAL DETAILS',
+            subtitle: 'Personal contacts, family relations, residence, and loan purpose',
+            fields: personalFields,
+            isDark: isDark,
+            borderColor: borderColor,
+            textMuted: textMuted,
+          ),
+          const SizedBox(height: 16),
+
+          // Group 2: Company Details
+          _buildAppFieldSection(
+            title: '🎗️ COMPANY DETAILS',
+            subtitle: 'Employment records, work experience, official email & landline',
+            fields: companyFields,
+            isDark: isDark,
+            borderColor: borderColor,
+            textMuted: textMuted,
+          ),
+          const SizedBox(height: 16),
+
+          // Group 3: Reference Details
+          _buildAppFieldSection(
+            title: '🎗️ REFERENCE DETAILS',
+            subtitle: 'Two mandatory reference contacts with relation and addresses',
+            fields: referenceFields,
+            isDark: isDark,
+            borderColor: borderColor,
+            textMuted: textMuted,
+          ),
+
+          if (customFields.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            _buildAppFieldSection(
+              title: '🎗️ CUSTOM / ADDITIONAL FIELDS',
+              subtitle: 'Additional fields configured specifically for this scope',
+              fields: customFields,
+              isDark: isDark,
+              borderColor: borderColor,
+              textMuted: textMuted,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAppFieldSection({
+    required String title,
+    required String subtitle,
+    required List<FinserveApplicationField> fields,
+    required bool isDark,
+    required Color borderColor,
+    required Color textMuted,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF24201D) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF2B2621) : const Color(0xFFF1F5F9),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+            ),
+            child: Row(
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '• $subtitle',
+                  style: TextStyle(fontSize: 12, color: textMuted),
+                ),
+                const Spacer(),
+                Text(
+                  '${fields.where((f) => f.enabled).length}/${fields.length} Active',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: textMuted),
+                ),
+              ],
+            ),
+          ),
+          if (fields.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text('No fields configured in this section', style: TextStyle(color: textMuted, fontSize: 13)),
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: fields.length,
+              separatorBuilder: (_, __) => Divider(height: 1, color: borderColor.withValues(alpha: 0.5)),
+              itemBuilder: (context, index) {
+                final field = fields[index];
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  child: Row(
+                    children: [
+                      // Field Label and Key
+                      Expanded(
+                        flex: 4,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              field.label,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: field.enabled ? (isDark ? Colors.white : const Color(0xFF1E293B)) : textMuted,
+                                decoration: field.enabled ? null : TextDecoration.lineThrough,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Key: ${field.key}',
+                              style: TextStyle(fontSize: 11, color: textMuted, fontFamily: 'monospace'),
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Type Chip
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          field.type.toUpperCase(),
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: textMuted),
+                        ),
+                      ),
+                      const SizedBox(width: 20),
+                      // Required Toggle
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Required',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: field.required ? const Color(0xFFD97706) : textMuted,
+                              fontWeight: field.required ? FontWeight.bold : FontWeight.normal,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Switch(
+                            value: field.required,
+                            activeColor: const Color(0xFFD97706),
+                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            onChanged: field.enabled ? (val) => _toggleFieldRequired(field.key, val) : null,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(width: 16),
+                      // Enabled Toggle
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Active',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: field.enabled ? const Color(0xFF16A34A) : textMuted,
+                              fontWeight: field.enabled ? FontWeight.bold : FontWeight.normal,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Switch(
+                            value: field.enabled,
+                            activeColor: const Color(0xFF16A34A),
+                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            onChanged: (val) => _toggleFieldEnabled(field.key, val),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(width: 10),
+                      // Delete custom field button
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.redAccent),
+                        tooltip: 'Remove field',
+                        onPressed: () => _removeApplicationField(field.key),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _toggleFieldRequired(String key, bool val) {
+    setState(() {
+      final index = _finserveApplicationFields.indexWhere((f) => f.key == key);
+      if (index != -1) {
+        final current = _finserveApplicationFields[index];
+        _finserveApplicationFields[index] = current.copyWith(required: val);
+      }
+    });
+  }
+
+  void _toggleFieldEnabled(String key, bool val) {
+    setState(() {
+      final index = _finserveApplicationFields.indexWhere((f) => f.key == key);
+      if (index != -1) {
+        final current = _finserveApplicationFields[index];
+        _finserveApplicationFields[index] = current.copyWith(enabled: val);
+      }
+    });
+  }
+
+  void _removeApplicationField(String key) {
+    setState(() {
+      _finserveApplicationFields.removeWhere((f) => f.key == key);
+    });
+  }
+
+  void _resetApplicationFieldsToDefault() {
+    setState(() {
+      _finserveApplicationFields = List<FinserveApplicationField>.from(
+        CrmSettings.defaultFinserveApplicationFields,
+      );
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Application form fields reset to standard default schema')),
+    );
+  }
+
+  void _showAddCustomFieldDialog() {
+    final labelCtrl = TextEditingController();
+    final keyCtrl = TextEditingController();
+    String section = 'PERSONAL';
+    String type = 'text';
+    bool isRequired = true;
+    bool isEnabled = true;
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: const Text('Add Application Field', style: TextStyle(fontWeight: FontWeight.bold)),
+              content: SizedBox(
+                width: 440,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: labelCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Field Label *',
+                        hintText: 'e.g. Pan Card Number, Mother Tongue...',
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (val) {
+                        if (keyCtrl.text.isEmpty || keyCtrl.text == val.toLowerCase().replaceAll(' ', '_')) {
+                          keyCtrl.text = val.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_');
+                          setDialogState(() {});
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: keyCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Field Key / ID *',
+                        hintText: 'e.g. panCardNumber',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      value: section,
+                      decoration: const InputDecoration(
+                        labelText: 'Form Section',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'PERSONAL', child: Text('🎗️ Personal Details')),
+                        DropdownMenuItem(value: 'COMPANY', child: Text('🎗️ Company Details')),
+                        DropdownMenuItem(value: 'REFERENCE', child: Text('🎗️ Reference Details')),
+                        DropdownMenuItem(value: 'CUSTOM', child: Text('🎗️ Custom / Other Section')),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) setDialogState(() => section = val);
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      value: type,
+                      decoration: const InputDecoration(
+                        labelText: 'Input Type',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'text', child: Text('Text Line')),
+                        DropdownMenuItem(value: 'number', child: Text('Number / Amount')),
+                        DropdownMenuItem(value: 'phone', child: Text('Phone / Mobile')),
+                        DropdownMenuItem(value: 'email', child: Text('Email Address')),
+                        DropdownMenuItem(value: 'textarea', child: Text('Multi-line Text / Address')),
+                        DropdownMenuItem(value: 'select', child: Text('Dropdown Selection')),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) setDialogState(() => type = val);
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Checkbox(
+                          value: isRequired,
+                          onChanged: (val) => setDialogState(() => isRequired = val ?? true),
+                        ),
+                        const Text('Mandatory (Required Field)'),
+                        const Spacer(),
+                        Checkbox(
+                          value: isEnabled,
+                          onChanged: (val) => setDialogState(() => isEnabled = val ?? true),
+                        ),
+                        const Text('Enabled'),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancel')),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2563EB),
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () {
+                    final label = labelCtrl.text.trim();
+                    final key = keyCtrl.text.trim();
+                    if (label.isEmpty || key.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Please enter field label and key')),
+                      );
+                      return;
+                    }
+                    Navigator.pop(dialogCtx);
+                    setState(() {
+                      _finserveApplicationFields.add(FinserveApplicationField(
+                        key: key,
+                        label: label,
+                        section: section,
+                        type: type,
+                        required: isRequired,
+                        enabled: isEnabled,
+                      ));
+                    });
+                  },
+                  child: const Text('Add Field'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _savePresalesSettings() {
-    context.read<CrmSettingsBloc>().add(CrmSettingsSaved({
-      'not_interested_reasons': jsonEncode(_notInterestedReasons),
-      'lead_sources': jsonEncode(_leadSources),
-      'reference_types': jsonEncode(_referenceTypes),
-      'site_visit_desk_employee_id': _siteVisitDeskEmployeeId?.toString() ?? '',
-    }));
+    final repo = context.read<CrmRepository>();
+    final isFinserve = repo.scope == 'NB_FINSERVE';
+    if (isFinserve) {
+      context.read<CrmSettingsBloc>().add(CrmSettingsSaved({
+        'loan_types': jsonEncode(_loanTypes),
+        'loan_doc_types': jsonEncode(_loanDocTypes.map((d) => d.toJson()).toList()),
+        'loan_type_docs_map': jsonEncode(_loanTypeDocsMap),
+        'finserve_application_fields': jsonEncode(_finserveApplicationFields.map((f) => f.toJson()).toList()),
+        'not_interested_reasons': jsonEncode(_notInterestedReasons),
+        'excel_assigned_telecaller_ids': jsonEncode(_excelAssignedTelecallerIds),
+        'webhook_assigned_telecaller_ids': jsonEncode(_webhookAssignedTelecallerIds),
+      }));
+    } else {
+      context.read<CrmSettingsBloc>().add(CrmSettingsSaved({
+        'not_interested_reasons': jsonEncode(_notInterestedReasons),
+        'lead_sources': jsonEncode(_leadSources),
+        'reference_types': jsonEncode(_referenceTypes),
+        'site_visit_desk_employee_id': _siteVisitDeskEmployeeId?.toString() ?? '',
+        'excel_assigned_telecaller_ids': jsonEncode(_excelAssignedTelecallerIds),
+        'webhook_assigned_telecaller_ids': jsonEncode(_webhookAssignedTelecallerIds),
+      }));
+    }
+  }
+
+  Widget _buildMultiSelectTelecallerCard({
+    required BuildContext context,
+    required String title,
+    required String description,
+    required IconData icon,
+    required Color iconColor,
+    required List<int> selectedIds,
+    required List<CrmSalesUser> employees,
+    required void Function(List<int> updated) onChanged,
+    required bool isDark,
+    required Color cardBg,
+    required Color borderColor,
+    required Color textMuted,
+    required Color primaryColor,
+  }) {
+    final selectedEmployees = employees.where((e) => selectedIds.contains(e.employeeId)).toList();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF24201D) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: iconColor, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : const Color(0xFF1E293B),
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      description,
+                      style: TextStyle(fontSize: 12, color: textMuted),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          InkWell(
+            onTap: () => _showTelecallerMultiSelectDialog(
+              context: context,
+              title: title,
+              initialSelectedIds: selectedIds,
+              employees: employees,
+              onConfirmed: onChanged,
+              isDark: isDark,
+              primaryColor: primaryColor,
+            ),
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E1B18) : Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: borderColor),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.checklist_rounded, size: 18, color: iconColor),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      selectedIds.isEmpty
+                          ? 'Select telecaller(s) from dropdown with checkboxes...'
+                          : '${selectedIds.length} person(s) assigned (Click to modify)',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: selectedIds.isEmpty ? textMuted : (isDark ? Colors.white : const Color(0xFF1E293B)),
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: iconColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '${selectedIds.length} selected',
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: iconColor),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(Icons.arrow_drop_down_rounded, size: 18, color: iconColor),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (selectedEmployees.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: selectedEmployees.map((emp) {
+                return Chip(
+                  avatar: CircleAvatar(
+                    backgroundColor: iconColor.withValues(alpha: 0.2),
+                    child: Text(
+                      emp.fullName.isNotEmpty ? emp.fullName[0].toUpperCase() : '?',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: iconColor),
+                    ),
+                  ),
+                  label: Text(
+                    '${emp.fullName}${emp.designation != null ? " • ${emp.designation}" : ""} (#${emp.employeeId})',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  deleteIcon: const Icon(Icons.close_rounded, size: 15),
+                  onDeleted: () {
+                    final updated = List<int>.from(selectedIds)..remove(emp.employeeId);
+                    onChanged(updated);
+                  },
+                );
+              }).toList(),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _showTelecallerMultiSelectDialog({
+    required BuildContext context,
+    required String title,
+    required List<int> initialSelectedIds,
+    required List<CrmSalesUser> employees,
+    required void Function(List<int> updated) onConfirmed,
+    required bool isDark,
+    required Color primaryColor,
+  }) {
+    List<int> tempSelected = List<int>.from(initialSelectedIds);
+    String searchQuery = '';
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            final filtered = employees.where((e) {
+              final q = searchQuery.toLowerCase();
+              return e.fullName.toLowerCase().contains(q) ||
+                  (e.designation ?? '').toLowerCase().contains(q) ||
+                  (e.department ?? '').toLowerCase().contains(q) ||
+                  e.employeeId.toString().contains(q);
+            }).toList();
+
+            return AlertDialog(
+              title: Row(
+                children: [
+                  Icon(Icons.checklist_rtl_rounded, color: primaryColor),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 480,
+                height: 520,
+                child: Column(
+                  children: [
+                    TextField(
+                      decoration: InputDecoration(
+                        hintText: 'Search employee by name, role or ID...',
+                        prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      onChanged: (val) {
+                        setDialogState(() => searchQuery = val.trim());
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '${tempSelected.length} of ${employees.length} selected',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? Colors.white70 : Colors.black54,
+                          ),
+                        ),
+                        Row(
+                          children: [
+                            TextButton(
+                              onPressed: () {
+                                setDialogState(() {
+                                  tempSelected = employees.map((e) => e.employeeId).toList();
+                                });
+                              },
+                              child: const Text('Select All', style: TextStyle(fontSize: 12)),
+                            ),
+                            TextButton(
+                              onPressed: () {
+                                setDialogState(() {
+                                  tempSelected.clear();
+                                });
+                              },
+                              child: const Text('Clear All', style: TextStyle(fontSize: 12, color: Colors.redAccent)),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const Divider(),
+                    Expanded(
+                      child: filtered.isEmpty
+                          ? const Center(child: Text('No employees found matching search.'))
+                          : ListView.builder(
+                              itemCount: filtered.length,
+                              itemBuilder: (ctx, i) {
+                                final emp = filtered[i];
+                                final isChecked = tempSelected.contains(emp.employeeId);
+                                return CheckboxListTile(
+                                  dense: true,
+                                  value: isChecked,
+                                  title: Text(
+                                    emp.fullName,
+                                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                                  ),
+                                  subtitle: Text(
+                                    '${emp.designation ?? "Employee"}${emp.department != null ? " • ${emp.department}" : ""} (Emp #${emp.employeeId})',
+                                    style: const TextStyle(fontSize: 11),
+                                  ),
+                                  activeColor: primaryColor,
+                                  onChanged: (val) {
+                                    setDialogState(() {
+                                      if (val == true) {
+                                        if (!tempSelected.contains(emp.employeeId)) {
+                                          tempSelected.add(emp.employeeId);
+                                        }
+                                      } else {
+                                        tempSelected.remove(emp.employeeId);
+                                      }
+                                    });
+                                  },
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogCtx),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryColor,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  onPressed: () {
+                    Navigator.pop(dialogCtx);
+                    onConfirmed(tempSelected);
+                  },
+                  child: const Text('Apply Selection'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 }

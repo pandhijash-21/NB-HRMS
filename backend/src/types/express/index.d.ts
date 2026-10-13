@@ -1,3 +1,4 @@
+/// <reference types="multer" />
 import type { AuditEntryInput } from '../../middleware/audit';
 
 declare global {

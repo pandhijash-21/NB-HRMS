@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "CrmLeadStatus" ADD VALUE IF NOT EXISTS 'ASSIGNED';

@@ -119,6 +119,7 @@ import '../../features/collaboration/presentation/screens/meet_invite_people_scr
 import '../../features/collaboration/presentation/screens/meet_room_screen.dart';
 import '../../features/collaboration/presentation/meet_helpers.dart';
 import '../../features/collaboration/presentation/screens/meet_recording_screen.dart';
+import '../../features/crm/data/crm_repository.dart';
 import '../../features/crm/presentation/screens/crm_dashboard_screen.dart';
 import '../../features/crm/presentation/screens/crm_pre_sales_screen.dart';
 import '../../features/crm/presentation/screens/crm_headers_screen.dart';
@@ -127,6 +128,7 @@ import '../../features/crm/presentation/screens/crm_settings_screen.dart';
 import '../../features/crm/presentation/screens/crm_bin_screen.dart';
 import '../../features/crm/presentation/screens/crm_visitor_desk_screen.dart';
 import '../../features/crm/presentation/screens/crm_sales_screen.dart';
+import '../../features/crm/presentation/screens/crm_virtual_building_screen.dart';
 import '../../features/platform/presentation/screens/platform_console_screen.dart';
 import '../../features/tour/presentation/software_tour_hub_screen.dart';
 import '../../features/earth/presentation/screens/earth_hub_screen.dart';
@@ -341,6 +343,9 @@ GoRouter createAppRouter(AuthBloc authBloc) {
               next = Permissions.canReadCrmDashboard(perms, role) ? '/crm/dashboard' : defaultRoute;
             } else if (loc.startsWith('/crm/sales') && !Permissions.canReadCrmSales(perms, role)) {
               next = '/crm/pre-sales';
+            } else if (loc.startsWith('/crm/virtual-building') &&
+                (!Permissions.canReadCrmSales(perms, role) && !Permissions.canReadCrmVisitorDesk(perms, role))) {
+              next = '/crm/pre-sales';
             } else if (loc.startsWith('/crm/post-sales') && !Permissions.canReadCrmPostSales(perms, role)) {
               next = '/crm/pre-sales';
             } else if (loc.startsWith('/crm/bin') && !Permissions.canReadCrmBin(perms, role)) {
@@ -479,6 +484,16 @@ GoRouter createAppRouter(AuthBloc authBloc) {
             builder: (context, state) => const CrmSalesScreen(),
           ),
           GoRoute(
+            path: '/crm/virtual-building',
+            redirect: (context, state) {
+              if (CrmRepository.crmScopeNotifier.value == 'NB_FINSERVE') {
+                return '/crm/pre-sales';
+              }
+              return null;
+            },
+            builder: (context, state) => const CrmVirtualBuildingScreen(),
+          ),
+          GoRoute(
             path: '/crm/post-sales',
             builder: (context, state) => const CrmPostSalesScreen(),
           ),
@@ -496,6 +511,12 @@ GoRouter createAppRouter(AuthBloc authBloc) {
           ),
           GoRoute(
             path: '/crm/visitor-desk',
+            redirect: (context, state) {
+              if (CrmRepository.crmScopeNotifier.value == 'NB_FINSERVE') {
+                return '/crm/pre-sales';
+              }
+              return null;
+            },
             builder: (context, state) => const CrmVisitorDeskScreen(),
           ),
           GoRoute(

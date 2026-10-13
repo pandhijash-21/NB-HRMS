@@ -145,7 +145,7 @@ export const collabStorage = {
         buffer,
         originalname: fileName,
         mimetype: mimeType,
-      } as Express.Multer.File;
+      } as any;
       const url = await uploadService.uploadToCloudinary(fake, 'collab');
       return {
         bucketKey: url,

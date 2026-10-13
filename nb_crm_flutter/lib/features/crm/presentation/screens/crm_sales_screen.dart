@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:file_picker/file_picker.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../data/crm_repository.dart';
 import '../../domain/crm_models.dart';
 import '../bloc/crm_leads_bloc.dart';
+import '../widgets/crm_scope_selector.dart';
 import '../../../erp/presentation/project_providers.dart';
 import '../../../erp/domain/project_models.dart';
 import '../../../erp/domain/structure_models.dart';
@@ -48,10 +52,19 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    CrmRepository.crmScopeNotifier.addListener(_onScopeChanged);
+  }
+
+  void _onScopeChanged() {
+    if (mounted) {
+      setState(() {});
+      context.read<CrmLeadsBloc>().add(const CrmLeadsLoadRequested());
+    }
   }
 
   @override
   void dispose() {
+    CrmRepository.crmScopeNotifier.removeListener(_onScopeChanged);
     _tabController.dispose();
     _searchController.dispose();
     _quotationSearchController.dispose();
@@ -69,6 +82,9 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
     final textMuted = isDark ? Colors.white.withValues(alpha: 0.6) : const Color(0xFF64748B);
     const primaryColor = Color(0xFF2563EB); // Royal Blue for Sales
     const goldColor = Color(0xFFC5A059);
+
+    final crmRepo = context.read<CrmRepository>();
+    final isFinserve = crmRepo.scope == 'NB_FINSERVE';
 
     final authState = context.watch<AuthBloc>().state;
     final currentUser = authState.user;
@@ -103,8 +119,17 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
         // Sales users map
         final salesUsers = state.salesUsers;
 
-        // Filter leads based on sales assignment & search & status
+        // Active scope
+        final currentScope = CrmRepository.crmScopeNotifier.value;
+
+        // Filter leads based on sales assignment & search & status & active scope
         final filteredLeads = allLeads.where((lead) {
+          // Strictly segregate by active scope
+          if (lead.scope != currentScope) return false;
+
+          // Sales Management ONLY shows leads that have been assigned to a sales manager!
+          if (lead.assignedToId == null) return false;
+
           if (_filterOnlyMyLeads && !isSuperAdmin && userEmployeeId != null) {
             if (lead.assignedToId != userEmployeeId) return false;
           } else if (_selectedSalesManagerId != null) {
@@ -121,14 +146,15 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
             final phoneMatch = lead.phone.toLowerCase().contains(q);
             final unitMatch = (lead.unitShown?['unitNo']?.toString().toLowerCase().contains(q) ?? false);
             final projMatch = (lead.unitShown?['projectName']?.toString().toLowerCase().contains(q) ?? false);
-            if (!nameMatch && !phoneMatch && !unitMatch && !projMatch) return false;
+            final loanMatch = (lead.customFields['Loan_Type']?.toString().toLowerCase().contains(q) ?? false);
+            if (!nameMatch && !phoneMatch && !unitMatch && !projMatch && !loanMatch) return false;
           }
 
           return true;
         }).toList();
 
         // Clients with quotations
-        final leadsWithProposals = allLeads.where((l) => l.proposals.isNotEmpty).toList();
+        final leadsWithProposals = allLeads.where((l) => l.scope == currentScope && l.assignedToId != null && l.proposals.isNotEmpty).toList();
         final filteredQuotationLeads = leadsWithProposals.where((lead) {
           final q = _quotationSearchController.text.trim().toLowerCase();
           if (q.isEmpty) return true;
@@ -190,11 +216,11 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
                     ),
                   ),
                   Tab(
-                    icon: const Icon(Icons.request_quote_rounded, size: 20),
+                    icon: Icon(isFinserve ? Icons.assignment_turned_in_rounded : Icons.request_quote_rounded, size: 20),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Text('Quotations'),
+                        Text(isFinserve ? 'Applications' : 'Quotations'),
                         const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
@@ -203,7 +229,9 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(
-                            '${leadsWithProposals.length}',
+                            isFinserve
+                                ? '${allLeads.where((l) => l.status == CrmStatus.interested || l.status.backendValue == "INTERESTED" || l.customFields["applicationDetails"] != null).length}'
+                                : '${leadsWithProposals.length}',
                             style: const TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
@@ -218,6 +246,13 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
               ),
             ),
             actions: [
+              CrmScopeSelectorWidget(
+                onScopeChanged: () {
+                  setState(() {});
+                  context.read<CrmLeadsBloc>().add(const CrmLeadsLoadRequested());
+                },
+              ),
+              const SizedBox(width: 8),
               IconButton(
                 tooltip: 'Refresh',
                 icon: const Icon(Icons.refresh_rounded),
@@ -245,19 +280,31 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
                 userEmployeeId,
                 isSuperAdmin,
               ),
-              _buildQuotationsTab(
-                context,
-                filteredQuotationLeads,
-                allLeads,
-                isDark,
-                cardBg,
-                borderColor,
-                textMuted,
-                primaryColor,
-                goldColor,
-                userEmployeeId,
-                currentUser?.name,
-              ),
+              if (isFinserve)
+                _buildFinserveApplicationsTab(
+                  context,
+                  allLeads,
+                  isDark,
+                  cardBg,
+                  borderColor,
+                  textMuted,
+                  primaryColor,
+                  goldColor,
+                )
+              else
+                _buildQuotationsTab(
+                  context,
+                  filteredQuotationLeads,
+                  allLeads,
+                  isDark,
+                  cardBg,
+                  borderColor,
+                  textMuted,
+                  primaryColor,
+                  goldColor,
+                  userEmployeeId,
+                  currentUser?.name,
+                ),
             ],
           ),
         );
@@ -282,10 +329,12 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
     bool isSuperAdmin,
   ) {
     // KPI metrics
+    final isFinserve = CrmRepository.crmScopeNotifier.value == 'NB_FINSERVE';
     final totalAssigned = leads.length;
     final unitsShownCount = leads.where((l) => l.unitShown != null).length;
     final proposalsCount = leads.where((l) => l.proposals.isNotEmpty).length;
     final siteDoneCount = leads.where((l) => l.status == CrmStatus.siteVisitDone).length;
+    final visitScheduledCount = leads.where((l) => l.status == CrmStatus.scheduledVisit).length;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -306,33 +355,63 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
                 cardBg: cardBg,
                 borderColor: borderColor,
               ),
-              _buildMetricCard(
-                title: 'Units Shown',
-                value: '$unitsShownCount',
-                icon: Icons.apartment_rounded,
-                color: const Color(0xFF10B981),
-                isDark: isDark,
-                cardBg: cardBg,
-                borderColor: borderColor,
-              ),
-              _buildMetricCard(
-                title: 'Proposals Active',
-                value: '$proposalsCount',
-                icon: Icons.description_rounded,
-                color: const Color(0xFFF59E0B),
-                isDark: isDark,
-                cardBg: cardBg,
-                borderColor: borderColor,
-              ),
-              _buildMetricCard(
-                title: 'Site Visits Done',
-                value: '$siteDoneCount',
-                icon: Icons.verified_rounded,
-                color: const Color(0xFF8B5CF6),
-                isDark: isDark,
-                cardBg: cardBg,
-                borderColor: borderColor,
-              ),
+              if (isFinserve) ...[
+                _buildMetricCard(
+                  title: 'Visits Scheduled',
+                  value: '$visitScheduledCount',
+                  icon: Icons.calendar_month_rounded,
+                  color: const Color(0xFF10B981),
+                  isDark: isDark,
+                  cardBg: cardBg,
+                  borderColor: borderColor,
+                ),
+                _buildMetricCard(
+                  title: 'Visits Done',
+                  value: '$siteDoneCount',
+                  icon: Icons.verified_rounded,
+                  color: const Color(0xFF8B5CF6),
+                  isDark: isDark,
+                  cardBg: cardBg,
+                  borderColor: borderColor,
+                ),
+                _buildMetricCard(
+                  title: 'Quotations / Sanctions',
+                  value: '$proposalsCount',
+                  icon: Icons.description_rounded,
+                  color: const Color(0xFFF59E0B),
+                  isDark: isDark,
+                  cardBg: cardBg,
+                  borderColor: borderColor,
+                ),
+              ] else ...[
+                _buildMetricCard(
+                  title: 'Units Shown',
+                  value: '$unitsShownCount',
+                  icon: Icons.apartment_rounded,
+                  color: const Color(0xFF10B981),
+                  isDark: isDark,
+                  cardBg: cardBg,
+                  borderColor: borderColor,
+                ),
+                _buildMetricCard(
+                  title: 'Proposals Active',
+                  value: '$proposalsCount',
+                  icon: Icons.description_rounded,
+                  color: const Color(0xFFF59E0B),
+                  isDark: isDark,
+                  cardBg: cardBg,
+                  borderColor: borderColor,
+                ),
+                _buildMetricCard(
+                  title: 'Site Visits Done',
+                  value: '$siteDoneCount',
+                  icon: Icons.verified_rounded,
+                  color: const Color(0xFF8B5CF6),
+                  isDark: isDark,
+                  cardBg: cardBg,
+                  borderColor: borderColor,
+                ),
+              ],
             ],
           ),
           const SizedBox(height: 20),
@@ -386,14 +465,16 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
                           isDense: true,
                           items: const [
                             DropdownMenuItem(value: 'ALL', child: Text('All Statuses')),
-                            DropdownMenuItem(value: 'NOT_STARTED', child: Text('Not Started')),
+                            DropdownMenuItem(value: 'ASSIGNED', child: Text('Assigned')),
+                            DropdownMenuItem(value: 'CNR', child: Text('CNR')),
                             DropdownMenuItem(value: 'FOLLOW_UP', child: Text('Follow Up')),
-                            DropdownMenuItem(value: 'SCHEDULED_VISIT', child: Text('Scheduled Visit')),
-                            DropdownMenuItem(value: 'SITE_VISIT_DONE', child: Text('Site Visit Done')),
+                            DropdownMenuItem(value: 'SCHEDULED_VISIT', child: Text('Visit Scheduled')),
+                            DropdownMenuItem(value: 'SITE_VISIT_DONE', child: Text('Visit Done')),
+                            DropdownMenuItem(value: 'NOT_INTERESTED', child: Text('Not Interested')),
                             DropdownMenuItem(value: 'INTERESTED', child: Text('Interested')),
+                            DropdownMenuItem(value: 'NOT_STARTED', child: Text('Not Started')),
                             DropdownMenuItem(value: 'PROPOSAL_SENT', child: Text('Proposal Sent')),
                             DropdownMenuItem(value: 'BOOKING_CONFIRMED', child: Text('Booking Confirmed')),
-                            DropdownMenuItem(value: 'NOT_INTERESTED', child: Text('Not Interested')),
                           ],
                           onChanged: (val) {
                             if (val != null) setState(() => _statusFilter = val);
@@ -429,14 +510,16 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
                         ),
                         child: DropdownButtonHideUnderline(
                           child: DropdownButton<int?>(
-                            value: _selectedSalesManagerId,
+                            value: salesUsers.any((u) => u.employeeId == _selectedSalesManagerId)
+                                ? _selectedSalesManagerId
+                                : null,
                             isDense: true,
                             hint: const Text('All Sales Managers'),
                             items: [
                               const DropdownMenuItem(value: null, child: Text('All Sales Managers')),
                               ...salesUsers.map((u) => DropdownMenuItem(
                                     value: u.employeeId,
-                                    child: Text(u.fullName),
+                                    child: Text(u.fullName.isNotEmpty ? u.fullName : 'Sales User #${u.employeeId}'),
                                   )),
                             ],
                             onChanged: (id) => setState(() => _selectedSalesManagerId = id),
@@ -560,7 +643,9 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
                         children: [
                           Flexible(
                             child: Text(
-                              lead.name.isNotEmpty ? lead.name : 'Client #${lead.id.substring(0, 6)}',
+                              lead.name.isNotEmpty
+                                  ? lead.name
+                                  : 'Client #${lead.id.length >= 6 ? lead.id.substring(0, 6) : lead.id}',
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
@@ -569,7 +654,7 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
                             ),
                           ),
                           const SizedBox(width: 8),
-                          _buildStatusBadge(lead.status),
+                          _buildStatusDropdown(context, lead, isDark),
                         ],
                       ),
                       const SizedBox(height: 4),
@@ -698,12 +783,12 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
                     _handleQuickStatusChange(context, lead, newStatus);
                   },
                   itemBuilder: (ctx) => [
-                    const PopupMenuItem(value: 'FOLLOW_UP', child: Text('Mark: Follow up')),
-                    const PopupMenuItem(value: 'SCHEDULED_VISIT', child: Text('Schedule A Visit')),
-                    const PopupMenuItem(value: 'SITE_VISIT_DONE', child: Text('Site Visit Done')),
-                    const PopupMenuItem(value: 'INTERESTED', child: Text('Mark: Interested')),
-                    const PopupMenuItem(value: 'PROPOSAL_SENT', child: Text('Mark: Proposal Sent')),
-                    const PopupMenuItem(value: 'NOT_INTERESTED', child: Text('Mark: Not Interested')),
+                    const PopupMenuItem(value: 'CNR', child: Text('CNR (Auto +24h Reschedule)')),
+                    const PopupMenuItem(value: 'FOLLOW_UP', child: Text('Follow up')),
+                    const PopupMenuItem(value: 'SCHEDULED_VISIT', child: Text('Visit Scheduled')),
+                    const PopupMenuItem(value: 'SITE_VISIT_DONE', child: Text('Visit Done (Auto System Time)')),
+                    const PopupMenuItem(value: 'NOT_INTERESTED', child: Text('Not Interested')),
+                    const PopupMenuItem(value: 'INTERESTED', child: Text('Interested')),
                   ],
                 ),
               ],
@@ -712,67 +797,180 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
 
           const Divider(height: 1),
 
-          // Unit Shown Section
+          // Scope-Aware Details Section: Loan Requirement (Finserve) vs Unit Shown (Real Estate)
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             color: isDark ? Colors.black.withValues(alpha: 0.15) : const Color(0xFFF1F5F9).withValues(alpha: 0.6),
-            child: unitShown != null
-                ? Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF10B981).withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Icon(Icons.apartment_rounded, color: Color(0xFF10B981), size: 20),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+            child: (lead.scope == 'NB_FINSERVE' || context.read<CrmRepository>().scope == 'NB_FINSERVE')
+                ? () {
+                    final portalLink = _getPortalLink(lead);
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
                           children: [
-                            Text(
-                              'Unit Shown: ${unitShown['unitNo']} (${unitShown['projectName']} - ${unitShown['towerName']})',
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF2563EB).withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(Icons.account_balance_wallet_rounded, color: Color(0xFF2563EB), size: 20),
                             ),
-                            const SizedBox(height: 2),
-                            Text(
-                              '${unitShown['unitType'] ?? "Flat"} • ${unitShown['carpetArea'] ?? "--"} sq.ft • Floor ${unitShown['floorNo'] ?? "--"} • Value: ₹ ${NumberFormat("#,##,###").format(num.tryParse(unitShown['totalValue']?.toString() ?? '0') ?? 0)}',
-                              style: TextStyle(fontSize: 12, color: textMuted),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Loan Requirement: ${lead.customFields['Loan_Type'] ?? lead.customFields['Type_Of_Loan'] ?? lead.customFields['loan_type'] ?? 'Finance / Loan Inquiry'}',
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Desired Amount: ₹ ${lead.customFields['Amount'] ?? lead.customFields['amount'] ?? lead.customFields['Budget'] ?? '--'} • Location: ${lead.customFields['Location'] ?? lead.customFields['location'] ?? lead.address ?? '--'}',
+                                    style: TextStyle(fontSize: 12, color: textMuted),
+                                  ),
+                                ],
+                              ),
                             ),
                           ],
                         ),
-                      ),
-                      TextButton.icon(
-                        icon: const Icon(Icons.edit_outlined, size: 15),
-                        label: const Text('Change Unit', style: TextStyle(fontSize: 12)),
-                        onPressed: () => _showSelectUnitModal(context, lead),
-                      ),
-                    ],
-                  )
-                : Row(
-                    children: [
-                      Icon(Icons.info_outline, size: 16, color: textMuted),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'No unit recorded as shown to customer yet.',
-                          style: TextStyle(fontSize: 12, color: textMuted, fontStyle: FontStyle.italic),
-                        ),
-                      ),
-                      OutlinedButton.icon(
-                        icon: const Icon(Icons.add_home_work_rounded, size: 15),
-                        label: const Text('Select Unit Shown', style: TextStyle(fontSize: 12)),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          visualDensity: VisualDensity.compact,
-                        ),
-                        onPressed: () => _showSelectUnitModal(context, lead),
-                      ),
-                    ],
-                  ),
+                        if (portalLink != null) ...[
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: isDark ? const Color(0xFF1E293B) : const Color(0xFFEFF6FF),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: const Color(0xFF3B82F6).withValues(alpha: 0.3),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.link_rounded, size: 16, color: Color(0xFF2563EB)),
+                                const SizedBox(width: 6),
+                                const Text(
+                                  'Portal Link: ',
+                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
+                                ),
+                                Expanded(
+                                  child: SelectableText(
+                                    portalLink,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontFamily: 'monospace',
+                                      color: isDark ? Colors.blue.shade200 : const Color(0xFF1D4ED8),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    maxLines: 1,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                InkWell(
+                                  onTap: () => _copyPortalLinkDirect(portalLink),
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF2563EB),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.copy_rounded, size: 12, color: Colors.white),
+                                        SizedBox(width: 4),
+                                        Text('Copy', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                InkWell(
+                                  onTap: () => _shareLeadPortalViaWhatsApp(lead, portalLink),
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF25D366),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.chat_bubble_outline_rounded, size: 12, color: Colors.white),
+                                        SizedBox(width: 4),
+                                        Text('WhatsApp', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    );
+                  }()
+                : (unitShown != null
+                    ? Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(Icons.apartment_rounded, color: Color(0xFF10B981), size: 20),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Unit Shown: ${unitShown['unitNo'] ?? "Unit"} (${unitShown['projectName'] ?? "Project"} - ${unitShown['towerName'] ?? "Tower"})',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${unitShown['unitType'] ?? "Flat"} • ${unitShown['carpetArea'] ?? "--"} sq.ft • Floor ${unitShown['floorNo'] ?? "--"} • Value: ₹ ${NumberFormat("#,##,###").format(num.tryParse(unitShown['totalValue']?.toString() ?? '0') ?? 0)}',
+                                  style: TextStyle(fontSize: 12, color: textMuted),
+                                ),
+                              ],
+                            ),
+                          ),
+                          TextButton.icon(
+                            icon: const Icon(Icons.edit_outlined, size: 15),
+                            label: const Text('Change Unit', style: TextStyle(fontSize: 12)),
+                            onPressed: () => _showSelectUnitModal(context, lead),
+                          ),
+                        ],
+                      )
+                    : Row(
+                        children: [
+                          Icon(Icons.info_outline, size: 16, color: textMuted),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'No unit recorded as shown to customer yet.',
+                              style: TextStyle(fontSize: 12, color: textMuted, fontStyle: FontStyle.italic),
+                            ),
+                          ),
+                          OutlinedButton.icon(
+                            icon: const Icon(Icons.add_home_work_rounded, size: 15),
+                            label: const Text('Select Unit Shown', style: TextStyle(fontSize: 12)),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              visualDensity: VisualDensity.compact,
+                            ),
+                            onPressed: () => _showSelectUnitModal(context, lead),
+                          ),
+                        ],
+                      )),
           ),
 
           const Divider(height: 1),
@@ -818,18 +1016,32 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
                 ),
                 const SizedBox(width: 8),
 
-                // "Generate Quotation" - Primary Action
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.request_quote_rounded, size: 17),
-                  label: const Text('Generate Quotation'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFC5A059),
-                    foregroundColor: Colors.black87,
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    elevation: 0,
+                // Primary Action: Finserve -> "Application & Docs"; Real Estate -> "Generate Quotation"
+                if (lead.scope == 'NB_FINSERVE' || context.read<CrmRepository>().scope == 'NB_FINSERVE') ...[
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.assignment_turned_in_rounded, size: 17),
+                    label: const Text('Application & Docs'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2563EB),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      elevation: 0,
+                    ),
+                    onPressed: () => _showFinserveApplicationModal(context, lead),
                   ),
-                  onPressed: () => _showGenerateQuotationModal(context, lead),
-                ),
+                ] else ...[
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.request_quote_rounded, size: 17),
+                    label: const Text('Generate Quotation'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFC5A059),
+                      foregroundColor: Colors.black87,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      elevation: 0,
+                    ),
+                    onPressed: () => _showGenerateQuotationModal(context, lead),
+                  ),
+                ],
               ],
             ),
           ),
@@ -2489,11 +2701,31 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
   }
 
   // ---------------------------------------------------------------------------
-  // Status Change Helper
+  // Status Change Helper & Status-Specific Modals
   // ---------------------------------------------------------------------------
   void _handleQuickStatusChange(BuildContext context, CrmLead lead, String newStatus) {
+    if (newStatus == 'CNR') {
+      _showCnrModal(context, lead);
+      return;
+    }
     if (newStatus == 'FOLLOW_UP') {
       _showFollowUpSchedulingModal(context, lead);
+      return;
+    }
+    if (newStatus == 'SCHEDULED_VISIT') {
+      _showScheduleVisitModal(context, lead);
+      return;
+    }
+    if (newStatus == 'SITE_VISIT_DONE') {
+      _showVisitDoneModal(context, lead);
+      return;
+    }
+    if (newStatus == 'NOT_INTERESTED') {
+      _showNotInterestedModal(context, lead);
+      return;
+    }
+    if (newStatus == 'INTERESTED') {
+      _showInterestedModal(context, lead);
       return;
     }
 
@@ -2525,18 +2757,1007 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
       'status': newStatus,
       'customFields': updatedCustomFields,
     };
-    if (newStatus == 'SITE_VISIT_DONE') {
-      updatePayload['visitedAt'] = DateTime.now().toIso8601String();
-    }
 
     context.read<CrmLeadsBloc>().add(
           CrmLeadsLeadUpdated(lead.id, updatePayload),
         );
   }
 
+  void _showCnrModal(BuildContext context, CrmLead lead) {
+    final tomorrow = DateTime.now().add(const Duration(hours: 24));
+    DateTime selectedDate = tomorrow;
+    TimeOfDay selectedTime = TimeOfDay.fromDateTime(tomorrow);
+    final remarkController = TextEditingController(text: 'CNR - Call Not Received. Auto rescheduled after 24 hours.');
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            final isDark = Theme.of(ctx).brightness == Brightness.dark;
+            final dateStr = DateFormat('yyyy-MM-dd').format(selectedDate);
+            final timeStr = '${selectedTime.hour.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}';
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.phone_missed_rounded, color: Color(0xFFF59E0B), size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'CNR — Auto Reschedule',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 440,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF59E0B).withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.25)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.info_outline_rounded, size: 16, color: Color(0xFFD97706)),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Call Not Received: Auto-rescheduled for +24 hours.',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: isDark ? Colors.amber.shade200 : const Color(0xFFB45309),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Client: ${lead.name.isNotEmpty ? lead.name : "Unnamed"} • ${lead.phone}',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: isDark ? Colors.white : const Color(0xFF1E293B),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text('Rescheduled Date', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      InkWell(
+                        onTap: () async {
+                          final picked = await showDatePicker(
+                            context: ctx,
+                            initialDate: selectedDate,
+                            firstDate: DateTime.now(),
+                            lastDate: DateTime.now().add(const Duration(days: 365)),
+                          );
+                          if (picked != null) {
+                            setModalState(() => selectedDate = picked);
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: isDark ? Colors.white24 : const Color(0xFFCBD5E1)),
+                            borderRadius: BorderRadius.circular(10),
+                            color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey.withValues(alpha: 0.04),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.calendar_today_rounded, size: 18, color: Color(0xFFF59E0B)),
+                              const SizedBox(width: 10),
+                              Text(
+                                DateFormat('dd MMM yyyy (EEE)').format(selectedDate),
+                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                              ),
+                              const Spacer(),
+                              const Text('Change', style: TextStyle(fontSize: 12, color: Color(0xFFF59E0B), fontWeight: FontWeight.w600)),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      const Text('Rescheduled Time', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      InkWell(
+                        onTap: () async {
+                          final picked = await showTimePicker(
+                            context: ctx,
+                            initialTime: selectedTime,
+                          );
+                          if (picked != null) {
+                            setModalState(() => selectedTime = picked);
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: isDark ? Colors.white24 : const Color(0xFFCBD5E1)),
+                            borderRadius: BorderRadius.circular(10),
+                            color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey.withValues(alpha: 0.04),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.access_time_rounded, size: 18, color: Color(0xFFF59E0B)),
+                              const SizedBox(width: 10),
+                              Text(
+                                selectedTime.format(ctx),
+                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                              ),
+                              const Spacer(),
+                              const Text('Change', style: TextStyle(fontSize: 12, color: Color(0xFFF59E0B), fontWeight: FontWeight.w600)),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      const Text('Remarks (Optional)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: remarkController,
+                        maxLines: 2,
+                        decoration: InputDecoration(
+                          hintText: 'Add remark for this reschedule...',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogCtx),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFF59E0B),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: () {
+                    final remarks = remarkController.text.trim().isNotEmpty
+                        ? remarkController.text.trim()
+                        : 'CNR - Call Not Received. Auto rescheduled after 24 hours.';
+                    Navigator.pop(dialogCtx);
+                    context.read<CrmLeadsBloc>().add(
+                          CrmLeadsLeadStatusUpdated(
+                            lead.id,
+                            status: 'CNR',
+                            scheduledDate: dateStr,
+                            scheduledTime: timeStr,
+                            remarks: remarks,
+                          ),
+                        );
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('CNR: Rescheduled to $dateStr at $timeStr'),
+                        backgroundColor: const Color(0xFFF59E0B),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  },
+                  child: const Text('Confirm Reschedule'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showScheduleVisitModal(BuildContext context, CrmLead lead) {
+    final tomorrow = DateTime.now().add(const Duration(days: 1));
+    DateTime selectedDate = tomorrow;
+    TimeOfDay selectedTime = const TimeOfDay(hour: 11, minute: 0);
+    final remarkController = TextEditingController(text: 'Visit scheduled.');
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            final isDark = Theme.of(ctx).brightness == Brightness.dark;
+            final dateStr = DateFormat('yyyy-MM-dd').format(selectedDate);
+            final timeStr = '${selectedTime.hour.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}';
+            final visitDateTime = DateTime(
+              selectedDate.year,
+              selectedDate.month,
+              selectedDate.day,
+              selectedTime.hour,
+              selectedTime.minute,
+            );
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2563EB).withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.calendar_month_rounded, color: Color(0xFF2563EB), size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Schedule Visit',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 440,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2563EB).withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFF2563EB).withValues(alpha: 0.25)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Client: ${lead.name.isNotEmpty ? lead.name : "Unnamed"} • ${lead.phone}',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: isDark ? Colors.white : const Color(0xFF1E293B),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Select the appointment date & time for the visit.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isDark ? Colors.blue.shade200 : const Color(0xFF1D4ED8),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text('Visit Date', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      InkWell(
+                        onTap: () async {
+                          final picked = await showDatePicker(
+                            context: ctx,
+                            initialDate: selectedDate,
+                            firstDate: DateTime.now(),
+                            lastDate: DateTime.now().add(const Duration(days: 365)),
+                          );
+                          if (picked != null) {
+                            setModalState(() => selectedDate = picked);
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: isDark ? Colors.white24 : const Color(0xFFCBD5E1)),
+                            borderRadius: BorderRadius.circular(10),
+                            color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey.withValues(alpha: 0.04),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.calendar_today_rounded, size: 18, color: Color(0xFF2563EB)),
+                              const SizedBox(width: 10),
+                              Text(
+                                DateFormat('dd MMM yyyy (EEE)').format(selectedDate),
+                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                              ),
+                              const Spacer(),
+                              const Text('Change', style: TextStyle(fontSize: 12, color: Color(0xFF2563EB), fontWeight: FontWeight.w600)),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      const Text('Visit Time', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      InkWell(
+                        onTap: () async {
+                          final picked = await showTimePicker(
+                            context: ctx,
+                            initialTime: selectedTime,
+                          );
+                          if (picked != null) {
+                            setModalState(() => selectedTime = picked);
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: isDark ? Colors.white24 : const Color(0xFFCBD5E1)),
+                            borderRadius: BorderRadius.circular(10),
+                            color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey.withValues(alpha: 0.04),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.access_time_rounded, size: 18, color: Color(0xFF2563EB)),
+                              const SizedBox(width: 10),
+                              Text(
+                                selectedTime.format(ctx),
+                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                              ),
+                              const Spacer(),
+                              const Text('Change', style: TextStyle(fontSize: 12, color: Color(0xFF2563EB), fontWeight: FontWeight.w600)),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      const Text('Remarks (Optional)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: remarkController,
+                        maxLines: 2,
+                        decoration: InputDecoration(
+                          hintText: 'e.g. Branch visit / Site meeting...',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogCtx),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2563EB),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: () {
+                    final remarks = remarkController.text.trim().isNotEmpty
+                        ? remarkController.text.trim()
+                        : 'Visit scheduled.';
+                    Navigator.pop(dialogCtx);
+                    context.read<CrmLeadsBloc>().add(
+                          CrmLeadsLeadStatusUpdated(
+                            lead.id,
+                            status: 'SCHEDULED_VISIT',
+                            scheduledDate: dateStr,
+                            scheduledTime: timeStr,
+                            scheduledVisitAt: visitDateTime.toIso8601String(),
+                            remarks: remarks,
+                          ),
+                        );
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Visit Scheduled for $dateStr at $timeStr'),
+                        backgroundColor: const Color(0xFF2563EB),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  },
+                  child: const Text('Schedule Visit'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showVisitDoneModal(BuildContext context, CrmLead lead) {
+    final now = DateTime.now();
+    final formattedTime = DateFormat('dd MMM yyyy, hh:mm a').format(now);
+    final remarkController = TextEditingController(text: 'Visit completed at $formattedTime');
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        final isDark = Theme.of(dialogCtx).brightness == Brightness.dark;
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.check_circle_rounded, color: Color(0xFF10B981), size: 22),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Mark Visit Done',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 440,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF10B981).withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.25)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.timer_outlined, size: 16, color: Color(0xFF047857)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Auto-fetched System Date & Time',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: isDark ? Colors.green.shade200 : const Color(0xFF047857),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        formattedTime,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF10B981),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Client: ${lead.name.isNotEmpty ? lead.name : "Unnamed"} • ${lead.phone}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark ? Colors.white70 : const Color(0xFF64748B),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                const Text('Remarks (Optional)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: remarkController,
+                  maxLines: 2,
+                  decoration: InputDecoration(
+                    hintText: 'Add remarks about the completed visit...',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF10B981),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () {
+                Navigator.pop(dialogCtx);
+                final remarks = remarkController.text.trim().isNotEmpty
+                    ? remarkController.text.trim()
+                    : 'Visit completed at $formattedTime';
+
+                context.read<CrmLeadsBloc>().add(
+                      CrmLeadsLeadStatusUpdated(
+                        lead.id,
+                        status: 'SITE_VISIT_DONE',
+                        remarks: remarks,
+                      ),
+                    );
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Visit Done recorded at $formattedTime'),
+                    backgroundColor: const Color(0xFF10B981),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              },
+              child: const Text('Confirm Visit Done'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showNotInterestedModal(BuildContext context, CrmLead lead) {
+    final settings = context.read<CrmLeadsBloc>().state.settings;
+    final configuredReasons = settings?.notInterestedReasons ?? [];
+    final reasons = configuredReasons.isNotEmpty
+        ? configuredReasons
+        : [
+            'Budget mismatch',
+            'Found somewhere else',
+            'Locality mismatch',
+            'Rate of Interest high',
+            'Loan eligibility low',
+            'Others',
+          ];
+
+    String selectedReason = reasons.contains('Budget mismatch') ? 'Budget mismatch' : reasons.first;
+    final remarkController = TextEditingController();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            final isOthers = selectedReason.trim().toLowerCase() == 'others';
+            final isDark = Theme.of(ctx).brightness == Brightness.dark;
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEF4444).withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.thumb_down_alt_rounded, color: Color(0xFFEF4444), size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Mark as Not Interested',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 440,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Client: ${lead.name.isNotEmpty ? lead.name : "Unnamed"} • ${lead.phone}',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: isDark ? Colors.white : const Color(0xFF1E293B),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      const Text('Select Reason *', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      DropdownButtonFormField<String>(
+                        value: selectedReason,
+                        decoration: InputDecoration(
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        ),
+                        items: reasons.map((r) {
+                          return DropdownMenuItem<String>(
+                            value: r,
+                            child: Text(r, style: const TextStyle(fontSize: 13)),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setModalState(() => selectedReason = val);
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        isOthers ? 'Remarks (Required for "Others") *' : 'Remarks (Optional)',
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: remarkController,
+                        maxLines: 2,
+                        decoration: InputDecoration(
+                          hintText: isOthers ? 'Specify specific reason...' : 'Add remarks...',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogCtx),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFEF4444),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: () {
+                    final remark = remarkController.text.trim();
+                    if (isOthers && remark.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Please enter remarks for "Others"')),
+                      );
+                      return;
+                    }
+                    Navigator.pop(dialogCtx);
+                    context.read<CrmLeadsBloc>().add(
+                          CrmLeadsLeadStatusUpdated(
+                            lead.id,
+                            status: 'NOT_INTERESTED',
+                            notInterestedReason: selectedReason,
+                            notInterestedRemark: remark.isNotEmpty ? remark : null,
+                          ),
+                        );
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Lead marked as Not Interested'),
+                        backgroundColor: Color(0xFFEF4444),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  },
+                  child: const Text('Confirm Not Interested'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showInterestedModal(BuildContext context, CrmLead lead) {
+    final remarkCtrl = TextEditingController(text: 'Client expressed high interest.');
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        final isDark = Theme.of(dialogCtx).brightness == Brightness.dark;
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.star_rounded, color: Color(0xFF10B981), size: 22),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Mark as Interested',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 440,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF10B981).withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.25)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Client: ${lead.name.isNotEmpty ? lead.name : "Unnamed"} • ${lead.phone}',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: isDark ? Colors.white : const Color(0xFF1E293B),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Lead status will be updated to Interested. Full customer intake details will be configured.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark ? Colors.green.shade200 : const Color(0xFF047857),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                const Text('Notes / Remarks (Optional)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: remarkCtrl,
+                  maxLines: 2,
+                  decoration: InputDecoration(
+                    hintText: 'e.g. Interested in loan closure...',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF10B981),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () {
+                Navigator.pop(dialogCtx);
+                final remarks = remarkCtrl.text.trim();
+                context.read<CrmLeadsBloc>().add(
+                      CrmLeadsLeadStatusUpdated(
+                        lead.id,
+                        status: 'INTERESTED',
+                        remarks: remarks.isNotEmpty ? remarks : null,
+                      ),
+                    );
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Lead marked as Interested'),
+                    backgroundColor: Color(0xFF10B981),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+                final crmRepo = context.read<CrmRepository>();
+                if (lead.scope == 'NB_FINSERVE' || crmRepo.scope == 'NB_FINSERVE') {
+                  Future.delayed(const Duration(milliseconds: 250), () {
+                    if (context.mounted) {
+                      _showFinserveApplicationModal(context, lead);
+                    }
+                  });
+                }
+              },
+              child: const Text('Confirm Interested'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // UI Helper Badges & Metrics
   // ---------------------------------------------------------------------------
+  Widget _buildStatusDropdown(BuildContext context, CrmLead lead, bool isDark) {
+    Color badgeBg;
+    Color badgeFg;
+    Color badgeBorder;
+
+    switch (lead.status) {
+      case CrmStatus.notStarted:
+        badgeBg = isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFF1F5F9);
+        badgeFg = isDark ? const Color(0xFFE2E8F0) : const Color(0xFF475569);
+        badgeBorder = isDark ? Colors.white.withValues(alpha: 0.20) : const Color(0xFFCBD5E1);
+        break;
+      case CrmStatus.assigned:
+        badgeBg = const Color(0xFF6366F1).withValues(alpha: isDark ? 0.22 : 0.12);
+        badgeFg = isDark ? const Color(0xFF818CF8) : const Color(0xFF4F46E5);
+        badgeBorder = const Color(0xFF6366F1).withValues(alpha: isDark ? 0.45 : 0.35);
+        break;
+      case CrmStatus.cnr:
+        badgeBg = const Color(0xFFF59E0B).withValues(alpha: isDark ? 0.22 : 0.12);
+        badgeFg = isDark ? const Color(0xFFFBBF24) : const Color(0xFFD97706);
+        badgeBorder = const Color(0xFFF59E0B).withValues(alpha: isDark ? 0.45 : 0.35);
+        break;
+      case CrmStatus.followUp:
+        badgeBg = const Color(0xFFEA580C).withValues(alpha: isDark ? 0.22 : 0.12);
+        badgeFg = isDark ? const Color(0xFFFB923C) : const Color(0xFFC2410C);
+        badgeBorder = const Color(0xFFEA580C).withValues(alpha: isDark ? 0.45 : 0.35);
+        break;
+      case CrmStatus.scheduledVisit:
+        badgeBg = const Color(0xFF2563EB).withValues(alpha: isDark ? 0.22 : 0.12);
+        badgeFg = isDark ? const Color(0xFF60A5FA) : const Color(0xFF1D4ED8);
+        badgeBorder = const Color(0xFF2563EB).withValues(alpha: isDark ? 0.45 : 0.35);
+        break;
+      case CrmStatus.siteVisitDone:
+        badgeBg = const Color(0xFF10B981).withValues(alpha: isDark ? 0.22 : 0.12);
+        badgeFg = isDark ? const Color(0xFF34D399) : const Color(0xFF047857);
+        badgeBorder = const Color(0xFF10B981).withValues(alpha: isDark ? 0.45 : 0.35);
+        break;
+      case CrmStatus.notInterested:
+      case CrmStatus.rejected:
+        badgeBg = const Color(0xFFEF4444).withValues(alpha: isDark ? 0.22 : 0.12);
+        badgeFg = isDark ? const Color(0xFFF87171) : const Color(0xFFB91C1C);
+        badgeBorder = const Color(0xFFEF4444).withValues(alpha: isDark ? 0.45 : 0.35);
+        break;
+      case CrmStatus.interested:
+      case CrmStatus.bookingConfirmed:
+        badgeBg = const Color(0xFF16A34A).withValues(alpha: isDark ? 0.22 : 0.12);
+        badgeFg = isDark ? const Color(0xFF4ADE80) : const Color(0xFF15803D);
+        badgeBorder = const Color(0xFF16A34A).withValues(alpha: isDark ? 0.45 : 0.35);
+        break;
+      case CrmStatus.proposalSent:
+        badgeBg = const Color(0xFFF59E0B).withValues(alpha: isDark ? 0.22 : 0.12);
+        badgeFg = isDark ? const Color(0xFFFBBF24) : const Color(0xFFD97706);
+        badgeBorder = const Color(0xFFF59E0B).withValues(alpha: isDark ? 0.45 : 0.35);
+        break;
+    }
+
+    final dropdownItems = <CrmStatus>[
+      CrmStatus.cnr,
+      CrmStatus.followUp,
+      CrmStatus.scheduledVisit,
+      CrmStatus.siteVisitDone,
+      CrmStatus.notInterested,
+      CrmStatus.interested,
+    ];
+    if (!dropdownItems.contains(lead.status)) {
+      dropdownItems.insert(0, lead.status);
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: badgeBg,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: badgeBorder, width: 1),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<CrmStatus>(
+          value: lead.status,
+          isDense: true,
+          dropdownColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          icon: Icon(Icons.arrow_drop_down_rounded, size: 18, color: badgeFg),
+          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: badgeFg),
+          selectedItemBuilder: (BuildContext ctx) {
+            return dropdownItems.map((s) {
+              return Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  s.displayName,
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: badgeFg),
+                ),
+              );
+            }).toList();
+          },
+          items: dropdownItems.map((s) {
+            Color dotColor;
+            switch (s) {
+              case CrmStatus.notStarted:
+                dotColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+                break;
+              case CrmStatus.assigned:
+                dotColor = const Color(0xFF6366F1);
+                break;
+              case CrmStatus.cnr:
+                dotColor = const Color(0xFFF59E0B);
+                break;
+              case CrmStatus.followUp:
+                dotColor = isDark ? const Color(0xFFFB923C) : const Color(0xFFEA580C);
+                break;
+              case CrmStatus.scheduledVisit:
+                dotColor = const Color(0xFF2563EB);
+                break;
+              case CrmStatus.siteVisitDone:
+                dotColor = const Color(0xFF10B981);
+                break;
+              case CrmStatus.notInterested:
+              case CrmStatus.rejected:
+                dotColor = const Color(0xFFEF4444);
+                break;
+              case CrmStatus.interested:
+              case CrmStatus.bookingConfirmed:
+                dotColor = isDark ? const Color(0xFF4ADE80) : const Color(0xFF16A34A);
+                break;
+              case CrmStatus.proposalSent:
+                dotColor = const Color(0xFFF59E0B);
+                break;
+            }
+            return DropdownMenuItem<CrmStatus>(
+              value: s,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    s.displayName,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white : const Color(0xFF1E293B),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+          onChanged: (newStatus) {
+            if (newStatus == null || newStatus == lead.status) return;
+            _handleQuickStatusChange(context, lead, newStatus.backendValue);
+          },
+        ),
+      ),
+    );
+  }
+
   Widget _buildMetricCard({
     required String title,
     required String value,
@@ -2593,57 +3814,6 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
     );
   }
 
-  Widget _buildStatusBadge(CrmStatus status) {
-    Color bg;
-    Color fg;
-
-    switch (status) {
-      case CrmStatus.proposalSent:
-        bg = const Color(0xFFF59E0B).withValues(alpha: 0.15);
-        fg = const Color(0xFFB45309);
-        break;
-      case CrmStatus.bookingConfirmed:
-        bg = const Color(0xFF16A34A).withValues(alpha: 0.15);
-        fg = const Color(0xFF16A34A);
-        break;
-      case CrmStatus.siteVisitDone:
-        bg = const Color(0xFF8B5CF6).withValues(alpha: 0.15);
-        fg = const Color(0xFF6D28D9);
-        break;
-      case CrmStatus.scheduledVisit:
-        bg = const Color(0xFF3B82F6).withValues(alpha: 0.15);
-        fg = const Color(0xFF1D4ED8);
-        break;
-      case CrmStatus.followUp:
-        bg = const Color(0xFFEA580C).withValues(alpha: 0.15);
-        fg = const Color(0xFFC2410C);
-        break;
-      case CrmStatus.interested:
-        bg = const Color(0xFF10B981).withValues(alpha: 0.15);
-        fg = const Color(0xFF047857);
-        break;
-      case CrmStatus.notInterested:
-      case CrmStatus.rejected:
-        bg = Colors.red.withValues(alpha: 0.12);
-        fg = Colors.red.shade700;
-        break;
-      default:
-        bg = Colors.grey.withValues(alpha: 0.15);
-        fg = Colors.grey.shade700;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        status.displayName,
-        style: TextStyle(color: fg, fontWeight: FontWeight.bold, fontSize: 11),
-      ),
-    );
-  }
 
   Widget _buildLogIcon(String type) {
     IconData icon;
@@ -2699,6 +3869,334 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
       title,
       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF2563EB)),
     );
+  }
+
+  Widget _buildFinserveApplicationsTab(
+    BuildContext context,
+    List<CrmLead> allLeads,
+    bool isDark,
+    Color cardBg,
+    Color borderColor,
+    Color textMuted,
+    Color primaryColor,
+    Color goldColor,
+  ) {
+    final appLeads = allLeads.where((l) {
+      final isInterested = l.status == CrmStatus.interested || l.status.backendValue == 'INTERESTED';
+      final hasAppDetails = l.customFields['applicationDetails'] != null;
+      final hasPortalToken = l.customFields['portalToken'] != null;
+      return isInterested || hasAppDetails || hasPortalToken;
+    }).toList();
+
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: primaryColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(Icons.assignment_turned_in_rounded, color: primaryColor, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Finserve Loan Applications & Client Intake',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : const Color(0xFF1E293B),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Review collected personal/company/reference details, track required documents, and dispatch Client Portal links.',
+                    style: TextStyle(fontSize: 13, color: textMuted),
+                  ),
+                ],
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+                ),
+                child: Text(
+                  '${appLeads.length} Applications Active',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF16A34A)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: appLeads.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.assignment_outlined, size: 56, color: textMuted.withValues(alpha: 0.5)),
+                        const SizedBox(height: 12),
+                        Text(
+                          'No active loan applications yet',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textMuted),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Mark an assigned lead as "Interested" to start the loan intake & document process.',
+                          style: TextStyle(fontSize: 13, color: textMuted),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.separated(
+                    itemCount: appLeads.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    itemBuilder: (context, index) {
+                      final lead = appLeads[index];
+                      final loanType = lead.customFields['Loan_Type'] ?? lead.customFields['loan_type'] ?? 'Home Loan';
+                      final docs = List<dynamic>.from(lead.customFields['documents'] ?? []);
+                      final portalLink = _getPortalLink(lead);
+                      final requiredDocs = CrmSettings.defaultLoanTypeDocsMap[loanType] ?? CrmSettings.defaultLoanTypeDocsMap['Home Loan'] ?? [];
+
+                      return Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: cardBg,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: borderColor),
+                        ),
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 22,
+                              backgroundColor: primaryColor.withValues(alpha: 0.15),
+                              child: Text(
+                                lead.name.isNotEmpty ? lead.name[0].toUpperCase() : 'C',
+                                style: TextStyle(fontWeight: FontWeight.bold, color: primaryColor, fontSize: 16),
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Text(
+                                        lead.name.isNotEmpty ? lead.name : 'Unnamed Client',
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          lead.status.displayName,
+                                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF10B981)),
+                                        ),
+                                      ),
+                                      if (portalLink != null) ...[
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF2563EB).withValues(alpha: 0.15),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: const Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(Icons.link_rounded, size: 12, color: Color(0xFF2563EB)),
+                                              SizedBox(width: 4),
+                                              Text(
+                                                'Portal Link Active',
+                                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        InkWell(
+                                          onTap: () => _copyPortalLinkDirect(portalLink),
+                                          borderRadius: BorderRadius.circular(4),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFF2563EB).withValues(alpha: 0.1),
+                                              borderRadius: BorderRadius.circular(4),
+                                              border: Border.all(color: const Color(0xFF2563EB).withValues(alpha: 0.3)),
+                                            ),
+                                            child: const Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(Icons.copy_rounded, size: 11, color: Color(0xFF2563EB)),
+                                                SizedBox(width: 3),
+                                                Text('Copy', style: TextStyle(color: Color(0xFF2563EB), fontSize: 10, fontWeight: FontWeight.bold)),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        InkWell(
+                                          onTap: () => _shareLeadPortalViaWhatsApp(lead, portalLink),
+                                          borderRadius: BorderRadius.circular(4),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFF25D366).withValues(alpha: 0.15),
+                                              borderRadius: BorderRadius.circular(4),
+                                              border: Border.all(color: const Color(0xFF25D366).withValues(alpha: 0.4)),
+                                            ),
+                                            child: const Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(Icons.chat_bubble_outline_rounded, size: 11, color: Color(0xFF16A34A)),
+                                                SizedBox(width: 3),
+                                                Text('WhatsApp', style: TextStyle(color: Color(0xFF16A34A), fontSize: 10, fontWeight: FontWeight.bold)),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '📞 ${lead.phone} • ✉️ ${lead.email ?? "No Email"} • Product: $loanType',
+                                    style: TextStyle(fontSize: 13, color: textMuted),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Row(
+                                    children: [
+                                      Text(
+                                        'Documents: ${docs.length} of ${requiredDocs.length} Uploaded',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: docs.length >= requiredDocs.length && requiredDocs.isNotEmpty
+                                              ? const Color(0xFF10B981)
+                                              : (docs.isEmpty ? Colors.amber.shade800 : primaryColor),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      SizedBox(
+                                        width: 100,
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(4),
+                                          child: LinearProgressIndicator(
+                                            value: requiredDocs.isEmpty ? 0 : (docs.length / requiredDocs.length).clamp(0.0, 1.0),
+                                            backgroundColor: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+                                            valueColor: AlwaysStoppedAnimation(
+                                              docs.length >= requiredDocs.length && requiredDocs.isNotEmpty
+                                                  ? const Color(0xFF10B981)
+                                                  : primaryColor,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            ElevatedButton.icon(
+                              icon: const Icon(Icons.assignment_turned_in_rounded, size: 16),
+                              label: const Text('Open Application & Docs'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: primaryColor,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                              onPressed: () => _showFinserveApplicationModal(context, lead),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showFinserveApplicationModal(BuildContext context, CrmLead lead) {
+    final leadsBloc = context.read<CrmLeadsBloc>();
+    final crmRepo = context.read<CrmRepository>();
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogCtx) => BlocProvider<CrmLeadsBloc>.value(
+        value: leadsBloc,
+        child: _FinserveApplicationDialog(
+          lead: lead,
+          crmRepository: crmRepo,
+          leadsBloc: leadsBloc,
+        ),
+      ),
+    );
+  }
+
+  String? _getPortalLink(CrmLead lead) {
+    final link = lead.customFields['portalLink']?.toString();
+    if (link != null && link.isNotEmpty) return link;
+    final token = lead.customFields['portalToken']?.toString();
+    if (token != null && token.isNotEmpty) {
+      return 'http://localhost:5000/client-portal?token=$token';
+    }
+    return null;
+  }
+
+  void _copyPortalLinkDirect(String link) {
+    Clipboard.setData(ClipboardData(text: link));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Client Portal link copied to clipboard!'),
+        backgroundColor: Color(0xFF2563EB),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _shareLeadPortalViaWhatsApp(CrmLead lead, String link) async {
+    final cleanPhone = lead.phone.replaceAll(RegExp(r'[^0-9]'), '');
+    final pPhone = cleanPhone.length == 10 ? '91$cleanPhone' : cleanPhone;
+    final clientName = lead.name.isNotEmpty ? lead.name : 'Customer';
+    final loanType = lead.customFields['Loan_Type']?.toString() ??
+        lead.customFields['loan_type']?.toString() ??
+        'Loan';
+    final message = 'Hello $clientName,\n\n'
+        'Greetings from NB Finserve!\n\n'
+        'Please verify and submit your documents for your $loanType application using our secure Client Portal link:\n'
+        '$link\n\n'
+        '🔐 To access, enter your registered mobile number (${lead.phone}) and verify with the 6-digit OTP sent to your email.\n\n'
+        'Thank you,\nNB Finserve Team';
+
+    final uri = Uri.parse('https://wa.me/$pPhone?text=${Uri.encodeComponent(message)}');
+    try {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not open WhatsApp: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 }
 
@@ -4191,3 +5689,1158 @@ class _ErpSelectUnitDialogState extends ConsumerState<_ErpSelectUnitDialog> {
     );
   }
 }
+
+// =============================================================================
+// Finserve Loan Application & Documents Modal Dialog
+// =============================================================================
+class _FinserveApplicationDialog extends StatefulWidget {
+  final CrmLead lead;
+  final CrmRepository? crmRepository;
+  final CrmLeadsBloc? leadsBloc;
+
+  const _FinserveApplicationDialog({
+    required this.lead,
+    this.crmRepository,
+    this.leadsBloc,
+  });
+
+  @override
+  State<_FinserveApplicationDialog> createState() => _FinserveApplicationDialogState();
+}
+
+class _FinserveApplicationDialogState extends State<_FinserveApplicationDialog>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  late CrmLead _currentLead;
+
+  CrmRepository get _repo => widget.crmRepository ?? context.read<CrmRepository>();
+
+  void _refreshLeads() {
+    if (widget.leadsBloc != null) {
+      widget.leadsBloc!.add(const CrmLeadsRefreshRequested());
+      return;
+    }
+    try {
+      context.read<CrmLeadsBloc>().add(const CrmLeadsRefreshRequested());
+    } catch (_) {}
+  }
+
+  // Personal Controllers
+  late TextEditingController _mobileCtrl;
+  late TextEditingController _alternateNoCtrl;
+  late TextEditingController _personalEmailCtrl;
+  String _maritalStatus = 'Married';
+  late TextEditingController _motherNameCtrl;
+  late TextEditingController _spouseNameCtrl;
+  String _education = 'Graduate';
+  late TextEditingController _currentAddressCtrl;
+  String _currentAddressType = 'Owned';
+  late TextEditingController _permanentAddressCtrl;
+  String _permanentAddressType = 'Owned';
+  late TextEditingController _requiredLoanAmountCtrl;
+  late TextEditingController _loanPurposeCtrl;
+
+  // Company Controllers
+  late TextEditingController _companyNameCtrl;
+  late TextEditingController _companyAddressCtrl;
+  late TextEditingController _currentWorkExpCtrl;
+  late TextEditingController _totalWorkExpCtrl;
+  late TextEditingController _officialEmailCtrl;
+  late TextEditingController _officeLandlineNoCtrl;
+
+  // Reference Controllers
+  late TextEditingController _ref1NameCtrl;
+  late TextEditingController _ref1MobileCtrl;
+  late TextEditingController _ref1RelationCtrl;
+  late TextEditingController _ref1AddressCtrl;
+
+  late TextEditingController _ref2NameCtrl;
+  late TextEditingController _ref2MobileCtrl;
+  late TextEditingController _ref2RelationCtrl;
+  late TextEditingController _ref2AddressCtrl;
+
+  String _selectedLoanType = 'Home Loan';
+  String? _portalLink;
+  bool _isGeneratingLink = false;
+  bool _isSavingDetails = false;
+  String? _uploadingDocId;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    _currentLead = widget.lead;
+
+    final appDetails = Map<String, dynamic>.from(_currentLead.customFields['applicationDetails'] ?? {});
+
+    _mobileCtrl = TextEditingController(text: appDetails['mobileNo']?.toString() ?? _currentLead.phone);
+    _alternateNoCtrl = TextEditingController(text: appDetails['alternateNo']?.toString() ?? '');
+    _personalEmailCtrl = TextEditingController(text: appDetails['personalEmail']?.toString() ?? _currentLead.email ?? '');
+    _maritalStatus = appDetails['maritalStatus']?.toString() ?? 'Married';
+    _motherNameCtrl = TextEditingController(text: appDetails['motherName']?.toString() ?? '');
+    _spouseNameCtrl = TextEditingController(text: appDetails['spouseName']?.toString() ?? '');
+    _education = appDetails['education']?.toString() ?? 'Graduate';
+    _currentAddressCtrl = TextEditingController(text: appDetails['currentAddress']?.toString() ?? _currentLead.address ?? '');
+    _currentAddressType = appDetails['currentAddressType']?.toString() ?? 'Owned';
+    _permanentAddressCtrl = TextEditingController(text: appDetails['permanentAddress']?.toString() ?? _currentLead.address ?? '');
+    _permanentAddressType = appDetails['permanentAddressType']?.toString() ?? 'Owned';
+    _requiredLoanAmountCtrl = TextEditingController(
+      text: appDetails['requiredLoanAmount']?.toString() ?? _currentLead.customFields['Amount']?.toString() ?? _currentLead.customFields['amount']?.toString() ?? _currentLead.customFields['Budget']?.toString() ?? '',
+    );
+    _loanPurposeCtrl = TextEditingController(
+      text: appDetails['loanPurpose']?.toString() ?? _currentLead.customFields['Loan_Type']?.toString() ?? _currentLead.customFields['loan_type']?.toString() ?? 'Home Loan',
+    );
+
+    // Company
+    _companyNameCtrl = TextEditingController(text: appDetails['companyName']?.toString() ?? _currentLead.customFields['Company']?.toString() ?? '');
+    _companyAddressCtrl = TextEditingController(text: appDetails['companyAddress']?.toString() ?? '');
+    _currentWorkExpCtrl = TextEditingController(text: appDetails['currentWorkExp']?.toString() ?? '');
+    _totalWorkExpCtrl = TextEditingController(text: appDetails['totalWorkExp']?.toString() ?? '');
+    _officialEmailCtrl = TextEditingController(text: appDetails['officialEmail']?.toString() ?? '');
+    _officeLandlineNoCtrl = TextEditingController(text: appDetails['officeLandlineNo']?.toString() ?? '');
+
+    // Reference
+    _ref1NameCtrl = TextEditingController(text: appDetails['ref1Name']?.toString() ?? '');
+    _ref1MobileCtrl = TextEditingController(text: appDetails['ref1Mobile']?.toString() ?? '');
+    _ref1RelationCtrl = TextEditingController(text: appDetails['ref1Relation']?.toString() ?? '');
+    _ref1AddressCtrl = TextEditingController(text: appDetails['ref1Address']?.toString() ?? '');
+
+    _ref2NameCtrl = TextEditingController(text: appDetails['ref2Name']?.toString() ?? '');
+    _ref2MobileCtrl = TextEditingController(text: appDetails['ref2Mobile']?.toString() ?? '');
+    _ref2RelationCtrl = TextEditingController(text: appDetails['ref2Relation']?.toString() ?? '');
+    _ref2AddressCtrl = TextEditingController(text: appDetails['ref2Address']?.toString() ?? '');
+
+    final leadLoanType = _currentLead.customFields['Loan_Type']?.toString() ?? _currentLead.customFields['loan_type']?.toString() ?? 'Home Loan';
+    if (CrmSettings.defaultLoanTypeDocsMap.containsKey(leadLoanType)) {
+      _selectedLoanType = leadLoanType;
+    }
+
+    _portalLink = _currentLead.customFields['portalLink']?.toString();
+    if (_portalLink == null || _portalLink!.isEmpty) {
+      final token = _currentLead.customFields['portalToken']?.toString();
+      if (token != null && token.isNotEmpty) {
+        _portalLink = 'http://localhost:5000/client-portal?token=$token';
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    _mobileCtrl.dispose();
+    _alternateNoCtrl.dispose();
+    _personalEmailCtrl.dispose();
+    _motherNameCtrl.dispose();
+    _spouseNameCtrl.dispose();
+    _currentAddressCtrl.dispose();
+    _permanentAddressCtrl.dispose();
+    _requiredLoanAmountCtrl.dispose();
+    _loanPurposeCtrl.dispose();
+    _companyNameCtrl.dispose();
+    _companyAddressCtrl.dispose();
+    _currentWorkExpCtrl.dispose();
+    _totalWorkExpCtrl.dispose();
+    _officialEmailCtrl.dispose();
+    _officeLandlineNoCtrl.dispose();
+    _ref1NameCtrl.dispose();
+    _ref1MobileCtrl.dispose();
+    _ref1RelationCtrl.dispose();
+    _ref1AddressCtrl.dispose();
+    _ref2NameCtrl.dispose();
+    _ref2MobileCtrl.dispose();
+    _ref2RelationCtrl.dispose();
+    _ref2AddressCtrl.dispose();
+    super.dispose();
+  }
+
+  Map<String, dynamic> _collectFormData() {
+    return {
+      'mobileNo': _mobileCtrl.text.trim(),
+      'alternateNo': _alternateNoCtrl.text.trim(),
+      'personalEmail': _personalEmailCtrl.text.trim(),
+      'maritalStatus': _maritalStatus,
+      'motherName': _motherNameCtrl.text.trim(),
+      'spouseName': _spouseNameCtrl.text.trim(),
+      'education': _education,
+      'currentAddress': _currentAddressCtrl.text.trim(),
+      'currentAddressType': _currentAddressType,
+      'permanentAddress': _permanentAddressCtrl.text.trim(),
+      'permanentAddressType': _permanentAddressType,
+      'requiredLoanAmount': _requiredLoanAmountCtrl.text.trim(),
+      'loanPurpose': _loanPurposeCtrl.text.trim(),
+      'companyName': _companyNameCtrl.text.trim(),
+      'companyAddress': _companyAddressCtrl.text.trim(),
+      'currentWorkExp': _currentWorkExpCtrl.text.trim(),
+      'totalWorkExp': _totalWorkExpCtrl.text.trim(),
+      'officialEmail': _officialEmailCtrl.text.trim(),
+      'officeLandlineNo': _officeLandlineNoCtrl.text.trim(),
+      'ref1Name': _ref1NameCtrl.text.trim(),
+      'ref1Mobile': _ref1MobileCtrl.text.trim(),
+      'ref1Relation': _ref1RelationCtrl.text.trim(),
+      'ref1Address': _ref1AddressCtrl.text.trim(),
+      'ref2Name': _ref2NameCtrl.text.trim(),
+      'ref2Mobile': _ref2MobileCtrl.text.trim(),
+      'ref2Relation': _ref2RelationCtrl.text.trim(),
+      'ref2Address': _ref2AddressCtrl.text.trim(),
+    };
+  }
+
+  Future<void> _saveApplicationDetails() async {
+    setState(() => _isSavingDetails = true);
+    try {
+      final data = _collectFormData();
+      final res = await _repo.updateLeadApplicationDetails(
+        _currentLead.id,
+        {
+          'applicationDetails': data,
+          'loanType': _selectedLoanType,
+        },
+      );
+      if (!mounted) return;
+      setState(() {
+        _isSavingDetails = false;
+        if (res['lead'] != null) {
+          _currentLead = CrmLead.fromJson(Map<String, dynamic>.from(res['lead']));
+        }
+      });
+      _refreshLeads();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Application details saved successfully!'),
+          backgroundColor: Color(0xFF10B981),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isSavingDetails = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to save details: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  Future<void> _generatePortalLink() async {
+    setState(() => _isGeneratingLink = true);
+    try {
+      final res = await _repo.generateClientPortalLink(_currentLead.id);
+      if (!mounted) return;
+      final portalUrl = res['portalUrl']?.toString() ?? res['link']?.toString();
+      setState(() {
+        _isGeneratingLink = false;
+        _portalLink = portalUrl;
+        if (res['lead'] != null) {
+          _currentLead = CrmLead.fromJson(Map<String, dynamic>.from(res['lead']));
+        }
+      });
+      _refreshLeads();
+      if (portalUrl != null && portalUrl.isNotEmpty) {
+        _showGeneratedLinkDialog(portalUrl);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isGeneratingLink = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to generate portal link: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  void _showGeneratedLinkDialog(String url) {
+    showDialog(
+      context: context,
+      builder: (dlgCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        titlePadding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+        contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.link_rounded, color: Color(0xFF10B981), size: 24),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Client Portal Link Ready!',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 520,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Share this unique, secure upload link with ${_currentLead.name.isNotEmpty ? _currentLead.name : "the client"}. They can upload their documents directly after entering their registered phone number and OTP.',
+                style: const TextStyle(fontSize: 13, height: 1.4),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFCBD5E1)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Unique Client Portal URL:',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF475569)),
+                    ),
+                    const SizedBox(height: 6),
+                    SelectableText(
+                      url,
+                      style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF1E293B),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.copy_rounded, size: 16),
+                      label: const Text('Copy Link'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: url));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Portal link copied to clipboard!'),
+                            backgroundColor: Color(0xFF2563EB),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.chat_bubble_outline_rounded, size: 16),
+                      label: const Text('Send WhatsApp'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF25D366),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      onPressed: () {
+                        Navigator.pop(dlgCtx);
+                        _shareViaWhatsApp();
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF3C7).withValues(alpha: 0.6),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.3)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.info_outline, size: 16, color: Color(0xFFB45309)),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'This link is permanently saved for this client. You can also copy or reshare it directly from the Customer Card or the Applications tab at any time.',
+                        style: TextStyle(fontSize: 11, color: Color(0xFF92400E)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dlgCtx),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _copyPortalLink() {
+    if (_portalLink == null) return;
+    Clipboard.setData(ClipboardData(text: _portalLink!));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Client Portal link copied to clipboard!'),
+        backgroundColor: Color(0xFF2563EB),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _shareViaWhatsApp() async {
+    if (_portalLink == null) return;
+    final cleanPhone = _currentLead.phone.replaceAll(RegExp(r'[^0-9]'), '');
+    final pPhone = cleanPhone.length == 10 ? '91$cleanPhone' : cleanPhone;
+    final clientName = _currentLead.name.isNotEmpty ? _currentLead.name : 'Customer';
+    final message = 'Hello $clientName,\n\n'
+        'Greetings from NB Finserve!\n\n'
+        'Please verify and submit your documents for your $_selectedLoanType application using our secure Client Portal link:\n'
+        '$_portalLink\n\n'
+        '🔐 To access, enter your registered mobile number (${_currentLead.phone}) and verify with the 6-digit OTP sent to your email.\n\n'
+        'Thank you,\nNB Finserve Team';
+
+    final uri = Uri.parse('https://wa.me/$pPhone?text=${Uri.encodeComponent(message)}');
+    try {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not open WhatsApp: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _pickAndUploadDoc(String docTypeId, String docName) async {
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
+        withData: true,
+      );
+      if (result == null || result.files.isEmpty) return;
+
+      final pickedFile = result.files.first;
+      final bytes = pickedFile.bytes;
+      if (bytes == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not read file data. Please try another file.')),
+          );
+        }
+        return;
+      }
+
+      setState(() => _uploadingDocId = docTypeId);
+
+      if (!mounted) return;
+      final res = await _repo.uploadLeadDoc(
+        _currentLead.id,
+        docTypeId: docTypeId,
+        docName: docName,
+        bytes: bytes,
+        filename: pickedFile.name,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _uploadingDocId = null;
+        if (res['lead'] != null) {
+          _currentLead = CrmLead.fromJson(Map<String, dynamic>.from(res['lead']));
+        }
+      });
+      _refreshLeads();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('$docName uploaded successfully!'),
+          backgroundColor: const Color(0xFF10B981),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _uploadingDocId = null);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to upload document: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final cardBg = isDark ? const Color(0xFF1C1916) : Colors.white;
+    final borderColor = isDark ? const Color(0xFFC5A059).withValues(alpha: 0.22) : const Color(0xFFE2E8F0);
+    final textMuted = isDark ? Colors.white.withValues(alpha: 0.6) : const Color(0xFF64748B);
+    const primaryColor = Color(0xFF2563EB);
+    const goldColor = Color(0xFFC5A059);
+
+    final size = MediaQuery.of(context).size;
+    final dialogWidth = (size.width * 0.88).clamp(600.0, 940.0);
+    final dialogHeight = (size.height * 0.88).clamp(500.0, 780.0);
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      backgroundColor: cardBg,
+      child: SizedBox(
+        width: dialogWidth,
+        height: dialogHeight,
+        child: Column(
+          children: [
+            // Header Strip
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF24201D) : const Color(0xFFF8FAFC),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                border: Border(bottom: BorderSide(color: borderColor)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: primaryColor.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.assignment_turned_in_rounded, color: primaryColor, size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              'Loan Application & Document Intake',
+                              style: TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.bold,
+                                color: isDark ? Colors.white : const Color(0xFF1E293B),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Text(
+                                'INTERESTED',
+                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF10B981)),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Client: ${_currentLead.name.isNotEmpty ? _currentLead.name : "Unnamed"} • 📞 ${_currentLead.phone} • ✉️ ${_currentLead.email ?? "No Email"}',
+                          style: TextStyle(fontSize: 12, color: textMuted),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    tooltip: 'Close',
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+
+            // Client Portal Link Action Banner
+            _buildPortalLinkBanner(isDark, borderColor, textMuted, goldColor),
+
+            // Tab Bar
+            Container(
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF221F1B) : const Color(0xFFF1F5F9),
+                border: Border(bottom: BorderSide(color: borderColor)),
+              ),
+              child: TabBar(
+                controller: _tabController,
+                indicatorColor: primaryColor,
+                labelColor: primaryColor,
+                unselectedLabelColor: textMuted,
+                tabs: const [
+                  Tab(
+                    icon: Icon(Icons.description_outlined, size: 18),
+                    text: '📝 Application Details (24 Fields)',
+                  ),
+                  Tab(
+                    icon: Icon(Icons.folder_shared_outlined, size: 18),
+                    text: '📁 Document Checklist & Portal',
+                  ),
+                ],
+              ),
+            ),
+
+            // Tab Content
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildApplicationDetailsTab(isDark, borderColor, textMuted, primaryColor),
+                  _buildDocumentChecklistTab(isDark, borderColor, textMuted, primaryColor),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPortalLinkBanner(bool isDark, Color borderColor, Color textMuted, Color goldColor) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF29241F) : const Color(0xFFFEF9C3).withValues(alpha: 0.5),
+        border: Border(bottom: BorderSide(color: borderColor)),
+      ),
+      child: _portalLink != null
+          ? Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFD97706).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Icon(Icons.link_rounded, color: Color(0xFFD97706), size: 18),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Secure Client Document Portal Link',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFB45309)),
+                      ),
+                      const SizedBox(height: 2),
+                      SelectableText(
+                        _portalLink!,
+                        style: const TextStyle(fontSize: 12, fontFamily: 'monospace', fontWeight: FontWeight.w600),
+                        maxLines: 1,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.copy_rounded, size: 15),
+                  label: const Text('Copy Link', style: TextStyle(fontSize: 12)),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  onPressed: _copyPortalLink,
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.chat_bubble_outline_rounded, size: 15),
+                  label: const Text('Send WhatsApp', style: TextStyle(fontSize: 12)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF25D366),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  onPressed: _shareViaWhatsApp,
+                ),
+                const SizedBox(width: 6),
+                IconButton(
+                  tooltip: 'Regenerate link',
+                  icon: _isGeneratingLink
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.refresh_rounded, size: 18),
+                  onPressed: _isGeneratingLink ? null : _generatePortalLink,
+                ),
+              ],
+            )
+          : Row(
+              children: [
+                const Icon(Icons.info_outline, size: 18, color: Color(0xFFB45309)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Generate a secure, single-use client portal link to let the client upload documents directly with email OTP verification.',
+                    style: TextStyle(fontSize: 12, color: textMuted),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                ElevatedButton.icon(
+                  icon: _isGeneratingLink
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.share_rounded, size: 16),
+                  label: Text(_isGeneratingLink ? 'Generating...' : 'Generate Client Portal Link'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2563EB),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  ),
+                  onPressed: _isGeneratingLink ? null : _generatePortalLink,
+                ),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildApplicationDetailsTab(bool isDark, Color borderColor, Color textMuted, Color primaryColor) {
+    return Column(
+      children: [
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Section 1: Personal Details
+                _buildSectionCard(
+                  title: '🎗️ PERSONAL DETAILS 🎗️',
+                  isDark: isDark,
+                  borderColor: borderColor,
+                  children: [
+                    _buildFieldRow([
+                      _buildTextField('MOBILE NO *', _mobileCtrl, hint: 'e.g. 9876543210'),
+                      _buildTextField('ALTERNATE NO', _alternateNoCtrl, hint: 'e.g. 9123456789'),
+                      _buildTextField('PERSONAL MAIL ID *', _personalEmailCtrl, hint: 'e.g. client@gmail.com'),
+                    ]),
+                    const SizedBox(height: 12),
+                    _buildFieldRow([
+                      _buildDropdownField('MARITAL STATUS *', _maritalStatus, ['Single', 'Married', 'Divorced', 'Widowed'], (val) {
+                        if (val != null) setState(() => _maritalStatus = val);
+                      }),
+                      _buildTextField('MOTHER NAME *', _motherNameCtrl, hint: "Mother's Full Name"),
+                      _buildTextField('SPOUSE NAME', _spouseNameCtrl, hint: "Spouse's Full Name (if married)"),
+                    ]),
+                    const SizedBox(height: 12),
+                    _buildFieldRow([
+                      _buildDropdownField('EDUCATION *', _education, ['High School', 'Graduate', 'Post Graduate', 'Doctorate', 'Professional', 'Other'], (val) {
+                        if (val != null) setState(() => _education = val);
+                      }),
+                      _buildDropdownField('CURRENT RESIDENCE (RENT/OWNED) *', _currentAddressType, ['Owned', 'Rented', 'Parental', 'Company Provided'], (val) {
+                        if (val != null) setState(() => _currentAddressType = val);
+                      }),
+                      _buildDropdownField('PERMANENT RESIDENCE (RENT/OWNED) *', _permanentAddressType, ['Owned', 'Rented', 'Parental'], (val) {
+                        if (val != null) setState(() => _permanentAddressType = val);
+                      }),
+                    ]),
+                    const SizedBox(height: 12),
+                    _buildFieldRow([
+                      _buildTextField('CURRENT ADDRESS *', _currentAddressCtrl, maxLines: 2, hint: 'Flat / Street / City / Pincode'),
+                      _buildTextField('PERMANENT ADDRESS *', _permanentAddressCtrl, maxLines: 2, hint: 'Permanent Native Address'),
+                    ]),
+                    const SizedBox(height: 12),
+                    _buildFieldRow([
+                      _buildTextField('REQUIRE LOAN AMOUNT *', _requiredLoanAmountCtrl, hint: 'e.g. 4500000'),
+                      _buildTextField('LOAN PURPOSE *', _loanPurposeCtrl, hint: 'e.g. Home Purchase, Business Expansion'),
+                    ]),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // Section 2: Company Details
+                _buildSectionCard(
+                  title: '🎗️ COMPANY DETAILS 🎗️',
+                  isDark: isDark,
+                  borderColor: borderColor,
+                  children: [
+                    _buildFieldRow([
+                      _buildTextField('COMPANY NAME *', _companyNameCtrl, hint: 'e.g. TCS, Infosys, Self Employed'),
+                      _buildTextField('CURRENT WORK EXP *', _currentWorkExpCtrl, hint: 'e.g. 3 Years'),
+                      _buildTextField('TOTAL WORK EXP *', _totalWorkExpCtrl, hint: 'e.g. 7 Years'),
+                    ]),
+                    const SizedBox(height: 12),
+                    _buildFieldRow([
+                      _buildTextField('COMPANY ADDRESS *', _companyAddressCtrl, maxLines: 2, hint: 'Office Address & City'),
+                      _buildTextField('OFFICIAL MAIL ID', _officialEmailCtrl, hint: 'e.g. emp@company.com'),
+                      _buildTextField('OFFICE LANDLINE NO', _officeLandlineNoCtrl, hint: 'e.g. 022-28492040'),
+                    ]),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // Section 3: Reference Details
+                _buildSectionCard(
+                  title: '🎗️ REFERENCE DETAILS 🎗️',
+                  isDark: isDark,
+                  borderColor: borderColor,
+                  children: [
+                    const Text('Reference 1 (Personal / Professional)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF2563EB))),
+                    const SizedBox(height: 8),
+                    _buildFieldRow([
+                      _buildTextField('1. NAME *', _ref1NameCtrl, hint: 'Full Name'),
+                      _buildTextField('1. MOBILE NO *', _ref1MobileCtrl, hint: '10-digit Mobile'),
+                      _buildTextField('1. RELATION *', _ref1RelationCtrl, hint: 'e.g. Colleague, Brother, Friend'),
+                      _buildTextField('1. ADDRESS *', _ref1AddressCtrl, hint: 'Address'),
+                    ]),
+                    const SizedBox(height: 14),
+                    const Text('Reference 2 (Personal / Professional)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF2563EB))),
+                    const SizedBox(height: 8),
+                    _buildFieldRow([
+                      _buildTextField('2. NAME *', _ref2NameCtrl, hint: 'Full Name'),
+                      _buildTextField('2. MOBILE NO *', _ref2MobileCtrl, hint: '10-digit Mobile'),
+                      _buildTextField('2. RELATION *', _ref2RelationCtrl, hint: 'e.g. Uncle, Manager, Neighbor'),
+                      _buildTextField('2. ADDRESS *', _ref2AddressCtrl, hint: 'Address'),
+                    ]),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        // Action Bar Bottom
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF24201D) : const Color(0xFFF8FAFC),
+            border: Border(top: BorderSide(color: borderColor)),
+          ),
+          child: Row(
+            children: [
+              Text(
+                'All 24 fields are synced directly with the Client Portal in READ-ONLY mode.',
+                style: TextStyle(fontSize: 12, color: textMuted),
+              ),
+              const Spacer(),
+              ElevatedButton.icon(
+                icon: _isSavingDetails
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.save_rounded, size: 18),
+                label: Text(_isSavingDetails ? 'Saving Details...' : 'Save Application Details'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primaryColor,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                onPressed: _isSavingDetails ? null : _saveApplicationDetails,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDocumentChecklistTab(bool isDark, Color borderColor, Color textMuted, Color primaryColor) {
+    final docsList = List<dynamic>.from(_currentLead.customFields['documents'] ?? []);
+    final requiredDocIds = CrmSettings.defaultLoanTypeDocsMap[_selectedLoanType] ?? CrmSettings.defaultLoanTypeDocsMap['Home Loan'] ?? [];
+    const availableDocTypes = CrmSettings.defaultLoanDocTypes;
+
+    final uploadedDocTypeIds = docsList.map((d) => d['docTypeId']?.toString()).toSet();
+    final completedCount = requiredDocIds.where((id) => uploadedDocTypeIds.contains(id)).length;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Loan Type Selector & Progress
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF24201D) : const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: borderColor),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Loan Product', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+                      const SizedBox(height: 4),
+                      DropdownButton<String>(
+                        value: CrmSettings.defaultLoanTypeDocsMap.containsKey(_selectedLoanType) ? _selectedLoanType : 'Home Loan',
+                        isDense: true,
+                        underline: const SizedBox.shrink(),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.white : const Color(0xFF1E293B),
+                        ),
+                        items: CrmSettings.defaultLoanTypeDocsMap.keys.map((k) {
+                          return DropdownMenuItem(value: k, child: Text(k));
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) setState(() => _selectedLoanType = val);
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      '$completedCount of ${requiredDocIds.length} Required Docs Received',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: completedCount >= requiredDocIds.length && requiredDocIds.isNotEmpty
+                            ? const Color(0xFF10B981)
+                            : const Color(0xFFD97706),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    SizedBox(
+                      width: 140,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: requiredDocIds.isEmpty ? 0 : (completedCount / requiredDocIds.length).clamp(0.0, 1.0),
+                          backgroundColor: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+                          valueColor: AlwaysStoppedAnimation(
+                            completedCount >= requiredDocIds.length && requiredDocIds.isNotEmpty
+                                ? const Color(0xFF10B981)
+                                : primaryColor,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+
+          Text(
+            'REQUIRED DOCUMENTS FOR $_selectedLoanType',
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+          ),
+          const SizedBox(height: 10),
+
+          // Document List
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: requiredDocIds.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 8),
+            itemBuilder: (context, index) {
+              final docTypeId = requiredDocIds[index];
+              CrmLoanDocType? docType;
+              for (final d in availableDocTypes) {
+                if (d.id == docTypeId) {
+                  docType = d;
+                  break;
+                }
+              }
+              final docName = docType?.name ?? docTypeId.replaceAll('_', ' ').toUpperCase();
+              final isUploading = _uploadingDocId == docTypeId;
+
+              dynamic uploadedDoc;
+              for (final d in docsList) {
+                if (d['docTypeId'] == docTypeId) {
+                  uploadedDoc = d;
+                  break;
+                }
+              }
+              final isUploaded = uploadedDoc != null;
+
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF24201D) : Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: isUploaded
+                        ? const Color(0xFF10B981).withValues(alpha: 0.4)
+                        : borderColor,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: isUploaded
+                            ? const Color(0xFF10B981).withValues(alpha: 0.15)
+                            : Colors.amber.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        isUploaded ? Icons.check_circle_rounded : Icons.pending_actions_rounded,
+                        color: isUploaded ? const Color(0xFF10B981) : const Color(0xFFD97706),
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(docName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  'Max ${docType?.maxFileSizeMb ?? 5}MB',
+                                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: textMuted),
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (isUploaded) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              'File: ${uploadedDoc['originalName'] ?? uploadedDoc['filename'] ?? "Document"} • ${uploadedDoc['uploadedAt'] != null ? DateFormat("dd MMM yyyy, hh:mm a").format(DateTime.parse(uploadedDoc['uploadedAt']).toLocal()) : ""}',
+                              style: const TextStyle(fontSize: 12, color: Color(0xFF10B981)),
+                            ),
+                          ] else ...[
+                            const SizedBox(height: 4),
+                            Text('Awaiting client submission via portal or internal upload', style: TextStyle(fontSize: 12, color: textMuted)),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    if (isUploaded && uploadedDoc['fileUrl'] != null) ...[
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.open_in_new_rounded, size: 14),
+                        label: const Text('View', style: TextStyle(fontSize: 12)),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        onPressed: () {
+                          final url = uploadedDoc['fileUrl']?.toString();
+                          if (url != null) {
+                            launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+                          }
+                        },
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    OutlinedButton.icon(
+                      icon: isUploading
+                          ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.upload_file_rounded, size: 14),
+                      label: Text(
+                        isUploading ? 'Uploading...' : (isUploaded ? 'Replace' : 'Upload'),
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      onPressed: isUploading ? null : () => _pickAndUploadDoc(docTypeId, docName),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionCard({
+    required String title,
+    required bool isDark,
+    required Color borderColor,
+    required List<Widget> children,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF24201D) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+          ),
+          const SizedBox(height: 14),
+          ...children,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFieldRow(List<Widget> children) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: children.map((c) => Expanded(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4), child: c))).toList(),
+    );
+  }
+
+  Widget _buildTextField(String label, TextEditingController controller, {String? hint, int maxLines = 1}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+        const SizedBox(height: 4),
+        TextField(
+          controller: controller,
+          maxLines: maxLines,
+          style: const TextStyle(fontSize: 13),
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: const TextStyle(fontSize: 12),
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDropdownField(String label, String value, List<String> options, ValueChanged<String?> onChanged) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+        const SizedBox(height: 4),
+        DropdownButtonFormField<String>(
+          value: options.contains(value) ? value : options.first,
+          isDense: true,
+          decoration: InputDecoration(
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+          items: options.map((opt) => DropdownMenuItem(value: opt, child: Text(opt, style: const TextStyle(fontSize: 13)))).toList(),
+          onChanged: onChanged,
+        ),
+      ],
+    );
+  }
+}
+

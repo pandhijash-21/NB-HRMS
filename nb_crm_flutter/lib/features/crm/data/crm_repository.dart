@@ -1,13 +1,33 @@
-import 'dart:typed_data';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../../core/network/dio_client.dart';
 import '../domain/crm_models.dart';
 
 class CrmRepository {
   final DioClient _dio;
+  static final ValueNotifier<String> crmScopeNotifier = ValueNotifier<String>('NB_DEVELOPER');
 
-  const CrmRepository({required DioClient dioClient}) : _dio = dioClient;
+  CrmRepository({required DioClient dioClient}) : _dio = dioClient {
+    _dio.dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          options.headers['x-crm-scope'] = crmScopeNotifier.value;
+          handler.next(options);
+        },
+      ),
+    );
+  }
+
+  ValueNotifier<String> get scopeNotifier => crmScopeNotifier;
+  String get scope => crmScopeNotifier.value;
+
+  void setScope(String newScope) {
+    final s = (newScope.toUpperCase() == 'NB_FINSERVE') ? 'NB_FINSERVE' : 'NB_DEVELOPER';
+    if (crmScopeNotifier.value != s) {
+      crmScopeNotifier.value = s;
+    }
+  }
 
   // ---------------------------------------------------------------------------
   // Projects
@@ -15,6 +35,7 @@ class CrmRepository {
   Future<List<CrmProject>> getProjects() async {
     return _dio.getEnvelope<List<CrmProject>>(
       'crm/projects',
+      queryParameters: {'scope': crmScopeNotifier.value},
       parse: (raw) {
         if (raw is! List) return [];
         return raw
@@ -54,7 +75,10 @@ class CrmRepository {
     String module = 'PRE_SALES',
     String? projectId,
   }) async {
-    final query = <String, dynamic>{'module': module};
+    final query = <String, dynamic>{
+      'module': module,
+      'scope': crmScopeNotifier.value,
+    };
     if (projectId != null && projectId.isNotEmpty) {
       query['projectId'] = projectId;
     }
@@ -101,7 +125,10 @@ class CrmRepository {
     String module = 'PRE_SALES',
     String? campaignId,
   }) async {
-    final query = <String, dynamic>{'module': module};
+    final query = <String, dynamic>{
+      'module': module,
+      'scope': crmScopeNotifier.value,
+    };
     if (campaignId != null && campaignId.isNotEmpty) {
       query['campaignId'] = campaignId;
     }
@@ -177,6 +204,7 @@ class CrmRepository {
     String? campaignId,
     String? status,
     String? search,
+    String? leadFlow,
     int? assignedToId,
     int page = 1,
     int limit = 100,
@@ -184,6 +212,7 @@ class CrmRepository {
     final query = <String, dynamic>{
       'page': page,
       'limit': limit,
+      'scope': crmScopeNotifier.value,
     };
     if (projectId != null && projectId != 'ALL' && projectId.isNotEmpty) {
       query['projectId'] = projectId;
@@ -194,6 +223,7 @@ class CrmRepository {
     if (status != null && status != 'ALL') query['status'] = status;
     if (search != null && search.isNotEmpty) query['search'] = search;
     if (assignedToId != null) query['assignedToId'] = assignedToId;
+    if (leadFlow != null && leadFlow != 'ALL') query['leadFlow'] = leadFlow;
 
     return _dio.getEnvelope<List<CrmLead>>(
       'crm/leads',
@@ -325,7 +355,9 @@ class CrmRepository {
   // Follow-ups
   // ---------------------------------------------------------------------------
   Future<List<CrmFollowUp>> getFollowUps({String? filter, String? leadId}) async {
-    final query = <String, dynamic>{};
+    final query = <String, dynamic>{
+      'scope': crmScopeNotifier.value,
+    };
     if (filter != null) query['filter'] = filter;
     if (leadId != null) query['leadId'] = leadId;
 
@@ -363,6 +395,7 @@ class CrmRepository {
   Future<CrmSettings> getSettings() async {
     return _dio.getEnvelope<CrmSettings>(
       'crm/settings',
+      queryParameters: {'scope': crmScopeNotifier.value},
       parse: (raw) => CrmSettings.fromJson(Map<String, dynamic>.from(raw as Map)),
     );
   }
@@ -430,7 +463,9 @@ class CrmRepository {
     String? did,
     int? limit,
   }) async {
-    final query = <String, dynamic>{};
+    final query = <String, dynamic>{
+      'scope': crmScopeNotifier.value,
+    };
     if (leadId != null) query['leadId'] = leadId;
     if (hasRecording != null) query['hasRecording'] = hasRecording.toString();
     if (search != null && search.isNotEmpty) query['search'] = search;
@@ -485,4 +520,183 @@ class CrmRepository {
       },
     );
   }
+
+  // ---------------------------------------------------------------------------
+  // WhatsApp Automation API
+  // ---------------------------------------------------------------------------
+  Future<CrmWhatsappConfig> getWhatsappConfig() async {
+    return _dio.getEnvelope<CrmWhatsappConfig>(
+      'crm/whatsapp/config',
+      parse: (raw) => CrmWhatsappConfig.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
+  Future<CrmWhatsappConfig> updateWhatsappConfig(Map<String, dynamic> config) async {
+    return _dio.putEnvelope<CrmWhatsappConfig>(
+      'crm/whatsapp/config',
+      data: config,
+      parse: (raw) => CrmWhatsappConfig.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
+  Future<Map<String, dynamic>> testWhatsappConnection() async {
+    return _dio.postEnvelope<Map<String, dynamic>>(
+      'crm/whatsapp/test-connection',
+      parse: (raw) => Map<String, dynamic>.from(raw as Map),
+    );
+  }
+
+  Future<Map<String, dynamic>> syncWhatsappTemplates() async {
+    return _dio.postEnvelope<Map<String, dynamic>>(
+      'crm/whatsapp/sync-templates',
+      parse: (raw) => Map<String, dynamic>.from(raw as Map),
+    );
+  }
+
+  Future<List<BotbizTemplateModel>> getWhatsappTemplates() async {
+    return _dio.getEnvelope<List<BotbizTemplateModel>>(
+      'crm/whatsapp/templates',
+      parse: (raw) {
+        if (raw is! Map) return [];
+        final list = raw['templates'];
+        if (list is! List) return [];
+        return list
+            .map((e) => BotbizTemplateModel.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList();
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> checkWhatsappTemplateStatus(String templateId) async {
+    return _dio.postEnvelope<Map<String, dynamic>>(
+      'crm/whatsapp/template-status/$templateId',
+      parse: (raw) => Map<String, dynamic>.from(raw as Map),
+    );
+  }
+
+  Future<Map<String, dynamic>> retryWhatsappLog(String logId) async {
+    return _dio.postEnvelope<Map<String, dynamic>>(
+      'crm/whatsapp/retry/$logId',
+      parse: (raw) => Map<String, dynamic>.from(raw as Map),
+    );
+  }
+
+  Future<Map<String, dynamic>> testWhatsapp(String phone, [String? message, String? templateId]) async {
+    return _dio.postEnvelope<Map<String, dynamic>>(
+      'crm/whatsapp/test',
+      data: {
+        'phone': phone,
+        if (message != null) 'message': message,
+        if (templateId != null) 'templateId': templateId,
+      },
+      parse: (raw) => Map<String, dynamic>.from(raw as Map),
+    );
+  }
+
+  Future<List<CrmWhatsappLogItem>> getWhatsappLogs([int limit = 50]) async {
+    return _dio.getEnvelope<List<CrmWhatsappLogItem>>(
+      'crm/whatsapp/logs',
+      queryParameters: {'limit': limit},
+      parse: (raw) {
+        if (raw is! List) return [];
+        return raw
+            .map((e) => CrmWhatsappLogItem.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList();
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> sendLeadWhatsapp(
+    String leadId, {
+    String? event,
+    String? message,
+    String? mediaUrl,
+  }) async {
+    return _dio.postEnvelope<Map<String, dynamic>>(
+      'crm/leads/$leadId/whatsapp',
+      data: {
+        if (event != null) 'event': event,
+        if (message != null) 'message': message,
+        if (mediaUrl != null) 'mediaUrl': mediaUrl,
+      },
+      parse: (raw) => Map<String, dynamic>.from(raw as Map),
+    );
+  }
+
+  Future<Map<String, dynamic>> uploadBrochure(List<int> bytes, String filename) async {
+    final formData = FormData.fromMap({
+      'brochure': MultipartFile.fromBytes(bytes, filename: filename),
+    });
+    return _dio.postEnvelope<Map<String, dynamic>>(
+      'crm/whatsapp/upload-brochure',
+      data: formData,
+      parse: (raw) => Map<String, dynamic>.from(raw as Map),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Virtual Building Elevation & Inventory
+  // ---------------------------------------------------------------------------
+  Future<Map<String, dynamic>> getVirtualBuilding({
+    required String projectId,
+    required String towerId,
+  }) async {
+    return _dio.getEnvelope<Map<String, dynamic>>(
+      'crm/virtual-building',
+      queryParameters: {
+        'projectId': projectId,
+        'towerId': towerId,
+      },
+      parse: (raw) => Map<String, dynamic>.from(raw as Map),
+    );
+  }
+
+  Future<Map<String, dynamic>> updateVirtualBuildingUnit(Map<String, dynamic> data) async {
+    return _dio.postEnvelope<Map<String, dynamic>>(
+      'crm/virtual-building/unit-action',
+      data: data,
+      parse: (raw) => Map<String, dynamic>.from(raw as Map),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Finserve Application Form & Client Portal
+  // ---------------------------------------------------------------------------
+  Future<Map<String, dynamic>> updateLeadApplicationDetails(
+    String leadId,
+    Map<String, dynamic> data,
+  ) async {
+    return _dio.putEnvelope<Map<String, dynamic>>(
+      'crm/leads/$leadId/application-details',
+      data: data,
+      parse: (raw) => Map<String, dynamic>.from(raw as Map),
+    );
+  }
+
+  Future<Map<String, dynamic>> generateClientPortalLink(String leadId) async {
+    return _dio.postEnvelope<Map<String, dynamic>>(
+      'crm/leads/$leadId/portal-link',
+      parse: (raw) => Map<String, dynamic>.from(raw as Map),
+    );
+  }
+
+  Future<Map<String, dynamic>> uploadLeadDoc(
+    String leadId, {
+    required String docTypeId,
+    required String docName,
+    required List<int> bytes,
+    required String filename,
+  }) async {
+    final formData = FormData.fromMap({
+      'docTypeId': docTypeId,
+      'docName': docName,
+      'document': MultipartFile.fromBytes(bytes, filename: filename),
+    });
+    return _dio.postEnvelope<Map<String, dynamic>>(
+      'crm/leads/$leadId/upload-doc',
+      data: formData,
+      parse: (raw) => Map<String, dynamic>.from(raw as Map),
+    );
+  }
 }
+

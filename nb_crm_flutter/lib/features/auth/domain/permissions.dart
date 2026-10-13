@@ -132,9 +132,14 @@ class Permissions {
       return 'ERP';
     }
     if (k.startsWith('CRM_') ||
+        k.startsWith('FIN_CRM_') ||
+        k.startsWith('FIN_') ||
         const [
           'CRM',
           'CRM_PRE_SALES',
+          'CRM_SALES',
+          'CRM_VISITOR_DESK',
+          'SALES',
           'CRM_POST_SALES',
           'CRM_HEADERS',
           'CRM_BIN',
@@ -312,33 +317,88 @@ class Permissions {
   }
 
   static bool canReadCrm(PermissionMap? perms, [String? role]) {
-    if (isSuperAdmin(role)) return true;
-    return hasPermission(perms, 'CRM', 'READ');
+    if (isAdmin(role)) return true;
+    return canAccessDeveloperCrm(perms, role) || canAccessFinserveCrm(perms, role);
   }
 
-  static bool canWriteCrm(PermissionMap? perms, [String? role]) {
-    if (isSuperAdmin(role)) return true;
-    return hasPermission(perms, 'CRM', 'WRITE');
+  static bool canAccessDeveloperCrm(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    return hasPermission(perms, 'CRM', 'READ') ||
+        hasPermission(perms, 'CRM_PRE_SALES', 'READ') ||
+        hasPermission(perms, 'CRM_SALES', 'READ') ||
+        hasPermission(perms, 'CRM_DASHBOARD', 'READ') ||
+        hasPermission(perms, 'CRM_HEADERS', 'READ') ||
+        hasPermission(perms, 'CRM_SETTINGS', 'READ') ||
+        hasPermission(perms, 'CRM_BIN', 'READ') ||
+        hasPermission(perms, 'CRM_VISITOR_DESK', 'READ');
   }
 
-  static bool canReadCrmDashboard(PermissionMap? perms, [String? role]) {
-    if (isSuperAdmin(role)) return true;
-    return hasPermission(perms, 'CRM_DASHBOARD', 'READ');
+  static bool canAccessFinserveCrm(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    return hasPermission(perms, 'FIN_CRM_PRE_SALES', 'READ') ||
+        hasPermission(perms, 'FIN_CRM_SALES', 'READ') ||
+        hasPermission(perms, 'FIN_CRM_DASHBOARD', 'READ') ||
+        hasPermission(perms, 'FIN_CRM_HEADERS', 'READ') ||
+        hasPermission(perms, 'FIN_CRM_SETTINGS', 'READ') ||
+        hasPermission(perms, 'FIN_CRM_BIN', 'READ');
   }
 
-  static bool canReadCrmHeaders(PermissionMap? perms, [String? role]) {
+  static bool canWriteCrm(PermissionMap? perms, [String? role, String? scope]) {
     if (isSuperAdmin(role)) return true;
-    return hasPermission(perms, 'CRM_HEADERS', 'READ');
+    if (scope == 'NB_FINSERVE') {
+      return hasPermission(perms, 'FIN_CRM_PRE_SALES', 'WRITE') ||
+          hasPermission(perms, 'FIN_CRM_SALES', 'WRITE');
+    }
+    return hasPermission(perms, 'CRM', 'WRITE') ||
+        hasPermission(perms, 'CRM_PRE_SALES', 'WRITE');
   }
 
-  static bool canReadCrmSettings(PermissionMap? perms, [String? role]) {
-    if (isSuperAdmin(role)) return true;
-    return hasPermission(perms, 'CRM_SETTINGS', 'READ');
+  static bool canReadCrmDashboard(PermissionMap? perms, [String? role, String? scope]) {
+    if (isAdmin(role)) return true;
+    if (scope == 'NB_FINSERVE') {
+      return hasPermission(perms, 'FIN_CRM_DASHBOARD', 'READ');
+    }
+    if (scope == 'NB_DEVELOPER') {
+      return hasPermission(perms, 'CRM_DASHBOARD', 'READ');
+    }
+    return hasPermission(perms, 'CRM_DASHBOARD', 'READ') ||
+        hasPermission(perms, 'FIN_CRM_DASHBOARD', 'READ');
   }
 
-  static bool canReadCrmBin(PermissionMap? perms, [String? role]) {
-    if (isSuperAdmin(role)) return true;
-    return hasPermission(perms, 'CRM_BIN', 'READ');
+  static bool canReadCrmHeaders(PermissionMap? perms, [String? role, String? scope]) {
+    if (isAdmin(role)) return true;
+    if (scope == 'NB_FINSERVE') {
+      return hasPermission(perms, 'FIN_CRM_HEADERS', 'READ');
+    }
+    if (scope == 'NB_DEVELOPER') {
+      return hasPermission(perms, 'CRM_HEADERS', 'READ');
+    }
+    return hasPermission(perms, 'CRM_HEADERS', 'READ') ||
+        hasPermission(perms, 'FIN_CRM_HEADERS', 'READ');
+  }
+
+  static bool canReadCrmSettings(PermissionMap? perms, [String? role, String? scope]) {
+    if (isAdmin(role)) return true;
+    if (scope == 'NB_FINSERVE') {
+      return hasPermission(perms, 'FIN_CRM_SETTINGS', 'READ');
+    }
+    if (scope == 'NB_DEVELOPER') {
+      return hasPermission(perms, 'CRM_SETTINGS', 'READ');
+    }
+    return hasPermission(perms, 'CRM_SETTINGS', 'READ') ||
+        hasPermission(perms, 'FIN_CRM_SETTINGS', 'READ');
+  }
+
+  static bool canReadCrmBin(PermissionMap? perms, [String? role, String? scope]) {
+    if (isAdmin(role)) return true;
+    if (scope == 'NB_FINSERVE') {
+      return hasPermission(perms, 'FIN_CRM_BIN', 'READ');
+    }
+    if (scope == 'NB_DEVELOPER') {
+      return hasPermission(perms, 'CRM_BIN', 'READ');
+    }
+    return hasPermission(perms, 'CRM_BIN', 'READ') ||
+        hasPermission(perms, 'FIN_CRM_BIN', 'READ');
   }
 
   static bool canManageUsers(PermissionMap? perms, [String? role]) {
@@ -536,40 +596,148 @@ class Permissions {
 
   // ── CRM EXTENSIONS ─────────────────────────────────────────────────────────
   /// Pre-sales nav uses CRM_PRE_SALES; DB module key is historically `CRM`.
-  static bool canReadCrmPreSales(PermissionMap? perms, [String? role]) {
-    if (isSuperAdmin(role)) return true;
+  static bool canReadCrmPreSales(PermissionMap? perms, [String? role, String? scope]) {
+    if (isAdmin(role)) return true;
+    if (scope == 'NB_FINSERVE') {
+      return hasPermission(perms, 'FIN_CRM_PRE_SALES', 'READ');
+    }
+    if (scope == 'NB_DEVELOPER') {
+      return hasPermission(perms, 'CRM_PRE_SALES', 'READ') ||
+          hasPermission(perms, 'CRM', 'READ');
+    }
     return hasPermission(perms, 'CRM_PRE_SALES', 'READ') ||
-        hasPermission(perms, 'CRM', 'READ');
+        hasPermission(perms, 'CRM', 'READ') ||
+        hasPermission(perms, 'FIN_CRM_PRE_SALES', 'READ');
   }
 
-  static bool canReadCrmSales(PermissionMap? perms, [String? role]) {
-    if (isSuperAdmin(role)) return true;
+  static bool canReadCrmSales(PermissionMap? perms, [String? role, String? scope]) {
+    if (isAdmin(role)) return true;
+    if (scope == 'NB_FINSERVE') {
+      return hasPermission(perms, 'FIN_CRM_SALES', 'READ') ||
+          hasPermission(perms, 'FIN_CRM_PRE_SALES', 'READ');
+    }
+    if (scope == 'NB_DEVELOPER') {
+      return hasPermission(perms, 'CRM_SALES', 'READ') ||
+          hasPermission(perms, 'CRM_PRE_SALES', 'READ') ||
+          hasPermission(perms, 'CRM', 'READ');
+    }
     return hasPermission(perms, 'CRM_SALES', 'READ') ||
         hasPermission(perms, 'CRM_PRE_SALES', 'READ') ||
+        hasPermission(perms, 'CRM', 'READ') ||
+        hasPermission(perms, 'FIN_CRM_SALES', 'READ') ||
+        hasPermission(perms, 'FIN_CRM_PRE_SALES', 'READ');
+  }
+
+  static bool canWriteCrmSales(PermissionMap? perms, [String? role, String? scope]) {
+    if (isAdmin(role)) return true;
+    if (scope == 'NB_FINSERVE') {
+      return hasPermission(perms, 'FIN_CRM_SALES', 'WRITE') ||
+          hasPermission(perms, 'FIN_CRM_PRE_SALES', 'WRITE');
+    }
+    if (scope == 'NB_DEVELOPER') {
+      return hasPermission(perms, 'CRM_SALES', 'WRITE') ||
+          hasPermission(perms, 'CRM_PRE_SALES', 'WRITE') ||
+          hasPermission(perms, 'CRM', 'WRITE');
+    }
+    return hasPermission(perms, 'CRM_SALES', 'WRITE') ||
+        hasPermission(perms, 'CRM_PRE_SALES', 'WRITE') ||
+        hasPermission(perms, 'CRM', 'WRITE') ||
+        hasPermission(perms, 'FIN_CRM_SALES', 'WRITE') ||
+        hasPermission(perms, 'FIN_CRM_PRE_SALES', 'WRITE');
+  }
+
+  static bool canReadCrmPostSales(PermissionMap? perms, [String? role, String? scope]) {
+    if (isAdmin(role)) return true;
+    if (scope == 'NB_FINSERVE') {
+      return hasPermission(perms, 'FIN_CRM_POST_SALES', 'READ');
+    }
+    if (scope == 'NB_DEVELOPER') {
+      return hasPermission(perms, 'CRM_POST_SALES', 'READ');
+    }
+    return hasPermission(perms, 'CRM_POST_SALES', 'READ') ||
+        hasPermission(perms, 'FIN_CRM_POST_SALES', 'READ');
+  }
+
+  static bool canWriteCrmPreSales(PermissionMap? perms, [String? role, String? scope]) {
+    if (isAdmin(role)) return true;
+    if (scope == 'NB_FINSERVE') {
+      return hasPermission(perms, 'FIN_CRM_PRE_SALES', 'WRITE');
+    }
+    if (scope == 'NB_DEVELOPER') {
+      return hasPermission(perms, 'CRM_PRE_SALES', 'WRITE') ||
+          hasPermission(perms, 'CRM', 'WRITE');
+    }
+    return hasPermission(perms, 'CRM_PRE_SALES', 'WRITE') ||
+        hasPermission(perms, 'CRM', 'WRITE') ||
+        hasPermission(perms, 'FIN_CRM_PRE_SALES', 'WRITE');
+  }
+
+  static bool canWriteCrmPostSales(PermissionMap? perms, [String? role, String? scope]) {
+    if (isAdmin(role)) return true;
+    if (scope == 'NB_FINSERVE') {
+      return hasPermission(perms, 'FIN_CRM_POST_SALES', 'WRITE');
+    }
+    if (scope == 'NB_DEVELOPER') {
+      return hasPermission(perms, 'CRM_POST_SALES', 'WRITE');
+    }
+    return hasPermission(perms, 'CRM_POST_SALES', 'WRITE') ||
+        hasPermission(perms, 'FIN_CRM_POST_SALES', 'WRITE');
+  }
+
+  static bool canReadCrmVisitorDesk(PermissionMap? perms, [String? role, String? scope]) {
+    // Visitor desk is purely for Real Estate / site visits and completely excluded from Finserve CRM
+    if (scope == 'NB_FINSERVE') return false;
+    if (isAdmin(role)) return true;
+    if (scope == 'NB_DEVELOPER') {
+      return hasPermission(perms, 'CRM_VISITOR_DESK', 'READ') ||
+          hasPermission(perms, 'CRM_PRE_SALES', 'READ') ||
+          hasPermission(perms, 'CRM_DASHBOARD', 'READ') ||
+          hasPermission(perms, 'CRM', 'READ');
+    }
+    return hasPermission(perms, 'CRM_VISITOR_DESK', 'READ') ||
+        hasPermission(perms, 'CRM_PRE_SALES', 'READ') ||
+        hasPermission(perms, 'CRM_DASHBOARD', 'READ') ||
         hasPermission(perms, 'CRM', 'READ');
   }
 
-  static bool canWriteCrmSales(PermissionMap? perms, [String? role]) {
-    if (isSuperAdmin(role)) return true;
-    return hasPermission(perms, 'CRM_SALES', 'WRITE') ||
+  static bool canWriteCrmVisitorDesk(PermissionMap? perms, [String? role, String? scope]) {
+    if (scope == 'NB_FINSERVE') return false;
+    if (isAdmin(role)) return true;
+    if (scope == 'NB_DEVELOPER') {
+      return hasPermission(perms, 'CRM_VISITOR_DESK', 'WRITE') ||
+          hasPermission(perms, 'CRM_PRE_SALES', 'WRITE') ||
+          hasPermission(perms, 'CRM', 'WRITE');
+    }
+    return hasPermission(perms, 'CRM_VISITOR_DESK', 'WRITE') ||
         hasPermission(perms, 'CRM_PRE_SALES', 'WRITE') ||
         hasPermission(perms, 'CRM', 'WRITE');
   }
 
-  static bool canReadCrmPostSales(PermissionMap? perms, [String? role]) {
-    if (isSuperAdmin(role)) return true;
-    return hasPermission(perms, 'CRM_POST_SALES', 'READ');
+  static bool canReadTracking(PermissionMap? perms, [String? role]) {
+    if (isSuperAdmin(role) || isSystemAdmin(role)) return true;
+    return hasPermission(perms, 'TRACKING', 'READ');
   }
 
-  static bool canWriteCrmPreSales(PermissionMap? perms, [String? role]) {
-    if (isSuperAdmin(role)) return true;
-    return hasPermission(perms, 'CRM_PRE_SALES', 'WRITE') ||
-        hasPermission(perms, 'CRM', 'WRITE');
+  static bool canWriteTracking(PermissionMap? perms, [String? role]) {
+    if (isSuperAdmin(role) || isSystemAdmin(role)) return true;
+    return hasPermission(perms, 'TRACKING', 'WRITE');
   }
 
-  static bool canWriteCrmPostSales(PermissionMap? perms, [String? role]) {
-    if (isSuperAdmin(role)) return true;
-    return hasPermission(perms, 'CRM_POST_SALES', 'WRITE');
+  static bool canReadStorage(PermissionMap? perms, [String? role]) {
+    if (isSuperAdmin(role) || isSystemAdmin(role)) return true;
+    return hasPermission(perms, 'ADMIN_STORAGE', 'READ') ||
+        hasPermission(perms, 'USER_MGMT', 'READ');
+  }
+
+  static bool canWriteStorage(PermissionMap? perms, [String? role]) {
+    if (isSuperAdmin(role) || isSystemAdmin(role)) return true;
+    return hasPermission(perms, 'ADMIN_STORAGE', 'WRITE') ||
+        hasPermission(perms, 'USER_MGMT', 'WRITE');
+  }
+
+  static bool canReadAudit(PermissionMap? perms, [String? role]) {
+    if (isSuperAdmin(role) || isSystemAdmin(role)) return true;
+    return hasPermission(perms, 'AUDIT', 'READ');
   }
 
   // Profile tab-level access (HRMS › Profile dropdown in RBAC)

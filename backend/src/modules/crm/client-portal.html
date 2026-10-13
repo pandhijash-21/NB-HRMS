@@ -1,0 +1,1004 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NB Finserve — Client Document & Application Portal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0B1120;
+      --card-bg: rgba(30, 41, 59, 0.7);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --primary: #F59E0B;
+      --primary-hover: #D97706;
+      --accent: #10B981;
+      --accent-glow: rgba(16, 185, 129, 0.15);
+      --text: #F8FAFC;
+      --text-muted: #94A3B8;
+      --input-bg: rgba(15, 23, 42, 0.6);
+      --input-border: rgba(255, 255, 255, 0.12);
+      --danger: #EF4444;
+      --gold-gradient: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+    }
+
+    body {
+      background: var(--bg);
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(245, 158, 11, 0.08) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.05) 0px, transparent 50%);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px 16px 60px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 820px;
+      margin: 0 auto;
+    }
+
+    /* Header */
+    .brand-header {
+      text-align: center;
+      padding: 24px 0 28px;
+    }
+
+    .brand-logo-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 18px;
+      background: rgba(245, 158, 11, 0.1);
+      border: 1px solid rgba(245, 158, 11, 0.25);
+      border-radius: 9999px;
+      margin-bottom: 14px;
+    }
+
+    .brand-logo-icon {
+      width: 22px;
+      height: 22px;
+      fill: var(--primary);
+    }
+
+    .brand-logo-text {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      color: var(--primary);
+      text-transform: uppercase;
+    }
+
+    .brand-title {
+      font-size: 26px;
+      font-weight: 800;
+      color: #FFFFFF;
+      letter-spacing: -0.5px;
+      margin-bottom: 6px;
+    }
+
+    .brand-subtitle {
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    /* Card styling */
+    .portal-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-radius: 20px;
+      padding: 32px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+      margin-bottom: 20px;
+      transition: all 0.3s ease;
+    }
+
+    .portal-card-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    .portal-card-icon {
+      font-size: 20px;
+    }
+
+    .portal-card-title {
+      font-size: 17px;
+      font-weight: 700;
+      color: #FFFFFF;
+    }
+
+    /* Inputs & Form */
+    .form-group {
+      margin-bottom: 18px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    .input-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .input-prefix {
+      position: absolute;
+      left: 14px;
+      color: var(--text-muted);
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .form-input {
+      width: 100%;
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      border-radius: 12px;
+      padding: 13px 14px;
+      font-size: 15px;
+      color: var(--text);
+      outline: none;
+      transition: all 0.2s ease;
+    }
+
+    .form-input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2);
+    }
+
+    .form-input.has-prefix {
+      padding-left: 50px;
+    }
+
+    .form-input:disabled, .form-input[readonly] {
+      background: rgba(15, 23, 42, 0.35);
+      color: #E2E8F0;
+      border-color: rgba(255, 255, 255, 0.05);
+      cursor: not-allowed;
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 14px 20px;
+      font-size: 15px;
+      font-weight: 700;
+      border-radius: 12px;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s ease;
+    }
+
+    .btn-primary {
+      background: var(--gold-gradient);
+      color: #000000;
+      box-shadow: 0 4px 14px rgba(245, 158, 11, 0.3);
+    }
+
+    .btn-primary:hover {
+      opacity: 0.95;
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text);
+      border: 1px solid var(--card-border);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none !important;
+    }
+
+    /* OTP Inputs */
+    .otp-container {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin: 24px 0;
+    }
+
+    .otp-input {
+      width: 48px;
+      height: 56px;
+      text-align: center;
+      font-size: 24px;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      background: var(--input-bg);
+      border: 1.5px solid var(--input-border);
+      border-radius: 12px;
+      color: #FFFFFF;
+      outline: none;
+      transition: all 0.2s;
+    }
+
+    .otp-input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2);
+    }
+
+    /* Alerts */
+    .alert {
+      padding: 14px 16px;
+      border-radius: 12px;
+      font-size: 13.5px;
+      line-height: 1.5;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .alert-info {
+      background: rgba(59, 130, 246, 0.12);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      color: #93C5FD;
+    }
+
+    .alert-success {
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: #6EE7B7;
+    }
+
+    .alert-danger {
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #FCA5A5;
+    }
+
+    /* Application Details Grid */
+    .details-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 16px;
+    }
+
+    .detail-item {
+      background: rgba(15, 23, 42, 0.45);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      padding: 12px 14px;
+    }
+
+    .detail-item.full-width {
+      grid-column: 1 / -1;
+    }
+
+    .detail-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+
+    .detail-value {
+      font-size: 14px;
+      font-weight: 600;
+      color: #FFFFFF;
+      word-break: break-word;
+    }
+
+    /* Documents list */
+    .doc-item-card {
+      background: rgba(15, 23, 42, 0.5);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 16px 18px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+      transition: all 0.2s;
+    }
+
+    .doc-item-card:hover {
+      border-color: rgba(255, 255, 255, 0.15);
+    }
+
+    .doc-item-info {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-width: 240px;
+      flex: 1;
+    }
+
+    .doc-item-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-muted);
+    }
+
+    .doc-item-icon.uploaded {
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--accent);
+    }
+
+    .doc-item-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #FFFFFF;
+      margin-bottom: 2px;
+    }
+
+    .doc-item-meta {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 700;
+      border-radius: 6px;
+      text-transform: uppercase;
+    }
+
+    .badge-uploaded {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34D399;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .badge-pending {
+      background: rgba(245, 158, 11, 0.15);
+      color: #FBBF24;
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+
+    .doc-upload-btn-wrap {
+      position: relative;
+    }
+
+    .doc-upload-input {
+      position: absolute;
+      left: 0;
+      top: 0;
+      opacity: 0;
+      width: 100%;
+      height: 100%;
+      cursor: pointer;
+    }
+
+    .btn-sm {
+      padding: 8px 14px;
+      font-size: 13px;
+      border-radius: 8px;
+      width: auto;
+    }
+
+    /* Toast */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: #1E293B;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #FFFFFF;
+      padding: 12px 22px;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+      transition: all 0.3s ease;
+      z-index: 9999;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #toast.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(0,0,0,0.3);
+      border-radius: 50%;
+      border-top-color: #000;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Progress bar */
+    .progress-bar-wrap {
+      width: 100%;
+      height: 8px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 4px;
+      overflow: hidden;
+      margin: 12px 0 20px;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #10B981, #059669);
+      width: 0%;
+      transition: width 0.4s ease;
+    }
+
+    /* Responsive */
+    @media (max-width: 600px) {
+      .portal-card {
+        padding: 22px 18px;
+      }
+      .brand-title {
+        font-size: 22px;
+      }
+      .otp-input {
+        width: 40px;
+        height: 48px;
+        font-size: 20px;
+      }
+      .doc-item-card {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .doc-item-actions {
+        display: flex;
+        justify-content: flex-end;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <!-- Brand Header -->
+    <div class="brand-header">
+      <div class="brand-logo-badge">
+        <svg class="brand-logo-icon" viewBox="0 0 24 24">
+          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path>
+        </svg>
+        <span class="brand-logo-text">NB Finserve</span>
+      </div>
+      <h1 class="brand-title">Client Application & Document Portal</h1>
+      <p class="brand-subtitle">Financial Services • Fast Verification • Secure Document Upload</p>
+    </div>
+
+    <!-- Step 1: Mobile Number Verification Card -->
+    <div id="step-mobile-card" class="portal-card">
+      <div class="portal-card-header">
+        <span class="portal-card-icon">🔒</span>
+        <h2 class="portal-card-title">Step 1: Confirm Your Identity</h2>
+      </div>
+
+      <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.5;">
+        Welcome to your loan document portal. Please enter your registered 10-digit mobile number to verify your identity. A secure one-time passcode will be sent to your registered email.
+      </p>
+
+      <div class="form-group">
+        <label class="form-label" for="input-mobile">Registered Mobile Number</label>
+        <div class="input-wrapper">
+          <span class="input-prefix">+91</span>
+          <input type="tel" id="input-mobile" class="form-input has-prefix" placeholder="Enter 10-digit mobile number" maxlength="10">
+        </div>
+      </div>
+
+      <button id="btn-send-otp" class="btn btn-primary" onclick="sendOtp()">
+        <span>Send Verification Code</span>
+      </button>
+    </div>
+
+    <!-- Step 2: Email OTP Card -->
+    <div id="step-otp-card" class="portal-card" style="display: none;">
+      <div class="portal-card-header">
+        <span class="portal-card-icon">✉️</span>
+        <h2 class="portal-card-title">Step 2: Enter Email Verification Code</h2>
+      </div>
+
+      <div class="alert alert-info">
+        <span>📧 Verification code sent to: <strong id="masked-email-display">your email</strong>. Please check your inbox and enter the 6-digit code below.</span>
+      </div>
+
+      <div class="otp-container">
+        <input type="text" class="otp-input" maxlength="1" pattern="[0-9]" inputmode="numeric">
+        <input type="text" class="otp-input" maxlength="1" pattern="[0-9]" inputmode="numeric">
+        <input type="text" class="otp-input" maxlength="1" pattern="[0-9]" inputmode="numeric">
+        <input type="text" class="otp-input" maxlength="1" pattern="[0-9]" inputmode="numeric">
+        <input type="text" class="otp-input" maxlength="1" pattern="[0-9]" inputmode="numeric">
+        <input type="text" class="otp-input" maxlength="1" pattern="[0-9]" inputmode="numeric">
+      </div>
+
+      <button id="btn-verify-otp" class="btn btn-primary" onclick="verifyOtp()">
+        <span>Verify Code & View Application</span>
+      </button>
+
+      <div style="text-align: center; margin-top: 16px;">
+        <button class="btn btn-secondary btn-sm" onclick="resendOtp()">Resend Code</button>
+      </div>
+    </div>
+
+    <!-- Step 3: Verified Client Dashboard -->
+    <div id="step-dashboard" style="display: none;">
+      <!-- Welcome summary header card -->
+      <div class="portal-card" style="border-color: rgba(245, 158, 11, 0.3);">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 14px;">
+          <div>
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+              <h2 id="client-name-display" style="font-size: 20px; font-weight: 800; color: #FFFFFF;">Applicant Name</h2>
+              <span class="badge badge-uploaded">✓ VERIFIED</span>
+            </div>
+            <p id="client-loan-type-display" style="font-size: 14px; color: var(--primary); font-weight: 600;">Loan Type: Personal / Home Loan</p>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">Required Loan Amount</div>
+            <div id="client-loan-amount-display" style="font-size: 20px; font-weight: 800; color: #34D399;">₹0</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Notice Alert -->
+      <div class="alert alert-info">
+        <span>ℹ️ <strong>Application Details (Read Only)</strong>: These details have been recorded by your loan advisor. Please review them and upload the required documents below to process your file.</span>
+      </div>
+
+      <!-- Read-Only Personal Details -->
+      <div class="portal-card">
+        <div class="portal-card-header">
+          <span class="portal-card-icon">🎗️</span>
+          <h3 class="portal-card-title">Personal Details</h3>
+        </div>
+        <div id="personal-details-grid" class="details-grid">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+
+      <!-- Read-Only Company Details -->
+      <div class="portal-card">
+        <div class="portal-card-header">
+          <span class="portal-card-icon">🏢</span>
+          <h3 class="portal-card-title">Company & Employment Details</h3>
+        </div>
+        <div id="company-details-grid" class="details-grid">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+
+      <!-- Read-Only Reference Details -->
+      <div class="portal-card">
+        <div class="portal-card-header">
+          <span class="portal-card-icon">👥</span>
+          <h3 class="portal-card-title">Reference Details</h3>
+        </div>
+        <div id="reference-details-grid" class="details-grid">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+
+      <!-- Required Document Checklist & Upload Section -->
+      <div class="portal-card" style="border-color: rgba(16, 185, 129, 0.3);">
+        <div class="portal-card-header">
+          <span class="portal-card-icon">📁</span>
+          <div style="flex: 1;">
+            <h3 class="portal-card-title">Required Loan Documents Checklist</h3>
+            <p style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
+              Upload clear PDF, JPG or PNG copies for each checklist item.
+            </p>
+          </div>
+          <span id="doc-counter-badge" class="badge badge-pending">0 / 0 UPLOADED</span>
+        </div>
+
+        <div class="progress-bar-wrap">
+          <div id="doc-progress-fill" class="progress-bar-fill"></div>
+        </div>
+
+        <div id="documents-list-container">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast">Message</div>
+
+  <script>
+    // Get query token from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token') || '';
+
+    // State
+    let currentMobile = '';
+    let applicationData = null;
+
+    // Toast helper
+    function showToast(msg, isError = false) {
+      const toast = document.getElementById('toast');
+      toast.textContent = msg;
+      toast.style.borderColor = isError ? 'rgba(239, 68, 68, 0.5)' : 'rgba(16, 185, 129, 0.5)';
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 3500);
+    }
+
+    // OTP Input Navigation
+    const otpInputs = document.querySelectorAll('.otp-input');
+    otpInputs.forEach((input, index) => {
+      input.addEventListener('input', (e) => {
+        if (e.target.value.length === 1 && index < otpInputs.length - 1) {
+          otpInputs[index + 1].focus();
+        }
+      });
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Backspace' && !e.target.value && index > 0) {
+          otpInputs[index - 1].focus();
+        }
+      });
+      input.addEventListener('paste', (e) => {
+        e.preventDefault();
+        const pasted = e.clipboardData.getData('text').trim();
+        if (/^\d{6}$/.test(pasted)) {
+          pasted.split('').forEach((ch, i) => {
+            if (otpInputs[i]) otpInputs[i].value = ch;
+          });
+          otpInputs[otpInputs.length - 1].focus();
+        }
+      });
+    });
+
+    function getEnteredOtp() {
+      return Array.from(otpInputs).map(inp => inp.value).join('');
+    }
+
+    // Initialize check
+    async function initPortal() {
+      if (!token) {
+        document.getElementById('step-mobile-card').innerHTML = `
+          <div class="alert alert-danger">
+            <span>⚠️ <strong>Invalid Link</strong>: No application token was found in the URL. Please use the link sent by your NB Finserve loan advisor.</span>
+          </div>
+        `;
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/crm-public/client-portal/${token}/info`);
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Invalid or expired link');
+        }
+      } catch (err) {
+        document.getElementById('step-mobile-card').innerHTML = `
+          <div class="alert alert-danger">
+            <span>⚠️ <strong>Link Expired or Invalid</strong>: ${err.message}. Please contact your loan advisor for a new link.</span>
+          </div>
+        `;
+      }
+    }
+
+    // Step 1: Send OTP
+    async function sendOtp() {
+      const mobileInput = document.getElementById('input-mobile');
+      const mobile = mobileInput.value.trim().replace(/\D/g, '');
+      if (mobile.length !== 10) {
+        showToast('Please enter a valid 10-digit mobile number', true);
+        return;
+      }
+
+      const btn = document.getElementById('btn-send-otp');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> <span>Sending Code...</span>';
+
+      try {
+        const res = await fetch(`/api/crm-public/client-portal/${token}/send-otp`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mobile }),
+        });
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Failed to send verification code');
+        }
+
+        currentMobile = mobile;
+        document.getElementById('masked-email-display').textContent = data.data.maskedEmail || 'registered email';
+        document.getElementById('step-mobile-card').style.display = 'none';
+        document.getElementById('step-otp-card').style.display = 'block';
+        otpInputs[0].focus();
+        showToast('Verification code sent to your registered email!');
+      } catch (err) {
+        showToast(err.message, true);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<span>Send Verification Code</span>';
+      }
+    }
+
+    async function resendOtp() {
+      if (!currentMobile) return;
+      try {
+        const res = await fetch(`/api/crm-public/client-portal/${token}/send-otp`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mobile: currentMobile }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.error || 'Resend failed');
+        showToast('New verification code sent to your email!');
+      } catch (err) {
+        showToast(err.message, true);
+      }
+    }
+
+    // Step 2: Verify OTP
+    async function verifyOtp() {
+      const otp = getEnteredOtp();
+      if (otp.length !== 6) {
+        showToast('Please enter all 6 digits of your verification code', true);
+        return;
+      }
+
+      const btn = document.getElementById('btn-verify-otp');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> <span>Verifying...</span>';
+
+      try {
+        const res = await fetch(`/api/crm-public/client-portal/${token}/verify-otp`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mobile: currentMobile, otp }),
+        });
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Invalid verification code');
+        }
+
+        applicationData = data.data.lead;
+        renderDashboard(applicationData);
+        document.getElementById('step-otp-card').style.display = 'none';
+        document.getElementById('step-dashboard').style.display = 'block';
+        showToast('Verified successfully! Welcome.');
+      } catch (err) {
+        showToast(err.message, true);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<span>Verify Code & View Application</span>';
+      }
+    }
+
+    // Render Dashboard
+    function renderDashboard(lead) {
+      const app = lead.applicationDetails || {};
+
+      document.getElementById('client-name-display').textContent = lead.name || app.motherName || 'Valued Applicant';
+      document.getElementById('client-loan-type-display').textContent = `Loan Category: ${lead.loanType || 'Personal / Business Loan'}`;
+      
+      const reqAmount = app.requiredLoanAmount ? `₹${Number(app.requiredLoanAmount).toLocaleString('en-IN')}` : '₹0';
+      document.getElementById('client-loan-amount-display').textContent = reqAmount;
+
+      // Personal Details Cards
+      const personalFields = [
+        { label: 'Mobile No', val: app.mobileNo || lead.phone },
+        { label: 'Alternate No', val: app.alternateNo || 'None' },
+        { label: 'Personal Mail ID', val: app.personalEmail || 'None' },
+        { label: 'Marital Status', val: app.maritalStatus || 'None' },
+        { label: 'Mother Name', val: app.motherName || 'None' },
+        { label: 'Spouse Name', val: app.spouseName || 'None' },
+        { label: 'Education', val: app.education || 'None' },
+        { label: 'Current Address', val: app.currentAddress || 'None', full: true },
+        { label: 'Current Residence Type', val: app.currentAddressType || 'None' },
+        { label: 'Permanent Address', val: app.permanentAddress || 'None', full: true },
+        { label: 'Permanent Residence Type', val: app.permanentAddressType || 'None' },
+        { label: 'Require Loan Amount', val: reqAmount },
+        { label: 'Loan Purpose', val: app.loanPurpose || 'None' },
+      ];
+
+      const pGrid = document.getElementById('personal-details-grid');
+      pGrid.innerHTML = personalFields.map(f => `
+        <div class="detail-item ${f.full ? 'full-width' : ''}">
+          <div class="detail-label">${escapeHtml(f.label)}</div>
+          <div class="detail-value">${escapeHtml(f.val || '—')}</div>
+        </div>
+      `).join('');
+
+      // Company Details Cards
+      const companyFields = [
+        { label: 'Company Name', val: app.companyName || 'None' },
+        { label: 'Company Address', val: app.companyAddress || 'None', full: true },
+        { label: 'Current Work Exp', val: app.currentWorkExp || 'None' },
+        { label: 'Total Work Exp', val: app.totalWorkExp || 'None' },
+        { label: 'Official Mail ID', val: app.officialEmail || 'None' },
+        { label: 'Office Landline No', val: app.officeLandlineNo || 'None' },
+      ];
+
+      const cGrid = document.getElementById('company-details-grid');
+      cGrid.innerHTML = companyFields.map(f => `
+        <div class="detail-item ${f.full ? 'full-width' : ''}">
+          <div class="detail-label">${escapeHtml(f.label)}</div>
+          <div class="detail-value">${escapeHtml(f.val || '—')}</div>
+        </div>
+      `).join('');
+
+      // Reference Details Cards
+      const refFields = [
+        { label: 'Ref 1: Name', val: app.ref1Name || 'None' },
+        { label: 'Ref 1: Mobile No', val: app.ref1Mobile || 'None' },
+        { label: 'Ref 1: Relation', val: app.ref1Relation || 'None' },
+        { label: 'Ref 1: Address', val: app.ref1Address || 'None', full: true },
+        { label: 'Ref 2: Name', val: app.ref2Name || 'None' },
+        { label: 'Ref 2: Mobile No', val: app.ref2Mobile || 'None' },
+        { label: 'Ref 2: Relation', val: app.ref2Relation || 'None' },
+        { label: 'Ref 2: Address', val: app.ref2Address || 'None', full: true },
+      ];
+
+      const rGrid = document.getElementById('reference-details-grid');
+      rGrid.innerHTML = refFields.map(f => `
+        <div class="detail-item ${f.full ? 'full-width' : ''}">
+          <div class="detail-label">${escapeHtml(f.label)}</div>
+          <div class="detail-value">${escapeHtml(f.val || '—')}</div>
+        </div>
+      `).join('');
+
+      renderDocumentsList(lead.requiredDocs || []);
+    }
+
+    function renderDocumentsList(docs) {
+      const container = document.getElementById('documents-list-container');
+      const uploadedCount = docs.filter(d => d.isUploaded).length;
+      const totalCount = docs.length;
+
+      document.getElementById('doc-counter-badge').textContent = `${uploadedCount} / ${totalCount} UPLOADED`;
+      document.getElementById('doc-counter-badge').className = `badge ${uploadedCount === totalCount ? 'badge-uploaded' : 'badge-pending'}`;
+
+      const pct = totalCount > 0 ? (uploadedCount / totalCount) * 100 : 0;
+      document.getElementById('doc-progress-fill').style.width = `${pct}%`;
+
+      if (docs.length === 0) {
+        container.innerHTML = `<div style="text-align: center; color: var(--text-muted); padding: 20px;">No specific documents checklist required for this loan category.</div>`;
+        return;
+      }
+
+      container.innerHTML = docs.map(d => {
+        const isUp = d.isUploaded;
+        const upItem = d.uploadedItem;
+        const badgeHtml = isUp
+          ? `<span class="badge badge-uploaded">✓ UPLOADED</span>`
+          : `<span class="badge badge-pending">PENDING</span>`;
+
+        const viewLinkHtml = isUp && upItem && upItem.fileUrl
+          ? `<a href="${upItem.fileUrl}" target="_blank" class="btn btn-secondary btn-sm" style="text-decoration:none;">View File</a>`
+          : '';
+
+        return `
+          <div class="doc-item-card">
+            <div class="doc-item-info">
+              <div class="doc-item-icon ${isUp ? 'uploaded' : ''}">${isUp ? '✓' : '📄'}</div>
+              <div>
+                <div class="doc-item-title">${escapeHtml(d.name)}</div>
+                <div class="doc-item-meta">
+                  ${isUp && upItem ? `File: ${escapeHtml(upItem.fileName)} • Uploaded on ${new Date(upItem.uploadedAt).toLocaleDateString()}` : `Max size: ${d.maxFileSizeMb}MB • Formats: ${(d.allowedFormats || []).join(', ').toUpperCase()}`}
+                </div>
+              </div>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 10px;">
+              ${badgeHtml}
+              ${viewLinkHtml}
+              <div class="doc-upload-btn-wrap">
+                <button class="btn btn-primary btn-sm">
+                  <span>${isUp ? 'Replace' : 'Upload'}</span>
+                </button>
+                <input type="file" class="doc-upload-input" accept=".pdf,image/*" onchange="uploadDocument('${d.id}', '${encodeURIComponent(d.name)}', this)">
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function uploadDocument(docTypeId, docNameEnc, inputEl) {
+      if (!inputEl.files || inputEl.files.length === 0) return;
+      const file = inputEl.files[0];
+      const docName = decodeURIComponent(docNameEnc);
+
+      showToast(`Uploading ${file.name}...`);
+
+      const formData = new FormData();
+      formData.append('document', file);
+      formData.append('docTypeId', docTypeId);
+      formData.append('docName', docName);
+
+      try {
+        const res = await fetch(`/api/crm-public/client-portal/${token}/upload-doc`, {
+          method: 'POST',
+          body: formData,
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Failed to upload document');
+        }
+
+        showToast(`${docName} uploaded successfully!`);
+
+        // Re-verify to refresh state
+        const otp = getEnteredOtp();
+        const refreshRes = await fetch(`/api/crm-public/client-portal/${token}/verify-otp`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mobile: currentMobile, otp }),
+        });
+        const refreshData = await refreshRes.json();
+        if (refreshData.success && refreshData.data.lead) {
+          applicationData = refreshData.data.lead;
+          renderDocumentsList(applicationData.requiredDocs || []);
+        }
+      } catch (err) {
+        showToast(err.message, true);
+      } finally {
+        inputEl.value = '';
+      }
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    // Run on load
+    window.addEventListener('DOMContentLoaded', initPortal);
+  </script>
+</body>
+</html>

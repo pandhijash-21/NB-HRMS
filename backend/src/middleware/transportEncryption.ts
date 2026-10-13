@@ -18,9 +18,17 @@ function isPublicCrmWebhook(path: string): boolean {
   );
 }
 
+function isPublicCrmEndpoint(req: Request): boolean {
+  const p = req.originalUrl || req.path || '';
+  if (p.includes('/api/crm-public') || p.includes('/api/crm/public') || p.includes('/client-portal')) {
+    return true;
+  }
+  return isPublicCrmWebhook(req.path);
+}
+
 export function transportEncryptionMiddleware(req: Request, res: Response, next: NextFunction) {
   if (SKIP_PATHS.has(req.path)) return next();
-  if (isPublicCrmWebhook(req.path)) return next();
+  if (isPublicCrmEndpoint(req)) return next();
   if (String(req.headers.accept ?? '').includes('text/event-stream')) return next();
 
   const isApiRoute = req.path.startsWith('/api/');

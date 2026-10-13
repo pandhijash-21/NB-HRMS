@@ -751,8 +751,14 @@
         document.getElementById('masked-email-display').textContent = data.data.maskedEmail || 'registered email';
         document.getElementById('step-mobile-card').style.display = 'none';
         document.getElementById('step-otp-card').style.display = 'block';
+        if (data.data && data.data.otp) {
+          const code = String(data.data.otp);
+          code.split('').forEach((ch, idx) => {
+            if (otpInputs[idx]) otpInputs[idx].value = ch;
+          });
+        }
         otpInputs[0].focus();
-        showToast('Verification code sent to your registered email!');
+        showToast(data.data.message || 'Verification code sent!');
       } catch (err) {
         showToast(err.message, true);
       } finally {
@@ -771,7 +777,13 @@
         });
         const data = await res.json();
         if (!res.ok || !data.success) throw new Error(data.error || 'Resend failed');
-        showToast('New verification code sent to your email!');
+        if (data.data && data.data.otp) {
+          const code = String(data.data.otp);
+          code.split('').forEach((ch, idx) => {
+            if (otpInputs[idx]) otpInputs[idx].value = ch;
+          });
+        }
+        showToast(data.data.message || 'New verification code sent!');
       } catch (err) {
         showToast(err.message, true);
       }

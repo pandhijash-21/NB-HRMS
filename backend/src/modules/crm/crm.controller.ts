@@ -1,7 +1,9 @@
 import { Request, Response } from 'express';
 import * as path from 'path';
+import * as fs from 'fs';
 import { crmService } from './crm.service';
 import { ok, fail } from '../../utils/response';
+import { CLIENT_PORTAL_HTML } from './client-portal.template';
 
 function getScope(req: Request): string {
   const fromParam = (req.query?.scope || req.body?.scope || req.headers['x-crm-scope'] || '').toString().toUpperCase().trim();
@@ -736,12 +738,21 @@ export const crmController = {
   },
 
   renderClientPortalPage(_req: Request, res: Response) {
-    const htmlPath = path.join(__dirname, 'client-portal.html');
-    res.sendFile(htmlPath, (err) => {
-      if (err) {
-        res.status(404).send('Client portal page not found');
+    const candidates = [
+      path.join(__dirname, 'client-portal.html'),
+      path.join(__dirname, '../../src/modules/crm/client-portal.html'),
+      path.join(process.cwd(), 'src/modules/crm/client-portal.html'),
+      path.join(process.cwd(), 'dist/modules/crm/client-portal.html'),
+      path.join(process.cwd(), 'backend/src/modules/crm/client-portal.html'),
+      path.join(process.cwd(), 'backend/dist/modules/crm/client-portal.html'),
+    ];
+    for (const cand of candidates) {
+      if (fs.existsSync(cand)) {
+        return res.sendFile(cand);
       }
-    });
+    }
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.send(CLIENT_PORTAL_HTML);
   },
 };
 

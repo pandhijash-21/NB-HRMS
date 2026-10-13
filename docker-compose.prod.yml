@@ -76,7 +76,7 @@ services:
       - "127.0.0.1:4000:4000"
     labels:
       - traefik.enable=true
-      - traefik.http.routers.nbcrm-api.rule=Host(`crm.nbdeveloper.co.in`) && (PathPrefix(`/api`) || PathPrefix(`/health`) || PathPrefix(`/actions`) || PathPrefix(`/events`) || PathPrefix(`/socket.io`) || PathPrefix(`/uploads`))
+      - traefik.http.routers.nbcrm-api.rule=Host(`crm.nbdeveloper.co.in`) && (PathPrefix(`/api`) || PathPrefix(`/health`) || PathPrefix(`/actions`) || PathPrefix(`/events`) || PathPrefix(`/socket.io`) || PathPrefix(`/uploads`) || PathPrefix(`/client-portal`))
       - traefik.http.routers.nbcrm-api.entrypoints=websecure
       - traefik.http.routers.nbcrm-api.tls.certresolver=letsencrypt
       - traefik.http.routers.nbcrm-api.tls=true

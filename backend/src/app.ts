@@ -184,6 +184,8 @@ app.use('/api/notifications', notificationsRouter);
 app.use('/api/crm-public', crmPublicRouter);
 app.use('/api/crm/public', crmPublicRouter);
 app.use('/client-portal', clientPortalPageRouter);
+app.use('/api/client-portal', clientPortalPageRouter);
+app.use('/api/crm-public/portal', clientPortalPageRouter);
 app.use('/api/crm', ...crmLicenseGuard, crmRouter);
 app.use('/api/earth', earthRouter);
 app.use('/api/tasks', tasksRouter);

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../logging/app_logger.dart';
 import 'app_navigation.dart';
@@ -189,6 +190,7 @@ GoRouter createAppRouter(AuthBloc authBloc) {
       final verifyingEmails = loc == '/verify-emails';
       final trackingSetup = loc == '/tracking/setup';
       final guestMeet = loc.startsWith('/meet/guest') || loc.startsWith('/meet/r/');
+      final isClientPortal = loc.startsWith('/client-portal') || state.uri.path.startsWith('/client-portal');
       final authenticated = auth.isAuthenticated;
       final isSuperAdmin = Permissions.isSuperAdmin(auth.user?.role);
       final isPlatformPath = loc.startsWith('/platform');
@@ -209,7 +211,7 @@ GoRouter createAppRouter(AuthBloc authBloc) {
         } else if (isSuperAdminLogin) {
           next = null;
         } else {
-          next = (loggingIn || guestMeet) ? null : '/login';
+          next = (loggingIn || guestMeet || isClientPortal) ? null : '/login';
         }
       } else if (auth.isFirstLogin) {
         next = changingPassword ? null : '/change-password';
@@ -420,6 +422,21 @@ GoRouter createAppRouter(AuthBloc authBloc) {
             asGuest: true,
             voiceOnly: flags.voice,
             autoJoin: flags.auto,
+          );
+        },
+      ),
+      GoRoute(
+        path: '/client-portal',
+        builder: (context, state) {
+          final token = state.uri.queryParameters['token'] ?? '';
+          if (kIsWeb) {
+            launchUrl(Uri.parse('/api/client-portal?token=$token'), webOnlyWindowName: '_self');
+          }
+          return const Scaffold(
+            backgroundColor: Color(0xFF0B1120),
+            body: Center(
+              child: CircularProgressIndicator(color: Color(0xFFF59E0B)),
+            ),
           );
         },
       ),

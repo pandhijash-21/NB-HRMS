@@ -79,6 +79,17 @@ app.use(vpnBlockMiddleware);
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
   crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrcAttr: ["'unsafe-inline'"],
+      styleSrc: ["'self'", "https:", "'unsafe-inline'"],
+      fontSrc: ["'self'", "https:", "data:"],
+      imgSrc: ["'self'", "data:", "https:", "blob:"],
+      connectSrc: ["'self'", "https:", "http:"],
+    },
+  },
 }));
 app.use(express.json({ limit: '6mb' }));
 app.use(transportEncryptionMiddleware);

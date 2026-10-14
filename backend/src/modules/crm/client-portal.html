@@ -748,18 +748,7 @@
       });
     });
 
-    // Enter key listener on mobile input
-    window.addEventListener('DOMContentLoaded', () => {
-      const mobileInput = document.getElementById('input-mobile');
-      if (mobileInput) {
-        mobileInput.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            sendOtp();
-          }
-        });
-      }
-    });
+
 
     function getEnteredOtp() {
       return Array.from(otpInputs).map(inp => inp.value).join('');
@@ -1145,8 +1134,48 @@
         .replace(/'/g, '&#039;');
     }
 
-    // Run on load
-    window.addEventListener('DOMContentLoaded', initPortal);
+    // Explicitly expose globals
+    window.sendOtp = sendOtp;
+    window.verifyOtp = verifyOtp;
+    window.resendOtp = resendOtp;
+    window.uploadDocument = uploadDocument;
+
+    // Attach listeners and run initialization
+    function bootstrap() {
+      const sendBtn = document.getElementById('btn-send-otp');
+      if (sendBtn) {
+        sendBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          sendOtp();
+        });
+      }
+
+      const verifyBtn = document.getElementById('btn-verify-otp');
+      if (verifyBtn) {
+        verifyBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          verifyOtp();
+        });
+      }
+
+      const mobileInput = document.getElementById('input-mobile');
+      if (mobileInput) {
+        mobileInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            sendOtp();
+          }
+        });
+      }
+
+      initPortal();
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', bootstrap);
+    } else {
+      bootstrap();
+    }
   </script>
 </body>
 </html>

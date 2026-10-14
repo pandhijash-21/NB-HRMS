@@ -13,7 +13,14 @@ export const crmRouter = Router();
 export const crmPublicRouter = Router();
 export const clientPortalPageRouter = Router();
 
-// Public Client Portal Webpage
+// Public Client Portal Webpage with inline script & handler support
+clientPortalPageRouter.use((_req, res, next) => {
+  res.setHeader(
+    'Content-Security-Policy',
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; script-src-attr 'unsafe-inline'; style-src 'self' https: 'unsafe-inline'; font-src 'self' https: data:; img-src 'self' data: https: blob:; connect-src 'self' https: http:; frame-ancestors 'self';"
+  );
+  next();
+});
 clientPortalPageRouter.get('/', crmController.renderClientPortalPage);
 clientPortalPageRouter.get('/:token', crmController.renderClientPortalPage);
 

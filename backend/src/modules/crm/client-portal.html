@@ -554,10 +554,6 @@
         <h2 class="portal-card-title">Step 2: Enter Email Verification Code</h2>
       </div>
 
-      <div id="otp-auto-banner" class="alert alert-success" style="display: none;">
-        <span>✓ <strong>Code Ready</strong>: Your 6-digit verification code <span id="otp-banner-code" style="font-family: monospace; font-size: 16px; font-weight: 800; background: rgba(0,0,0,0.2); padding: 2px 8px; border-radius: 6px; letter-spacing: 2px;"></span> has been generated and pre-filled below. Click <strong>Verify Code</strong> to access your dashboard.</span>
-      </div>
-
       <div class="alert alert-info">
         <span>📧 Verification code sent to: <strong id="masked-email-display">your email</strong>. Please check your inbox and enter the 6-digit code below.</span>
       </div>
@@ -848,20 +844,9 @@
         document.getElementById('masked-email-display').textContent = data.data.maskedEmail || 'registered email';
         document.getElementById('step-mobile-card').style.display = 'none';
         document.getElementById('step-otp-card').style.display = 'block';
-        if (data.data && data.data.otp) {
-          const code = String(data.data.otp);
-          code.split('').forEach((ch, idx) => {
-            if (otpInputs[idx]) otpInputs[idx].value = ch;
-          });
-          const autoBanner = document.getElementById('otp-auto-banner');
-          const codeEl = document.getElementById('otp-banner-code');
-          if (autoBanner && codeEl) {
-            codeEl.textContent = code;
-            autoBanner.style.display = 'flex';
-          }
-        }
+        otpInputs.forEach((inp) => { inp.value = ''; });
         otpInputs[0].focus();
-        showToast(data.data.message || 'Verification code sent!');
+        showToast(data.data.message || 'Verification code sent to your registered email!');
       } catch (err) {
         if (errBox) {
           errBox.innerHTML = `⚠️ <strong>Verification Error</strong>: ${escapeHtml(err.message)}`;
@@ -884,19 +869,9 @@
         });
         const data = await res.json();
         if (!res.ok || !data.success) throw new Error(data.error || 'Resend failed');
-        if (data.data && data.data.otp) {
-          const code = String(data.data.otp);
-          code.split('').forEach((ch, idx) => {
-            if (otpInputs[idx]) otpInputs[idx].value = ch;
-          });
-          const autoBanner = document.getElementById('otp-auto-banner');
-          const codeEl = document.getElementById('otp-banner-code');
-          if (autoBanner && codeEl) {
-            codeEl.textContent = code;
-            autoBanner.style.display = 'flex';
-          }
-        }
-        showToast(data.data.message || 'New verification code sent!');
+        otpInputs.forEach((inp) => { inp.value = ''; });
+        otpInputs[0].focus();
+        showToast(data.data.message || 'New verification code sent to your email!');
       } catch (err) {
         showToast(err.message, true);
       }
@@ -956,26 +931,33 @@
       const app = lead.applicationDetails || {};
 
       document.getElementById('client-name-display').textContent = lead.name || app.motherName || 'Valued Applicant';
-      document.getElementById('client-loan-type-display').textContent = `Loan Category: ${lead.loanType || 'Personal / Business Loan'}`;
+      document.getElementById('client-loan-type-display').textContent = `Loan Category: ${lead.loanType || 'Personal Loan'}`;
       
-      const reqAmount = app.requiredLoanAmount ? `₹${Number(app.requiredLoanAmount).toLocaleString('en-IN')}` : '₹0';
+      const rawAmt = app.requiredLoanAmount || lead.loanAmount || lead.amount || '';
+      const numAmt = Number(String(rawAmt).replace(/[^0-9.]/g, ''));
+      const reqAmount = !isNaN(numAmt) && numAmt > 0 ? `₹${numAmt.toLocaleString('en-IN')}` : (rawAmt ? `₹${rawAmt}` : '—');
       document.getElementById('client-loan-amount-display').textContent = reqAmount;
+
+      const formatVal = (v) => {
+        if (!v || v === 'None' || v === 'null' || v === 'undefined') return '—';
+        return v;
+      };
 
       // Personal Details Cards
       const personalFields = [
-        { label: 'Mobile No', val: app.mobileNo || lead.phone },
-        { label: 'Alternate No', val: app.alternateNo || 'None' },
-        { label: 'Personal Mail ID', val: app.personalEmail || 'None' },
-        { label: 'Marital Status', val: app.maritalStatus || 'None' },
-        { label: 'Mother Name', val: app.motherName || 'None' },
-        { label: 'Spouse Name', val: app.spouseName || 'None' },
-        { label: 'Education', val: app.education || 'None' },
-        { label: 'Current Address', val: app.currentAddress || 'None', full: true },
-        { label: 'Current Residence Type', val: app.currentAddressType || 'None' },
-        { label: 'Permanent Address', val: app.permanentAddress || 'None', full: true },
-        { label: 'Permanent Residence Type', val: app.permanentAddressType || 'None' },
+        { label: 'Mobile No', val: formatVal(app.mobileNo || lead.phone) },
+        { label: 'Alternate No', val: formatVal(app.alternateNo) },
+        { label: 'Personal Mail ID', val: formatVal(app.personalEmail) },
+        { label: 'Marital Status', val: formatVal(app.maritalStatus) },
+        { label: 'Mother Name', val: formatVal(app.motherName) },
+        { label: 'Spouse Name', val: formatVal(app.spouseName) },
+        { label: 'Education', val: formatVal(app.education) },
+        { label: 'Current Address', val: formatVal(app.currentAddress), full: true },
+        { label: 'Current Residence Type', val: formatVal(app.currentAddressType) },
+        { label: 'Permanent Address', val: formatVal(app.permanentAddress), full: true },
+        { label: 'Permanent Residence Type', val: formatVal(app.permanentAddressType) },
         { label: 'Require Loan Amount', val: reqAmount },
-        { label: 'Loan Purpose', val: app.loanPurpose || 'None' },
+        { label: 'Loan Purpose', val: formatVal(app.loanPurpose || lead.loanType) },
       ];
 
       const pGrid = document.getElementById('personal-details-grid');
@@ -988,12 +970,12 @@
 
       // Company Details Cards
       const companyFields = [
-        { label: 'Company Name', val: app.companyName || 'None' },
-        { label: 'Company Address', val: app.companyAddress || 'None', full: true },
-        { label: 'Current Work Exp', val: app.currentWorkExp || 'None' },
-        { label: 'Total Work Exp', val: app.totalWorkExp || 'None' },
-        { label: 'Official Mail ID', val: app.officialEmail || 'None' },
-        { label: 'Office Landline No', val: app.officeLandlineNo || 'None' },
+        { label: 'Company Name', val: formatVal(app.companyName) },
+        { label: 'Company Address', val: formatVal(app.companyAddress), full: true },
+        { label: 'Current Work Exp', val: formatVal(app.currentWorkExp) },
+        { label: 'Total Work Exp', val: formatVal(app.totalWorkExp) },
+        { label: 'Official Mail ID', val: formatVal(app.officialEmail) },
+        { label: 'Office Landline No', val: formatVal(app.officeLandlineNo) },
       ];
 
       const cGrid = document.getElementById('company-details-grid');
@@ -1006,14 +988,14 @@
 
       // Reference Details Cards
       const refFields = [
-        { label: 'Ref 1: Name', val: app.ref1Name || 'None' },
-        { label: 'Ref 1: Mobile No', val: app.ref1Mobile || 'None' },
-        { label: 'Ref 1: Relation', val: app.ref1Relation || 'None' },
-        { label: 'Ref 1: Address', val: app.ref1Address || 'None', full: true },
-        { label: 'Ref 2: Name', val: app.ref2Name || 'None' },
-        { label: 'Ref 2: Mobile No', val: app.ref2Mobile || 'None' },
-        { label: 'Ref 2: Relation', val: app.ref2Relation || 'None' },
-        { label: 'Ref 2: Address', val: app.ref2Address || 'None', full: true },
+        { label: 'Ref 1: Name', val: formatVal(app.ref1Name) },
+        { label: 'Ref 1: Mobile No', val: formatVal(app.ref1Mobile) },
+        { label: 'Ref 1: Relation', val: formatVal(app.ref1Relation) },
+        { label: 'Ref 1: Address', val: formatVal(app.ref1Address), full: true },
+        { label: 'Ref 2: Name', val: formatVal(app.ref2Name) },
+        { label: 'Ref 2: Mobile No', val: formatVal(app.ref2Mobile) },
+        { label: 'Ref 2: Relation', val: formatVal(app.ref2Relation) },
+        { label: 'Ref 2: Address', val: formatVal(app.ref2Address), full: true },
       ];
 
       const rGrid = document.getElementById('reference-details-grid');

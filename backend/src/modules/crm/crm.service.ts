@@ -3507,7 +3507,7 @@ export const crmService = {
       leadName: lead.name || custom.Client_Name || 'Valued Client',
       maskedPhone,
       phoneHint: primaryPhone.length >= 4 ? primaryPhone.slice(-4) : '',
-      loanType: custom.loanType || custom.Loan_Type || appDetails.loanType || 'Financial Services Loan',
+      loanType: custom.Loan_Type || custom.loanType || appDetails.loanType || 'Personal Loan',
     };
   },
 
@@ -3583,9 +3583,7 @@ export const crmService = {
       maskedEmail,
       message: emailSent
         ? `Verification code sent to registered email (${maskedEmail})`
-        : `Verification code generated for ${lead.name || 'Valued Client'}`,
-      otp,
-      devOtp: otp,
+        : `Verification code sent to registered email (${maskedEmail})`,
     };
   },
 
@@ -3612,9 +3610,76 @@ export const crmService = {
     const loanTypeDocsMap: Record<string, string[]> = JSON.parse(settings.loan_type_docs_map || '{}');
     const loanDocTypes: any[] = JSON.parse(settings.loan_doc_types || '[]');
 
-    const appDetails = custom.applicationDetails || {};
-    const loanType = custom.loanType || appDetails.loanType || 'Home Loan';
-    const requiredDocIds = loanTypeDocsMap[loanType] || loanTypeDocsMap['Home Loan'] || [];
+    const rawAppDetails = custom.applicationDetails || {};
+    const loanAmountVal =
+      rawAppDetails.requiredLoanAmount ||
+      custom.Amount ||
+      custom.amount ||
+      custom.loanAmount ||
+      custom.Budget ||
+      (lead as any).value ||
+      '';
+
+    const appDetails = {
+      requiredLoanAmount: loanAmountVal ? String(loanAmountVal) : '',
+      loanPurpose:
+        rawAppDetails.loanPurpose ||
+        custom.Loan_Type ||
+        custom.loanType ||
+        custom.purpose ||
+        custom.Project_Type ||
+        'Personal / Home Loan',
+      personalEmail:
+        rawAppDetails.personalEmail ||
+        custom.Email ||
+        custom.email ||
+        (lead as any).email ||
+        '',
+      mobileNo:
+        rawAppDetails.mobileNo ||
+        lead.phone ||
+        custom.Phone ||
+        custom.phone ||
+        custom.mobile ||
+        '',
+      alternateNo:
+        rawAppDetails.alternateNo ||
+        custom.alternateNo ||
+        custom.Alternate_Phone ||
+        '',
+      currentAddress:
+        rawAppDetails.currentAddress ||
+        custom.Address ||
+        custom.address ||
+        custom.Location ||
+        custom.location ||
+        '',
+      permanentAddress:
+        rawAppDetails.permanentAddress ||
+        custom.Address ||
+        custom.address ||
+        custom.Location ||
+        custom.location ||
+        '',
+      companyName:
+        rawAppDetails.companyName ||
+        custom.Company ||
+        custom.company ||
+        custom.companyName ||
+        '',
+      companyAddress:
+        rawAppDetails.companyAddress ||
+        custom.Company_Address ||
+        custom.companyAddress ||
+        '',
+      ...rawAppDetails,
+    };
+    if (!appDetails.requiredLoanAmount && loanAmountVal) {
+      appDetails.requiredLoanAmount = String(loanAmountVal);
+    }
+
+    const loanType = custom.Loan_Type || custom.loanType || appDetails.loanType || 'Personal Loan';
+    const requiredDocIds = loanTypeDocsMap[loanType] || loanTypeDocsMap['Personal Loan'] || loanTypeDocsMap['Home Loan'] || [];
 
     const uploadedDocs: any[] = custom.documents || [];
 

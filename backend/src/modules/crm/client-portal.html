@@ -9,19 +9,22 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #0B1120;
-      --card-bg: rgba(30, 41, 59, 0.7);
-      --card-border: rgba(255, 255, 255, 0.08);
-      --primary: #F59E0B;
-      --primary-hover: #D97706;
-      --accent: #10B981;
-      --accent-glow: rgba(16, 185, 129, 0.15);
-      --text: #F8FAFC;
-      --text-muted: #94A3B8;
-      --input-bg: rgba(15, 23, 42, 0.6);
-      --input-border: rgba(255, 255, 255, 0.12);
-      --danger: #EF4444;
-      --gold-gradient: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
+      --bg: #F8FAFC;
+      --card-bg: #FFFFFF;
+      --card-border: #E2E8F0;
+      --card-border-focus: #CBD5E1;
+      --primary: #D97706;
+      --primary-hover: #B45309;
+      --primary-gradient: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
+      --accent: #059669;
+      --accent-light: #ECFDF5;
+      --text: #0F172A;
+      --text-muted: #64748B;
+      --input-bg: #FFFFFF;
+      --input-border: #CBD5E1;
+      --danger: #DC2626;
+      --card-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.05), 0 8px 10px -6px rgba(15, 23, 42, 0.03);
+      --card-shadow-hover: 0 20px 30px -10px rgba(15, 23, 42, 0.08);
     }
 
     * {
@@ -34,14 +37,14 @@
     body {
       background: var(--bg);
       background-image: 
-        radial-gradient(at 0% 0%, rgba(245, 158, 11, 0.08) 0px, transparent 50%),
-        radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.05) 0px, transparent 50%);
+        radial-gradient(at 0% 0%, rgba(245, 158, 11, 0.05) 0px, transparent 45%),
+        radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.04) 0px, transparent 45%);
       color: var(--text);
       min-height: 100vh;
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 20px 16px 60px;
+      padding: 24px 16px 80px;
     }
 
     .container {
@@ -53,44 +56,44 @@
     /* Header */
     .brand-header {
       text-align: center;
-      padding: 24px 0 28px;
+      padding: 24px 0 32px;
     }
 
     .brand-logo-badge {
       display: inline-flex;
       align-items: center;
       gap: 10px;
-      padding: 8px 18px;
-      background: rgba(245, 158, 11, 0.1);
-      border: 1px solid rgba(245, 158, 11, 0.25);
+      padding: 8px 20px;
+      background: #FEF3C7;
+      border: 1px solid #FDE68A;
       border-radius: 9999px;
       margin-bottom: 14px;
     }
 
     .brand-logo-icon {
-      width: 22px;
-      height: 22px;
+      width: 20px;
+      height: 20px;
       fill: var(--primary);
     }
 
     .brand-logo-text {
       font-size: 13px;
-      font-weight: 700;
+      font-weight: 800;
       letter-spacing: 1.5px;
-      color: var(--primary);
+      color: #B45309;
       text-transform: uppercase;
     }
 
     .brand-title {
-      font-size: 26px;
+      font-size: 28px;
       font-weight: 800;
-      color: #FFFFFF;
+      color: #0F172A;
       letter-spacing: -0.5px;
       margin-bottom: 6px;
     }
 
     .brand-subtitle {
-      font-size: 14px;
+      font-size: 14.5px;
       color: var(--text-muted);
     }
 
@@ -98,46 +101,48 @@
     .portal-card {
       background: var(--card-bg);
       border: 1px solid var(--card-border);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      border-radius: 20px;
+      border-radius: 18px;
       padding: 32px;
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
-      margin-bottom: 20px;
-      transition: all 0.3s ease;
+      box-shadow: var(--card-shadow);
+      margin-bottom: 22px;
+      transition: all 0.25s ease;
+    }
+
+    .portal-card:hover {
+      box-shadow: var(--card-shadow-hover);
     }
 
     .portal-card-header {
       display: flex;
       align-items: center;
       gap: 12px;
-      margin-bottom: 20px;
+      margin-bottom: 22px;
       padding-bottom: 16px;
-      border-bottom: 1px solid var(--card-border);
+      border-bottom: 1px solid #F1F5F9;
     }
 
     .portal-card-icon {
-      font-size: 20px;
+      font-size: 22px;
     }
 
     .portal-card-title {
-      font-size: 17px;
-      font-weight: 700;
-      color: #FFFFFF;
+      font-size: 18px;
+      font-weight: 800;
+      color: #0F172A;
     }
 
     /* Inputs & Form */
     .form-group {
-      margin-bottom: 18px;
+      margin-bottom: 20px;
     }
 
     .form-label {
       display: block;
       font-size: 12px;
-      font-weight: 600;
+      font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.5px;
-      color: var(--text-muted);
+      color: #475569;
       margin-bottom: 8px;
     }
 
@@ -149,18 +154,18 @@
 
     .input-prefix {
       position: absolute;
-      left: 14px;
-      color: var(--text-muted);
-      font-weight: 600;
-      font-size: 14px;
+      left: 16px;
+      color: #64748B;
+      font-weight: 700;
+      font-size: 15px;
     }
 
     .form-input {
       width: 100%;
       background: var(--input-bg);
-      border: 1px solid var(--input-border);
+      border: 1.5px solid var(--input-border);
       border-radius: 12px;
-      padding: 13px 14px;
+      padding: 13px 16px;
       font-size: 15px;
       color: var(--text);
       outline: none;
@@ -169,17 +174,17 @@
 
     .form-input:focus {
       border-color: var(--primary);
-      box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2);
+      box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.15);
     }
 
     .form-input.has-prefix {
-      padding-left: 50px;
+      padding-left: 54px;
     }
 
     .form-input:disabled, .form-input[readonly] {
-      background: rgba(15, 23, 42, 0.35);
-      color: #E2E8F0;
-      border-color: rgba(255, 255, 255, 0.05);
+      background: #F1F5F9;
+      color: #64748B;
+      border-color: #E2E8F0;
       cursor: not-allowed;
     }
 
@@ -190,7 +195,7 @@
       justify-content: center;
       gap: 8px;
       width: 100%;
-      padding: 14px 20px;
+      padding: 14px 22px;
       font-size: 15px;
       font-weight: 700;
       border-radius: 12px;
@@ -200,28 +205,30 @@
     }
 
     .btn-primary {
-      background: var(--gold-gradient);
-      color: #000000;
-      box-shadow: 0 4px 14px rgba(245, 158, 11, 0.3);
+      background: var(--primary-gradient);
+      color: #FFFFFF;
+      box-shadow: 0 4px 14px rgba(217, 119, 6, 0.25);
     }
 
     .btn-primary:hover {
       opacity: 0.95;
       transform: translateY(-1px);
+      box-shadow: 0 6px 18px rgba(217, 119, 6, 0.35);
     }
 
     .btn-secondary {
-      background: rgba(255, 255, 255, 0.08);
-      color: var(--text);
-      border: 1px solid var(--card-border);
+      background: #F8FAFC;
+      color: #334155;
+      border: 1.5px solid #CBD5E1;
     }
 
     .btn-secondary:hover {
-      background: rgba(255, 255, 255, 0.12);
+      background: #F1F5F9;
+      border-color: #94A3B8;
     }
 
     .btn:disabled {
-      opacity: 0.5;
+      opacity: 0.55;
       cursor: not-allowed;
       transform: none !important;
     }
@@ -230,72 +237,72 @@
     .otp-container {
       display: flex;
       justify-content: center;
-      gap: 10px;
+      gap: 12px;
       margin: 24px 0;
     }
 
     .otp-input {
-      width: 48px;
-      height: 56px;
+      width: 50px;
+      height: 58px;
       text-align: center;
       font-size: 24px;
-      font-weight: 700;
+      font-weight: 800;
       font-family: 'JetBrains Mono', monospace;
-      background: var(--input-bg);
-      border: 1.5px solid var(--input-border);
+      background: #FFFFFF;
+      border: 2px solid #CBD5E1;
       border-radius: 12px;
-      color: #FFFFFF;
+      color: #0F172A;
       outline: none;
       transition: all 0.2s;
     }
 
     .otp-input:focus {
       border-color: var(--primary);
-      box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2);
+      box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.15);
     }
 
     /* Alerts */
     .alert {
-      padding: 14px 16px;
+      padding: 14px 18px;
       border-radius: 12px;
-      font-size: 13.5px;
+      font-size: 14px;
       line-height: 1.5;
       margin-bottom: 20px;
       display: flex;
       align-items: flex-start;
-      gap: 10px;
+      gap: 12px;
     }
 
     .alert-info {
-      background: rgba(59, 130, 246, 0.12);
-      border: 1px solid rgba(59, 130, 246, 0.3);
-      color: #93C5FD;
+      background: #EFF6FF;
+      border: 1px solid #BFDBFE;
+      color: #1E40AF;
     }
 
     .alert-success {
-      background: rgba(16, 185, 129, 0.12);
-      border: 1px solid rgba(16, 185, 129, 0.3);
-      color: #6EE7B7;
+      background: #ECFDF5;
+      border: 1px solid #A7F3D0;
+      color: #065F46;
     }
 
     .alert-danger {
-      background: rgba(239, 68, 68, 0.12);
-      border: 1px solid rgba(239, 68, 68, 0.3);
-      color: #FCA5A5;
+      background: #FEF2F2;
+      border: 1px solid #FECACA;
+      color: #991B1B;
     }
 
     /* Application Details Grid */
     .details-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
       gap: 16px;
     }
 
     .detail-item {
-      background: rgba(15, 23, 42, 0.45);
-      border: 1px solid rgba(255, 255, 255, 0.05);
+      background: #F8FAFC;
+      border: 1px solid #E2E8F0;
       border-radius: 12px;
-      padding: 12px 14px;
+      padding: 12px 16px;
     }
 
     .detail-item.full-width {
@@ -304,7 +311,7 @@
 
     .detail-label {
       font-size: 11px;
-      font-weight: 600;
+      font-weight: 700;
       color: var(--text-muted);
       text-transform: uppercase;
       letter-spacing: 0.5px;
@@ -312,19 +319,19 @@
     }
 
     .detail-value {
-      font-size: 14px;
-      font-weight: 600;
-      color: #FFFFFF;
+      font-size: 14.5px;
+      font-weight: 700;
+      color: #0F172A;
       word-break: break-word;
     }
 
     /* Documents list */
     .doc-item-card {
-      background: rgba(15, 23, 42, 0.5);
+      background: #FFFFFF;
       border: 1px solid var(--card-border);
       border-radius: 14px;
-      padding: 16px 18px;
-      margin-bottom: 12px;
+      padding: 16px 20px;
+      margin-bottom: 14px;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -334,43 +341,44 @@
     }
 
     .doc-item-card:hover {
-      border-color: rgba(255, 255, 255, 0.15);
+      border-color: #CBD5E1;
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
     }
 
     .doc-item-info {
       display: flex;
       align-items: center;
       gap: 14px;
-      min-width: 240px;
+      min-width: 250px;
       flex: 1;
     }
 
     .doc-item-icon {
-      width: 40px;
-      height: 40px;
-      border-radius: 10px;
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 18px;
-      background: rgba(255, 255, 255, 0.05);
+      font-size: 20px;
+      background: #F1F5F9;
       color: var(--text-muted);
     }
 
     .doc-item-icon.uploaded {
-      background: rgba(16, 185, 129, 0.15);
+      background: #D1FAE5;
       color: var(--accent);
     }
 
     .doc-item-title {
-      font-size: 14px;
+      font-size: 15px;
       font-weight: 700;
-      color: #FFFFFF;
-      margin-bottom: 2px;
+      color: #0F172A;
+      margin-bottom: 3px;
     }
 
     .doc-item-meta {
-      font-size: 12px;
+      font-size: 12.5px;
       color: var(--text-muted);
     }
 
@@ -378,23 +386,24 @@
       display: inline-flex;
       align-items: center;
       gap: 4px;
-      padding: 4px 10px;
-      font-size: 11px;
-      font-weight: 700;
+      padding: 5px 12px;
+      font-size: 11.5px;
+      font-weight: 800;
       border-radius: 6px;
       text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
 
     .badge-uploaded {
-      background: rgba(16, 185, 129, 0.15);
-      color: #34D399;
-      border: 1px solid rgba(16, 185, 129, 0.3);
+      background: #D1FAE5;
+      color: #065F46;
+      border: 1px solid #A7F3D0;
     }
 
     .badge-pending {
-      background: rgba(245, 158, 11, 0.15);
-      color: #FBBF24;
-      border: 1px solid rgba(245, 158, 11, 0.3);
+      background: #FEF3C7;
+      color: #92400E;
+      border: 1px solid #FDE68A;
     }
 
     .doc-upload-btn-wrap {
@@ -412,30 +421,32 @@
     }
 
     .btn-sm {
-      padding: 8px 14px;
-      font-size: 13px;
-      border-radius: 8px;
+      padding: 8px 16px;
+      font-size: 13.5px;
+      border-radius: 9px;
       width: auto;
     }
 
     /* Toast */
     #toast {
       position: fixed;
-      bottom: 24px;
+      bottom: 28px;
       left: 50%;
-      transform: translateX(-50%) translateY(100px);
-      background: #1E293B;
+      transform: translateX(-50%) translateY(120px);
+      background: #0F172A;
       border: 1px solid rgba(255, 255, 255, 0.15);
       color: #FFFFFF;
-      padding: 12px 22px;
+      padding: 13px 26px;
       border-radius: 12px;
-      font-size: 14px;
+      font-size: 14.5px;
       font-weight: 600;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-      transition: all 0.3s ease;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.25);
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
       z-index: 9999;
       opacity: 0;
       pointer-events: none;
+      max-width: 90%;
+      text-align: center;
     }
 
     #toast.show {
@@ -447,9 +458,9 @@
       display: inline-block;
       width: 16px;
       height: 16px;
-      border: 2px solid rgba(0,0,0,0.3);
+      border: 2px solid rgba(255,255,255,0.4);
       border-radius: 50%;
-      border-top-color: #000;
+      border-top-color: #FFFFFF;
       animation: spin 0.8s linear infinite;
     }
 
@@ -461,10 +472,10 @@
     .progress-bar-wrap {
       width: 100%;
       height: 8px;
-      background: rgba(255, 255, 255, 0.08);
+      background: #E2E8F0;
       border-radius: 4px;
       overflow: hidden;
-      margin: 12px 0 20px;
+      margin: 14px 0 22px;
     }
 
     .progress-bar-fill {
@@ -477,14 +488,14 @@
     /* Responsive */
     @media (max-width: 600px) {
       .portal-card {
-        padding: 22px 18px;
+        padding: 24px 20px;
       }
       .brand-title {
-        font-size: 22px;
+        font-size: 24px;
       }
       .otp-input {
-        width: 40px;
-        height: 48px;
+        width: 44px;
+        height: 52px;
         font-size: 20px;
       }
       .doc-item-card {
@@ -510,7 +521,7 @@
         <span class="brand-logo-text">NB Finserve</span>
       </div>
       <h1 class="brand-title">Client Application & Document Portal</h1>
-      <p class="brand-subtitle">Financial Services • Fast Verification • Secure Document Upload</p>
+      <p class="brand-subtitle">Financial Services • Secure Identity Verification • Loan File Processing</p>
     </div>
 
     <!-- Step 1: Mobile Number Verification Card -->
@@ -520,12 +531,12 @@
         <h2 class="portal-card-title">Step 1: Confirm Your Identity</h2>
       </div>
 
-      <div id="applicant-greeting-badge" style="display: none; align-items: center; gap: 8px; padding: 10px 14px; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 10px; margin-bottom: 16px; font-weight: 700; color: #FBBF24; font-size: 14px;">
+      <div id="applicant-greeting-badge" style="display: none; align-items: center; gap: 8px; padding: 10px 16px; background: #FEF3C7; border: 1px solid #FDE68A; border-radius: 10px; margin-bottom: 18px; font-weight: 700; color: #92400E; font-size: 14px;">
         <span>👤</span>
         <span id="applicant-greeting-name">Applicant Name</span>
       </div>
 
-      <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.5;">
+      <p style="font-size: 14.5px; color: var(--text-muted); margin-bottom: 22px; line-height: 1.6;">
         Welcome to your loan document portal. Please enter your registered 10-digit mobile number to verify your identity. A secure one-time passcode will be sent to your registered email.
       </p>
 
@@ -535,14 +546,14 @@
           <span class="input-prefix">+91</span>
           <input type="tel" id="input-mobile" class="form-input has-prefix" placeholder="Enter 10-digit mobile number" maxlength="16" autofocus>
         </div>
-        <p id="phone-hint-text" style="display: none; font-size: 12.5px; color: #94A3B8; margin-top: 8px;">
-          Registered with: <strong id="phone-hint-val" style="color: #F8FAFC;"></strong>
+        <p id="phone-hint-text" style="display: none; font-size: 13px; color: #64748B; margin-top: 8px;">
+          Registered with: <strong id="phone-hint-val" style="color: #0F172A;"></strong>
         </p>
       </div>
 
-      <div id="step-mobile-error" class="alert alert-danger" style="display: none; margin-bottom: 16px;"></div>
+      <div id="step-mobile-error" class="alert alert-danger" style="display: none; margin-bottom: 18px;"></div>
 
-      <button id="btn-send-otp" class="btn btn-primary" onclick="sendOtp()">
+      <button id="btn-send-otp" class="btn btn-primary">
         <span>Send Verification Code</span>
       </button>
     </div>
@@ -558,7 +569,7 @@
         <span>📧 Verification code sent to: <strong id="masked-email-display">your email</strong>. Please check your inbox and enter the 6-digit code below.</span>
       </div>
 
-      <div id="step-otp-error" class="alert alert-danger" style="display: none; margin-bottom: 16px;"></div>
+      <div id="step-otp-error" class="alert alert-danger" style="display: none; margin-bottom: 18px;"></div>
 
       <div class="otp-container">
         <input type="text" class="otp-input" maxlength="1" pattern="[0-9]" inputmode="numeric">
@@ -569,36 +580,49 @@
         <input type="text" class="otp-input" maxlength="1" pattern="[0-9]" inputmode="numeric">
       </div>
 
-      <button id="btn-verify-otp" class="btn btn-primary" onclick="verifyOtp()">
+      <button id="btn-verify-otp" class="btn btn-primary">
         <span>Verify Code & View Application</span>
       </button>
 
-      <div style="text-align: center; margin-top: 16px;">
-        <button class="btn btn-secondary btn-sm" onclick="resendOtp()">Resend Code</button>
+      <div style="text-align: center; margin-top: 22px;">
+        <button id="btn-resend-otp" class="btn btn-secondary btn-sm">Resend Code</button>
+        <div id="resend-timer-text" style="font-size: 12.5px; color: var(--text-muted); margin-top: 8px;"></div>
+        <div id="resend-limit-warning" class="alert alert-danger" style="display: none; margin-top: 14px; text-align: left;"></div>
       </div>
     </div>
 
     <!-- Step 3: Verified Client Dashboard -->
     <div id="step-dashboard" style="display: none;">
       <!-- Welcome summary header card -->
-      <div class="portal-card" style="border-color: rgba(245, 158, 11, 0.3);">
+      <div class="portal-card" style="border-left: 5px solid var(--primary);">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 14px;">
           <div>
             <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
-              <h2 id="client-name-display" style="font-size: 20px; font-weight: 800; color: #FFFFFF;">Applicant Name</h2>
-              <span class="badge badge-uploaded">✓ VERIFIED</span>
+              <h2 id="client-name-display" style="font-size: 22px; font-weight: 800; color: #0F172A;">Applicant Name</h2>
+              <span id="portal-status-badge" class="badge badge-uploaded">✓ VERIFIED</span>
             </div>
-            <p id="client-loan-type-display" style="font-size: 14px; color: var(--primary); font-weight: 600;">Loan Type: Personal / Home Loan</p>
+            <p id="client-loan-type-display" style="font-size: 14.5px; color: var(--primary); font-weight: 700;">Loan Category: Personal Loan</p>
           </div>
           <div style="text-align: right;">
-            <div style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">Required Loan Amount</div>
-            <div id="client-loan-amount-display" style="font-size: 20px; font-weight: 800; color: #34D399;">₹0</div>
+            <div style="font-size: 11.5px; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">Required Loan Amount</div>
+            <div id="client-loan-amount-display" style="font-size: 24px; font-weight: 800; color: #059669;">₹0</div>
           </div>
         </div>
       </div>
 
+      <!-- Locked Status Banner (visible when submitted) -->
+      <div id="dashboard-locked-banner" class="alert alert-success" style="display: none; align-items: flex-start; gap: 14px;">
+        <span style="font-size: 22px;">🔒</span>
+        <div>
+          <div style="font-weight: 800; font-size: 15px; margin-bottom: 3px;">Application Confirmed & Locked</div>
+          <p style="font-size: 13.5px; margin: 0; line-height: 1.5;">
+            Your documents have been submitted and locked for review. Only your NB Finserve loan administrator can modify your file.
+          </p>
+        </div>
+      </div>
+
       <!-- Notice Alert -->
-      <div class="alert alert-info">
+      <div id="dashboard-notice-alert" class="alert alert-info">
         <span>ℹ️ <strong>Application Details (Read Only)</strong>: These details have been recorded by your loan advisor. Please review them and upload the required documents below to process your file.</span>
       </div>
 
@@ -636,13 +660,13 @@
       </div>
 
       <!-- Required Document Checklist & Upload Section -->
-      <div class="portal-card" style="border-color: rgba(16, 185, 129, 0.3);">
+      <div class="portal-card" style="border-top: 4px solid var(--accent);">
         <div class="portal-card-header">
           <span class="portal-card-icon">📁</span>
           <div style="flex: 1;">
             <h3 class="portal-card-title">Required Loan Documents Checklist</h3>
-            <p style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
-              Upload clear PDF, JPG or PNG copies for each checklist item.
+            <p style="font-size: 12.5px; color: var(--text-muted); margin-top: 2px;">
+              Upload clear PDF, JPG or PNG copies for each checklist item within the specified file size limit.
             </p>
           </div>
           <span id="doc-counter-badge" class="badge badge-pending">0 / 0 UPLOADED</span>
@@ -654,6 +678,31 @@
 
         <div id="documents-list-container">
           <!-- Populated dynamically -->
+        </div>
+      </div>
+
+      <!-- Step 4: Final Confirmation & Lock Card -->
+      <div id="confirmation-card" class="portal-card" style="border: 1.5px solid #CBD5E1;">
+        <div class="portal-card-header">
+          <span class="portal-card-icon">✍️</span>
+          <h3 class="portal-card-title">Final Confirmation & Submission</h3>
+        </div>
+
+        <div id="submission-action-wrap">
+          <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 18px; line-height: 1.6;">
+            Please ensure you have uploaded all required documents. Once you submit, your application is locked and forwarded to NB Finserve for underwriting. <strong>After submission, you will not be able to modify or replace documents</strong> without contacting your administrator.
+          </p>
+
+          <label style="display: flex; align-items: flex-start; gap: 12px; cursor: pointer; padding: 14px 16px; background: #F8FAFC; border: 1.5px solid #E2E8F0; border-radius: 12px; margin-bottom: 20px;">
+            <input type="checkbox" id="confirm-checkbox" style="width: 18px; height: 18px; margin-top: 2px; accent-color: var(--primary); cursor: pointer;">
+            <span style="font-size: 13.5px; color: #334155; line-height: 1.5;">
+              I confirm that the recorded application details are correct, and all uploaded documents are genuine and complete. I understand that <strong>once saved, documents are locked and only an administrator can change them</strong>.
+            </span>
+          </label>
+
+          <button id="btn-submit-portal" class="btn btn-primary" disabled style="opacity: 0.5;">
+            <span>Save & Submit Application</span>
+          </button>
         </div>
       </div>
     </div>
@@ -706,14 +755,17 @@
     // State
     let currentMobile = '';
     let applicationData = null;
+    let resendInterval = null;
+    let attemptsRemaining = 3;
 
     // Toast helper
     function showToast(msg, isError = false) {
       const toast = document.getElementById('toast');
       toast.textContent = msg;
-      toast.style.borderColor = isError ? 'rgba(239, 68, 68, 0.5)' : 'rgba(16, 185, 129, 0.5)';
+      toast.style.borderColor = isError ? 'rgba(239, 68, 68, 0.8)' : 'rgba(16, 185, 129, 0.8)';
+      toast.style.background = isError ? '#991B1B' : '#0F172A';
       toast.classList.add('show');
-      setTimeout(() => toast.classList.remove('show'), 3500);
+      setTimeout(() => toast.classList.remove('show'), 4000);
     }
 
     // OTP Input Navigation
@@ -744,8 +796,6 @@
       });
     });
 
-
-
     function getEnteredOtp() {
       return Array.from(otpInputs).map(inp => inp.value).join('');
     }
@@ -755,7 +805,7 @@
       if (!token) {
         document.getElementById('step-mobile-card').innerHTML = `
           <div class="alert alert-danger">
-            <span>⚠️ <strong>Invalid Link</strong>: No application token was found in the URL. Please use the link sent by your NB Finserve loan advisor.</span>
+            <span>⚠️ <strong>Invalid Link</strong>: No application token was found in the URL. Please use the complete link sent by your NB Finserve loan advisor.</span>
           </div>
         `;
         return;
@@ -844,8 +894,15 @@
         document.getElementById('masked-email-display').textContent = data.data.maskedEmail || 'registered email';
         document.getElementById('step-mobile-card').style.display = 'none';
         document.getElementById('step-otp-card').style.display = 'block';
+
         otpInputs.forEach((inp) => { inp.value = ''; });
         otpInputs[0].focus();
+
+        if (typeof data.data.attemptsRemaining === 'number') {
+          attemptsRemaining = data.data.attemptsRemaining;
+        }
+
+        startResendTimer(data.data.cooldownSeconds || 30);
         showToast(data.data.message || 'Verification code sent to your registered email!');
       } catch (err) {
         if (errBox) {
@@ -859,8 +916,56 @@
       }
     }
 
+    // Resend Timer with 30s cooldown and 3 attempts per hour rate limit
+    function startResendTimer(seconds) {
+      let cooldown = seconds;
+      const resendBtn = document.getElementById('btn-resend-otp');
+      const timerText = document.getElementById('resend-timer-text');
+      const warningBox = document.getElementById('resend-limit-warning');
+
+      if (resendInterval) clearInterval(resendInterval);
+
+      resendBtn.disabled = true;
+      resendBtn.style.opacity = '0.5';
+
+      function renderCountdown() {
+        resendBtn.textContent = `Resend Code (${cooldown}s)`;
+        timerText.textContent = `Resend available in ${cooldown}s • ${attemptsRemaining} attempt(s) remaining`;
+      }
+
+      renderCountdown();
+
+      resendInterval = setInterval(() => {
+        cooldown--;
+        if (cooldown <= 0) {
+          clearInterval(resendInterval);
+          resendInterval = null;
+          if (attemptsRemaining > 0) {
+            resendBtn.disabled = false;
+            resendBtn.style.opacity = '1';
+            resendBtn.textContent = 'Resend Code';
+            timerText.textContent = `${attemptsRemaining} resend attempt(s) remaining`;
+          } else {
+            resendBtn.disabled = true;
+            resendBtn.style.opacity = '0.5';
+            resendBtn.textContent = 'Resend Limit Reached';
+            timerText.textContent = 'Maximum attempts reached (3/3)';
+            if (warningBox) {
+              warningBox.innerHTML = '⚠️ <strong>Limit Reached</strong>: You have used all 3 verification requests. For security, please try again in 1 hour.';
+              warningBox.style.display = 'flex';
+            }
+          }
+        } else {
+          renderCountdown();
+        }
+      }, 1000);
+    }
+
     async function resendOtp() {
       if (!currentMobile) return;
+      const warningBox = document.getElementById('resend-limit-warning');
+      if (warningBox) warningBox.style.display = 'none';
+
       try {
         const res = await fetch(`${apiBase}/api/crm-public/client-portal/${token}/send-otp`, {
           method: 'POST',
@@ -869,11 +974,24 @@
         });
         const data = await res.json();
         if (!res.ok || !data.success) throw new Error(data.error || 'Resend failed');
+
         otpInputs.forEach((inp) => { inp.value = ''; });
         otpInputs[0].focus();
+
+        if (typeof data.data.attemptsRemaining === 'number') {
+          attemptsRemaining = data.data.attemptsRemaining;
+        }
+
+        startResendTimer(data.data.cooldownSeconds || 30);
         showToast(data.data.message || 'New verification code sent to your email!');
       } catch (err) {
         showToast(err.message, true);
+        if (err.message && err.message.includes('Maximum')) {
+          if (warningBox) {
+            warningBox.innerHTML = `⚠️ <strong>Limit Reached</strong>: ${escapeHtml(err.message)}`;
+            warningBox.style.display = 'flex';
+          }
+        }
       }
     }
 
@@ -913,7 +1031,7 @@
         renderDashboard(applicationData);
         document.getElementById('step-otp-card').style.display = 'none';
         document.getElementById('step-dashboard').style.display = 'block';
-        showToast('Verified successfully! Welcome.');
+        showToast('Identity verified successfully! Welcome.');
       } catch (err) {
         if (errBox) {
           errBox.innerHTML = `⚠️ <strong>Invalid Code</strong>: ${escapeHtml(err.message)}`;
@@ -929,6 +1047,7 @@
     // Render Dashboard
     function renderDashboard(lead) {
       const app = lead.applicationDetails || {};
+      const isSubmitted = lead.isSubmitted || lead.clientPortalStatus === 'SUBMITTED';
 
       document.getElementById('client-name-display').textContent = lead.name || app.motherName || 'Valued Applicant';
       document.getElementById('client-loan-type-display').textContent = `Loan Category: ${lead.loanType || 'Personal Loan'}`;
@@ -1006,10 +1125,32 @@
         </div>
       `).join('');
 
-      renderDocumentsList(lead.requiredDocs || []);
+      renderDocumentsList(lead.requiredDocs || [], isSubmitted);
+
+      // Submission status handling
+      const lockBanner = document.getElementById('dashboard-locked-banner');
+      const noticeAlert = document.getElementById('dashboard-notice-alert');
+      const actionWrap = document.getElementById('submission-action-wrap');
+      const statusBadge = document.getElementById('portal-status-badge');
+
+      if (isSubmitted) {
+        lockBanner.style.display = 'flex';
+        noticeAlert.style.display = 'none';
+        statusBadge.textContent = '🔒 SUBMITTED & LOCKED';
+        statusBadge.className = 'badge badge-uploaded';
+
+        if (actionWrap) {
+          const dateStr = lead.submittedAt ? new Date(lead.submittedAt).toLocaleString('en-IN') : 'recently';
+          actionWrap.innerHTML = `
+            <div class="alert alert-success" style="margin-bottom: 0;">
+              <span>✓ <strong>Application Locked</strong>: This file was confirmed and submitted on <strong>${dateStr}</strong>. Document modifications are now restricted to authorized loan administrators.</span>
+            </div>
+          `;
+        }
+      }
     }
 
-    function renderDocumentsList(docs) {
+    function renderDocumentsList(docs, isLocked = false) {
       const container = document.getElementById('documents-list-container');
       const uploadedCount = docs.filter(d => d.isUploaded).length;
       const totalCount = docs.length;
@@ -1021,13 +1162,16 @@
       document.getElementById('doc-progress-fill').style.width = `${pct}%`;
 
       if (docs.length === 0) {
-        container.innerHTML = `<div style="text-align: center; color: var(--text-muted); padding: 20px;">No specific documents checklist required for this loan category.</div>`;
+        container.innerHTML = `<div style="text-align: center; color: var(--text-muted); padding: 24px;">No specific documents checklist required for this loan category.</div>`;
         return;
       }
 
       container.innerHTML = docs.map(d => {
         const isUp = d.isUploaded;
         const upItem = d.uploadedItem;
+        const maxMb = d.maxFileSizeMb || 10;
+        const formats = (d.allowedFormats || ['pdf', 'jpg', 'png']).join(', ').toUpperCase();
+
         const badgeHtml = isUp
           ? `<span class="badge badge-uploaded">✓ UPLOADED</span>`
           : `<span class="badge badge-pending">PENDING</span>`;
@@ -1036,6 +1180,22 @@
           ? `<a href="${upItem.fileUrl}" target="_blank" class="btn btn-secondary btn-sm" style="text-decoration:none;">View File</a>`
           : '';
 
+        let actionControlHtml = '';
+        if (isLocked) {
+          actionControlHtml = isUp
+            ? `<span style="font-size: 13px; font-weight: 700; color: #059669; display: flex; align-items: center; gap: 4px;">🔒 Locked</span>`
+            : `<span style="font-size: 13px; font-weight: 600; color: #94A3B8;">Submission Closed</span>`;
+        } else {
+          actionControlHtml = `
+            <div class="doc-upload-btn-wrap">
+              <button class="btn btn-primary btn-sm">
+                <span>${isUp ? 'Replace' : 'Upload'}</span>
+              </button>
+              <input type="file" class="doc-upload-input" accept=".pdf,image/*" onchange="uploadDocument('${d.id}', '${encodeURIComponent(d.name)}', ${maxMb}, '${encodeURIComponent(JSON.stringify(d.allowedFormats || []))}', this)">
+            </div>
+          `;
+        }
+
         return `
           <div class="doc-item-card">
             <div class="doc-item-info">
@@ -1043,30 +1203,52 @@
               <div>
                 <div class="doc-item-title">${escapeHtml(d.name)}</div>
                 <div class="doc-item-meta">
-                  ${isUp && upItem ? `File: ${escapeHtml(upItem.fileName)} • Uploaded on ${new Date(upItem.uploadedAt).toLocaleDateString()}` : `Max size: ${d.maxFileSizeMb}MB • Formats: ${(d.allowedFormats || []).join(', ').toUpperCase()}`}
+                  ${isUp && upItem 
+                    ? `File: ${escapeHtml(upItem.fileName)} • Uploaded on ${new Date(upItem.uploadedAt).toLocaleDateString()}` 
+                    : `Max file size: <strong>${maxMb}MB</strong> • Permitted: ${formats}`}
                 </div>
               </div>
             </div>
 
-            <div style="display: flex; align-items: center; gap: 10px;">
+            <div style="display: flex; align-items: center; gap: 12px;">
               ${badgeHtml}
               ${viewLinkHtml}
-              <div class="doc-upload-btn-wrap">
-                <button class="btn btn-primary btn-sm">
-                  <span>${isUp ? 'Replace' : 'Upload'}</span>
-                </button>
-                <input type="file" class="doc-upload-input" accept=".pdf,image/*" onchange="uploadDocument('${d.id}', '${encodeURIComponent(d.name)}', this)">
-              </div>
+              ${actionControlHtml}
             </div>
           </div>
         `;
       }).join('');
     }
 
-    async function uploadDocument(docTypeId, docNameEnc, inputEl) {
+    // Document Upload with strict file size & format validation
+    async function uploadDocument(docTypeId, docNameEnc, maxMb, allowedFormatsEnc, inputEl) {
       if (!inputEl.files || inputEl.files.length === 0) return;
       const file = inputEl.files[0];
       const docName = decodeURIComponent(docNameEnc);
+
+      // 1. Strict File Size Validation
+      const maxBytes = maxMb * 1024 * 1024;
+      if (file.size > maxBytes) {
+        const fileMb = (file.size / (1024 * 1024)).toFixed(1);
+        showToast(`File size (${fileMb}MB) exceeds the ${maxMb}MB limit for ${docName}.`, true);
+        alert(`File size (${fileMb}MB) exceeds the maximum limit of ${maxMb}MB for "${docName}".\nPlease compress or choose a smaller file.`);
+        inputEl.value = '';
+        return;
+      }
+
+      // 2. Strict Format Validation
+      let allowed = ['pdf', 'jpg', 'jpeg', 'png'];
+      try {
+        allowed = JSON.parse(decodeURIComponent(allowedFormatsEnc)).map(f => f.toLowerCase().replace('.', ''));
+      } catch (_) {}
+
+      const ext = (file.name.split('.').pop() || '').toLowerCase();
+      if (!allowed.includes(ext)) {
+        showToast(`.${ext} format is not allowed. Supported: ${allowed.join(', ').toUpperCase()}`, true);
+        alert(`File format ".${ext}" is not permitted for "${docName}".\nAllowed formats: ${allowed.join(', ').toUpperCase()}`);
+        inputEl.value = '';
+        return;
+      }
 
       showToast(`Uploading ${file.name}...`);
 
@@ -1097,12 +1279,67 @@
         const refreshData = await refreshRes.json();
         if (refreshData.success && refreshData.data.lead) {
           applicationData = refreshData.data.lead;
-          renderDocumentsList(applicationData.requiredDocs || []);
+          renderDocumentsList(applicationData.requiredDocs || [], applicationData.isSubmitted);
         }
       } catch (err) {
         showToast(err.message, true);
+        alert(`Upload error: ${err.message}`);
       } finally {
         inputEl.value = '';
+      }
+    }
+
+    // Confirmation Checkbox & Save Application
+    function toggleSubmitBtn() {
+      const chk = document.getElementById('confirm-checkbox');
+      const btn = document.getElementById('btn-submit-portal');
+      if (chk && btn) {
+        btn.disabled = !chk.checked;
+        btn.style.opacity = chk.checked ? '1' : '0.5';
+      }
+    }
+
+    async function submitPortal() {
+      const chk = document.getElementById('confirm-checkbox');
+      if (!chk || !chk.checked) {
+        showToast('Please check the confirmation box before submitting.', true);
+        return;
+      }
+
+      const uploadedCount = (applicationData?.requiredDocs || []).filter(d => d.isUploaded).length;
+      if (uploadedCount === 0) {
+        alert('Please upload at least one required loan document before saving and submitting your application.');
+        return;
+      }
+
+      const confirmed = confirm('Are you sure you want to submit your application?\n\nOnce submitted, your application and documents will be LOCKED and forwarded to the administrator. You will not be able to change them directly.');
+      if (!confirmed) return;
+
+      const btn = document.getElementById('btn-submit-portal');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> <span>Saving & Submitting...</span>';
+
+      try {
+        const res = await fetch(`${apiBase}/api/crm-public/client-portal/${token}/submit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Failed to submit application');
+        }
+
+        showToast('Application confirmed and locked successfully!');
+        if (applicationData) {
+          applicationData.isSubmitted = true;
+          applicationData.submittedAt = data.data.submittedAt || new Date().toISOString();
+          renderDashboard(applicationData);
+        }
+      } catch (err) {
+        showToast(err.message, true);
+        alert(`Submission error: ${err.message}`);
+        btn.disabled = false;
+        btn.innerHTML = '<span>Save & Submit Application</span>';
       }
     }
 
@@ -1121,6 +1358,8 @@
     window.verifyOtp = verifyOtp;
     window.resendOtp = resendOtp;
     window.uploadDocument = uploadDocument;
+    window.submitPortal = submitPortal;
+    window.toggleSubmitBtn = toggleSubmitBtn;
 
     // Attach listeners and run initialization
     function bootstrap() {
@@ -1138,6 +1377,27 @@
           e.preventDefault();
           verifyOtp();
         });
+      }
+
+      const resendBtn = document.getElementById('btn-resend-otp');
+      if (resendBtn) {
+        resendBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          resendOtp();
+        });
+      }
+
+      const submitBtn = document.getElementById('btn-submit-portal');
+      if (submitBtn) {
+        submitBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          submitPortal();
+        });
+      }
+
+      const chk = document.getElementById('confirm-checkbox');
+      if (chk) {
+        chk.addEventListener('change', toggleSubmitBtn);
       }
 
       const mobileInput = document.getElementById('input-mobile');

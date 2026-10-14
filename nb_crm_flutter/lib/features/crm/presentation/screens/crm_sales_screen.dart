@@ -6557,7 +6557,10 @@ class _FinserveApplicationDialogState extends State<_FinserveApplicationDialog>
   }
 
   Widget _buildDocumentChecklistTab(bool isDark, Color borderColor, Color textMuted, Color primaryColor) {
-    final docsList = List<dynamic>.from(_currentLead.customFields['documents'] ?? []);
+    final clientSubmitted = _currentLead.customFields['clientPortalSubmitted'] == true;
+    final allDocs = List<dynamic>.from(_currentLead.customFields['documents'] ?? []);
+    // Before save / submit by client, admin cannot view client-uploaded documents
+    final docsList = allDocs.where((d) => clientSubmitted || d['uploadedBy'] != 'CLIENT').toList();
     final requiredDocIds = CrmSettings.defaultLoanTypeDocsMap[_selectedLoanType] ?? CrmSettings.defaultLoanTypeDocsMap['Home Loan'] ?? [];
     const availableDocTypes = CrmSettings.defaultLoanDocTypes;
 
@@ -6638,7 +6641,52 @@ class _FinserveApplicationDialogState extends State<_FinserveApplicationDialog>
               ],
             ),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 12),
+
+          // Client Submission Status Banner
+          if (!clientSubmitted)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.amber.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.amber.withOpacity(0.3)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.lock_clock_rounded, size: 18, color: Colors.amber),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Client has not finalized their portal yet. Client-uploaded documents will appear here once the client confirms and submits their portal.',
+                      style: TextStyle(fontSize: 12.5, color: Colors.amber, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF10B981).withOpacity(0.12),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFF10B981).withOpacity(0.3)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.verified_user_rounded, size: 18, color: Color(0xFF10B981)),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Client confirmed and submitted application. Documents are locked for client; administrator can review and manage.',
+                      style: TextStyle(fontSize: 12.5, color: Color(0xFF10B981), fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          const SizedBox(height: 16),
 
           Text(
             'REQUIRED DOCUMENTS FOR $_selectedLoanType',

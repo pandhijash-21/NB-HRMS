@@ -50,6 +50,14 @@ const envSchema = z.object({
   SMTP_PASS:   z.string().optional(),
   SMTP_FROM:   z.string().optional(),
 
+  /** Dedicated SMTP for Finserve Client Portal & Notifications */
+  FINSERVE_SMTP_HOST:   z.string().optional(),
+  FINSERVE_SMTP_PORT:   z.coerce.number().optional().default(587),
+  FINSERVE_SMTP_SECURE: z.preprocess((v) => v === 'true' || v === true, z.boolean()).optional().default(false),
+  FINSERVE_SMTP_USER:   z.string().optional(),
+  FINSERVE_SMTP_PASS:   z.string().optional(),
+  FINSERVE_SMTP_FROM:   z.string().optional(),
+
   /** eTimeOffice HTTP attendance API (optional / other sites). */
   ETIMEOFFICE_BASE_URL: z.string().default('https://api.etimeoffice.com'),
   ETIMEOFFICE_CORPORATE_ID: optionalNonEmptyString,

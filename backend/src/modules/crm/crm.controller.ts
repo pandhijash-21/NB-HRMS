@@ -737,6 +737,16 @@ export const crmController = {
     }
   },
 
+  async submitClientPortal(req: Request, res: Response) {
+    try {
+      const token = String(req.params.token || req.body.token || '');
+      const result = await crmService.submitClientPortal(token);
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to submit application'));
+    }
+  },
+
   renderClientPortalPage(_req: Request, res: Response) {
     const candidates = [
       path.join(__dirname, 'client-portal.html'),

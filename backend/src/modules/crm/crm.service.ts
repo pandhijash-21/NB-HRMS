@@ -3551,6 +3551,47 @@ export const crmService = {
       (lead as any).email ||
       '';
 
+    // Rate Limiting: 30s cooldown between sends, max 3 attempts per 1-hour window, otherwise 1-hour lockout.
+    const now = Date.now();
+    const rateLimit = custom.portalOtpRateLimit || { attempts: 0, firstAttemptAt: 0, lastSentAt: 0, lockoutUntil: 0 };
+
+    if (rateLimit.lockoutUntil && now < rateLimit.lockoutUntil) {
+      const remainingMins = Math.ceil((rateLimit.lockoutUntil - now) / 60000);
+      throw new Error(`Maximum verification attempts reached (3/3). For security, please try again after ${remainingMins} minute(s).`);
+    }
+
+    if (rateLimit.lockoutUntil && now >= rateLimit.lockoutUntil) {
+      rateLimit.attempts = 0;
+      rateLimit.firstAttemptAt = 0;
+      rateLimit.lastSentAt = 0;
+      rateLimit.lockoutUntil = 0;
+    } else if (rateLimit.firstAttemptAt && (now - rateLimit.firstAttemptAt > 60 * 60 * 1000)) {
+      rateLimit.attempts = 0;
+      rateLimit.firstAttemptAt = 0;
+      rateLimit.lastSentAt = 0;
+      rateLimit.lockoutUntil = 0;
+    }
+
+    if (rateLimit.lastSentAt && (now - rateLimit.lastSentAt < 30 * 1000)) {
+      const waitSecs = Math.ceil((30 * 1000 - (now - rateLimit.lastSentAt)) / 1000);
+      throw new Error(`Please wait ${waitSecs}s before requesting a new verification code.`);
+    }
+
+    if (rateLimit.attempts >= 3) {
+      rateLimit.lockoutUntil = now + 60 * 60 * 1000;
+      custom.portalOtpRateLimit = rateLimit;
+      await prisma.crmLead.update({
+        where: { id: lead.id },
+        data: { customFields: custom },
+      });
+      throw new Error('Maximum verification attempts reached (3/3). Please try again after 1 hour.');
+    }
+
+    rateLimit.attempts += 1;
+    if (!rateLimit.firstAttemptAt) rateLimit.firstAttemptAt = now;
+    rateLimit.lastSentAt = now;
+    custom.portalOtpRateLimit = rateLimit;
+
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     custom.portalOtp = {
       code: otp,
@@ -3578,12 +3619,16 @@ export const crmService = {
       ? (parts[0].length > 2 ? `${parts[0].slice(0, 2)}***@${parts[1]}` : `*@${parts[1]}`)
       : `SMS / Registered Mobile (+91 ******${cleanInput.slice(-4)})`;
 
+    const remainingAttempts = Math.max(0, 3 - rateLimit.attempts);
     return {
       success: true,
       maskedEmail,
       message: emailSent
         ? `Verification code sent to registered email (${maskedEmail})`
         : `Verification code sent to registered email (${maskedEmail})`,
+      cooldownSeconds: 30,
+      attemptsRemaining: remainingAttempts,
+      lockoutUntil: rateLimit.attempts >= 3 ? rateLimit.lockoutUntil : null,
     };
   },
 
@@ -3711,7 +3756,51 @@ export const crmService = {
         applicationDetails: appDetails,
         requiredDocs: requiredDocsList,
         uploadedDocs,
+        isSubmitted: !!custom.clientPortalSubmitted,
+        submittedAt: custom.clientPortalSubmittedAt || null,
+        clientPortalStatus: custom.clientPortalStatus || 'DRAFT',
       },
+    };
+  },
+
+  async submitClientPortal(token: string) {
+    if (!token) throw new Error('Application token is required');
+    const leads = await prisma.crmLead.findMany({
+      where: { isDeleted: false },
+    });
+    const lead = leads.find((l) => (l.customFields as any)?.portalToken === token);
+    if (!lead) throw new Error('Invalid or expired application link');
+
+    const custom = (lead.customFields as any) || {};
+    if (custom.clientPortalSubmitted) {
+      return {
+        success: true,
+        alreadySubmitted: true,
+        message: 'Application has already been confirmed and submitted.',
+        submittedAt: custom.clientPortalSubmittedAt,
+      };
+    }
+
+    const documents = custom.documents || [];
+    if (!documents.length) {
+      throw new Error('Please upload at least one required loan document before submitting.');
+    }
+
+    const submittedAt = new Date().toISOString();
+    custom.clientPortalSubmitted = true;
+    custom.clientPortalStatus = 'SUBMITTED';
+    custom.clientPortalSubmittedAt = submittedAt;
+    custom.clientPortalConfirmed = true;
+
+    await prisma.crmLead.update({
+      where: { id: lead.id },
+      data: { customFields: custom },
+    });
+
+    return {
+      success: true,
+      message: 'Application confirmed and locked successfully. Your loan advisor can now review your file.',
+      submittedAt,
     };
   },
 
@@ -3723,17 +3812,38 @@ export const crmService = {
     const lead = leads.find((l) => (l.customFields as any)?.portalToken === token);
     if (!lead) throw new Error('Invalid or expired application link');
 
+    const custom = (lead.customFields as any) || {};
+    if (custom.clientPortalSubmitted || custom.clientPortalStatus === 'SUBMITTED') {
+      throw new Error('This application has already been confirmed and locked. Only an administrator can modify documents.');
+    }
+
+    // Verify file size & format against doc definition from settings
+    const settings = await this.getSettings('NB_FINSERVE');
+    const loanDocTypes: any[] = JSON.parse(settings.loan_doc_types || '[]');
+    const docDef = loanDocTypes.find((d) => d.id === docTypeId);
+
+    const maxMb = Number(docDef?.maxFileSizeMb) || 10;
+    const maxBytes = maxMb * 1024 * 1024;
+    if (file.size > maxBytes) {
+      throw new Error(`File size (${(file.size / (1024 * 1024)).toFixed(1)}MB) exceeds the maximum allowed limit of ${maxMb}MB for this document.`);
+    }
+
+    const ext = path.extname(file.originalname) || '.pdf';
+    const cleanExt = ext.replace('.', '').toLowerCase();
+    const allowed = (docDef?.allowedFormats || ['pdf', 'jpg', 'jpeg', 'png']).map((f: string) => f.toLowerCase().replace('.', ''));
+    if (!allowed.includes(cleanExt)) {
+      throw new Error(`File format .${cleanExt} is not permitted. Allowed formats: ${allowed.join(', ').toUpperCase()}`);
+    }
+
     const uploadsDir = path.join(process.cwd(), 'uploads', 'crm', 'client-docs');
     fs.mkdirSync(uploadsDir, { recursive: true });
 
-    const ext = path.extname(file.originalname) || '.pdf';
     const safeName = `${lead.id}_${docTypeId}_${Date.now()}${ext}`;
     const filePath = path.join(uploadsDir, safeName);
     fs.writeFileSync(filePath, file.buffer);
 
     const fileUrl = `/uploads/crm/client-docs/${safeName}`;
 
-    const custom = (lead.customFields as any) || {};
     const documents: any[] = custom.documents || [];
 
     const existingIndex = documents.findIndex((d) => d.docTypeId === docTypeId);

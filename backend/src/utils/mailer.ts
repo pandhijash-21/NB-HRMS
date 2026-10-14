@@ -19,10 +19,37 @@ function createTransport() {
 
 // Lazily created so startup doesn't fail when SMTP is not configured
 let _transporter: ReturnType<typeof nodemailer.createTransport> | null = null;
+let _finserveTransporter: ReturnType<typeof nodemailer.createTransport> | null = null;
 
 function getTransporter() {
   if (!_transporter) _transporter = createTransport();
   return _transporter;
+}
+
+function createFinserveTransport() {
+  const host = env.FINSERVE_SMTP_HOST || env.SMTP_HOST;
+  const user = env.FINSERVE_SMTP_USER || env.SMTP_USER;
+  const pass = env.FINSERVE_SMTP_PASS || env.SMTP_PASS;
+  const port = env.FINSERVE_SMTP_PORT || env.SMTP_PORT;
+  const secure = env.FINSERVE_SMTP_SECURE ?? env.SMTP_SECURE ?? false;
+
+  if (!host || !user || !pass) {
+    return null;
+  }
+  return nodemailer.createTransport({
+    host,
+    port,
+    secure,
+    auth: {
+      user,
+      pass: pass.replace(/\s+/g, ''),
+    },
+  });
+}
+
+function getFinserveTransporter() {
+  if (!_finserveTransporter) _finserveTransporter = createFinserveTransport();
+  return _finserveTransporter;
 }
 
 export async function sendAccountCreatedEmail(
@@ -217,15 +244,16 @@ export async function sendOtpEmail(to: string, otp: string): Promise<void> {
 }
 
 export async function sendFinserveClientOtpEmail(to: string, clientName: string, otp: string): Promise<void> {
-  const t = getTransporter();
+  const t = getFinserveTransporter() || getTransporter();
   if (!t) {
     console.log(`[SMTP SIMULATED - DEV] Client Portal OTP for ${clientName} (${to}): ${otp}`);
     return;
   }
   if (!to) return;
 
+  const sender = env.FINSERVE_SMTP_FROM || env.FINSERVE_SMTP_USER || env.SMTP_FROM || env.SMTP_USER;
   await t.sendMail({
-    from: `"NB Finserve" <${env.SMTP_FROM ?? env.SMTP_USER}>`,
+    from: `"NB Finserve" <${sender}>`,
     to,
     subject: `Your NB Finserve Verification OTP: ${otp}`,
     html: `

@@ -42,6 +42,7 @@ crmPublicRouter.post('/webhook/:token', crmController.handleCampaignWebhook);
 crmPublicRouter.get('/client-portal/:token/info', crmController.getClientPortalInfo);
 crmPublicRouter.post('/client-portal/:token/send-otp', crmController.sendClientPortalOtp);
 crmPublicRouter.post('/client-portal/:token/verify-otp', crmController.verifyClientPortalOtp);
+crmPublicRouter.post('/client-portal/:token/submit', crmController.submitClientPortal);
 crmPublicRouter.post(
   '/client-portal/:token/upload-doc',
   upload.single('document'),

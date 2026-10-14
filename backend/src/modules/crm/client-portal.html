@@ -520,6 +520,11 @@
         <h2 class="portal-card-title">Step 1: Confirm Your Identity</h2>
       </div>
 
+      <div id="applicant-greeting-badge" style="display: none; align-items: center; gap: 8px; padding: 10px 14px; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 10px; margin-bottom: 16px; font-weight: 700; color: #FBBF24; font-size: 14px;">
+        <span>👤</span>
+        <span id="applicant-greeting-name">Applicant Name</span>
+      </div>
+
       <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.5;">
         Welcome to your loan document portal. Please enter your registered 10-digit mobile number to verify your identity. A secure one-time passcode will be sent to your registered email.
       </p>
@@ -530,6 +535,9 @@
           <span class="input-prefix">+91</span>
           <input type="tel" id="input-mobile" class="form-input has-prefix" placeholder="Enter 10-digit mobile number" maxlength="16" autofocus>
         </div>
+        <p id="phone-hint-text" style="display: none; font-size: 12.5px; color: #94A3B8; margin-top: 8px;">
+          Registered with: <strong id="phone-hint-val" style="color: #F8FAFC;"></strong>
+        </p>
       </div>
 
       <div id="step-mobile-error" class="alert alert-danger" style="display: none; margin-bottom: 16px;"></div>
@@ -658,9 +666,46 @@
   <div id="toast">Message</div>
 
   <script>
-    // Get query token from URL
-    const urlParams = new URLSearchParams(window.location.search);
-    const token = urlParams.get('token') || '';
+    // Robust token extraction from Query Param, Hash, or Path
+    function getPortalToken() {
+      const urlParams = new URLSearchParams(window.location.search);
+      let t = urlParams.get('token');
+      if (t) return t.trim();
+
+      if (window.location.hash) {
+        const hash = window.location.hash;
+        const qIdx = hash.indexOf('?');
+        if (qIdx !== -1) {
+          const hp = new URLSearchParams(hash.substring(qIdx));
+          t = hp.get('token');
+          if (t) return t.trim();
+        }
+        const m = hash.match(/token=([a-zA-Z0-9]+)/);
+        if (m) return m[1].trim();
+      }
+
+      const parts = window.location.pathname.split('/').filter(Boolean);
+      const idx = parts.findIndex(p => p === 'client-portal');
+      if (idx !== -1 && parts[idx + 1] && parts[idx + 1] !== 'index.html') {
+        return parts[idx + 1].trim();
+      }
+
+      return '';
+    }
+
+    // Determine API origin (falls back to local port 4000 if opened on dev port 5000 or similar)
+    function getApiBase() {
+      if (!window.location.port || ['4000', '80', '443'].includes(window.location.port)) {
+        return '';
+      }
+      if (['localhost', '127.0.0.1'].includes(window.location.hostname)) {
+        return 'http://localhost:4000';
+      }
+      return '';
+    }
+
+    const token = getPortalToken();
+    const apiBase = getApiBase();
 
     // State
     let currentMobile = '';
@@ -732,15 +777,32 @@
       }
 
       try {
-        const res = await fetch(`/api/crm-public/client-portal/${token}/info`);
+        const res = await fetch(`${apiBase}/api/crm-public/client-portal/${token}/info`);
         const data = await res.json();
         if (!res.ok || !data.success) {
           throw new Error(data.error || 'Invalid or expired link');
         }
+
+        // Populate greeting badge and registered phone hint
+        if (data.data) {
+          const info = data.data;
+          const greetBadge = document.getElementById('applicant-greeting-badge');
+          const greetName = document.getElementById('applicant-greeting-name');
+          if (greetBadge && greetName && info.leadName) {
+            greetName.textContent = `Welcome, ${info.leadName} (${info.loanType || 'Loan Application'})`;
+            greetBadge.style.display = 'inline-flex';
+          }
+          const hintP = document.getElementById('phone-hint-text');
+          const hintVal = document.getElementById('phone-hint-val');
+          if (hintP && hintVal && info.maskedPhone) {
+            hintVal.textContent = info.maskedPhone;
+            hintP.style.display = 'block';
+          }
+        }
       } catch (err) {
         document.getElementById('step-mobile-card').innerHTML = `
           <div class="alert alert-danger">
-            <span>⚠️ <strong>Link Expired or Invalid</strong>: ${err.message}. Please contact your loan advisor for a new link.</span>
+            <span>⚠️ <strong>Link Expired or Invalid</strong>: ${escapeHtml(err.message)}. Please contact your loan advisor for a new link.</span>
           </div>
         `;
       }
@@ -750,6 +812,16 @@
     async function sendOtp() {
       const errBox = document.getElementById('step-mobile-error');
       if (errBox) { errBox.style.display = 'none'; errBox.textContent = ''; }
+
+      if (!token) {
+        const msg = 'Invalid or missing portal token. Please use the complete link provided.';
+        if (errBox) {
+          errBox.innerHTML = `⚠️ <strong>Error</strong>: ${msg}`;
+          errBox.style.display = 'flex';
+        }
+        showToast(msg, true);
+        return;
+      }
 
       const mobileInput = document.getElementById('input-mobile');
       let mobile = (mobileInput.value || '').trim().replace(/\D/g, '');
@@ -772,7 +844,7 @@
       btn.innerHTML = '<span class="spinner"></span> <span>Sending Code...</span>';
 
       try {
-        const res = await fetch(`/api/crm-public/client-portal/${token}/send-otp`, {
+        const res = await fetch(`${apiBase}/api/crm-public/client-portal/${token}/send-otp`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ mobile }),
@@ -816,7 +888,7 @@
     async function resendOtp() {
       if (!currentMobile) return;
       try {
-        const res = await fetch(`/api/crm-public/client-portal/${token}/send-otp`, {
+        const res = await fetch(`${apiBase}/api/crm-public/client-portal/${token}/send-otp`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ mobile: currentMobile }),
@@ -862,7 +934,7 @@
       btn.innerHTML = '<span class="spinner"></span> <span>Verifying...</span>';
 
       try {
-        const res = await fetch(`/api/crm-public/client-portal/${token}/verify-otp`, {
+        const res = await fetch(`${apiBase}/api/crm-public/client-portal/${token}/verify-otp`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ mobile: currentMobile, otp }),
@@ -1033,7 +1105,7 @@
       formData.append('docName', docName);
 
       try {
-        const res = await fetch(`/api/crm-public/client-portal/${token}/upload-doc`, {
+        const res = await fetch(`${apiBase}/api/crm-public/client-portal/${token}/upload-doc`, {
           method: 'POST',
           body: formData,
         });
@@ -1046,7 +1118,7 @@
 
         // Re-verify to refresh state
         const otp = getEnteredOtp();
-        const refreshRes = await fetch(`/api/crm-public/client-portal/${token}/verify-otp`, {
+        const refreshRes = await fetch(`${apiBase}/api/crm-public/client-portal/${token}/verify-otp`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ mobile: currentMobile, otp }),

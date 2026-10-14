@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../logging/app_logger.dart';
+import '../network/app_config.dart';
 import 'app_navigation.dart';
 import 'go_router_refresh_stream.dart';
 import '../../features/auth/presentation/bloc/auth_bloc.dart';
@@ -430,7 +431,11 @@ GoRouter createAppRouter(AuthBloc authBloc) {
         builder: (context, state) {
           final token = state.uri.queryParameters['token'] ?? '';
           if (kIsWeb) {
-            launchUrl(Uri.parse('/api/client-portal?token=$token'), webOnlyWindowName: '_self');
+            final origin = AppConfig.apiBaseUrl.replaceAll(RegExp(r'/api/?$'), '');
+            final portalUrl = origin.contains('localhost')
+                ? '$origin/client-portal?token=$token'
+                : '/api/client-portal?token=$token';
+            launchUrl(Uri.parse(portalUrl), webOnlyWindowName: '_self');
           }
           return const Scaffold(
             backgroundColor: Color(0xFF0B1120),

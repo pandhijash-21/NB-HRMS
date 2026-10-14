@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:file_picker/file_picker.dart';
 
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/network/app_config.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../data/crm_repository.dart';
 import '../../domain/crm_models.dart';
@@ -4153,11 +4154,17 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
   }
 
   String? _getPortalLink(CrmLead lead) {
-    final link = lead.customFields['portalLink']?.toString();
-    if (link != null && link.isNotEmpty) return link;
+    String? link = lead.customFields['portalLink']?.toString();
     final token = lead.customFields['portalToken']?.toString();
+    final origin = AppConfig.apiBaseUrl.replaceAll(RegExp(r'/api/?$'), '');
+    if (link != null && link.isNotEmpty) {
+      if (link.contains('localhost:5000')) {
+        return link.replaceAll('localhost:5000', 'localhost:4000');
+      }
+      return link;
+    }
     if (token != null && token.isNotEmpty) {
-      return 'http://localhost:5000/client-portal?token=$token';
+      return '$origin/client-portal?token=$token';
     }
     return null;
   }
@@ -5816,10 +5823,15 @@ class _FinserveApplicationDialogState extends State<_FinserveApplicationDialog>
     }
 
     _portalLink = _currentLead.customFields['portalLink']?.toString();
-    if (_portalLink == null || _portalLink!.isEmpty) {
+    final origin = AppConfig.apiBaseUrl.replaceAll(RegExp(r'/api/?$'), '');
+    if (_portalLink != null && _portalLink!.isNotEmpty) {
+      if (_portalLink!.contains('localhost:5000')) {
+        _portalLink = _portalLink!.replaceAll('localhost:5000', 'localhost:4000');
+      }
+    } else {
       final token = _currentLead.customFields['portalToken']?.toString();
       if (token != null && token.isNotEmpty) {
-        _portalLink = 'http://localhost:5000/client-portal?token=$token';
+        _portalLink = '$origin/client-portal?token=$token';
       }
     }
   }

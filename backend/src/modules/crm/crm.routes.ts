@@ -15,6 +15,7 @@ export const clientPortalPageRouter = Router();
 
 // Public Client Portal Webpage
 clientPortalPageRouter.get('/', crmController.renderClientPortalPage);
+clientPortalPageRouter.get('/:token', crmController.renderClientPortalPage);
 
 // Public Webhook for Greeter / Elision Call Logs (No auth required)
 crmPublicRouter.post('/telephony/webhook', crmController.handleTelephonyWebhook);

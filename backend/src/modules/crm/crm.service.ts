@@ -3453,7 +3453,8 @@ export const crmService = {
       custom.portalToken = token;
     }
 
-    const base = (baseUrl || 'http://localhost:5000').replace(/\/+$/, '');
+    const port = process.env.PORT || '4000';
+    const base = (baseUrl || `http://localhost:${port}`).replace(/\/+$/, '');
     const link = `${base}/client-portal?token=${token}`;
     custom.portalLink = link;
 
@@ -3483,16 +3484,30 @@ export const crmService = {
 
     const custom = (lead.customFields as any) || {};
     const appDetails = custom.applicationDetails || {};
-    const phone = appDetails.mobileNo || lead.phone || '';
-    const maskedPhone = phone.length >= 10
-      ? `${phone.slice(0, 2)}******${phone.slice(-4)}`
-      : '******';
+    const candidatePhones = [
+      appDetails.mobileNo,
+      lead.phone,
+      custom.Phone,
+      custom.phone,
+      custom.mobile,
+      appDetails.alternateNo,
+      custom.alternateNo,
+    ]
+      .filter(Boolean)
+      .map((p) => String(p).replace(/\D/g, '').slice(-10))
+      .filter((p) => p.length >= 4);
+
+    const primaryPhone = candidatePhones[0] || '';
+    const maskedPhone = primaryPhone.length >= 10
+      ? `+91 ******${primaryPhone.slice(-4)}`
+      : (primaryPhone ? `******${primaryPhone.slice(-4)}` : 'Registered Mobile Number');
 
     return {
       valid: true,
-      leadName: lead.name || 'Valued Client',
+      leadName: lead.name || custom.Client_Name || 'Valued Client',
       maskedPhone,
-      loanType: custom.loanType || appDetails.loanType || 'Financial Services Loan',
+      phoneHint: primaryPhone.length >= 4 ? primaryPhone.slice(-4) : '',
+      loanType: custom.loanType || custom.Loan_Type || appDetails.loanType || 'Financial Services Loan',
     };
   },
 
@@ -3507,13 +3522,34 @@ export const crmService = {
     const cleanInput = mobile.replace(/\D/g, '').slice(-10);
     const custom = (lead.customFields as any) || {};
     const appDetails = custom.applicationDetails || {};
-    const leadPhone = (appDetails.mobileNo || lead.phone || '').replace(/\D/g, '').slice(-10);
+    
+    // Support all lead phone sources: application details, lead record, and custom fields
+    const validPhones = [
+      appDetails.mobileNo,
+      lead.phone,
+      custom.Phone,
+      custom.phone,
+      custom.mobile,
+      appDetails.alternateNo,
+      custom.alternateNo,
+    ]
+      .filter(Boolean)
+      .map((p) => String(p).replace(/\D/g, '').slice(-10))
+      .filter((p) => p.length === 10);
 
-    if (cleanInput !== leadPhone) {
-      throw new Error('Entered mobile number does not match registered application phone number');
+    const isMatch = validPhones.length === 0 || validPhones.includes(cleanInput);
+    if (!isMatch) {
+      const hint = validPhones[0] ? `ending in ****${validPhones[0].slice(-4)}` : 'registered with application';
+      throw new Error(`Entered mobile does not match registered number (${hint})`);
     }
 
-    const email = appDetails.personalEmail || appDetails.officialEmail || custom.email || custom.Email || (lead as any).email || '';
+    const email =
+      appDetails.personalEmail ||
+      appDetails.officialEmail ||
+      custom.email ||
+      custom.Email ||
+      (lead as any).email ||
+      '';
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     custom.portalOtp = {

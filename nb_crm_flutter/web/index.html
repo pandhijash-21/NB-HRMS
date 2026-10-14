@@ -20,7 +20,13 @@
     (function () {
       var path = window.location.pathname || '';
       if (path.indexOf('/client-portal') === 0) {
-        window.location.replace('/api/client-portal' + window.location.search);
+        var host = window.location.hostname;
+        var port = window.location.port;
+        if ((host === 'localhost' || host === '127.0.0.1') && port !== '4000') {
+          window.location.replace('http://localhost:4000' + path + window.location.search + window.location.hash);
+        } else {
+          window.location.replace('/api/client-portal' + window.location.search + window.location.hash);
+        }
       }
     })();
   </script>

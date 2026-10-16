@@ -74,6 +74,8 @@ services:
     # Localhost only — public traffic must go through Traefik (VPN gate on web, API middleware).
     ports:
       - "127.0.0.1:4000:4000"
+    volumes:
+      - uploadsdata:/app/uploads
     labels:
       - traefik.enable=true
       - traefik.http.routers.nbcrm-api.rule=Host(`crm.nbdeveloper.co.in`) && (PathPrefix(`/api`) || PathPrefix(`/health`) || PathPrefix(`/actions`) || PathPrefix(`/events`) || PathPrefix(`/socket.io`) || PathPrefix(`/uploads`) || PathPrefix(`/client-portal`))
@@ -215,3 +217,4 @@ volumes:
   osrmdata:
   miniodata:
   whispercache:
+  uploadsdata:

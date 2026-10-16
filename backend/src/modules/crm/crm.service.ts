@@ -4548,14 +4548,27 @@ export const crmService = {
       throw new Error(`File format .${cleanExt} is not permitted. Allowed formats: ${allowed.join(', ').toUpperCase()}`);
     }
 
-    const uploadsDir = path.join(process.cwd(), 'uploads', 'crm', 'client-docs');
-    fs.mkdirSync(uploadsDir, { recursive: true });
-
+    let fileUrl = '';
     const safeName = `${lead.id}_${docTypeId}_${Date.now()}${ext}`;
-    const filePath = path.join(uploadsDir, safeName);
-    fs.writeFileSync(filePath, file.buffer);
+    try {
+      const uploadsDir = path.join(process.cwd(), 'uploads', 'crm', 'client-docs');
+      fs.mkdirSync(uploadsDir, { recursive: true });
+      fs.writeFileSync(path.join(uploadsDir, safeName), file.buffer);
+      fileUrl = `/uploads/crm/client-docs/${safeName}`;
+    } catch (_) {}
 
-    const fileUrl = `/uploads/crm/client-docs/${safeName}`;
+    try {
+      const cloudUrl = await uploadService.uploadToCloudinary(file, 'crm/client-docs');
+      if (cloudUrl) fileUrl = cloudUrl;
+    } catch (e) {
+      console.warn('[uploadClientPortalDoc] Cloudinary upload fallback to local storage:', e);
+      if (!fileUrl) {
+        const uploadsDir = path.join(process.cwd(), 'uploads', 'crm', 'client-docs');
+        fs.mkdirSync(uploadsDir, { recursive: true });
+        fs.writeFileSync(path.join(uploadsDir, safeName), file.buffer);
+        fileUrl = `/uploads/crm/client-docs/${safeName}`;
+      }
+    }
 
     const documents: any[] = custom.documents || [];
 
@@ -4596,15 +4609,28 @@ export const crmService = {
     const lead = await prisma.crmLead.findUnique({ where: { id: leadId } });
     if (!lead) throw new Error('Lead not found');
 
-    const uploadsDir = path.join(process.cwd(), 'uploads', 'crm', 'client-docs');
-    fs.mkdirSync(uploadsDir, { recursive: true });
-
     const ext = path.extname(file.originalname) || '.pdf';
     const safeName = `${lead.id}_${docTypeId}_${Date.now()}${ext}`;
-    const filePath = path.join(uploadsDir, safeName);
-    fs.writeFileSync(filePath, file.buffer);
+    let fileUrl = '';
+    try {
+      const uploadsDir = path.join(process.cwd(), 'uploads', 'crm', 'client-docs');
+      fs.mkdirSync(uploadsDir, { recursive: true });
+      fs.writeFileSync(path.join(uploadsDir, safeName), file.buffer);
+      fileUrl = `/uploads/crm/client-docs/${safeName}`;
+    } catch (_) {}
 
-    const fileUrl = `/uploads/crm/client-docs/${safeName}`;
+    try {
+      const cloudUrl = await uploadService.uploadToCloudinary(file, 'crm/client-docs');
+      if (cloudUrl) fileUrl = cloudUrl;
+    } catch (e) {
+      console.warn('[uploadLeadDoc] Cloudinary upload fallback to local storage:', e);
+      if (!fileUrl) {
+        const uploadsDir = path.join(process.cwd(), 'uploads', 'crm', 'client-docs');
+        fs.mkdirSync(uploadsDir, { recursive: true });
+        fs.writeFileSync(path.join(uploadsDir, safeName), file.buffer);
+        fileUrl = `/uploads/crm/client-docs/${safeName}`;
+      }
+    }
 
     const custom = (lead.customFields as any) || {};
     const documents: any[] = custom.documents || [];
@@ -4692,46 +4718,92 @@ export const crmService = {
     let addedCount = 0;
     for (const doc of documents) {
       if (!doc.fileUrl) continue;
-      const relativePath = doc.fileUrl.startsWith('/') ? doc.fileUrl.slice(1) : doc.fileUrl;
-      const candidates = [
-        path.join(process.cwd(), relativePath),
-        path.join(process.cwd(), 'backend', relativePath),
-        path.join(__dirname, '../../../../', relativePath),
-        path.join(__dirname, '../../../', relativePath),
-      ];
 
-      let targetPath = '';
-      for (const cand of candidates) {
-        if (fs.existsSync(cand)) {
-          targetPath = cand;
-          break;
-        }
-      }
-
-      const ext = path.extname(doc.fileName || relativePath) || '.pdf';
+      const ext = path.extname(doc.fileName || doc.fileUrl) || '.pdf';
       const docLabel = (doc.docName || doc.docTypeId || 'Document')
         .replace(/[^a-zA-Z0-9_\- ]/g, '')
         .trim()
         .replace(/\s+/g, '_');
-      const originalBase = path.basename(doc.fileName || relativePath, ext).replace(/[^a-zA-Z0-9_\- ]/g, '_');
+      const originalBase = path.basename(doc.fileName || doc.fileUrl, ext).replace(/[^a-zA-Z0-9_\- ]/g, '_');
       const entryName = `${docLabel}_${originalBase}${ext}`;
 
-      if (targetPath && fs.existsSync(targetPath)) {
-        archive.file(targetPath, { name: entryName });
-        addedCount++;
+      let fileBuffer: Buffer | null = null;
+
+      // 1. Fetch remote HTTP/HTTPS URL (e.g. Cloudinary, MinIO, CDN)
+      if (doc.fileUrl.startsWith('http://') || doc.fileUrl.startsWith('https://')) {
+        try {
+          const fetched = await uploadService.fetchDocumentBytes(doc.fileUrl);
+          if (fetched?.buffer && fetched.buffer.length > 0) {
+            fileBuffer = fetched.buffer;
+          }
+        } catch {
+          try {
+            const resp = await fetch(doc.fileUrl);
+            if (resp.ok) {
+              const ab = await resp.arrayBuffer();
+              if (ab.byteLength > 0) fileBuffer = Buffer.from(ab);
+            }
+          } catch (_) {}
+        }
       } else {
-        archive.append(`Document "${doc.docName || doc.docTypeId || 'Doc'}" was registered at path: ${doc.fileUrl}`, {
-          name: `${entryName}.info.txt`,
-        });
+        // 2. Fetch from local filesystem
+        const relativePath = doc.fileUrl.startsWith('/') ? doc.fileUrl.slice(1) : doc.fileUrl;
+        const candidates = [
+          path.join(process.cwd(), relativePath),
+          path.join(process.cwd(), 'backend', relativePath),
+          path.join(__dirname, '../../../../', relativePath),
+          path.join(__dirname, '../../../', relativePath),
+          path.join('/app', relativePath),
+          path.join('/app/uploads', path.basename(relativePath)),
+          path.join(process.cwd(), 'uploads', 'crm', 'client-docs', path.basename(relativePath)),
+          path.join(process.cwd(), 'backend', 'uploads', 'crm', 'client-docs', path.basename(relativePath)),
+        ];
+
+        for (const cand of candidates) {
+          if (fs.existsSync(cand)) {
+            try {
+              fileBuffer = fs.readFileSync(cand);
+              break;
+            } catch (_) {}
+          }
+        }
+
+        // 3. Fallback: fetch from live domain if local container disk missed it
+        if (!fileBuffer) {
+          const remoteCandidates = [
+            `https://crm.nbdeveloper.co.in${doc.fileUrl}`,
+            `https://crm.nbdeveloper.co.in/api${doc.fileUrl}`,
+          ];
+          for (const remoteUrl of remoteCandidates) {
+            try {
+              const resp = await fetch(remoteUrl);
+              if (resp.ok) {
+                const ab = await resp.arrayBuffer();
+                if (ab.byteLength > 0) {
+                  fileBuffer = Buffer.from(ab);
+                  break;
+                }
+              }
+            } catch (_) {}
+          }
+        }
+      }
+
+      if (fileBuffer && fileBuffer.length > 0) {
+        archive.append(fileBuffer, { name: entryName });
         addedCount++;
       }
     }
 
     if (addedCount === 0) {
-      archive.append('No document files found for this application.', { name: 'README.txt' });
+      archive.append(
+        'The requested application files could not be located on storage. Please contact the administrator or re-upload the documents.',
+        { name: 'README.txt' }
+      );
     }
 
     await archive.finalize();
+
 
   },
 };

@@ -108,6 +108,10 @@ export interface UpdateCrmSettingsDto {
   bin_retention_days?: string;
   excel_assigned_telecaller_ids?: string | number[];
   webhook_assigned_telecaller_ids?: string | number[];
+  max_telecaller_active_workload?: number | string;
+  telecaller_max_workload_map?: string | Record<string, number>;
+  untouched_lead_timeout_minutes?: number | string;
+  idle_timeout_minutes?: number | string;
   [key: string]: any;
 }
 

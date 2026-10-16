@@ -580,6 +580,12 @@ class CrmSettings {
   final List<int> excelAssignedTelecallerIds;
   final List<int> webhookAssignedTelecallerIds;
 
+  // Waiting Queue, Inactivity & Workload Management
+  final int maxTelecallerActiveWorkload;
+  final Map<String, int> telecallerMaxWorkloadMap;
+  final int untouchedLeadTimeoutMinutes;
+  final int idleTimeoutMinutes;
+
   // Loan Types & Document Configs (Finserve CRM)
   final List<String> loanTypes;
   final List<CrmLoanDocType> loanDocTypes;
@@ -679,6 +685,10 @@ class CrmSettings {
     this.kpiShowConversionRate = true,
     this.excelAssignedTelecallerIds = const [],
     this.webhookAssignedTelecallerIds = const [],
+    this.maxTelecallerActiveWorkload = 20,
+    this.telecallerMaxWorkloadMap = const {},
+    this.untouchedLeadTimeoutMinutes = 30,
+    this.idleTimeoutMinutes = 5,
     this.loanTypes = const [
       'Home Loan',
       'Personal Loan',
@@ -811,6 +821,10 @@ class CrmSettings {
       kpiShowConversionRate: json['kpi_show_conversion_rate']?.toString() != 'false',
       excelAssignedTelecallerIds: _parseIntList(json['excel_assigned_telecaller_ids']),
       webhookAssignedTelecallerIds: _parseIntList(json['webhook_assigned_telecaller_ids']),
+      maxTelecallerActiveWorkload: int.tryParse(json['max_telecaller_active_workload']?.toString() ?? '20') ?? 20,
+      telecallerMaxWorkloadMap: _parseWorkloadMap(json['telecaller_max_workload_map']),
+      untouchedLeadTimeoutMinutes: int.tryParse(json['untouched_lead_timeout_minutes']?.toString() ?? '30') ?? 30,
+      idleTimeoutMinutes: int.tryParse(json['idle_timeout_minutes']?.toString() ?? '5') ?? 5,
       loanTypes: _parseList(json['loan_types'], const [
         'Home Loan',
         'Personal Loan',
@@ -844,6 +858,108 @@ class CrmSettings {
       }).toList();
     }
     return defaultFinserveApplicationFields;
+  }
+
+  static Map<String, int> _parseWorkloadMap(dynamic raw) {
+    if (raw == null) return const {};
+    Map map = {};
+    if (raw is Map) {
+      map = raw;
+    } else if (raw is String && raw.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map) map = decoded;
+      } catch (_) {}
+    }
+    if (map.isNotEmpty) {
+      final res = <String, int>{};
+      map.forEach((k, v) {
+        final val = int.tryParse(v.toString());
+        if (val != null && val > 0) {
+          res[k.toString()] = val;
+        }
+      });
+      return res;
+    }
+    return const {};
+  }
+}
+
+class TelecallerPresenceInfo {
+  final int employeeId;
+  final String fullName;
+  final String? subOrganization;
+  final String? department;
+  final String? designation;
+  final bool isPunchedIn;
+  final String presenceStatus; // 'ACTIVE' | 'ON_BREAK'
+  final DateTime? lastActiveAt;
+  final bool isActiveOnScreen;
+  final int maxCapacity;
+  final int currentWorkload;
+  final int availableCapacity;
+  final bool isEligibleForDispatch;
+
+  const TelecallerPresenceInfo({
+    required this.employeeId,
+    required this.fullName,
+    this.subOrganization,
+    this.department,
+    this.designation,
+    this.isPunchedIn = false,
+    this.presenceStatus = 'ON_BREAK',
+    this.lastActiveAt,
+    this.isActiveOnScreen = false,
+    this.maxCapacity = 20,
+    this.currentWorkload = 0,
+    this.availableCapacity = 20,
+    this.isEligibleForDispatch = false,
+  });
+
+  factory TelecallerPresenceInfo.fromJson(Map<String, dynamic> json) {
+    return TelecallerPresenceInfo(
+      employeeId: int.tryParse(json['employeeId']?.toString() ?? '0') ?? 0,
+      fullName: json['fullName']?.toString() ?? 'Unknown Telecaller',
+      subOrganization: json['subOrganization']?.toString(),
+      department: json['department']?.toString(),
+      designation: json['designation']?.toString(),
+      isPunchedIn: json['isPunchedIn'] == true,
+      presenceStatus: json['presenceStatus']?.toString().toUpperCase() ?? 'ON_BREAK',
+      lastActiveAt: json['lastActiveAt'] != null ? DateTime.tryParse(json['lastActiveAt'].toString()) : null,
+      isActiveOnScreen: json['isActiveOnScreen'] == true,
+      maxCapacity: int.tryParse(json['maxCapacity']?.toString() ?? '20') ?? 20,
+      currentWorkload: int.tryParse(json['currentWorkload']?.toString() ?? '0') ?? 0,
+      availableCapacity: int.tryParse(json['availableCapacity']?.toString() ?? '20') ?? 20,
+      isEligibleForDispatch: json['isEligibleForDispatch'] == true,
+    );
+  }
+}
+
+class WaitingQueueStatus {
+  final int queuedLeadsCount;
+  final int activeTelecallersCount;
+  final int totalTelecallersCount;
+  final int totalAvailableCapacity;
+  final List<TelecallerPresenceInfo> telecallers;
+
+  const WaitingQueueStatus({
+    this.queuedLeadsCount = 0,
+    this.activeTelecallersCount = 0,
+    this.totalTelecallersCount = 0,
+    this.totalAvailableCapacity = 0,
+    this.telecallers = const [],
+  });
+
+  factory WaitingQueueStatus.fromJson(Map<String, dynamic> json) {
+    return WaitingQueueStatus(
+      queuedLeadsCount: int.tryParse(json['queuedLeadsCount']?.toString() ?? '0') ?? 0,
+      activeTelecallersCount: int.tryParse(json['activeTelecallersCount']?.toString() ?? '0') ?? 0,
+      totalTelecallersCount: int.tryParse(json['totalTelecallersCount']?.toString() ?? '0') ?? 0,
+      totalAvailableCapacity: int.tryParse(json['totalAvailableCapacity']?.toString() ?? '0') ?? 0,
+      telecallers: (json['telecallers'] as List? ?? [])
+          .map((e) => TelecallerPresenceInfo.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList(),
+    );
   }
 }
 
@@ -1052,6 +1168,7 @@ class CrmKpiMetrics {
   final int missedCalls;
   final int totalTalkTimeMinutes;
   final double conversionRate;
+  final bool isPersonal;
 
   const CrmKpiMetrics({
     required this.totalActiveLeads,
@@ -1065,6 +1182,7 @@ class CrmKpiMetrics {
     this.missedCalls = 0,
     this.totalTalkTimeMinutes = 0,
     this.conversionRate = 0.0,
+    this.isPersonal = false,
   });
 
   factory CrmKpiMetrics.fromJson(Map<String, dynamic> json) {
@@ -1080,6 +1198,7 @@ class CrmKpiMetrics {
       missedCalls: (json['missedCalls'] as num?)?.toInt() ?? 0,
       totalTalkTimeMinutes: (json['totalTalkTimeMinutes'] as num?)?.toInt() ?? 0,
       conversionRate: (json['conversionRate'] as num?)?.toDouble() ?? 0.0,
+      isPersonal: json['isPersonal'] == true,
     );
   }
 }

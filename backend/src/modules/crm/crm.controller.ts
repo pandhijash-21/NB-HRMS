@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import { crmService } from './crm.service';
 import { ok, fail } from '../../utils/response';
 import { CLIENT_PORTAL_HTML } from './client-portal.template';
+import { isAdminRole } from '../auth/permissions-map';
 
 function getScope(req: Request): string {
   const fromParam = (req.query?.scope || req.body?.scope || req.headers['x-crm-scope'] || '').toString().toUpperCase().trim();
@@ -201,11 +202,17 @@ export const crmController = {
   async createLead(req: Request, res: Response) {
     try {
       const authUser = (req as any).user;
+      const isAdmin = isAdminRole(authUser?.roleName || authUser?.role);
+      const explicitTelecallerId = req.body.telecallerId
+        ? Number(req.body.telecallerId)
+        : (isAdmin ? undefined : authUser?.employeeId);
+
       const lead = await crmService.createLead(
         req.body,
         authUser?.id,
-        authUser?.employeeId,
+        explicitTelecallerId,
         getScope(req),
+        authUser?.subOrganization,
       );
       res.json(ok(lead));
     } catch (err: any) {
@@ -219,13 +226,19 @@ export const crmController = {
         return res.status(400).json(fail('No Excel file uploaded'));
       }
       const authUser = (req as any).user;
+      const isAdmin = isAdminRole(authUser?.roleName || authUser?.role);
       const campaignId = (req.body.campaignId || req.query.campaignId) as string | undefined;
+      const explicitTelecallerId = req.body.telecallerId
+        ? Number(req.body.telecallerId)
+        : (isAdmin ? undefined : authUser?.employeeId);
+
       const result = await crmService.importExcelLeads(
         req.file.buffer,
         authUser?.id,
-        authUser?.employeeId,
+        explicitTelecallerId,
         campaignId,
         getScope(req),
+        authUser?.subOrganization,
       );
       res.json(ok(result));
     } catch (err: any) {
@@ -440,10 +453,13 @@ export const crmController = {
 
   async getKpiMetrics(req: Request, res: Response) {
     try {
+      const authUser = (req as any).user;
       const metrics = await crmService.getKpiMetrics(
         req.query.projectId as string | undefined,
         req.query.campaignId as string | undefined,
         getScope(req),
+        authUser?.role,
+        authUser?.employeeId,
       );
       res.json(ok(metrics));
     } catch (err: any) {
@@ -763,6 +779,86 @@ export const crmController = {
     }
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     return res.send(CLIENT_PORTAL_HTML);
+  },
+
+  async downloadLeadDocsZip(req: Request, res: Response) {
+    try {
+      const id = String(req.params.id);
+      await crmService.downloadLeadDocsZip(id, res, false);
+    } catch (err: any) {
+      if (!res.headersSent) {
+        res.status(500).json(fail(err.message || 'Failed to download documents zip'));
+      }
+    }
+  },
+
+  async downloadLeadDocsZipPublic(req: Request, res: Response) {
+    try {
+      const token = String(req.params.token || req.params.id || req.query.token);
+      await crmService.downloadLeadDocsZip(token, res, true);
+    } catch (err: any) {
+      if (!res.headersSent) {
+        res.status(500).send(err.message || 'Failed to download documents zip');
+      }
+    }
+  },
+
+  async reportTelecallerActivity(req: Request, res: Response) {
+    try {
+      const authUser = (req as any).user;
+      if (!authUser?.employeeId) {
+        return res.status(400).json(fail('Employee profile required for telecaller activity'));
+      }
+      const rawStatus = (req.body.status || 'ACTIVE').toUpperCase();
+      const status: 'ACTIVE' | 'ON_BREAK' = rawStatus === 'ON_BREAK' ? 'ON_BREAK' : 'ACTIVE';
+      const result = crmService.recordTelecallerActivity(
+        authUser.employeeId,
+        status,
+        authUser.subOrganization,
+      );
+      if (status === 'ACTIVE') {
+        crmService
+          .dispatchWaitingQueue(getScope(req), authUser.subOrganization)
+          .catch((e) => console.error('[Telecaller Activity Dispatch Error]:', e));
+      }
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to record telecaller activity'));
+    }
+  },
+
+  async getTelecallerActivity(req: Request, res: Response) {
+    try {
+      const authUser = (req as any).user;
+      const scope = getScope(req);
+      const subOrg = authUser?.subOrganization;
+      const list = await crmService.getTelecallerPresenceList(scope, subOrg);
+      res.json(ok(list));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to get telecaller activity'));
+    }
+  },
+
+  async getWaitingQueueStatus(req: Request, res: Response) {
+    try {
+      const authUser = (req as any).user;
+      const scope = getScope(req);
+      const result = await crmService.getWaitingQueueStatus(scope, authUser?.subOrganization);
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to get waiting queue status'));
+    }
+  },
+
+  async dispatchWaitingQueue(req: Request, res: Response) {
+    try {
+      const authUser = (req as any).user;
+      const scope = getScope(req);
+      const result = await crmService.dispatchWaitingQueue(scope, authUser?.subOrganization);
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to dispatch waiting queue'));
+    }
   },
 };
 

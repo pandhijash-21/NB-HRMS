@@ -48,6 +48,8 @@ crmPublicRouter.post(
   upload.single('document'),
   crmController.uploadClientPortalDoc,
 );
+crmPublicRouter.get('/client-portal/:token/download-docs-zip', crmController.downloadLeadDocsZipPublic);
+crmPublicRouter.get('/leads/:id/download-docs-zip', crmController.downloadLeadDocsZipPublic);
 
 // Apply auth to all protected CRM routes
 crmRouter.use(requireAuth);
@@ -167,6 +169,7 @@ crmRouter.patch('/leads/:id/restore', generalCrmGuard, crmController.restoreFrom
 crmRouter.put('/leads/:id/application-details', generalCrmGuard, crmController.updateLeadApplicationDetails);
 crmRouter.post('/leads/:id/portal-link', generalCrmGuard, crmController.generateClientPortalLink);
 crmRouter.post('/leads/:id/upload-doc', generalCrmGuard, upload.single('document'), crmController.uploadLeadDoc);
+crmRouter.get('/leads/:id/download-docs-zip', generalCrmGuard, crmController.downloadLeadDocsZip);
 
 // Follow-ups
 crmRouter.get('/follow-ups', generalCrmGuard, crmController.getFollowUps);
@@ -184,5 +187,10 @@ crmRouter.get('/sales-users', generalCrmGuard, crmController.getSalesUsers);
 crmRouter.get('/virtual-building', generalCrmGuard, crmController.getVirtualBuilding);
 crmRouter.post('/virtual-building/unit-action', generalCrmGuard, crmController.updateVirtualBuildingUnit);
 
+// Telecaller Screen Activity & Heartbeat / Inactivity Break
+crmRouter.post('/telecallers/activity', generalCrmGuard, crmController.reportTelecallerActivity);
+crmRouter.get('/telecallers/activity', generalCrmGuard, crmController.getTelecallerActivity);
 
-
+// Waiting Queue Management & Dispatch
+crmRouter.get('/waiting-queue/status', generalCrmGuard, crmController.getWaitingQueueStatus);
+crmRouter.post('/waiting-queue/dispatch', generalCrmGuard, crmController.dispatchWaitingQueue);

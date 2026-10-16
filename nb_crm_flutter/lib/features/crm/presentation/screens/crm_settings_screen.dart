@@ -106,6 +106,16 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
   final _newSourceController = TextEditingController();
   final _newRefTypeController = TextEditingController();
 
+  int _maxTelecallerActiveWorkload = 20;
+  Map<String, int> _telecallerMaxWorkloadMap = {};
+  int _untouchedLeadTimeoutMinutes = 30;
+  int _idleTimeoutMinutes = 5;
+  WaitingQueueStatus? _waitingQueueStatus;
+  bool _waitingQueueLoading = false;
+  final _maxWorkloadController = TextEditingController(text: '20');
+  final _untouchedTimeoutController = TextEditingController(text: '30');
+  final _idleTimeoutController = TextEditingController(text: '5');
+
   bool _telephonyLoaded = false;
   List<CrmTelecallerTelephony> _telecallers = [];
   bool _telecallersLoading = false;
@@ -163,6 +173,9 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
     _newReasonController.dispose();
     _newSourceController.dispose();
     _newRefTypeController.dispose();
+    _maxWorkloadController.dispose();
+    _untouchedTimeoutController.dispose();
+    _idleTimeoutController.dispose();
     super.dispose();
   }
 
@@ -273,7 +286,54 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
         settings.loanTypeDocsMap.map((k, v) => MapEntry(k, List<String>.from(v))),
       );
       _finserveApplicationFields = List<FinserveApplicationField>.from(settings.finserveApplicationFields);
+      _maxTelecallerActiveWorkload = settings.maxTelecallerActiveWorkload;
+      _maxWorkloadController.text = _maxTelecallerActiveWorkload.toString();
+      _telecallerMaxWorkloadMap = Map<String, int>.from(settings.telecallerMaxWorkloadMap);
+      _untouchedLeadTimeoutMinutes = settings.untouchedLeadTimeoutMinutes;
+      _untouchedTimeoutController.text = _untouchedLeadTimeoutMinutes.toString();
+      _idleTimeoutMinutes = settings.idleTimeoutMinutes;
+      _idleTimeoutController.text = _idleTimeoutMinutes.toString();
       _presalesConfigLoaded = true;
+      _loadWaitingQueueStatus();
+    }
+  }
+
+  Future<void> _loadWaitingQueueStatus() async {
+    if (_waitingQueueLoading) return;
+    setState(() => _waitingQueueLoading = true);
+    try {
+      final status = await context.read<CrmRepository>().getWaitingQueueStatus();
+      if (mounted) {
+        setState(() {
+          _waitingQueueStatus = status;
+          _waitingQueueLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _waitingQueueLoading = false);
+    }
+  }
+
+  Future<void> _triggerQueueDispatch() async {
+    try {
+      final res = await context.read<CrmRepository>().dispatchWaitingQueue();
+      if (mounted) {
+        final dispatched = res['dispatchedCount'] ?? 0;
+        final remaining = res['remainingQueuedCount'] ?? 0;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Dispatched $dispatched leads to active telecallers. $remaining waiting in queue.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        _loadWaitingQueueStatus();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to dispatch queue: $e'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
@@ -1642,6 +1702,18 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
                 ),
               ],
             ),
+          ),
+          const SizedBox(height: 20),
+
+          // Section 0B: Lead Waiting Queue & Workload Capacity Management
+          _buildWaitingQueueAndWorkloadCard(
+            context: context,
+            employees: employees,
+            isDark: isDark,
+            cardBg: cardBg,
+            borderColor: borderColor,
+            textMuted: textMuted,
+            primaryColor: primaryColor,
           ),
           const SizedBox(height: 20),
 
@@ -3089,6 +3161,10 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
         'not_interested_reasons': jsonEncode(_notInterestedReasons),
         'excel_assigned_telecaller_ids': jsonEncode(_excelAssignedTelecallerIds),
         'webhook_assigned_telecaller_ids': jsonEncode(_webhookAssignedTelecallerIds),
+        'max_telecaller_active_workload': _maxWorkloadController.text.trim(),
+        'telecaller_max_workload_map': jsonEncode(_telecallerMaxWorkloadMap),
+        'untouched_lead_timeout_minutes': _untouchedTimeoutController.text.trim(),
+        'idle_timeout_minutes': _idleTimeoutController.text.trim(),
       }));
     } else {
       context.read<CrmSettingsBloc>().add(CrmSettingsSaved({
@@ -3098,6 +3174,10 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
         'site_visit_desk_employee_id': _siteVisitDeskEmployeeId?.toString() ?? '',
         'excel_assigned_telecaller_ids': jsonEncode(_excelAssignedTelecallerIds),
         'webhook_assigned_telecaller_ids': jsonEncode(_webhookAssignedTelecallerIds),
+        'max_telecaller_active_workload': _maxWorkloadController.text.trim(),
+        'telecaller_max_workload_map': jsonEncode(_telecallerMaxWorkloadMap),
+        'untouched_lead_timeout_minutes': _untouchedTimeoutController.text.trim(),
+        'idle_timeout_minutes': _idleTimeoutController.text.trim(),
       }));
     }
   }
@@ -3405,4 +3485,365 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
       },
     );
   }
+
+  Widget _buildWaitingQueueAndWorkloadCard({
+    required BuildContext context,
+    required List<CrmSalesUser> employees,
+    required bool isDark,
+    required Color cardBg,
+    required Color borderColor,
+    required Color textMuted,
+    required Color primaryColor,
+  }) {
+    final status = _waitingQueueStatus;
+    final presenceMap = <int, TelecallerPresenceInfo>{};
+    if (status != null) {
+      for (final p in status.telecallers) {
+        presenceMap[p.employeeId] = p;
+      }
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.hourglass_top_rounded, color: Color(0xFFF59E0B), size: 22),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Telecaller Workload & Waiting Queue Automation',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : const Color(0xFF1E293B),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Leads enter a waiting queue and are dispatched to telecallers who have punched in today and are active on screen. Leads untouched for 30 minutes return to the queue.',
+                      style: TextStyle(fontSize: 13, color: textMuted),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: _waitingQueueLoading
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.refresh_rounded, size: 20),
+                tooltip: 'Refresh Queue Status',
+                onPressed: _loadWaitingQueueStatus,
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          // Live Metrics & Dispatch Action Bar
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF24201D) : const Color(0xFFFFFBEB),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.3)),
+            ),
+            child: Wrap(
+              spacing: 16,
+              runSpacing: 12,
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildMetricChip(
+                      icon: Icons.list_alt_rounded,
+                      label: 'In Queue',
+                      value: '${status?.queuedLeadsCount ?? 0}',
+                      color: const Color(0xFFD97706),
+                    ),
+                    const SizedBox(width: 12),
+                    _buildMetricChip(
+                      icon: Icons.person_pin_rounded,
+                      label: 'Active Telecallers',
+                      value: '${status?.activeTelecallersCount ?? 0}',
+                      color: const Color(0xFF059669),
+                    ),
+                    const SizedBox(width: 12),
+                    _buildMetricChip(
+                      icon: Icons.space_dashboard_rounded,
+                      label: 'Available Slots',
+                      value: '${status?.totalAvailableCapacity ?? 0}',
+                      color: const Color(0xFF2563EB),
+                    ),
+                  ],
+                ),
+                ElevatedButton.icon(
+                  onPressed: _triggerQueueDispatch,
+                  icon: const Icon(Icons.bolt_rounded, size: 18),
+                  label: const Text('Dispatch Queue Now'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFD97706),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Configuration Fields (Workload limits & timeouts)
+          Text(
+            'Queue & Automation Rules',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: isDark ? Colors.white : const Color(0xFF1E293B),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 16,
+            runSpacing: 14,
+            children: [
+              SizedBox(
+                width: 260,
+                child: TextField(
+                  controller: _maxWorkloadController,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: 'Global Max Active Workload (CNR + Not Started)',
+                    hintText: 'e.g. 20',
+                    helperText: 'Max active leads assigned before pausing',
+                    isDense: true,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 260,
+                child: TextField(
+                  controller: _untouchedTimeoutController,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: 'Untouched Lead Timeout (Minutes)',
+                    hintText: 'e.g. 30',
+                    helperText: 'Returns lead to queue if untouched',
+                    isDense: true,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 260,
+                child: TextField(
+                  controller: _idleTimeoutController,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: 'Screen Inactivity Idle Timeout (Minutes)',
+                    hintText: 'e.g. 5',
+                    helperText: 'Sets status to "On Break" if no screen activity',
+                    isDense: true,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+
+          // Per-Telecaller Capacity Table
+          Text(
+            'Individual Telecaller Capacity Overrides',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: isDark ? Colors.white : const Color(0xFF1E293B),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Specify individual lead capacities (CNR + Not Started) for specific team members. Leave blank to use the global limit.',
+            style: TextStyle(fontSize: 12, color: textMuted),
+          ),
+          const SizedBox(height: 14),
+
+          if (employees.isEmpty)
+            Text('No telecallers/sales employees found.', style: TextStyle(color: textMuted))
+          else
+            Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: borderColor),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: employees.length,
+                separatorBuilder: (_, __) => Divider(height: 1, color: borderColor),
+                itemBuilder: (ctx, i) {
+                  final emp = employees[i];
+                  final presence = presenceMap[emp.employeeId];
+                  final isPunchedIn = presence?.isPunchedIn ?? false;
+                  final isActiveOnScreen = presence?.isActiveOnScreen ?? false;
+                  final currentWorkload = presence?.currentWorkload ?? 0;
+                  final customLimit = _telecallerMaxWorkloadMap[emp.employeeId.toString()];
+
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 18,
+                          backgroundColor: primaryColor.withValues(alpha: 0.15),
+                          child: Text(
+                            emp.fullName.isNotEmpty ? emp.fullName[0].toUpperCase() : 'T',
+                            style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                emp.fullName,
+                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                              ),
+                              const SizedBox(height: 3),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 4,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  // Attendance Chip
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: isPunchedIn
+                                          ? const Color(0xFF10B981).withValues(alpha: 0.15)
+                                          : Colors.grey.withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      isPunchedIn ? 'Punched In' : 'Not Punched In',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                        color: isPunchedIn ? const Color(0xFF059669) : Colors.grey.shade600,
+                                      ),
+                                    ),
+                                  ),
+                                  // Screen Presence Chip
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: isActiveOnScreen
+                                          ? const Color(0xFF3B82F6).withValues(alpha: 0.15)
+                                          : const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      isActiveOnScreen ? 'Active on Screen' : 'On Break / Idle',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                        color: isActiveOnScreen ? const Color(0xFF2563EB) : const Color(0xFFD97706),
+                                      ),
+                                    ),
+                                  ),
+                                  Text(
+                                    'Active Workload (CNR + Not Started): $currentWorkload',
+                                    style: TextStyle(fontSize: 11, color: textMuted),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        SizedBox(
+                          width: 140,
+                          child: TextFormField(
+                            initialValue: customLimit?.toString() ?? '',
+                            keyboardType: TextInputType.number,
+                            decoration: InputDecoration(
+                              labelText: 'Max Capacity',
+                              hintText: 'Default',
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            onChanged: (val) {
+                              final parsed = int.tryParse(val.trim());
+                              setState(() {
+                                if (parsed != null && parsed > 0) {
+                                  _telecallerMaxWorkloadMap[emp.employeeId.toString()] = parsed;
+                                } else {
+                                  _telecallerMaxWorkloadMap.remove(emp.employeeId.toString());
+                                }
+                              });
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetricChip({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 6),
+          Text(
+            '$label: ',
+            style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.w500),
+          ),
+          Text(
+            value,
+            style: TextStyle(fontSize: 13, color: color, fontWeight: FontWeight.bold),
+          ),
+        ],
+      ),
+    );
+  }
 }
+

@@ -408,6 +408,31 @@ class CrmRepository {
     );
   }
 
+  Future<Map<String, dynamic>> reportTelecallerActivity(String status) async {
+    return _dio.postEnvelope<Map<String, dynamic>>(
+      'crm/telecallers/activity',
+      data: {'status': status},
+      queryParameters: {'scope': crmScopeNotifier.value},
+      parse: (raw) => Map<String, dynamic>.from(raw as Map),
+    );
+  }
+
+  Future<WaitingQueueStatus> getWaitingQueueStatus() async {
+    return _dio.getEnvelope<WaitingQueueStatus>(
+      'crm/waiting-queue/status',
+      queryParameters: {'scope': crmScopeNotifier.value},
+      parse: (raw) => WaitingQueueStatus.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
+  Future<Map<String, dynamic>> dispatchWaitingQueue() async {
+    return _dio.postEnvelope<Map<String, dynamic>>(
+      'crm/waiting-queue/dispatch',
+      queryParameters: {'scope': crmScopeNotifier.value},
+      parse: (raw) => Map<String, dynamic>.from(raw as Map),
+    );
+  }
+
   Future<CrmTelecallerTelephonyList> listTelecallerTelephony() async {
     return _dio.getEnvelope<CrmTelecallerTelephonyList>(
       'crm/telephony/telecallers',

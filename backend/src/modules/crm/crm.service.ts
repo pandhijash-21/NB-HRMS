@@ -5,9 +5,22 @@ import * as crypto from 'crypto';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as xlsx from 'xlsx';
+import archiver from 'archiver';
 import { uploadService } from '../personal-education/upload.service';
 import { whatsappService } from './whatsapp.service';
 import { sendFinserveClientOtpEmail } from '../../utils/mailer';
+import { isAdminRole } from '../auth/permissions-map';
+import { deriveDayInOut } from '../attendance/dayPunch.rules';
+
+interface TelecallerPresence {
+  employeeId: number;
+  lastActiveAt: number;
+  status: 'ACTIVE' | 'ON_BREAK';
+  subOrganization?: string | null;
+}
+
+const telecallerPresenceMap = new Map<number, TelecallerPresence>();
+
 import {
   CreateProjectDto,
   UpdateProjectDto,
@@ -570,18 +583,6 @@ export const crmService = {
     ).trim();
 
     const campaignScope = campaign.scope || 'NB_DEVELOPER';
-    const pools = await this.getAssignedTelecallerPools(campaignScope);
-    let webhookTelecallerId: number | undefined;
-
-    if (pools.webhookIds.length > 0) {
-      const existingWebhookCount = await prisma.crmLead.count({
-        where: {
-          scope: campaignScope,
-          leadSource: { in: ['WEBHOOK', 'META'] },
-        },
-      });
-      webhookTelecallerId = pools.webhookIds[existingWebhookCount % pools.webhookIds.length];
-    }
 
     const lead = await prisma.crmLead.create({
       data: {
@@ -589,12 +590,14 @@ export const crmService = {
         campaignId: campaign.id,
         phone: rawPhone || '0000000000',
         name,
-        status: 'NOT_STARTED',
+        status: CrmLeadStatus.NOT_STARTED,
         customFields: normalizedPayload,
         leadSource: 'WEBHOOK',
-        telecallerId: webhookTelecallerId || undefined,
       },
     });
+
+    // Attempt automatic waiting queue dispatch to active telecaller with capacity
+    await this.dispatchWaitingQueue(campaignScope);
 
     // WhatsApp Automation: Auto-welcome message with brochure on new webhook lead
     whatsappService
@@ -907,19 +910,30 @@ export const crmService = {
       query.userRole?.toUpperCase() || ''
     );
 
-    // If non-admin user is logged in, enforce flow and telecaller scoping
+    // If non-admin user is logged in, enforce flow and assignment scoping
     if (!isAdmin && query.userEmployeeId) {
       const pools = await this.getAssignedTelecallerPools(scope);
       const isExcelAssigned = pools.excelIds.includes(query.userEmployeeId);
       const isWebhookAssigned = pools.webhookIds.includes(query.userEmployeeId);
 
-      // Non-admin telecallers only see leads assigned directly to them
-      where.telecallerId = query.userEmployeeId;
+      // Non-admin sees leads assigned to them either as telecaller OR as sales rep/manager
+      const userAssignmentCond = [
+        { telecallerId: query.userEmployeeId },
+        { assignedToId: query.userEmployeeId },
+      ];
 
       if (isExcelAssigned && !isWebhookAssigned) {
-        where.OR = [{ leadSource: 'EXCEL' }, { leadSource: 'MANUAL' }, { leadSource: null }];
+        where.AND = [
+          { OR: userAssignmentCond },
+          { OR: [{ leadSource: 'EXCEL' }, { leadSource: 'MANUAL' }, { leadSource: null }] },
+        ];
       } else if (isWebhookAssigned && !isExcelAssigned) {
-        where.leadSource = { in: ['WEBHOOK', 'META'] };
+        where.AND = [
+          { OR: userAssignmentCond },
+          { leadSource: { in: ['WEBHOOK', 'META'] } },
+        ];
+      } else {
+        where.OR = userAssignmentCond;
       }
     }
 
@@ -927,14 +941,20 @@ export const crmService = {
       const flow = query.leadFlow.toUpperCase();
       if (flow === 'EXCEL') {
         const excelCond = [{ leadSource: 'EXCEL' }, { leadSource: 'MANUAL' }, { leadSource: null }];
-        if (where.OR) {
+        if (where.AND) {
+          where.AND.push({ OR: excelCond });
+        } else if (where.OR) {
           where.AND = [{ OR: where.OR }, { OR: excelCond }];
           delete where.OR;
         } else {
           where.OR = excelCond;
         }
       } else if (flow === 'WEBHOOK' || flow === 'META') {
-        where.leadSource = { in: ['WEBHOOK', 'META'] };
+        if (where.AND) {
+          where.AND.push({ leadSource: { in: ['WEBHOOK', 'META'] } });
+        } else {
+          where.leadSource = { in: ['WEBHOOK', 'META'] };
+        }
       }
     }
 
@@ -1003,7 +1023,13 @@ export const crmService = {
     };
   },
 
-  async createLead(dto: CreateLeadDto, createdById?: string, telecallerId?: number, scope: string = 'NB_DEVELOPER') {
+  async createLead(
+    dto: CreateLeadDto,
+    createdById?: string,
+    telecallerId?: number,
+    scope: string = 'NB_DEVELOPER',
+    subOrganization?: string | null,
+  ) {
     const custom = (dto.customFields && typeof dto.customFields === 'object') ? dto.customFields : {};
     const phone = (dto.phone || custom.phone || custom.Phone || custom.Phone_Number || custom.phone_number || '').toString().trim();
     const name = (dto.name || custom.client_name || custom.Client_Name || custom.full_name || custom.Full_Name || custom.Name || custom.name || 'Unnamed Lead').toString().trim();
@@ -1013,21 +1039,14 @@ export const crmService = {
     const requestedSource = (dto.leadSource || custom.leadSource || custom.lead_source || 'EXCEL').toString().toUpperCase();
     const finalSource = requestedSource.includes('WEBHOOK') || requestedSource.includes('META') ? 'WEBHOOK' : 'EXCEL';
 
-    let assignedTelecallerId = telecallerId || dto.telecallerId;
-    if (!assignedTelecallerId) {
-      const pools = await this.getAssignedTelecallerPools(scope);
-      if (finalSource === 'WEBHOOK' && pools.webhookIds.length > 0) {
-        const count = await prisma.crmLead.count({
-          where: { scope, leadSource: { in: ['WEBHOOK', 'META'] } },
-        });
-        assignedTelecallerId = pools.webhookIds[count % pools.webhookIds.length];
-      } else if (finalSource === 'EXCEL' && pools.excelIds.length > 0) {
-        const count = await prisma.crmLead.count({
-          where: { scope, leadSource: 'EXCEL' },
-        });
-        assignedTelecallerId = pools.excelIds[count % pools.excelIds.length];
-      }
+    let assignedTelecallerId = dto.telecallerId || telecallerId;
+    if (assignedTelecallerId) {
+      custom.assignedAt = new Date().toISOString();
     }
+
+    const effectiveAssignedId = dto.assignedToId || assignedTelecallerId;
+    const initialStatus = (dto.status as CrmLeadStatus) ||
+      (effectiveAssignedId ? CrmLeadStatus.ASSIGNED : CrmLeadStatus.NOT_STARTED);
 
     const newLead = await prisma.crmLead.create({
       data: {
@@ -1035,10 +1054,10 @@ export const crmService = {
         campaignId,
         phone: phone || '0000000000',
         name,
-        status: (dto.status as CrmLeadStatus) || CrmLeadStatus.NOT_STARTED,
+        status: initialStatus,
         customFields: custom,
         leadSource: finalSource,
-        assignedToId: dto.assignedToId,
+        assignedToId: effectiveAssignedId,
         telecallerId: assignedTelecallerId,
         createdById,
       },
@@ -1066,6 +1085,11 @@ export const crmService = {
       })
       .catch((err) => console.error('[CRM WhatsApp Hook Error - Manual Lead]:', err));
 
+    // If lead was not explicitly assigned, dispatch waiting queue
+    if (!effectiveAssignedId) {
+      await this.dispatchWaitingQueue(scope, subOrganization);
+    }
+
     return newLead;
   },
 
@@ -1075,6 +1099,7 @@ export const crmService = {
     telecallerId?: number,
     campaignId?: string,
     scope: string = 'NB_DEVELOPER',
+    subOrganization?: string | null,
   ) {
     const workbook = xlsx.read(fileBuffer, { type: 'buffer' });
     const firstSheetName = workbook.SheetNames[0];
@@ -1104,6 +1129,22 @@ export const crmService = {
 
     const pools = await this.getAssignedTelecallerPools(campaignScope);
 
+    // Pre-fetch active employees to match any Assigned To column in Excel
+    const activeEmployees = await prisma.employee.findMany({
+      where: { status: 'ACTIVE' },
+      include: { generalInfo: true, user: true },
+    });
+    const empLookup = new Map<string, number>();
+    for (const e of activeEmployees) {
+      empLookup.set(String(e.id), e.id);
+      if (e.generalInfo?.fullName) {
+        empLookup.set(e.generalInfo.fullName.toLowerCase().trim(), e.id);
+      }
+      if (e.user?.username) {
+        empLookup.set(e.user.username.toLowerCase().trim(), e.id);
+      }
+    }
+
     let insertedCount = 0;
     const leadsToInsert: any[] = [];
 
@@ -1111,6 +1152,7 @@ export const crmService = {
       const customFields: Record<string, any> = {};
       let phone = '';
       let name = '';
+      let assignedHeaderValue = '';
 
       for (const [header, val] of Object.entries(row)) {
         const cleanHeader = header.trim();
@@ -1123,6 +1165,18 @@ export const crmService = {
         } else if (mappedKey === 'client_name' || mappedKey === 'name' || lowerHeader.includes('name') || lowerHeader.includes('client')) {
           name = strVal;
         }
+
+        if (
+          lowerHeader.includes('assigned') ||
+          lowerHeader.includes('telecaller') ||
+          lowerHeader.includes('caller') ||
+          lowerHeader.includes('sales rep') ||
+          lowerHeader.includes('manager') ||
+          lowerHeader.includes('advisor')
+        ) {
+          assignedHeaderValue = strVal;
+        }
+
         customFields[mappedKey] = strVal;
       }
 
@@ -1131,19 +1185,30 @@ export const crmService = {
 
       if (phone || name) {
         let rowTelecallerId = telecallerId;
-        if (pools.excelIds.length > 0) {
-          rowTelecallerId = pools.excelIds[leadsToInsert.length % pools.excelIds.length];
+        let rowAssignedToId: number | undefined = undefined;
+
+        if (assignedHeaderValue) {
+          const matched = empLookup.get(assignedHeaderValue.toLowerCase().trim()) ||
+            (!isNaN(Number(assignedHeaderValue)) ? Number(assignedHeaderValue) : undefined);
+          if (matched) {
+            rowTelecallerId = matched;
+            rowAssignedToId = matched;
+            customFields.assignedAt = new Date().toISOString();
+          }
         }
+
+        const effectiveAssignedId = rowAssignedToId || rowTelecallerId;
 
         leadsToInsert.push({
           campaignId: targetCampaignId,
           scope: campaignScope,
           phone: phone || 'N/A',
           name: name || 'Unnamed Lead',
-          status: CrmLeadStatus.NOT_STARTED,
+          status: effectiveAssignedId ? CrmLeadStatus.ASSIGNED : CrmLeadStatus.NOT_STARTED,
           customFields,
           leadSource: 'EXCEL',
           telecallerId: rowTelecallerId,
+          assignedToId: effectiveAssignedId,
           createdById,
         });
       }
@@ -1165,10 +1230,14 @@ export const crmService = {
       }
     }
 
+    const dispatchResult = await this.dispatchWaitingQueue(campaignScope, subOrganization);
+
     return {
       count: insertedCount,
       totalRows: rows.length,
-      message: `Successfully imported ${insertedCount} leads from Excel`,
+      dispatchedCount: dispatchResult.dispatchedCount,
+      queuedCount: dispatchResult.remainingQueuedCount,
+      message: `Successfully imported ${insertedCount} leads from Excel (${dispatchResult.dispatchedCount} dispatched to active telecallers, ${dispatchResult.remainingQueuedCount} waiting in queue)`,
     };
   },
 
@@ -1181,6 +1250,7 @@ export const crmService = {
       scheduledVisitAt?: string | Date;
       remarks?: string;
       assignedToId?: number;
+      telecallerId?: number;
       notInterestedReason?: string;
       notInterestedRemark?: string;
     },
@@ -1237,13 +1307,22 @@ export const crmService = {
     }
 
     let safeAssignedId = existing.assignedToId;
-    if (payload.assignedToId && payload.assignedToId > 0) {
-      const emp = await prisma.employee.findUnique({ where: { id: payload.assignedToId } });
-      if (emp) safeAssignedId = emp.id;
+    if (payload.assignedToId !== undefined) {
+      if (payload.assignedToId === null || payload.assignedToId === 0) {
+        updateData.assignedToId = null;
+      } else {
+        const emp = await prisma.employee.findUnique({ where: { id: payload.assignedToId } });
+        if (emp) {
+          updateData.assignedToId = emp.id;
+          safeAssignedId = emp.id;
+        }
+      }
+    } else if ((isFinserve || status === 'ASSIGNED' || status === 'INTERESTED' || status === 'SITE_VISIT_DONE') && safeAssignedId) {
+      updateData.assignedToId = safeAssignedId;
     }
 
-    if ((isFinserve || status === 'ASSIGNED' || status === 'INTERESTED' || status === 'SITE_VISIT_DONE') && safeAssignedId) {
-      updateData.assignedToId = safeAssignedId;
+    if (payload.telecallerId !== undefined) {
+      updateData.telecallerId = payload.telecallerId && payload.telecallerId > 0 ? payload.telecallerId : null;
     }
 
     // Schedule or reschedule single active follow-up if date and time provided
@@ -1919,6 +1998,10 @@ export const crmService = {
       kpi_show_conversion_rate: 'true',
       excel_assigned_telecaller_ids: JSON.stringify([]),
       webhook_assigned_telecaller_ids: JSON.stringify([]),
+      max_telecaller_active_workload: '20',
+      telecaller_max_workload_map: JSON.stringify({}),
+      untouched_lead_timeout_minutes: '30',
+      idle_timeout_minutes: '5',
       loan_types: JSON.stringify([
         'Home Loan',
         'Personal Loan',
@@ -2041,6 +2124,567 @@ export const crmService = {
     }
 
     return this.getSettings(scope);
+  },
+
+  /**
+   * Discovers all active employees eligible to receive telecaller leads for the given CRM scope.
+   * Checks:
+   * 1. Employee is ACTIVE and has an active User account (excluding administrative roles).
+   * 2. Permission Matrix: User's role has READ or WRITE permission on CRM modules:
+   *    - For Real Estate CRM (NB_DEVELOPER): CRM_PRE_SALES, CRM_SALES, or CRM
+   *    - For Finserve CRM (NB_FINSERVE): FIN_CRM_PRE_SALES, FIN_CRM_SALES, or FIN_CRM
+   * 3. Sub-organization: Matches creator or campaign sub-organization if provided (graceful fallback).
+   */
+  async getEligibleTelecallers(
+    scope: string = 'NB_DEVELOPER',
+    subOrganization?: string | null,
+    options?: {
+      requirePunchIn?: boolean;
+      requireActive?: boolean;
+    },
+  ): Promise<number[]> {
+    const isFinserve = scope === 'NB_FINSERVE';
+    const targetModuleKeys = isFinserve
+      ? ['FIN_CRM_PRE_SALES', 'FIN_CRM_SALES', 'FIN_CRM']
+      : ['CRM_PRE_SALES', 'CRM_SALES', 'CRM'];
+
+    const users = await prisma.user.findMany({
+      where: {
+        isActive: true,
+        employeeId: { not: null },
+        employee: {
+          status: 'ACTIVE',
+        },
+      },
+      include: {
+        employee: {
+          include: {
+            generalInfo: {
+              select: {
+                fullName: true,
+                subOrganization: true,
+                organization: true,
+                department: true,
+                designation: true,
+              },
+            },
+          },
+        },
+        role: {
+          include: {
+            permissions: {
+              where: {
+                moduleKey: { in: targetModuleKeys },
+                OR: [{ canRead: true }, { canWrite: true }],
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // 1. Filter out administrators so leads are assigned to dedicated telecalling / sales staff
+    const nonAdminUsers = users.filter((u) => !isAdminRole(u.role?.name));
+
+    // 2. Filter by permission matrix (user's role must grant access to this CRM scope)
+    const permittedUsers = nonAdminUsers.filter((u) => (u.role?.permissions?.length || 0) > 0);
+
+    // 3. Filter by subOrganization if specified
+    let scopedUsers = permittedUsers;
+    if (subOrganization && subOrganization.trim().length > 0) {
+      const subOrgClean = subOrganization.trim().toLowerCase();
+      const matched = permittedUsers.filter((u) => {
+        const empSub = (u.subOrganization || u.employee?.generalInfo?.subOrganization || '').toLowerCase().trim();
+        return empSub === subOrgClean;
+      });
+      if (matched.length > 0) {
+        scopedUsers = matched;
+      }
+    }
+
+    // 4. Base candidates sorted by employee ID
+    let candidateIds: number[] = [];
+    if (scopedUsers.length > 0) {
+      candidateIds = Array.from(
+        new Set(
+          scopedUsers
+            .map((u) => u.employeeId)
+            .filter((id): id is number => typeof id === 'number' && id > 0),
+        ),
+      ).sort((a, b) => a - b);
+    } else {
+      // Fallback A: Check if explicit pools were configured in CRM Settings
+      const pools = await this.getAssignedTelecallerPools(scope);
+      const configuredPool = Array.from(new Set([...pools.excelIds, ...pools.webhookIds]));
+      if (configuredPool.length > 0) {
+        candidateIds = configuredPool;
+      } else {
+        // Fallback B: Any user who holds CRM permissions
+        const fallbackPermitted = users.filter((u) => (u.role?.permissions?.length || 0) > 0);
+        if (fallbackPermitted.length > 0) {
+          candidateIds = Array.from(
+            new Set(
+              fallbackPermitted
+                .map((u) => u.employeeId)
+                .filter((id): id is number => typeof id === 'number' && id > 0),
+            ),
+          ).sort((a, b) => a - b);
+        }
+      }
+    }
+
+    // Filter by Daily Attendance punch-in if required
+    if (options?.requirePunchIn) {
+      const punchChecks = await Promise.all(
+        candidateIds.map(async (id) => ({ id, punched: await this.isPunchedInToday(id) })),
+      );
+      candidateIds = punchChecks.filter((p) => p.punched).map((p) => p.id);
+    }
+
+    // Filter by Screen Activity (not on break, heartbeat within idle timeout) if required
+    if (options?.requireActive) {
+      const settings = await this.getSettings(scope);
+      const idleMin = parseInt(String(settings.idle_timeout_minutes || '5'), 10) || 5;
+      candidateIds = candidateIds.filter((id) => this.isTelecallerActiveOnScreen(id, idleMin));
+    }
+
+    return candidateIds;
+  },
+
+  // ---------------------------------------------------------------------------
+  // Telecaller Presence & Screen Activity Tracking
+  // ---------------------------------------------------------------------------
+  recordTelecallerActivity(
+    employeeId: number,
+    status: 'ACTIVE' | 'ON_BREAK' = 'ACTIVE',
+    subOrganization?: string | null,
+  ): TelecallerPresence {
+    const existing = telecallerPresenceMap.get(employeeId);
+    const updated: TelecallerPresence = {
+      employeeId,
+      lastActiveAt: status === 'ACTIVE' ? Date.now() : (existing?.lastActiveAt || Date.now()),
+      status,
+      subOrganization: subOrganization !== undefined ? subOrganization : existing?.subOrganization,
+    };
+    telecallerPresenceMap.set(employeeId, updated);
+    return updated;
+  },
+
+  getTelecallerActivity(employeeId: number): TelecallerPresence | undefined {
+    return telecallerPresenceMap.get(employeeId);
+  },
+
+  isTelecallerActiveOnScreen(employeeId: number, idleTimeoutMinutes: number = 5): boolean {
+    const presence = telecallerPresenceMap.get(employeeId);
+    if (!presence) return false;
+    if (presence.status === 'ON_BREAK') return false;
+    const elapsedMs = Date.now() - presence.lastActiveAt;
+    if (elapsedMs > idleTimeoutMinutes * 60 * 1000) {
+      presence.status = 'ON_BREAK';
+      return false;
+    }
+    return true;
+  },
+
+  async isPunchedInToday(employeeId: number): Promise<boolean> {
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const punches = await prisma.attendancePunch.findMany({
+      where: {
+        employeeId,
+        punchAt: { gte: startOfDay, lte: endOfDay },
+      },
+      orderBy: { punchAt: 'asc' },
+      select: { punchAt: true, source: true },
+    });
+
+    if (punches.length === 0) return false;
+
+    const mobilePunches = punches.filter((p) => String(p.source) === 'MOBILE_APP');
+    if (mobilePunches.length > 0) {
+      return mobilePunches.length % 2 === 1;
+    }
+
+    const { firstIn, lastOut } = deriveDayInOut(punches);
+    let isPunchedIn = Boolean(firstIn) && !lastOut;
+    if (!isPunchedIn && punches.length > 0) {
+      isPunchedIn = punches.length % 2 === 1;
+    }
+    return isPunchedIn;
+  },
+
+  // ---------------------------------------------------------------------------
+  // Telecaller Active Workload & Capacity Management
+  // ---------------------------------------------------------------------------
+  /**
+   * Workload = count of active untouched or in-progress leads:
+   * status IN ['NOT_STARTED', 'CNR', 'ASSIGNED']
+   */
+  async getTelecallerWorkload(employeeId: number, scope: string = 'NB_DEVELOPER'): Promise<number> {
+    return await prisma.crmLead.count({
+      where: {
+        isDeleted: false,
+        scope,
+        OR: [
+          { telecallerId: employeeId },
+          { assignedToId: employeeId },
+        ],
+        status: { in: [CrmLeadStatus.NOT_STARTED, CrmLeadStatus.CNR, CrmLeadStatus.ASSIGNED] },
+      },
+    });
+  },
+
+  async getTelecallerCapacity(
+    employeeId: number,
+    scope: string = 'NB_DEVELOPER',
+    settings?: any,
+  ): Promise<{ maxCapacity: number; currentWorkload: number; availableCapacity: number }> {
+    if (!settings) {
+      settings = await this.getSettings(scope);
+    }
+    let maxCapacity = 20;
+    if (settings.max_telecaller_active_workload) {
+      const val = parseInt(String(settings.max_telecaller_active_workload), 10);
+      if (!isNaN(val) && val > 0) maxCapacity = val;
+    }
+
+    if (settings.telecaller_max_workload_map) {
+      try {
+        const map = typeof settings.telecaller_max_workload_map === 'string'
+          ? JSON.parse(settings.telecaller_max_workload_map)
+          : settings.telecaller_max_workload_map;
+        if (map && map[String(employeeId)] !== undefined) {
+          const custom = parseInt(String(map[String(employeeId)]), 10);
+          if (!isNaN(custom) && custom > 0) maxCapacity = custom;
+        }
+      } catch {}
+    }
+
+    const currentWorkload = await this.getTelecallerWorkload(employeeId, scope);
+    const availableCapacity = Math.max(0, maxCapacity - currentWorkload);
+
+    return { maxCapacity, currentWorkload, availableCapacity };
+  },
+
+  // ---------------------------------------------------------------------------
+  // Waiting Queue Dispatcher
+  // ---------------------------------------------------------------------------
+  async dispatchWaitingQueue(
+    scope: string = 'NB_DEVELOPER',
+    subOrganization?: string | null,
+  ): Promise<{
+    dispatchedCount: number;
+    remainingQueuedCount: number;
+    activeTelecallersCount: number;
+    candidateDetails: any[];
+  }> {
+    const queuedLeads = await prisma.crmLead.findMany({
+      where: {
+        scope,
+        isDeleted: false,
+        telecallerId: null,
+        assignedToId: null,
+        status: CrmLeadStatus.NOT_STARTED,
+      },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, customFields: true },
+    });
+
+    if (queuedLeads.length === 0) {
+      return {
+        dispatchedCount: 0,
+        remainingQueuedCount: 0,
+        activeTelecallersCount: 0,
+        candidateDetails: [],
+      };
+    }
+
+    // 1. Find telecallers who have punched in today and are active on screen
+    const eligibleIds = await this.getEligibleTelecallers(scope, subOrganization, {
+      requirePunchIn: true,
+      requireActive: true,
+    });
+
+    if (eligibleIds.length === 0) {
+      return {
+        dispatchedCount: 0,
+        remainingQueuedCount: queuedLeads.length,
+        activeTelecallersCount: 0,
+        candidateDetails: [],
+      };
+    }
+
+    const settings = await this.getSettings(scope);
+
+    // 2. Compute workload and available capacity for each active telecaller
+    const candidates: Array<{
+      employeeId: number;
+      maxCapacity: number;
+      currentWorkload: number;
+      availableCapacity: number;
+    }> = [];
+
+    for (const empId of eligibleIds) {
+      const cap = await this.getTelecallerCapacity(empId, scope, settings);
+      if (cap.availableCapacity > 0) {
+        candidates.push({
+          employeeId: empId,
+          maxCapacity: cap.maxCapacity,
+          currentWorkload: cap.currentWorkload,
+          availableCapacity: cap.availableCapacity,
+        });
+      }
+    }
+
+    if (candidates.length === 0) {
+      return {
+        dispatchedCount: 0,
+        remainingQueuedCount: queuedLeads.length,
+        activeTelecallersCount: eligibleIds.length,
+        candidateDetails: [],
+      };
+    }
+
+    // 3. Dispatch leads round-robin across candidates with available capacity
+    let dispatchedCount = 0;
+    let candidateIndex = 0;
+
+    for (const lead of queuedLeads) {
+      let candidateWithCapacity: typeof candidates[0] | null = null;
+      let attempts = 0;
+      const prevTelecallerId = (lead.customFields as any)?.previousTelecallerId;
+
+      while (attempts < candidates.length) {
+        const cand = candidates[candidateIndex % candidates.length];
+        candidateIndex++;
+        attempts++;
+
+        // If candidates length > 1, avoid immediately assigning back to telecaller who left it untouched
+        if (cand.availableCapacity > 0) {
+          if (candidates.length > 1 && prevTelecallerId && cand.employeeId === Number(prevTelecallerId) && attempts < candidates.length) {
+            continue;
+          }
+          candidateWithCapacity = cand;
+          break;
+        }
+      }
+
+      // If skipping previous telecaller failed to find someone, accept any candidate with capacity
+      if (!candidateWithCapacity) {
+        candidateWithCapacity = candidates.find((c) => c.availableCapacity > 0) || null;
+      }
+
+      if (!candidateWithCapacity) {
+        // All active telecallers have reached their maximum workload limit
+        break;
+      }
+
+      const assignedAt = new Date().toISOString();
+      const existingCustom = (lead.customFields as any) || {};
+
+      await prisma.crmLead.update({
+        where: { id: lead.id },
+        data: {
+          telecallerId: candidateWithCapacity.employeeId,
+          assignedToId: candidateWithCapacity.employeeId,
+          status: CrmLeadStatus.NOT_STARTED,
+          customFields: {
+            ...existingCustom,
+            assignedAt,
+          },
+        },
+      });
+
+      candidateWithCapacity.availableCapacity--;
+      candidateWithCapacity.currentWorkload++;
+      dispatchedCount++;
+    }
+
+    const remainingQueuedCount = queuedLeads.length - dispatchedCount;
+
+    return {
+      dispatchedCount,
+      remainingQueuedCount,
+      activeTelecallersCount: candidates.length,
+      candidateDetails: candidates,
+    };
+  },
+
+  // ---------------------------------------------------------------------------
+  // 30-Minute Untouched Lead Recovery
+  // ---------------------------------------------------------------------------
+  async recoverUntouchedLeads(scope: string = 'NB_DEVELOPER'): Promise<{ recoveredCount: number }> {
+    const settings = await this.getSettings(scope);
+    let timeoutMinutes = 30;
+    if (settings.untouched_lead_timeout_minutes) {
+      const parsed = parseInt(String(settings.untouched_lead_timeout_minutes), 10);
+      if (!isNaN(parsed) && parsed > 0) timeoutMinutes = parsed;
+    }
+
+    const cutoff = new Date(Date.now() - timeoutMinutes * 60 * 1000);
+
+    // Find leads assigned to a telecaller that have NOT been touched:
+    // status in [NOT_STARTED, ASSIGNED], lastCallAt is null, and assignedAt or updatedAt <= cutoff
+    const potentialLeads = await prisma.crmLead.findMany({
+      where: {
+        scope,
+        isDeleted: false,
+        telecallerId: { not: null },
+        status: { in: [CrmLeadStatus.NOT_STARTED, CrmLeadStatus.ASSIGNED] },
+        lastCallAt: null,
+        updatedAt: { lte: cutoff },
+      },
+      include: {
+        callLogs: { select: { id: true }, take: 1 },
+      },
+      take: 200,
+    });
+
+    let recoveredCount = 0;
+    for (const lead of potentialLeads) {
+      if (lead.callLogs && lead.callLogs.length > 0) {
+        continue;
+      }
+
+      const custom = (lead.customFields as any) || {};
+      let assignedTime = lead.updatedAt.getTime();
+      if (custom.assignedAt) {
+        const parsedAssigned = new Date(custom.assignedAt).getTime();
+        if (!isNaN(parsedAssigned)) assignedTime = parsedAssigned;
+      }
+
+      if (Date.now() - assignedTime >= timeoutMinutes * 60 * 1000) {
+        await prisma.crmLead.update({
+          where: { id: lead.id },
+          data: {
+            telecallerId: null,
+            assignedToId: null,
+            status: CrmLeadStatus.NOT_STARTED,
+            customFields: {
+              ...custom,
+              returnedToQueueAt: new Date().toISOString(),
+              unassignedReason: `UNTOUCHED_${timeoutMinutes}_MIN`,
+              previousTelecallerId: lead.telecallerId,
+            },
+          },
+        });
+        recoveredCount++;
+      }
+    }
+
+    return { recoveredCount };
+  },
+
+  async recoverUntouchedLeadsAndDispatch(scope: string = 'NB_DEVELOPER') {
+    const { recoveredCount } = await this.recoverUntouchedLeads(scope);
+    const dispatchRes = await this.dispatchWaitingQueue(scope);
+    return { recoveredCount, ...dispatchRes };
+  },
+
+  // ---------------------------------------------------------------------------
+  // Waiting Queue & Telecaller Status Queries
+  // ---------------------------------------------------------------------------
+  async getWaitingQueueStatus(scope: string = 'NB_DEVELOPER', subOrganization?: string | null) {
+    const queuedLeadsCount = await prisma.crmLead.count({
+      where: {
+        scope,
+        isDeleted: false,
+        telecallerId: null,
+        assignedToId: null,
+        status: CrmLeadStatus.NOT_STARTED,
+      },
+    });
+
+    const presenceList = await this.getTelecallerPresenceList(scope, subOrganization);
+    const activeTelecallers = presenceList.filter((p) => p.isEligibleForDispatch);
+    const totalAvailableCapacity = activeTelecallers.reduce((acc, p) => acc + p.availableCapacity, 0);
+
+    return {
+      queuedLeadsCount,
+      activeTelecallersCount: activeTelecallers.length,
+      totalTelecallersCount: presenceList.length,
+      totalAvailableCapacity,
+      telecallers: presenceList,
+    };
+  },
+
+  async getTelecallerPresenceList(scope: string = 'NB_DEVELOPER', subOrganization?: string | null) {
+    const allEligibleIds = await this.getEligibleTelecallers(scope, subOrganization, {
+      requirePunchIn: false,
+      requireActive: false,
+    });
+
+    const settings = await this.getSettings(scope);
+    const idleMin = parseInt(String(settings.idle_timeout_minutes || '5'), 10) || 5;
+
+    const employees = await prisma.employee.findMany({
+      where: { id: { in: allEligibleIds } },
+      select: {
+        id: true,
+        generalInfo: {
+          select: {
+            fullName: true,
+            subOrganization: true,
+            department: true,
+            designation: true,
+          },
+        },
+      },
+      orderBy: { generalInfo: { fullName: 'asc' } },
+    });
+
+    const results = [];
+    for (const emp of employees) {
+      const isPunchedIn = await this.isPunchedInToday(emp.id);
+      const presence = telecallerPresenceMap.get(emp.id);
+      const isActiveOnScreen = this.isTelecallerActiveOnScreen(emp.id, idleMin);
+      const capacity = await this.getTelecallerCapacity(emp.id, scope, settings);
+
+      const isEligibleForDispatch = isPunchedIn && isActiveOnScreen && capacity.availableCapacity > 0;
+
+      results.push({
+        employeeId: emp.id,
+        fullName: emp.generalInfo?.fullName || `Employee #${emp.id}`,
+        subOrganization: emp.generalInfo?.subOrganization || null,
+        department: emp.generalInfo?.department || null,
+        designation: emp.generalInfo?.designation || null,
+        isPunchedIn,
+        presenceStatus: presence?.status || (isActiveOnScreen ? 'ACTIVE' : 'ON_BREAK'),
+        lastActiveAt: presence?.lastActiveAt ? new Date(presence.lastActiveAt).toISOString() : null,
+        isActiveOnScreen,
+        maxCapacity: capacity.maxCapacity,
+        currentWorkload: capacity.currentWorkload,
+        availableCapacity: capacity.availableCapacity,
+        isEligibleForDispatch,
+      });
+    }
+
+    return results;
+  },
+
+  /**
+   * Deterministic round-robin lead distribution across eligible telecallers.
+   * Uses total lead count + batchOffset modulo candidate count.
+   */
+  async getNextRoundRobinTelecaller(
+    scope: string = 'NB_DEVELOPER',
+    subOrganization?: string | null,
+    source: string = 'EXCEL',
+    batchOffset: number = 0,
+  ): Promise<number | undefined> {
+    const eligibleIds = await this.getEligibleTelecallers(scope, subOrganization);
+    if (eligibleIds.length === 0) return undefined;
+    if (eligibleIds.length === 1) return eligibleIds[0];
+
+    const totalLeadsCount = await prisma.crmLead.count({
+      where: { scope },
+    });
+
+    const index = (totalLeadsCount + batchOffset) % eligibleIds.length;
+    return eligibleIds[index];
   },
 
   async getAssignedTelecallerPools(scope: string = 'NB_DEVELOPER') {
@@ -2755,11 +3399,21 @@ export const crmService = {
   // ---------------------------------------------------------------------------
   // KPI Metrics for Dashboard
   // ---------------------------------------------------------------------------
-  async getKpiMetrics(projectId?: string, campaignId?: string, scope: string = 'NB_DEVELOPER') {
+  async getKpiMetrics(
+    projectId?: string,
+    campaignId?: string,
+    scope: string = 'NB_DEVELOPER',
+    userRole?: string,
+    userEmployeeId?: number,
+  ) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(
+      userRole?.toUpperCase() || ''
+    );
 
     const leadWhere: Record<string, unknown> = { isDeleted: false, scope };
     if (campaignId && campaignId !== 'ALL') {
@@ -2768,11 +3422,38 @@ export const crmService = {
       leadWhere.campaign = { projectId, scope };
     }
 
+    // Only admin can see ALL TOTAL KPIs across the whole organization.
+    // Non-admin individuals only see their own assigned KPIs.
+    if (!isAdmin && userEmployeeId) {
+      leadWhere.OR = [
+        { telecallerId: userEmployeeId },
+        { assignedToId: userEmployeeId },
+      ];
+    }
+
     const followUpWhere: Record<string, unknown> = {
       scheduledDate: { gte: today, lt: tomorrow },
       status: 'PENDING',
       lead: { ...leadWhere },
     };
+    if (!isAdmin && userEmployeeId) {
+      followUpWhere.OR = [
+        { assignedToId: userEmployeeId },
+        { lead: { isDeleted: false, scope, OR: [{ telecallerId: userEmployeeId }, { assignedToId: userEmployeeId }] } },
+      ];
+    }
+
+    const callLogWhere: Record<string, unknown> = {};
+    if (!isAdmin && userEmployeeId) {
+      callLogWhere.lead = {
+        isDeleted: false,
+        scope,
+        OR: [
+          { telecallerId: userEmployeeId },
+          { assignedToId: userEmployeeId },
+        ],
+      };
+    }
 
     const [
       totalActiveLeads,
@@ -2795,6 +3476,9 @@ export const crmService = {
         where: {
           isDeleted: true,
           scope,
+          ...(!isAdmin && userEmployeeId
+            ? { OR: [{ telecallerId: userEmployeeId }, { assignedToId: userEmployeeId }] }
+            : {}),
           ...(campaignId && campaignId !== 'ALL'
             ? { campaignId }
             : projectId && projectId !== 'ALL'
@@ -2808,18 +3492,21 @@ export const crmService = {
       prisma.crmLead.count({
         where: { ...leadWhere, status: CrmLeadStatus.FOLLOW_UP },
       }),
-      prisma.crmCallLog.count(),
+      prisma.crmCallLog.count({ where: callLogWhere }),
       prisma.crmCallLog.count({
         where: {
+          ...callLogWhere,
           callStatus: { in: ['ANSWERED', 'ANSWER', 'COMPLETED', 'SUCCESS'] },
         },
       }),
       prisma.crmCallLog.count({
         where: {
+          ...callLogWhere,
           callStatus: { in: ['MISSED', 'NOANSWER', 'BUSY', 'FAILED', 'CANCELLED'] },
         },
       }),
       prisma.crmCallLog.aggregate({
+        where: callLogWhere,
         _sum: { duration: true },
       }),
     ]);
@@ -2842,6 +3529,8 @@ export const crmService = {
       missedCalls,
       totalTalkTimeMinutes,
       conversionRate,
+      isPersonal: !isAdmin,
+      employeeId: !isAdmin ? userEmployeeId : undefined,
     };
   },
 
@@ -3927,6 +4616,73 @@ export const crmService = {
       document: newDocItem,
       uploadedDocs: documents,
     };
+  },
+
+  async downloadLeadDocsZip(leadIdOrToken: string, res: Response, isToken: boolean = false) {
+    let lead: any = null;
+    if (isToken) {
+      const leads = await prisma.crmLead.findMany({ where: { isDeleted: false } });
+      lead = leads.find((l) => (l.customFields as any)?.portalToken === leadIdOrToken);
+    } else {
+      lead = await prisma.crmLead.findUnique({ where: { id: leadIdOrToken } });
+      if (!lead) {
+        // Fallback: search by portalToken
+        const leads = await prisma.crmLead.findMany({ where: { isDeleted: false } });
+        lead = leads.find((l) => (l.customFields as any)?.portalToken === leadIdOrToken);
+      }
+    }
+
+    if (!lead) {
+      res.status(404).send('Lead or client application not found');
+      return;
+    }
+
+    const custom = (lead.customFields as any) || {};
+    const documents: any[] = custom.documents || [];
+
+    if (!documents || documents.length === 0) {
+      res.status(400).send('No documents have been uploaded for this client application.');
+      return;
+    }
+
+    const archive = (archiver as any)('zip', { zlib: { level: 9 } });
+
+    const safeClientName = (lead.name || 'Client')
+      .replace(/[^a-zA-Z0-9_\- ]/g, '')
+      .trim()
+      .replace(/\s+/g, '_');
+    const zipFilename = `${safeClientName}_Application_Documents.zip`;
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${zipFilename}"`);
+
+    archive.on('error', (err: any) => {
+      console.error('[DownloadDocsZip Error]:', err);
+      if (!res.headersSent) {
+        res.status(500).send('Error generating zip archive');
+      }
+    });
+
+    archive.pipe(res);
+
+    for (const doc of documents) {
+      if (!doc.fileUrl) continue;
+      const relativePath = doc.fileUrl.startsWith('/') ? doc.fileUrl.slice(1) : doc.fileUrl;
+      const fullPath = path.join(process.cwd(), relativePath);
+
+      if (fs.existsSync(fullPath)) {
+        const ext = path.extname(doc.fileName || fullPath) || path.extname(fullPath) || '.pdf';
+        const docLabel = (doc.docName || doc.docTypeId || 'Document')
+          .replace(/[^a-zA-Z0-9_\- ]/g, '')
+          .trim()
+          .replace(/\s+/g, '_');
+        const originalBase = path.basename(doc.fileName || fullPath, ext).replace(/[^a-zA-Z0-9_\- ]/g, '_');
+        const entryName = `${docLabel}_${originalBase}${ext}`;
+        archive.file(fullPath, { name: entryName });
+      }
+    }
+
+    await archive.finalize();
   },
 };
 

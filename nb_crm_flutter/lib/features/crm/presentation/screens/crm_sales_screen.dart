@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -49,11 +50,55 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
   int? _selectedSalesManagerId;
   bool _filterOnlyMyLeads = true;
 
+  Timer? _idleTimer;
+  Timer? _heartbeatTimer;
+  DateTime _lastInteractionTime = DateTime.now();
+  bool _isOnBreak = false;
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     CrmRepository.crmScopeNotifier.addListener(_onScopeChanged);
+    _setupInactivityTracker();
+  }
+
+  void _setupInactivityTracker() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+      if (!_isOnBreak && mounted) {
+        context.read<CrmRepository>().reportTelecallerActivity('ACTIVE').catchError((_) => <String, dynamic>{});
+      }
+    });
+    _onUserInteraction();
+  }
+
+  void _onUserInteraction() {
+    final now = DateTime.now();
+    _idleTimer?.cancel();
+
+    if (_isOnBreak) {
+      if (mounted) {
+        setState(() => _isOnBreak = false);
+      }
+      context.read<CrmRepository>().reportTelecallerActivity('ACTIVE').then((_) {
+        if (mounted) {
+          context.read<CrmLeadsBloc>().add(const CrmLeadsLoadRequested());
+        }
+      }).catchError((_) {});
+    } else if (now.difference(_lastInteractionTime).inSeconds > 45) {
+      context.read<CrmRepository>().reportTelecallerActivity('ACTIVE').catchError((_) => <String, dynamic>{});
+    }
+
+    _lastInteractionTime = now;
+
+    // Start 5-minute inactivity timer
+    _idleTimer = Timer(const Duration(minutes: 5), () {
+      if (mounted && !_isOnBreak) {
+        setState(() => _isOnBreak = true);
+        context.read<CrmRepository>().reportTelecallerActivity('ON_BREAK').catchError((_) => <String, dynamic>{});
+      }
+    });
   }
 
   void _onScopeChanged() {
@@ -65,6 +110,8 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
 
   @override
   void dispose() {
+    _idleTimer?.cancel();
+    _heartbeatTimer?.cancel();
     CrmRepository.crmScopeNotifier.removeListener(_onScopeChanged);
     _tabController.dispose();
     _searchController.dispose();
@@ -164,8 +211,17 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
               lead.proposals.any((p) => p.unitNo.toLowerCase().contains(q) || p.id.toLowerCase().contains(q));
         }).toList();
 
-        return Scaffold(
-          backgroundColor: isDark ? const Color(0xFF141210) : const Color(0xFFF8FAFC),
+        return Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: (_) => _onUserInteraction(),
+          onPointerMove: (_) => _onUserInteraction(),
+          child: Focus(
+            onKeyEvent: (_, __) {
+              _onUserInteraction();
+              return KeyEventResult.ignored;
+            },
+            child: Scaffold(
+              backgroundColor: isDark ? const Color(0xFF141210) : const Color(0xFFF8FAFC),
           appBar: AppBar(
             title: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -264,52 +320,101 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
               const SizedBox(width: 8),
             ],
           ),
-          body: TabBarView(
-            controller: _tabController,
-            physics: const NeverScrollableScrollPhysics(),
+          body: Column(
             children: [
-              _buildCustomersTab(
-                context,
-                filteredLeads,
-                salesUsers,
-                state,
-                isDark,
-                cardBg,
-                borderColor,
-                textMuted,
-                primaryColor,
-                userEmployeeId,
-                isSuperAdmin,
-              ),
-              if (isFinserve)
-                _buildFinserveApplicationsTab(
-                  context,
-                  allLeads,
-                  isDark,
-                  cardBg,
-                  borderColor,
-                  textMuted,
-                  primaryColor,
-                  goldColor,
-                )
-              else
-                _buildQuotationsTab(
-                  context,
-                  filteredQuotationLeads,
-                  allLeads,
-                  isDark,
-                  cardBg,
-                  borderColor,
-                  textMuted,
-                  primaryColor,
-                  goldColor,
-                  userEmployeeId,
-                  currentUser?.name,
+              if (_isOnBreak)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  color: const Color(0xFFD97706),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.coffee_rounded, color: Colors.white, size: 20),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text(
+                              'Status: On Break (Inactive for 5 minutes)',
+                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                            ),
+                            Text(
+                              'New lead assignment is paused. Move mouse, scroll, or tap anywhere to resume active status.',
+                              style: TextStyle(color: Colors.white, fontSize: 11),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        onPressed: _onUserInteraction,
+                        icon: const Icon(Icons.play_arrow_rounded, size: 16),
+                        label: const Text('Resume Active'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: const Color(0xFFB45309),
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
+              Expanded(
+                child: TabBarView(
+                  controller: _tabController,
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: [
+                    _buildCustomersTab(
+                      context,
+                      filteredLeads,
+                      salesUsers,
+                      state,
+                      isDark,
+                      cardBg,
+                      borderColor,
+                      textMuted,
+                      primaryColor,
+                      userEmployeeId,
+                      isSuperAdmin,
+                    ),
+                    if (isFinserve)
+                      _buildFinserveApplicationsTab(
+                        context,
+                        allLeads,
+                        isDark,
+                        cardBg,
+                        borderColor,
+                        textMuted,
+                        primaryColor,
+                        goldColor,
+                      )
+                    else
+                      _buildQuotationsTab(
+                        context,
+                        filteredQuotationLeads,
+                        allLeads,
+                        isDark,
+                        cardBg,
+                        borderColor,
+                        textMuted,
+                        primaryColor,
+                        goldColor,
+                        userEmployeeId,
+                        currentUser?.name,
+                      ),
+                  ],
+                ),
+              ),
             ],
           ),
-        );
-      },
+        ),
+      ),
+    );
+  },
     );
   }
 
@@ -6135,6 +6240,56 @@ class _FinserveApplicationDialogState extends State<_FinserveApplicationDialog>
     }
   }
 
+  String _getDocsZipUrl() {
+    final token = _currentLead.customFields['portalToken']?.toString();
+    final origin = AppConfig.apiBaseUrl.replaceAll(RegExp(r'/api/?$'), '');
+    if (token != null && token.isNotEmpty) {
+      return '$origin/api/crm-public/client-portal/$token/download-docs-zip';
+    }
+    return '$origin/api/crm/leads/${_currentLead.id}/download-docs-zip';
+  }
+
+  void _downloadDocsZip() {
+    final url = _getDocsZipUrl();
+    launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+  }
+
+  void _copyDocsZipLink() {
+    final url = _getDocsZipUrl();
+    Clipboard.setData(ClipboardData(text: url));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Shareable documents ZIP download link copied to clipboard!'),
+        backgroundColor: Color(0xFF10B981),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _shareDocsZipViaWhatsApp() async {
+    final url = _getDocsZipUrl();
+    final cleanPhone = _currentLead.phone.replaceAll(RegExp(r'[^0-9]'), '');
+    final pPhone = cleanPhone.length == 10 ? '91$cleanPhone' : cleanPhone;
+    final clientName = _currentLead.name.isNotEmpty ? _currentLead.name : 'Customer';
+    final message = 'Hello $clientName,\n\n'
+        'Greetings from NB Finserve!\n\n'
+        'All required application documents for your $_selectedLoanType have been successfully received and verified.\n\n'
+        '📦 You can download the complete archive of all submitted documents (ZIP) using this link:\n'
+        '$url\n\n'
+        'Thank you,\nNB Finserve Team';
+
+    final uri = Uri.parse('https://wa.me/$pPhone?text=${Uri.encodeComponent(message)}');
+    try {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not open WhatsApp: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
   Future<void> _pickAndUploadDoc(String docTypeId, String docName) async {
     try {
       final result = await FilePicker.pickFiles(
@@ -6682,6 +6837,128 @@ class _FinserveApplicationDialogState extends State<_FinserveApplicationDialog>
                       'Client confirmed and submitted application. Documents are locked for client; administrator can review and manage.',
                       style: TextStyle(fontSize: 12.5, color: Color(0xFF10B981), fontWeight: FontWeight.w600),
                     ),
+                  ),
+                ],
+              ),
+            ),
+          const SizedBox(height: 14),
+
+          // All Documents Received Banner & Download ZIP Action Card
+          if (requiredDocIds.isNotEmpty && completedCount >= requiredDocIds.length)
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: isDark
+                      ? [const Color(0xFF064E3B), const Color(0xFF065F46)]
+                      : [const Color(0xFF047857), const Color(0xFF059669)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF10B981).withValues(alpha: 0.25),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.inventory_2_rounded, color: Colors.white, size: 22),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Text(
+                                  'All Required Documents Received & Verified',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 15,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.25),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    '$completedCount / ${requiredDocIds.length} COMPLETE',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 3),
+                            const Text(
+                              'All mandatory loan documents have been collected. You can directly download the unified ZIP file or copy the shareable link to forward to lenders, underwriters, or partners.',
+                              style: TextStyle(color: Colors.white70, fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 8,
+                    children: [
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.download_rounded, size: 16),
+                        label: const Text('Download All Documents (.ZIP)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: const Color(0xFF065F46),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          elevation: 2,
+                        ),
+                        onPressed: _downloadDocsZip,
+                      ),
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.link_rounded, size: 16, color: Colors.white),
+                        label: const Text('Copy Shareable ZIP Link', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Colors.white70),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        onPressed: _copyDocsZipLink,
+                      ),
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.share_rounded, size: 16, color: Colors.white),
+                        label: const Text('Share via WhatsApp', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Colors.white70),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        onPressed: _shareDocsZipViaWhatsApp,
+                      ),
+                    ],
                   ),
                 ],
               ),

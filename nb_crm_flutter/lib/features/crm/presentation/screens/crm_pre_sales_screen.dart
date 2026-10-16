@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -45,11 +46,55 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
   // Call Recording Filters
   final TextEditingController _recordingSearchController = TextEditingController();
 
+  Timer? _idleTimer;
+  Timer? _heartbeatTimer;
+  DateTime _lastInteractionTime = DateTime.now();
+  bool _isOnBreak = false;
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
     CrmRepository.crmScopeNotifier.addListener(_onScopeChanged);
+    _setupInactivityTracker();
+  }
+
+  void _setupInactivityTracker() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+      if (!_isOnBreak && mounted) {
+        context.read<CrmRepository>().reportTelecallerActivity('ACTIVE').catchError((_) => <String, dynamic>{});
+      }
+    });
+    _onUserInteraction();
+  }
+
+  void _onUserInteraction() {
+    final now = DateTime.now();
+    _idleTimer?.cancel();
+
+    if (_isOnBreak) {
+      if (mounted) {
+        setState(() => _isOnBreak = false);
+      }
+      context.read<CrmRepository>().reportTelecallerActivity('ACTIVE').then((_) {
+        if (mounted) {
+          context.read<CrmLeadsBloc>().add(const CrmLeadsLoadRequested());
+        }
+      }).catchError((_) {});
+    } else if (now.difference(_lastInteractionTime).inSeconds > 45) {
+      context.read<CrmRepository>().reportTelecallerActivity('ACTIVE').catchError((_) => <String, dynamic>{});
+    }
+
+    _lastInteractionTime = now;
+
+    // Start 5-minute inactivity timer
+    _idleTimer = Timer(const Duration(minutes: 5), () {
+      if (mounted && !_isOnBreak) {
+        setState(() => _isOnBreak = true);
+        context.read<CrmRepository>().reportTelecallerActivity('ON_BREAK').catchError((_) => <String, dynamic>{});
+      }
+    });
   }
 
   void _onScopeChanged() {
@@ -61,6 +106,8 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
 
   @override
   void dispose() {
+    _idleTimer?.cancel();
+    _heartbeatTimer?.cancel();
     CrmRepository.crmScopeNotifier.removeListener(_onScopeChanged);
     _tabController.dispose();
     _searchController.dispose();
@@ -102,60 +149,118 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
         }
       },
       builder: (context, state) {
-        return Scaffold(
-          backgroundColor: isDark ? const Color(0xFF141210) : const Color(0xFFF8FAFC),
-          appBar: AppBar(
-            title: const Text('Pre-Sales Management'),
-            leading: const AppBackButton(fallbackLocation: '/crm/dashboard'),
-            backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
-            elevation: 0,
-            scrolledUnderElevation: 0,
-            bottom: PreferredSize(
-              preferredSize: const Size.fromHeight(48),
-              child: TourTarget(
-                id: TourIds.step('crm.pre_sales', 2),
-                child: TourTarget(
-                  id: TourIds.step('crm.pre_sales', 3),
-                  child: TabBar(
-              controller: _tabController,
-              isScrollable: true,
-              tabs: const [
-                Tab(text: 'Leads & Inquiries'),
-                Tab(text: 'Follow-ups & Scheduled Calls'),
-                Tab(text: 'Call Recordings'),
-                Tab(text: 'Pipeline & Deals'),
-              ],
-            ),
+        return Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: (_) => _onUserInteraction(),
+          onPointerMove: (_) => _onUserInteraction(),
+          child: Focus(
+            onKeyEvent: (_, __) {
+              _onUserInteraction();
+              return KeyEventResult.ignored;
+            },
+            child: Scaffold(
+              backgroundColor: isDark ? const Color(0xFF141210) : const Color(0xFFF8FAFC),
+              appBar: AppBar(
+                title: const Text('Pre-Sales Management'),
+                leading: const AppBackButton(fallbackLocation: '/crm/dashboard'),
+                backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
+                elevation: 0,
+                scrolledUnderElevation: 0,
+                bottom: PreferredSize(
+                  preferredSize: const Size.fromHeight(48),
+                  child: TourTarget(
+                    id: TourIds.step('crm.pre_sales', 2),
+                    child: TourTarget(
+                      id: TourIds.step('crm.pre_sales', 3),
+                      child: TabBar(
+                        controller: _tabController,
+                        isScrollable: true,
+                        tabs: const [
+                          Tab(text: 'Leads & Inquiries'),
+                          Tab(text: 'Follow-ups & Scheduled Calls'),
+                          Tab(text: 'Call Recordings'),
+                          Tab(text: 'Pipeline & Deals'),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
+                actions: [
+                  CrmScopeSelectorWidget(
+                    onScopeChanged: () {
+                      setState(() {});
+                      context.read<CrmLeadsBloc>().add(const CrmLeadsLoadRequested());
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    tooltip: 'Refresh',
+                    icon: const Icon(Icons.refresh_rounded),
+                    onPressed: () {
+                      context.read<CrmLeadsBloc>().add(const CrmLeadsRefreshRequested());
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                ],
+              ),
+              body: Column(
+                children: [
+                  if (_isOnBreak)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      color: const Color(0xFFD97706),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.coffee_rounded, color: Colors.white, size: 20),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Text(
+                                  'Status: On Break (Inactive for 5 minutes)',
+                                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                                ),
+                                Text(
+                                  'New lead assignment is paused. Move mouse, scroll, or tap anywhere to resume active status.',
+                                  style: TextStyle(color: Colors.white, fontSize: 11),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton.icon(
+                            onPressed: _onUserInteraction,
+                            icon: const Icon(Icons.play_arrow_rounded, size: 16),
+                            label: const Text('Resume Active'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              foregroundColor: const Color(0xFFB45309),
+                              elevation: 0,
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  Expanded(
+                    child: TabBarView(
+                      controller: _tabController,
+                      physics: const NeverScrollableScrollPhysics(), // Disables swipe gesture conflicts / carousel effect
+                      children: [
+                        _buildLeadsTableTab(context, state, authState, isDark, cardBg, borderColor, textMuted, primaryGold),
+                        _buildFollowUpsTab(context, state, isDark, cardBg, borderColor, textMuted, primaryGold),
+                        _buildCallRecordingsTab(context, state, isDark, cardBg, borderColor, textMuted, primaryGold),
+                        _buildPipelineTab(isDark, cardBg, borderColor, textMuted),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
-            actions: [
-              CrmScopeSelectorWidget(
-                onScopeChanged: () {
-                  setState(() {});
-                  context.read<CrmLeadsBloc>().add(const CrmLeadsLoadRequested());
-                },
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                tooltip: 'Refresh',
-                icon: const Icon(Icons.refresh_rounded),
-                onPressed: () {
-                  context.read<CrmLeadsBloc>().add(const CrmLeadsRefreshRequested());
-                },
-              ),
-              const SizedBox(width: 8),
-            ],
-          ),
-          body: TabBarView(
-            controller: _tabController,
-            physics: const NeverScrollableScrollPhysics(), // Disables swipe gesture conflicts / carousel effect
-            children: [
-              _buildLeadsTableTab(context, state, authState, isDark, cardBg, borderColor, textMuted, primaryGold),
-              _buildFollowUpsTab(context, state, isDark, cardBg, borderColor, textMuted, primaryGold),
-              _buildCallRecordingsTab(context, state, isDark, cardBg, borderColor, textMuted, primaryGold),
-              _buildPipelineTab(isDark, cardBg, borderColor, textMuted),
-            ],
           ),
         );
       },
@@ -203,6 +308,10 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
 
     final filteredLeads = leads.where((l) {
       if (l.scope != repo.scope) return false;
+      // Leads directly assigned to this employee (as sales rep or telecaller) are always visible to them
+      if (!isAdmin && userEmployeeId != null && (l.assignedToId == userEmployeeId || l.telecallerId == userEmployeeId)) {
+        return true;
+      }
       if (effectiveFlow == 'EXCEL') {
         return l.leadSource == 'EXCEL' || l.leadSource == null || l.leadSource == 'MANUAL';
       } else if (effectiveFlow == 'WEBHOOK') {

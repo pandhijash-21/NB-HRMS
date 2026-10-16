@@ -1262,6 +1262,25 @@ class _ModularMatrixTableState extends State<_ModularMatrixTable> {
         .length;
     final totalCount = modules.length;
 
+    final isFinserve = title.contains('Finserve') || modules.any((m) => m.key.startsWith('FIN_'));
+    final salesKey = isFinserve ? 'FIN_CRM_SALES' : 'CRM_SALES';
+    final salesModule = modules.where((m) => m.key == salesKey).firstOrNull ??
+        (isFinserve
+            ? const SystemModule(
+                key: 'FIN_CRM_SALES',
+                name: 'NB Finserve - Sales & Conversions',
+                description: 'Assigned client applications, product advisory, and loan/finserve conversions',
+                category: 'CRM',
+                sortOrder: 14,
+              )
+            : const SystemModule(
+                key: 'CRM_SALES',
+                name: 'Sales & Booking Desk',
+                description: 'Pipeline management, site visit conversions, and unit bookings',
+                category: 'CRM',
+                sortOrder: 2,
+              ));
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
@@ -1365,12 +1384,145 @@ class _ModularMatrixTableState extends State<_ModularMatrixTable> {
               ],
             ),
           ),
+          _buildFeaturedSalesModuleToggle(
+            salesModule: salesModule,
+            color: color,
+            isDark: isDark,
+          ),
           _buildModulesDataTable(
             modules: modules,
             color: color,
             isDark: isDark,
             category: 'CRM',
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFeaturedSalesModuleToggle({
+    required SystemModule salesModule,
+    required Color color,
+    required bool isDark,
+  }) {
+    final perm = _permFor(salesModule.key, salesModule.category);
+    final isSuperAdminRole = Permissions.isSuperAdmin(widget.roleName);
+    final allGranted = isSuperAdminRole || _isAllActionsGranted(perm);
+    final anyGranted = isSuperAdminRole || _hasAnyActionGranted(perm);
+    final isUpdating = _updating.any((k) => k.startsWith('${salesModule.key}-'));
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: (anyGranted ? const Color(0xFF10B981) : const Color(0xFF64748B))
+            .withValues(alpha: isDark ? 0.12 : 0.06),
+        border: Border(
+          bottom: BorderSide(
+            color: (anyGranted ? const Color(0xFF10B981) : const Color(0xFF64748B))
+                .withValues(alpha: 0.2),
+            width: 1,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: (anyGranted ? const Color(0xFF10B981) : const Color(0xFF64748B))
+                  .withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              Icons.point_of_sale_rounded,
+              size: 20,
+              color: anyGranted ? const Color(0xFF10B981) : const Color(0xFF94A3B8),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      salesModule.name,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        color: isDark ? Colors.white : const Color(0xFF1E293B),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: (anyGranted ? const Color(0xFF10B981) : const Color(0xFFEF4444))
+                            .withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: (anyGranted ? const Color(0xFF10B981) : const Color(0xFFEF4444))
+                              .withValues(alpha: 0.35),
+                          width: 0.8,
+                        ),
+                      ),
+                      child: Text(
+                        anyGranted
+                            ? (allGranted ? 'ENABLED (FULL ACCESS)' : 'PARTIALLY ENABLED')
+                            : 'DISABLED',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: anyGranted ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  salesModule.description ??
+                      'Sales applications, loan documentations, and client conversions.',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: isDark ? Colors.white54 : const Color(0xFF64748B),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          if (isUpdating)
+            const SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(strokeWidth: 2.5),
+            )
+          else
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  anyGranted ? 'Enabled' : 'Disabled',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: anyGranted ? const Color(0xFF10B981) : const Color(0xFF64748B),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Switch.adaptive(
+                  value: anyGranted,
+                  activeThumbColor: const Color(0xFF10B981),
+                  activeTrackColor: const Color(0xFF10B981).withValues(alpha: 0.4),
+                  onChanged: isSuperAdminRole
+                      ? null
+                      : (val) => _toggleAllForModule(salesModule, val),
+                ),
+              ],
+            ),
         ],
       ),
     );
@@ -1587,31 +1739,21 @@ class _ModularMatrixTableState extends State<_ModularMatrixTable> {
                   child: Tooltip(
                     message: Permissions.isSuperAdmin(widget.roleName)
                         ? 'Superadmin access is permanent'
-                        : (allGranted ? 'Revoke all actions' : 'Grant all 5 actions'),
-                    child: IconButton(
-                      icon: isRowUpdating
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : Icon(
-                              (allGranted || Permissions.isSuperAdmin(widget.roleName))
-                                  ? Icons.check_circle_rounded
-                                  : (perm.canRead
-                                      ? Icons.radio_button_checked_rounded
-                                      : Icons.radio_button_unchecked_rounded),
-                              size: 22,
-                              color: (allGranted || Permissions.isSuperAdmin(widget.roleName))
-                                  ? const Color(0xFF10B981)
-                                  : (perm.canRead
-                                      ? (isDark ? const Color(0xFFC5A059) : const Color(0xFF212F3D))
-                                      : (isDark ? Colors.white24 : Colors.black26)),
-                            ),
-                      onPressed: (isRowUpdating || Permissions.isSuperAdmin(widget.roleName))
-                          ? null
-                          : () => _toggleAllForModule(module, !allGranted),
-                    ),
+                        : (allGranted ? 'Disable all actions' : 'Enable all 5 actions'),
+                    child: isRowUpdating
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Switch.adaptive(
+                            value: (allGranted || Permissions.isSuperAdmin(widget.roleName)),
+                            activeThumbColor: const Color(0xFF10B981),
+                            activeTrackColor: const Color(0xFF10B981).withValues(alpha: 0.35),
+                            onChanged: (isRowUpdating || Permissions.isSuperAdmin(widget.roleName))
+                                ? null
+                                : (next) => _toggleAllForModule(module, next),
+                          ),
                   ),
                 ),
               ),

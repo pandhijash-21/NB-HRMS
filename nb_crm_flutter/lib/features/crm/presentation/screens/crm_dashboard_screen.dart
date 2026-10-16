@@ -181,6 +181,7 @@ class _CrmDashboardView extends StatelessWidget {
               (() {
                 final kpi = state.kpiMetrics!;
                 final settings = state.settings;
+                final isPersonal = kpi.isPersonal || !Permissions.isAdmin(auth.user?.role);
                 final List<Widget> cards = [];
 
                 if (settings?.kpiShowActiveLeads ?? true) {
@@ -188,7 +189,7 @@ class _CrmDashboardView extends StatelessWidget {
                     context,
                     title: 'Active Leads',
                     value: '${kpi.totalActiveLeads}',
-                    subtext: 'Pre-sales pipeline',
+                    subtext: isPersonal ? 'My assigned pipeline' : 'Pre-sales pipeline',
                     icon: Icons.people_alt_rounded,
                     color: const Color(0xFF0284C7),
                     isDark: isDark,
@@ -341,30 +342,96 @@ class _CrmDashboardView extends StatelessWidget {
                   );
                 }
 
-                return TourTarget(
+                final gridWidget = TourTarget(
                   id: TourIds.step('crm.dashboard', 2),
                   child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final cardWidth = constraints.maxWidth;
-                    final isLarge = cardWidth >= 900;
-                    final isMedium = cardWidth >= 600;
+                    builder: (context, constraints) {
+                      final cardWidth = constraints.maxWidth;
+                      final isLarge = cardWidth >= 900;
+                      final isMedium = cardWidth >= 600;
 
-                    final crossAxisCount = isLarge ? 4 : (isMedium ? 3 : 2);
-                    final childAspectRatio = isLarge
-                        ? 1.8
-                        : (isMedium ? 1.5 : (cardWidth < 360 ? 1.08 : (cardWidth < 420 ? 1.18 : 1.35)));
+                      final crossAxisCount = isLarge ? 4 : (isMedium ? 3 : 2);
+                      final childAspectRatio = isLarge
+                          ? 1.8
+                          : (isMedium ? 1.5 : (cardWidth < 360 ? 1.08 : (cardWidth < 420 ? 1.18 : 1.35)));
 
-                    return GridView.count(
-                      crossAxisCount: crossAxisCount,
-                      crossAxisSpacing: 10,
-                      mainAxisSpacing: 10,
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      childAspectRatio: childAspectRatio,
-                      children: cards,
-                    );
-                  },
-                ),
+                      return GridView.count(
+                        crossAxisCount: crossAxisCount,
+                        crossAxisSpacing: 10,
+                        mainAxisSpacing: 10,
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        childAspectRatio: childAspectRatio,
+                        children: cards,
+                      );
+                    },
+                  ),
+                );
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: (isPersonal ? const Color(0xFF0284C7) : const Color(0xFFD97706))
+                            .withValues(alpha: isDark ? 0.15 : 0.08),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: (isPersonal ? const Color(0xFF0284C7) : const Color(0xFFD97706))
+                              .withValues(alpha: 0.25),
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            isPersonal ? Icons.person_rounded : Icons.admin_panel_settings_rounded,
+                            size: 16,
+                            color: isPersonal
+                                ? (isDark ? const Color(0xFF38BDF8) : const Color(0xFF0284C7))
+                                : (isDark ? const Color(0xFFFBBF24) : const Color(0xFFD97706)),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              isPersonal
+                                  ? 'My Performance KPIs (Personal Metrics)'
+                                  : 'Total Organization KPIs (Admin Overview Across All Agents)',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: isPersonal
+                                    ? (isDark ? const Color(0xFF38BDF8) : const Color(0xFF0284C7))
+                                    : (isDark ? const Color(0xFFFBBF24) : const Color(0xFFB45309)),
+                              ),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: (isPersonal ? const Color(0xFF0284C7) : const Color(0xFFD97706))
+                                  .withValues(alpha: 0.18),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              isPersonal ? 'INDIVIDUAL' : 'ADMIN VIEW',
+                              style: TextStyle(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.5,
+                                color: isPersonal
+                                    ? (isDark ? const Color(0xFF38BDF8) : const Color(0xFF0284C7))
+                                    : (isDark ? const Color(0xFFFBBF24) : const Color(0xFFB45309)),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    gridWidget,
+                  ],
                 );
               })(),
             ],

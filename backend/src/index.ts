@@ -160,6 +160,29 @@ async function start() {
   }, 60 * 1000);
   console.log('Punch reminders run every minute');
 
+  // CRM Untouched Leads Recovery & Waiting Queue Auto-Dispatcher (Every 60s)
+  try {
+    const { crmService } = require('./modules/crm/crm.service') as typeof import('./modules/crm/crm.service');
+    const runCrmLeadRecoveryWorker = async () => {
+      try {
+        await crmService.recoverUntouchedLeadsAndDispatch('NB_DEVELOPER');
+        await crmService.recoverUntouchedLeadsAndDispatch('NB_FINSERVE');
+      } catch (workerErr) {
+        console.error('[CRM Lead Recovery Worker Error]:', workerErr);
+      }
+    };
+    // Run initial pass after 10s warmup, then every 60s
+    setTimeout(() => {
+      void runCrmLeadRecoveryWorker();
+    }, 10000);
+    setInterval(() => {
+      void runCrmLeadRecoveryWorker();
+    }, 60 * 1000);
+    console.log('CRM 30-min untouched lead recovery and waiting queue worker started (60s)');
+  } catch (err) {
+    console.warn('CRM lead recovery worker setup notice:', err);
+  }
+
   server.listen(env.PORT, () => {
     console.log(`Server running on port ${env.PORT}`);
   });

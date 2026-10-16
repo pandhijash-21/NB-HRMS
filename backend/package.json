@@ -39,6 +39,7 @@
     "@types/node": "^25.5.0",
     "@types/nodemailer": "^7.0.11",
     "@types/uuid": "^10.0.0",
+    "archiver": "^8.0.0",
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.73.1",
     "cloudinary": "^2.9.0",
@@ -68,6 +69,7 @@
     "effect": "^3.20.0"
   },
   "devDependencies": {
+    "@types/archiver": "^8.0.0",
     "nodemon": "^3.1.14",
     "ts-node": "^10.9.2"
   }

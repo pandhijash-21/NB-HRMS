@@ -1814,9 +1814,9 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
                   color: const Color(0xFF2563EB),
                 ),
                 _buildMetricChip(
-                  icon: Icons.file_copy_outlined,
-                  label: 'Bank Docs',
-                  value: '${_loanDocTypes.length}',
+                  icon: Icons.folder_special_rounded,
+                  label: 'Doc Master',
+                  value: '${_loanDocTypes.length} Docs',
                   color: const Color(0xFF10B981),
                 ),
                 _buildMetricChip(
@@ -1826,6 +1826,12 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
                   color: const Color(0xFF7C3AED),
                 ),
               ] else ...[
+                _buildMetricChip(
+                  icon: Icons.folder_special_rounded,
+                  label: 'Doc Master',
+                  value: '${_loanDocTypes.length} Docs',
+                  color: const Color(0xFF10B981),
+                ),
                 _buildMetricChip(
                   icon: Icons.how_to_reg_rounded,
                   label: 'Site Reception',
@@ -2267,6 +2273,14 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
               textMuted: textMuted,
               primaryColor: primaryColor,
             )
+          else if (sectionId == 'doc_master')
+            _buildMasterDocumentTypesCard(
+              isDark: isDark,
+              cardBg: cardBg,
+              borderColor: borderColor,
+              textMuted: textMuted,
+              primaryColor: primaryColor,
+            )
           else if (sectionId == 'application_fields')
             _buildFinserveApplicationFieldsCard(
               context: context,
@@ -2383,9 +2397,21 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
           color: const Color(0xFF2563EB),
           badges: [
             '${_loanTypes.length} Loan Products',
-            '${_loanDocTypes.length} Master Docs',
+            'Checklist Mapping',
           ],
           previews: _loanTypes.take(4).toList(),
+        ),
+        _PresalesCategoryMeta(
+          id: 'doc_master',
+          title: 'Doc Master (Document Types)',
+          subtitle: 'Add, edit, or remove master documents (PAN, Aadhaar, Bank Statement, etc.) and file size limits',
+          icon: Icons.folder_special_rounded,
+          color: const Color(0xFF10B981),
+          badges: [
+            '${_loanDocTypes.length} Master Document Types',
+            'Max File Sizes & Formats',
+          ],
+          previews: _loanDocTypes.take(4).map((d) => d.name).toList(),
         ),
         _PresalesCategoryMeta(
           id: 'application_fields',
@@ -2450,6 +2476,18 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
     }
 
     return [
+      _PresalesCategoryMeta(
+        id: 'doc_master',
+        title: 'Doc Master (Document Types)',
+        subtitle: 'Manage master document types, verification checklists, and file size limits',
+        icon: Icons.folder_special_rounded,
+        color: const Color(0xFF10B981),
+        badges: [
+          '${_loanDocTypes.length} Master Document Types',
+          'Max File Sizes & Formats',
+        ],
+        previews: _loanDocTypes.take(4).map((d) => d.name).toList(),
+      ),
       _PresalesCategoryMeta(
         id: 'lead_routing',
         title: 'Lead Flow & Desk Routing',
@@ -2694,6 +2732,35 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
             ],
           ),
           const SizedBox(height: 18),
+          InkWell(
+            onTap: () => setState(() => _activePresalesSection = 'doc_master'),
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+              decoration: BoxDecoration(
+                color: const Color(0xFF10B981).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.folder_special_rounded, color: Color(0xFF10B981), size: 20),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Need to add new document types or change file size limits? Manage them in Doc Master',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF10B981)),
+                    ),
+                  ),
+                  Text(
+                    'Open Doc Master →',
+                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Color(0xFF10B981)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
 
           // Add New Loan Type
           Row(
@@ -2887,7 +2954,9 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
     );
   }
 
-  // Sub-card 2: Master Document Types & Max File Size Configurations
+  // ---------------------------------------------------------------------------
+  // Doc Master: Master Document Types & Max File Size Configurations
+  // ---------------------------------------------------------------------------
   Widget _buildMasterDocumentTypesCard({
     required bool isDark,
     required Color cardBg,
@@ -2896,7 +2965,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
     required Color primaryColor,
   }) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(16),
@@ -2908,12 +2977,12 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(10),
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: const Color(0xFF10B981).withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(Icons.file_copy_outlined, color: Color(0xFF10B981), size: 22),
+                child: const Icon(Icons.folder_special_rounded, color: Color(0xFF10B981), size: 26),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -2921,16 +2990,16 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Finserve: Master Bank Document Types & File Size Limits',
+                      'Doc Master: Master Document Pool & Verification Checklist',
                       style: TextStyle(
-                        fontSize: 16,
+                        fontSize: 17,
                         fontWeight: FontWeight.bold,
                         color: isDark ? Colors.white : const Color(0xFF1E293B),
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Define the master pool of document types and max allowed file size (MB) for loan applications.',
+                      'Manage all master document types (PAN, Aadhaar, Bank Statement, Salary Slips, etc.), set allowed file size limits (MB), and add or remove documents. These documents auto-populate in verification checklists and client upload portals.',
                       style: TextStyle(fontSize: 13, color: textMuted),
                     ),
                   ],
@@ -2938,28 +3007,34 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
               ),
             ],
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 20),
 
           // Add New Document Type Form
           Container(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: isDark ? const Color(0xFF24201D) : const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(14),
               border: Border.all(color: borderColor),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Add New Document Type',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: isDark ? Colors.white70 : const Color(0xFF334155),
-                  ),
+                Row(
+                  children: [
+                    const Icon(Icons.add_circle_outline_rounded, size: 18, color: Color(0xFF10B981)),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Add New Master Document Type',
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : const Color(0xFF1E293B),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
                 Row(
                   children: [
                     Expanded(
@@ -2967,7 +3042,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
                       child: TextField(
                         controller: _newDocNameController,
                         decoration: InputDecoration(
-                          hintText: 'Document Name (e.g. PAN Card, Bank Statement)...',
+                          hintText: 'Document Name (e.g. PAN Card, Bank Statement, GST Certificate)...',
                           isDense: true,
                           prefixIcon: const Icon(Icons.description_outlined, size: 20),
                           contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -3000,7 +3075,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF10B981),
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
                     ),
@@ -3009,63 +3084,147 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
               ],
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 22),
 
           // Display List of Added Master Document Types
-          Text(
-            'Configured Document Pool (${_loanDocTypes.length} Available)',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: isDark ? Colors.white70 : const Color(0xFF475569),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: _loanDocTypes.map((doc) {
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Configured Document Pool (${_loanDocTypes.length} Available in Master)',
+                style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white70 : const Color(0xFF334155),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF26221E) : Colors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: borderColor),
+                  color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.insert_drive_file_outlined, size: 18, color: Color(0xFF10B981)),
-                    const SizedBox(width: 8),
-                    Text(
-                      doc.name,
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF2563EB).withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        'Max ${doc.maxFileSizeMb} MB',
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    IconButton(
-                      icon: const Icon(Icons.close_rounded, size: 16, color: Colors.redAccent),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
-                      tooltip: 'Remove ${doc.name}',
-                      onPressed: () => _removeLoanDocType(doc.id),
-                    ),
-                  ],
+                child: Text(
+                  '${_loanDocTypes.length} Active Types',
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF10B981)),
                 ),
-              );
-            }).toList(),
+              ),
+            ],
           ),
+          const SizedBox(height: 12),
+
+          if (_loanDocTypes.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(28),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF24201D) : const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: borderColor),
+              ),
+              child: Column(
+                children: [
+                  Icon(Icons.folder_open_rounded, size: 44, color: textMuted),
+                  const SizedBox(height: 10),
+                  Text(
+                    'No document types in Doc Master yet',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: isDark ? Colors.white : const Color(0xFF1E293B)),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Use the form above to add document types (e.g. PAN Card, Bank Statement, Aadhaar, ITR, Salary Slips).',
+                    style: TextStyle(fontSize: 12.5, color: textMuted),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            )
+          else
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isTwoCol = constraints.maxWidth >= 600;
+                final itemWidth = isTwoCol ? (constraints.maxWidth - 12) / 2 : constraints.maxWidth;
+
+                return Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: _loanDocTypes.map((doc) {
+                    return SizedBox(
+                      width: itemWidth,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF26221E) : Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: borderColor),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.03),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(Icons.description_rounded, size: 20, color: Color(0xFF10B981)),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    doc.name,
+                                    style: TextStyle(
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.bold,
+                                      color: isDark ? Colors.white : const Color(0xFF1E293B),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF2563EB).withValues(alpha: 0.12),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          'Max ${doc.maxFileSizeMb} MB',
+                                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        doc.allowedFormats.join(', ').toUpperCase(),
+                                        style: TextStyle(fontSize: 10.5, color: textMuted),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline_rounded, size: 20, color: Colors.redAccent),
+                              tooltip: 'Delete ${doc.name}',
+                              onPressed: () => _removeLoanDocType(doc.id),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                );
+              },
+            ),
         ],
       ),
     );
@@ -4193,6 +4352,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
       }));
     } else {
       context.read<CrmSettingsBloc>().add(CrmSettingsSaved({
+        'loan_doc_types': jsonEncode(_loanDocTypes.map((d) => d.toJson()).toList()),
         'not_interested_reasons': jsonEncode(_notInterestedReasons),
         'lead_sources': jsonEncode(_leadSources),
         'reference_types': jsonEncode(_referenceTypes),

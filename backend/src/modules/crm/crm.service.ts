@@ -4526,9 +4526,7 @@ export const crmService = {
     if (!lead) throw new Error('Invalid or expired application link');
 
     const custom = (lead.customFields as any) || {};
-    if (custom.clientPortalSubmitted || custom.clientPortalStatus === 'SUBMITTED') {
-      throw new Error('This application has already been confirmed and locked. Only an administrator can modify documents.');
-    }
+    // Allow updating or replacing documents so applicants and staff can update their file
 
     // Verify file size & format against doc definition from settings
     const settings = await this.getSettings('NB_FINSERVE');

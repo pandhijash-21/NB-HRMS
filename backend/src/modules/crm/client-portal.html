@@ -1166,7 +1166,18 @@
         return;
       }
 
-      container.innerHTML = docs.map(d => {
+      let zipDownloadHtml = '';
+      if (uploadedCount > 0) {
+        zipDownloadHtml = `
+          <div style="margin-bottom: 16px; display: flex; justify-content: flex-end;">
+            <a href="${apiBase}/api/crm-public/client-portal/${token}/download-docs-zip" target="_blank" class="btn btn-secondary btn-sm" style="text-decoration: none; width: auto; font-weight: 700; color: #D97706; border-color: #FDE68A; background: #FEF3C7;">
+              📦 Download All Uploaded Documents (ZIP)
+            </a>
+          </div>
+        `;
+      }
+
+      container.innerHTML = zipDownloadHtml + docs.map(d => {
         const isUp = d.isUploaded;
         const upItem = d.uploadedItem;
         const maxMb = d.maxFileSizeMb || 10;
@@ -1180,21 +1191,14 @@
           ? `<a href="${upItem.fileUrl}" target="_blank" class="btn btn-secondary btn-sm" style="text-decoration:none;">View File</a>`
           : '';
 
-        let actionControlHtml = '';
-        if (isLocked) {
-          actionControlHtml = isUp
-            ? `<span style="font-size: 13px; font-weight: 700; color: #059669; display: flex; align-items: center; gap: 4px;">🔒 Locked</span>`
-            : `<span style="font-size: 13px; font-weight: 600; color: #94A3B8;">Submission Closed</span>`;
-        } else {
-          actionControlHtml = `
-            <div class="doc-upload-btn-wrap">
-              <button class="btn btn-primary btn-sm">
-                <span>${isUp ? 'Replace' : 'Upload'}</span>
-              </button>
-              <input type="file" class="doc-upload-input" accept=".pdf,image/*" onchange="uploadDocument('${d.id}', '${encodeURIComponent(d.name)}', ${maxMb}, '${encodeURIComponent(JSON.stringify(d.allowedFormats || []))}', this)">
-            </div>
-          `;
-        }
+        const actionControlHtml = `
+          <div class="doc-upload-btn-wrap">
+            <button class="btn btn-primary btn-sm">
+              <span>${isUp ? 'Replace' : 'Upload'}</span>
+            </button>
+            <input type="file" class="doc-upload-input" accept=".pdf,image/*" onchange="uploadDocument('${d.id}', '${encodeURIComponent(d.name)}', ${maxMb}, '${encodeURIComponent(JSON.stringify(d.allowedFormats || []))}', this)">
+          </div>
+        `;
 
         return `
           <div class="doc-item-card">

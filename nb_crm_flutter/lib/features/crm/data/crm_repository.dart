@@ -410,9 +410,8 @@ class CrmRepository {
 
   Future<Map<String, dynamic>> reportTelecallerActivity(String status) async {
     return _dio.postEnvelope<Map<String, dynamic>>(
-      'crm/telecallers/activity',
-      data: {'status': status},
-      queryParameters: {'scope': crmScopeNotifier.value},
+      'crm/telecallers/activity?scope=${crmScopeNotifier.value}',
+      data: {'status': status, 'scope': crmScopeNotifier.value},
       parse: (raw) => Map<String, dynamic>.from(raw as Map),
     );
   }
@@ -427,8 +426,8 @@ class CrmRepository {
 
   Future<Map<String, dynamic>> dispatchWaitingQueue() async {
     return _dio.postEnvelope<Map<String, dynamic>>(
-      'crm/waiting-queue/dispatch',
-      queryParameters: {'scope': crmScopeNotifier.value},
+      'crm/waiting-queue/dispatch?scope=${crmScopeNotifier.value}',
+      data: {'scope': crmScopeNotifier.value},
       parse: (raw) => Map<String, dynamic>.from(raw as Map),
     );
   }

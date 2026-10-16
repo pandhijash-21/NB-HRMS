@@ -470,7 +470,9 @@ export const crmController = {
 
   async getSalesUsers(req: Request, res: Response) {
     try {
-      const users = await crmService.getSalesUsers();
+      const users = await crmService.getSalesUsers({
+        telecallersOnly: req.query.telecallersOnly as string,
+      });
       res.json(ok(users));
     } catch (err: any) {
       res.status(500).json(fail(err.message || 'Failed to fetch sales users'));

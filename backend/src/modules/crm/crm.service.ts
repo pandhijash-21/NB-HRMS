@@ -2216,17 +2216,31 @@ export const crmService = {
       },
     });
 
-    // 1. Filter out administrators so leads are assigned to dedicated telecalling / sales staff
-    const nonAdminUsers = users.filter((u) => !isAdminRole(u.role?.name));
+    // 1. Exclude administrators, IT, and executive management roles
+    const isExcludedAdmin = (roleName?: string | null) => {
+      const r = String(roleName || '').toLowerCase().trim();
+      return isAdminRole(roleName) || /admin|superadmin|itadmin/i.test(r);
+    };
 
-    // 2. Filter by permission matrix (user's role must grant access to this CRM scope)
-    const permittedUsers = nonAdminUsers.filter((u) => (u.role?.permissions?.length || 0) > 0);
+    // 2. Telecaller check: role or designation must indicate telecalling
+    const isTelecallerUser = (u: any) => {
+      const roleName = String(u.role?.name || '').toLowerCase().trim();
+      const desig = String(u.employee?.generalInfo?.designation || '').toLowerCase().trim();
+      if (isExcludedAdmin(u.role?.name)) return false;
+      return roleName.includes('telecall') || desig.includes('telecall');
+    };
 
-    // 3. Filter by subOrganization if specified
-    let scopedUsers = permittedUsers;
+    const telecallerUsers = users.filter(isTelecallerUser);
+
+    // 3. Permission matrix: ensure they have access to this CRM scope
+    const permittedUsers = telecallerUsers.filter((u) => (u.role?.permissions?.length || 0) > 0);
+    const candidatePool = permittedUsers.length > 0 ? permittedUsers : telecallerUsers;
+
+    // 4. Filter by subOrganization if specified
+    let scopedUsers = candidatePool;
     if (subOrganization && subOrganization.trim().length > 0) {
       const subOrgClean = subOrganization.trim().toLowerCase();
-      const matched = permittedUsers.filter((u) => {
+      const matched = candidatePool.filter((u) => {
         const empSub = (u.subOrganization || u.employee?.generalInfo?.subOrganization || '').toLowerCase().trim();
         return empSub === subOrgClean;
       });
@@ -2235,7 +2249,7 @@ export const crmService = {
       }
     }
 
-    // 4. Base candidates sorted by employee ID
+    // 5. Candidate IDs sorted by employee ID
     let candidateIds: number[] = [];
     if (scopedUsers.length > 0) {
       candidateIds = Array.from(
@@ -2246,23 +2260,15 @@ export const crmService = {
         ),
       ).sort((a, b) => a - b);
     } else {
-      // Fallback A: Check if explicit pools were configured in CRM Settings
+      // Fallback: Check if explicit pools were configured in CRM Settings
       const pools = await this.getAssignedTelecallerPools(scope);
       const configuredPool = Array.from(new Set([...pools.excelIds, ...pools.webhookIds]));
       if (configuredPool.length > 0) {
-        candidateIds = configuredPool;
-      } else {
-        // Fallback B: Any user who holds CRM permissions
-        const fallbackPermitted = users.filter((u) => (u.role?.permissions?.length || 0) > 0);
-        if (fallbackPermitted.length > 0) {
-          candidateIds = Array.from(
-            new Set(
-              fallbackPermitted
-                .map((u) => u.employeeId)
-                .filter((id): id is number => typeof id === 'number' && id > 0),
-            ),
-          ).sort((a, b) => a - b);
-        }
+        const nonAdminPool = configuredPool.filter((id) => {
+          const user = users.find((u) => u.employeeId === id);
+          return !isExcludedAdmin(user?.role?.name);
+        });
+        candidateIds = nonAdminPool;
       }
     }
 
@@ -2320,15 +2326,20 @@ export const crmService = {
   },
 
   async isPunchedInToday(employeeId: number): Promise<boolean> {
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date();
-    endOfDay.setHours(23, 59, 59, 999);
+    const ymd = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+
+    const fromUtc = new Date(`${ymd}T00:00:00+05:30`);
+    const toExclusive = new Date(fromUtc.getTime() + 24 * 60 * 60 * 1000);
 
     const punches = await prisma.attendancePunch.findMany({
       where: {
         employeeId,
-        punchAt: { gte: startOfDay, lte: endOfDay },
+        punchAt: { gte: fromUtc, lt: toExclusive },
       },
       orderBy: { punchAt: 'asc' },
       select: { punchAt: true, source: true },
@@ -2341,12 +2352,15 @@ export const crmService = {
       return mobilePunches.length % 2 === 1;
     }
 
+    // Biometric machine (ESSL/ETIMEOFFICE) or manual punches:
+    // If odd number of punches, currently on duty.
+    if (punches.length % 2 === 1) return true;
+
     const { firstIn, lastOut } = deriveDayInOut(punches);
-    let isPunchedIn = Boolean(firstIn) && !lastOut;
-    if (!isPunchedIn && punches.length > 0) {
-      isPunchedIn = punches.length % 2 === 1;
-    }
-    return isPunchedIn;
+    if (firstIn && !lastOut) return true;
+
+    // Has at least 1 punch today
+    return punches.length > 0;
   },
 
   // ---------------------------------------------------------------------------
@@ -3590,9 +3604,22 @@ export const crmService = {
   // ---------------------------------------------------------------------------
   // Sales Users & Employees from HRMS
   // ---------------------------------------------------------------------------
-  async getSalesUsers() {
+  async getSalesUsers(query?: { telecallersOnly?: boolean | string }) {
+    const isTelecallersOnly =
+      query?.telecallersOnly === true || query?.telecallersOnly === 'true';
+
     const employees = await prisma.employee.findMany({
-      where: { status: 'ACTIVE' },
+      where: {
+        status: 'ACTIVE',
+        ...(isTelecallersOnly
+          ? {
+              OR: [
+                { user: { role: { name: { contains: 'telecall', mode: 'insensitive' } } } },
+                { generalInfo: { designation: { contains: 'telecall', mode: 'insensitive' } } },
+              ],
+            }
+          : {}),
+      },
       include: {
         generalInfo: {
           select: {
@@ -3612,7 +3639,7 @@ export const crmService = {
       orderBy: { id: 'asc' },
     });
 
-    return employees.map((emp) => ({
+    const mapped = employees.map((emp) => ({
       employeeId: emp.id,
       userId: emp.userId,
       fullName: emp.generalInfo?.fullName || emp.user?.username || `Employee #${emp.id}`,
@@ -3620,6 +3647,15 @@ export const crmService = {
       department: emp.generalInfo?.department || 'Sales & Marketing',
       role: emp.user?.role?.name || 'SALES',
     }));
+
+    if (isTelecallersOnly) {
+      return mapped.filter((e) => {
+        const r = (e.role || '').toLowerCase();
+        return !/admin|superadmin|itadmin/i.test(r);
+      });
+    }
+
+    return mapped;
   },
 
   // ---------------------------------------------------------------------------

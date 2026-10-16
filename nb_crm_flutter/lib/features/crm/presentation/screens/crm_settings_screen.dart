@@ -4535,11 +4535,14 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
       builder: (dialogCtx) {
         return StatefulBuilder(
           builder: (ctx, setDialogState) {
-            final filtered = employees.where((e) {
+            final telecallerCandidates = employees.where((e) => e.isTelecaller).toList();
+            final candidatePool = telecallerCandidates.isNotEmpty ? telecallerCandidates : employees;
+            final filtered = candidatePool.where((e) {
               final q = searchQuery.toLowerCase();
               return e.fullName.toLowerCase().contains(q) ||
                   (e.designation ?? '').toLowerCase().contains(q) ||
                   (e.department ?? '').toLowerCase().contains(q) ||
+                  (e.role ?? '').toLowerCase().contains(q) ||
                   e.employeeId.toString().contains(q);
             }).toList();
 
@@ -4578,7 +4581,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          '${tempSelected.length} of ${employees.length} selected',
+                          '${tempSelected.length} of ${candidatePool.length} selected',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
@@ -4590,7 +4593,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
                             TextButton(
                               onPressed: () {
                                 setDialogState(() {
-                                  tempSelected = employees.map((e) => e.employeeId).toList();
+                                  tempSelected = candidatePool.map((e) => e.employeeId).toList();
                                 });
                               },
                               child: const Text('Select All', style: TextStyle(fontSize: 12)),
@@ -4687,6 +4690,38 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
         presenceMap[p.employeeId] = p;
       }
     }
+
+    // Build authoritative list containing ONLY telecallers
+    final Map<int, ({int employeeId, String fullName, bool isPunchedIn, bool isActiveOnScreen, int currentWorkload})> telecallerRows = {};
+
+    if (status != null) {
+      for (final p in status.telecallers) {
+        telecallerRows[p.employeeId] = (
+          employeeId: p.employeeId,
+          fullName: p.fullName,
+          isPunchedIn: p.isPunchedIn,
+          isActiveOnScreen: p.isActiveOnScreen,
+          currentWorkload: p.currentWorkload,
+        );
+      }
+    }
+
+    for (final emp in employees.where((e) => e.isTelecaller)) {
+      final presence = presenceMap[emp.employeeId];
+      telecallerRows.putIfAbsent(
+        emp.employeeId,
+        () => (
+          employeeId: emp.employeeId,
+          fullName: emp.fullName,
+          isPunchedIn: presence?.isPunchedIn ?? false,
+          isActiveOnScreen: presence?.isActiveOnScreen ?? false,
+          currentWorkload: presence?.currentWorkload ?? 0,
+        ),
+      );
+    }
+
+    final telecallerList = telecallerRows.values.toList()
+      ..sort((a, b) => a.fullName.toLowerCase().compareTo(b.fullName.toLowerCase()));
 
     return Container(
       width: double.infinity,
@@ -4872,8 +4907,28 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
           ),
           const SizedBox(height: 14),
 
-          if (employees.isEmpty)
-            Text('No telecallers/sales employees found.', style: TextStyle(color: textMuted))
+          if (telecallerList.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.white.withValues(alpha: 0.03) : const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: borderColor),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline_rounded, size: 20, color: textMuted),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'No team members with role "Telecaller" or "Telecalling" found. Only telecallers are managed under workload overrides.',
+                      style: TextStyle(fontSize: 13, color: textMuted),
+                    ),
+                  ),
+                ],
+              ),
+            )
           else
             Container(
               decoration: BoxDecoration(
@@ -4883,14 +4938,13 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
               child: ListView.separated(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                itemCount: employees.length,
+                itemCount: telecallerList.length,
                 separatorBuilder: (_, __) => Divider(height: 1, color: borderColor),
                 itemBuilder: (ctx, i) {
-                  final emp = employees[i];
-                  final presence = presenceMap[emp.employeeId];
-                  final isPunchedIn = presence?.isPunchedIn ?? false;
-                  final isActiveOnScreen = presence?.isActiveOnScreen ?? false;
-                  final currentWorkload = presence?.currentWorkload ?? 0;
+                  final emp = telecallerList[i];
+                  final isPunchedIn = emp.isPunchedIn;
+                  final isActiveOnScreen = emp.isActiveOnScreen;
+                  final currentWorkload = emp.currentWorkload;
                   final customLimit = _telecallerMaxWorkloadMap[emp.employeeId.toString()];
 
                   return Padding(

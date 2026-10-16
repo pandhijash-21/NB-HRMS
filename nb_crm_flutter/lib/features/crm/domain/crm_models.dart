@@ -522,13 +522,22 @@ class CrmSalesUser {
   final String fullName;
   final String? designation;
   final String? department;
+  final String? role;
 
   const CrmSalesUser({
     required this.employeeId,
     required this.fullName,
     this.designation,
     this.department,
+    this.role,
   });
+
+  bool get isTelecaller {
+    final r = (role ?? '').toLowerCase();
+    final d = (designation ?? '').toLowerCase();
+    if (r.contains('admin') || r.contains('superadmin') || r.contains('itadmin')) return false;
+    return r.contains('telecall') || d.contains('telecall');
+  }
 
   factory CrmSalesUser.fromJson(Map<String, dynamic> json) {
     final empId = (json['employeeId'] as num?)?.toInt() ??
@@ -539,6 +548,7 @@ class CrmSalesUser {
         'Sales User';
     String? desig = json['designation']?.toString();
     String? dept = json['department']?.toString();
+    String? role = json['role']?.toString();
 
     if (json['generalInfo'] is Map) {
       final gi = json['generalInfo'] as Map;
@@ -549,11 +559,19 @@ class CrmSalesUser {
       if (gi['department'] != null) dept = gi['department'].toString().trim();
     }
 
+    if (json['user'] is Map && (json['user'] as Map)['role'] is Map) {
+      final roleMap = (json['user'] as Map)['role'] as Map;
+      if (roleMap['name'] != null) {
+        role = roleMap['name'].toString();
+      }
+    }
+
     return CrmSalesUser(
       employeeId: empId,
       fullName: name,
       designation: desig,
       department: dept,
+      role: role,
     );
   }
 }

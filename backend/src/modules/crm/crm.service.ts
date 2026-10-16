@@ -919,6 +919,7 @@ export const crmService = {
     page?: number;
     limit?: number;
     scope?: string;
+    inWaitingQueue?: boolean;
   }) {
     const scope = query.scope || 'NB_DEVELOPER';
     const page = Math.max(1, query.page || 1);
@@ -988,7 +989,15 @@ export const crmService = {
       where.campaign = { projectId: query.projectId, scope };
     }
 
-    if (query.status && query.status !== 'ALL') {
+    if (
+      query.status === 'WL' ||
+      query.status === 'WAITING_LIST' ||
+      (query as any).inWaitingQueue === true ||
+      (query as any).inWaitingQueue === 'true'
+    ) {
+      where.telecallerId = null;
+      where.assignedToId = null;
+    } else if (query.status && query.status !== 'ALL') {
       where.status = query.status as CrmLeadStatus;
     }
 
@@ -2411,7 +2420,6 @@ export const crmService = {
         isDeleted: false,
         telecallerId: null,
         assignedToId: null,
-        status: CrmLeadStatus.NOT_STARTED,
       },
       orderBy: { createdAt: 'asc' },
       select: { id: true, customFields: true },
@@ -2618,7 +2626,6 @@ export const crmService = {
         isDeleted: false,
         telecallerId: null,
         assignedToId: null,
-        status: CrmLeadStatus.NOT_STARTED,
       },
     });
 
@@ -2669,6 +2676,26 @@ export const crmService = {
 
       const isEligibleForDispatch = isPunchedIn && isActiveOnScreen && capacity.availableCapacity > 0;
 
+      let inactiveSeconds = 0;
+      if (presence?.lastActiveAt) {
+        const elapsed = Math.floor((Date.now() - presence.lastActiveAt) / 1000);
+        if (!isActiveOnScreen || presence.status === 'ON_BREAK') {
+          inactiveSeconds = Math.max(0, elapsed);
+        }
+      } else if (!isActiveOnScreen) {
+        inactiveSeconds = idleMin * 60;
+      }
+
+      let ineligibleReason: string | null = null;
+      if (!isPunchedIn) {
+        ineligibleReason = 'Not punched in today';
+      } else if (!isActiveOnScreen || presence?.status === 'ON_BREAK') {
+        const mins = Math.floor(inactiveSeconds / 60);
+        ineligibleReason = mins > 0 ? `On break / Inactive (${mins}m)` : 'Inactive on screen';
+      } else if (capacity.availableCapacity <= 0) {
+        ineligibleReason = `Workload full (${capacity.currentWorkload}/${capacity.maxCapacity})`;
+      }
+
       results.push({
         employeeId: emp.id,
         fullName: emp.generalInfo?.fullName || `Employee #${emp.id}`,
@@ -2679,6 +2706,8 @@ export const crmService = {
         presenceStatus: presence?.status || (isActiveOnScreen ? 'ACTIVE' : 'ON_BREAK'),
         lastActiveAt: presence?.lastActiveAt ? new Date(presence.lastActiveAt).toISOString() : null,
         isActiveOnScreen,
+        inactiveSeconds,
+        ineligibleReason,
         maxCapacity: capacity.maxCapacity,
         currentWorkload: capacity.currentWorkload,
         availableCapacity: capacity.availableCapacity,

@@ -192,6 +192,7 @@ export const crmController = {
         page: req.query.page ? parseInt(req.query.page as string, 10) : 1,
         limit: req.query.limit ? parseInt(req.query.limit as string, 10) : 50,
         scope: getScope(req),
+        inWaitingQueue: req.query.inWaitingQueue === 'true' || req.query.status === 'WL' || req.query.status === 'WAITING_LIST',
       });
       res.json(ok(leads));
     } catch (err: any) {
@@ -806,6 +807,10 @@ export const crmController = {
   async reportTelecallerActivity(req: Request, res: Response) {
     try {
       const authUser = (req as any).user;
+      const isAdmin = isAdminRole(authUser?.roleName || authUser?.role);
+      if (isAdmin) {
+        return res.json(ok({ ignored: true, reason: 'Admin activity is not tracked for telecalling presence' }));
+      }
       if (!authUser?.employeeId) {
         return res.status(400).json(fail('Employee profile required for telecaller activity'));
       }

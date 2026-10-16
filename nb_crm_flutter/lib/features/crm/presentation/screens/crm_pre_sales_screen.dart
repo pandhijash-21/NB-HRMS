@@ -15,6 +15,7 @@ import '../../domain/crm_models.dart';
 import '../bloc/crm_leads_bloc.dart';
 import '../widgets/crm_audio_player_dialog.dart';
 import '../widgets/crm_scope_selector.dart';
+import '../widgets/crm_telecaller_status_dialog.dart';
 
 class CrmPreSalesScreen extends StatelessWidget {
   const CrmPreSalesScreen({super.key});
@@ -59,10 +60,39 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     _setupInactivityTracker();
   }
 
+  bool _isTelecallerUser() {
+    if (!mounted) return false;
+    final authState = context.read<AuthBloc>().state;
+    final role = authState.user?.role;
+    if (Permissions.isAdmin(role)) return false;
+    if (authState.user?.employeeId == null) return false;
+    final r = (role ?? '').toUpperCase();
+    if (r.contains('ACCOUNT') ||
+        r.contains('PANTRY') ||
+        r.contains('DRIVER') ||
+        r.contains('HOUSEKEEPING') ||
+        r.contains('STORE') ||
+        r.contains('PURCHASE') ||
+        r.contains('LEGAL') ||
+        r.contains('CEO') ||
+        r.contains('DIRECTOR')) {
+      return false;
+    }
+    return true;
+  }
+
   void _setupInactivityTracker() {
+    if (!_isTelecallerUser()) {
+      _heartbeatTimer?.cancel();
+      _idleTimer?.cancel();
+      if (_isOnBreak) {
+        setState(() => _isOnBreak = false);
+      }
+      return;
+    }
     _heartbeatTimer?.cancel();
     _heartbeatTimer = Timer.periodic(const Duration(seconds: 60), (_) {
-      if (!_isOnBreak && mounted) {
+      if (!_isOnBreak && mounted && _isTelecallerUser()) {
         context.read<CrmRepository>().reportTelecallerActivity('ACTIVE').catchError((_) => <String, dynamic>{});
       }
     });
@@ -70,6 +100,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
   }
 
   void _onUserInteraction() {
+    if (!_isTelecallerUser()) return;
     final now = DateTime.now();
     _idleTimer?.cancel();
 
@@ -90,7 +121,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
 
     // Start 5-minute inactivity timer
     _idleTimer = Timer(const Duration(minutes: 5), () {
-      if (mounted && !_isOnBreak) {
+      if (mounted && !_isOnBreak && _isTelecallerUser()) {
         setState(() => _isOnBreak = true);
         context.read<CrmRepository>().reportTelecallerActivity('ON_BREAK').catchError((_) => <String, dynamic>{});
       }
@@ -186,6 +217,28 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   ),
                 ),
                 actions: [
+                  if (Permissions.isAdmin(authState.user?.role) ||
+                      ['ADMIN', 'SUPER_ADMIN', 'SYSTEM_ADMIN'].contains(authState.user?.role.toUpperCase() ?? ''))
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: OutlinedButton.icon(
+                        onPressed: () => showTelecallerStatusDialog(
+                          context,
+                          onDispatched: () {
+                            context.read<CrmLeadsBloc>().add(const CrmLeadsRefreshRequested());
+                          },
+                        ),
+                        icon: const Icon(Icons.people_alt_rounded, size: 16),
+                        label: const Text('Telecaller Activity'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: primaryGold,
+                          side: BorderSide(color: primaryGold.withValues(alpha: 0.5)),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                        ),
+                      ),
+                    ),
                   CrmScopeSelectorWidget(
                     onScopeChanged: () {
                       setState(() {});
@@ -205,7 +258,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
               ),
               body: Column(
                 children: [
-                  if (_isOnBreak)
+                  if (_isOnBreak && _isTelecallerUser())
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -308,6 +361,9 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
 
     final filteredLeads = leads.where((l) {
       if (l.scope != repo.scope) return false;
+      if (state.statusFilter == 'WL') {
+        return l.isWaitingList;
+      }
       // Leads directly assigned to this employee (as sales rep or telecaller) are always visible to them
       if (!isAdmin && userEmployeeId != null && (l.assignedToId == userEmployeeId || l.telecallerId == userEmployeeId)) {
         return true;
@@ -446,6 +502,17 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                       DropdownMenuItem(
                         value: 'ALL',
                         child: Text('All Statuses', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: isDark ? Colors.white : const Color(0xFF1E293B))),
+                      ),
+                      DropdownMenuItem(
+                        value: 'WL',
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFFD97706), shape: BoxShape.circle)),
+                            const SizedBox(width: 8),
+                            Text('⏳ Waiting List (WL)', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: isDark ? const Color(0xFFFBBF24) : const Color(0xFFB45309))),
+                          ],
+                        ),
                       ),
                       DropdownMenuItem(
                         value: 'NOT_STARTED',
@@ -604,6 +671,20 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                           label: const Text('Import Excel'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF16A34A),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                      if (isAdmin) ...[
+                        ElevatedButton.icon(
+                          onPressed: () => _handleDistributeLeads(context),
+                          icon: const Icon(Icons.bolt_rounded, size: 18),
+                          label: Text('Distribute (${leads.where((l) => l.isWaitingList).length})'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFD97706),
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -775,6 +856,15 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                       if (val) context.read<CrmLeadsBloc>().add(const CrmLeadsLeadFlowFilterChanged('WEBHOOK'));
                     },
                   ),
+                  ChoiceChip(
+                    avatar: const Icon(Icons.hourglass_top_rounded, size: 14, color: Color(0xFFD97706)),
+                    label: Text('Waiting List (${leads.where((l) => l.isWaitingList).length})'),
+                    selected: state.statusFilter == 'WL',
+                    selectedColor: const Color(0xFFF59E0B).withValues(alpha: 0.25),
+                    onSelected: (val) {
+                      context.read<CrmLeadsBloc>().add(CrmLeadsStatusFilterChanged(val ? 'WL' : 'ALL'));
+                    },
+                  ),
                 ],
               ),
             ),
@@ -845,6 +935,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                           ),
                         ),
                         const DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
+                        const DataColumn(label: Text('Allocated To', style: TextStyle(fontWeight: FontWeight.bold))),
                         ...columns.map((c) {
                           String labelText = c.label;
                           if (isFinserve) {
@@ -960,6 +1051,71 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                             // Status Column (4 telecaller statuses)
                             DataCell(
                               _buildStatusDropdown(context, lead, canAlterLead, salesUsers),
+                            ),
+
+                            // Allocated Agent Column
+                            DataCell(
+                              lead.isWaitingList
+                                  ? Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFD97706).withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(color: const Color(0xFFD97706).withValues(alpha: 0.3)),
+                                      ),
+                                      child: const Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.hourglass_top_rounded, size: 12, color: Color(0xFFD97706)),
+                                          SizedBox(width: 4),
+                                          Text(
+                                            'Waiting List (WL)',
+                                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFFD97706)),
+                                          ),
+                                        ],
+                                      ),
+                                    )
+                                  : (lead.telecallerName != null && lead.telecallerName!.isNotEmpty)
+                                      ? Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF16A34A).withValues(alpha: 0.12),
+                                            borderRadius: BorderRadius.circular(6),
+                                            border: Border.all(color: const Color(0xFF16A34A).withValues(alpha: 0.3)),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const Icon(Icons.headset_mic_rounded, size: 12, color: Color(0xFF16A34A)),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                lead.telecallerName!,
+                                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF16A34A)),
+                                              ),
+                                            ],
+                                          ),
+                                        )
+                                      : (lead.assignedToName != null && lead.assignedToName!.isNotEmpty)
+                                          ? Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFF2563EB).withValues(alpha: 0.12),
+                                                borderRadius: BorderRadius.circular(6),
+                                                border: Border.all(color: const Color(0xFF2563EB).withValues(alpha: 0.3)),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  const Icon(Icons.person_rounded, size: 12, color: Color(0xFF2563EB)),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    lead.assignedToName!,
+                                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
+                                                  ),
+                                                ],
+                                              ),
+                                            )
+                                          : Text('—', style: TextStyle(color: textMuted)),
                             ),
 
                             // Dynamic Columns (Honoring column visibility)
@@ -4240,6 +4396,47 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
         );
       },
     );
+  }
+
+  Future<void> _handleDistributeLeads(BuildContext context) async {
+    try {
+      final repo = context.read<CrmRepository>();
+      final res = await repo.dispatchWaitingQueue();
+      final dispatched = res['dispatchedCount'] ?? 0;
+      final remaining = res['remainingQueuedCount'] ?? 0;
+      final active = res['activeTelecallersCount'] ?? 0;
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: const Color(0xFF16A34A),
+            duration: const Duration(seconds: 4),
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '⚡ Auto-distributed $dispatched leads across $active active telecallers! ($remaining in Waiting List)',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+        context.read<CrmLeadsBloc>().add(const CrmLeadsRefreshRequested());
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.red.shade700,
+            content: Text('Failed to distribute leads: $e'),
+          ),
+        );
+      }
+    }
   }
 
   void _updateLeadStatus(

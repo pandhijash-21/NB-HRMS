@@ -345,6 +345,18 @@ class CrmLead {
     this.latestFollowUp,
   });
 
+  bool get isWaitingList => (telecallerId == null && assignedToId == null) || (status == CrmStatus.notStarted && telecallerId == null);
+
+  String get allocatedAgentName {
+    if (telecallerName != null && telecallerName!.trim().isNotEmpty) {
+      return telecallerName!;
+    }
+    if (assignedToName != null && assignedToName!.trim().isNotEmpty) {
+      return assignedToName!;
+    }
+    return isWaitingList ? 'Waiting List (WL)' : 'Unassigned';
+  }
+
   factory CrmLead.fromJson(Map<String, dynamic> json) {
     String? assignedName;
     if (json['assignedTo'] is Map && (json['assignedTo'] as Map)['generalInfo'] is Map) {
@@ -899,6 +911,8 @@ class TelecallerPresenceInfo {
   final int currentWorkload;
   final int availableCapacity;
   final bool isEligibleForDispatch;
+  final int inactiveSeconds;
+  final String? ineligibleReason;
 
   const TelecallerPresenceInfo({
     required this.employeeId,
@@ -914,7 +928,20 @@ class TelecallerPresenceInfo {
     this.currentWorkload = 0,
     this.availableCapacity = 20,
     this.isEligibleForDispatch = false,
+    this.inactiveSeconds = 0,
+    this.ineligibleReason,
   });
+
+  String get inactiveDurationFormatted {
+    if (inactiveSeconds <= 0) return '0s';
+    final mins = inactiveSeconds ~/ 60;
+    final secs = inactiveSeconds % 60;
+    if (mins == 0) return '${secs}s';
+    if (mins < 60) return '${mins}m ${secs}s';
+    final hours = mins ~/ 60;
+    final remMins = mins % 60;
+    return '${hours}h ${remMins}m';
+  }
 
   factory TelecallerPresenceInfo.fromJson(Map<String, dynamic> json) {
     return TelecallerPresenceInfo(
@@ -931,6 +958,8 @@ class TelecallerPresenceInfo {
       currentWorkload: int.tryParse(json['currentWorkload']?.toString() ?? '0') ?? 0,
       availableCapacity: int.tryParse(json['availableCapacity']?.toString() ?? '20') ?? 20,
       isEligibleForDispatch: json['isEligibleForDispatch'] == true,
+      inactiveSeconds: int.tryParse(json['inactiveSeconds']?.toString() ?? '0') ?? 0,
+      ineligibleReason: json['ineligibleReason']?.toString(),
     );
   }
 }

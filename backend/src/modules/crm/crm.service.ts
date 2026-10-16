@@ -5,7 +5,31 @@ import * as crypto from 'crypto';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as xlsx from 'xlsx';
-import archiver from 'archiver';
+import * as archiverModule from 'archiver';
+
+function initZipArchive(options: any = { zlib: { level: 9 } }): any {
+  const mod: any = archiverModule;
+  if (mod.ZipArchive) {
+    return new mod.ZipArchive(options);
+  }
+  if (mod.default?.ZipArchive) {
+    return new mod.default.ZipArchive(options);
+  }
+  if (typeof mod.default === 'function') {
+    return mod.default('zip', options);
+  }
+  if (typeof mod === 'function') {
+    return mod('zip', options);
+  }
+  try {
+    const directReq = require('archiver');
+    if (directReq.ZipArchive) return new directReq.ZipArchive(options);
+    if (directReq.default?.ZipArchive) return new directReq.default.ZipArchive(options);
+    if (typeof directReq === 'function') return directReq('zip', options);
+    if (typeof directReq.default === 'function') return directReq.default('zip', options);
+  } catch (_) {}
+  throw new Error('Unable to initialize zip archive stream');
+}
 import { uploadService } from '../personal-education/upload.service';
 import { whatsappService } from './whatsapp.service';
 import { sendFinserveClientOtpEmail } from '../../utils/mailer';
@@ -4645,7 +4669,7 @@ export const crmService = {
       return;
     }
 
-    const archive = (archiver as any)('zip', { zlib: { level: 9 } });
+    const archive = initZipArchive({ zlib: { level: 9 } });
 
     const safeClientName = (lead.name || 'Client')
       .replace(/[^a-zA-Z0-9_\- ]/g, '')
@@ -4654,7 +4678,7 @@ export const crmService = {
     const zipFilename = `${safeClientName}_Application_Documents.zip`;
 
     res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', `attachment; filename="${zipFilename}"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${zipFilename}"; filename*=UTF-8''${encodeURIComponent(zipFilename)}`);
 
     archive.on('error', (err: any) => {
       console.error('[DownloadDocsZip Error]:', err);
@@ -4665,24 +4689,50 @@ export const crmService = {
 
     archive.pipe(res);
 
+    let addedCount = 0;
     for (const doc of documents) {
       if (!doc.fileUrl) continue;
       const relativePath = doc.fileUrl.startsWith('/') ? doc.fileUrl.slice(1) : doc.fileUrl;
-      const fullPath = path.join(process.cwd(), relativePath);
+      const candidates = [
+        path.join(process.cwd(), relativePath),
+        path.join(process.cwd(), 'backend', relativePath),
+        path.join(__dirname, '../../../../', relativePath),
+        path.join(__dirname, '../../../', relativePath),
+      ];
 
-      if (fs.existsSync(fullPath)) {
-        const ext = path.extname(doc.fileName || fullPath) || path.extname(fullPath) || '.pdf';
-        const docLabel = (doc.docName || doc.docTypeId || 'Document')
-          .replace(/[^a-zA-Z0-9_\- ]/g, '')
-          .trim()
-          .replace(/\s+/g, '_');
-        const originalBase = path.basename(doc.fileName || fullPath, ext).replace(/[^a-zA-Z0-9_\- ]/g, '_');
-        const entryName = `${docLabel}_${originalBase}${ext}`;
-        archive.file(fullPath, { name: entryName });
+      let targetPath = '';
+      for (const cand of candidates) {
+        if (fs.existsSync(cand)) {
+          targetPath = cand;
+          break;
+        }
+      }
+
+      const ext = path.extname(doc.fileName || relativePath) || '.pdf';
+      const docLabel = (doc.docName || doc.docTypeId || 'Document')
+        .replace(/[^a-zA-Z0-9_\- ]/g, '')
+        .trim()
+        .replace(/\s+/g, '_');
+      const originalBase = path.basename(doc.fileName || relativePath, ext).replace(/[^a-zA-Z0-9_\- ]/g, '_');
+      const entryName = `${docLabel}_${originalBase}${ext}`;
+
+      if (targetPath && fs.existsSync(targetPath)) {
+        archive.file(targetPath, { name: entryName });
+        addedCount++;
+      } else {
+        archive.append(`Document "${doc.docName || doc.docTypeId || 'Doc'}" was registered at path: ${doc.fileUrl}`, {
+          name: `${entryName}.info.txt`,
+        });
+        addedCount++;
       }
     }
 
+    if (addedCount === 0) {
+      archive.append('No document files found for this application.', { name: 'README.txt' });
+    }
+
     await archive.finalize();
+
   },
 };
 

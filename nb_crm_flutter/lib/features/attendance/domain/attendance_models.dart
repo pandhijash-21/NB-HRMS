@@ -41,6 +41,7 @@ class AttendanceCalendarDay {
   bool get isLeave => (dayStatus ?? '').toUpperCase() == 'LEAVE';
   bool get isHoliday => (dayStatus ?? '').toUpperCase() == 'HOLIDAY';
   bool get isAbsent => (dayStatus ?? '').toUpperCase() == 'ABSENT';
+  bool get isWfh => (dayStatus ?? '').toUpperCase() == 'WFH';
 }
 
 class AttendancePunch {
@@ -279,6 +280,7 @@ class AttendanceMyDaySummary {
   bool get isLeave => (dayStatus ?? '').toUpperCase() == 'LEAVE';
   bool get isHoliday => (dayStatus ?? '').toUpperCase() == 'HOLIDAY';
   bool get isAbsent => (dayStatus ?? '').toUpperCase() == 'ABSENT';
+  bool get isWfh => (dayStatus ?? '').toUpperCase() == 'WFH';
 
   factory AttendanceMyDaySummary.fromJson(Map<String, dynamic> json) {
     final policy = _asMap(json['policy']);

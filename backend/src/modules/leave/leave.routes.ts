@@ -279,11 +279,143 @@ leaveRouter.post('/admin/absences/mark', requireAuth, adminOrHR, async (req: Req
   }
 });
 
+// ─── Work From Home (WFH) ───────────────────────────────────────────────────
+
+leaveRouter.get('/wfh/eligibility', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const role = String(req.user?.roleName ?? req.user?.role ?? '').toUpperCase();
+    const isAdmin = ['ADMIN', 'HR', 'HR_MANAGER'].includes(role);
+    const employeeId = Number(req.user?.employeeId);
+    let isEligible = false;
+    if (employeeId) {
+      isEligible = await leaveAdminService.isEmployeeWfhAllowed(employeeId);
+    }
+    return res.json(ok({ eligible: isEligible || isAdmin, isSelectedEmployee: isEligible, isAdmin }));
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});
+
+leaveRouter.get('/wfh/admin/config', requireAuth, adminOrHR, async (req: Request, res: Response) => {
+  try {
+    const allowedEmployeeIds = await leaveAdminService.getWfhAllowedEmployeeIds();
+    const employees = await prisma.employee.findMany({
+      where: { status: 'ACTIVE' },
+      include: {
+        generalInfo: {
+          select: {
+            fullName: true,
+            employeeCode: true,
+            designation: true,
+            department: true,
+          },
+        },
+      },
+      orderBy: { id: 'asc' },
+    });
+
+    return res.json(
+      ok({
+        allowedEmployeeIds,
+        employees: employees.map((e) => ({
+          id: e.id,
+          fullName: e.generalInfo?.fullName ?? `Employee #${e.id}`,
+          employeeCode: e.generalInfo?.employeeCode ?? '',
+          designation: e.generalInfo?.designation ?? '',
+          department: e.generalInfo?.department ?? '',
+        })),
+      }),
+    );
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});
+
+leaveRouter.post('/wfh/admin/config', requireAuth, adminOrHR, async (req: Request, res: Response) => {
+  try {
+    const rawIds = req.body.employeeIds;
+    const employeeIds = Array.isArray(rawIds) ? rawIds.map(Number).filter((n: number) => Number.isFinite(n)) : [];
+    await leaveAdminService.setWfhAllowedEmployeeIds(employeeIds, req.user!.id);
+    return res.json(ok({ success: true, count: employeeIds.length }));
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});
+
+leaveRouter.post('/wfh/apply', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const employeeId = Number(req.user!.employeeId);
+    if (!employeeId) return res.status(400).json(fail('Employee ID not found in token'));
+    const role = String(req.user?.roleName ?? req.user?.role ?? '').toUpperCase();
+    const isAdmin = ['ADMIN', 'HR', 'HR_MANAGER'].includes(role);
+    const isAllowed = await leaveAdminService.isEmployeeWfhAllowed(employeeId);
+    if (!isAllowed && !isAdmin) {
+      return res.status(403).json(fail('You are not authorized to apply for Work From Home (WFH). Please contact HR/Admin.'));
+    }
+
+    if (!req.body.fromDate || !req.body.toDate) {
+      return res.status(400).json(fail('From Date and To Date are required'));
+    }
+    if (!req.body.reason || !String(req.body.reason).trim()) {
+      return res.status(400).json(fail('Reason for Work From Home is required'));
+    }
+
+    const wfhType = await leaveAdminService.ensureWfhLeaveType();
+    const app = await leaveApplicationService.apply({
+      employeeId,
+      leaveTypeId: wfhType.id,
+      fromDate: req.body.fromDate,
+      toDate: req.body.toDate,
+      reason: String(req.body.reason).trim(),
+      appliedBy: req.user!.id,
+      isAppliedByAdmin: false,
+      isHalfDay: false,
+    });
+    return res.status(201).json(ok(app));
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});
+
+leaveRouter.get('/wfh/my-applications', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const employeeId = Number(req.user!.employeeId);
+    if (!employeeId) return res.status(400).json(fail('Employee ID not found in token'));
+    const wfhType = await leaveAdminService.ensureWfhLeaveType();
+    const apps = await prisma.leaveApplication.findMany({
+      where: { employeeId, leaveTypeId: wfhType.id },
+      orderBy: { appliedAt: 'desc' },
+      include: {
+        approvalSteps: {
+          orderBy: { stepNumber: 'asc' },
+        },
+      },
+    });
+    return res.json(ok(apps));
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});
+
 // ─── Leave types (public) ────────────────────────────────────────────────────
 
-leaveRouter.get('/types', requireAuth, async (_req, res) => {
+leaveRouter.get('/types', requireAuth, async (req: Request, res: Response) => {
+  const employeeId = Number(req.user?.employeeId);
+  const role = String(req.user?.roleName ?? req.user?.role ?? '').toUpperCase();
+  const isAdmin = ['ADMIN', 'HR', 'HR_MANAGER'].includes(role);
+
+  let isWfhAllowed = false;
+  if (employeeId) {
+    isWfhAllowed = await leaveAdminService.isEmployeeWfhAllowed(employeeId);
+  }
+
   const types = await prisma.leaveType.findMany({ where: { isActive: true }, orderBy: { code: 'asc' } });
-  return res.json(ok(types));
+  const filtered = types.filter((t) => {
+    if (t.code === 'WFH' && !isWfhAllowed && !isAdmin) return false;
+    return true;
+  });
+  return res.json(ok(filtered));
 });
 
 import { prisma } from '../../config/prisma';
+

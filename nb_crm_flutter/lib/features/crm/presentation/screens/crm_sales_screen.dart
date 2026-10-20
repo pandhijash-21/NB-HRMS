@@ -6020,10 +6020,31 @@ class _FinserveApplicationDialogState extends State<_FinserveApplicationDialog>
   bool _isSavingDetails = false;
   String? _uploadingDocId;
 
+  // Pipeline & Forwarding State
+  List<CrmSalesUser> _salesEmployees = [];
+  bool _isLoadingEmployees = false;
+  int? _selectedForwardEmployeeId;
+  final TextEditingController _forwardRemarksCtrl = TextEditingController();
+  bool _isForwarding = false;
+
+  // Bank Applications State
+  List<Map<String, dynamic>> _bankApplications = [];
+  Map<String, dynamic>? _finalBank;
+  late TextEditingController _appIdCtrl;
+  late TextEditingController _agreementNumCtrl;
+  bool _isSavingPipeline = false;
+
+  // Disbursement State
+  Map<String, dynamic>? _disbursementDetails;
+  DateTime? _selectedTentativeDate;
+
+  // Bank Queries State
+  List<Map<String, dynamic>> _bankQueries = [];
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _currentLead = widget.lead;
 
     final appDetails = Map<String, dynamic>.from(_currentLead.customFields['applicationDetails'] ?? {});
@@ -6065,6 +6086,9 @@ class _FinserveApplicationDialogState extends State<_FinserveApplicationDialog>
     _ref2RelationCtrl = TextEditingController(text: appDetails['ref2Relation']?.toString() ?? '');
     _ref2AddressCtrl = TextEditingController(text: appDetails['ref2Address']?.toString() ?? '');
 
+    _appIdCtrl = TextEditingController();
+    _agreementNumCtrl = TextEditingController();
+
     final leadLoanType = _currentLead.customFields['Loan_Type']?.toString() ?? _currentLead.customFields['loan_type']?.toString() ?? 'Home Loan';
     if (CrmSettings.defaultLoanTypeDocsMap.containsKey(leadLoanType)) {
       _selectedLoanType = leadLoanType;
@@ -6081,6 +6105,62 @@ class _FinserveApplicationDialogState extends State<_FinserveApplicationDialog>
       if (token != null && token.isNotEmpty) {
         _portalLink = '$origin/client-portal?token=$token';
       }
+    }
+
+    _syncLeadCustomFields(_currentLead);
+    _loadEmployees();
+  }
+
+  void _syncLeadCustomFields(CrmLead lead) {
+    _currentLead = lead;
+    final custom = lead.customFields;
+    _bankApplications = List<Map<String, dynamic>>.from(
+      (custom['bankApplications'] as List? ?? []).map((e) => Map<String, dynamic>.from(e as Map)),
+    );
+    _finalBank = custom['finalBank'] != null ? Map<String, dynamic>.from(custom['finalBank'] as Map) : null;
+    if (_finalBank != null) {
+      if (_finalBank!['applicationId'] != null && _appIdCtrl.text.isEmpty) {
+        _appIdCtrl.text = _finalBank!['applicationId'].toString();
+      }
+      if (_finalBank!['loanAgreementNumber'] != null && _agreementNumCtrl.text.isEmpty) {
+        _agreementNumCtrl.text = _finalBank!['loanAgreementNumber'].toString();
+      }
+    }
+    _disbursementDetails = custom['disbursementDetails'] != null ? Map<String, dynamic>.from(custom['disbursementDetails'] as Map) : null;
+    if (_disbursementDetails?['currentTentativeDate'] != null) {
+      try {
+        _selectedTentativeDate = DateTime.parse(_disbursementDetails!['currentTentativeDate'].toString());
+      } catch (_) {}
+    }
+    _bankQueries = List<Map<String, dynamic>>.from(
+      (custom['bankQueries'] as List? ?? []).map((e) => Map<String, dynamic>.from(e as Map)),
+    );
+    final forwarded = custom['forwardedForProcessing'];
+    if (forwarded != null && forwarded['forwardedToId'] != null) {
+      _selectedForwardEmployeeId = (forwarded['forwardedToId'] as num).toInt();
+    } else if (lead.assignedToId != null) {
+      _selectedForwardEmployeeId = lead.assignedToId;
+    }
+  }
+
+  Future<void> _loadEmployees() async {
+    setState(() => _isLoadingEmployees = true);
+    try {
+      final emps = await _repo.getHrmsEmployees();
+      if (!mounted) return;
+      setState(() {
+        _salesEmployees = emps;
+        _isLoadingEmployees = false;
+        if (_selectedForwardEmployeeId == null && emps.isNotEmpty) {
+          if (_currentLead.assignedToId != null) {
+            _selectedForwardEmployeeId = _currentLead.assignedToId;
+          } else {
+            _selectedForwardEmployeeId = emps.first.employeeId;
+          }
+        }
+      });
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingEmployees = false);
     }
   }
 
@@ -6110,6 +6190,9 @@ class _FinserveApplicationDialogState extends State<_FinserveApplicationDialog>
     _ref2MobileCtrl.dispose();
     _ref2RelationCtrl.dispose();
     _ref2AddressCtrl.dispose();
+    _forwardRemarksCtrl.dispose();
+    _appIdCtrl.dispose();
+    _agreementNumCtrl.dispose();
     super.dispose();
   }
 
@@ -6468,7 +6551,7 @@ class _FinserveApplicationDialogState extends State<_FinserveApplicationDialog>
       setState(() {
         _uploadingDocId = null;
         if (res['lead'] != null) {
-          _currentLead = CrmLead.fromJson(Map<String, dynamic>.from(res['lead']));
+          _syncLeadCustomFields(CrmLead.fromJson(Map<String, dynamic>.from(res['lead'])));
         }
       });
       _refreshLeads();
@@ -6500,8 +6583,9 @@ class _FinserveApplicationDialogState extends State<_FinserveApplicationDialog>
     const goldColor = Color(0xFFC5A059);
 
     final size = MediaQuery.of(context).size;
-    final dialogWidth = (size.width * 0.88).clamp(600.0, 940.0);
-    final dialogHeight = (size.height * 0.88).clamp(500.0, 780.0);
+    final dialogWidth = (size.width * 0.92).clamp(720.0, 1150.0);
+    final dialogHeight = (size.height * 0.90).clamp(560.0, 860.0);
+    final openQueryCount = _bankQueries.where((q) => q['status'] != 'RESOLVED').length;
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -6513,7 +6597,7 @@ class _FinserveApplicationDialogState extends State<_FinserveApplicationDialog>
           children: [
             // Header Strip
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
               decoration: BoxDecoration(
                 color: isDark ? const Color(0xFF24201D) : const Color(0xFFF8FAFC),
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
@@ -6527,7 +6611,7 @@ class _FinserveApplicationDialogState extends State<_FinserveApplicationDialog>
                       color: primaryColor.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Icon(Icons.assignment_turned_in_rounded, color: primaryColor, size: 22),
+                    child: const Icon(Icons.account_balance_rounded, color: primaryColor, size: 22),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -6537,7 +6621,7 @@ class _FinserveApplicationDialogState extends State<_FinserveApplicationDialog>
                         Row(
                           children: [
                             Text(
-                              'Loan Application & Document Intake',
+                              'Finserve Loan & Bank Processing Pipeline',
                               style: TextStyle(
                                 fontSize: 17,
                                 fontWeight: FontWeight.bold,
@@ -6551,9 +6635,9 @@ class _FinserveApplicationDialogState extends State<_FinserveApplicationDialog>
                                 color: const Color(0xFF10B981).withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(6),
                               ),
-                              child: const Text(
-                                'INTERESTED',
-                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF10B981)),
+                              child: Text(
+                                _currentLead.status.displayName,
+                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF10B981)),
                               ),
                             ),
                           ],
@@ -6566,6 +6650,44 @@ class _FinserveApplicationDialogState extends State<_FinserveApplicationDialog>
                       ],
                     ),
                   ),
+                  // Universal Bank Queries Action Button
+                  ElevatedButton.icon(
+                    icon: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        const Icon(Icons.help_center_outlined, size: 16),
+                        if (openQueryCount > 0)
+                          Positioned(
+                            top: -4,
+                            right: -4,
+                            child: Container(
+                              padding: const EdgeInsets.all(3),
+                              decoration: const BoxDecoration(
+                                color: Colors.red,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Text(
+                                '$openQueryCount',
+                                style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    label: Text(
+                      openQueryCount > 0 ? 'Bank Queries ($openQueryCount Open)' : 'Bank Queries (${_bankQueries.length})',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: openQueryCount > 0 ? Colors.red.shade700 : const Color(0xFF0F766E),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      elevation: 1,
+                    ),
+                    onPressed: _showBankQueriesModal,
+                  ),
+                  const SizedBox(width: 8),
                   IconButton(
                     icon: const Icon(Icons.close_rounded),
                     tooltip: 'Close',
@@ -6589,14 +6711,28 @@ class _FinserveApplicationDialogState extends State<_FinserveApplicationDialog>
                 indicatorColor: primaryColor,
                 labelColor: primaryColor,
                 unselectedLabelColor: textMuted,
+                isScrollable: true,
+                tabAlignment: TabAlignment.start,
                 tabs: const [
                   Tab(
-                    icon: Icon(Icons.description_outlined, size: 18),
-                    text: '📝 Application Details (24 Fields)',
+                    icon: Icon(Icons.description_outlined, size: 17),
+                    text: '📝 1. Intake Details',
                   ),
                   Tab(
-                    icon: Icon(Icons.folder_shared_outlined, size: 18),
-                    text: '📁 Document Checklist & Portal',
+                    icon: Icon(Icons.folder_shared_outlined, size: 17),
+                    text: '📁 2. Required Docs',
+                  ),
+                  Tab(
+                    icon: Icon(Icons.account_balance_outlined, size: 17),
+                    text: '🏦 3. Bank Processing',
+                  ),
+                  Tab(
+                    icon: Icon(Icons.verified_outlined, size: 17),
+                    text: '📜 4. Sanction & DD Docs',
+                  ),
+                  Tab(
+                    icon: Icon(Icons.payments_outlined, size: 17),
+                    text: '💰 5. Disbursement',
                   ),
                 ],
               ),
@@ -6609,6 +6745,9 @@ class _FinserveApplicationDialogState extends State<_FinserveApplicationDialog>
                 children: [
                   _buildApplicationDetailsTab(isDark, borderColor, textMuted, primaryColor),
                   _buildDocumentChecklistTab(isDark, borderColor, textMuted, primaryColor),
+                  _buildBankProcessingTab(isDark, borderColor, textMuted, primaryColor, goldColor),
+                  _buildSanctionDocsTab(isDark, borderColor, textMuted, primaryColor),
+                  _buildDisbursementTab(isDark, borderColor, textMuted, primaryColor),
                 ],
               ),
             ),
@@ -7106,6 +7245,16 @@ class _FinserveApplicationDialogState extends State<_FinserveApplicationDialog>
                 ],
               ),
             ),
+          const SizedBox(height: 14),
+
+          // Forward Lead for Bank Processing Action Card
+          _buildForwardLeadSection(
+            isDark: isDark,
+            borderColor: borderColor,
+            textMuted: textMuted,
+            primaryColor: primaryColor,
+            isDocsComplete: requiredDocIds.isNotEmpty && completedCount >= requiredDocIds.length,
+          ),
           const SizedBox(height: 16),
 
           Text(
@@ -7239,6 +7388,2362 @@ class _FinserveApplicationDialogState extends State<_FinserveApplicationDialog>
                 ),
               );
             },
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // SECTION: Lead Forwarding Action Card (Tab 2)
+  // ===========================================================================
+  Widget _buildForwardLeadSection({
+    required bool isDark,
+    required Color borderColor,
+    required Color textMuted,
+    required Color primaryColor,
+    required bool isDocsComplete,
+  }) {
+    final forwarded = _currentLead.customFields['forwardedForProcessing'];
+    final isForwarded = forwarded != null && forwarded['forwardedToId'] != null;
+    final forwardedName = forwarded?['forwardedToName']?.toString() ?? 'Loan Processing Executive';
+    final forwardedAtStr = forwarded?['forwardedAt']?.toString();
+    final formattedDate = forwardedAtStr != null
+        ? DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.parse(forwardedAtStr).toLocal())
+        : '';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : const Color(0xFFEFF6FF),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isForwarded
+              ? const Color(0xFF10B981).withValues(alpha: 0.5)
+              : (isDocsComplete ? const Color(0xFF3B82F6).withValues(alpha: 0.4) : borderColor),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: (isForwarded ? const Color(0xFF10B981) : const Color(0xFF2563EB)).withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  isForwarded ? Icons.check_circle_rounded : Icons.forward_to_inbox_rounded,
+                  color: isForwarded ? const Color(0xFF10B981) : const Color(0xFF2563EB),
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isForwarded ? 'Lead Forwarded for Bank Processing' : 'Forward Lead for Bank Processing',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      isForwarded
+                          ? 'Assigned to $forwardedName ($formattedDate). You can manage multi-bank submissions in Tab 3.'
+                          : (isDocsComplete
+                              ? 'All required documents have been verified. Select an executive from the dropdown to forward this lead to.'
+                              : 'Waiting for all documents to be received before unlocking lead forwarding.'),
+                      style: TextStyle(fontSize: 12, color: textMuted),
+                    ),
+                  ],
+                ),
+              ),
+              if (isForwarded)
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.arrow_forward_rounded, size: 14),
+                  label: const Text('Go to Bank Processing', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2563EB),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  onPressed: () => _tabController.animateTo(2),
+                ),
+            ],
+          ),
+          if (isDocsComplete) ...[
+            const SizedBox(height: 14),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Select Executive to Forward Lead To',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey),
+                      ),
+                      const SizedBox(height: 4),
+                      if (_isLoadingEmployees)
+                        const LinearProgressIndicator()
+                      else
+                        DropdownButtonFormField<int>(
+                          value: _salesEmployees.any((e) => e.employeeId == _selectedForwardEmployeeId)
+                              ? _selectedForwardEmployeeId
+                              : (_salesEmployees.isNotEmpty ? _salesEmployees.first.employeeId : null),
+                          isDense: true,
+                          decoration: InputDecoration(
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            filled: true,
+                            fillColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+                          ),
+                          items: _salesEmployees.map((e) {
+                            final roleTxt = e.role != null && e.role!.isNotEmpty ? ' (${e.role})' : '';
+                            return DropdownMenuItem(
+                              value: e.employeeId,
+                              child: Text(
+                                '${e.fullName}$roleTxt',
+                                style: const TextStyle(fontSize: 13),
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: (val) {
+                            if (val != null) setState(() => _selectedForwardEmployeeId = val);
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Handover Remarks / Instructions',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey),
+                      ),
+                      const SizedBox(height: 4),
+                      TextField(
+                        controller: _forwardRemarksCtrl,
+                        style: const TextStyle(fontSize: 13),
+                        decoration: InputDecoration(
+                          hintText: 'e.g. Apply to HDFC & ICICI for best ROI...',
+                          hintStyle: const TextStyle(fontSize: 12),
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          filled: true,
+                          fillColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                ElevatedButton.icon(
+                  icon: _isForwarding
+                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.send_rounded, size: 15),
+                  label: Text(_isForwarding ? 'Forwarding...' : (isForwarded ? 'Re-Forward' : 'Forward Lead')),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2563EB),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  onPressed: _isForwarding ? null : _forwardLead,
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _forwardLead() async {
+    if (_selectedForwardEmployeeId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select an executive to forward this lead to')),
+      );
+      return;
+    }
+    final emp = _salesEmployees.firstWhere(
+      (e) => e.employeeId == _selectedForwardEmployeeId,
+      orElse: () => CrmSalesUser(employeeId: _selectedForwardEmployeeId!, fullName: 'Employee #$_selectedForwardEmployeeId'),
+    );
+
+    setState(() => _isForwarding = true);
+    try {
+      final res = await _repo.updateFinservePipeline(
+        _currentLead.id,
+        {
+          'forwardedForProcessing': {
+            'forwardedToId': emp.employeeId,
+            'forwardedToName': emp.fullName,
+            'forwardedAt': DateTime.now().toIso8601String(),
+            'remarks': _forwardRemarksCtrl.text.trim(),
+          },
+          'loanStage': 'BANK_APPLICATIONS',
+        },
+      );
+      if (!mounted) return;
+      setState(() {
+        _isForwarding = false;
+        if (res['lead'] != null) {
+          _syncLeadCustomFields(CrmLead.fromJson(Map<String, dynamic>.from(res['lead'])));
+        }
+      });
+      _refreshLeads();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Lead forwarded to ${emp.fullName} successfully!'),
+          backgroundColor: const Color(0xFF10B981),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      _tabController.animateTo(2);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isForwarding = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to forward lead: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  // ===========================================================================
+  // SECTION: Tab 3 — Multi-Bank Processing & Approvals
+  // ===========================================================================
+  Widget _buildBankProcessingTab(bool isDark, Color borderColor, Color textMuted, Color primaryColor, Color goldColor) {
+    final forwarded = _currentLead.customFields['forwardedForProcessing'];
+    final isForwarded = forwarded != null && forwarded['forwardedToId'] != null;
+    final forwardedName = forwarded?['forwardedToName']?.toString() ?? 'Operations / Underwriting';
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Forwarding Status Banner
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF24201D) : const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: borderColor),
+            ),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  backgroundColor: primaryColor.withValues(alpha: 0.15),
+                  child: Icon(Icons.person_pin_rounded, color: primaryColor),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Text('Lead Forwarded To: ', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                          Text(
+                            isForwarded ? forwardedName : 'Not Forwarded Yet',
+                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        isForwarded
+                            ? 'This executive is managing bank applications, rate negotiations, and login tracking.'
+                            : 'All documents must be verified in Tab 2, then forward to a team member to initiate bank submissions.',
+                        style: TextStyle(fontSize: 12, color: textMuted),
+                      ),
+                    ],
+                  ),
+                ),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.add_circle_outline_rounded, size: 16),
+                  label: const Text('Add Bank Application'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: primaryColor,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  ),
+                  onPressed: _showAddBankDialog,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Bank Applications List Header
+          Row(
+            children: [
+              Text(
+                'APPLIED BANKS (${_bankApplications.length})',
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+              ),
+              const Spacer(),
+              if (_bankApplications.isNotEmpty)
+                Text(
+                  '${_bankApplications.where((b) => b['status'] == 'APPROVED').length} Approved • ${_bankApplications.where((b) => b['status'] == 'REJECTED').length} Rejected',
+                  style: TextStyle(fontSize: 12, color: textMuted, fontWeight: FontWeight.w600),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          if (_bankApplications.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E293B).withValues(alpha: 0.5) : const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: borderColor, strokeAlign: BorderSide.strokeAlignCenter),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.account_balance_outlined, size: 48, color: textMuted.withValues(alpha: 0.5)),
+                  const SizedBox(height: 12),
+                  const Text('No Bank Applications Added Yet', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Add all banks this loan applicant is applying to (e.g. HDFC, ICICI, SBI, Axis, etc.).',
+                    style: TextStyle(fontSize: 12.5, color: textMuted),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.add_rounded, size: 16),
+                    label: const Text('Add First Bank'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryColor,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                    ),
+                    onPressed: _showAddBankDialog,
+                  ),
+                ],
+              ),
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _bankApplications.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 10),
+              itemBuilder: (context, index) {
+                final bank = _bankApplications[index];
+                final status = bank['status']?.toString() ?? 'PENDING';
+                final isApproved = status == 'APPROVED';
+                final isRejected = status == 'REJECTED';
+                final isFinal = bank['isFinalSelected'] == true;
+
+                return Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF24201D) : Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isFinal
+                          ? const Color(0xFFF59E0B)
+                          : (isApproved
+                              ? const Color(0xFF10B981).withValues(alpha: 0.4)
+                              : (isRejected ? Colors.red.withValues(alpha: 0.4) : borderColor)),
+                      width: isFinal ? 2 : 1,
+                    ),
+                    boxShadow: isFinal
+                        ? [
+                            BoxShadow(
+                              color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: primaryColor.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(Icons.account_balance_rounded, size: 20, color: Color(0xFF2563EB)),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      bank['bankName']?.toString() ?? 'Bank',
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    if (isFinal)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFFEF3C7),
+                                          borderRadius: BorderRadius.circular(4),
+                                          border: Border.all(color: const Color(0xFFF59E0B)),
+                                        ),
+                                        child: const Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.star_rounded, size: 12, color: Color(0xFFB45309)),
+                                            SizedBox(width: 3),
+                                            Text(
+                                              'FINAL SELECTED BANK',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w800,
+                                                color: Color(0xFFB45309),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                                if (bank['appliedAt'] != null)
+                                  Text(
+                                    'Applied on: ${DateFormat('dd MMM yyyy').format(DateTime.parse(bank['appliedAt']).toLocal())}',
+                                    style: TextStyle(fontSize: 11, color: textMuted),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          // Status Pills & Edit
+                          Row(
+                            children: [
+                              ChoiceChip(
+                                label: const Text('Pending', style: TextStyle(fontSize: 11)),
+                                selected: status == 'PENDING',
+                                selectedColor: Colors.amber.withValues(alpha: 0.2),
+                                onSelected: (sel) {
+                                  if (sel) _updateBankStatus(index, 'PENDING');
+                                },
+                              ),
+                              const SizedBox(width: 6),
+                              ChoiceChip(
+                                label: const Text('Approved', style: TextStyle(fontSize: 11)),
+                                selected: isApproved,
+                                selectedColor: const Color(0xFF10B981).withValues(alpha: 0.2),
+                                onSelected: (sel) {
+                                  if (sel) _showEditBankStatusDialog(index, 'APPROVED');
+                                },
+                              ),
+                              const SizedBox(width: 6),
+                              ChoiceChip(
+                                label: const Text('Rejected', style: TextStyle(fontSize: 11)),
+                                selected: isRejected,
+                                selectedColor: Colors.red.withValues(alpha: 0.2),
+                                onSelected: (sel) {
+                                  if (sel) _showEditBankStatusDialog(index, 'REJECTED');
+                                },
+                              ),
+                              const SizedBox(width: 8),
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.red),
+                                tooltip: 'Remove Bank',
+                                onPressed: () {
+                                  setState(() {
+                                    if (_bankApplications[index]['isFinalSelected'] == true) {
+                                      _finalBank = null;
+                                    }
+                                    _bankApplications.removeAt(index);
+                                  });
+                                  _saveBankApplications();
+                                },
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+
+                      // Approved Box: Asking for Final ROI
+                      if (isApproved) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF10B981).withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.check_circle_rounded, color: Color(0xFF10B981), size: 18),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  'Approved ROI: ${bank['roi'] != null && bank['roi'].toString().isNotEmpty ? "${bank['roi']}%" : "Not specified"} ${bank['approvedAmount'] != null ? "• Amount: ₹${bank['approvedAmount']}" : ""}',
+                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF065F46)),
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: () => _showEditBankStatusDialog(index, 'APPROVED'),
+                                child: const Text('Change ROI'),
+                              ),
+                              if (!isFinal)
+                                ElevatedButton.icon(
+                                  icon: const Icon(Icons.check_rounded, size: 14),
+                                  label: const Text('Select as Final Bank'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFFF59E0B),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    textStyle: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
+                                  ),
+                                  onPressed: () => _selectAsFinalBank(index),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+
+                      // Rejected Box: Asking for Remarks
+                      if (isRejected) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.cancel_rounded, color: Colors.red, size: 18),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  'Rejection Remarks: ${bank['rejectionRemarks'] ?? "No reason specified"}',
+                                  style: TextStyle(fontSize: 12.5, color: Colors.red.shade800, fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: () => _showEditBankStatusDialog(index, 'REJECTED'),
+                                child: const Text('Edit Remarks'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                );
+              },
+            ),
+          const SizedBox(height: 24),
+
+          // Final Bank Selection & Loan Identifiers Card
+          _buildFinalBankDetailsSection(isDark, borderColor, textMuted, primaryColor, goldColor),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFinalBankDetailsSection(bool isDark, Color borderColor, Color textMuted, Color primaryColor, Color goldColor) {
+    final finalBankName = _finalBank?['bankName']?.toString();
+    final finalRoi = _finalBank?['roi']?.toString();
+
+    if (_finalBank == null) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E293B).withValues(alpha: 0.5) : const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: borderColor),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.info_outline_rounded, color: Color(0xFF64748B), size: 20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Once bank approves the loan, select one bank as "Final Bank" above to record the Application ID and Loan Agreement Number.',
+                style: TextStyle(fontSize: 12.5, color: textMuted),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF2A231C) : const Color(0xFFFFFBEB),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFF59E0B), width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF59E0B).withValues(alpha: 0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.stars_rounded, color: Color(0xFFD97706), size: 24),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Final Chosen Bank: $finalBankName',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF92400E)),
+                    ),
+                    if (finalRoi != null && finalRoi.isNotEmpty)
+                      Text('Final Agreed ROI: $finalRoi%', style: const TextStyle(fontSize: 12.5, color: Color(0xFFB45309), fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Divider(),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Bank Application ID (LAN)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+                    const SizedBox(height: 4),
+                    TextField(
+                      controller: _appIdCtrl,
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                      decoration: InputDecoration(
+                        hintText: 'e.g. HDFC-APP-982314',
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        filled: true,
+                        fillColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Loan Agreement Number', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+                    const SizedBox(height: 4),
+                    TextField(
+                      controller: _agreementNumCtrl,
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                      decoration: InputDecoration(
+                        hintText: 'e.g. AGR-2026-8819',
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        filled: true,
+                        fillColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              ElevatedButton.icon(
+                icon: _isSavingPipeline
+                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.save_rounded, size: 16),
+                label: const Text('Save & Proceed to Sanction Docs ➔'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFD97706),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                onPressed: _isSavingPipeline ? null : _saveFinalBankDetails,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _selectAsFinalBank(int index) {
+    final b = _bankApplications[index];
+    setState(() {
+      for (int i = 0; i < _bankApplications.length; i++) {
+        _bankApplications[i]['isFinalSelected'] = (i == index);
+      }
+      _finalBank = {
+        'bankId': b['id'],
+        'bankName': b['bankName'],
+        'roi': b['roi'],
+        'applicationId': _appIdCtrl.text.trim(),
+        'loanAgreementNumber': _agreementNumCtrl.text.trim(),
+        'finalizedAt': DateTime.now().toIso8601String(),
+      };
+    });
+    _saveBankApplications();
+  }
+
+  Future<void> _saveFinalBankDetails() async {
+    final appId = _appIdCtrl.text.trim();
+    final agrNum = _agreementNumCtrl.text.trim();
+    if (appId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter Bank Application ID / LAN number')),
+      );
+      return;
+    }
+    if (agrNum.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter Loan Agreement Number')),
+      );
+      return;
+    }
+    if (_finalBank == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select one of the approved banks as final bank')),
+      );
+      return;
+    }
+
+    setState(() => _isSavingPipeline = true);
+    try {
+      final updatedFinal = {
+        ..._finalBank!,
+        'applicationId': appId,
+        'loanAgreementNumber': agrNum,
+        'finalizedAt': DateTime.now().toIso8601String(),
+      };
+      final res = await _repo.updateFinservePipeline(
+        _currentLead.id,
+        {
+          'finalBank': updatedFinal,
+          'loanStage': 'SANCTION_DOCS',
+        },
+      );
+      if (!mounted) return;
+      setState(() {
+        _isSavingPipeline = false;
+        if (res['lead'] != null) {
+          _syncLeadCustomFields(CrmLead.fromJson(Map<String, dynamic>.from(res['lead'])));
+        }
+      });
+      _refreshLeads();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Final bank details and loan numbers saved! Proceeding to Sanction Docs.'),
+          backgroundColor: Color(0xFF10B981),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      _tabController.animateTo(3);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isSavingPipeline = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to save final bank details: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  Future<void> _saveBankApplications() async {
+    setState(() => _isSavingPipeline = true);
+    try {
+      final res = await _repo.updateFinservePipeline(
+        _currentLead.id,
+        {
+          'bankApplications': _bankApplications,
+          if (_finalBank != null) 'finalBank': _finalBank,
+        },
+      );
+      if (!mounted) return;
+      setState(() {
+        _isSavingPipeline = false;
+        if (res['lead'] != null) {
+          _syncLeadCustomFields(CrmLead.fromJson(Map<String, dynamic>.from(res['lead'])));
+        }
+      });
+      _refreshLeads();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isSavingPipeline = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to update bank applications: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  void _updateBankStatus(int index, String status) {
+    setState(() {
+      _bankApplications[index]['status'] = status;
+      if (status == 'PENDING') {
+        _bankApplications[index]['rejectionRemarks'] = null;
+      }
+    });
+    _saveBankApplications();
+  }
+
+  void _showAddBankDialog() {
+    final nameCtrl = TextEditingController();
+    final roiCtrl = TextEditingController();
+    final remarksCtrl = TextEditingController();
+    final amtCtrl = TextEditingController(text: _requiredLoanAmountCtrl.text.trim());
+    String status = 'PENDING';
+
+    final presetBanks = [
+      'HDFC Bank',
+      'ICICI Bank',
+      'State Bank of India (SBI)',
+      'Axis Bank',
+      'Kotak Mahindra Bank',
+      'Bank of Baroda',
+      'Punjab National Bank',
+      'Tata Capital',
+      'Bajaj Finserv',
+      'IndusInd Bank',
+      'Federal Bank',
+    ];
+
+    showDialog(
+      context: context,
+      builder: (dlgCtx) => StatefulBuilder(
+        builder: (context, setDlgState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text('Add Bank Application', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+          content: SizedBox(
+            width: 480,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Bank Name', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+                const SizedBox(height: 4),
+                Autocomplete<String>(
+                  optionsBuilder: (textEditingValue) {
+                    if (textEditingValue.text.isEmpty) return presetBanks;
+                    return presetBanks.where((b) => b.toLowerCase().contains(textEditingValue.text.toLowerCase()));
+                  },
+                  onSelected: (selection) => nameCtrl.text = selection,
+                  fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
+                    nameCtrl.addListener(() {
+                      if (textEditingController.text != nameCtrl.text) {
+                        textEditingController.text = nameCtrl.text;
+                      }
+                    });
+                    return TextField(
+                      controller: textEditingController,
+                      focusNode: focusNode,
+                      decoration: InputDecoration(
+                        hintText: 'Enter or select bank name',
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      onChanged: (val) => nameCtrl.text = val,
+                    );
+                  },
+                ),
+                const SizedBox(height: 14),
+                const Text('Current Application Status', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+                const SizedBox(height: 4),
+                DropdownButtonFormField<String>(
+                  value: status,
+                  isDense: true,
+                  decoration: InputDecoration(
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'PENDING', child: Text('Pending / In Process')),
+                    DropdownMenuItem(value: 'APPROVED', child: Text('Approved')),
+                    DropdownMenuItem(value: 'REJECTED', child: Text('Rejected')),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) setDlgState(() => status = v);
+                  },
+                ),
+                if (status == 'APPROVED') ...[
+                  const SizedBox(height: 14),
+                  const Text('Final ROI (Rate of Interest %)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+                  const SizedBox(height: 4),
+                  TextField(
+                    controller: roiCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: InputDecoration(
+                      hintText: 'e.g. 8.75',
+                      suffixText: '%',
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  const Text('Approved Amount (₹)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+                  const SizedBox(height: 4),
+                  TextField(
+                    controller: amtCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      hintText: 'e.g. 5000000',
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                ],
+                if (status == 'REJECTED') ...[
+                  const SizedBox(height: 14),
+                  const Text('Rejection Remarks / Reason (Mandatory)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+                  const SizedBox(height: 4),
+                  TextField(
+                    controller: remarksCtrl,
+                    maxLines: 2,
+                    decoration: InputDecoration(
+                      hintText: 'Specify reason for rejection by bank credit committee...',
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dlgCtx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2563EB),
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () {
+                final bName = nameCtrl.text.trim();
+                if (bName.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please enter or select a bank name')),
+                  );
+                  return;
+                }
+                if (status == 'REJECTED' && remarksCtrl.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Rejection remarks are mandatory when rejected')),
+                  );
+                  return;
+                }
+                if (status == 'APPROVED' && roiCtrl.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please enter the approved ROI (%)')),
+                  );
+                  return;
+                }
+
+                final newBank = {
+                  'id': 'bank_${DateTime.now().millisecondsSinceEpoch}_${_bankApplications.length + 1}',
+                  'bankName': bName,
+                  'appliedAt': DateTime.now().toIso8601String(),
+                  'status': status,
+                  'roi': roiCtrl.text.trim(),
+                  'approvedAmount': amtCtrl.text.trim(),
+                  'rejectionRemarks': remarksCtrl.text.trim(),
+                  'isFinalSelected': false,
+                };
+
+                setState(() => _bankApplications.add(newBank));
+                Navigator.pop(dlgCtx);
+                _saveBankApplications();
+              },
+              child: const Text('Add Bank'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showEditBankStatusDialog(int index, String targetStatus) {
+    final bank = _bankApplications[index];
+    final roiCtrl = TextEditingController(text: bank['roi']?.toString() ?? '');
+    final remarksCtrl = TextEditingController(text: bank['rejectionRemarks']?.toString() ?? '');
+    final amtCtrl = TextEditingController(text: bank['approvedAmount']?.toString() ?? '');
+
+    showDialog(
+      context: context,
+      builder: (dlgCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          targetStatus == 'APPROVED' ? 'Bank Approval — Enter Final ROI' : 'Bank Rejection — Enter Remarks',
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        content: SizedBox(
+          width: 440,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Bank: ${bank['bankName']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              const SizedBox(height: 14),
+              if (targetStatus == 'APPROVED') ...[
+                const Text('Final ROI (Rate of Interest %)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+                const SizedBox(height: 4),
+                TextField(
+                  controller: roiCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    hintText: 'e.g. 8.75',
+                    suffixText: '%',
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text('Approved Loan Amount (₹)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+                const SizedBox(height: 4),
+                TextField(
+                  controller: amtCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    hintText: 'e.g. 5000000',
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              ],
+              if (targetStatus == 'REJECTED') ...[
+                const Text('Rejection Remarks / Reason (Mandatory)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+                const SizedBox(height: 4),
+                TextField(
+                  controller: remarksCtrl,
+                  maxLines: 3,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    hintText: 'Provide detailed reason for bank rejection...',
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dlgCtx), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: targetStatus == 'APPROVED' ? const Color(0xFF10B981) : Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              if (targetStatus == 'REJECTED' && remarksCtrl.text.trim().isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Rejection remarks are required')),
+                );
+                return;
+              }
+              if (targetStatus == 'APPROVED' && roiCtrl.text.trim().isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Final ROI is required')),
+                );
+                return;
+              }
+
+              setState(() {
+                _bankApplications[index]['status'] = targetStatus;
+                if (targetStatus == 'APPROVED') {
+                  _bankApplications[index]['roi'] = roiCtrl.text.trim();
+                  _bankApplications[index]['approvedAmount'] = amtCtrl.text.trim();
+                  _bankApplications[index]['rejectionRemarks'] = null;
+                } else if (targetStatus == 'REJECTED') {
+                  _bankApplications[index]['rejectionRemarks'] = remarksCtrl.text.trim();
+                  _bankApplications[index]['isFinalSelected'] = false;
+                  if (_finalBank?['bankId'] == _bankApplications[index]['id']) {
+                    _finalBank = null;
+                  }
+                }
+              });
+              Navigator.pop(dlgCtx);
+              _saveBankApplications();
+            },
+            child: const Text('Save Decision'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // SECTION: Tab 4 — Sanction Letter, DD Copy & Other Docs
+  // ===========================================================================
+  Widget _buildSanctionDocsTab(bool isDark, Color borderColor, Color textMuted, Color primaryColor) {
+    final docsList = List<dynamic>.from(_currentLead.customFields['documents'] ?? []);
+    final finalBankName = _finalBank?['bankName']?.toString() ?? 'Selected Bank';
+    final appId = _finalBank?['applicationId']?.toString() ?? _appIdCtrl.text.trim();
+    final agrNum = _finalBank?['loanAgreementNumber']?.toString() ?? _agreementNumCtrl.text.trim();
+
+    final sanctionDoc = docsList.firstWhere((d) => d['docTypeId'] == 'SANCTION_LETTER', orElse: () => null);
+    final ddDoc = docsList.firstWhere((d) => d['docTypeId'] == 'DD_COPY', orElse: () => null);
+    final otherDoc = docsList.firstWhere((d) => d['docTypeId'] == 'OTHER_DOCS', orElse: () => null);
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header Card
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF24201D) : const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: borderColor),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.verified_rounded, color: Color(0xFF10B981), size: 22),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Post-Approval Document Verification',
+                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: isDark ? Colors.white : const Color(0xFF1E293B)),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Final Bank: $finalBankName • LAN: ${appId.isNotEmpty ? appId : "Pending"} • Agr No: ${agrNum.isNotEmpty ? agrNum : "Pending"}',
+                        style: TextStyle(fontSize: 12, color: textMuted),
+                      ),
+                    ],
+                  ),
+                ),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.help_center_outlined, size: 15),
+                  label: const Text('Raise Query for this stage', style: TextStyle(fontSize: 12)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0F766E),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                  onPressed: () => _showAddQueryDialog(defaultStage: 'Sanction Letter & DD'),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+
+          Text(
+            'POST-APPROVAL MANDATORY DOCUMENTS',
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+          ),
+          const SizedBox(height: 12),
+
+          // 1. Sanction Letter
+          _buildPostApprovalDocTile(
+            title: 'Sanction Letter',
+            description: 'Official loan sanction letter issued by $finalBankName mentioning final terms, ROI, and approved limit.',
+            docTypeId: 'SANCTION_LETTER',
+            uploadedDoc: sanctionDoc,
+            isDark: isDark,
+            borderColor: borderColor,
+            textMuted: textMuted,
+          ),
+          const SizedBox(height: 10),
+
+          // 2. DD Copy
+          _buildPostApprovalDocTile(
+            title: 'DD Copy (Demand Draft / Disbursement Cheque)',
+            description: 'Scanned copy of the Demand Draft or initial cheque issued by the lender.',
+            docTypeId: 'DD_COPY',
+            uploadedDoc: ddDoc,
+            isDark: isDark,
+            borderColor: borderColor,
+            textMuted: textMuted,
+          ),
+          const SizedBox(height: 10),
+
+          // 3. Other Documents
+          _buildPostApprovalDocTile(
+            title: 'Other Documents / Ancillary Undertakings',
+            description: 'Disbursement kit, ECS mandate, insurance policy, and branch acknowledgment copies.',
+            docTypeId: 'OTHER_DOCS',
+            uploadedDoc: otherDoc,
+            isDark: isDark,
+            borderColor: borderColor,
+            textMuted: textMuted,
+          ),
+
+          const SizedBox(height: 24),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              ElevatedButton.icon(
+                icon: const Icon(Icons.payments_outlined, size: 16),
+                label: const Text('Proceed to Disbursement Tracking ➔'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2563EB),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                onPressed: () => _tabController.animateTo(4),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPostApprovalDocTile({
+    required String title,
+    required String description,
+    required String docTypeId,
+    required dynamic uploadedDoc,
+    required bool isDark,
+    required Color borderColor,
+    required Color textMuted,
+  }) {
+    final isUploaded = uploadedDoc != null;
+    final isUploading = _uploadingDocId == docTypeId;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF24201D) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isUploaded ? const Color(0xFF10B981).withValues(alpha: 0.4) : borderColor,
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: isUploaded ? const Color(0xFF10B981).withValues(alpha: 0.15) : Colors.amber.withValues(alpha: 0.15),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              isUploaded ? Icons.check_circle_rounded : Icons.pending_actions_rounded,
+              color: isUploaded ? const Color(0xFF10B981) : const Color(0xFFD97706),
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: isUploaded ? const Color(0xFF10B981).withValues(alpha: 0.12) : Colors.amber.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        isUploaded ? 'UPLOADED' : 'PENDING UPLOAD',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: isUploaded ? const Color(0xFF10B981) : Colors.amber.shade800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Text(description, style: TextStyle(fontSize: 12, color: textMuted)),
+                if (isUploaded) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'File: ${uploadedDoc['originalName'] ?? uploadedDoc['filename'] ?? "Document"} • ${uploadedDoc['uploadedAt'] != null ? DateFormat("dd MMM yyyy, hh:mm a").format(DateTime.parse(uploadedDoc['uploadedAt']).toLocal()) : ""}',
+                    style: const TextStyle(fontSize: 11.5, color: Color(0xFF10B981), fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          if (isUploaded && uploadedDoc['fileUrl'] != null) ...[
+            OutlinedButton.icon(
+              icon: const Icon(Icons.open_in_new_rounded, size: 14),
+              label: const Text('View', style: TextStyle(fontSize: 12)),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                visualDensity: VisualDensity.compact,
+              ),
+              onPressed: () {
+                final url = uploadedDoc['fileUrl']?.toString();
+                if (url != null) {
+                  launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+                }
+              },
+            ),
+            const SizedBox(width: 8),
+          ],
+          OutlinedButton.icon(
+            icon: isUploading
+                ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.upload_file_rounded, size: 14),
+            label: Text(
+              isUploading ? 'Uploading...' : (isUploaded ? 'Replace' : 'Upload'),
+              style: const TextStyle(fontSize: 12),
+            ),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              visualDensity: VisualDensity.compact,
+            ),
+            onPressed: isUploading ? null : () => _pickAndUploadDoc(docTypeId, title),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // SECTION: Tab 5 — Disbursement Tracking & Follow-up Loop
+  // ===========================================================================
+  Widget _buildDisbursementTab(bool isDark, Color borderColor, Color textMuted, Color primaryColor) {
+    final docsList = List<dynamic>.from(_currentLead.customFields['documents'] ?? []);
+    final hasSanctionLetter = docsList.any((d) => d['docTypeId'] == 'SANCTION_LETTER');
+    final openQueries = _bankQueries.where((q) => q['status'] != 'RESOLVED').toList();
+    final hasOpenQueries = openQueries.isNotEmpty;
+
+    final isDisbursed = _disbursementDetails?['isDisbursed'] == true;
+    final tentativeDateStr = _disbursementDetails?['currentTentativeDate']?.toString();
+    final tentativeDate = tentativeDateStr != null ? DateTime.tryParse(tentativeDateStr) : null;
+    final tentativeHistory = List<dynamic>.from(_disbursementDetails?['tentativeDates'] ?? []);
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // If already Disbursed: Celebration Card!
+          if (isDisbursed) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: isDark
+                      ? [const Color(0xFF064E3B), const Color(0xFF065F46)]
+                      : [const Color(0xFF047857), const Color(0xFF059669)],
+                ),
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(color: const Color(0xFF10B981).withValues(alpha: 0.3), blurRadius: 16, offset: const Offset(0, 6)),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), shape: BoxShape.circle),
+                        child: const Icon(Icons.celebration_rounded, color: Colors.white, size: 28),
+                      ),
+                      const SizedBox(width: 14),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '🎉 LOAN DISBURSED & FLOW CLOSED',
+                              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800, letterSpacing: 0.5),
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              'All documents, bank approvals, and final disbursement checks have completed successfully.',
+                              style: TextStyle(color: Colors.white70, fontSize: 13),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        _buildDisbursedMetaItem('Disbursed Amount', '₹${_disbursementDetails?['disbursedAmount'] ?? _requiredLoanAmountCtrl.text}'),
+                        _buildDisbursedMetaItem('Final Bank', _finalBank?['bankName']?.toString() ?? 'Lender'),
+                        _buildDisbursedMetaItem('Final ROI', '${_finalBank?['roi'] ?? "N/A"}%'),
+                        _buildDisbursedMetaItem(
+                          'Disbursed Date',
+                          _disbursementDetails?['disbursedAt'] != null
+                              ? DateFormat('dd MMM yyyy').format(DateTime.parse(_disbursementDetails!['disbursedAt']).toLocal())
+                              : 'Confirmed',
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+          ],
+
+          // Prerequisite Alerts
+          if (!isDisbursed) ...[
+            if (hasOpenQueries) ...[
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Warning: There are ${openQueries.length} unresolved bank query(s). Please resolve all bank queries before disbursing.',
+                        style: TextStyle(fontSize: 12.5, color: Colors.red.shade800, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.red.shade800,
+                        side: BorderSide(color: Colors.red.shade400),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      ),
+                      onPressed: _showBankQueriesModal,
+                      child: const Text('View Queries', style: TextStyle(fontSize: 11.5)),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+
+            if (!hasSanctionLetter) ...[
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.info_outline_rounded, color: Color(0xFFD97706), size: 20),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Notice: Sanction letter has not been uploaded in Tab 4. Ensure sanction letter is attached before closing disbursement.',
+                        style: TextStyle(fontSize: 12.5, color: Color(0xFFB45309), fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+            ],
+
+            // Tentative Disbursement Date Card
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF24201D) : Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: borderColor),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: primaryColor.withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.date_range_rounded, color: Color(0xFF2563EB), size: 22),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Tentative Disbursement Scheduling',
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              tentativeDate != null
+                                  ? 'Scheduled for: ${DateFormat('EEEE, dd MMMM yyyy').format(tentativeDate)}'
+                                  : 'No tentative disbursement date set yet. Click below to schedule.',
+                              style: TextStyle(fontSize: 13, color: tentativeDate != null ? const Color(0xFF2563EB) : textMuted, fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
+                      ),
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.event_rounded, size: 16),
+                        label: Text(tentativeDate != null ? 'Change Date' : 'Set Tentative Date'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primaryColor,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        onPressed: () => _pickTentativeDate(),
+                      ),
+                    ],
+                  ),
+
+                  // On or after date prompt: "Ask if it is disbursed or not"
+                  if (tentativeDate != null) ...[
+                    const SizedBox(height: 20),
+                    const Divider(),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: borderColor),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(Icons.help_outline_rounded, color: Color(0xFF2563EB), size: 20),
+                              SizedBox(width: 8),
+                              Text(
+                                'Disbursement Check-in: Has the loan been disbursed?',
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Verify with the bank branch or credit manager if the funds have been credited to the client / builder account.',
+                            style: TextStyle(fontSize: 12.5, color: textMuted),
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              ElevatedButton.icon(
+                                icon: const Icon(Icons.check_circle_rounded, size: 16),
+                                label: const Text('Yes, Loan is Disbursed!'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF10B981),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                ),
+                                onPressed: _showConfirmDisbursementDialog,
+                              ),
+                              const SizedBox(width: 12),
+                              OutlinedButton.icon(
+                                icon: const Icon(Icons.update_rounded, size: 16),
+                                label: const Text('No, Postpone & Set New Date'),
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                ),
+                                onPressed: _showRescheduleDateDialog,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+
+          // History of Tentative Dates Timeline
+          if (tentativeHistory.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            Text(
+              'TENTATIVE DISBURSEMENT HISTORY & DELAY LOG',
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+            ),
+            const SizedBox(height: 10),
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: tentativeHistory.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              itemBuilder: (context, index) {
+                final entry = tentativeHistory[index];
+                final dStr = entry['date']?.toString();
+                final dDate = dStr != null ? DateTime.tryParse(dStr) : null;
+                final status = entry['status']?.toString() ?? 'DELAYED';
+                final reason = entry['delayReason']?.toString() ?? 'Rescheduled';
+
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF24201D) : const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: borderColor),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.history_rounded, size: 16, color: textMuted),
+                      const SizedBox(width: 10),
+                      Text(
+                        dDate != null ? DateFormat('dd MMM yyyy').format(dDate) : (dStr ?? 'Date'),
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                      const SizedBox(width: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: status == 'DISBURSED' ? const Color(0xFF10B981).withValues(alpha: 0.15) : Colors.amber.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          status,
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: status == 'DISBURSED' ? const Color(0xFF10B981) : Colors.amber.shade800,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Reason: $reason',
+                          style: TextStyle(fontSize: 12, color: textMuted),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDisbursedMetaItem(String label, String value) {
+    return Column(
+      children: [
+        Text(label.toUpperCase(), style: const TextStyle(color: Colors.white70, fontSize: 10.5, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 3),
+        Text(value, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+      ],
+    );
+  }
+
+  Future<void> _pickTentativeDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedTentativeDate ?? now.add(const Duration(days: 3)),
+      firstDate: now.subtract(const Duration(days: 30)),
+      lastDate: now.add(const Duration(days: 365)),
+    );
+    if (picked != null) {
+      setState(() => _selectedTentativeDate = picked);
+      await _saveTentativeDisbursementDate(picked);
+    }
+  }
+
+  Future<void> _saveTentativeDisbursementDate(DateTime date, {String? delayReason}) async {
+    final dateStr = DateFormat('yyyy-MM-dd').format(date);
+    final history = List<Map<String, dynamic>>.from(_disbursementDetails?['tentativeDates'] ?? []);
+
+    history.add({
+      'date': dateStr,
+      'setAt': DateTime.now().toIso8601String(),
+      'status': 'PENDING',
+      if (delayReason != null) 'delayReason': delayReason,
+    });
+
+    final details = {
+      ...(_disbursementDetails ?? {}),
+      'currentTentativeDate': dateStr,
+      'tentativeDates': history,
+      'isDisbursed': false,
+    };
+
+    setState(() {
+      _disbursementDetails = details;
+      _selectedTentativeDate = date;
+    });
+
+    try {
+      final res = await _repo.updateFinservePipeline(
+        _currentLead.id,
+        {
+          'disbursementDetails': details,
+          'loanStage': 'TENTATIVE_DISBURSEMENT',
+        },
+      );
+      if (!mounted) return;
+      if (res['lead'] != null) {
+        _syncLeadCustomFields(CrmLead.fromJson(Map<String, dynamic>.from(res['lead'])));
+      }
+      _refreshLeads();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Tentative disbursement date set to ${DateFormat("dd MMM yyyy").format(date)}'),
+          backgroundColor: const Color(0xFF10B981),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to save tentative date: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  void _showConfirmDisbursementDialog() {
+    final amtCtrl = TextEditingController(text: _requiredLoanAmountCtrl.text.trim());
+    final refCtrl = TextEditingController();
+    DateTime disbDate = DateTime.now();
+
+    showDialog(
+      context: context,
+      builder: (dlgCtx) => StatefulBuilder(
+        builder: (context, setDlgState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.check_circle_rounded, color: Color(0xFF10B981), size: 24),
+              SizedBox(width: 10),
+              Text('Confirm Final Loan Disbursement', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+            ],
+          ),
+          content: SizedBox(
+            width: 440,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Disbursed Loan Amount (₹)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+                const SizedBox(height: 4),
+                TextField(
+                  controller: amtCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    hintText: 'e.g. 4500000',
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text('Disbursement Reference / UTR Number', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+                const SizedBox(height: 4),
+                TextField(
+                  controller: refCtrl,
+                  decoration: InputDecoration(
+                    hintText: 'e.g. UTR-HDFC-9918239',
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text('Disbursement Date', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+                const SizedBox(height: 4),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.calendar_today_rounded, size: 14),
+                  label: Text(DateFormat('dd MMM yyyy').format(disbDate)),
+                  onPressed: () async {
+                    final p = await showDatePicker(
+                      context: context,
+                      initialDate: disbDate,
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime(2030),
+                    );
+                    if (p != null) setDlgState(() => disbDate = p);
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dlgCtx), child: const Text('Cancel')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF10B981), foregroundColor: Colors.white),
+              onPressed: () async {
+                Navigator.pop(dlgCtx);
+                final disbAmt = amtCtrl.text.trim();
+                final history = List<Map<String, dynamic>>.from(_disbursementDetails?['tentativeDates'] ?? []);
+                history.add({
+                  'date': DateFormat('yyyy-MM-dd').format(disbDate),
+                  'setAt': DateTime.now().toIso8601String(),
+                  'status': 'DISBURSED',
+                  'reference': refCtrl.text.trim(),
+                });
+
+                final details = {
+                  ...(_disbursementDetails ?? {}),
+                  'isDisbursed': true,
+                  'disbursedAt': disbDate.toIso8601String(),
+                  'disbursedAmount': disbAmt,
+                  'flowClosed': true,
+                  'reference': refCtrl.text.trim(),
+                  'tentativeDates': history,
+                };
+
+                try {
+                  final res = await _repo.updateFinservePipeline(
+                    _currentLead.id,
+                    {
+                      'status': 'BOOKING_CONFIRMED',
+                      'disbursementDetails': details,
+                      'loanStage': 'DISBURSED',
+                    },
+                  );
+                  if (!mounted) return;
+                  if (res['lead'] != null) {
+                    _syncLeadCustomFields(CrmLead.fromJson(Map<String, dynamic>.from(res['lead'])));
+                  }
+                  _refreshLeads();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('🎉 Loan marked as DISBURSED! Flow successfully completed.'),
+                      backgroundColor: Color(0xFF10B981),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                } catch (e) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to confirm disbursement: $e'), backgroundColor: Colors.red),
+                  );
+                }
+              },
+              child: const Text('Confirm Disbursement'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showRescheduleDateDialog() {
+    final reasonCtrl = TextEditingController();
+    DateTime newDate = DateTime.now().add(const Duration(days: 4));
+
+    showDialog(
+      context: context,
+      builder: (dlgCtx) => StatefulBuilder(
+        builder: (context, setDlgState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text('Postpone & Schedule New Tentative Date', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          content: SizedBox(
+            width: 440,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Reason for Postponement / Delay (Mandatory)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+                const SizedBox(height: 4),
+                TextField(
+                  controller: reasonCtrl,
+                  maxLines: 2,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    hintText: 'e.g. Bank credit manager requested additional branch clearance...',
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                const Text('New Tentative Disbursement Date', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+                const SizedBox(height: 4),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.event_rounded, size: 16),
+                  label: Text(DateFormat('EEEE, dd MMMM yyyy').format(newDate)),
+                  onPressed: () async {
+                    final p = await showDatePicker(
+                      context: context,
+                      initialDate: newDate,
+                      firstDate: DateTime.now(),
+                      lastDate: DateTime.now().add(const Duration(days: 365)),
+                    );
+                    if (p != null) setDlgState(() => newDate = p);
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dlgCtx), child: const Text('Cancel')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB), foregroundColor: Colors.white),
+              onPressed: () {
+                final reason = reasonCtrl.text.trim();
+                if (reason.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please enter reason for rescheduling')),
+                  );
+                  return;
+                }
+                Navigator.pop(dlgCtx);
+                _saveTentativeDisbursementDate(newDate, delayReason: reason);
+              },
+              child: const Text('Save New Date'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // SECTION: Universal Bank Queries Modal & Management
+  // ===========================================================================
+  void _showBankQueriesModal() {
+    showDialog(
+      context: context,
+      builder: (dlgCtx) => StatefulBuilder(
+        builder: (context, setDlgState) {
+          final openQueries = _bankQueries.where((q) => q['status'] != 'RESOLVED').toList();
+          final resolvedQueries = _bankQueries.where((q) => q['status'] == 'RESOLVED').toList();
+
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            titlePadding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+            contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0F766E).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.help_center_rounded, color: Color(0xFF0F766E), size: 22),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Bank Queries Management', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+                      Text('Log and resolve bank objections across all loan stages until disbursed.', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    ],
+                  ),
+                ),
+                IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => Navigator.pop(dlgCtx)),
+              ],
+            ),
+            content: SizedBox(
+              width: 620,
+              height: 520,
+              child: Column(
+                children: [
+                  // Action Strip
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: openQueries.isNotEmpty ? Colors.red.withValues(alpha: 0.15) : Colors.green.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          '${openQueries.length} OPEN QUERY(S)',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: openQueries.isNotEmpty ? Colors.red.shade800 : Colors.green.shade800,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(12)),
+                        child: Text('${resolvedQueries.length} RESOLVED', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+                      ),
+                      const Spacer(),
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.add_rounded, size: 15),
+                        label: const Text('Raise Query', style: TextStyle(fontSize: 12)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0F766E),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
+                        onPressed: () {
+                          _showAddQueryDialog(onAdded: () => setDlgState(() {}));
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  const Divider(),
+                  const SizedBox(height: 6),
+
+                  // Queries List
+                  Expanded(
+                    child: _bankQueries.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.check_circle_outline_rounded, size: 48, color: Colors.green.withValues(alpha: 0.4)),
+                                const SizedBox(height: 8),
+                                const Text('No Bank Queries Raised', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                const SizedBox(height: 2),
+                                const Text('Click "Raise Query" whenever any bank credit team raises an objection.', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                              ],
+                            ),
+                          )
+                        : ListView.separated(
+                            itemCount: _bankQueries.length,
+                            separatorBuilder: (_, __) => const SizedBox(height: 10),
+                            itemBuilder: (context, idx) {
+                              final q = _bankQueries[idx];
+                              final isResolved = q['status'] == 'RESOLVED';
+                              final raisedAt = q['raisedAt'] != null
+                                  ? DateFormat('dd MMM, hh:mm a').format(DateTime.parse(q['raisedAt']).toLocal())
+                                  : '';
+
+                              return Container(
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color: isResolved ? const Color(0xFFF8FAFC) : Colors.white,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: isResolved ? const Color(0xFF10B981).withValues(alpha: 0.4) : Colors.red.withValues(alpha: 0.4),
+                                  ),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: isResolved ? const Color(0xFF10B981).withValues(alpha: 0.15) : Colors.red.withValues(alpha: 0.15),
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Text(
+                                            isResolved ? 'RESOLVED' : 'OPEN QUERY',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                              color: isResolved ? const Color(0xFF10B981) : Colors.red,
+                                            ),
+                                          ),
+                                        ),
+                                        if (q['stage'] != null) ...[
+                                          const SizedBox(width: 8),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(color: Colors.blue.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(4)),
+                                            child: Text(q['stage'], style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.blue)),
+                                          ),
+                                        ],
+                                        const Spacer(),
+                                        Text('$raisedAt • By ${q['raisedBy'] ?? "Staff"}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text('Query: ${q['query']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5)),
+                                    const SizedBox(height: 4),
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(color: const Color(0xFFFEF3C7).withValues(alpha: 0.5), borderRadius: BorderRadius.circular(6)),
+                                      child: Text(
+                                        'Required Action / Docs: ${q['required']}',
+                                        style: const TextStyle(fontSize: 12, color: Color(0xFF92400E), fontWeight: FontWeight.w600),
+                                      ),
+                                    ),
+                                    if (isResolved && q['resolutionNotes'] != null && q['resolutionNotes'].toString().isNotEmpty) ...[
+                                      const SizedBox(height: 6),
+                                      Text('Resolution Notes: ${q['resolutionNotes']}', style: const TextStyle(fontSize: 11.5, color: Color(0xFF10B981))),
+                                    ],
+                                    if (!isResolved) ...[
+                                      const SizedBox(height: 8),
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.end,
+                                        children: [
+                                          ElevatedButton.icon(
+                                            icon: const Icon(Icons.check_rounded, size: 14),
+                                            label: const Text('Mark as Resolved'),
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: const Color(0xFF10B981),
+                                              foregroundColor: Colors.white,
+                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                              textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                            ),
+                                            onPressed: () {
+                                              _showResolveQueryDialog(q['id']?.toString() ?? '', onResolved: () => setDlgState(() {}));
+                                            },
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dlgCtx), child: const Text('Done')),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _showAddQueryDialog({String? defaultStage, VoidCallback? onAdded}) {
+    final queryCtrl = TextEditingController();
+    final reqCtrl = TextEditingController();
+    String stage = defaultStage ?? 'Sanction Letter';
+
+    showDialog(
+      context: context,
+      builder: (dlgCtx) => StatefulBuilder(
+        builder: (context, setDlgState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text('Raise Bank Query', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          content: SizedBox(
+            width: 440,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('What Query Did The Bank Raise?', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+                const SizedBox(height: 4),
+                TextField(
+                  controller: queryCtrl,
+                  maxLines: 2,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    hintText: 'e.g. Bank credit manager needs revised salary slip for June...',
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text('What Is Required From Client / Team?', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+                const SizedBox(height: 4),
+                TextField(
+                  controller: reqCtrl,
+                  maxLines: 2,
+                  decoration: InputDecoration(
+                    hintText: 'e.g. Upload stamp-attested salary slip & 6-month bank statement...',
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text('Stage / Context', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+                const SizedBox(height: 4),
+                DropdownButtonFormField<String>(
+                  value: stage,
+                  isDense: true,
+                  decoration: InputDecoration(
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'Sanction Letter', child: Text('Sanction Letter')),
+                    DropdownMenuItem(value: 'Sanction Letter & DD', child: Text('Sanction Letter & DD')),
+                    DropdownMenuItem(value: 'DD Copy', child: Text('DD Copy')),
+                    DropdownMenuItem(value: 'KYC & Income', child: Text('KYC & Income')),
+                    DropdownMenuItem(value: 'Disbursement', child: Text('Disbursement')),
+                    DropdownMenuItem(value: 'General', child: Text('General')),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) setDlgState(() => stage = v);
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dlgCtx), child: const Text('Cancel')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F766E), foregroundColor: Colors.white),
+              onPressed: () async {
+                final qText = queryCtrl.text.trim();
+                final rText = reqCtrl.text.trim();
+                if (qText.isEmpty || rText.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please enter both Query and Required action')),
+                  );
+                  return;
+                }
+                Navigator.pop(dlgCtx);
+                try {
+                  final res = await _repo.addBankQuery(_currentLead.id, query: qText, required: rText, stage: stage);
+                  if (res['updatedLead'] != null) {
+                    _syncLeadCustomFields(CrmLead.fromJson(Map<String, dynamic>.from(res['updatedLead'])));
+                  }
+                  _refreshLeads();
+                  if (onAdded != null) onAdded();
+                  setState(() {});
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Bank query raised successfully!'), backgroundColor: Color(0xFF0F766E)),
+                  );
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to raise query: $e'), backgroundColor: Colors.red),
+                  );
+                }
+              },
+              child: const Text('Raise Query'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showResolveQueryDialog(String queryId, {VoidCallback? onResolved}) {
+    final notesCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (dlgCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Mark Query as Resolved', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Resolution Notes / Clarification Given', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+              const SizedBox(height: 4),
+              TextField(
+                controller: notesCtrl,
+                maxLines: 2,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: 'e.g. June salary slip submitted to bank officer & confirmed accepted...',
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dlgCtx), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF10B981), foregroundColor: Colors.white),
+            onPressed: () async {
+              Navigator.pop(dlgCtx);
+              try {
+                final res = await _repo.resolveBankQuery(_currentLead.id, queryId, resolutionNotes: notesCtrl.text.trim());
+                if (res['updatedLead'] != null) {
+                  _syncLeadCustomFields(CrmLead.fromJson(Map<String, dynamic>.from(res['updatedLead'])));
+                }
+                _refreshLeads();
+                if (onResolved != null) onResolved();
+                setState(() {});
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Bank query marked as RESOLVED!'), backgroundColor: Color(0xFF10B981)),
+                );
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Failed to resolve query: $e'), backgroundColor: Colors.red),
+                );
+              }
+            },
+            child: const Text('Mark Resolved'),
           ),
         ],
       ),

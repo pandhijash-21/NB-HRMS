@@ -58,6 +58,11 @@ import {
   ScheduleFollowUpDto,
   UpdateCrmSettingsDto,
   UpdateLeadApplicationDetailsDto,
+  UpdateFinservePipelineDto,
+  BankApplicationItem,
+  FinalBankDetails,
+  BankQueryItem,
+  DisbursementDetails,
 } from './crm.types';
 
 const DEFAULT_PRE_SALES_COLUMNS: Array<{
@@ -4218,6 +4223,182 @@ export const crmService = {
     });
 
     return updated;
+  },
+
+  async updateFinservePipeline(
+    leadId: string,
+    dto: UpdateFinservePipelineDto,
+    updatedByName?: string,
+  ) {
+    const lead = await prisma.crmLead.findUnique({ where: { id: leadId } });
+    if (!lead) throw new Error('Lead not found');
+
+    const currentCustom = (lead.customFields as any) || {};
+    const updatedCustom: any = {
+      ...currentCustom,
+    };
+
+    if (dto.forwardedForProcessing) {
+      updatedCustom.forwardedForProcessing = {
+        ...(currentCustom.forwardedForProcessing || {}),
+        ...dto.forwardedForProcessing,
+        forwardedAt: dto.forwardedForProcessing.forwardedAt || new Date().toISOString(),
+        forwardedBy: updatedByName || dto.forwardedForProcessing.forwardedBy || 'System',
+      };
+    }
+
+    if (dto.bankApplications) {
+      updatedCustom.bankApplications = dto.bankApplications;
+    }
+
+    if (dto.finalBank) {
+      updatedCustom.finalBank = {
+        ...(currentCustom.finalBank || {}),
+        ...dto.finalBank,
+        finalizedAt: dto.finalBank.finalizedAt || new Date().toISOString(),
+        finalizedBy: updatedByName || dto.finalBank.finalizedBy || 'System',
+      };
+    }
+
+    if (dto.disbursementDetails) {
+      updatedCustom.disbursementDetails = {
+        ...(currentCustom.disbursementDetails || {}),
+        ...dto.disbursementDetails,
+      };
+    }
+
+    if (dto.loanStage) {
+      updatedCustom.loanStage = dto.loanStage;
+    }
+
+    const updateData: any = {
+      customFields: updatedCustom,
+      updatedAt: new Date(),
+    };
+
+    if (dto.forwardedForProcessing?.forwardedToId) {
+      updateData.assignedToId = Number(dto.forwardedForProcessing.forwardedToId);
+    }
+
+    if (dto.status) {
+      updateData.status = dto.status;
+    }
+
+    const updated = await prisma.crmLead.update({
+      where: { id: leadId },
+      data: updateData,
+      include: {
+        assignedTo: {
+          include: { generalInfo: { select: { fullName: true } } },
+        },
+        telecaller: {
+          include: { generalInfo: { select: { fullName: true } } },
+        },
+      },
+    });
+
+    return updated;
+  },
+
+  async addBankQuery(
+    leadId: string,
+    dto: { query: string; required: string; stage?: string },
+    raisedByName?: string,
+  ) {
+    const lead = await prisma.crmLead.findUnique({ where: { id: leadId } });
+    if (!lead) throw new Error('Lead not found');
+    if (!dto.query || !dto.required) {
+      throw new Error('Query and Required details are mandatory');
+    }
+
+    const currentCustom = (lead.customFields as any) || {};
+    const queries: BankQueryItem[] = Array.isArray(currentCustom.bankQueries)
+      ? [...currentCustom.bankQueries]
+      : [];
+
+    const newQuery: BankQueryItem = {
+      id: `query_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      query: dto.query.trim(),
+      required: dto.required.trim(),
+      stage: dto.stage || 'General',
+      status: 'OPEN',
+      raisedAt: new Date().toISOString(),
+      raisedBy: raisedByName || 'Staff',
+    };
+
+    queries.unshift(newQuery);
+
+    const updatedCustom = {
+      ...currentCustom,
+      bankQueries: queries,
+    };
+
+    const updated = await prisma.crmLead.update({
+      where: { id: leadId },
+      data: {
+        customFields: updatedCustom,
+        updatedAt: new Date(),
+      },
+      include: {
+        assignedTo: {
+          include: { generalInfo: { select: { fullName: true } } },
+        },
+        telecaller: {
+          include: { generalInfo: { select: { fullName: true } } },
+        },
+      },
+    });
+
+    return { updatedLead: updated, query: newQuery };
+  },
+
+  async resolveBankQuery(
+    leadId: string,
+    queryId: string,
+    dto: { resolutionNotes?: string },
+    resolvedByName?: string,
+  ) {
+    const lead = await prisma.crmLead.findUnique({ where: { id: leadId } });
+    if (!lead) throw new Error('Lead not found');
+
+    const currentCustom = (lead.customFields as any) || {};
+    const queries: BankQueryItem[] = Array.isArray(currentCustom.bankQueries)
+      ? [...currentCustom.bankQueries]
+      : [];
+
+    const idx = queries.findIndex((q) => q.id === queryId);
+    if (idx === -1) throw new Error('Query not found');
+
+    queries[idx] = {
+      ...queries[idx],
+      status: 'RESOLVED',
+      resolvedAt: new Date().toISOString(),
+      resolvedBy: resolvedByName || 'Staff',
+      resolutionNotes: dto.resolutionNotes?.trim() || '',
+    };
+
+    const updatedCustom = {
+      ...currentCustom,
+      bankQueries: queries,
+    };
+
+    const updated = await prisma.crmLead.update({
+      where: { id: leadId },
+      data: {
+        customFields: updatedCustom,
+        updatedAt: new Date(),
+      },
+      include: {
+        assignedTo: {
+          include: { generalInfo: { select: { fullName: true } } },
+        },
+        telecaller: {
+          include: { generalInfo: { select: { fullName: true } } },
+        },
+      },
+    });
+
+    return { updatedLead: updated, query: queries[idx] };
   },
 
   async generateClientPortalLink(leadId: string, baseUrl?: string) {

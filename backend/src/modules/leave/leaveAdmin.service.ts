@@ -401,4 +401,62 @@ export const leaveAdminService = {
     ]);
     return { depts, institutes, global };
   },
+
+  // ─── Work From Home (WFH) Management ─────────────────────────────────────────
+
+  async ensureWfhLeaveType() {
+    const existing = await prisma.leaveType.findUnique({ where: { code: 'WFH' } });
+    if (existing) return existing;
+    return prisma.leaveType.create({
+      data: {
+        code: 'WFH',
+        name: 'Work From Home (WFH)',
+        applicableTo: 'BOTH',
+        defaultDaysPerYear: null,
+        isCarryForward: false,
+        allowHalfDay: false,
+        skipPublicHolidays: true,
+        skipWeekends: true,
+        requiresDocument: false,
+        requiresReason: true,
+        isActive: true,
+        employeeCanApply: true,
+        cutsSalary: false,
+      },
+    });
+  },
+
+  async getWfhAllowedEmployeeIds(): Promise<number[]> {
+    const row = await prisma.leaveSetting.findUnique({ where: { key: 'wfh_allowed_employees' } });
+    if (!row || !row.value) return [];
+    try {
+      const parsed = JSON.parse(row.value);
+      return Array.isArray(parsed) ? parsed.map(Number).filter((n) => Number.isFinite(n)) : [];
+    } catch {
+      return [];
+    }
+  },
+
+  async setWfhAllowedEmployeeIds(employeeIds: number[], actorId: string) {
+    const cleanIds = Array.from(new Set(employeeIds.map(Number).filter((n) => Number.isFinite(n))));
+    return prisma.leaveSetting.upsert({
+      where: { key: 'wfh_allowed_employees' },
+      create: {
+        key: 'wfh_allowed_employees',
+        value: JSON.stringify(cleanIds),
+        description: 'Employee IDs permitted to view and apply for Work From Home (WFH)',
+        updatedBy: actorId,
+      },
+      update: {
+        value: JSON.stringify(cleanIds),
+        updatedBy: actorId,
+      },
+    });
+  },
+
+  async isEmployeeWfhAllowed(employeeId: number): Promise<boolean> {
+    const allowed = await this.getWfhAllowedEmployeeIds();
+    return allowed.includes(employeeId);
+  },
 };
+

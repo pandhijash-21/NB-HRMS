@@ -271,10 +271,12 @@ export const leaveApprovalWorkflowService = {
     return prisma.$transaction(async (tx) => {
       const app = await tx.leaveApplication.findUnique({
         where: { id: applicationId },
-        include: { approvalSteps: true },
+        include: { approvalSteps: true, leaveType: { select: { code: true } } },
       });
       if (!app) throw new Error('Application not found');
       if (app.status !== 'PENDING') throw new Error('Application is not pending');
+
+      const skipBalance = ['LWP', 'DL', 'AL', 'OT', 'WFH'].includes(app.leaveType?.code ?? '');
 
       const steps = app.approvalSteps;
       const finalTier = steps.length ? Math.max(...steps.map((s) => s.stepNumber)) : 0;
@@ -314,16 +316,18 @@ export const leaveApprovalWorkflowService = {
           data: { status: 'REJECTED' },
         });
 
-        const year = app.fromDate.getUTCFullYear();
-        await leaveBalanceService.revertPending({
-          employeeId: app.employeeId,
-          leaveTypeId: app.leaveTypeId,
-          year,
-          days: app.totalDays,
-          actorId,
-          revertAction: 'REJECT_REVERT',
-          context: `LeaveApplication:${applicationId}`,
-        });
+        if (!skipBalance) {
+          const year = app.fromDate.getUTCFullYear();
+          await leaveBalanceService.revertPending({
+            employeeId: app.employeeId,
+            leaveTypeId: app.leaveTypeId,
+            year,
+            days: app.totalDays,
+            actorId,
+            revertAction: 'REJECT_REVERT',
+            context: `LeaveApplication:${applicationId}`,
+          });
+        }
 
         return { status: 'REJECTED' as const };
       }
@@ -349,15 +353,17 @@ export const leaveApprovalWorkflowService = {
         data: { status: 'APPROVED' },
       });
 
-      const year = app.fromDate.getUTCFullYear();
-      await leaveBalanceService.approve({
-        employeeId: app.employeeId,
-        leaveTypeId: app.leaveTypeId,
-        year,
-        days: app.totalDays,
-        actorId,
-        context: `LeaveApplication:${applicationId}`,
-      });
+      if (!skipBalance) {
+        const year = app.fromDate.getUTCFullYear();
+        await leaveBalanceService.approve({
+          employeeId: app.employeeId,
+          leaveTypeId: app.leaveTypeId,
+          year,
+          days: app.totalDays,
+          actorId,
+          context: `LeaveApplication:${applicationId}`,
+        });
+      }
 
       return { status: 'APPROVED' as const };
     });

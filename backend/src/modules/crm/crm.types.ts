@@ -156,3 +156,71 @@ export interface UpdateLeadApplicationDetailsDto {
   applicationDetails?: Record<string, any>;
   status?: string;
 }
+
+export interface BankApplicationItem {
+  id: string;
+  bankName: string;
+  appliedAt?: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  rejectionRemarks?: string;
+  roi?: string; // Rate of interest %
+  approvedAmount?: string;
+  tenureMonths?: string;
+  isFinalSelected?: boolean;
+}
+
+export interface FinalBankDetails {
+  bankId?: string;
+  bankName: string;
+  roi?: string;
+  applicationId?: string;
+  loanAgreementNumber?: string;
+  finalizedAt?: string;
+  finalizedBy?: string;
+}
+
+export interface BankQueryItem {
+  id: string;
+  stage?: string;
+  query: string; // What query
+  required: string; // What is required
+  status: 'OPEN' | 'RESOLVED';
+  raisedAt: string;
+  raisedBy?: string;
+  resolvedAt?: string;
+  resolvedBy?: string;
+  resolutionNotes?: string;
+}
+
+export interface TentativeDateEntry {
+  date: string; // YYYY-MM-DD
+  setAt: string;
+  setBy?: string;
+  status: 'PENDING' | 'DISBURSED' | 'DELAYED';
+  delayReason?: string;
+}
+
+export interface DisbursementDetails {
+  tentativeDates: TentativeDateEntry[];
+  currentTentativeDate?: string;
+  isDisbursed?: boolean;
+  disbursedAt?: string;
+  disbursedAmount?: string;
+  remarks?: string;
+  flowClosed?: boolean;
+}
+
+export interface UpdateFinservePipelineDto {
+  forwardedForProcessing?: {
+    forwardedToId: number;
+    forwardedToName: string;
+    forwardedAt: string;
+    forwardedBy?: string;
+    remarks?: string;
+  };
+  bankApplications?: BankApplicationItem[];
+  finalBank?: FinalBankDetails;
+  disbursementDetails?: DisbursementDetails;
+  loanStage?: string;
+  status?: string;
+}

@@ -14,6 +14,7 @@ import '../../data/leave_repository.dart';
 import '../../domain/leave_models.dart';
 import '../bloc/leave_bloc.dart';
 import '../widgets/leave_shared_widgets.dart';
+import '../widgets/wfh_dialogs.dart';
 
 class LeaveHubScreen extends StatelessWidget {
   const LeaveHubScreen({super.key});
@@ -206,6 +207,13 @@ class _LeaveHubView extends StatelessWidget {
             ),
                 ],
               ),
+            ),
+            const SizedBox(height: 24),
+            WfhSectionCard(
+              canAdmin: canAdmin,
+              onRefresh: () {
+                context.read<LeaveBloc>().add(const LeaveRefreshRequested());
+              },
             ),
             if (canApprove || canAdmin) ...[
               const SizedBox(height: 20),

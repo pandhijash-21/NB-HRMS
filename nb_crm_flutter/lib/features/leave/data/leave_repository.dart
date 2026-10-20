@@ -316,4 +316,66 @@ class LeaveRepository {
       parse: (raw) => raw,
     );
   }
+
+  // ─── Work From Home (WFH) ───────────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> getWfhEligibility() async {
+    return _dio.getEnvelope<Map<String, dynamic>>(
+      'leave/wfh/eligibility',
+      parse: (raw) {
+        if (raw is! Map) return {'eligible': false, 'isAdmin': false};
+        return Map<String, dynamic>.from(raw);
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> getAdminWfhConfig() async {
+    return _dio.getEnvelope<Map<String, dynamic>>(
+      'leave/wfh/admin/config',
+      parse: (raw) {
+        if (raw is! Map) throw const FormatException('Invalid WFH config response');
+        return Map<String, dynamic>.from(raw);
+      },
+    );
+  }
+
+  Future<void> updateAdminWfhConfig(List<int> employeeIds) async {
+    await _dio.postEnvelope<dynamic>(
+      'leave/wfh/admin/config',
+      data: {'employeeIds': employeeIds},
+      parse: (raw) => raw,
+    );
+  }
+
+  Future<LeaveApplication> applyWfh({
+    required String fromDate,
+    required String toDate,
+    required String reason,
+  }) async {
+    return _dio.postEnvelope<LeaveApplication>(
+      'leave/wfh/apply',
+      data: {
+        'fromDate': fromDate,
+        'toDate': toDate,
+        'reason': reason,
+      },
+      parse: (raw) {
+        if (raw is! Map) throw const FormatException('Invalid WFH apply response');
+        return LeaveApplication.fromJson(Map<String, dynamic>.from(raw));
+      },
+    );
+  }
+
+  Future<List<LeaveApplication>> getMyWfhApplications() async {
+    return _dio.getEnvelope<List<LeaveApplication>>(
+      'leave/wfh/my-applications',
+      parse: (raw) {
+        if (raw is! List) return [];
+        return raw
+            .map((e) => LeaveApplication.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList();
+      },
+    );
+  }
 }
+

@@ -167,6 +167,9 @@ crmRouter.post('/leads/:id/whatsapp', generalCrmGuard, crmController.sendLeadWha
 crmRouter.delete('/leads/:id', generalCrmGuard, crmController.moveToBin);
 crmRouter.patch('/leads/:id/restore', generalCrmGuard, crmController.restoreFromBin);
 crmRouter.put('/leads/:id/application-details', generalCrmGuard, crmController.updateLeadApplicationDetails);
+crmRouter.put('/leads/:id/finserve-pipeline', generalCrmGuard, crmController.updateFinservePipeline);
+crmRouter.post('/leads/:id/bank-queries', generalCrmGuard, crmController.addBankQuery);
+crmRouter.patch('/leads/:id/bank-queries/:queryId/resolve', generalCrmGuard, crmController.resolveBankQuery);
 crmRouter.post('/leads/:id/portal-link', generalCrmGuard, crmController.generateClientPortalLink);
 crmRouter.post('/leads/:id/upload-doc', generalCrmGuard, upload.single('document'), crmController.uploadLeadDoc);
 crmRouter.get('/leads/:id/download-docs-zip', generalCrmGuard, crmController.downloadLeadDocsZip);

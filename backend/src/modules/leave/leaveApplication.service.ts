@@ -1,6 +1,7 @@
 import { prisma } from '../../config/prisma';
 import { calculateLeaveDays } from './leaveDayCalculator.service';
 import { leaveBalanceService } from './leaveBalance.service';
+import { leaveAdminService } from './leaveAdmin.service';
 import { leaveApprovalWorkflowService } from './leaveApprovalWorkflow.service';
 import { leaveNotificationService } from './leaveNotification.service';
 import { employmentChangeService } from '../personal-education/employmentChange.service';
@@ -46,6 +47,13 @@ export const leaveApplicationService = {
       throw new Error('Employees cannot apply for this leave type. Contact HR/Admin.');
     }
 
+    if (lt.code === 'WFH') {
+      const isAllowed = await leaveAdminService.isEmployeeWfhAllowed(input.employeeId);
+      if (!isAllowed && !input.isAppliedByAdmin) {
+        throw new Error('You are not authorized to apply for Work From Home (WFH). Please contact HR/Admin.');
+      }
+    }
+
     if (lt.requiresDocument && !(input.documentUrl && String(input.documentUrl).trim())) {
       throw new Error('Supporting document is required for this leave type');
     }
@@ -76,8 +84,8 @@ export const leaveApplicationService = {
 
     const year = from.getUTCFullYear();
 
-    // Check balance (skip for LWP/DL/AL/OT — unlimited or balance irrelevant)
-    const skipBalanceCheck = ['LWP', 'DL', 'AL', 'OT'].includes(lt.code);
+    // Check balance (skip for LWP/DL/AL/OT/WFH — unlimited or balance irrelevant)
+    const skipBalanceCheck = ['LWP', 'DL', 'AL', 'OT', 'WFH'].includes(lt.code);
     if (!skipBalanceCheck) {
       const balance = await prisma.leaveBalance.findUnique({
         where: { employeeId_leaveTypeId_year: { employeeId: input.employeeId, leaveTypeId: lt.id, year } },
@@ -158,7 +166,7 @@ export const leaveApplicationService = {
     }
 
     const lt = await prisma.leaveType.findUnique({ where: { id: app.leaveTypeId }, select: { code: true } });
-    const skipBalanceCheck = ['LWP', 'DL', 'AL', 'OT'].includes(lt?.code ?? '');
+    const skipBalanceCheck = ['LWP', 'DL', 'AL', 'OT', 'WFH'].includes(lt?.code ?? '');
 
     await prisma.$transaction(async (tx) => {
       await tx.leaveApplication.update({

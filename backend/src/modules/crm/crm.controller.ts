@@ -679,6 +679,53 @@ export const crmController = {
     }
   },
 
+  async updateFinservePipeline(req: Request, res: Response) {
+    try {
+      const authUser = (req as any).user;
+      const leadId = String(req.params.id);
+      const result = await crmService.updateFinservePipeline(
+        leadId,
+        req.body,
+        authUser?.name || authUser?.username || 'Staff',
+      );
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to update Finserve pipeline'));
+    }
+  },
+
+  async addBankQuery(req: Request, res: Response) {
+    try {
+      const authUser = (req as any).user;
+      const leadId = String(req.params.id);
+      const result = await crmService.addBankQuery(
+        leadId,
+        req.body,
+        authUser?.name || authUser?.username || 'Staff',
+      );
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to add bank query'));
+    }
+  },
+
+  async resolveBankQuery(req: Request, res: Response) {
+    try {
+      const authUser = (req as any).user;
+      const leadId = String(req.params.id);
+      const queryId = String(req.params.queryId);
+      const result = await crmService.resolveBankQuery(
+        leadId,
+        queryId,
+        req.body,
+        authUser?.name || authUser?.username || 'Staff',
+      );
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to resolve bank query'));
+    }
+  },
+
   async generateClientPortalLink(req: Request, res: Response) {
     try {
       const leadId = String(req.params.id);

@@ -722,5 +722,50 @@ class CrmRepository {
       parse: (raw) => Map<String, dynamic>.from(raw as Map),
     );
   }
+
+  // ---------------------------------------------------------------------------
+  // Finserve Bank Processing, Post-Sanction & Disbursement Pipeline
+  // ---------------------------------------------------------------------------
+  Future<Map<String, dynamic>> updateFinservePipeline(
+    String leadId,
+    Map<String, dynamic> data,
+  ) async {
+    return _dio.putEnvelope<Map<String, dynamic>>(
+      'crm/leads/$leadId/finserve-pipeline',
+      data: data,
+      parse: (raw) => Map<String, dynamic>.from(raw as Map),
+    );
+  }
+
+  Future<Map<String, dynamic>> addBankQuery(
+    String leadId, {
+    required String query,
+    required String required,
+    String? stage,
+  }) async {
+    return _dio.postEnvelope<Map<String, dynamic>>(
+      'crm/leads/$leadId/bank-queries',
+      data: {
+        'query': query,
+        'required': required,
+        if (stage != null) 'stage': stage,
+      },
+      parse: (raw) => Map<String, dynamic>.from(raw as Map),
+    );
+  }
+
+  Future<Map<String, dynamic>> resolveBankQuery(
+    String leadId,
+    String queryId, {
+    String? resolutionNotes,
+  }) async {
+    return _dio.patchEnvelope<Map<String, dynamic>>(
+      'crm/leads/$leadId/bank-queries/$queryId/resolve',
+      data: {
+        if (resolutionNotes != null) 'resolutionNotes': resolutionNotes,
+      },
+      parse: (raw) => Map<String, dynamic>.from(raw as Map),
+    );
+  }
 }
 

@@ -782,6 +782,7 @@ class _CalendarGrid extends StatelessWidget {
       final summary = calendar[key];
       final selected = key == selectedDate;
       final hasPunches = summary != null && summary.count > 0;
+      final isWfh = summary?.isWfh ?? false;
       final isLeave = summary?.isLeave ?? false;
       final isHoliday = summary?.isHoliday ?? false;
       final isAbsent = summary?.isAbsent ?? false;
@@ -839,20 +840,26 @@ class _CalendarGrid extends StatelessWidget {
                 ],
               ),
             ),
-          ] else if (isLeave || isHoliday || isAbsent) ...[
+          ] else if (isWfh || isLeave || isHoliday || isAbsent) ...[
             const SizedBox(height: 2),
             Text(
-              isHoliday ? 'Holiday' : (isLeave ? 'Leave' : 'Absent'),
+              isWfh
+                  ? 'WFH'
+                  : isHoliday
+                      ? 'Holiday'
+                      : (isLeave ? 'Leave' : 'Absent'),
               style: TextStyle(
                 fontSize: 8,
                 fontWeight: FontWeight.w800,
                 color: selected
                     ? (isDark ? const Color(0xFF1A1816) : Colors.white)
-                    : (isHoliday
-                        ? Colors.purple.shade400
-                        : isLeave
-                            ? Colors.blue.shade400
-                            : Colors.grey.shade600),
+                    : (isWfh
+                        ? const Color(0xFF0D9488)
+                        : isHoliday
+                            ? Colors.purple.shade400
+                            : isLeave
+                                ? Colors.blue.shade400
+                                : Colors.grey.shade600),
               ),
             ),
           ],
@@ -872,26 +879,30 @@ class _CalendarGrid extends StatelessWidget {
                     ? (isDark ? const Color(0xFFC5A059) : const Color(0xFF263238))
                     : (hasPunches
                         ? (isDark ? const Color(0xFF1E1B18) : Colors.white)
-                        : isLeave
-                            ? (isDark ? const Color(0xFF1A2233) : const Color(0xFFE3F2FD))
-                            : isHoliday
-                                ? (isDark ? const Color(0xFF221A30) : const Color(0xFFF3E5F5))
-                                : isAbsent
-                                    ? (isDark ? const Color(0xFF1A1A1A) : const Color(0xFFF5F5F5))
-                                    : (isDark ? const Color(0xFF151311) : const Color(0xFFF1F5F9))),
+                        : isWfh
+                            ? (isDark ? const Color(0xFF132A26) : const Color(0xFFE6FFFA))
+                            : isLeave
+                                ? (isDark ? const Color(0xFF1A2233) : const Color(0xFFE3F2FD))
+                                : isHoliday
+                                    ? (isDark ? const Color(0xFF221A30) : const Color(0xFFF3E5F5))
+                                    : isAbsent
+                                        ? (isDark ? const Color(0xFF1A1A1A) : const Color(0xFFF5F5F5))
+                                        : (isDark ? const Color(0xFF151311) : const Color(0xFFF1F5F9))),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
                   color: selected
                       ? (isDark ? const Color(0xFFC5A059) : const Color(0xFF263238))
                       : (hasPunches
                           ? (isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC))
-                          : isLeave
-                              ? (isDark ? Colors.blue.withValues(alpha: 0.25) : Colors.blue.shade200)
-                              : isHoliday
-                                  ? (isDark ? Colors.purple.withValues(alpha: 0.25) : Colors.purple.shade100)
-                                  : isAbsent
-                                      ? (isDark ? Colors.grey.withValues(alpha: 0.25) : Colors.grey.shade300)
-                                      : (isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.03))),
+                          : isWfh
+                              ? (isDark ? const Color(0xFF0D9488).withValues(alpha: 0.4) : const Color(0xFF5EEAD4))
+                              : isLeave
+                                  ? (isDark ? Colors.blue.withValues(alpha: 0.25) : Colors.blue.shade200)
+                                  : isHoliday
+                                      ? (isDark ? Colors.purple.withValues(alpha: 0.25) : Colors.purple.shade100)
+                                      : isAbsent
+                                          ? (isDark ? Colors.grey.withValues(alpha: 0.25) : Colors.grey.shade300)
+                                          : (isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.03))),
                   width: selected ? 2.0 : 1.2,
                 ),
                 boxShadow: selected
@@ -941,9 +952,10 @@ class _DayDetail extends StatelessWidget {
   Widget build(BuildContext context) {
     final summary = day.summary;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isWfh = summary.isWfh || (summary.dayStatus ?? '').toUpperCase() == 'WFH';
     final isLeave = summary.isLeave;
     final isHoliday = summary.isHoliday;
-    final isAbsent = summary.isAbsent && !isLeave;
+    final isAbsent = summary.isAbsent && !isLeave && !isWfh;
 
     // Convert total minutes to hours & minutes format
     final int hours = summary.totalMinutes ~/ 60;
@@ -1128,6 +1140,53 @@ class _DayDetail extends StatelessWidget {
                   ],
                 ),
               ),
+            ] else if (isWfh) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0D9488).withValues(alpha: isDark ? 0.15 : 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFF0D9488), width: 1.2),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.home_work_rounded, size: 18, color: Color(0xFF0D9488)),
+                        SizedBox(width: 8),
+                        Text(
+                          'WORK FROM HOME (WFH)',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF0D9488),
+                            letterSpacing: 0.6,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Approved Work From Home',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: isDark ? Colors.white : const Color(0xFF212F3D),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'This day is marked as approved Work From Home in your attendance record.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? Colors.white70 : const Color(0xFF607D8B),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ] else if (isLeave) ...[
               Container(
                 width: double.infinity,
@@ -1277,9 +1336,11 @@ class _DayDetail extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 child: Text(
-                  isLeave
-                      ? 'No punches — marked as approved leave.'
-                      : 'No punches recorded for this day.',
+                  isWfh
+                      ? 'Approved Work From Home — office punches not required.'
+                      : isLeave
+                          ? 'No punches — marked as approved leave.'
+                          : 'No punches recorded for this day.',
                   style: TextStyle(
                     fontSize: 13,
                     color: isDark ? Colors.white30 : const Color(0xFF607D8B).withValues(alpha: 0.6),

@@ -161,6 +161,7 @@ crmRouter.delete('/campaigns/:id', generalCrmGuard, crmController.deleteCampaign
 crmRouter.get('/leads', generalCrmGuard, crmController.getLeads);
 crmRouter.post('/leads', generalCrmGuard, crmController.createLead);
 crmRouter.post('/leads/import-excel', generalCrmGuard, upload.single('file'), crmController.importExcel);
+crmRouter.post('/leads/:id/transfer', generalCrmGuard, crmController.transferLead);
 crmRouter.patch('/leads/:id/status', generalCrmGuard, crmController.updateLeadStatus);
 crmRouter.patch('/leads/:id', generalCrmGuard, crmController.updateLead);
 crmRouter.post('/leads/:id/whatsapp', generalCrmGuard, crmController.sendLeadWhatsapp);

@@ -408,6 +408,8 @@ export const crmService = {
         startDate: dto.startDate ? new Date(dto.startDate) : null,
         module,
         scope,
+        assignedTelecallerIds: (dto.assignedTelecallerIds || []).map(Number).filter((n) => !isNaN(n) && n > 0),
+        assignmentMode: dto.assignmentMode || 'ROUND_ROBIN',
         isActive: true,
       },
       include: {
@@ -476,6 +478,10 @@ export const crmService = {
         ...(dto.description !== undefined && { description: dto.description?.trim() || null }),
         ...(dto.startDate !== undefined && { startDate: dto.startDate ? new Date(dto.startDate) : null }),
         ...(dto.isActive !== undefined && { isActive: dto.isActive }),
+        ...(dto.assignedTelecallerIds !== undefined && {
+          assignedTelecallerIds: (dto.assignedTelecallerIds || []).map(Number).filter((n) => !isNaN(n) && n > 0),
+        }),
+        ...(dto.assignmentMode !== undefined && { assignmentMode: dto.assignmentMode }),
       },
       include: {
         project: { select: { id: true, name: true } },
@@ -613,6 +619,43 @@ export const crmService = {
 
     const campaignScope = campaign.scope || 'NB_DEVELOPER';
 
+    // Campaign-specific telecaller routing
+    let webhookAssignedTelecallerId: number | null = null;
+    const campaignAssignedIds = Array.isArray((campaign as any).assignedTelecallerIds)
+      ? (campaign as any).assignedTelecallerIds.map(Number).filter((n: number) => !isNaN(n) && n > 0)
+      : [];
+
+    if (campaignAssignedIds.length > 0) {
+      if ((campaign as any).assignmentMode === 'SPECIFIC') {
+        webhookAssignedTelecallerId = campaignAssignedIds[0];
+      } else {
+        // Round-robin among campaign telecallers (pick least loaded in this campaign)
+        const counts = await prisma.crmLead.groupBy({
+          by: ['telecallerId'],
+          where: {
+            campaignId: campaign.id,
+            telecallerId: { in: campaignAssignedIds },
+            isDeleted: false,
+          },
+          _count: { id: true },
+        });
+        const countMap = new Map<number, number>();
+        for (const c of counts) {
+          if (c.telecallerId) countMap.set(c.telecallerId, c._count.id);
+        }
+        let minCount = Infinity;
+        let selectedId = campaignAssignedIds[0];
+        for (const id of campaignAssignedIds) {
+          const count = countMap.get(id) || 0;
+          if (count < minCount) {
+            minCount = count;
+            selectedId = id;
+          }
+        }
+        webhookAssignedTelecallerId = selectedId;
+      }
+    }
+
     const lead = await prisma.crmLead.create({
       data: {
         scope: campaignScope,
@@ -620,13 +663,20 @@ export const crmService = {
         phone: rawPhone || '0000000000',
         name,
         status: CrmLeadStatus.NOT_STARTED,
-        customFields: normalizedPayload,
+        customFields: {
+          ...normalizedPayload,
+          ...(webhookAssignedTelecallerId ? { allocatedAt: new Date().toISOString() } : {}),
+        },
+        telecallerId: webhookAssignedTelecallerId,
+        assignedToId: null,
         leadSource: 'WEBHOOK',
       },
     });
 
-    // Attempt automatic waiting queue dispatch to active telecaller with capacity
-    await this.dispatchWaitingQueue(campaignScope);
+    // If no campaign-specific telecaller was configured, use waiting queue / global auto-dispatch
+    if (!webhookAssignedTelecallerId) {
+      await this.dispatchWaitingQueue(campaignScope);
+    }
 
     // WhatsApp Automation: Auto-welcome message with brochure on new webhook lead
     whatsappService
@@ -1077,14 +1127,13 @@ export const crmService = {
     const requestedSource = (dto.leadSource || custom.leadSource || custom.lead_source || 'EXCEL').toString().toUpperCase();
     const finalSource = requestedSource.includes('WEBHOOK') || requestedSource.includes('META') ? 'WEBHOOK' : 'EXCEL';
 
-    let assignedTelecallerId = dto.telecallerId || telecallerId;
-    if (assignedTelecallerId) {
-      custom.assignedAt = new Date().toISOString();
+    let allocatedTelecallerId = dto.telecallerId || telecallerId;
+    if (allocatedTelecallerId) {
+      custom.allocatedAt = new Date().toISOString();
     }
 
-    const effectiveAssignedId = dto.assignedToId || assignedTelecallerId;
     const initialStatus = (dto.status as CrmLeadStatus) ||
-      (effectiveAssignedId ? CrmLeadStatus.ASSIGNED : CrmLeadStatus.NOT_STARTED);
+      (dto.assignedToId ? CrmLeadStatus.ASSIGNED : CrmLeadStatus.NOT_STARTED);
 
     const newLead = await prisma.crmLead.create({
       data: {
@@ -1095,8 +1144,8 @@ export const crmService = {
         status: initialStatus,
         customFields: custom,
         leadSource: finalSource,
-        assignedToId: effectiveAssignedId,
-        telecallerId: assignedTelecallerId,
+        assignedToId: dto.assignedToId || null,
+        telecallerId: allocatedTelecallerId || null,
         createdById,
       },
       include: {
@@ -1123,8 +1172,8 @@ export const crmService = {
       })
       .catch((err) => console.error('[CRM WhatsApp Hook Error - Manual Lead]:', err));
 
-    // If lead was not explicitly assigned, dispatch waiting queue
-    if (!effectiveAssignedId) {
+    // If lead was not explicitly allocated to a telecaller, dispatch waiting queue
+    if (!allocatedTelecallerId) {
       await this.dispatchWaitingQueue(scope, subOrganization);
     }
 
@@ -1138,6 +1187,10 @@ export const crmService = {
     campaignId?: string,
     scope: string = 'NB_DEVELOPER',
     subOrganization?: string | null,
+    options?: {
+      assignmentMode?: 'SPECIFIC' | 'ROUND_ROBIN' | 'UNASSIGNED';
+      assignedTelecallerIds?: number[];
+    },
   ) {
     const workbook = xlsx.read(fileBuffer, { type: 'buffer' });
     const firstSheetName = workbook.SheetNames[0];
@@ -1225,28 +1278,38 @@ export const crmService = {
         let rowTelecallerId = telecallerId;
         let rowAssignedToId: number | undefined = undefined;
 
-        if (assignedHeaderValue) {
+        // Custom allocation options passed from upload dialog
+        if (options?.assignmentMode === 'ROUND_ROBIN' && options.assignedTelecallerIds && options.assignedTelecallerIds.length > 0) {
+          const targetId = options.assignedTelecallerIds[leadsToInsert.length % options.assignedTelecallerIds.length];
+          rowTelecallerId = targetId;
+          customFields.allocatedAt = new Date().toISOString();
+        } else if (options?.assignmentMode === 'SPECIFIC' && options.assignedTelecallerIds && options.assignedTelecallerIds.length > 0) {
+          const targetId = options.assignedTelecallerIds[0];
+          rowTelecallerId = targetId;
+          customFields.allocatedAt = new Date().toISOString();
+        } else if (options?.assignmentMode === 'UNASSIGNED') {
+          rowTelecallerId = undefined;
+        }
+
+        if (assignedHeaderValue && !rowTelecallerId) {
           const matched = empLookup.get(assignedHeaderValue.toLowerCase().trim()) ||
             (!isNaN(Number(assignedHeaderValue)) ? Number(assignedHeaderValue) : undefined);
           if (matched) {
             rowTelecallerId = matched;
-            rowAssignedToId = matched;
-            customFields.assignedAt = new Date().toISOString();
+            customFields.allocatedAt = new Date().toISOString();
           }
         }
-
-        const effectiveAssignedId = rowAssignedToId || rowTelecallerId;
 
         leadsToInsert.push({
           campaignId: targetCampaignId,
           scope: campaignScope,
           phone: phone || 'N/A',
           name: name || 'Unnamed Lead',
-          status: effectiveAssignedId ? CrmLeadStatus.ASSIGNED : CrmLeadStatus.NOT_STARTED,
+          status: CrmLeadStatus.NOT_STARTED,
           customFields,
           leadSource: 'EXCEL',
           telecallerId: rowTelecallerId,
-          assignedToId: effectiveAssignedId,
+          assignedToId: null,
           createdById,
         });
       }
@@ -1572,6 +1635,98 @@ export const crmService = {
       }
     } catch (whErr) {
       console.error('[CRM WhatsApp Hook Error in updateLead]:', whErr);
+    }
+
+    return updated;
+  },
+
+  async transferLead(
+    leadId: string,
+    targetTelecallerId: number,
+    remarks?: string,
+    userContext?: { userId?: string; employeeId?: number; role?: string; username?: string },
+  ) {
+    const existing = await prisma.crmLead.findUnique({
+      where: { id: leadId },
+      include: {
+        telecaller: { include: { generalInfo: true } },
+        assignedTo: { include: { generalInfo: true } },
+      },
+    });
+    if (!existing) throw new Error('Lead not found');
+
+    const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(
+      userContext?.role?.toUpperCase() || ''
+    );
+    const isCurrentTelecaller = userContext?.employeeId != null && (
+      userContext.employeeId === existing.telecallerId ||
+      userContext.employeeId === existing.assignedToId
+    );
+
+    if (!isAdmin && !isCurrentTelecaller) {
+      throw new Error('You do not have permission to transfer this lead. Only the currently allocated telecaller or an Admin can transfer it.');
+    }
+
+    if (existing.telecallerId === targetTelecallerId) {
+      throw new Error('Lead is already allocated to this telecaller.');
+    }
+
+    const targetEmp = await prisma.employee.findUnique({
+      where: { id: targetTelecallerId },
+      include: { generalInfo: true, user: true },
+    });
+    if (!targetEmp) throw new Error('Target telecaller employee not found');
+
+    const fromName = existing.telecaller?.generalInfo?.fullName || (existing.telecallerId ? `Telecaller #${existing.telecallerId}` : 'Waiting List / Unallocated');
+    const toName = targetEmp.generalInfo?.fullName || targetEmp.user?.username || `Telecaller #${targetTelecallerId}`;
+
+    const existingCustom = (existing.customFields as Record<string, any>) || {};
+    const transferHistory = Array.isArray(existingCustom.transferHistory) ? [...existingCustom.transferHistory] : [];
+    transferHistory.push({
+      fromEmployeeId: existing.telecallerId || null,
+      fromName,
+      toEmployeeId: targetTelecallerId,
+      toName,
+      transferredBy: userContext?.userId || 'SYSTEM',
+      transferredByName: userContext?.username || userContext?.role || 'Admin',
+      transferredAt: new Date().toISOString(),
+      remarks: remarks?.trim() || null,
+    });
+
+    const updated = await prisma.crmLead.update({
+      where: { id: leadId },
+      data: {
+        telecallerId: targetTelecallerId,
+        customFields: {
+          ...existingCustom,
+          transferHistory,
+          allocatedAt: new Date().toISOString(),
+          lastTransferredAt: new Date().toISOString(),
+          lastTransferredFrom: fromName,
+          lastTransferredTo: toName,
+        },
+      },
+      include: {
+        telecaller: { include: { generalInfo: true } },
+        assignedTo: { include: { generalInfo: true } },
+      },
+    });
+
+    try {
+      const now = new Date();
+      await prisma.crmFollowUp.create({
+        data: {
+          leadId,
+          scheduledDate: now,
+          scheduledTime: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
+          remarks: `[LEAD TRANSFERRED] Transferred from ${fromName} to ${toName}. Reason: ${remarks?.trim() || 'Internal re-allocation'}`,
+          status: 'COMPLETED',
+          createdById: userContext?.userId || null,
+          assignedToId: targetTelecallerId,
+        },
+      });
+    } catch (e) {
+      console.error('[CRM Lead Transfer Note Error]:', e);
     }
 
     return updated;

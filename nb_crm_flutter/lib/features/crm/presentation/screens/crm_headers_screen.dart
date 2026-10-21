@@ -635,6 +635,33 @@ class _CrmHeadersView extends StatelessWidget {
                               ),
                             ],
                           ),
+                          if (activeCamp.assignedTelecallerIds.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.people_alt_rounded, size: 13, color: Colors.blue),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        '${activeCamp.assignedTelecallerIds.length} Telecaller(s) Allocated (${activeCamp.assignmentMode == "SPECIFIC" ? "Specific" : "Round-Robin"})',
+                                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.blue),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                           const SizedBox(height: 10),
                           Row(
                             children: [
@@ -1107,139 +1134,339 @@ class _CrmHeadersView extends StatelessWidget {
     final adIdCtrl = TextEditingController();
     final descCtrl = TextEditingController();
     DateTime selectedDate = DateTime.now();
+    List<int> selectedTelecallerIds = [];
+    String assignmentMode = 'ROUND_ROBIN';
+    List<CrmSalesUser> employees = [];
+    bool employeesLoaded = false;
 
     showDialog(
       context: context,
       builder: (dialogCtx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: Text('Add Campaign — ${project.name}'),
-          content: SingleChildScrollView(
-            child: Container(
-              constraints: const BoxConstraints(maxWidth: 440),
-              width: double.maxFinite,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Campaign Name *', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 6),
-                  TextField(
-                    controller: nameCtrl,
-                    decoration: const InputDecoration(
-                      hintText: 'e.g. Meta Lead Ads, Google Search 2026',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
+        builder: (ctx, setDialogState) {
+          if (!employeesLoaded) {
+            context.read<CrmRepository>().getHrmsEmployees().then((list) {
+              if (dialogCtx.mounted) {
+                setDialogState(() {
+                  employees = list;
+                  employeesLoaded = true;
+                });
+              }
+            }).catchError((_) {});
+          }
 
-                  const Text('Ad ID (ad_id) *', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 6),
-                  TextField(
-                    controller: adIdCtrl,
-                    decoration: const InputDecoration(
-                      hintText: 'e.g. 2385194820194, AD_FB_01',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
+          final selectedEmployees = employees.where((e) => selectedTelecallerIds.contains(e.employeeId)).toList();
 
-                  const Text('Campaign Launch Date *', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 6),
-                  InkWell(
-                    onTap: () async {
-                      final picked = await showDatePicker(
+          return AlertDialog(
+            title: Text('Add Campaign — ${project.name}'),
+            content: SingleChildScrollView(
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 480),
+                width: double.maxFinite,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Campaign Name *', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: nameCtrl,
+                      decoration: const InputDecoration(
+                        hintText: 'e.g. Meta Lead Ads, Google Search 2026',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    const Text('Ad ID (ad_id) *', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: adIdCtrl,
+                      decoration: const InputDecoration(
+                        hintText: 'e.g. 2385194820194, AD_FB_01',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    const Text('Campaign Launch Date *', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 6),
+                    InkWell(
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: selectedDate,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime(2035),
+                        );
+                        if (picked != null) {
+                          setDialogState(() => selectedDate = picked);
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey.shade400),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(DateFormat('dd MMM yyyy').format(selectedDate)),
+                            const Icon(Icons.calendar_today_rounded, size: 18),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Campaign-wise Telecaller Allocation
+                    const Text('Allocate Telecaller(s) to this Campaign', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 2),
+                    const Text('Meta leads from this campaign will be allocated to these telecallers (Default status: Not Started)', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                    const SizedBox(height: 8),
+
+                    InkWell(
+                      onTap: () => _showTelecallerCheckboxDialog(
                         context: context,
-                        initialDate: selectedDate,
-                        firstDate: DateTime(2020),
-                        lastDate: DateTime(2035),
-                      );
-                      if (picked != null) {
-                        setDialogState(() => selectedDate = picked);
-                      }
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                        employees: employees,
+                        initialSelected: selectedTelecallerIds,
+                        onConfirmed: (updated) => setDialogState(() => selectedTelecallerIds = updated),
+                      ),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey.shade400),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.checklist_rounded, size: 18, color: Color(0xFF2563EB)),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                selectedTelecallerIds.isEmpty
+                                    ? 'Select telecallers with checkboxes...'
+                                    : '${selectedTelecallerIds.length} person(s) assigned (Click to modify)',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: selectedTelecallerIds.isEmpty ? FontWeight.normal : FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            const Icon(Icons.arrow_drop_down_rounded),
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (selectedEmployees.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: selectedEmployees.map((emp) {
+                          return Chip(
+                            avatar: CircleAvatar(
+                              radius: 10,
+                              child: Text(emp.fullName.isNotEmpty ? emp.fullName[0].toUpperCase() : '?', style: const TextStyle(fontSize: 10)),
+                            ),
+                            label: Text(emp.fullName, style: const TextStyle(fontSize: 11)),
+                            deleteIcon: const Icon(Icons.close, size: 14),
+                            onDeleted: () => setDialogState(() => selectedTelecallerIds.remove(emp.employeeId)),
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          const Text('Routing Mode: ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                          const SizedBox(width: 8),
+                          ChoiceChip(
+                            label: const Text('Round-Robin', style: TextStyle(fontSize: 11)),
+                            selected: assignmentMode == 'ROUND_ROBIN',
+                            onSelected: (val) => setDialogState(() => assignmentMode = 'ROUND_ROBIN'),
+                          ),
+                          const SizedBox(width: 6),
+                          ChoiceChip(
+                            label: const Text('Specific (First Person)', style: TextStyle(fontSize: 11)),
+                            selected: assignmentMode == 'SPECIFIC',
+                            onSelected: (val) => setDialogState(() => assignmentMode = 'SPECIFIC'),
+                          ),
+                        ],
+                      ),
+                    ],
+                    const SizedBox(height: 14),
+
+                    const Text('Description (Optional)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: descCtrl,
+                      maxLines: 2,
+                      decoration: const InputDecoration(
+                        hintText: 'e.g. Targeting 3 BHK buyers in Ahmedabad',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    Container(
+                      padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade400),
-                        borderRadius: BorderRadius.circular(4),
+                        color: primaryColor.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: primaryColor.withValues(alpha: 0.2)),
                       ),
                       child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(DateFormat('dd MMM yyyy').format(selectedDate)),
-                          const Icon(Icons.calendar_today_rounded, size: 18),
+                          Icon(Icons.info_outline_rounded, size: 18, color: primaryColor),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'A unique Webhook URL will be automatically generated upon creation.',
+                              style: TextStyle(fontSize: 12, color: primaryColor),
+                            ),
+                          ),
                         ],
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 14),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancel')),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: primaryColor, foregroundColor: Colors.white),
+                onPressed: () async {
+                  final name = nameCtrl.text.trim();
+                  final adId = adIdCtrl.text.trim();
+                  if (name.isEmpty || adId.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Please enter Campaign Name and Ad ID')),
+                    );
+                    return;
+                  }
 
-                  const Text('Description (Optional)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 6),
+                  Navigator.pop(dialogCtx);
+                  context.read<CrmHeadersBloc>().add(
+                        CrmHeadersCampaignCreated({
+                          'projectId': project.id,
+                          'name': name,
+                          'adId': adId,
+                          'startDate': selectedDate.toIso8601String(),
+                          'description': descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim(),
+                          'module': 'PRE_SALES',
+                          'assignedTelecallerIds': selectedTelecallerIds,
+                          'assignmentMode': assignmentMode,
+                        }),
+                      );
+                },
+                child: const Text('Create Campaign'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _showTelecallerCheckboxDialog({
+    required BuildContext context,
+    required List<CrmSalesUser> employees,
+    required List<int> initialSelected,
+    required Function(List<int>) onConfirmed,
+  }) {
+    List<int> tempSelected = List.from(initialSelected);
+    String searchQuery = '';
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setLocalState) {
+          final filtered = employees.where((e) {
+            if (searchQuery.isEmpty) return true;
+            return e.fullName.toLowerCase().contains(searchQuery.toLowerCase()) ||
+                (e.designation ?? '').toLowerCase().contains(searchQuery.toLowerCase());
+          }).toList();
+
+          return AlertDialog(
+            title: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Select Telecallers', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                TextButton(
+                  onPressed: () {
+                    setLocalState(() {
+                      if (tempSelected.length == employees.length) {
+                        tempSelected.clear();
+                      } else {
+                        tempSelected = employees.map((e) => e.employeeId).toList();
+                      }
+                    });
+                  },
+                  child: Text(tempSelected.length == employees.length ? 'Deselect All' : 'Select All'),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: 420,
+              height: 400,
+              child: Column(
+                children: [
                   TextField(
-                    controller: descCtrl,
-                    maxLines: 2,
                     decoration: const InputDecoration(
-                      hintText: 'e.g. Targeting 3 BHK buyers in Ahmedabad',
+                      hintText: 'Search by telecaller name or role...',
+                      prefixIcon: Icon(Icons.search, size: 20),
                       border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                     ),
+                    onChanged: (val) => setLocalState(() => searchQuery = val),
                   ),
-                  const SizedBox(height: 14),
-
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: primaryColor.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: primaryColor.withValues(alpha: 0.2)),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.info_outline_rounded, size: 18, color: primaryColor),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            'A unique Webhook URL will be automatically generated upon creation.',
-                            style: TextStyle(fontSize: 12, color: primaryColor),
+                  const SizedBox(height: 10),
+                  Expanded(
+                    child: filtered.isEmpty
+                        ? const Center(child: Text('No telecallers match search'))
+                        : ListView.builder(
+                            itemCount: filtered.length,
+                            itemBuilder: (ctx, idx) {
+                              final emp = filtered[idx];
+                              final isChecked = tempSelected.contains(emp.employeeId);
+                              return CheckboxListTile(
+                                value: isChecked,
+                                title: Text(emp.fullName, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                                subtitle: Text('${emp.designation ?? ""} • #${emp.employeeId}', style: const TextStyle(fontSize: 11)),
+                                secondary: CircleAvatar(
+                                  radius: 14,
+                                  child: Text(emp.fullName.isNotEmpty ? emp.fullName[0].toUpperCase() : '?', style: const TextStyle(fontSize: 11)),
+                                ),
+                                dense: true,
+                                onChanged: (val) {
+                                  setLocalState(() {
+                                    if (val == true) {
+                                      tempSelected.add(emp.employeeId);
+                                    } else {
+                                      tempSelected.remove(emp.employeeId);
+                                    }
+                                  });
+                                },
+                              );
+                            },
                           ),
-                        ),
-                      ],
-                    ),
                   ),
                 ],
               ),
             ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancel')),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: primaryColor, foregroundColor: Colors.white),
-              onPressed: () async {
-                final name = nameCtrl.text.trim();
-                final adId = adIdCtrl.text.trim();
-                if (name.isEmpty || adId.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Please enter Campaign Name and Ad ID')),
-                  );
-                  return;
-                }
-
-                Navigator.pop(dialogCtx);
-                context.read<CrmHeadersBloc>().add(
-                      CrmHeadersCampaignCreated({
-                        'projectId': project.id,
-                        'name': name,
-                        'adId': adId,
-                        'startDate': selectedDate.toIso8601String(),
-                        'description': descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim(),
-                        'module': 'PRE_SALES',
-                      }),
-                    );
-              },
-              child: const Text('Create Campaign'),
-            ),
-          ],
-        ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancel')),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(dialogCtx);
+                  onConfirmed(tempSelected);
+                },
+                child: Text('Confirm (${tempSelected.length})'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -1517,54 +1744,158 @@ class _CrmHeadersView extends StatelessWidget {
     final nameCtrl = TextEditingController(text: camp.name);
     final adIdCtrl = TextEditingController(text: camp.adId ?? '');
     final descCtrl = TextEditingController(text: camp.description ?? '');
+    List<int> selectedTelecallerIds = List.from(camp.assignedTelecallerIds);
+    String assignmentMode = camp.assignmentMode.isNotEmpty ? camp.assignmentMode : 'ROUND_ROBIN';
+    List<CrmSalesUser> employees = [];
+    bool employeesLoaded = false;
 
     showDialog(
       context: context,
-      builder: (dialogCtx) => AlertDialog(
-        title: Text('Edit Campaign — ${camp.name}'),
-        content: Container(
-          constraints: const BoxConstraints(maxWidth: 440),
-          width: double.maxFinite,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameCtrl,
-                decoration: const InputDecoration(labelText: 'Campaign Name *', border: OutlineInputBorder()),
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          if (!employeesLoaded) {
+            context.read<CrmRepository>().getHrmsEmployees().then((list) {
+              if (dialogCtx.mounted) {
+                setDialogState(() {
+                  employees = list;
+                  employeesLoaded = true;
+                });
+              }
+            }).catchError((_) {});
+          }
+
+          final selectedEmployees = employees.where((e) => selectedTelecallerIds.contains(e.employeeId)).toList();
+
+          return AlertDialog(
+            title: Text('Edit Campaign — ${camp.name}'),
+            content: SingleChildScrollView(
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 480),
+                width: double.maxFinite,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextField(
+                      controller: nameCtrl,
+                      decoration: const InputDecoration(labelText: 'Campaign Name *', border: OutlineInputBorder()),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: adIdCtrl,
+                      decoration: const InputDecoration(labelText: 'Ad ID', border: OutlineInputBorder()),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Campaign-wise Telecaller Allocation
+                    const Text('Allocate Telecaller(s) to this Campaign', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 2),
+                    const Text('Meta leads from this campaign will be allocated to these telecallers (Default status: Not Started)', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                    const SizedBox(height: 8),
+
+                    InkWell(
+                      onTap: () => _showTelecallerCheckboxDialog(
+                        context: context,
+                        employees: employees,
+                        initialSelected: selectedTelecallerIds,
+                        onConfirmed: (updated) => setDialogState(() => selectedTelecallerIds = updated),
+                      ),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey.shade400),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.checklist_rounded, size: 18, color: Color(0xFF2563EB)),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                selectedTelecallerIds.isEmpty
+                                    ? 'Select telecallers with checkboxes...'
+                                    : '${selectedTelecallerIds.length} telecaller(s) allocated (Click to modify)',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: selectedTelecallerIds.isEmpty ? FontWeight.normal : FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            const Icon(Icons.arrow_drop_down_rounded),
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (selectedEmployees.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: selectedEmployees.map((emp) {
+                          return Chip(
+                            avatar: CircleAvatar(
+                              radius: 10,
+                              child: Text(emp.fullName.isNotEmpty ? emp.fullName[0].toUpperCase() : '?', style: const TextStyle(fontSize: 10)),
+                            ),
+                            label: Text(emp.fullName, style: const TextStyle(fontSize: 11)),
+                            deleteIcon: const Icon(Icons.close, size: 14),
+                            onDeleted: () => setDialogState(() => selectedTelecallerIds.remove(emp.employeeId)),
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          const Text('Routing Mode: ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                          const SizedBox(width: 8),
+                          ChoiceChip(
+                            label: const Text('Round-Robin', style: TextStyle(fontSize: 11)),
+                            selected: assignmentMode == 'ROUND_ROBIN',
+                            onSelected: (val) => setDialogState(() => assignmentMode = 'ROUND_ROBIN'),
+                          ),
+                          const SizedBox(width: 6),
+                          ChoiceChip(
+                            label: const Text('Specific (First Person)', style: TextStyle(fontSize: 11)),
+                            selected: assignmentMode == 'SPECIFIC',
+                            onSelected: (val) => setDialogState(() => assignmentMode = 'SPECIFIC'),
+                          ),
+                        ],
+                      ),
+                    ],
+                    const SizedBox(height: 14),
+
+                    TextField(
+                      controller: descCtrl,
+                      maxLines: 2,
+                      decoration: const InputDecoration(labelText: 'Description', border: OutlineInputBorder()),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: adIdCtrl,
-                decoration: const InputDecoration(labelText: 'Ad ID', border: OutlineInputBorder()),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: descCtrl,
-                maxLines: 2,
-                decoration: const InputDecoration(labelText: 'Description', border: OutlineInputBorder()),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancel')),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: primaryColor, foregroundColor: Colors.white),
+                onPressed: () {
+                  final name = nameCtrl.text.trim();
+                  if (name.isEmpty) return;
+                  Navigator.pop(dialogCtx);
+                  context.read<CrmHeadersBloc>().add(
+                    CrmHeadersCampaignUpdated(camp.id, {
+                      'name': name,
+                      'adId': adIdCtrl.text.trim().isEmpty ? null : adIdCtrl.text.trim(),
+                      'description': descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim(),
+                      'assignedTelecallerIds': selectedTelecallerIds,
+                      'assignmentMode': assignmentMode,
+                    }),
+                  );
+                },
+                child: const Text('Save'),
               ),
             ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: primaryColor, foregroundColor: Colors.white),
-            onPressed: () {
-              final name = nameCtrl.text.trim();
-              if (name.isEmpty) return;
-              Navigator.pop(dialogCtx);
-              context.read<CrmHeadersBloc>().add(
-                CrmHeadersCampaignUpdated(camp.id, {
-                  'name': name,
-                  'adId': adIdCtrl.text.trim().isEmpty ? null : adIdCtrl.text.trim(),
-                  'description': descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim(),
-                }),
-              );
-            },
-            child: const Text('Save'),
-          ),
-        ],
+          );
+        },
       ),
     );
   }

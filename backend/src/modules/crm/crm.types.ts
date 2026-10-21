@@ -23,6 +23,8 @@ export interface CreateCampaignDto {
   startDate?: string;
   module?: string;
   copyFromCampaignId?: string;
+  assignedTelecallerIds?: number[];
+  assignmentMode?: 'ROUND_ROBIN' | 'SPECIFIC';
 }
 
 export interface UpdateCampaignDto {
@@ -32,6 +34,13 @@ export interface UpdateCampaignDto {
   description?: string;
   startDate?: string;
   isActive?: boolean;
+  assignedTelecallerIds?: number[];
+  assignmentMode?: 'ROUND_ROBIN' | 'SPECIFIC';
+}
+
+export interface TransferLeadDto {
+  targetTelecallerId: number;
+  remarks?: string;
 }
 
 export interface MergeColumnsDto {

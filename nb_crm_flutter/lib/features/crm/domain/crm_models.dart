@@ -68,6 +68,8 @@ class CrmCampaign {
   final bool isActive;
   final int columnsCount;
   final int leadsCount;
+  final List<int> assignedTelecallerIds;
+  final String assignmentMode;
 
   const CrmCampaign({
     required this.id,
@@ -83,6 +85,8 @@ class CrmCampaign {
     this.isActive = true,
     this.columnsCount = 0,
     this.leadsCount = 0,
+    this.assignedTelecallerIds = const [],
+    this.assignmentMode = 'ROUND_ROBIN',
   });
 
   String get webhookUrl {
@@ -111,6 +115,11 @@ class CrmCampaign {
       leadsCount: (json['leadsCount'] as num?)?.toInt() ??
           ((json['_count'] is Map ? (json['_count'] as Map)['leads'] : null) as num?)?.toInt() ??
           0,
+      assignedTelecallerIds: (json['assignedTelecallerIds'] as List?)
+              ?.map((e) => (e as num).toInt())
+              .toList() ??
+          const [],
+      assignmentMode: json['assignmentMode'] as String? ?? 'ROUND_ROBIN',
     );
   }
 
@@ -125,6 +134,8 @@ class CrmCampaign {
         'startDate': startDate?.toIso8601String(),
         'module': module,
         'isActive': isActive,
+        'assignedTelecallerIds': assignedTelecallerIds,
+        'assignmentMode': assignmentMode,
       };
 }
 

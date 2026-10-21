@@ -3610,6 +3610,8 @@ model CrmCampaign {
   description  String?
   startDate    DateTime? @map("start_date")
   module       String    @default("PRE_SALES") @map("module")
+  assignedTelecallerIds Int[]     @default([]) @map("assigned_telecaller_ids")
+  assignmentMode        String?   @default("ROUND_ROBIN") @map("assignment_mode")
   isActive     Boolean   @default(true) @map("is_active")
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")

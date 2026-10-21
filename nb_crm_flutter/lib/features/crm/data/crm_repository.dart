@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
@@ -251,12 +252,24 @@ class CrmRepository {
     Uint8List fileBytes,
     String fileName, {
     String? campaignId,
+    String? assignmentMode,
+    int? telecallerId,
+    List<int>? assignedTelecallerIds,
   }) async {
     final map = <String, dynamic>{
       'file': MultipartFile.fromBytes(fileBytes, filename: fileName),
     };
     if (campaignId != null && campaignId.isNotEmpty) {
       map['campaignId'] = campaignId;
+    }
+    if (assignmentMode != null && assignmentMode.isNotEmpty) {
+      map['assignmentMode'] = assignmentMode;
+    }
+    if (telecallerId != null && telecallerId > 0) {
+      map['telecallerId'] = telecallerId;
+    }
+    if (assignedTelecallerIds != null && assignedTelecallerIds.isNotEmpty) {
+      map['assignedTelecallerIds'] = jsonEncode(assignedTelecallerIds);
     }
 
     final formData = FormData.fromMap(map);
@@ -270,6 +283,24 @@ class CrmRepository {
       return Map<String, dynamic>.from(res.data!['data'] as Map);
     }
     return {'count': 0, 'message': 'Upload completed'};
+  }
+
+  Future<Map<String, dynamic>> transferLead(
+    String leadId, {
+    required int targetTelecallerId,
+    String? remarks,
+  }) async {
+    final res = await _dio.dio.post<Map<String, dynamic>>(
+      'crm/leads/$leadId/transfer',
+      data: {
+        'targetTelecallerId': targetTelecallerId,
+        if (remarks != null && remarks.isNotEmpty) 'remarks': remarks,
+      },
+    );
+    if (res.data != null && res.data!['data'] is Map) {
+      return Map<String, dynamic>.from(res.data!['data'] as Map);
+    }
+    return {'status': 'success'};
   }
 
   Future<CrmLead> updateLeadStatus(

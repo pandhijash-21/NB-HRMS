@@ -127,12 +127,44 @@ class CrmLeadsLeadMovedToBin extends CrmLeadsEvent {
 }
 
 class CrmLeadsExcelImported extends CrmLeadsEvent {
-  const CrmLeadsExcelImported(this.fileBytes, this.fileName);
+  const CrmLeadsExcelImported(
+    this.fileBytes,
+    this.fileName, {
+    this.campaignId,
+    this.assignmentMode,
+    this.telecallerId,
+    this.assignedTelecallerIds,
+  });
   final Uint8List fileBytes;
   final String fileName;
+  final String? campaignId;
+  final String? assignmentMode;
+  final int? telecallerId;
+  final List<int>? assignedTelecallerIds;
 
   @override
-  List<Object?> get props => [fileBytes, fileName];
+  List<Object?> get props => [
+        fileBytes,
+        fileName,
+        campaignId,
+        assignmentMode,
+        telecallerId,
+        assignedTelecallerIds,
+      ];
+}
+
+class CrmLeadTransferRequested extends CrmLeadsEvent {
+  const CrmLeadTransferRequested({
+    required this.leadId,
+    required this.targetTelecallerId,
+    this.remarks,
+  });
+  final String leadId;
+  final int targetTelecallerId;
+  final String? remarks;
+
+  @override
+  List<Object?> get props => [leadId, targetTelecallerId, remarks];
 }
 
 class CrmLeadsFollowUpFilterChanged extends CrmLeadsEvent {
@@ -375,6 +407,7 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
     on<CrmLeadsLeadStatusUpdated>(_onLeadStatusUpdated);
     on<CrmLeadsLeadMovedToBin>(_onLeadMovedToBin);
     on<CrmLeadsExcelImported>(_onExcelImported);
+    on<CrmLeadTransferRequested>(_onLeadTransferRequested);
     on<CrmLeadsFollowUpFilterChanged>(_onFollowUpFilterChanged);
     on<CrmLeadsFollowUpScheduled>(_onFollowUpScheduled);
     on<CrmLeadsFollowUpCompleted>(_onFollowUpCompleted);
@@ -638,12 +671,41 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
       final res = await _crmRepository.importExcel(
         event.fileBytes,
         event.fileName,
-        campaignId: state.selectedCampaignId,
+        campaignId: event.campaignId ?? state.selectedCampaignId,
+        assignmentMode: event.assignmentMode,
+        telecallerId: event.telecallerId,
+        assignedTelecallerIds: event.assignedTelecallerIds,
       );
       final count = res['count'] ?? 0;
+      final msg = res['message'] ?? 'Imported $count leads';
       emit(state.copyWith(
         isActing: false,
-        actionSuccessMessage: 'Imported $count leads',
+        actionSuccessMessage: msg,
+      ));
+      await _fetchData(
+        emit,
+        projectId: state.selectedProjectId,
+        campaignId: event.campaignId ?? state.selectedCampaignId,
+      );
+    } catch (e) {
+      emit(state.copyWith(isActing: false, errorMessage: e.toString()));
+    }
+  }
+
+  Future<void> _onLeadTransferRequested(
+    CrmLeadTransferRequested event,
+    Emitter<CrmLeadsState> emit,
+  ) async {
+    emit(state.copyWith(isActing: true));
+    try {
+      await _crmRepository.transferLead(
+        event.leadId,
+        targetTelecallerId: event.targetTelecallerId,
+        remarks: event.remarks,
+      );
+      emit(state.copyWith(
+        isActing: false,
+        actionSuccessMessage: 'Lead transferred successfully',
       ));
       await _fetchData(
         emit,

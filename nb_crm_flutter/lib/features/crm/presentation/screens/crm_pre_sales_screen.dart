@@ -267,12 +267,12 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                         children: [
                           const Icon(Icons.coffee_rounded, color: Colors.white, size: 20),
                           const SizedBox(width: 12),
-                          Expanded(
+                          const Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Text(
+                                Text(
                                   'Status: On Break (Inactive for 5 minutes)',
                                   style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
                                 ),
@@ -923,8 +923,6 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                       columns: [
                         const DataColumn(label: Text('#', style: TextStyle(fontWeight: FontWeight.bold))),
                         const DataColumn(label: Text('Flow', style: TextStyle(fontWeight: FontWeight.bold))),
-                        if (isFinserve)
-                          const DataColumn(label: Text('Sales Manager', style: TextStyle(fontWeight: FontWeight.bold))),
                         const DataColumn(
                           label: Row(
                             children: [
@@ -935,7 +933,34 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                           ),
                         ),
                         const DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
-                        const DataColumn(label: Text('Allocated To', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(
+                          label: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text('Allocated To', style: TextStyle(fontWeight: FontWeight.bold)),
+                              const SizedBox(width: 4),
+                              Tooltip(
+                                message: 'Allocated To: Telecaller responsible for calling, qualification, and follow-ups. Click transfer button to re-allocate.',
+                                child: Icon(Icons.info_outline_rounded, size: 15, color: textMuted),
+                              ),
+                            ],
+                          ),
+                        ),
+                        DataColumn(
+                          label: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(isFinserve ? 'Assigned Manager' : 'Assigned To', style: const TextStyle(fontWeight: FontWeight.bold)),
+                              const SizedBox(width: 4),
+                              Tooltip(
+                                message: isFinserve
+                                    ? 'Assigned Manager: Loan Officer / Sales Manager assigned for branch meeting, document processing, and closing.'
+                                    : 'Assigned To: Sales Representative assigned by Visitor Desk when visitor visits site.',
+                                child: Icon(Icons.info_outline_rounded, size: 15, color: textMuted),
+                              ),
+                            ],
+                          ),
+                        ),
                         ...columns.map((c) {
                           String labelText = c.label;
                           if (isFinserve) {
@@ -955,7 +980,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                         final lead = filteredLeads[index];
 
                         // Telecaller Limitation:
-                        // In Real Estate CRM, once assigned, telecallers have view-only access.
+                        // In Real Estate CRM, once assigned by Visitor Desk, telecallers have view-only access.
                         // In Finserve CRM, telecallers can assign and manage leads with Sales Managers.
                         final isAssigned = lead.assignedToId != null;
                         final isAssignedSalesRep = userEmployeeId != null && userEmployeeId == lead.assignedToId;
@@ -984,54 +1009,6 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                     ),
                             ),
 
-                            // Sales Manager Assignment Column (Finserve CRM)
-                            if (isFinserve)
-                              DataCell(
-                                InkWell(
-                                  borderRadius: BorderRadius.circular(8),
-                                  onTap: () => _showAssignSalesManagerModal(context, lead, salesUsers),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                    decoration: BoxDecoration(
-                                      color: lead.assignedToId != null
-                                          ? const Color(0xFF2563EB).withValues(alpha: 0.12)
-                                          : (isDark ? Colors.white.withValues(alpha: 0.06) : Colors.grey.withValues(alpha: 0.12)),
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(
-                                        color: lead.assignedToId != null
-                                            ? const Color(0xFF2563EB).withValues(alpha: 0.35)
-                                            : (isDark ? Colors.white12 : Colors.grey.withValues(alpha: 0.25)),
-                                      ),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          lead.assignedToId != null ? Icons.person_rounded : Icons.person_add_outlined,
-                                          size: 13,
-                                          color: lead.assignedToId != null ? const Color(0xFF2563EB) : (isDark ? Colors.white70 : Colors.grey.shade700),
-                                        ),
-                                        const SizedBox(width: 5),
-                                        Text(
-                                          lead.assignedToName ?? 'Assign Manager',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                            color: lead.assignedToId != null ? const Color(0xFF2563EB) : (isDark ? Colors.white70 : Colors.grey.shade700),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Icon(
-                                          Icons.arrow_drop_down_rounded,
-                                          size: 16,
-                                          color: lead.assignedToId != null ? const Color(0xFF2563EB) : (isDark ? Colors.white70 : Colors.grey.shade700),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-
                             // Elision Phone Icon Column
                             DataCell(
                               IconButton(
@@ -1048,74 +1025,149 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                               ),
                             ),
 
-                            // Status Column (4 telecaller statuses)
+                            // Status Column (Default NOT_STARTED, or ASSIGNED when Visitor Desk assigns)
                             DataCell(
                               _buildStatusDropdown(context, lead, canAlterLead, salesUsers),
                             ),
 
-                            // Allocated Agent Column
+                            // Allocated To Column (Telecaller with Transfer button)
                             DataCell(
-                              lead.isWaitingList
-                                  ? Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFD97706).withValues(alpha: 0.12),
-                                        borderRadius: BorderRadius.circular(6),
-                                        border: Border.all(color: const Color(0xFFD97706).withValues(alpha: 0.3)),
-                                      ),
-                                      child: const Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(Icons.hourglass_top_rounded, size: 12, color: Color(0xFFD97706)),
-                                          SizedBox(width: 4),
-                                          Text(
-                                            'Waiting List (WL)',
-                                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFFD97706)),
-                                          ),
-                                        ],
+                              (lead.telecallerName != null && lead.telecallerName!.isNotEmpty)
+                                  ? InkWell(
+                                      borderRadius: BorderRadius.circular(6),
+                                      onTap: () => _showTransferLeadModal(context, lead, salesUsers),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF16A34A).withValues(alpha: 0.12),
+                                          borderRadius: BorderRadius.circular(6),
+                                          border: Border.all(color: const Color(0xFF16A34A).withValues(alpha: 0.3)),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(Icons.headset_mic_rounded, size: 12, color: Color(0xFF16A34A)),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              lead.telecallerName!,
+                                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF16A34A)),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Tooltip(
+                                              message: 'Transfer this lead to another telecaller',
+                                              child: Container(
+                                                padding: const EdgeInsets.all(2),
+                                                decoration: BoxDecoration(
+                                                  color: const Color(0xFF16A34A).withValues(alpha: 0.2),
+                                                  borderRadius: BorderRadius.circular(4),
+                                                ),
+                                                child: const Icon(Icons.swap_horiz_rounded, size: 12, color: Color(0xFF16A34A)),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                     )
-                                  : (lead.telecallerName != null && lead.telecallerName!.isNotEmpty)
-                                      ? Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFF16A34A).withValues(alpha: 0.12),
-                                            borderRadius: BorderRadius.circular(6),
-                                            border: Border.all(color: const Color(0xFF16A34A).withValues(alpha: 0.3)),
+                                  : InkWell(
+                                      borderRadius: BorderRadius.circular(6),
+                                      onTap: () => _showTransferLeadModal(context, lead, salesUsers),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFD97706).withValues(alpha: 0.12),
+                                          borderRadius: BorderRadius.circular(6),
+                                          border: Border.all(color: const Color(0xFFD97706).withValues(alpha: 0.3)),
+                                        ),
+                                        child: const Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.hourglass_top_rounded, size: 12, color: Color(0xFFD97706)),
+                                            SizedBox(width: 4),
+                                            Text(
+                                              'Waiting List (WL)',
+                                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFFD97706)),
+                                            ),
+                                            SizedBox(width: 4),
+                                            Icon(Icons.swap_horiz_rounded, size: 12, color: Color(0xFFD97706)),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                            ),
+
+                            // Assigned To Column (Sales Representative / Finserve Manager)
+                            DataCell(
+                              isFinserve
+                                  ? InkWell(
+                                      borderRadius: BorderRadius.circular(8),
+                                      onTap: () => _showAssignSalesManagerModal(context, lead, salesUsers),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                        decoration: BoxDecoration(
+                                          color: lead.assignedToId != null
+                                              ? const Color(0xFF2563EB).withValues(alpha: 0.12)
+                                              : (isDark ? Colors.white.withValues(alpha: 0.06) : Colors.grey.withValues(alpha: 0.12)),
+                                          borderRadius: BorderRadius.circular(8),
+                                          border: Border.all(
+                                            color: lead.assignedToId != null
+                                                ? const Color(0xFF2563EB).withValues(alpha: 0.35)
+                                                : (isDark ? Colors.white12 : Colors.grey.withValues(alpha: 0.25)),
                                           ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              const Icon(Icons.headset_mic_rounded, size: 12, color: Color(0xFF16A34A)),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                lead.telecallerName!,
-                                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF16A34A)),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              lead.assignedToId != null ? Icons.person_rounded : Icons.person_add_outlined,
+                                              size: 13,
+                                              color: lead.assignedToId != null ? const Color(0xFF2563EB) : (isDark ? Colors.white70 : Colors.grey.shade700),
+                                            ),
+                                            const SizedBox(width: 5),
+                                            Text(
+                                              lead.assignedToName ?? 'Assign Manager',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w600,
+                                                color: lead.assignedToId != null ? const Color(0xFF2563EB) : (isDark ? Colors.white70 : Colors.grey.shade700),
                                               ),
-                                            ],
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Icon(
+                                              Icons.arrow_drop_down_rounded,
+                                              size: 16,
+                                              color: lead.assignedToId != null ? const Color(0xFF2563EB) : (isDark ? Colors.white70 : Colors.grey.shade700),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    )
+                                  : (lead.assignedToName != null && lead.assignedToName!.isNotEmpty)
+                                      ? Tooltip(
+                                          message: 'Assigned to Sales Representative by Visitor Desk',
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFF2563EB).withValues(alpha: 0.12),
+                                              borderRadius: BorderRadius.circular(6),
+                                              border: Border.all(color: const Color(0xFF2563EB).withValues(alpha: 0.35)),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(Icons.badge_rounded, size: 12, color: Color(0xFF2563EB)),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  lead.assignedToName!,
+                                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
+                                                ),
+                                              ],
+                                            ),
                                           ),
                                         )
-                                      : (lead.assignedToName != null && lead.assignedToName!.isNotEmpty)
-                                          ? Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFF2563EB).withValues(alpha: 0.12),
-                                                borderRadius: BorderRadius.circular(6),
-                                                border: Border.all(color: const Color(0xFF2563EB).withValues(alpha: 0.3)),
-                                              ),
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  const Icon(Icons.person_rounded, size: 12, color: Color(0xFF2563EB)),
-                                                  const SizedBox(width: 4),
-                                                  Text(
-                                                    lead.assignedToName!,
-                                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
-                                                  ),
-                                                ],
-                                              ),
-                                            )
-                                          : Text('—', style: TextStyle(color: textMuted)),
+                                      : Tooltip(
+                                          message: 'Awaiting client visit at Visitor Desk',
+                                          child: Text('—', style: TextStyle(color: textMuted)),
+                                        ),
                             ),
 
                             // Dynamic Columns (Honoring column visibility)
@@ -1177,6 +1229,11 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                       onPressed: () => _showAssignSalesManagerModal(context, lead, salesUsers),
                                     ),
                                   ],
+                                  IconButton(
+                                    icon: const Icon(Icons.swap_horiz_rounded, size: 18, color: Color(0xFF6366F1)),
+                                    tooltip: 'Transfer Lead to another Telecaller',
+                                    onPressed: () => _showTransferLeadModal(context, lead, salesUsers),
+                                  ),
                                   IconButton(
                                     icon: Icon(
                                       canAlterLead ? Icons.edit_outlined : Icons.lock_outline_rounded,
@@ -2848,18 +2905,14 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
         return;
       }
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Importing "${file.name}"...')),
-        );
-      }
-
-      context.read<CrmLeadsBloc>().add(
-            CrmLeadsExcelImported(
-              file.bytes!,
-              file.name,
-            ),
-          );
+      final leadsState = context.read<CrmLeadsBloc>().state;
+      _showExcelImportDialog(
+        context: context,
+        file: file,
+        campaigns: leadsState.campaigns,
+        salesUsers: leadsState.salesUsers,
+        defaultCampaignId: leadsState.selectedCampaignId,
+      );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -2867,6 +2920,682 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
         );
       }
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Dialog: Interactive Excel Lead Import & Assignment Configuration
+  // ---------------------------------------------------------------------------
+  void _showExcelImportDialog({
+    required BuildContext context,
+    required PlatformFile file,
+    required List<CrmCampaign> campaigns,
+    required List<CrmSalesUser> salesUsers,
+    required String? defaultCampaignId,
+  }) {
+    String? selectedCampaignId = defaultCampaignId ?? (campaigns.isNotEmpty ? campaigns.first.id : null);
+    String assignmentMode = 'ROUND_ROBIN';
+    int? specificTelecallerId;
+    List<int> multiSelectedTelecallerIds = [];
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setModalState) {
+          final selectedEmployees = salesUsers.where((u) => multiSelectedTelecallerIds.contains(u.employeeId)).toList();
+
+          return AlertDialog(
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF16A34A).withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.table_chart_rounded, color: Color(0xFF16A34A), size: 22),
+                ),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Import Excel Leads',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        'Choose campaign and assignment rules',
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            content: Container(
+              constraints: const BoxConstraints(maxWidth: 500),
+              width: double.maxFinite,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // File tag
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF16A34A).withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFF16A34A).withValues(alpha: 0.2)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.insert_drive_file_rounded, size: 20, color: Color(0xFF16A34A)),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              file.name,
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Text(
+                            '${(file.size / 1024).toStringAsFixed(1)} KB',
+                            style: const TextStyle(fontSize: 11, color: Colors.grey),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Target Campaign
+                    const Text('Assign to Campaign *', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 6),
+                    DropdownButtonFormField<String?>(
+                      isExpanded: true,
+                      initialValue: selectedCampaignId,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                        prefixIcon: Icon(Icons.campaign_rounded, size: 20),
+                      ),
+                      items: campaigns.map((c) {
+                        return DropdownMenuItem<String?>(
+                          value: c.id,
+                          child: Text('${c.name} (${c.code})', overflow: TextOverflow.ellipsis),
+                        );
+                      }).toList(),
+                      onChanged: (val) => setModalState(() => selectedCampaignId = val),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Lead Allocation Mode
+                    const Text(
+                      'Who should these leads be allocated to? (Telecaller) *',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 2),
+                    const Text(
+                      'Initial status is set to "Not Started". Status becomes "Assigned" once Visitor Desk assigns a sales representative.',
+                      style: TextStyle(fontSize: 11, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Mode 1: Round-Robin
+                    RadioListTile<String>(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      value: 'ROUND_ROBIN',
+                      groupValue: assignmentMode,
+                      title: const Text('Round-Robin across selected telecallers', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                      subtitle: const Text('Distribute incoming rows evenly among chosen telecallers', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                      onChanged: (val) => setModalState(() => assignmentMode = val ?? 'ROUND_ROBIN'),
+                    ),
+
+                    if (assignmentMode == 'ROUND_ROBIN') ...[
+                      Padding(
+                        padding: const EdgeInsets.only(left: 32, bottom: 8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            InkWell(
+                              onTap: () => _showTelecallerMultiSelectDialog(
+                                context: context,
+                                salesUsers: salesUsers,
+                                initialSelected: multiSelectedTelecallerIds,
+                                onConfirm: (updated) => setModalState(() => multiSelectedTelecallerIds = updated),
+                              ),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                decoration: BoxDecoration(
+                                  border: Border.all(color: Colors.grey.shade400),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.checklist_rounded, size: 18, color: Color(0xFF16A34A)),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        multiSelectedTelecallerIds.isEmpty
+                                            ? 'Click to select telecaller(s) with checkboxes...'
+                                            : '${multiSelectedTelecallerIds.length} telecaller(s) selected (Click to modify)',
+                                        style: TextStyle(
+                                          fontSize: 12.5,
+                                          fontWeight: multiSelectedTelecallerIds.isEmpty ? FontWeight.normal : FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                    const Icon(Icons.arrow_drop_down_rounded),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            if (selectedEmployees.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                children: selectedEmployees.map((emp) {
+                                  return Chip(
+                                    labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+                                    avatar: CircleAvatar(
+                                      radius: 10,
+                                      child: Text(emp.fullName.isNotEmpty ? emp.fullName[0].toUpperCase() : '?', style: const TextStyle(fontSize: 10)),
+                                    ),
+                                    label: Text(emp.fullName, style: const TextStyle(fontSize: 11)),
+                                    deleteIcon: const Icon(Icons.close, size: 14),
+                                    onDeleted: () => setModalState(() => multiSelectedTelecallerIds.remove(emp.employeeId)),
+                                  );
+                                }).toList(),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+
+                    // Mode 2: Specific Telecaller
+                    RadioListTile<String>(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      value: 'SPECIFIC',
+                      groupValue: assignmentMode,
+                      title: const Text('Allocate all leads to a specific telecaller', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                      subtitle: const Text('Every lead in this file is allocated to one telecaller', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                      onChanged: (val) => setModalState(() => assignmentMode = val ?? 'SPECIFIC'),
+                    ),
+
+                    if (assignmentMode == 'SPECIFIC') ...[
+                      Padding(
+                        padding: const EdgeInsets.only(left: 32, bottom: 8),
+                        child: DropdownButtonFormField<int?>(
+                          isExpanded: true,
+                          initialValue: specificTelecallerId,
+                          decoration: const InputDecoration(
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                            hintText: 'Choose specific telecaller...',
+                          ),
+                          items: salesUsers.map((u) {
+                            return DropdownMenuItem<int?>(
+                              value: u.employeeId,
+                              child: Text('${u.fullName} (#${u.employeeId})', overflow: TextOverflow.ellipsis),
+                            );
+                          }).toList(),
+                          onChanged: (val) => setModalState(() => specificTelecallerId = val),
+                        ),
+                      ),
+                    ],
+
+                    // Mode 3: Unassigned / Waiting list
+                    RadioListTile<String>(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      value: 'UNASSIGNED',
+                      groupValue: assignmentMode,
+                      title: const Text('Leave unallocated / Waiting list (WL)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                      subtitle: const Text('Leads will enter the waiting list or auto-dispatch queue', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                      onChanged: (val) => setModalState(() => assignmentMode = val ?? 'UNASSIGNED'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogCtx),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF16A34A),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                ),
+                icon: const Icon(Icons.upload_file_rounded, size: 18),
+                label: const Text('Import Leads'),
+                onPressed: () {
+                  if (assignmentMode == 'ROUND_ROBIN' && multiSelectedTelecallerIds.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Please select at least one telecaller for round-robin assignment or choose another mode')),
+                    );
+                    return;
+                  }
+                  if (assignmentMode == 'SPECIFIC' && specificTelecallerId == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Please select the specific telecaller to assign these leads to')),
+                    );
+                    return;
+                  }
+
+                  Navigator.pop(dialogCtx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Importing "${file.name}"...')),
+                  );
+
+                  context.read<CrmLeadsBloc>().add(
+                    CrmLeadsExcelImported(
+                      file.bytes!,
+                      file.name,
+                      campaignId: selectedCampaignId,
+                      assignmentMode: assignmentMode,
+                      telecallerId: assignmentMode == 'SPECIFIC' ? specificTelecallerId : null,
+                      assignedTelecallerIds: assignmentMode == 'ROUND_ROBIN' ? multiSelectedTelecallerIds : null,
+                    ),
+                  );
+                },
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Dialog: Reusable Multi-Select Telecallers with Checkboxes
+  // ---------------------------------------------------------------------------
+  void _showTelecallerMultiSelectDialog({
+    required BuildContext context,
+    required List<CrmSalesUser> salesUsers,
+    required List<int> initialSelected,
+    required void Function(List<int> updated) onConfirm,
+  }) {
+    List<int> tempSelected = List<int>.from(initialSelected);
+    String q = '';
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setDlgState) {
+          final filtered = salesUsers.where((u) {
+            final query = q.toLowerCase().trim();
+            if (query.isEmpty) return true;
+            return u.fullName.toLowerCase().contains(query) ||
+                (u.designation ?? '').toLowerCase().contains(query) ||
+                u.employeeId.toString().contains(query);
+          }).toList();
+
+          return AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.checklist_rounded, color: Color(0xFF16A34A)),
+                SizedBox(width: 8),
+                Text('Select Telecallers', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ],
+            ),
+            content: Container(
+              constraints: const BoxConstraints(maxWidth: 400),
+              width: double.maxFinite,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    onChanged: (val) => setDlgState(() => q = val),
+                    decoration: InputDecoration(
+                      hintText: 'Search telecaller...',
+                      prefixIcon: const Icon(Icons.search_rounded, size: 18),
+                      isDense: true,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      TextButton(
+                        onPressed: () => setDlgState(() {
+                          tempSelected = salesUsers.map((u) => u.employeeId).toList();
+                        }),
+                        child: const Text('Select All', style: TextStyle(fontSize: 12)),
+                      ),
+                      TextButton(
+                        onPressed: () => setDlgState(() {
+                          tempSelected.clear();
+                        }),
+                        child: const Text('Clear All', style: TextStyle(fontSize: 12)),
+                      ),
+                    ],
+                  ),
+                  const Divider(height: 1),
+                  SizedBox(
+                    height: 220,
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: filtered.length,
+                      itemBuilder: (ctx, i) {
+                        final u = filtered[i];
+                        final checked = tempSelected.contains(u.employeeId);
+                        return CheckboxListTile(
+                          dense: true,
+                          value: checked,
+                          title: Text(u.fullName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                          subtitle: Text(
+                            u.designation?.isNotEmpty == true ? '${u.designation} (#${u.employeeId})' : '#${u.employeeId}',
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                          onChanged: (val) {
+                            setDlgState(() {
+                              if (val == true) {
+                                tempSelected.add(u.employeeId);
+                              } else {
+                                tempSelected.remove(u.employeeId);
+                              }
+                            });
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancel')),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF16A34A), foregroundColor: Colors.white),
+                onPressed: () {
+                  Navigator.pop(dialogCtx);
+                  onConfirm(tempSelected);
+                },
+                child: Text('Done (${tempSelected.length})'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Modal: Transfer Lead to another Telecaller
+  // ---------------------------------------------------------------------------
+  void _showTransferLeadModal(
+    BuildContext context,
+    CrmLead lead,
+    List<CrmSalesUser> salesUsers,
+  ) {
+    int? selectedTelecallerId;
+    final remarksCtrl = TextEditingController();
+    String searchQuery = '';
+
+    final currentTelecallerId = lead.telecallerId;
+    final currentTelecallerName = (lead.telecallerName != null && lead.telecallerName!.isNotEmpty)
+        ? lead.telecallerName!
+        : 'Waiting List / Unallocated';
+
+    final candidates = salesUsers.where((u) => u.employeeId != currentTelecallerId).toList();
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setModalState) {
+          final isDark = Theme.of(ctx).brightness == Brightness.dark;
+
+          final filtered = candidates.where((u) {
+            final q = searchQuery.toLowerCase().trim();
+            if (q.isEmpty) return true;
+            return u.fullName.toLowerCase().contains(q) ||
+                (u.designation ?? '').toLowerCase().contains(q) ||
+                (u.role ?? '').toLowerCase().contains(q) ||
+                u.employeeId.toString().contains(q);
+          }).toList();
+
+          return AlertDialog(
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6366F1).withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.swap_horiz_rounded, color: Color(0xFF6366F1), size: 22),
+                ),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Transfer Allocated Telecaller',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        'Reassign lead calling & follow-ups to another telecaller',
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            content: Container(
+              constraints: const BoxConstraints(maxWidth: 480),
+              width: double.maxFinite,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF24201D) : const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: isDark ? Colors.white12 : Colors.grey.shade300),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.person_rounded, size: 16, color: Colors.grey),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  lead.name.isNotEmpty ? lead.name : 'Unnamed Lead',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF6366F1).withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  lead.phone.isNotEmpty ? '+91 ${lead.phone}' : 'No phone',
+                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF6366F1)),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const Divider(height: 16),
+                          Row(
+                            children: [
+                              const Text('Allocated Telecaller: ', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                              Text(
+                                currentTelecallerName,
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    const Text(
+                      'Select New Telecaller *',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 8),
+
+                    TextField(
+                      onChanged: (val) => setModalState(() => searchQuery = val),
+                      decoration: InputDecoration(
+                        hintText: 'Search by telecaller name or designation...',
+                        prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                        isDense: true,
+                        filled: true,
+                        fillColor: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey.shade100,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+
+                    Container(
+                      height: 180,
+                      decoration: BoxDecoration(
+                        border: Border.all(color: isDark ? Colors.white12 : Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: filtered.isEmpty
+                          ? const Center(
+                              child: Text('No matching telecallers found', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                            )
+                          : ListView.separated(
+                              shrinkWrap: true,
+                              itemCount: filtered.length,
+                              separatorBuilder: (_, __) => const Divider(height: 1),
+                              itemBuilder: (ctx, i) {
+                                final user = filtered[i];
+                                final isSelected = selectedTelecallerId == user.employeeId;
+                                return ListTile(
+                                  dense: true,
+                                  selected: isSelected,
+                                  selectedTileColor: const Color(0xFF6366F1).withValues(alpha: 0.12),
+                                  leading: CircleAvatar(
+                                    radius: 14,
+                                    backgroundColor: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                                    child: Text(
+                                      user.fullName.isNotEmpty ? user.fullName[0].toUpperCase() : '?',
+                                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF6366F1)),
+                                    ),
+                                  ),
+                                  title: Text(
+                                    user.fullName,
+                                    style: TextStyle(
+                                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  subtitle: Text(
+                                    user.designation?.isNotEmpty == true
+                                        ? '${user.designation} (#${user.employeeId})'
+                                        : 'Employee #${user.employeeId}',
+                                    style: const TextStyle(fontSize: 11),
+                                  ),
+                                  trailing: isSelected
+                                      ? const Icon(Icons.check_circle_rounded, color: Color(0xFF6366F1), size: 20)
+                                      : null,
+                                  onTap: () => setModalState(() => selectedTelecallerId = user.employeeId),
+                                );
+                              },
+                            ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    const Text(
+                      'Transfer Reason / Note (Optional)',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: remarksCtrl,
+                      maxLines: 2,
+                      decoration: const InputDecoration(
+                        hintText: 'e.g. Telecaller on leave, language preference, area re-assignment',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.info_outline_rounded, color: Colors.amber, size: 18),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Once transferred, this lead will be immediately removed from your part and assigned to the selected person.',
+                              style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogCtx),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF6366F1),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                ),
+                icon: const Icon(Icons.swap_horiz_rounded, size: 18),
+                label: const Text('Confirm Transfer'),
+                onPressed: () {
+                  if (selectedTelecallerId == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Please select a telecaller to transfer this lead to')),
+                    );
+                    return;
+                  }
+                  Navigator.pop(dialogCtx);
+                  context.read<CrmLeadsBloc>().add(
+                    CrmLeadTransferRequested(
+                      leadId: lead.id,
+                      targetTelecallerId: selectedTelecallerId!,
+                      remarks: remarksCtrl.text.trim().isEmpty ? null : remarksCtrl.text.trim(),
+                    ),
+                  );
+                },
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -3551,6 +4280,19 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   effectiveReadOnly ? 'Lead Details (Read-Only)' : 'Edit Lead: ${lead.name}',
                 ),
               ),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.swap_horiz_rounded, size: 16, color: Color(0xFF2563EB)),
+                label: const Text('Transfer', style: TextStyle(fontSize: 12, color: Color(0xFF2563EB))),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  side: const BorderSide(color: Color(0xFF2563EB)),
+                ),
+                onPressed: () {
+                  Navigator.pop(dialogCtx);
+                  _showTransferLeadModal(context, lead, salesUsers);
+                },
+              ),
             ],
           ),
           content: Container(
@@ -3585,10 +4327,76 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                     ),
                   ],
 
-                  // Assigned Sales User dropdown
-                  Text(
-                    isFinserve ? 'Assigned Sales Manager' : 'Assigned Sales Representative',
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                  // 1. Allocated Telecaller Section
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text('Allocated Telecaller', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                          const SizedBox(width: 4),
+                          Tooltip(
+                            message: 'Telecaller allocated for initial calling, lead qualification, and follow-ups.',
+                            child: Icon(Icons.info_outline_rounded, size: 14, color: Colors.grey.shade600),
+                          ),
+                        ],
+                      ),
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.swap_horiz_rounded, size: 14, color: Color(0xFF16A34A)),
+                        label: const Text('Transfer Telecaller', style: TextStyle(fontSize: 11, color: Color(0xFF16A34A))),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          side: const BorderSide(color: Color(0xFF16A34A)),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        onPressed: () {
+                          Navigator.pop(dialogCtx);
+                          _showTransferLeadModal(context, lead, salesUsers);
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(8),
+                      color: const Color(0xFF16A34A).withValues(alpha: 0.06),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.headset_mic_rounded, size: 16, color: Color(0xFF16A34A)),
+                        const SizedBox(width: 8),
+                        Text(
+                          (lead.telecallerName != null && lead.telecallerName!.isNotEmpty)
+                              ? lead.telecallerName!
+                              : 'Waiting List (Unallocated)',
+                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // 2. Assigned Sales User section
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        isFinserve ? 'Assigned Sales Manager' : 'Assigned Sales Representative (Visitor Desk)',
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(width: 4),
+                      Tooltip(
+                        message: isFinserve
+                            ? 'Sales Manager / Loan Officer assigned for branch meeting, document processing, and closing.'
+                            : 'Sales Representative assigned by Visitor Desk when client visits the site/office.',
+                        child: Icon(Icons.info_outline_rounded, size: 14, color: Colors.grey.shade600),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 6),
                   if (effectiveReadOnly)

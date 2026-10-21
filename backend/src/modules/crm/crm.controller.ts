@@ -229,6 +229,20 @@ export const crmController = {
       const authUser = (req as any).user;
       const isAdmin = isAdminRole(authUser?.roleName || authUser?.role);
       const campaignId = (req.body.campaignId || req.query.campaignId) as string | undefined;
+      const assignmentMode = (req.body.assignmentMode || 'ROUND_ROBIN') as 'SPECIFIC' | 'ROUND_ROBIN' | 'UNASSIGNED';
+
+      let assignedTelecallerIds: number[] | undefined = undefined;
+      if (req.body.assignedTelecallerIds) {
+        try {
+          const parsed = typeof req.body.assignedTelecallerIds === 'string'
+            ? JSON.parse(req.body.assignedTelecallerIds)
+            : req.body.assignedTelecallerIds;
+          if (Array.isArray(parsed)) {
+            assignedTelecallerIds = parsed.map(Number).filter((n) => !isNaN(n) && n > 0);
+          }
+        } catch (_) {}
+      }
+
       const explicitTelecallerId = req.body.telecallerId
         ? Number(req.body.telecallerId)
         : (isAdmin ? undefined : authUser?.employeeId);
@@ -240,10 +254,40 @@ export const crmController = {
         campaignId,
         getScope(req),
         authUser?.subOrganization,
+        {
+          assignmentMode,
+          assignedTelecallerIds,
+        },
       );
       res.json(ok(result));
     } catch (err: any) {
       res.status(400).json(fail(err.message || 'Failed to import Excel leads'));
+    }
+  },
+
+  async transferLead(req: Request, res: Response) {
+    try {
+      const id = String(req.params.id);
+      const { targetTelecallerId, remarks } = req.body;
+      if (!targetTelecallerId || isNaN(Number(targetTelecallerId))) {
+        return res.status(400).json(fail('Target telecaller ID is required'));
+      }
+      const authUser = (req as any).user;
+      const userContext = {
+        userId: authUser?.id,
+        employeeId: authUser?.employeeId,
+        role: authUser?.roleName || authUser?.role?.name || (typeof authUser?.role === 'string' ? authUser?.role : ''),
+        username: authUser?.username,
+      };
+      const result = await crmService.transferLead(
+        id,
+        Number(targetTelecallerId),
+        remarks,
+        userContext,
+      );
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to transfer lead'));
     }
   },
 

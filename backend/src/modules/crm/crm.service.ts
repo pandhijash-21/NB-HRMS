@@ -5373,8 +5373,35 @@ export const crmService = {
     }
 
     await archive.finalize();
+  },
 
+  async wipeRealEstatePreSalesData() {
+    const reLeads = await prisma.crmLead.findMany({
+      where: {
+        scope: { not: 'NB_FINSERVE' },
+      },
+      select: { id: true },
+    });
 
+    const leadIds = reLeads.map((l) => l.id);
+    if (leadIds.length === 0) {
+      return { count: 0, message: 'No Real Estate leads found to delete.' };
+    }
+
+    await prisma.crmFollowUp.deleteMany({ where: { leadId: { in: leadIds } } }).catch(() => {});
+    await prisma.crmCallLog.updateMany({
+      where: { leadId: { in: leadIds } },
+      data: { leadId: null },
+    }).catch(() => {});
+
+    const deleteRes = await prisma.crmLead.deleteMany({
+      where: { id: { in: leadIds } },
+    });
+
+    return {
+      count: deleteRes.count,
+      message: `Successfully wiped ${deleteRes.count} Real Estate Pre-Sales leads and associated records.`,
+    };
   },
 };
 

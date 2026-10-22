@@ -666,6 +666,15 @@ export const crmController = {
     }
   },
 
+  async wipeRealEstatePreSalesData(req: Request, res: Response) {
+    try {
+      const result = await crmService.wipeRealEstatePreSalesData();
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(500).json(fail(err.message || 'Failed to wipe Real Estate pre-sales data'));
+    }
+  },
+
   async uploadBrochure(req: Request, res: Response) {
     try {
       if (!req.file) {

@@ -91,6 +91,40 @@ async function start() {
         END IF;
       END $$;
     `);
+
+    // Wipe all PRE-sales data from Real Estate CRM (Finserve preserved)
+    const presalesWipeRecord = await prisma.crmSetting.findUnique({
+      where: { key: 'real_estate_presales_wiped_v1' },
+    });
+    if (!presalesWipeRecord) {
+      console.log('==> One-time Real Estate Pre-Sales data wipe starting...');
+      await prisma.$executeRawUnsafe(`
+        DO $$ BEGIN
+          IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'crm_leads') THEN
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'crm_proposals') THEN
+              DELETE FROM crm_proposals WHERE lead_id IN (SELECT id FROM crm_leads WHERE scope != 'NB_FINSERVE' OR scope IS NULL);
+            END IF;
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'crm_follow_ups') THEN
+              DELETE FROM crm_follow_ups WHERE lead_id IN (SELECT id FROM crm_leads WHERE scope != 'NB_FINSERVE' OR scope IS NULL);
+            END IF;
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'crm_call_logs') THEN
+              UPDATE crm_call_logs SET lead_id = NULL WHERE lead_id IN (SELECT id FROM crm_leads WHERE scope != 'NB_FINSERVE' OR scope IS NULL);
+            END IF;
+            DELETE FROM crm_leads WHERE scope != 'NB_FINSERVE' OR scope IS NULL;
+          END IF;
+        END $$;
+      `);
+      await prisma.crmSetting.upsert({
+        where: { key: 'real_estate_presales_wiped_v1' },
+        update: { value: new Date().toISOString() },
+        create: {
+          key: 'real_estate_presales_wiped_v1',
+          value: new Date().toISOString(),
+          description: 'One-time wipe of Real Estate Pre-Sales leads and sales records',
+        },
+      });
+      console.log('==> One-time Real Estate Pre-Sales data wipe completed successfully!');
+    }
   } catch (err) {
     console.warn('Database schema column verify notice:', err);
   }

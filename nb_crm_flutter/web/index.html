@@ -123,27 +123,6 @@
       0%, 100% { transform: scale(1); opacity: 1; }
       50% { transform: scale(1.06); opacity: 0.85; }
     }
-    #nb-splash-controls {
-      position: absolute;
-      right: 20px;
-      bottom: max(24px, env(safe-area-inset-bottom));
-      z-index: 2;
-    }
-    #nb-splash-skip {
-      padding: 8px 16px;
-      border-radius: 20px;
-      border: 1px solid rgba(255,255,255,0.2);
-      background: rgba(255,255,255,0.06);
-      color: rgba(255,255,255,0.85);
-      cursor: pointer;
-      font-size: 13px;
-      letter-spacing: 0.3px;
-      transition: all 0.2s;
-    }
-    #nb-splash-skip:hover {
-      background: rgba(255,255,255,0.14);
-      color: #fff;
-    }
     #nb-splash-version {
       position: absolute;
       left: 20px;
@@ -175,9 +154,6 @@
     <div id="nb-splash-subtitle">Real Estate & Financial Services</div>
     <div id="nb-splash-status">Starting application…</div>
     <div id="nb-splash-version">v1.0.1</div>
-    <div id="nb-splash-controls">
-      <button id="nb-splash-skip" type="button">Skip</button>
-    </div>
   </div>
   <script>
     (function () {
@@ -190,7 +166,6 @@
       }
 
       var overlay = document.getElementById('nb-splash');
-      var skip = document.getElementById('nb-splash-skip');
       var statusEl = document.getElementById('nb-splash-status');
       var dismissed = false;
 
@@ -204,12 +179,6 @@
         overlay.classList.add('nb-off');
         setTimeout(function () { overlay.style.display = 'none'; }, 420);
       }
-
-      skip.addEventListener('click', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        dismiss();
-      });
 
       // Keep loader in loop continuously until Flutter signals that the page is loaded!
       window.__nbAbortSplash = dismiss;
@@ -227,6 +196,6 @@
       setTimeout(function () { if (!dismissed) dismiss(); }, 60000);
     })();
   </script>
-  <script src="flutter_bootstrap.js?v=crmicons-1" async></script>
+  <script src="flutter_bootstrap.js?v=crm-botbiz-v3" async></script>
 </body>
 </html>

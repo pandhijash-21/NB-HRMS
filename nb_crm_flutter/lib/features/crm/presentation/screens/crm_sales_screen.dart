@@ -20,6 +20,7 @@ import '../../../erp/presentation/project_providers.dart';
 import '../../../erp/domain/project_models.dart';
 import '../../../erp/domain/structure_models.dart';
 import '../utils/proposal_print.dart';
+import '../../../../core/widgets/nb_brand_loader.dart';
 
 class CrmSalesScreen extends ConsumerWidget {
   const CrmSalesScreen({super.key});
@@ -755,7 +756,18 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
           const SizedBox(height: 16),
 
           // Customer Cards List
-          if (leads.isEmpty)
+          if (state.status.isLoading && leads.isEmpty)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 40),
+                child: NbBrandLoader(
+                  size: 90,
+                  isFullScreen: false,
+                  statusLines: ['Loading assigned leads…'],
+                ),
+              ),
+            )
+          else if (leads.isEmpty)
             Center(
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 40),
@@ -823,6 +835,7 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
     final unitShown = lead.unitShown;
     final proposals = lead.proposals;
     final appointedMgr = lead.assignedToName ?? 'Unassigned';
+    final isBooked = lead.status == CrmStatus.bookingConfirmed || proposals.any((p) => p.isBooked);
 
     return Container(
       decoration: BoxDecoration(
@@ -955,6 +968,26 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
                               ),
                             ],
                           ),
+                          if (lead.siteVisitCount > 0)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFD97706).withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: const Color(0xFFD97706).withValues(alpha: 0.3)),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.repeat_rounded, size: 12, color: Color(0xFFD97706)),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    lead.visitCountBadge,
+                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFFD97706)),
+                                  ),
+                                ],
+                              ),
+                            ),
                           if (lead.campaignName != null)
                             Text('•  Campaign: ${lead.campaignName}', style: TextStyle(fontSize: 11, color: textMuted)),
                         ],
@@ -1002,19 +1035,21 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
-                                  const SizedBox(width: 8),
-                                  InkWell(
-                                    onTap: () => _showFollowUpSchedulingModal(context, lead),
-                                    child: const Text(
-                                      'Change',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
-                                        color: Color(0xFFEA580C),
-                                        decoration: TextDecoration.underline,
+                                  if (!isBooked) ...[
+                                    const SizedBox(width: 8),
+                                    InkWell(
+                                      onTap: () => _showFollowUpSchedulingModal(context, lead),
+                                      child: const Text(
+                                        'Change',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFFEA580C),
+                                          decoration: TextDecoration.underline,
+                                        ),
                                       ),
                                     ),
-                                  ),
+                                  ],
                                 ],
                               ),
                             ),
@@ -1024,22 +1059,42 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
                     ],
                   ),
                 ),
-                // Quick Status Menu
-                PopupMenuButton<String>(
-                  tooltip: 'Update Status',
-                  icon: const Icon(Icons.more_vert_rounded),
-                  onSelected: (newStatus) {
-                    _handleQuickStatusChange(context, lead, newStatus);
-                  },
-                  itemBuilder: (ctx) => [
-                    const PopupMenuItem(value: 'CNR', child: Text('CNR (Auto +24h Reschedule)')),
-                    const PopupMenuItem(value: 'FOLLOW_UP', child: Text('Follow up')),
-                    const PopupMenuItem(value: 'SCHEDULED_VISIT', child: Text('Visit Scheduled')),
-                    const PopupMenuItem(value: 'SITE_VISIT_DONE', child: Text('Visit Done (Auto System Time)')),
-                    const PopupMenuItem(value: 'NOT_INTERESTED', child: Text('Not Interested')),
-                    const PopupMenuItem(value: 'INTERESTED', child: Text('Interested')),
-                  ],
-                ),
+                // Quick Status Menu (Locked when Booking Confirmed)
+                if (isBooked)
+                  Tooltip(
+                    message: 'Booking Confirmed — Lead is locked against all modifications.',
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.lock_rounded, size: 14, color: Colors.green),
+                          SizedBox(width: 4),
+                          Text('Locked', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.green)),
+                        ],
+                      ),
+                    ),
+                  )
+                else
+                  PopupMenuButton<String>(
+                    tooltip: 'Update Status',
+                    icon: const Icon(Icons.more_vert_rounded),
+                    onSelected: (newStatus) {
+                      _handleQuickStatusChange(context, lead, newStatus);
+                    },
+                    itemBuilder: (ctx) => [
+                      const PopupMenuItem(value: 'CNR', child: Text('CNR (Auto +24h Reschedule)')),
+                      const PopupMenuItem(value: 'FOLLOW_UP', child: Text('Follow up')),
+                      const PopupMenuItem(value: 'SCHEDULED_VISIT', child: Text('Visit Scheduled')),
+                      const PopupMenuItem(value: 'SITE_VISIT_DONE', child: Text('Visit Done (Auto System Time)')),
+                      const PopupMenuItem(value: 'NOT_INTERESTED', child: Text('Not Interested')),
+                      const PopupMenuItem(value: 'INTERESTED', child: Text('Interested')),
+                    ],
+                  ),
               ],
             ),
           ),
@@ -1192,11 +1247,12 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
                               ],
                             ),
                           ),
-                          TextButton.icon(
-                            icon: const Icon(Icons.edit_outlined, size: 15),
-                            label: const Text('Change Unit', style: TextStyle(fontSize: 12)),
-                            onPressed: () => _showSelectUnitModal(context, lead),
-                          ),
+                          if (!isBooked)
+                            TextButton.icon(
+                              icon: const Icon(Icons.edit_outlined, size: 15),
+                              label: const Text('Change Unit', style: TextStyle(fontSize: 12)),
+                              onPressed: () => _showSelectUnitModal(context, lead),
+                            ),
                         ],
                       )
                     : Row(
@@ -1209,15 +1265,16 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
                               style: TextStyle(fontSize: 12, color: textMuted, fontStyle: FontStyle.italic),
                             ),
                           ),
-                          OutlinedButton.icon(
-                            icon: const Icon(Icons.add_home_work_rounded, size: 15),
-                            label: const Text('Select Unit Shown', style: TextStyle(fontSize: 12)),
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                              visualDensity: VisualDensity.compact,
+                          if (!isBooked)
+                            OutlinedButton.icon(
+                              icon: const Icon(Icons.add_home_work_rounded, size: 15),
+                              label: const Text('Select Unit Shown', style: TextStyle(fontSize: 12)),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                              onPressed: () => _showSelectUnitModal(context, lead),
                             ),
-                            onPressed: () => _showSelectUnitModal(context, lead),
-                          ),
                         ],
                       )),
           ),
@@ -1265,8 +1322,28 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
                 ),
                 const SizedBox(width: 8),
 
-                // Primary Action: Finserve -> "Application & Docs"; Real Estate -> "Generate Quotation"
-                if (lead.scope == 'NB_FINSERVE' || context.read<CrmRepository>().scope == 'NB_FINSERVE') ...[
+                // Primary Action: If booked, lock completely! Otherwise Finserve -> "Application & Docs"; Real Estate -> "Generate Quotation"
+                if (isBooked) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.green.withValues(alpha: 0.4)),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.lock_rounded, size: 16, color: Colors.green),
+                        SizedBox(width: 6),
+                        Text(
+                          'Booking Confirmed (Locked)',
+                          style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
+                ] else if (lead.scope == 'NB_FINSERVE' || context.read<CrmRepository>().scope == 'NB_FINSERVE') ...[
                   ElevatedButton.icon(
                     icon: const Icon(Icons.assignment_turned_in_rounded, size: 17),
                     label: const Text('Application & Docs'),
@@ -1315,6 +1392,7 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
     int? userEmployeeId,
     String? currentUserName,
   ) {
+    final state = context.read<CrmLeadsBloc>().state;
     if (leadsWithProposals.isEmpty) {
       return Center(
         child: Padding(
@@ -1399,7 +1477,44 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
           const SizedBox(height: 16),
 
           // Client Proposals Accordion / Dropdown Cards
-          ListView.separated(
+          if (state.status.isLoading && leadsWithProposals.isEmpty)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 40),
+                child: NbBrandLoader(
+                  size: 90,
+                  isFullScreen: false,
+                  statusLines: ['Loading customer proposals…'],
+                ),
+              ),
+            )
+          else if (leadsWithProposals.isEmpty)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 40),
+                child: Column(
+                  children: [
+                    Icon(Icons.request_quote_outlined, size: 54, color: textMuted),
+                    const SizedBox(height: 12),
+                    Text(
+                      'No Proposals or Estimates Found',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : const Color(0xFF1E293B),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Select an assigned client from the customers tab to generate a proposal.',
+                      style: TextStyle(fontSize: 13, color: textMuted),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            ListView.separated(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: leadsWithProposals.length,
@@ -1933,11 +2048,17 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
     final stampDutyCtrl = TextEditingController(text: stampDutyAmountVal > 0 ? stampDutyAmountVal.toStringAsFixed(0) : '0');
     final regChargesCtrl = TextEditingController(text: regChargesVal > 0 ? regChargesVal.toStringAsFixed(0) : '0');
 
+    String defaultGeneralRemarks = CrmSettings.defaultQuotationGeneralRemarks;
+    try {
+      final s = await context.read<CrmRepository>().getSettings();
+      if (s.quotationGeneralRemarks.isNotEmpty) {
+        defaultGeneralRemarks = s.quotationGeneralRemarks;
+      }
+    } catch (_) {}
+
     final descriptionCtrl = TextEditingController(text: unitRemarks);
-    final disclaimerCtrl = TextEditingController(
-      text:
-          '1. Prices and availability are subject to change without prior notice.\n2. Applicable Government GST and Stamp Duty charges are subject to statutory revisions.\n3. Booking is subject to clearance of booking token and standard terms of agreement.',
-    );
+    final disclaimerCtrl = TextEditingController(text: defaultGeneralRemarks);
+    final additionalRemarksCtrl = TextEditingController();
 
     // Proposal Expiry Date: defaults to 7 days from now
     DateTime expiryDate = DateTime.now().add(const Duration(days: 7));
@@ -2345,8 +2466,8 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
                           ),
                           const SizedBox(height: 20),
 
-                          // SECTION 4: Description & Disclaimer
-                          _buildSectionHeader('4. Property Description & Disclaimers'),
+                          // SECTION 4: Description, Terms & Remarks
+                          _buildSectionHeader('4. Property Description, Terms & Additional Remarks'),
                           const SizedBox(height: 8),
                           TextField(
                             controller: descriptionCtrl,
@@ -2360,9 +2481,21 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
                           const SizedBox(height: 10),
                           TextField(
                             controller: disclaimerCtrl,
+                            maxLines: 4,
+                            decoration: const InputDecoration(
+                              labelText: 'General Remarks & Standard Terms (Template from Settings)',
+                              hintText: 'Configured from Settings, editable per quote if required...',
+                              isDense: true,
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          TextField(
+                            controller: additionalRemarksCtrl,
                             maxLines: 3,
                             decoration: const InputDecoration(
-                              labelText: 'Disclaimer & Terms',
+                              labelText: 'Additional Remarks & Special Conditions (Open for this Client)',
+                              hintText: 'Enter payment milestones, custom concessions, or client notes...',
                               isDense: true,
                               border: OutlineInputBorder(),
                             ),
@@ -2502,6 +2635,7 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
                             grandTotal: grandTotal,
                             description: descriptionCtrl.text.trim(),
                             disclaimer: disclaimerCtrl.text.trim(),
+                            additionalRemarks: additionalRemarksCtrl.text.trim(),
                             createdById: currentUserId,
                             createdByName: currentUserName,
                           );
@@ -4596,12 +4730,13 @@ class _ClientProposalsGroupCardState extends State<_ClientProposalsGroupCard> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                // Button to Generate New Proposal for this same client
-                IconButton(
-                  tooltip: 'Generate Another Proposal for this Client',
-                  icon: const Icon(Icons.add_circle_outline_rounded, color: Color(0xFFC5A059)),
-                  onPressed: widget.onGenerateNewProposal,
-                ),
+                // Button to Generate New Proposal for this same client (hidden if booked)
+                if (!widget.lead.proposals.any((p) => p.isBooked) && widget.lead.status != CrmStatus.bookingConfirmed)
+                  IconButton(
+                    tooltip: 'Generate Another Proposal for this Client',
+                    icon: const Icon(Icons.add_circle_outline_rounded, color: Color(0xFFC5A059)),
+                    onPressed: widget.onGenerateNewProposal,
+                  ),
               ],
             ),
           ),
@@ -4709,8 +4844,14 @@ class _ClientProposalsGroupCardState extends State<_ClientProposalsGroupCard> {
                   Text(selectedProposal.description, style: const TextStyle(fontSize: 12)),
                   const SizedBox(height: 8),
                 ],
+                if (selectedProposal.additionalRemarks.isNotEmpty) ...[
+                  Text('Additional Remarks:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFFB45309))),
+                  const SizedBox(height: 2),
+                  Text(selectedProposal.additionalRemarks, style: const TextStyle(fontSize: 12)),
+                  const SizedBox(height: 8),
+                ],
                 if (selectedProposal.disclaimer.isNotEmpty) ...[
-                  Text('Disclaimer & Terms:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: widget.textMuted)),
+                  Text('General Terms & Conditions:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: widget.textMuted)),
                   const SizedBox(height: 2),
                   Text(selectedProposal.disclaimer, style: TextStyle(fontSize: 11, color: widget.textMuted)),
                   const SizedBox(height: 12),
@@ -4788,12 +4929,14 @@ class _ClientProposalsGroupCardState extends State<_ClientProposalsGroupCard> {
                     ),
                     const SizedBox(width: 8),
 
-                    // Generate Revised
-                    OutlinedButton.icon(
-                      icon: const Icon(Icons.edit_note_rounded, size: 16),
-                      label: const Text('New Revision'),
-                      onPressed: widget.onGenerateNewProposal,
-                    ),
+                    // Generate Revised (only if not already booked)
+                    if (!isBooked && widget.lead.status != CrmStatus.bookingConfirmed) ...[
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.edit_note_rounded, size: 16),
+                        label: const Text('New Revision'),
+                        onPressed: widget.onGenerateNewProposal,
+                      ),
+                    ],
 
                     const Spacer(),
 
@@ -5230,6 +5373,29 @@ class _ClientProposalsGroupCardState extends State<_ClientProposalsGroupCard> {
                       _printRow('Grand Total', '₹ ${NumberFormat("#,##,###").format(proposal.grandTotal)}', isBold: true, isHighlight: true),
                       const SizedBox(height: 16),
                       Text('Description:\n${proposal.description}', style: const TextStyle(fontSize: 12)),
+                      if (proposal.additionalRemarks.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFC5A059).withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: const Color(0xFFC5A059).withValues(alpha: 0.3)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Additional Remarks & Special Notes:',
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Color(0xFFB45309)),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(proposal.additionalRemarks, style: const TextStyle(fontSize: 12)),
+                            ],
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 10),
                       Text('Terms & Conditions:\n${proposal.disclaimer}', style: TextStyle(fontSize: 11, color: widget.textMuted)),
                       const SizedBox(height: 16),

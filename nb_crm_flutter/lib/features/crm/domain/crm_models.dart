@@ -470,6 +470,106 @@ class CrmLead {
     }
     return logs..sort((a, b) => b.timestamp.compareTo(a.timestamp));
   }
+
+  int get siteVisitCount {
+    if (customFields['siteVisitCount'] is num) {
+      return (customFields['siteVisitCount'] as num).toInt();
+    }
+    if (customFields['siteVisits'] is List) {
+      return (customFields['siteVisits'] as List).length;
+    }
+    if (status == CrmStatus.siteVisitDone || visitedAt != null) {
+      return 1;
+    }
+    return 0;
+  }
+
+  String get visitCountWording {
+    final count = siteVisitCount;
+    if (count <= 1) return 'once';
+    if (count == 2) return 'twice';
+    if (count == 3) return 'thrice';
+    return '$count times';
+  }
+
+  String get visitCountBadge {
+    final count = siteVisitCount;
+    if (count == 0) return 'First visit';
+    if (count == 1) return 'Visit #1 (Once)';
+    if (count == 2) return 'Visit #2 (Twice)';
+    if (count == 3) return 'Visit #3 (Thrice)';
+    return 'Visit #$count ($count times)';
+  }
+
+  List<Map<String, dynamic>> get siteVisitsHistory {
+    final raw = customFields['siteVisits'];
+    if (raw is List) {
+      return raw.whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList();
+    }
+    return const [];
+  }
+
+  CrmLead copyWith({
+    String? id,
+    String? scope,
+    String? campaignId,
+    String? campaignName,
+    String? phone,
+    String? name,
+    CrmStatus? status,
+    Map<String, dynamic>? customFields,
+    int? assignedToId,
+    bool clearAssignedTo = false,
+    String? assignedToName,
+    int? telecallerId,
+    bool clearTelecaller = false,
+    String? telecallerName,
+    DateTime? lastCallAt,
+    DateTime? notInterestedAt,
+    String? notInterestedReason,
+    String? notInterestedRemark,
+    DateTime? scheduledVisitAt,
+    DateTime? visitedAt,
+    String? leadSource,
+    String? channelPartnerName,
+    String? referenceType,
+    String? referenceName,
+    bool? isDeleted,
+    DateTime? deletedAt,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    CrmFollowUp? latestFollowUp,
+  }) {
+    return CrmLead(
+      id: id ?? this.id,
+      scope: scope ?? this.scope,
+      campaignId: campaignId ?? this.campaignId,
+      campaignName: campaignName ?? this.campaignName,
+      phone: phone ?? this.phone,
+      name: name ?? this.name,
+      status: status ?? this.status,
+      customFields: customFields ?? this.customFields,
+      assignedToId: clearAssignedTo ? null : (assignedToId ?? this.assignedToId),
+      assignedToName: clearAssignedTo ? null : (assignedToName ?? this.assignedToName),
+      telecallerId: clearTelecaller ? null : (telecallerId ?? this.telecallerId),
+      telecallerName: clearTelecaller ? null : (telecallerName ?? this.telecallerName),
+      lastCallAt: lastCallAt ?? this.lastCallAt,
+      notInterestedAt: notInterestedAt ?? this.notInterestedAt,
+      notInterestedReason: notInterestedReason ?? this.notInterestedReason,
+      notInterestedRemark: notInterestedRemark ?? this.notInterestedRemark,
+      scheduledVisitAt: scheduledVisitAt ?? this.scheduledVisitAt,
+      visitedAt: visitedAt ?? this.visitedAt,
+      leadSource: leadSource ?? this.leadSource,
+      channelPartnerName: channelPartnerName ?? this.channelPartnerName,
+      referenceType: referenceType ?? this.referenceType,
+      referenceName: referenceName ?? this.referenceName,
+      isDeleted: isDeleted ?? this.isDeleted,
+      deletedAt: deletedAt ?? this.deletedAt,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      latestFollowUp: latestFollowUp ?? this.latestFollowUp,
+    );
+  }
 }
 
 class CrmFollowUp {
@@ -632,6 +732,10 @@ class CrmSettings {
   final List<CrmLoanDocType> loanDocTypes;
   final Map<String, List<String>> loanTypeDocsMap;
   final List<FinserveApplicationField> finserveApplicationFields;
+  final String quotationGeneralRemarks;
+
+  static const String defaultQuotationGeneralRemarks =
+      '1. Prices and availability are subject to change without prior notice.\n2. Applicable Government GST and Stamp Duty charges are subject to statutory revisions.\n3. Booking is subject to clearance of booking token and standard terms of agreement.\n4. All payments to be made via Cheque / Demand Draft / RTGS in favor of NB Developers.';
 
   static const List<CrmLoanDocType> defaultLoanDocTypes = [
     CrmLoanDocType(id: 'pan_card', name: 'PAN Card', maxFileSizeMb: 5),
@@ -741,6 +845,7 @@ class CrmSettings {
     this.loanDocTypes = defaultLoanDocTypes,
     this.loanTypeDocsMap = defaultLoanTypeDocsMap,
     this.finserveApplicationFields = defaultFinserveApplicationFields,
+    this.quotationGeneralRemarks = defaultQuotationGeneralRemarks,
   });
 
   static List<int> _parseIntList(dynamic raw) {
@@ -877,6 +982,7 @@ class CrmSettings {
       loanDocTypes: _parseLoanDocTypes(json['loan_doc_types']),
       loanTypeDocsMap: _parseLoanTypeDocsMap(json['loan_type_docs_map']),
       finserveApplicationFields: _parseFinserveAppFields(json['finserve_application_fields'] ?? json['application_fields']),
+      quotationGeneralRemarks: json['quotation_general_remarks']?.toString() ?? defaultQuotationGeneralRemarks,
     );
   }
 
@@ -1367,6 +1473,7 @@ class CrmProposal {
   // Notes & Disclaimers
   final String description;
   final String disclaimer;
+  final String additionalRemarks;
 
   // Sales guy metadata
   final int? createdById;
@@ -1412,6 +1519,7 @@ class CrmProposal {
     this.paymentSchedule = const [],
     this.description = '',
     this.disclaimer = '',
+    this.additionalRemarks = '',
     this.createdById,
     this.createdByName,
   });
@@ -1488,6 +1596,7 @@ class CrmProposal {
           : const [],
       description: json['description']?.toString() ?? '',
       disclaimer: json['disclaimer']?.toString() ?? '',
+      additionalRemarks: json['additionalRemarks']?.toString() ?? '',
       createdById: (json['createdById'] as num?)?.toInt(),
       createdByName: json['createdByName']?.toString(),
     );
@@ -1533,6 +1642,7 @@ class CrmProposal {
         'paymentSchedule': paymentSchedule,
         'description': description,
         'disclaimer': disclaimer,
+        'additionalRemarks': additionalRemarks,
         'createdById': createdById,
         'createdByName': createdByName,
       };

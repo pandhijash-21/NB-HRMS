@@ -1,20 +1,24 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 
 import '../app_version.dart';
-import '../services/branding_config.dart';
 import '../services/location_access_gate.dart';
-import 'nb_brand_loader.dart';
-import 'splash_video_audio.dart';
-import 'splash_video_surface.dart';
 
-/// Full-screen branded splash. Parent should mount this only when logged out.
+/// Full-screen branded splash displaying the Mr NB GIF animation.
 class SplashVideoHost extends StatefulWidget {
-  const SplashVideoHost({super.key});
+  const SplashVideoHost({
+    super.key,
+    this.isReady = false,
+    this.onDismissed,
+  });
 
-  static const assetFallback = 'assets/clips/processed/splash_mr_nb.mp4';
+  static const gifAsset = 'assets/images/mrnb.gif';
+
+  /// If true, signals that the underlying page is ready and triggers smooth fadeout.
+  /// If false, the loader animation keeps looping continuously.
+  final bool isReady;
+  final VoidCallback? onDismissed;
 
   @override
   State<SplashVideoHost> createState() => _SplashVideoHostState();
@@ -24,107 +28,44 @@ class _SplashVideoHostState extends State<SplashVideoHost>
     with SingleTickerProviderStateMixin {
   late final AnimationController _fade;
   bool _done = false;
-  bool _playing = false;
-  bool _showSkip = false;
-  bool _muted = true;
-  int _progress = 0;
-  String _status = 'Preparing Mr NB…';
-  Timer? _skipTimer;
-  Timer? _failSafe;
-  Timer? _statusTicker;
-  int _statusIndex = 0;
-
-  static const _statusCycle = [
-    'Preparing Mr NB…',
-    'Requesting location (mandatory)…',
-    'Fetching splash media…',
-    'Buffering video…',
-    'Almost ready…',
-  ];
 
   @override
   void initState() {
     super.initState();
     _fade = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 420),
+      duration: const Duration(milliseconds: 380),
       value: 1,
     );
-    // Start the system location prompt during splash so login already has permission.
+
+    // Warm location permissions gate quietly in background
     unawaited(LocationAccessGate.requestPermissionPrompt());
-    _skipTimer = Timer(const Duration(milliseconds: 600), () {
-      if (mounted && !_done) setState(() => _showSkip = true);
-    });
-    // Cached/local splash should fail fast; first remote download gets a bit more room.
-    final failSeconds = BrandingConfig.hasRemoteSplash ? 18 : 12;
-    _failSafe = Timer(Duration(seconds: failSeconds), _finish);
-    _statusTicker = Timer.periodic(const Duration(milliseconds: 1600), (_) {
-      if (!mounted || _playing || _done) return;
-      setState(() {
-        _statusIndex = (_statusIndex + 1) % _statusCycle.length;
-        _status = _statusCycle[_statusIndex];
-      });
-    });
-  }
 
-  void _afterFrame(VoidCallback fn) {
-    final phase = SchedulerBinding.instance.schedulerPhase;
-    if (phase == SchedulerPhase.idle ||
-        phase == SchedulerPhase.postFrameCallbacks) {
-      if (mounted) fn();
-      return;
+    if (widget.isReady) {
+      _finish();
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) fn();
-    });
   }
 
-  void _markPlaying() {
-    _afterFrame(() {
-      if (!mounted || _playing) return;
-      setState(() {
-        _playing = true;
-        _status = 'Playing…';
-        _progress = 100;
-      });
-    });
-  }
-
-  void _onProgress(int pct) {
-    _afterFrame(() {
-      if (!mounted || _playing || _done) return;
-      setState(() {
-        _progress = pct.clamp(0, 100);
-        if (pct < 25) {
-          _status = BrandingConfig.hasRemoteSplash
-              ? 'Fetching splash from cloud…'
-              : 'Loading splash media…';
-        } else if (pct < 70) {
-          _status = 'Buffering video…';
-        } else {
-          _status = 'Almost ready…';
-        }
-      });
-    });
+  @override
+  void didUpdateWidget(SplashVideoHost oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isReady && !oldWidget.isReady) {
+      _finish();
+    }
   }
 
   Future<void> _finish() async {
     if (_done || !mounted) return;
     _done = true;
-    _skipTimer?.cancel();
-    _failSafe?.cancel();
-    _statusTicker?.cancel();
-    SplashVideoAudio.stop();
     await _fade.reverse();
-    if (mounted) setState(() {});
+    if (mounted) {
+      setState(() {});
+      widget.onDismissed?.call();
+    }
   }
 
   @override
   void dispose() {
-    _skipTimer?.cancel();
-    _failSafe?.cancel();
-    _statusTicker?.cancel();
-    SplashVideoAudio.stop();
     _fade.dispose();
     super.dispose();
   }
@@ -135,7 +76,7 @@ class _SplashVideoHostState extends State<SplashVideoHost>
       return const SizedBox.shrink();
     }
 
-    final source = BrandingConfig.resolveSplashSource();
+    final bottomPadding = MediaQuery.paddingOf(context).bottom;
 
     return FadeTransition(
       opacity: _fade,
@@ -144,73 +85,100 @@ class _SplashVideoHostState extends State<SplashVideoHost>
         child: SizedBox.expand(
           child: Stack(
             fit: StackFit.expand,
+            alignment: Alignment.center,
             children: [
-              SplashVideoSurface(
-                key: ValueKey('splash-mr-nb-$source'),
-                asset: source,
-                onEnded: _finish,
-                onPlaying: _markPlaying,
-                onProgress: _onProgress,
+              // Subtle luxury background gradient
+              const DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: RadialGradient(
+                    center: Alignment.center,
+                    radius: 0.95,
+                    colors: [
+                      Color(0xFF1A140E),
+                      Color(0xFF090705),
+                      Colors.black,
+                    ],
+                    stops: [0.0, 0.55, 1.0],
+                  ),
+                ),
               ),
-              if (!_playing)
-                NbBrandLoader(
-                  statusLines: [
-                    _status,
-                    if (_progress > 0 && _progress < 100) '$_progress%',
+
+              // Centered Mr NB GIF
+              Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      constraints: const BoxConstraints(
+                        maxWidth: 360,
+                        maxHeight: 360,
+                      ),
+                      padding: const EdgeInsets.all(16),
+                      child: Image.asset(
+                        SplashVideoHost.gifAsset,
+                        fit: BoxFit.contain,
+                        gaplessPlayback: true,
+                        filterQuality: FilterQuality.medium,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Welcome to NB Group',
+                      style: TextStyle(
+                        color: Color(0xFFE8C98A),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1.2,
+                        fontFamily: 'serif',
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Real Estate & Financial Services',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.6),
+                        fontSize: 12,
+                        letterSpacing: 0.6,
+                      ),
+                    ),
                   ],
                 ),
+              ),
+
+              // Version watermark (bottom-left)
               Positioned(
                 left: 20,
-                bottom: 28 + MediaQuery.paddingOf(context).bottom,
+                bottom: 24 + bottomPadding,
                 child: Text(
                   'v$kAppVersion',
                   style: const TextStyle(
-                    color: Color(0xB8FFFFFF),
-                    fontSize: 13,
+                    color: Color(0x8AFFFFFF),
+                    fontSize: 12,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 0.8,
                   ),
                 ),
               ),
-              if (_showSkip)
-                Positioned(
-                  right: 20,
-                  bottom: 24 + MediaQuery.paddingOf(context).bottom,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Material(
-                        color: Colors.black.withValues(alpha: 0.45),
-                        shape: const CircleBorder(),
-                        child: IconButton(
-                          tooltip: _muted ? 'Unmute' : 'Mute',
-                          color: Colors.white,
-                          onPressed: () {
-                            setState(() => _muted = !_muted);
-                            SplashVideoAudio.applyMute?.call(_muted);
-                          },
-                          icon: Icon(
-                            _muted ? Icons.volume_off : Icons.volume_up,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      TextButton(
-                        onPressed: _finish,
-                        style: TextButton.styleFrom(
-                          foregroundColor: Colors.white,
-                          backgroundColor: Colors.black.withValues(alpha: 0.45),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 10,
-                          ),
-                        ),
-                        child: const Text('Skip'),
-                      ),
-                    ],
+
+              // Skip button (bottom-right)
+              Positioned(
+                right: 20,
+                bottom: 20 + bottomPadding,
+                child: TextButton.icon(
+                  onPressed: _finish,
+                  icon: const Icon(Icons.arrow_forward_rounded, size: 16),
+                  label: const Text('Skip'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.white70,
+                    backgroundColor: Colors.white.withValues(alpha: 0.08),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                      side: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
+                    ),
                   ),
                 ),
+              ),
             ],
           ),
         ),

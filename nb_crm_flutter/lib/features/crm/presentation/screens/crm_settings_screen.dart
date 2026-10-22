@@ -69,6 +69,8 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
   // Controllers for Retention Settings
   final _notInterestedDaysController = TextEditingController(text: '30');
   final _binDaysController = TextEditingController(text: '30');
+  final _quotationGeneralRemarksController = TextEditingController(text: CrmSettings.defaultQuotationGeneralRemarks);
+  bool _quotationRemarksLoaded = false;
 
   // KPI Management Toggles
   bool _kpiShowActiveLeads = true;
@@ -167,6 +169,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
       _presalesConfigLoaded = false;
       _telephonyLoaded = false;
       _kpiLoaded = false;
+      _quotationRemarksLoaded = false;
       _activePresalesSection = null;
       _bankSubTab = 0;
       _loadTelecallers();
@@ -200,6 +203,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
     _maxWorkloadController.dispose();
     _untouchedTimeoutController.dispose();
     _idleTimeoutController.dispose();
+    _quotationGeneralRemarksController.dispose();
     super.dispose();
   }
 
@@ -296,6 +300,12 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
       _kpiShowFreshLeads = settings.kpiShowFreshLeads;
       _kpiShowConversionRate = settings.kpiShowConversionRate;
       _kpiLoaded = true;
+    }
+    if (!_quotationRemarksLoaded) {
+      if (settings.quotationGeneralRemarks.isNotEmpty) {
+        _quotationGeneralRemarksController.text = settings.quotationGeneralRemarks;
+      }
+      _quotationRemarksLoaded = true;
     }
     if (!_presalesConfigLoaded) {
       _notInterestedReasons = List<String>.from(settings.notInterestedReasons);
@@ -1593,6 +1603,62 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
                     ],
                   ),
                 ),
+                const Divider(height: 32),
+
+                // Quotation General Remarks Template
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFC5A059).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.request_quote_rounded, color: Color(0xFFC5A059), size: 22),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Quotation General Remarks & Standard Terms',
+                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                          ),
+                          Text(
+                            'Company-wide template that pre-fills standard terms on all customer quotations. Sales representatives can append deal-specific additional remarks.',
+                            style: TextStyle(fontSize: 12, color: textMuted),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _quotationGeneralRemarksController,
+                  maxLines: 5,
+                  decoration: const InputDecoration(
+                    labelText: 'General Remarks / Terms & Conditions Template',
+                    hintText: 'Enter numbered terms or notes that appear on customer quotations...',
+                    border: OutlineInputBorder(),
+                    alignLabelWithHint: true,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.save_rounded, size: 16),
+                    label: const Text('Save Quotation Terms'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFC5A059),
+                      foregroundColor: Colors.black87,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    ),
+                    onPressed: _saveQuotationRemarks,
+                  ),
+                ),
               ],
             ),
           ),
@@ -1630,6 +1696,12 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
     context.read<CrmSettingsBloc>().add(CrmSettingsSaved({
       'not_interested_retention_days': _notInterestedDaysController.text.trim(),
       'bin_retention_days': _binDaysController.text.trim(),
+    }));
+  }
+
+  void _saveQuotationRemarks() {
+    context.read<CrmSettingsBloc>().add(CrmSettingsSaved({
+      'quotation_general_remarks': _quotationGeneralRemarksController.text.trim(),
     }));
   }
 

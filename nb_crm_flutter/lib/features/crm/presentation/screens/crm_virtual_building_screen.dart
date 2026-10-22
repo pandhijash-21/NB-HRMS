@@ -8,6 +8,7 @@ import '../../../erp/domain/structure_models.dart';
 import '../../../erp/presentation/project_providers.dart';
 import '../crm_providers.dart';
 import '../widgets/crm_scope_selector.dart';
+import '../../../../core/widgets/nb_brand_loader.dart';
 
 class CrmVirtualBuildingScreen extends ConsumerStatefulWidget {
   const CrmVirtualBuildingScreen({super.key});
@@ -180,7 +181,11 @@ class _CrmVirtualBuildingScreenState
 
   Widget _buildBody(BuildContext context, bool isDark, bool isWide) {
     if (_isLoadingProjects) {
-      return const Center(child: CircularProgressIndicator());
+      return const NbBrandLoader(
+        size: 90,
+        isFullScreen: false,
+        statusLines: ['Loading ERP projects & towers…'],
+      );
     }
 
     if (_projects.isEmpty) {
@@ -224,7 +229,11 @@ class _CrmVirtualBuildingScreenState
         // Main Elevation Grid Area
         Expanded(
           child: _isLoadingBuilding
-              ? const Center(child: CircularProgressIndicator())
+              ? const NbBrandLoader(
+                  size: 90,
+                  isFullScreen: false,
+                  statusLines: ['Loading 3D building layout & units…'],
+                )
               : _errorMessage != null
                   ? Center(
                       child: Padding(

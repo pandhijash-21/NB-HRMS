@@ -126,11 +126,13 @@ void _syncWebSplash(AuthStatus status) {
     }
     return;
   }
-  if (status == AuthStatus.authenticated) {
-    SplashVideoAudio.stop();
-  } else if (status == AuthStatus.unauthenticated) {
-    SplashVideoAudio.startLoggedOut();
+  // Keep the animated loader in loop until auth status is resolved and page paints!
+  if (status == AuthStatus.unknown) {
+    return;
   }
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    SplashVideoAudio.stop();
+  });
 }
 
 class NbCrmApp extends StatelessWidget {
@@ -201,11 +203,9 @@ class NbCrmApp extends StatelessWidget {
                           ),
                         ),
                       ),
-                      if (!kIsWeb && auth.status != AuthStatus.authenticated)
-                        Positioned.fill(
-                          child: auth.status == AuthStatus.unauthenticated
-                              ? const SplashVideoHost()
-                              : const ColoredBox(color: Color(0xFF000000)),
+                      if (!kIsWeb && auth.status == AuthStatus.unknown)
+                        const Positioned.fill(
+                          child: SplashVideoHost(),
                         ),
                     ],
                   ),

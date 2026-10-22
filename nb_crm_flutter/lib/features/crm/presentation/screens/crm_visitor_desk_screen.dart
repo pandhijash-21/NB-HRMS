@@ -9,6 +9,7 @@ import '../../data/crm_repository.dart';
 import '../../domain/crm_models.dart';
 import '../bloc/crm_leads_bloc.dart';
 import '../widgets/crm_scope_selector.dart';
+import '../../../../core/widgets/nb_brand_loader.dart';
 
 class CrmVisitorDeskScreen extends StatelessWidget {
   const CrmVisitorDeskScreen({super.key});
@@ -141,7 +142,18 @@ class _CrmVisitorDeskViewState extends State<_CrmVisitorDeskView> {
               const SizedBox(width: 8),
             ],
           ),
-          body: SingleChildScrollView(
+          body: (state.status.isLoading && state.salesUsers.isEmpty)
+              ? const Center(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 60),
+                    child: NbBrandLoader(
+                      size: 90,
+                      isFullScreen: false,
+                      statusLines: ['Loading visitor desk data…'],
+                    ),
+                  ),
+                )
+              : SingleChildScrollView(
             padding: const EdgeInsets.all(20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -406,7 +418,7 @@ class _CrmVisitorDeskViewState extends State<_CrmVisitorDeskView> {
                                     borderRadius: BorderRadius.circular(8),
                                     border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
                                   ),
-                                  child: const Text('Site Done', style: TextStyle(color: Color(0xFF047857), fontWeight: FontWeight.bold, fontSize: 12)),
+                                  child: Text(lead.visitCountBadge, style: const TextStyle(color: Color(0xFF047857), fontWeight: FontWeight.bold, fontSize: 12)),
                                 ),
                               ),
                             ],
@@ -445,8 +457,11 @@ class _CrmVisitorDeskViewState extends State<_CrmVisitorDeskView> {
         if (res['exists'] == true && res['lead'] != null) {
           final l = res['lead'] as Map<String, dynamic>;
           _nameController.text = l['name']?.toString() ?? '';
-          if (l['assignedToId'] != null) {
-            _selectedSalesId = l['assignedToId'] as int?;
+          final prevMgr = res['previousSalesManager'] as Map<String, dynamic>?;
+          if (prevMgr != null && prevMgr['id'] != null) {
+            _selectedSalesId = (prevMgr['id'] as num).toInt();
+          } else if (l['assignedToId'] != null) {
+            _selectedSalesId = (l['assignedToId'] as num).toInt();
           }
         }
       });
@@ -470,6 +485,16 @@ class _CrmVisitorDeskViewState extends State<_CrmVisitorDeskView> {
     final lead = _lookupData?['lead'] as Map<String, dynamic>?;
     final salesUsers = state.salesUsers;
 
+    final pastVisitCount = (_lookupData?['pastVisitCount'] as num?)?.toInt() ?? 0;
+    final pastWording = _lookupData?['pastVisitWording']?.toString() ??
+        (pastVisitCount == 1 ? 'once' : pastVisitCount == 2 ? 'twice' : pastVisitCount == 3 ? 'thrice' : '$pastVisitCount times');
+    final nextVisitNumber = (_lookupData?['nextVisitNumber'] as num?)?.toInt() ?? (pastVisitCount + 1);
+    final nextWording = _lookupData?['nextVisitWording']?.toString() ??
+        (nextVisitNumber == 1 ? 'once' : nextVisitNumber == 2 ? 'twice' : nextVisitNumber == 3 ? 'thrice' : '$nextVisitNumber times');
+    final prevMgr = _lookupData?['previousSalesManager'] as Map<String, dynamic>?;
+    final prevMgrName = prevMgr?['fullName']?.toString() ?? lead?['assignedTo']?['generalInfo']?['fullName']?.toString();
+    final prevMgrId = (prevMgr?['id'] as num?)?.toInt() ?? (lead?['assignedToId'] as num?)?.toInt();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -479,14 +504,18 @@ class _CrmVisitorDeskViewState extends State<_CrmVisitorDeskView> {
             width: double.infinity,
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: isScheduledToday
-                  ? const Color(0xFF16A34A).withValues(alpha: 0.1)
-                  : const Color(0xFF2563EB).withValues(alpha: 0.1),
+              color: pastVisitCount > 0
+                  ? const Color(0xFFD97706).withValues(alpha: 0.1)
+                  : (isScheduledToday
+                      ? const Color(0xFF16A34A).withValues(alpha: 0.1)
+                      : const Color(0xFF2563EB).withValues(alpha: 0.1)),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: isScheduledToday
-                    ? const Color(0xFF16A34A).withValues(alpha: 0.35)
-                    : const Color(0xFF2563EB).withValues(alpha: 0.35),
+                color: pastVisitCount > 0
+                    ? const Color(0xFFD97706).withValues(alpha: 0.35)
+                    : (isScheduledToday
+                        ? const Color(0xFF16A34A).withValues(alpha: 0.35)
+                        : const Color(0xFF2563EB).withValues(alpha: 0.35)),
               ),
             ),
             child: Column(
@@ -495,20 +524,45 @@ class _CrmVisitorDeskViewState extends State<_CrmVisitorDeskView> {
                 Row(
                   children: [
                     Icon(
-                      isScheduledToday ? Icons.check_circle_rounded : Icons.info_outline_rounded,
-                      size: 20,
-                      color: isScheduledToday ? const Color(0xFF16A34A) : const Color(0xFF2563EB),
+                      pastVisitCount > 0
+                          ? Icons.repeat_rounded
+                          : (isScheduledToday ? Icons.check_circle_rounded : Icons.info_outline_rounded),
+                      size: 22,
+                      color: pastVisitCount > 0
+                          ? const Color(0xFFD97706)
+                          : (isScheduledToday ? const Color(0xFF16A34A) : const Color(0xFF2563EB)),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        isScheduledToday
-                            ? 'Scheduled Site Visit Confirmed for Today!'
-                            : 'No visit was scheduled for today. Check-in will automatically allocate a visit for today at the current time.',
+                        pastVisitCount > 0
+                            ? 'Repeat Visitor — Site visit done $pastWording previously ($pastVisitCount past visit${pastVisitCount > 1 ? "s" : ""})'
+                            : (isScheduledToday
+                                ? 'Scheduled Site Visit Confirmed for Today!'
+                                : 'First-time visit for this client at site reception.'),
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
-                          color: isScheduledToday ? const Color(0xFF15803D) : const Color(0xFF1D4ED8),
+                          color: pastVisitCount > 0
+                              ? const Color(0xFFB45309)
+                              : (isScheduledToday ? const Color(0xFF15803D) : const Color(0xFF1D4ED8)),
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: pastVisitCount > 0
+                            ? const Color(0xFFD97706).withValues(alpha: 0.18)
+                            : const Color(0xFF16A34A).withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        'This Visit: #$nextVisitNumber ($nextWording)',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: pastVisitCount > 0 ? const Color(0xFFB45309) : const Color(0xFF15803D),
                         ),
                       ),
                     ),
@@ -522,6 +576,54 @@ class _CrmVisitorDeskViewState extends State<_CrmVisitorDeskView> {
                 if (lead['campaign'] != null && lead['campaign']['name'] != null) ...[
                   const SizedBox(height: 4),
                   Text('Campaign: ${lead['campaign']['name']}', style: TextStyle(fontSize: 13, color: textMuted)),
+                ],
+                if (prevMgrName != null && prevMgrName.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.black26 : Colors.white.withValues(alpha: 0.7),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.person_pin_rounded, size: 18, color: Color(0xFFD97706)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Previous Sales Manager: $prevMgrName',
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        if (prevMgrId != null && _selectedSalesId != prevMgrId)
+                          TextButton.icon(
+                            icon: const Icon(Icons.check_rounded, size: 14),
+                            label: const Text('Keep Same Manager', style: TextStyle(fontSize: 12)),
+                            style: TextButton.styleFrom(
+                              foregroundColor: const Color(0xFFD97706),
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              visualDensity: VisualDensity.compact,
+                            ),
+                            onPressed: () {
+                              setState(() => _selectedSalesId = prevMgrId);
+                            },
+                          )
+                        else if (prevMgrId != null && _selectedSalesId == prevMgrId)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF16A34A).withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text(
+                              '✓ Same Manager Selected',
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF16A34A)),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
                 ],
               ],
             ),
@@ -681,7 +783,11 @@ class _CrmVisitorDeskViewState extends State<_CrmVisitorDeskView> {
           child: ElevatedButton.icon(
             icon: const Icon(Icons.how_to_reg_rounded, size: 20),
             label: Text(
-              exists ? 'Confirm Check-In & Mark Site Done' : 'Register Visitor & Mark Site Done',
+              exists
+                  ? (pastVisitCount > 0
+                      ? 'Confirm Visit #$nextVisitNumber ($nextWording) & Mark Site Done'
+                      : 'Confirm Check-In & Mark Site Done')
+                  : 'Register Visitor & Mark Site Done',
               style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
             ),
             style: ElevatedButton.styleFrom(

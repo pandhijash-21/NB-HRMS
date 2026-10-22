@@ -2,15 +2,23 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-/// Branded full-screen loader used on splash and while the app boots.
+/// Branded loader featuring the animated Mr NB GIF for page loading & boot states.
 class NbBrandLoader extends StatefulWidget {
   const NbBrandLoader({
     super.key,
     this.statusLines = const <String>[],
+    this.size = 140,
+    this.isFullScreen = true,
   });
 
-  /// Rotating / stacked status lines shown under the NB mark.
+  /// Status lines or messages shown under the loader.
   final List<String> statusLines;
+
+  /// Diameter of the central loader container.
+  final double size;
+
+  /// If true, renders a full-screen dark gradient backdrop; otherwise transparent.
+  final bool isFullScreen;
 
   @override
   State<NbBrandLoader> createState() => _NbBrandLoaderState();
@@ -21,190 +29,161 @@ class _NbBrandLoaderState extends State<NbBrandLoader>
   static const _gold = Color(0xFFC5A36A);
   static const _goldLite = Color(0xFFE8C98A);
 
-  late final AnimationController _spin;
   late final AnimationController _pulse;
+  late final AnimationController _spin;
 
   @override
   void initState() {
     super.initState();
-    _spin = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1600),
-    )..repeat();
     _pulse = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1800),
     )..repeat(reverse: true);
+
+    _spin = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2400),
+    )..repeat();
   }
 
   @override
   void dispose() {
-    _spin.dispose();
     _pulse.dispose();
+    _spin.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final lines = widget.statusLines.where((s) => s.trim().isNotEmpty).toList();
-    return DecoratedBox(
-      decoration: const BoxDecoration(
-        gradient: RadialGradient(
-          colors: [Color(0xFF16110C), Color(0xFF000000)],
-          radius: 0.85,
-        ),
-      ),
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              width: 168,
-              height: 168,
-              child: AnimatedBuilder(
-                animation: Listenable.merge([_spin, _pulse]),
-                builder: (context, _) {
-                  final pulse = 0.82 + (_pulse.value * 0.18);
-                  return Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      Transform.scale(
-                        scale: pulse,
-                        child: Container(
-                          width: 132,
-                          height: 132,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: RadialGradient(
-                              colors: [
-                                _gold.withValues(alpha: 0.28),
-                                _gold.withValues(alpha: 0.04),
-                                Colors.transparent,
-                              ],
-                              stops: const [0, 0.55, 1],
-                            ),
-                          ),
-                        ),
-                      ),
-                      Transform.rotate(
-                        angle: _spin.value * math.pi * 2,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border(
-                              top: const BorderSide(color: _goldLite, width: 1.6),
-                              right: BorderSide(
-                                color: _gold.withValues(alpha: 0.55),
-                                width: 1.6,
-                              ),
-                              bottom: BorderSide(
-                                color: _gold.withValues(alpha: 0.16),
-                                width: 1.6,
-                              ),
-                              left: BorderSide(
-                                color: _gold.withValues(alpha: 0.16),
-                                width: 1.6,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      Transform.rotate(
-                        angle: -_spin.value * math.pi * 1.14,
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: _gold.withValues(alpha: 0.28),
-                                width: 1.5,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      Transform.rotate(
-                        angle: _spin.value * math.pi * 2,
-                        child: Align(
-                          alignment: Alignment.topCenter,
-                          child: Container(
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: _goldLite,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: _gold.withValues(alpha: 0.9),
-                                  blurRadius: 10,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      Transform.scale(
-                        scale: pulse,
-                        child: Container(
-                          width: 84,
-                          height: 84,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: const LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [Color(0xFF2A2218), Color(0xFF0C0C0C)],
-                            ),
-                            border: Border.all(
-                              color: _gold.withValues(alpha: 0.35),
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: _gold.withValues(alpha: 0.22),
-                                blurRadius: 28,
-                              ),
+
+    Widget loaderCore = Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: widget.size + 40,
+            height: widget.size + 40,
+            child: AnimatedBuilder(
+              animation: Listenable.merge([_pulse, _spin]),
+              builder: (context, _) {
+                final pulseScale = 0.94 + (_pulse.value * 0.08);
+
+                return Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    // Outer pulsing golden aura
+                    Transform.scale(
+                      scale: pulseScale,
+                      child: Container(
+                        width: widget.size + 30,
+                        height: widget.size + 30,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: RadialGradient(
+                            colors: [
+                              _gold.withValues(alpha: 0.22),
+                              _gold.withValues(alpha: 0.05),
+                              Colors.transparent,
                             ],
+                            stops: const [0.0, 0.6, 1.0],
                           ),
-                          child: const Text(
-                            'NB',
-                            style: TextStyle(
-                              color: _goldLite,
-                              fontSize: 26,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 3,
-                              fontFamily: 'serif',
+                        ),
+                      ),
+                    ),
+
+                    // Rotating golden orbital arc
+                    Transform.rotate(
+                      angle: _spin.value * math.pi * 2,
+                      child: Container(
+                        width: widget.size + 14,
+                        height: widget.size + 14,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border(
+                            top: const BorderSide(color: _goldLite, width: 2),
+                            right: BorderSide(
+                              color: _gold.withValues(alpha: 0.4),
+                              width: 1.5,
+                            ),
+                            bottom: BorderSide(
+                              color: _gold.withValues(alpha: 0.1),
+                              width: 1,
+                            ),
+                            left: BorderSide(
+                              color: _gold.withValues(alpha: 0.1),
+                              width: 1,
                             ),
                           ),
                         ),
                       ),
-                    ],
-                  );
-                },
-              ),
-            ),
-            if (lines.isNotEmpty) ...[
-              const SizedBox(height: 28),
-              ...lines.map(
-                (line) => Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 24),
-                  child: Text(
-                    line,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: _goldLite.withValues(alpha: 0.85),
-                      fontSize: 13,
-                      letterSpacing: 0.3,
-                      height: 1.35,
                     ),
+
+                    // Inner circle holding Mr NB GIF
+                    Container(
+                      width: widget.size,
+                      height: widget.size,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: const Color(0xFF0F0C09),
+                        border: Border.all(
+                          color: _gold.withValues(alpha: 0.35),
+                          width: 1.5,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: _gold.withValues(alpha: 0.18),
+                            blurRadius: 16,
+                          ),
+                        ],
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: Image.asset(
+                        'assets/images/mrnb.gif',
+                        fit: BoxFit.contain,
+                        gaplessPlayback: true,
+                        filterQuality: FilterQuality.medium,
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+          if (lines.isNotEmpty) ...[
+            const SizedBox(height: 18),
+            ...lines.map(
+              (line) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 20),
+                child: Text(
+                  line,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: _goldLite.withValues(alpha: 0.9),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 0.4,
                   ),
                 ),
               ),
-            ],
+            ),
           ],
-        ),
+        ],
       ),
     );
+
+    if (widget.isFullScreen) {
+      return DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: RadialGradient(
+            colors: [Color(0xFF16110C), Color(0xFF000000)],
+            radius: 0.85,
+          ),
+        ),
+        child: loaderCore,
+      );
+    }
+
+    return loaderCore;
   }
 }

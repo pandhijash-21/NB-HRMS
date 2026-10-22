@@ -263,6 +263,14 @@ void printProposalQuotation({
       </div>
     ''' : ''}
 
+    <!-- Additional Remarks (if any) -->
+    ${proposal.additionalRemarks.isNotEmpty ? '''
+      <div style="margin-top: 14px; border: 1px dashed #c5a059; border-radius: 6px; padding: 10px 12px; background: #fffdfa;">
+        <div style="font-weight: 700; font-size: 11px; text-transform: uppercase; color: #b45309; margin-bottom: 4px;">Additional Remarks & Special Notes:</div>
+        <div style="font-size: 11.5px; color: #1e293b; line-height: 1.5;">${proposal.additionalRemarks.replaceAll('\n', '<br/>')}</div>
+      </div>
+    ''' : ''}
+
     <!-- Disclaimer & Standard Terms -->
     ${proposal.disclaimer.isNotEmpty ? '''
       <div style="margin-top: 14px; padding: 10px 12px; background: #f8fafc; border-left: 3px solid #b45309; border-radius: 0 4px 4px 0; font-size: 10.5px; color: #475569; line-height: 1.5;">

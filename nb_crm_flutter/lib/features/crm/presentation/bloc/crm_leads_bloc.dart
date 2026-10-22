@@ -250,6 +250,12 @@ class CrmLeadsColumnsMerged extends CrmLeadsEvent {
   List<Object?> get props => [sourceKey, targetKey, targetLabel];
 }
 
+class CrmLeadsSilentRefreshRequested extends CrmLeadsEvent {
+  const CrmLeadsSilentRefreshRequested();
+  @override
+  List<Object?> get props => [];
+}
+
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
@@ -416,9 +422,48 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
     on<CrmLeadsClickToCallRequested>(_onClickToCallRequested);
     on<CrmLeadsColumnVisibilityToggled>(_onColumnVisibilityToggled);
     on<CrmLeadsColumnsMerged>(_onColumnsMerged);
+    on<CrmLeadsSilentRefreshRequested>(_onSilentRefresh);
+
+    CrmRepository.leadMutationNotifier.addListener(_onLeadMutationNotified);
   }
 
   final CrmRepository _crmRepository;
+
+  void _onLeadMutationNotified() {
+    add(const CrmLeadsSilentRefreshRequested());
+  }
+
+  @override
+  Future<void> close() {
+    CrmRepository.leadMutationNotifier.removeListener(_onLeadMutationNotified);
+    return super.close();
+  }
+
+  Future<void> _onSilentRefresh(
+    CrmLeadsSilentRefreshRequested event,
+    Emitter<CrmLeadsState> emit,
+  ) async {
+    await _refreshLeadsOnly(emit);
+  }
+
+  Future<void> _refreshLeadsOnly(Emitter<CrmLeadsState> emit) async {
+    try {
+      final effectiveStatus = state.statusFilter;
+      final effectiveLeadFlow = state.leadFlowFilter;
+      final effectiveSearch = state.search;
+
+      final updatedLeads = await _crmRepository.getLeads(
+        projectId: state.selectedProjectId,
+        campaignId: state.selectedCampaignId,
+        status: effectiveStatus == 'ALL' ? null : effectiveStatus,
+        leadFlow: effectiveLeadFlow == 'ALL' ? null : effectiveLeadFlow,
+        search: effectiveSearch.isEmpty ? null : effectiveSearch,
+      );
+      emit(state.copyWith(leads: updatedLeads));
+    } catch (_) {
+      // Retain optimistic local state on network error
+    }
+  }
 
   Future<void> _fetchData(
     Emitter<CrmLeadsState> emit, {
@@ -593,20 +638,47 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
     CrmLeadsLeadUpdated event,
     Emitter<CrmLeadsState> emit,
   ) async {
-    emit(state.copyWith(isActing: true));
+    // 1. Instant Optimistic Update in State
+    final assignedId = event.data['assignedToId'] as int?;
+    final targetUser = assignedId != null
+        ? state.salesUsers.firstWhere(
+            (u) => u.employeeId == assignedId,
+            orElse: () => CrmSalesUser(
+              employeeId: assignedId,
+              fullName: 'Sales Manager #$assignedId',
+            ),
+          )
+        : null;
+    final statusStr = event.data['status']?.toString();
+    final newStatus = statusStr != null ? CrmStatus.fromString(statusStr) : null;
+
+    final optimisticallyUpdated = state.leads.map((l) {
+      if (l.id == event.leadId) {
+        return l.copyWith(
+          assignedToId: event.data.containsKey('assignedToId') ? assignedId : l.assignedToId,
+          clearAssignedTo: event.data.containsKey('assignedToId') && assignedId == null,
+          assignedToName: event.data.containsKey('assignedToId') ? targetUser?.fullName : l.assignedToName,
+          status: newStatus ?? l.status,
+          name: event.data['name']?.toString() ?? l.name,
+          phone: event.data['phone']?.toString() ?? l.phone,
+        );
+      }
+      return l;
+    }).toList();
+
+    emit(state.copyWith(
+      leads: optimisticallyUpdated,
+      actionSuccessMessage: assignedId != null
+          ? 'Lead assigned to ${targetUser?.fullName ?? "Sales Manager"}'
+          : 'Lead updated',
+    ));
+
+    // 2. Perform background update & silent refresh
     try {
       await _crmRepository.updateLead(event.leadId, event.data);
-      emit(state.copyWith(
-        isActing: false,
-        actionSuccessMessage: 'Lead updated',
-      ));
-      await _fetchData(
-        emit,
-        projectId: state.selectedProjectId,
-        campaignId: state.selectedCampaignId,
-      );
+      await _refreshLeadsOnly(emit);
     } catch (e) {
-      emit(state.copyWith(isActing: false, errorMessage: e.toString()));
+      emit(state.copyWith(errorMessage: 'Update failed: $e'));
     }
   }
 
@@ -614,7 +686,21 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
     CrmLeadsLeadStatusUpdated event,
     Emitter<CrmLeadsState> emit,
   ) async {
-    emit(state.copyWith(isActing: true));
+    // 1. Instant Optimistic Update
+    final newStatus = CrmStatus.fromString(event.status);
+    final optimisticallyUpdated = state.leads.map((l) {
+      if (l.id == event.leadId) {
+        return l.copyWith(status: newStatus);
+      }
+      return l;
+    }).toList();
+
+    emit(state.copyWith(
+      leads: optimisticallyUpdated,
+      actionSuccessMessage: 'Status updated to ${event.status}',
+    ));
+
+    // 2. Background update & silent refresh
     try {
       await _crmRepository.updateLeadStatus(
         event.leadId,
@@ -627,17 +713,9 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
         notInterestedReason: event.notInterestedReason,
         notInterestedRemark: event.notInterestedRemark,
       );
-      emit(state.copyWith(
-        isActing: false,
-        actionSuccessMessage: 'Status updated to ${event.status}',
-      ));
-      await _fetchData(
-        emit,
-        projectId: state.selectedProjectId,
-        campaignId: state.selectedCampaignId,
-      );
+      await _refreshLeadsOnly(emit);
     } catch (e) {
-      emit(state.copyWith(isActing: false, errorMessage: e.toString()));
+      emit(state.copyWith(errorMessage: 'Status update failed: $e'));
     }
   }
 
@@ -645,20 +723,16 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
     CrmLeadsLeadMovedToBin event,
     Emitter<CrmLeadsState> emit,
   ) async {
-    emit(state.copyWith(isActing: true));
+    final updatedLeads = state.leads.where((l) => l.id != event.leadId).toList();
+    emit(state.copyWith(
+      leads: updatedLeads,
+      actionSuccessMessage: 'Lead moved to bin',
+    ));
     try {
       await _crmRepository.moveToBin(event.leadId);
-      emit(state.copyWith(
-        isActing: false,
-        actionSuccessMessage: 'Lead moved to bin',
-      ));
-      await _fetchData(
-        emit,
-        projectId: state.selectedProjectId,
-        campaignId: state.selectedCampaignId,
-      );
+      await _refreshLeadsOnly(emit);
     } catch (e) {
-      emit(state.copyWith(isActing: false, errorMessage: e.toString()));
+      emit(state.copyWith(errorMessage: e.toString()));
     }
   }
 
@@ -696,24 +770,40 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
     CrmLeadTransferRequested event,
     Emitter<CrmLeadsState> emit,
   ) async {
-    emit(state.copyWith(isActing: true));
+    // 1. Instant Optimistic Update in State
+    final targetUser = state.salesUsers.firstWhere(
+      (u) => u.employeeId == event.targetTelecallerId,
+      orElse: () => CrmSalesUser(
+        employeeId: event.targetTelecallerId,
+        fullName: 'Telecaller #${event.targetTelecallerId}',
+      ),
+    );
+
+    final optimisticallyUpdated = state.leads.map((l) {
+      if (l.id == event.leadId) {
+        return l.copyWith(
+          telecallerId: event.targetTelecallerId,
+          telecallerName: targetUser.fullName,
+        );
+      }
+      return l;
+    }).toList();
+
+    emit(state.copyWith(
+      leads: optimisticallyUpdated,
+      actionSuccessMessage: 'Lead transferred to ${targetUser.fullName}',
+    ));
+
+    // 2. Background transfer & silent refresh
     try {
       await _crmRepository.transferLead(
         event.leadId,
         targetTelecallerId: event.targetTelecallerId,
         remarks: event.remarks,
       );
-      emit(state.copyWith(
-        isActing: false,
-        actionSuccessMessage: 'Lead transferred successfully',
-      ));
-      await _fetchData(
-        emit,
-        projectId: state.selectedProjectId,
-        campaignId: state.selectedCampaignId,
-      );
+      await _refreshLeadsOnly(emit);
     } catch (e) {
-      emit(state.copyWith(isActing: false, errorMessage: e.toString()));
+      emit(state.copyWith(errorMessage: 'Transfer failed: $e'));
     }
   }
 
@@ -772,16 +862,21 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
   ) async {
     emit(state.copyWith(isActing: true));
     try {
-      await _crmRepository.visitorCheckin(event.payload);
+      final checkedIn = await _crmRepository.visitorCheckin(event.payload);
+      final existingIndex = state.leads.indexWhere((l) => l.id == checkedIn.id);
+      final updatedLeads = List<CrmLead>.from(state.leads);
+      if (existingIndex >= 0) {
+        updatedLeads[existingIndex] = checkedIn;
+      } else {
+        updatedLeads.insert(0, checkedIn);
+      }
+
       emit(state.copyWith(
         isActing: false,
+        leads: updatedLeads,
         actionSuccessMessage: 'Visitor check-in completed & status updated to Site Done!',
       ));
-      await _fetchData(
-        emit,
-        projectId: state.selectedProjectId,
-        campaignId: state.selectedCampaignId,
-      );
+      await _refreshLeadsOnly(emit);
     } catch (e) {
       emit(state.copyWith(isActing: false, errorMessage: e.toString()));
     }

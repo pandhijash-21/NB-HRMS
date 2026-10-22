@@ -76,29 +76,10 @@ class BrandingConfig {
     }
   }
 
-  /// Prefer remote Cloudinary URL; fall back to bundled asset path.
+  /// Branded GIF splash asset
   static String resolveSplashSource() {
-    final remote = splashVideoUrl?.trim();
-    if (remote != null && remote.startsWith('http')) {
-      return leanCloudinaryUrl(remote);
-    }
-    return 'assets/clips/processed/splash_mr_nb.mp4';
+    return 'assets/images/mrnb.gif';
   }
 
-  /// Prefer a smaller/faster Cloudinary delivery for cold start.
-  static String leanCloudinaryUrl(String url) {
-    if (!url.contains('res.cloudinary.com') || !url.contains('/upload/')) {
-      return url;
-    }
-    // Replace any existing transformation segment after /upload/.
-    return url.replaceFirst(
-      RegExp(r'/upload/[^/]*(?=/v\d+/|/[^/]+/)'),
-      '/upload/w_960,c_limit,q_auto:eco,f_mp4,vc_auto',
-    );
-  }
-
-  static bool get hasRemoteSplash {
-    final remote = splashVideoUrl?.trim();
-    return remote != null && remote.startsWith('http');
-  }
+  static bool get hasRemoteSplash => false;
 }

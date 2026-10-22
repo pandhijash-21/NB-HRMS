@@ -121,6 +121,7 @@ export interface UpdateCrmSettingsDto {
   telecaller_max_workload_map?: string | Record<string, number>;
   untouched_lead_timeout_minutes?: number | string;
   idle_timeout_minutes?: number | string;
+  quotation_general_remarks?: string;
   [key: string]: any;
 }
 

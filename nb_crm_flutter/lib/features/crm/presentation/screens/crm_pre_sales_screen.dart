@@ -16,6 +16,7 @@ import '../bloc/crm_leads_bloc.dart';
 import '../widgets/crm_audio_player_dialog.dart';
 import '../widgets/crm_scope_selector.dart';
 import '../widgets/crm_telecaller_status_dialog.dart';
+import '../../../../core/widgets/nb_brand_loader.dart';
 
 class CrmPreSalesScreen extends StatelessWidget {
   const CrmPreSalesScreen({super.key});
@@ -872,7 +873,16 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
 
           // Dynamic Data Table with Custom Scrollbar
           if (state.status.isLoading && filteredLeads.isEmpty)
-            const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator()))
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(40),
+                child: NbBrandLoader(
+                  size: 90,
+                  isFullScreen: false,
+                  statusLines: ['Loading CRM pipeline…'],
+                ),
+              ),
+            )
           else if (state.status.isFailure && filteredLeads.isEmpty)
             Center(child: Text('Error loading leads: ${state.errorMessage}', style: const TextStyle(color: Colors.red)))
           else if (filteredLeads.isEmpty)
@@ -980,11 +990,15 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                         final lead = filteredLeads[index];
 
                         // Telecaller Limitation:
-                        // In Real Estate CRM, once assigned by Visitor Desk, telecallers have view-only access.
-                        // In Finserve CRM, telecallers can assign and manage leads with Sales Managers.
-                        final isAssigned = lead.assignedToId != null;
+                        // Once a sales representative is assigned (assignedToId != null),
+                        // telecallers can SEE the lead in their table, but the lead is strictly BLOCKED for telecallers
+                        // (no editing, no status change, no transfer, no telecalling).
+                        // Only Admins or the assigned Sales Representative themselves can alter the lead.
+                        final isAssignedToSales = lead.assignedToId != null;
                         final isAssignedSalesRep = userEmployeeId != null && userEmployeeId == lead.assignedToId;
-                        final canAlterLead = canWrite && (!isAssigned || isAdmin || isAssignedSalesRep || isFinserve);
+                        final isBooked = lead.status == CrmStatus.bookingConfirmed || lead.proposals.any((p) => p.isBooked);
+                        final isBlockedForTelecaller = (isAssignedToSales && !isAdmin && !isAssignedSalesRep) || isBooked;
+                        final canAlterLead = canWrite && !isBlockedForTelecaller && !isBooked;
 
                         return DataRow(
                           cells: [
@@ -1012,16 +1026,33 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                             // Elision Phone Icon Column
                             DataCell(
                               IconButton(
-                                tooltip: 'Click-to-Call via Elision',
+                                tooltip: isBlockedForTelecaller
+                                    ? 'Lead is handed over to Sales (${lead.assignedToName ?? "Sales Rep"}) — Telecalling is blocked.'
+                                    : 'Click-to-Call via Elision',
                                 icon: Container(
                                   padding: const EdgeInsets.all(6),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF16A34A).withValues(alpha: 0.15),
+                                    color: isBlockedForTelecaller
+                                        ? Colors.grey.withValues(alpha: 0.15)
+                                        : const Color(0xFF16A34A).withValues(alpha: 0.15),
                                     shape: BoxShape.circle,
                                   ),
-                                  child: const Icon(Icons.phone_in_talk_rounded, color: Color(0xFF16A34A), size: 18),
+                                  child: Icon(
+                                    isBlockedForTelecaller ? Icons.phone_disabled_rounded : Icons.phone_in_talk_rounded,
+                                    color: isBlockedForTelecaller ? Colors.grey : const Color(0xFF16A34A),
+                                    size: 18,
+                                  ),
                                 ),
-                                onPressed: () => _handleElisionCallAndFollowUp(context, lead),
+                                onPressed: isBlockedForTelecaller
+                                    ? () {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('Lead is assigned to Sales (${lead.assignedToName ?? "Sales Rep"}). Telecalling is blocked for telecallers.'),
+                                            backgroundColor: Colors.amber.shade900,
+                                          ),
+                                        );
+                                      }
+                                    : () => _handleElisionCallAndFollowUp(context, lead),
                               ),
                             ),
 
@@ -1035,7 +1066,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                               (lead.telecallerName != null && lead.telecallerName!.isNotEmpty)
                                   ? InkWell(
                                       borderRadius: BorderRadius.circular(6),
-                                      onTap: () => _showTransferLeadModal(context, lead, salesUsers),
+                                      onTap: canAlterLead ? () => _showTransferLeadModal(context, lead, salesUsers) : null,
                                       child: Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                         decoration: BoxDecoration(
@@ -1100,7 +1131,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                               isFinserve
                                   ? InkWell(
                                       borderRadius: BorderRadius.circular(8),
-                                      onTap: () => _showAssignSalesManagerModal(context, lead, salesUsers),
+                                      onTap: canAlterLead ? () => _showAssignSalesManagerModal(context, lead, salesUsers) : null,
                                       child: Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                                         decoration: BoxDecoration(
@@ -1229,11 +1260,12 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                       onPressed: () => _showAssignSalesManagerModal(context, lead, salesUsers),
                                     ),
                                   ],
-                                  IconButton(
-                                    icon: const Icon(Icons.swap_horiz_rounded, size: 18, color: Color(0xFF6366F1)),
-                                    tooltip: 'Transfer Lead to another Telecaller',
-                                    onPressed: () => _showTransferLeadModal(context, lead, salesUsers),
-                                  ),
+                                  if (isAdmin || !isBlockedForTelecaller)
+                                    IconButton(
+                                      icon: const Icon(Icons.swap_horiz_rounded, size: 18, color: Color(0xFF6366F1)),
+                                      tooltip: 'Transfer Lead to another Telecaller',
+                                      onPressed: () => _showTransferLeadModal(context, lead, salesUsers),
+                                    ),
                                   IconButton(
                                     icon: Icon(
                                       canAlterLead ? Icons.edit_outlined : Icons.lock_outline_rounded,
@@ -1242,7 +1274,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                     ),
                                     tooltip: canAlterLead
                                         ? 'Edit Lead Details'
-                                        : 'Assigned to ${lead.assignedToName ?? "Sales Rep"} (View-only for telecaller)',
+                                        : 'Assigned to Sales: ${lead.assignedToName ?? "Sales Rep"} (Blocked for Telecallers - View Only)',
                                     onPressed: () => _showEditLeadDialog(
                                       context,
                                       lead,
@@ -1251,7 +1283,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                       isReadOnly: !canAlterLead,
                                     ),
                                   ),
-                                  if (canAlterLead)
+                                  if (canAlterLead && (isAdmin || !isBlockedForTelecaller))
                                     IconButton(
                                       icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.redAccent),
                                       tooltip: 'Move to Bin',
@@ -1348,10 +1380,14 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
         break;
     }
 
-    // If telecaller cannot alter this assigned lead, render locked badge
-    if (!canAlter) {
+    // If lead is booked or telecaller cannot alter this assigned lead, render locked badge
+    final isLeadBooked = lead.status == CrmStatus.bookingConfirmed || lead.proposals.any((p) => p.isBooked);
+    if (!canAlter || isLeadBooked) {
+      final tooltipMsg = isLeadBooked
+          ? 'Booking Confirmed — Lead is finalized and locked against all modifications.'
+          : 'Lead is assigned to ${lead.assignedToName ?? "Sales Rep"} — Telecallers have view-only access.';
       return Tooltip(
-        message: 'Lead is assigned to ${lead.assignedToName ?? "Sales Rep"} — Telecallers have view-only access.',
+        message: tooltipMsg,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
           decoration: BoxDecoration(
@@ -1572,7 +1608,18 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
           ),
           const SizedBox(height: 16),
 
-          if (followUps.isEmpty)
+          if (state.status.isLoading && followUps.isEmpty)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 40),
+                child: NbBrandLoader(
+                  size: 90,
+                  isFullScreen: false,
+                  statusLines: ['Loading scheduled follow-ups…'],
+                ),
+              ),
+            )
+          else if (followUps.isEmpty)
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(40),
@@ -1847,7 +1894,18 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
           const SizedBox(height: 16),
 
           // Logs Content
-          if (logs.isEmpty)
+          if (state.status.isLoading && logs.isEmpty)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 40),
+                child: NbBrandLoader(
+                  size: 90,
+                  isFullScreen: false,
+                  statusLines: ['Loading call recordings…'],
+                ),
+              ),
+            )
+          else if (logs.isEmpty)
             Center(
               child: Container(
                 width: double.infinity,
@@ -4198,7 +4256,8 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     bool isReadOnly = false,
   }) {
     final isFinserve = CrmRepository.crmScopeNotifier.value == 'NB_FINSERVE';
-    final effectiveReadOnly = isReadOnly && !isFinserve;
+    final isLeadBooked = lead.status == CrmStatus.bookingConfirmed || lead.proposals.any((p) => p.isBooked);
+    final effectiveReadOnly = isReadOnly || isLeadBooked;
 
     final controllers = <String, TextEditingController>{};
     for (final col in columns) {
@@ -4249,195 +4308,104 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
       }
     } catch (_) {}
 
-    final uniqueUsers = <int, CrmSalesUser>{};
-    for (final u in salesUsers) {
-      uniqueUsers[u.employeeId] = u;
-    }
-    if (lead.assignedToId != null && !uniqueUsers.containsKey(lead.assignedToId)) {
-      uniqueUsers[lead.assignedToId!] = CrmSalesUser(
-        employeeId: lead.assignedToId!,
-        fullName: lead.assignedToName ?? 'Employee #${lead.assignedToId}',
-        designation: isFinserve ? 'Sales Manager' : 'Sales',
-      );
-    }
-
-    int? selectedAssignee = (lead.assignedToId != null && uniqueUsers.containsKey(lead.assignedToId))
-        ? lead.assignedToId
-        : null;
-
     showDialog(
       context: context,
-      builder: (dialogCtx) => StatefulBuilder(
-        builder: (ctx, setEditState) => AlertDialog(
-          title: Row(
-            children: [
-              if (effectiveReadOnly) ...[
-                const Icon(Icons.lock_outline_rounded, color: Colors.amber),
-                const SizedBox(width: 8),
+      builder: (dialogCtx) {
+        final isDark = Theme.of(dialogCtx).brightness == Brightness.dark;
+        return StatefulBuilder(
+          builder: (ctx, setEditState) => AlertDialog(
+            title: Row(
+              children: [
+                if (effectiveReadOnly) ...[
+                  const Icon(Icons.lock_rounded, color: Colors.amber, size: 20),
+                  const SizedBox(width: 8),
+                ],
+                Expanded(
+                  child: Text(
+                    effectiveReadOnly
+                        ? (isLeadBooked
+                            ? 'Lead Details (Booking Confirmed - Locked)'
+                            : 'Lead Details (Locked - In Sales)')
+                        : 'Edit Lead: ${lead.name}',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded, size: 20),
+                  tooltip: 'Close',
+                  onPressed: () => Navigator.pop(dialogCtx),
+                ),
               ],
-              Expanded(
-                child: Text(
-                  effectiveReadOnly ? 'Lead Details (Read-Only)' : 'Edit Lead: ${lead.name}',
-                ),
-              ),
-              const SizedBox(width: 8),
-              OutlinedButton.icon(
-                icon: const Icon(Icons.swap_horiz_rounded, size: 16, color: Color(0xFF2563EB)),
-                label: const Text('Transfer', style: TextStyle(fontSize: 12, color: Color(0xFF2563EB))),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  side: const BorderSide(color: Color(0xFF2563EB)),
-                ),
-                onPressed: () {
-                  Navigator.pop(dialogCtx);
-                  _showTransferLeadModal(context, lead, salesUsers);
-                },
-              ),
-            ],
-          ),
-          content: Container(
-            constraints: const BoxConstraints(maxWidth: 520),
-            width: double.maxFinite,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (effectiveReadOnly) ...[
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      margin: const EdgeInsets.only(bottom: 16),
-                      decoration: BoxDecoration(
-                        color: Colors.amber.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.amber.withValues(alpha: 0.35)),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.lock_rounded, color: Colors.amber, size: 20),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              'This lead is assigned to ${lead.assignedToName ?? "Sales Rep"}. Telecallers have view-only access.',
-                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+            content: Container(
+              constraints: const BoxConstraints(maxWidth: 520),
+              width: double.maxFinite,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (effectiveReadOnly) ...[
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: isLeadBooked
+                              ? Colors.green.withValues(alpha: isDark ? 0.2 : 0.12)
+                              : Colors.amber.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: isLeadBooked
+                                ? Colors.green.withValues(alpha: isDark ? 0.45 : 0.35)
+                                : Colors.amber.withValues(alpha: 0.35),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              isLeadBooked ? Icons.verified_rounded : Icons.lock_rounded,
+                              color: isLeadBooked ? Colors.green : Colors.amber,
+                              size: 18,
                             ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-
-                  // 1. Allocated Telecaller Section
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Text('Allocated Telecaller', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
-                          const SizedBox(width: 4),
-                          Tooltip(
-                            message: 'Telecaller allocated for initial calling, lead qualification, and follow-ups.',
-                            child: Icon(Icons.info_outline_rounded, size: 14, color: Colors.grey.shade600),
-                          ),
-                        ],
-                      ),
-                      OutlinedButton.icon(
-                        icon: const Icon(Icons.swap_horiz_rounded, size: 14, color: Color(0xFF16A34A)),
-                        label: const Text('Transfer Telecaller', style: TextStyle(fontSize: 11, color: Color(0xFF16A34A))),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          side: const BorderSide(color: Color(0xFF16A34A)),
-                          visualDensity: VisualDensity.compact,
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                isLeadBooked
+                                    ? '🎉 Booking Confirmed! This lead is finalized and completely locked. No further modifications can be made.'
+                                    : 'This lead is assigned to Sales (${lead.assignedToName ?? "Sales Rep"}). Telecallers have view-only access. Edits and status changes are blocked.',
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          ],
                         ),
-                        onPressed: () {
-                          Navigator.pop(dialogCtx);
-                          _showTransferLeadModal(context, lead, salesUsers);
-                        },
+                      ),
+                    ] else if (lead.assignedToName != null || lead.telecallerName != null) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withValues(alpha: isDark ? 0.12 : 0.05),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.blue.withValues(alpha: isDark ? 0.25 : 0.18)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.badge_outlined, size: 15, color: Color(0xFF2563EB)),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Telecaller: ${lead.telecallerName ?? "Unallocated"}   •   Sales Rep: ${lead.assignedToName ?? "Unassigned"}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: isDark ? Colors.white70 : const Color(0xFF1E293B),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 6),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey.shade300),
-                      borderRadius: BorderRadius.circular(8),
-                      color: const Color(0xFF16A34A).withValues(alpha: 0.06),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.headset_mic_rounded, size: 16, color: Color(0xFF16A34A)),
-                        const SizedBox(width: 8),
-                        Text(
-                          (lead.telecallerName != null && lead.telecallerName!.isNotEmpty)
-                              ? lead.telecallerName!
-                              : 'Waiting List (Unallocated)',
-                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // 2. Assigned Sales User section
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        isFinserve ? 'Assigned Sales Manager' : 'Assigned Sales Representative (Visitor Desk)',
-                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(width: 4),
-                      Tooltip(
-                        message: isFinserve
-                            ? 'Sales Manager / Loan Officer assigned for branch meeting, document processing, and closing.'
-                            : 'Sales Representative assigned by Visitor Desk when client visits the site/office.',
-                        child: Icon(Icons.info_outline_rounded, size: 14, color: Colors.grey.shade600),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  if (effectiveReadOnly)
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade300),
-                        borderRadius: BorderRadius.circular(8),
-                        color: Colors.grey.withValues(alpha: 0.08),
-                      ),
-                      child: Text(
-                        lead.assignedToName ?? 'Unassigned',
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                    )
-                  else
-                    DropdownButtonFormField<int?>(
-                      isExpanded: true,
-                      initialValue: selectedAssignee,
-                      decoration: const InputDecoration(
-                        prefixIcon: Icon(Icons.badge_outlined, size: 20),
-                        border: OutlineInputBorder(),
-                      ),
-                      items: [
-                        const DropdownMenuItem<int?>(value: null, child: Text('Unassigned')),
-                        ...uniqueUsers.values.map((u) {
-                          final label = u.designation != null && u.designation!.isNotEmpty
-                              ? '${u.fullName} (${u.designation})'
-                              : u.fullName;
-                          return DropdownMenuItem<int?>(
-                            value: u.employeeId,
-                            child: Text(label, style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis),
-                          );
-                        }),
-                      ],
-                      onChanged: (val) => setEditState(() => selectedAssignee = val),
-                    ),
-                  const SizedBox(height: 16),
-                  const Divider(),
-                  const SizedBox(height: 8),
 
                   ...columns.map((col) {
                     final labelLower = col.label.toLowerCase();
@@ -4614,7 +4582,6 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                           'name': name,
                           'phone': phone,
                           'customFields': customFields,
-                          'assignedToId': selectedAssignee,
                         }),
                       );
                 },
@@ -4622,8 +4589,9 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
               ),
           ],
         ),
-      ),
-    );
+      );
+    },
+  );
   }
 
   void _confirmMoveToBin(BuildContext context, CrmLead lead) {

@@ -1367,6 +1367,11 @@ export const crmService = {
     const isAssignedSalesRep = userContext?.employeeId != null && userContext?.employeeId === existing.assignedToId;
     const isFinserve = existing.scope === 'NB_FINSERVE';
 
+    // Booking Confirmed Rule:
+    if (existing.status === 'BOOKING_CONFIRMED') {
+      throw new Error('This lead has a Confirmed Booking and is locked. Status modifications are blocked.');
+    }
+
     // In Real Estate CRM, once assigned to sales, telecallers have view-only access.
     // In Finserve CRM, telecallers can assign and manage leads with sales managers freely.
     if (!isFinserve && existing.assignedToId && !isSuperAdmin && !isAssignedSalesRep) {
@@ -1529,6 +1534,12 @@ export const crmService = {
     const isAssignedSalesRep = userContext?.employeeId != null && userContext?.employeeId === existing.assignedToId;
     const isFinserve = existing.scope === 'NB_FINSERVE';
 
+    // Booking Confirmed Rule:
+    // Once booking is confirmed, the lead cannot be modified by anyone.
+    if (existing.status === 'BOOKING_CONFIRMED') {
+      throw new Error('This lead has a Confirmed Booking and is locked. Modifications are blocked.');
+    }
+
     if (!isFinserve && existing.assignedToId && !isSuperAdmin && !isAssignedSalesRep) {
       throw new Error('This lead is assigned to a sales representative. Telecallers have view-only access.');
     }
@@ -1606,7 +1617,7 @@ export const crmService = {
       const agentName = updated.assignedTo?.generalInfo?.fullName;
       const agentPhone = '';
 
-      if (dto.status === 'BOOKING_CONFIRMED' && existing.status !== 'BOOKING_CONFIRMED') {
+      if (dto.status === 'BOOKING_CONFIRMED') {
         whatsappService
           .triggerEvent('BOOKING_CONFIRMED', updated, { projectName, agentName, agentPhone })
           .catch((err) => console.error('[CRM WhatsApp Hook Error - Booking Confirmed]:', err));
@@ -1654,6 +1665,9 @@ export const crmService = {
       },
     });
     if (!existing) throw new Error('Lead not found');
+    if (existing.status === 'BOOKING_CONFIRMED') {
+      throw new Error('This lead has a Confirmed Booking and is locked. Transfers are blocked.');
+    }
 
     const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(
       userContext?.role?.toUpperCase() || ''
@@ -1742,6 +1756,10 @@ export const crmService = {
     const isSuperAdmin = ['ADMIN', 'SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(userContext?.role?.toUpperCase() || '');
     const isAssignedSalesRep = userContext?.employeeId != null && userContext?.employeeId === existing.assignedToId;
     const isFinserve = existing.scope === 'NB_FINSERVE';
+
+    if (existing.status === 'BOOKING_CONFIRMED') {
+      throw new Error('This lead has a Confirmed Booking and is locked. It cannot be moved to Bin.');
+    }
 
     if (!isFinserve && existing.assignedToId && !isSuperAdmin && !isAssignedSalesRep) {
       throw new Error('This lead is assigned to a sales representative. Telecallers have view-only access.');
@@ -2003,9 +2021,41 @@ export const crmService = {
       }
     }
 
+    // Helper for visit wording: once, twice, thrice, N times
+    const formatVisitCount = (count: number) => {
+      if (count <= 1) return { wording: 'once', ordinal: '1st' };
+      if (count === 2) return { wording: 'twice', ordinal: '2nd' };
+      if (count === 3) return { wording: 'thrice', ordinal: '3rd' };
+      return { wording: `${count} times`, ordinal: `${count}th` };
+    };
+
+    const custom = (lead.customFields as Record<string, any>) || {};
+    const siteVisitsList: any[] = Array.isArray(custom.siteVisits) ? custom.siteVisits : [];
+    let pastVisitCount = typeof custom.siteVisitCount === 'number' ? custom.siteVisitCount : siteVisitsList.length;
+    if (pastVisitCount === 0 && (lead.status === 'SITE_VISIT_DONE' || lead.visitedAt)) {
+      pastVisitCount = 1;
+    }
+    const nextVisitNumber = pastVisitCount + 1;
+    const pastInfo = pastVisitCount > 0 ? formatVisitCount(pastVisitCount) : null;
+    const nextInfo = formatVisitCount(nextVisitNumber);
+
+    const previousSalesManager = lead.assignedTo ? {
+      id: lead.assignedTo.id,
+      fullName: lead.assignedTo.generalInfo?.fullName || `Employee #${lead.assignedTo.id}`,
+      designation: lead.assignedTo.generalInfo?.designation || 'Sales Manager',
+    } : null;
+
     return {
       exists: true,
       isScheduledToday,
+      pastVisitCount,
+      pastVisitWording: pastInfo?.wording || null,
+      pastVisitOrdinal: pastInfo?.ordinal || null,
+      nextVisitNumber,
+      nextVisitWording: nextInfo.wording,
+      nextVisitOrdinal: nextInfo.ordinal,
+      previousSalesManager,
+      siteVisitsHistory: siteVisitsList,
       lead,
     };
   },
@@ -2030,7 +2080,7 @@ export const crmService = {
 
     const emp = await prisma.employee.findUnique({
       where: { id: dto.assignedToId },
-      include: { generalInfo: { select: { fullName: true } } },
+      include: { generalInfo: { select: { fullName: true, designation: true } } },
     });
     if (!emp) {
       throw new Error('Assigned sales representative not found');
@@ -2038,11 +2088,55 @@ export const crmService = {
 
     const now = new Date();
 
+    const formatVisitCount = (count: number) => {
+      if (count <= 1) return { wording: 'once', ordinal: '1st' };
+      if (count === 2) return { wording: 'twice', ordinal: '2nd' };
+      if (count === 3) return { wording: 'thrice', ordinal: '3rd' };
+      return { wording: `${count} times`, ordinal: `${count}th` };
+    };
+
     if (dto.leadId) {
       const existing = await prisma.crmLead.findUnique({
         where: { id: dto.leadId },
+        include: {
+          assignedTo: {
+            include: { generalInfo: { select: { fullName: true, designation: true } } },
+          },
+        },
       });
       if (!existing) throw new Error('Lead not found');
+
+      const custom = (existing.customFields as Record<string, any>) || {};
+      const previousVisits: any[] = Array.isArray(custom.siteVisits) ? [...custom.siteVisits] : [];
+      let pastVisitCount = typeof custom.siteVisitCount === 'number' ? custom.siteVisitCount : previousVisits.length;
+      if (pastVisitCount === 0 && (existing.status === 'SITE_VISIT_DONE' || existing.visitedAt)) {
+        pastVisitCount = 1;
+      }
+      const currentVisitNumber = pastVisitCount + 1;
+      const { wording, ordinal } = formatVisitCount(currentVisitNumber);
+
+      const salesRepName = emp.generalInfo?.fullName || `Employee #${emp.id}`;
+      const previousManagerName = existing.assignedTo?.generalInfo?.fullName;
+      const isReassigned = existing.assignedToId && existing.assignedToId !== emp.id;
+
+      let logNote = `Site visit done ${wording} (${ordinal} visit). Assigned to ${salesRepName}.`;
+      if (isReassigned && previousManagerName) {
+        logNote += ` (Previously attended by ${previousManagerName}).`;
+      }
+      if (dto.remarks && dto.remarks.trim()) {
+        logNote += ` Reception Notes: ${dto.remarks.trim()}`;
+      }
+
+      previousVisits.push({
+        visitNumber: currentVisitNumber,
+        wording,
+        ordinal,
+        visitedAt: now.toISOString(),
+        salesRepId: emp.id,
+        salesRepName,
+        previousRepName: previousManagerName,
+        remarks: dto.remarks?.trim() || null,
+      });
 
       const updated = await prisma.crmLead.update({
         where: { id: dto.leadId },
@@ -2051,6 +2145,13 @@ export const crmService = {
           visitedAt: now,
           scheduledVisitAt: existing.scheduledVisitAt || now,
           assignedToId: emp.id,
+          customFields: {
+            ...custom,
+            siteVisitCount: currentVisitNumber,
+            lastVisitWording: wording,
+            lastVisitOrdinal: ordinal,
+            siteVisits: previousVisits,
+          },
           ...(dto.leadSource && { leadSource: dto.leadSource }),
           ...(dto.channelPartnerName && { channelPartnerName: dto.channelPartnerName }),
           ...(dto.referenceType && { referenceType: dto.referenceType }),
@@ -2058,8 +2159,9 @@ export const crmService = {
         },
         include: {
           assignedTo: {
-            include: { generalInfo: { select: { fullName: true } } },
+            include: { generalInfo: { select: { fullName: true, designation: true } } },
           },
+          campaign: { select: { project: { select: { name: true } } } },
         },
       });
 
@@ -2069,7 +2171,7 @@ export const crmService = {
           scheduledDate: now,
           scheduledTime: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
           status: 'COMPLETED',
-          remarks: dto.remarks || `Visitor checked in at site. Assigned to ${emp.generalInfo?.fullName || 'Sales Rep'}. Status: Site Done.`,
+          remarks: logNote,
           assignedToId: emp.id,
           createdById: userContext?.userId,
         },
@@ -2094,6 +2196,13 @@ export const crmService = {
     const cleanDigits = dto.phone.replace(/\D/g, '');
     const defaultCamp = await this.ensureDefaultCampaign('PRE_SALES');
 
+    const { wording, ordinal } = formatVisitCount(1);
+    const salesRepName = emp.generalInfo?.fullName || `Employee #${emp.id}`;
+    let logNote = `Site visit done ${wording} (${ordinal} visit). Assigned to ${salesRepName}.`;
+    if (dto.remarks && dto.remarks.trim()) {
+      logNote += ` Reception Notes: ${dto.remarks.trim()}`;
+    }
+
     const newLead = await prisma.crmLead.create({
       data: {
         campaignId: defaultCamp.id,
@@ -2110,6 +2219,20 @@ export const crmService = {
         createdById: userContext?.userId,
         customFields: {
           source: dto.leadSource || 'Walk IN',
+          siteVisitCount: 1,
+          lastVisitWording: 'once',
+          lastVisitOrdinal: '1st',
+          siteVisits: [
+            {
+              visitNumber: 1,
+              wording: 'once',
+              ordinal: '1st',
+              visitedAt: now.toISOString(),
+              salesRepId: emp.id,
+              salesRepName,
+              remarks: dto.remarks?.trim() || null,
+            },
+          ],
           ...(dto.channelPartnerName && { channel_partner: dto.channelPartnerName }),
           ...(dto.referenceType && { reference_type: dto.referenceType }),
           ...(dto.referenceName && { reference_name: dto.referenceName }),
@@ -2117,7 +2240,7 @@ export const crmService = {
       },
       include: {
         assignedTo: {
-          include: { generalInfo: { select: { fullName: true } } },
+          include: { generalInfo: { select: { fullName: true, designation: true } } },
         },
       },
     });
@@ -2128,7 +2251,7 @@ export const crmService = {
         scheduledDate: now,
         scheduledTime: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
         status: 'COMPLETED',
-        remarks: dto.remarks || `New visitor registered at site desk. Assigned to ${emp.generalInfo?.fullName || 'Sales Rep'}. Status: Site Done.`,
+        remarks: logNote,
         assignedToId: emp.id,
         createdById: userContext?.userId,
       },
@@ -2195,6 +2318,10 @@ export const crmService = {
       telecaller_max_workload_map: JSON.stringify({}),
       untouched_lead_timeout_minutes: '30',
       idle_timeout_minutes: '5',
+      quotation_general_remarks: `1. Prices and availability are subject to change without prior notice.
+2. Applicable Government GST and Stamp Duty charges are subject to statutory revisions.
+3. Booking is subject to clearance of booking token and standard terms of agreement.
+4. All payments to be made via Cheque / Demand Draft / RTGS in favor of NB Developers.`,
       loan_types: JSON.stringify([
         'Home Loan',
         'Personal Loan',

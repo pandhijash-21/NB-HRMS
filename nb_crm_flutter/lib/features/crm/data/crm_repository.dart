@@ -8,6 +8,11 @@ import '../domain/crm_models.dart';
 class CrmRepository {
   final DioClient _dio;
   static final ValueNotifier<String> crmScopeNotifier = ValueNotifier<String>('NB_DEVELOPER');
+  static final ValueNotifier<int> leadMutationNotifier = ValueNotifier<int>(0);
+
+  static void notifyLeadMutated() {
+    leadMutationNotifier.value = leadMutationNotifier.value + 1;
+  }
 
   CrmRepository({required DioClient dioClient}) : _dio = dioClient {
     _dio.dio.interceptors.add(
@@ -297,6 +302,7 @@ class CrmRepository {
         if (remarks != null && remarks.isNotEmpty) 'remarks': remarks,
       },
     );
+    notifyLeadMutated();
     if (res.data != null && res.data!['data'] is Map) {
       return Map<String, dynamic>.from(res.data!['data'] as Map);
     }
@@ -314,7 +320,7 @@ class CrmRepository {
     String? notInterestedReason,
     String? notInterestedRemark,
   }) async {
-    return _dio.patchEnvelope<CrmLead>(
+    final updated = await _dio.patchEnvelope<CrmLead>(
       'crm/leads/$leadId/status',
       data: {
         'status': status,
@@ -328,6 +334,8 @@ class CrmRepository {
       },
       parse: (raw) => CrmLead.fromJson(Map<String, dynamic>.from(raw as Map)),
     );
+    notifyLeadMutated();
+    return updated;
   }
 
   Future<Map<String, dynamic>> visitorLookup(String phone) async {
@@ -339,19 +347,23 @@ class CrmRepository {
   }
 
   Future<CrmLead> visitorCheckin(Map<String, dynamic> data) async {
-    return _dio.postEnvelope<CrmLead>(
+    final res = await _dio.postEnvelope<CrmLead>(
       'crm/visitor-checkin',
       data: data,
       parse: (raw) => CrmLead.fromJson(Map<String, dynamic>.from(raw as Map)),
     );
+    notifyLeadMutated();
+    return res;
   }
 
   Future<CrmLead> updateLead(String leadId, Map<String, dynamic> data) async {
-    return _dio.patchEnvelope<CrmLead>(
+    final res = await _dio.patchEnvelope<CrmLead>(
       'crm/leads/$leadId',
       data: data,
       parse: (raw) => CrmLead.fromJson(Map<String, dynamic>.from(raw as Map)),
     );
+    notifyLeadMutated();
+    return res;
   }
 
   Future<void> moveToBin(String leadId) async {
@@ -359,6 +371,7 @@ class CrmRepository {
       'crm/leads/$leadId',
       parse: (_) {},
     );
+    notifyLeadMutated();
   }
 
   Future<void> restoreFromBin(String leadId) async {

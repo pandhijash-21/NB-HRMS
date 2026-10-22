@@ -11,6 +11,7 @@ import '../../data/crm_repository.dart';
 import '../../domain/crm_models.dart';
 import '../bloc/crm_headers_bloc.dart';
 import '../widgets/crm_scope_selector.dart';
+import '../../../../core/widgets/nb_brand_loader.dart';
 
 class CrmHeadersScreen extends StatelessWidget {
   const CrmHeadersScreen({super.key});
@@ -205,7 +206,16 @@ class _CrmHeadersView extends StatelessWidget {
           const SizedBox(height: 14),
 
           if (state.status == LoadStatus.loading && state.projects.isEmpty)
-            const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator()))
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(40),
+                child: NbBrandLoader(
+                  size: 80,
+                  isFullScreen: false,
+                  statusLines: ['Loading CRM projects…'],
+                ),
+              ),
+            )
           else if (state.status == LoadStatus.failure && state.projects.isEmpty)
             Center(child: Text('Error loading projects: ${state.errorMessage}', style: const TextStyle(color: Colors.red)))
           else if (state.projects.isEmpty)
@@ -469,7 +479,16 @@ class _CrmHeadersView extends StatelessWidget {
           const SizedBox(height: 12),
 
           if (state.status == LoadStatus.loading && campaigns.isEmpty)
-            const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator()))
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: NbBrandLoader(
+                  size: 80,
+                  isFullScreen: false,
+                  statusLines: ['Loading CRM campaigns…'],
+                ),
+              ),
+            )
           else if (state.status == LoadStatus.failure && campaigns.isEmpty)
             Text('Error loading campaigns: ${state.errorMessage}', style: const TextStyle(color: Colors.red))
           else if (campaigns.isEmpty)
@@ -774,7 +793,16 @@ class _CrmHeadersView extends StatelessWidget {
 
           // Columns Table
           if (state.status == LoadStatus.loading && columns.isEmpty)
-            const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator()))
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(32),
+                child: NbBrandLoader(
+                  size: 80,
+                  isFullScreen: false,
+                  statusLines: ['Loading dynamic table columns…'],
+                ),
+              ),
+            )
           else if (state.status == LoadStatus.failure && columns.isEmpty)
             Center(child: Text('Error loading headers: ${state.errorMessage}', style: const TextStyle(color: Colors.red)))
           else if (columns.isEmpty)

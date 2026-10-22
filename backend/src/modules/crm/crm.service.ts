@@ -4018,9 +4018,20 @@ export const crmService = {
 
   async sendLeadWhatsapp(
     leadId: string,
-    payload: { event?: string; message?: string; mediaUrl?: string; messageType?: any; templateId?: string; templateEndpoint?: string },
+    payload: {
+      event?: string;
+      message?: string;
+      mediaUrl?: string;
+      headerMediaUrl?: string;
+      headerText?: string;
+      messageType?: any;
+      templateId?: string;
+      templateName?: string;
+      templateEndpoint?: string;
+      variables?: Record<string, string>;
+    },
   ) {
-    const lead = await prisma.crmLead.findUnique({
+    const lead: any = await prisma.crmLead.findUnique({
       where: { id: leadId },
       include: {
         campaign: { select: { project: { select: { name: true } } } },
@@ -4033,7 +4044,7 @@ export const crmService = {
 
     if (payload.event) {
       await whatsappService.triggerEvent(payload.event, lead, {
-        projectName: (lead.campaign as any)?.project?.name || (leadScope === 'NB_FINSERVE' ? 'NB Finserve' : 'Legacy Tower'),
+        projectName: lead.campaign?.project?.name || (leadScope === 'NB_FINSERVE' ? 'NB Finserve' : 'Legacy Tower'),
         agentName: lead.assignedTo?.generalInfo?.fullName,
         scope: leadScope,
       });
@@ -4041,15 +4052,48 @@ export const crmService = {
     }
 
     if (!payload.message && !payload.templateId) throw new Error('Message content or Template ID is required');
+
+    // Resolve dynamic lead variables for BotBiz template (name, phone, date, time, calendar_link, etc.)
+    const config = await whatsappService.getRawConfig(leadScope);
+    const now = new Date();
+    const formattedDate = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+    const formattedTime = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+    const leadName = lead.name || (lead.customFields as any)?.client_name || (lead.customFields as any)?.name || 'Valued Client';
+    const calendarLink = config.defaultCalendarLink || '';
+    const projectName = lead.campaign?.project?.name || (leadScope === 'NB_FINSERVE' ? 'NB Finserve' : 'Legacy Tower');
+    const agentName = lead.assignedTo?.generalInfo?.fullName || 'Property Advisor';
+
+    const mergedVariables: Record<string, string> = {
+      name: leadName,
+      customerName: leadName,
+      client_name: leadName,
+      phone: lead.phone,
+      number: lead.phone,
+      date: formattedDate,
+      time: formattedTime,
+      calendar_link: calendarLink,
+      calendarLink: calendarLink,
+      link: calendarLink,
+      project: projectName,
+      projectName,
+      advisor: agentName,
+      salespersonName: agentName,
+      ...(payload.variables || {}),
+    };
+
     return whatsappService.sendDirect({
       phone: lead.phone,
       message: payload.message || '',
       mediaUrl: payload.mediaUrl,
+      headerMediaUrl: payload.headerMediaUrl || payload.mediaUrl,
+      headerText: payload.headerText,
       event: 'MANUAL_DISPATCH',
       leadId: lead.id,
-      messageType: payload.messageType,
+      messageType: payload.templateId ? 'TEMPLATE' : (payload.messageType || 'TEXT'),
       templateId: payload.templateId,
+      templateName: payload.templateName,
       templateEndpoint: payload.templateEndpoint,
+      variables: mergedVariables,
       scope: leadScope,
     });
   },

@@ -1,7 +1,7 @@
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../data/crm_repository.dart';
 import '../../domain/crm_models.dart';
@@ -33,7 +33,6 @@ class _CrmWhatsappSettingsWidgetState extends State<CrmWhatsappSettingsWidget> {
   bool _isTesting = false;
   bool _isTestingConnection = false;
   bool _isSyncingTemplates = false;
-  bool _isUploadingBrochure = false;
   String? _testStatusMessage;
   bool? _testSuccess;
 
@@ -51,10 +50,7 @@ class _CrmWhatsappSettingsWidgetState extends State<CrmWhatsappSettingsWidget> {
   final _apiKeyController = TextEditingController();
   final _senderIdController = TextEditingController();
   final _projectNameController = TextEditingController(text: 'Legacy Tower');
-  final _defaultBrochureController = TextEditingController(
-    text: 'https://nbdeveloper.co.in/brochures/legacy-tower.pdf',
-  );
-  String _defaultBrochureName = 'Legacy_Tower_Brochure.pdf';
+  final _calendarLinkController = TextEditingController();
   final _defaultLocationController = TextEditingController(
     text: 'https://maps.google.com/?q=Legacy+Tower',
   );
@@ -124,7 +120,7 @@ class _CrmWhatsappSettingsWidgetState extends State<CrmWhatsappSettingsWidget> {
     _apiKeyController.dispose();
     _senderIdController.dispose();
     _projectNameController.dispose();
-    _defaultBrochureController.dispose();
+    _calendarLinkController.dispose();
     _defaultLocationController.dispose();
     _testPhoneController.dispose();
     super.dispose();
@@ -162,10 +158,7 @@ class _CrmWhatsappSettingsWidgetState extends State<CrmWhatsappSettingsWidget> {
         _projectNameController.text = config.defaultProjectName.isNotEmpty
             ? config.defaultProjectName
             : (isFin ? 'NB Finserve' : 'Legacy Tower');
-        _defaultBrochureController.text = config.defaultBrochureUrl;
-        _defaultBrochureName = config.defaultBrochureName.isNotEmpty
-            ? config.defaultBrochureName
-            : (isFin ? 'NB_Finserve_Loan_Guide.pdf' : 'Legacy_Tower_Brochure.pdf');
+        _calendarLinkController.text = config.defaultCalendarLink;
         _defaultLocationController.text = config.defaultLocationUrl;
         _triggers = List.from(config.triggers);
         _isLoading = false;
@@ -376,61 +369,7 @@ class _CrmWhatsappSettingsWidgetState extends State<CrmWhatsappSettingsWidget> {
     }
   }
 
-  Future<void> _pickAndUploadBrochure() async {
-    final repo = context.read<CrmRepository>();
-    try {
-      final result = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: const ['pdf'],
-        withData: true,
-      );
 
-      if (result == null || result.files.isEmpty) return;
-      final file = result.files.first;
-      if (file.bytes == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Could not read PDF file data. Please try another file.'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-        return;
-      }
-
-      setState(() => _isUploadingBrochure = true);
-      final res = await repo.uploadBrochure(file.bytes!, file.name);
-
-      if (!mounted) return;
-      setState(() {
-        _isUploadingBrochure = false;
-        if (res['url'] != null) {
-          _defaultBrochureController.text = res['url'].toString();
-        }
-        if (res['filename'] != null) {
-          _defaultBrochureName = res['filename'].toString();
-        }
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Brochure "${file.name}" uploaded successfully!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-      _saveConfig();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _isUploadingBrochure = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to upload brochure: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
 
   Future<void> _saveConfig() async {
     setState(() => _isSaving = true);
@@ -444,8 +383,7 @@ class _CrmWhatsappSettingsWidgetState extends State<CrmWhatsappSettingsWidget> {
         'apiKey': _apiKeyController.text.trim(),
         'senderId': _senderIdController.text.trim(),
         'defaultProjectName': _projectNameController.text.trim(),
-        'defaultBrochureUrl': _defaultBrochureController.text.trim(),
-        'defaultBrochureName': _defaultBrochureName,
+        'defaultCalendarLink': _calendarLinkController.text.trim(),
         'defaultLocationUrl': _defaultLocationController.text.trim(),
         'triggers': _triggers.map((t) => t.toJson()).toList(),
       };
@@ -734,7 +672,7 @@ class _CrmWhatsappSettingsWidgetState extends State<CrmWhatsappSettingsWidget> {
                 const SizedBox(height: 20),
                 _buildTestingCard(),
                 const SizedBox(height: 20),
-                _buildBrochureUploadCard(),
+                _buildCalendarLinkCard(),
                 const SizedBox(height: 20),
                 _buildVariableLegendCard(),
                 const SizedBox(height: 20),
@@ -1142,7 +1080,62 @@ class _CrmWhatsappSettingsWidgetState extends State<CrmWhatsappSettingsWidget> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(tmpl.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          Row(
+                            children: [
+                              Text(tmpl.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                              if (tmpl.headerFormat != null && tmpl.headerFormat!.isNotEmpty) ...[
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: tmpl.headerFormat == 'document'
+                                        ? Colors.red.withValues(alpha: 0.12)
+                                        : Colors.blue.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(
+                                      color: tmpl.headerFormat == 'document' ? Colors.red.shade400 : Colors.blue.shade400,
+                                      width: 0.8,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        tmpl.headerFormat == 'document'
+                                            ? Icons.picture_as_pdf_rounded
+                                            : Icons.image_rounded,
+                                        size: 11,
+                                        color: tmpl.headerFormat == 'document' ? Colors.red : Colors.blue,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        tmpl.headerFormat!.toUpperCase(),
+                                        style: TextStyle(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w700,
+                                          color: tmpl.headerFormat == 'document' ? Colors.red : Colors.blue,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                              if (tmpl.bodyExampleVariables.isNotEmpty) ...[
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF6366F1).withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    'Vars: ${tmpl.bodyExampleVariables.join(", ")}',
+                                    style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Color(0xFF6366F1)),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
                           Text('ID: ${tmpl.id} • Lang: ${tmpl.language} • ${tmpl.category ?? "MARKETING"}',
                               style: TextStyle(fontSize: 11, color: widget.textMuted)),
                         ],
@@ -1327,9 +1320,7 @@ class _CrmWhatsappSettingsWidgetState extends State<CrmWhatsappSettingsWidget> {
     );
   }
 
-  Widget _buildBrochureUploadCard() {
-    final hasBrochure = _defaultBrochureController.text.trim().isNotEmpty;
-
+  Widget _buildCalendarLinkCard() {
     return Container(
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
@@ -1345,10 +1336,10 @@ class _CrmWhatsappSettingsWidgetState extends State<CrmWhatsappSettingsWidget> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.1),
+                  color: const Color(0xFF6366F1).withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(Icons.picture_as_pdf_rounded, color: Colors.red, size: 24),
+                child: const Icon(Icons.calendar_month_rounded, color: Color(0xFF6366F1), size: 24),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -1356,9 +1347,7 @@ class _CrmWhatsappSettingsWidgetState extends State<CrmWhatsappSettingsWidget> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _isFinserve
-                          ? 'NB Finserve Loan Guide File Storage (PDF)'
-                          : 'Legacy Tower Brochure File Storage (PDF)',
+                      'Default Calendar & Appointment Link',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
@@ -1367,9 +1356,7 @@ class _CrmWhatsappSettingsWidgetState extends State<CrmWhatsappSettingsWidget> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      _isFinserve
-                          ? 'Stored permanently and dispatched directly via WhatsApp with loan inquiries and follow-ups.'
-                          : 'Stored permanently and dispatched directly via WhatsApp with new lead greetings and follow-ups.',
+                      'Sent automatically to leads in BotBiz WhatsApp templates as {{calendar_link}} for booking visits or consultation calls.',
                       style: TextStyle(fontSize: 12, color: widget.textMuted),
                     ),
                   ],
@@ -1378,70 +1365,28 @@ class _CrmWhatsappSettingsWidgetState extends State<CrmWhatsappSettingsWidget> {
             ],
           ),
           const SizedBox(height: 18),
-
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: widget.isDark
-                  ? const Color(0xFF1E293B).withValues(alpha: 0.5)
-                  : const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: hasBrochure ? const Color(0xFF16A34A).withValues(alpha: 0.4) : widget.borderColor,
-              ),
+          TextField(
+            controller: _calendarLinkController,
+            decoration: InputDecoration(
+              labelText: 'Calendar / Appointment Scheduling Link',
+              hintText: 'https://calendly.com/your-team or https://calendar.google.com/calendar/appointments/...',
+              prefixIcon: const Icon(Icons.link_rounded, size: 20),
+              suffixIcon: _calendarLinkController.text.trim().isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                      tooltip: 'Test Calendar Link',
+                      onPressed: () {
+                        final raw = _calendarLinkController.text.trim();
+                        if (raw.isNotEmpty) {
+                          launchUrl(Uri.parse(raw), mode: LaunchMode.externalApplication);
+                        }
+                      },
+                    )
+                  : null,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              helperText: 'Mapped to BotBiz template variable templateVariable-calendar_link-1 (and templateVariable-4-1)',
             ),
-            child: Row(
-              children: [
-                Icon(
-                  hasBrochure ? Icons.check_circle_rounded : Icons.cloud_upload_rounded,
-                  color: hasBrochure ? const Color(0xFF16A34A) : const Color(0xFF3B82F6),
-                  size: 32,
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _defaultBrochureName,
-                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        hasBrochure
-                            ? 'Stored permanently and ready for WhatsApp delivery.'
-                            : (_isFinserve
-                                ? 'No loan guide PDF uploaded yet. Click upload to attach.'
-                                : 'No brochure PDF uploaded yet. Click upload to attach.'),
-                        style: TextStyle(fontSize: 12, color: widget.textMuted),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 16),
-                ElevatedButton.icon(
-                  icon: _isUploadingBrochure
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                        )
-                      : const Icon(Icons.upload_file_rounded, size: 18),
-                  label: Text(_isUploadingBrochure
-                      ? 'Uploading...'
-                      : (hasBrochure
-                          ? (_isFinserve ? 'Replace Loan Guide PDF' : 'Replace Brochure PDF')
-                          : (_isFinserve ? 'Upload Loan Guide PDF' : 'Upload Brochure PDF'))),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF3B82F6),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                  onPressed: _isUploadingBrochure ? null : _pickAndUploadBrochure,
-                ),
-              ],
-            ),
+            onChanged: (_) => setState(() {}),
           ),
         ],
       ),

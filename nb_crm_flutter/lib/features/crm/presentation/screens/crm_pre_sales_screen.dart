@@ -16,7 +16,8 @@ import '../bloc/crm_leads_bloc.dart';
 import '../widgets/crm_audio_player_dialog.dart';
 import '../widgets/crm_scope_selector.dart';
 import '../widgets/crm_telecaller_status_dialog.dart';
-import '../../../../core/widgets/nb_brand_loader.dart';
+import '../widgets/crm_send_whatsapp_dialog.dart';
+
 
 class CrmPreSalesScreen extends StatelessWidget {
   const CrmPreSalesScreen({super.key});
@@ -876,11 +877,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
             const Center(
               child: Padding(
                 padding: EdgeInsets.all(40),
-                child: NbBrandLoader(
-                  size: 90,
-                  isFullScreen: false,
-                  statusLines: ['Loading CRM pipeline…'],
-                ),
+                child: CircularProgressIndicator(strokeWidth: 3, color: Color(0xFFC5A059)),
               ),
             )
           else if (state.status.isFailure && filteredLeads.isEmpty)
@@ -1267,6 +1264,11 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                       onPressed: () => _showTransferLeadModal(context, lead, salesUsers),
                                     ),
                                   IconButton(
+                                    icon: const Icon(Icons.chat_bubble_rounded, size: 18, color: Color(0xFF22C55E)),
+                                    tooltip: 'Send WhatsApp Template (BotBiz)',
+                                    onPressed: () => showSendWhatsappDialog(context, lead: lead),
+                                  ),
+                                  IconButton(
                                     icon: Icon(
                                       canAlterLead ? Icons.edit_outlined : Icons.lock_outline_rounded,
                                       size: 18,
@@ -1612,11 +1614,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
             const Center(
               child: Padding(
                 padding: EdgeInsets.symmetric(vertical: 40),
-                child: NbBrandLoader(
-                  size: 90,
-                  isFullScreen: false,
-                  statusLines: ['Loading scheduled follow-ups…'],
-                ),
+                child: CircularProgressIndicator(strokeWidth: 3, color: Color(0xFFC5A059)),
               ),
             )
           else if (followUps.isEmpty)
@@ -1898,11 +1896,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
             const Center(
               child: Padding(
                 padding: EdgeInsets.symmetric(vertical: 40),
-                child: NbBrandLoader(
-                  size: 90,
-                  isFullScreen: false,
-                  statusLines: ['Loading call recordings…'],
-                ),
+                child: CircularProgressIndicator(strokeWidth: 3, color: Color(0xFFC5A059)),
               ),
             )
           else if (logs.isEmpty)

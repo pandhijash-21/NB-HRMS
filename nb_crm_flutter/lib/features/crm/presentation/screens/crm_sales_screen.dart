@@ -16,11 +16,11 @@ import '../../domain/crm_models.dart';
 import '../bloc/crm_leads_bloc.dart';
 import '../widgets/crm_scope_selector.dart';
 import '../widgets/crm_telecaller_status_dialog.dart';
+import '../widgets/crm_send_whatsapp_dialog.dart';
 import '../../../erp/presentation/project_providers.dart';
 import '../../../erp/domain/project_models.dart';
 import '../../../erp/domain/structure_models.dart';
 import '../utils/proposal_print.dart';
-import '../../../../core/widgets/nb_brand_loader.dart';
 
 class CrmSalesScreen extends ConsumerWidget {
   const CrmSalesScreen({super.key});
@@ -760,11 +760,7 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
             const Center(
               child: Padding(
                 padding: EdgeInsets.symmetric(vertical: 40),
-                child: NbBrandLoader(
-                  size: 90,
-                  isFullScreen: false,
-                  statusLines: ['Loading assigned leads…'],
-                ),
+                child: CircularProgressIndicator(strokeWidth: 3, color: Color(0xFFC5A059)),
               ),
             )
           else if (leads.isEmpty)
@@ -1321,6 +1317,12 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
                   onPressed: () => _showCustomerDetailsAndLogsModal(context, lead),
                 ),
                 const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.chat_bubble_rounded, size: 20, color: Color(0xFF22C55E)),
+                  tooltip: 'Send WhatsApp Template (BotBiz)',
+                  onPressed: () => showSendWhatsappDialog(context, lead: lead),
+                ),
+                const SizedBox(width: 8),
 
                 // Primary Action: If booked, lock completely! Otherwise Finserve -> "Application & Docs"; Real Estate -> "Generate Quotation"
                 if (isBooked) ...[
@@ -1481,11 +1483,7 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
             const Center(
               child: Padding(
                 padding: EdgeInsets.symmetric(vertical: 40),
-                child: NbBrandLoader(
-                  size: 90,
-                  isFullScreen: false,
-                  statusLines: ['Loading customer proposals…'],
-                ),
+                child: CircularProgressIndicator(strokeWidth: 3, color: Color(0xFFC5A059)),
               ),
             )
           else if (leadsWithProposals.isEmpty)

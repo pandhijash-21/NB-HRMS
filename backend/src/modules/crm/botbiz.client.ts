@@ -53,6 +53,10 @@ export interface BotbizTemplate {
   rawStatus?: string;
   components?: any[];
   variableCount?: number;
+  headerFormat?: 'document' | 'image' | 'video' | 'text' | 'location' | 'none' | string;
+  headerExampleUrl?: string;
+  bodyText?: string;
+  bodyExampleVariables?: string[];
   raw?: any;
 }
 
@@ -411,6 +415,36 @@ export class BotBizApiClient {
           status = 'DISABLED';
         }
 
+        const components = item.components || (item.template_json ? JSON.parse(item.template_json).components : []);
+        const headerComp = Array.isArray(components)
+          ? components.find((c: any) => c.type?.toUpperCase() === 'HEADER')
+          : undefined;
+        const headerFormat = headerComp?.format ? String(headerComp.format).toLowerCase() : undefined;
+        let headerExampleUrl: string | undefined = undefined;
+        if (headerComp?.example?.header_handle && headerComp.example.header_handle[0]) {
+          headerExampleUrl = headerComp.example.header_handle[0];
+        } else if (headerComp?.example?.header_url && headerComp.example.header_url[0]) {
+          headerExampleUrl = headerComp.example.header_url[0];
+        }
+        const bodyComp = Array.isArray(components)
+          ? components.find((c: any) => c.type?.toUpperCase() === 'BODY')
+          : undefined;
+        const bodyText = bodyComp?.text ? String(bodyComp.text) : undefined;
+        let bodyExampleVariables: string[] = [];
+        if (bodyComp?.example?.body_text && Array.isArray(bodyComp.example.body_text[0])) {
+          bodyExampleVariables = bodyComp.example.body_text[0].map(String);
+        } else if (bodyText) {
+          const matches = bodyText.match(/\{\{([a-zA-Z0-9_-]+)\}\}/g);
+          if (matches) {
+            matches.forEach((m: string) => {
+              const name = m.replace(/[\{\}]/g, '').trim();
+              if (!bodyExampleVariables.includes(name)) {
+                bodyExampleVariables.push(name);
+              }
+            });
+          }
+        }
+
         return {
           id: String(id),
           name: String(name),
@@ -418,10 +452,14 @@ export class BotBizApiClient {
           category: String(category),
           status,
           rawStatus,
-          components: item.components || (item.template_json ? JSON.parse(item.template_json).components : []),
-          variableCount: Array.isArray(item.components)
-            ? JSON.stringify(item.components).split('{{').length - 1
-            : undefined,
+          components,
+          headerFormat,
+          headerExampleUrl,
+          bodyText,
+          bodyExampleVariables,
+          variableCount: bodyExampleVariables.length > 0
+            ? bodyExampleVariables.length
+            : (Array.isArray(components) ? JSON.stringify(components).split('{{').length - 1 : undefined),
           raw: item,
         };
       });
@@ -562,8 +600,10 @@ export class BotBizApiClient {
   async sendTemplateMessage(params: {
     phoneNumber: string;
     templateId: string;
-    templateName: string;
+    templateName?: string;
     templateEndpointUrl?: string;
+    templateHeaderMediaUrl?: string;
+    templateHeaderText?: string;
     variables?: Record<string, string>;
   }): Promise<BotbizSendResponse> {
     const normalizedPhone = BotBizApiClient.normalizePhoneNumber(
@@ -574,44 +614,118 @@ export class BotBizApiClient {
     const timer = setTimeout(() => controller.abort(), this.config.timeoutMs);
 
     try {
-      let response: Response;
+      // 1. Determine target base URL and initialize parameters
+      let targetBase = `${this.config.apiBase}/whatsapp/send/template`;
+      const formParams = new URLSearchParams();
 
-      if (params.templateEndpointUrl) {
-        // Send to administrator-configured custom template endpoint
-        response = await fetch(params.templateEndpointUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.config.apiToken}`,
-          },
-          body: JSON.stringify({
-            apiToken: this.config.apiToken,
-            phone_number_id: this.config.phoneNumberId,
-            phone_number: normalizedPhone,
-            template_id: params.templateId,
-            template_name: params.templateName,
-            variables: params.variables || {},
-          }),
-          signal: controller.signal,
-        });
-      } else {
-        // Send to official BotBiz template dispatch endpoint
-        const endpoint = `${this.config.apiBase}/whatsapp/send/template`;
-        const formParams = new URLSearchParams();
-        formParams.append('apiToken', this.config.apiToken);
-        formParams.append('phone_number_id', this.config.phoneNumberId);
-        formParams.append('phone_number', normalizedPhone);
-        formParams.append('template_id', params.templateId);
-        if (params.templateName) {
-          formParams.append('template_name', params.templateName);
+      // If user pasted a BotBiz-generated template endpoint URL, extract its preset query parameters
+      if (params.templateEndpointUrl && params.templateEndpointUrl.trim().length > 0) {
+        try {
+          const parsed = new URL(params.templateEndpointUrl.trim());
+          targetBase = `${parsed.origin}${parsed.pathname}`;
+          parsed.searchParams.forEach((val, key) => {
+            formParams.set(key, val);
+          });
+        } catch {
+          // not a full URL, treat as endpoint path
+        }
+      }
+
+      // 2. Set credentials and recipient
+      formParams.set('apiToken', this.config.apiToken);
+      formParams.set('phone_number_id', this.config.phoneNumberId);
+      formParams.set('phone_number', normalizedPhone);
+      if (params.templateId) {
+        formParams.set('template_id', params.templateId);
+      }
+      if (params.templateName) {
+        formParams.set('template_name', params.templateName);
+      }
+
+      // 3. Header Management
+      const headerMediaUrl = params.templateHeaderMediaUrl || formParams.get('template_header_media_url');
+      if (headerMediaUrl && headerMediaUrl.trim().length > 0) {
+        formParams.set('template_header_media_url', headerMediaUrl.trim());
+      }
+      if (params.templateHeaderText) {
+        formParams.set('template_header_variable-1', params.templateHeaderText);
+        formParams.set('templateHeaderVariable-1', params.templateHeaderText);
+      }
+
+      // 4. Variables Management (e.g. templateVariable-name-1=Jash, templateVariable-date-1=..., templateVariable-time-1=...)
+      if (params.variables) {
+        for (const [key, rawVal] of Object.entries(params.variables)) {
+          if (rawVal !== undefined && rawVal !== null) {
+            const val = String(rawVal);
+            const cleanKey = key.trim();
+            formParams.set(`templateVariable-${cleanKey}-1`, val);
+            formParams.set(`templateVariable-${cleanKey}`, val);
+          }
         }
 
-        response = await fetch(endpoint, {
+        // Standard positional aliases to guarantee compatibility with numbered templates {{1}}, {{2}}, {{3}}, {{4}}
+        if (params.variables.name) {
+          formParams.set('templateVariable-name-1', params.variables.name);
+          formParams.set('templateVariable-1-1', params.variables.name);
+          formParams.set('templateVariable-1', params.variables.name);
+        }
+        if (params.variables.date) {
+          formParams.set('templateVariable-date-1', params.variables.date);
+          formParams.set('templateVariable-2-1', params.variables.date);
+          formParams.set('templateVariable-2', params.variables.date);
+        }
+        if (params.variables.time) {
+          formParams.set('templateVariable-time-1', params.variables.time);
+          formParams.set('templateVariable-3-1', params.variables.time);
+          formParams.set('templateVariable-3', params.variables.time);
+        }
+        const calendarLink =
+          params.variables.calendar_link ||
+          params.variables.calendarLink ||
+          params.variables.link;
+        if (calendarLink) {
+          formParams.set('templateVariable-calendar_link-1', calendarLink);
+          formParams.set('templateVariable-calendar-1', calendarLink);
+          formParams.set('templateVariable-link-1', calendarLink);
+          formParams.set('templateVariable-4-1', calendarLink);
+          formParams.set('templateVariable-4', calendarLink);
+        }
+        if (params.variables.phone || params.variables.number) {
+          const ph = params.variables.phone || params.variables.number;
+          formParams.set('templateVariable-phone-1', ph);
+          formParams.set('templateVariable-number-1', ph);
+        }
+      }
+
+      // Construct target full URL with query string
+      const fullUrl = `${targetBase}?${formParams.toString()}`;
+
+      // BotBiz supports GET and POST x-www-form-urlencoded
+      let response: Response;
+      try {
+        response = await fetch(fullUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
+            'Accept': 'application/json',
           },
           body: formParams.toString(),
+          signal: controller.signal,
+        });
+
+        if (response.status === 405) {
+          // If POST not allowed on endpoint, fallback to GET with query string
+          response = await fetch(fullUrl, {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' },
+            signal: controller.signal,
+          });
+        }
+      } catch {
+        // Network fallback to GET
+        response = await fetch(fullUrl, {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' },
           signal: controller.signal,
         });
       }

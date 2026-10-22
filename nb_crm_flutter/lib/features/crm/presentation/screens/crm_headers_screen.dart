@@ -11,7 +11,6 @@ import '../../data/crm_repository.dart';
 import '../../domain/crm_models.dart';
 import '../bloc/crm_headers_bloc.dart';
 import '../widgets/crm_scope_selector.dart';
-import '../../../../core/widgets/nb_brand_loader.dart';
 
 class CrmHeadersScreen extends StatelessWidget {
   const CrmHeadersScreen({super.key});
@@ -209,11 +208,7 @@ class _CrmHeadersView extends StatelessWidget {
             const Center(
               child: Padding(
                 padding: EdgeInsets.all(40),
-                child: NbBrandLoader(
-                  size: 80,
-                  isFullScreen: false,
-                  statusLines: ['Loading CRM projects…'],
-                ),
+                child: CircularProgressIndicator(strokeWidth: 3, color: Color(0xFFC5A059)),
               ),
             )
           else if (state.status == LoadStatus.failure && state.projects.isEmpty)
@@ -482,11 +477,7 @@ class _CrmHeadersView extends StatelessWidget {
             const Center(
               child: Padding(
                 padding: EdgeInsets.all(24),
-                child: NbBrandLoader(
-                  size: 80,
-                  isFullScreen: false,
-                  statusLines: ['Loading CRM campaigns…'],
-                ),
+                child: CircularProgressIndicator(strokeWidth: 3, color: Color(0xFFC5A059)),
               ),
             )
           else if (state.status == LoadStatus.failure && campaigns.isEmpty)
@@ -796,11 +787,7 @@ class _CrmHeadersView extends StatelessWidget {
             const Center(
               child: Padding(
                 padding: EdgeInsets.all(32),
-                child: NbBrandLoader(
-                  size: 80,
-                  isFullScreen: false,
-                  statusLines: ['Loading dynamic table columns…'],
-                ),
+                child: CircularProgressIndicator(strokeWidth: 3, color: Color(0xFFC5A059)),
               ),
             )
           else if (state.status == LoadStatus.failure && columns.isEmpty)

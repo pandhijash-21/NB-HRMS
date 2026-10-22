@@ -160,25 +160,6 @@ class _SplashVideoHostState extends State<SplashVideoHost>
                 ),
               ),
 
-              // Skip button (bottom-right)
-              Positioned(
-                right: 20,
-                bottom: 20 + bottomPadding,
-                child: TextButton.icon(
-                  onPressed: _finish,
-                  icon: const Icon(Icons.arrow_forward_rounded, size: 16),
-                  label: const Text('Skip'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.white70,
-                    backgroundColor: Colors.white.withValues(alpha: 0.08),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                      side: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
-                    ),
-                  ),
-                ),
-              ),
             ],
           ),
         ),

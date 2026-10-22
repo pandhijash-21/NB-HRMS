@@ -16,9 +16,11 @@ export interface CrmWhatsappTrigger {
   templateId?: string; // BotBiz Meta Template ID if messageType is 'TEMPLATE'
   templateName?: string; // BotBiz Meta Template Name
   templateEndpoint?: string; // Administrator configured BotBiz generated template endpoint
+  headerMediaUrl?: string; // Header document/image/video URL if template has media header
+  headerType?: 'NONE' | 'DOCUMENT' | 'IMAGE' | 'VIDEO' | 'TEXT' | string;
   language?: string; // e.g. 'en_US'
   messageTemplate: string; // Body text for free-form or template preview
-  mediaUrl?: string; // Optional brochure or image URL
+  mediaUrl?: string; // Optional image or document URL
   includeCalendarLink?: boolean;
   locationUrl?: string; // Google Maps location pin
 }
@@ -36,7 +38,8 @@ export interface CrmWhatsappConfig {
   apiKey: string; // Masked on return for security
   hasApiKey: boolean;
   senderId: string; // BotBiz WhatsApp Phone Number ID
-  defaultBrochureUrl: string;
+  defaultCalendarLink: string; // Calendar/Appointment scheduling URL (Google Calendar / Calendly)
+  defaultBrochureUrl?: string;
   defaultBrochureName?: string;
   defaultLocationUrl: string;
   defaultProjectName: string;
@@ -402,6 +405,7 @@ export class WhatsappService {
     apiBase: string;
     apiKey: string;
     senderId: string;
+    defaultCalendarLink: string;
     defaultBrochureUrl: string;
     defaultBrochureName: string;
     defaultLocationUrl: string;
@@ -423,6 +427,8 @@ export class WhatsappService {
             `${prefix}whatsapp_api_url`,
             `${prefix}whatsapp_api_key`,
             `${prefix}whatsapp_sender_id`,
+            `${prefix}whatsapp_default_calendar_link`,
+            `${prefix}whatsapp_calendar_link`,
             `${prefix}whatsapp_default_brochure_url`,
             `${prefix}whatsapp_default_brochure_name`,
             `${prefix}whatsapp_default_location_url`,
@@ -486,11 +492,12 @@ export class WhatsappService {
       apiBase,
       apiKey,
       senderId,
+      defaultCalendarLink:
+        map.whatsapp_default_calendar_link ||
+        map.whatsapp_calendar_link ||
+        '',
       defaultBrochureUrl:
-        map.whatsapp_default_brochure_url ||
-        (isFinserve
-          ? 'https://nbfinserve.co.in/docs/loan-guide.pdf'
-          : 'https://nbdeveloper.co.in/brochures/legacy-tower.pdf'),
+        map.whatsapp_default_brochure_url || '',
       defaultBrochureName:
         map.whatsapp_default_brochure_name ||
         (isFinserve ? 'NB_Finserve_Loan_Guide.pdf' : 'Legacy_Tower_Brochure.pdf'),
@@ -531,6 +538,7 @@ export class WhatsappService {
       apiKey: this.maskToken(raw.apiKey),
       hasApiKey: Boolean(raw.apiKey.trim()),
       senderId: raw.senderId,
+      defaultCalendarLink: raw.defaultCalendarLink,
       defaultBrochureUrl: raw.defaultBrochureUrl,
       defaultBrochureName: raw.defaultBrochureName,
       defaultLocationUrl: raw.defaultLocationUrl,
@@ -576,6 +584,12 @@ export class WhatsappService {
 
     if (dto.senderId !== undefined) {
       entries.push([`${prefix}whatsapp_sender_id`, String(dto.senderId).trim()]);
+    }
+    if ((dto as any).defaultCalendarLink !== undefined) {
+      entries.push([
+        `${prefix}whatsapp_default_calendar_link`,
+        String((dto as any).defaultCalendarLink).trim(),
+      ]);
     }
     if (dto.defaultBrochureUrl !== undefined)
       entries.push([
@@ -954,19 +968,24 @@ export class WhatsappService {
    */
   async sendDirect(params: {
     phone: string;
-    message: string;
+    message?: string;
     mediaUrl?: string;
+    headerMediaUrl?: string;
+    headerText?: string;
     event?: string;
     leadId?: string;
     messageType?: WhatsappMessageType;
     templateId?: string;
     templateName?: string;
     templateEndpoint?: string;
+    variables?: Record<string, string>;
     scope?: string;
   }): Promise<{ success: boolean; data?: any; error?: string }> {
     const scope = params.scope || 'NB_DEVELOPER';
     const raw = await this.getRawConfig(scope);
     const normalizedPhone = this.normalizePhoneNumber(params.phone);
+
+    const messageText = params.message || (params.templateName ? `Template: ${params.templateName}` : (params.templateId ? `Template: ${params.templateId}` : 'WhatsApp Notification'));
 
     if (!normalizedPhone || normalizedPhone.length < 10) {
       const errMsg = 'Invalid or missing recipient phone number';
@@ -974,7 +993,7 @@ export class WhatsappService {
         phone: params.phone,
         event: params.event || 'MANUAL',
         leadId: params.leadId,
-        message: params.message,
+        message: messageText,
         mediaUrl: params.mediaUrl,
         status: 'FAILED',
         error: errMsg,
@@ -987,7 +1006,7 @@ export class WhatsappService {
         phone: normalizedPhone,
         event: params.event || 'MANUAL',
         leadId: params.leadId,
-        message: params.message,
+        message: messageText,
         mediaUrl: params.mediaUrl,
         status: 'DISABLED',
         error: `WhatsApp automation is currently disabled in ${scope === 'NB_FINSERVE' ? 'NB Finserve' : 'NB Developer'} settings`,
@@ -1031,7 +1050,7 @@ export class WhatsappService {
           phone: normalizedPhone,
           event: params.event || 'MANUAL',
           leadId: params.leadId,
-          message: params.message,
+          message: messageText,
           messageType: 'TEMPLATE',
           templateId: params.templateId,
           status: 'FAILED',
@@ -1043,18 +1062,26 @@ export class WhatsappService {
       // Use internal BotBiz ID if present (BotBiz API requires internal template ID)
       const botbizInternalId = tmpl?.raw?.id ? String(tmpl.raw.id) : params.templateId;
 
+      const headerMediaUrl =
+        params.headerMediaUrl ||
+        params.mediaUrl ||
+        tmpl?.headerExampleUrl;
+
       const sendRes = await this.botbizClient.sendTemplateMessage({
         phoneNumber: normalizedPhone,
         templateId: botbizInternalId,
         templateName: params.templateName || tmpl?.name || 'CRM_NOTIFICATION',
         templateEndpointUrl: params.templateEndpoint,
+        templateHeaderMediaUrl: headerMediaUrl,
+        templateHeaderText: params.headerText,
+        variables: params.variables,
       });
 
       await this.addLog({
         phone: normalizedPhone,
         event: params.event || 'MANUAL',
         leadId: params.leadId,
-        message: params.message,
+        message: messageText,
         messageType: 'TEMPLATE',
         templateId: params.templateId,
         waMessageId: sendRes.waMessageId,
@@ -1073,7 +1100,7 @@ export class WhatsappService {
     // 2. Free-Form Text Message Dispatch (Documented POST /whatsapp/send)
     const sendRes = await this.botbizClient.sendTextMessage({
       phoneNumber: normalizedPhone,
-      message: params.message,
+      message: messageText,
       mediaUrl: params.mediaUrl,
     });
 
@@ -1081,7 +1108,7 @@ export class WhatsappService {
       phone: normalizedPhone,
       event: params.event || 'MANUAL',
       leadId: params.leadId,
-      message: params.message,
+      message: messageText,
       messageType: 'TEXT',
       mediaUrl: params.mediaUrl,
       waMessageId: sendRes.waMessageId,
@@ -1254,13 +1281,15 @@ export class WhatsappService {
       await this.sendDirect({
         phone,
         message: finalMessage,
-        mediaUrl: brochureUrl,
+        mediaUrl: trigger.mediaUrl,
+        headerMediaUrl: trigger.headerMediaUrl || trigger.mediaUrl,
         event,
         leadId: lead.id,
         messageType: trigger.messageType,
         templateId: trigger.templateId,
         templateName: trigger.templateName,
         templateEndpoint: trigger.templateEndpoint,
+        variables,
         scope,
       });
     } catch (err) {

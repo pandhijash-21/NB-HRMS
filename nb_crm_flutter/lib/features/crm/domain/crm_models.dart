@@ -1741,6 +1741,8 @@ class CrmWhatsappTrigger {
     String? templateId,
     String? templateName,
     String? templateEndpoint,
+    String? headerMediaUrl,
+    String? headerType,
     String? language,
     String? mediaUrl,
     bool? includeCalendarLink,
@@ -1756,12 +1758,48 @@ class CrmWhatsappTrigger {
       templateId: templateId ?? this.templateId,
       templateName: templateName ?? this.templateName,
       templateEndpoint: templateEndpoint ?? this.templateEndpoint,
+      headerMediaUrl: headerMediaUrl ?? this.headerMediaUrl,
+      headerType: headerType ?? this.headerType,
       language: language ?? this.language,
       mediaUrl: mediaUrl ?? this.mediaUrl,
       includeCalendarLink: includeCalendarLink ?? this.includeCalendarLink,
       locationUrl: locationUrl ?? this.locationUrl,
     );
   }
+
+  final String id;
+  final String event;
+  final String name;
+  final bool enabled;
+  final String messageTemplate;
+  final String messageType;
+  final String? templateId;
+  final String? templateName;
+  final String? templateEndpoint;
+  final String? headerMediaUrl;
+  final String? headerType;
+  final String language;
+  final String mediaUrl;
+  final bool includeCalendarLink;
+  final String locationUrl;
+
+  const CrmWhatsappTrigger({
+    required this.id,
+    required this.event,
+    required this.name,
+    this.enabled = true,
+    required this.messageTemplate,
+    this.messageType = 'TEXT',
+    this.templateId,
+    this.templateName,
+    this.templateEndpoint,
+    this.headerMediaUrl,
+    this.headerType,
+    this.language = 'en_US',
+    this.mediaUrl = '',
+    this.includeCalendarLink = false,
+    this.locationUrl = '',
+  });
 
   factory CrmWhatsappTrigger.fromJson(Map<String, dynamic> json) {
     return CrmWhatsappTrigger(
@@ -1774,6 +1812,8 @@ class CrmWhatsappTrigger {
       templateId: json['templateId']?.toString(),
       templateName: json['templateName']?.toString(),
       templateEndpoint: json['templateEndpoint']?.toString(),
+      headerMediaUrl: json['headerMediaUrl']?.toString(),
+      headerType: json['headerType']?.toString(),
       language: json['language']?.toString() ?? 'en_US',
       mediaUrl: json['mediaUrl']?.toString() ?? '',
       includeCalendarLink: json['includeCalendarLink'] == true,
@@ -1791,6 +1831,8 @@ class CrmWhatsappTrigger {
         'templateId': templateId,
         'templateName': templateName,
         'templateEndpoint': templateEndpoint,
+        'headerMediaUrl': headerMediaUrl,
+        'headerType': headerType,
         'language': language,
         'mediaUrl': mediaUrl,
         'includeCalendarLink': includeCalendarLink,
@@ -1807,7 +1849,8 @@ class CrmWhatsappConfig {
     required this.apiKey,
     this.hasApiKey = false,
     required this.senderId,
-    required this.defaultBrochureUrl,
+    this.defaultCalendarLink = '',
+    this.defaultBrochureUrl = '',
     this.defaultBrochureName = 'Legacy_Tower_Brochure.pdf',
     required this.defaultLocationUrl,
     required this.defaultProjectName,
@@ -1824,6 +1867,7 @@ class CrmWhatsappConfig {
   final String apiKey;
   final bool hasApiKey;
   final String senderId;
+  final String defaultCalendarLink;
   final String defaultBrochureUrl;
   final String defaultBrochureName;
   final String defaultLocationUrl;
@@ -1841,6 +1885,7 @@ class CrmWhatsappConfig {
     String? apiKey,
     bool? hasApiKey,
     String? senderId,
+    String? defaultCalendarLink,
     String? defaultBrochureUrl,
     String? defaultBrochureName,
     String? defaultLocationUrl,
@@ -1858,6 +1903,7 @@ class CrmWhatsappConfig {
       apiKey: apiKey ?? this.apiKey,
       hasApiKey: hasApiKey ?? this.hasApiKey,
       senderId: senderId ?? this.senderId,
+      defaultCalendarLink: defaultCalendarLink ?? this.defaultCalendarLink,
       defaultBrochureUrl: defaultBrochureUrl ?? this.defaultBrochureUrl,
       defaultBrochureName: defaultBrochureName ?? this.defaultBrochureName,
       defaultLocationUrl: defaultLocationUrl ?? this.defaultLocationUrl,
@@ -1887,6 +1933,7 @@ class CrmWhatsappConfig {
       apiKey: json['apiKey']?.toString() ?? '',
       hasApiKey: json['hasApiKey'] == true,
       senderId: json['senderId']?.toString() ?? '',
+      defaultCalendarLink: json['defaultCalendarLink']?.toString() ?? json['calendarLink']?.toString() ?? json['calendar_link']?.toString() ?? '',
       defaultBrochureUrl: json['defaultBrochureUrl']?.toString() ?? '',
       defaultBrochureName: json['defaultBrochureName']?.toString() ?? 'Legacy_Tower_Brochure.pdf',
       defaultLocationUrl: json['defaultLocationUrl']?.toString() ?? '',
@@ -1905,6 +1952,7 @@ class CrmWhatsappConfig {
         'apiUrl': apiUrl,
         'apiKey': apiKey,
         'senderId': senderId,
+        'defaultCalendarLink': defaultCalendarLink,
         'defaultBrochureUrl': defaultBrochureUrl,
         'defaultBrochureName': defaultBrochureName,
         'defaultLocationUrl': defaultLocationUrl,
@@ -1921,6 +1969,10 @@ class BotbizTemplateModel {
     this.category,
     required this.status,
     this.variableCount,
+    this.headerFormat,
+    this.headerExampleUrl,
+    this.bodyText,
+    this.bodyExampleVariables = const [],
   });
 
   final String id;
@@ -1929,8 +1981,19 @@ class BotbizTemplateModel {
   final String? category;
   final String status; // 'APPROVED' | 'PENDING' | 'REJECTED' | 'PAUSED' | 'DISABLED' | 'UNKNOWN'
   final int? variableCount;
+  final String? headerFormat;
+  final String? headerExampleUrl;
+  final String? bodyText;
+  final List<String> bodyExampleVariables;
 
   factory BotbizTemplateModel.fromJson(Map<String, dynamic> json) {
+    final rawVars = json['bodyExampleVariables'];
+    final vars = <String>[];
+    if (rawVars is List) {
+      for (final v in rawVars) {
+        if (v != null) vars.add(v.toString());
+      }
+    }
     return BotbizTemplateModel(
       id: json['id']?.toString() ?? '',
       name: json['name']?.toString() ?? '',
@@ -1938,6 +2001,10 @@ class BotbizTemplateModel {
       category: json['category']?.toString(),
       status: json['status']?.toString() ?? 'UNKNOWN',
       variableCount: json['variableCount'] is num ? (json['variableCount'] as num).toInt() : null,
+      headerFormat: json['headerFormat']?.toString(),
+      headerExampleUrl: json['headerExampleUrl']?.toString(),
+      bodyText: json['bodyText']?.toString(),
+      bodyExampleVariables: vars,
     );
   }
 }

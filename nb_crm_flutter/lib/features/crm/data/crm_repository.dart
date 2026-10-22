@@ -679,6 +679,12 @@ class CrmRepository {
     String? event,
     String? message,
     String? mediaUrl,
+    String? headerMediaUrl,
+    String? headerText,
+    String? templateId,
+    String? templateName,
+    String? templateEndpoint,
+    Map<String, String>? variables,
   }) async {
     return _dio.postEnvelope<Map<String, dynamic>>(
       'crm/leads/$leadId/whatsapp',
@@ -686,18 +692,13 @@ class CrmRepository {
         if (event != null) 'event': event,
         if (message != null) 'message': message,
         if (mediaUrl != null) 'mediaUrl': mediaUrl,
+        if (headerMediaUrl != null) 'headerMediaUrl': headerMediaUrl,
+        if (headerText != null) 'headerText': headerText,
+        if (templateId != null) 'templateId': templateId,
+        if (templateName != null) 'templateName': templateName,
+        if (templateEndpoint != null) 'templateEndpoint': templateEndpoint,
+        if (variables != null) 'variables': variables,
       },
-      parse: (raw) => Map<String, dynamic>.from(raw as Map),
-    );
-  }
-
-  Future<Map<String, dynamic>> uploadBrochure(List<int> bytes, String filename) async {
-    final formData = FormData.fromMap({
-      'brochure': MultipartFile.fromBytes(bytes, filename: filename),
-    });
-    return _dio.postEnvelope<Map<String, dynamic>>(
-      'crm/whatsapp/upload-brochure',
-      data: formData,
       parse: (raw) => Map<String, dynamic>.from(raw as Map),
     );
   }

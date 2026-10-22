@@ -9,7 +9,6 @@ import '../../data/crm_repository.dart';
 import '../../domain/crm_models.dart';
 import '../bloc/crm_leads_bloc.dart';
 import '../widgets/crm_scope_selector.dart';
-import '../../../../core/widgets/nb_brand_loader.dart';
 
 class CrmVisitorDeskScreen extends StatelessWidget {
   const CrmVisitorDeskScreen({super.key});
@@ -146,11 +145,7 @@ class _CrmVisitorDeskViewState extends State<_CrmVisitorDeskView> {
               ? const Center(
                   child: Padding(
                     padding: EdgeInsets.symmetric(vertical: 60),
-                    child: NbBrandLoader(
-                      size: 90,
-                      isFullScreen: false,
-                      statusLines: ['Loading visitor desk data…'],
-                    ),
+                    child: CircularProgressIndicator(strokeWidth: 3, color: Color(0xFFC5A059)),
                   ),
                 )
               : SingleChildScrollView(

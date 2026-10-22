@@ -1705,12 +1705,14 @@ class CrmWhatsappTrigger {
     required this.id,
     required this.event,
     required this.name,
-    required this.enabled,
+    this.enabled = true,
     required this.messageTemplate,
     this.messageType = 'TEXT',
     this.templateId,
     this.templateName,
     this.templateEndpoint,
+    this.headerMediaUrl,
+    this.headerType,
     this.language = 'en_US',
     this.mediaUrl = '',
     this.includeCalendarLink = false,
@@ -1726,6 +1728,8 @@ class CrmWhatsappTrigger {
   final String? templateId;
   final String? templateName;
   final String? templateEndpoint;
+  final String? headerMediaUrl;
+  final String? headerType;
   final String language;
   final String mediaUrl;
   final bool includeCalendarLink;
@@ -1766,40 +1770,6 @@ class CrmWhatsappTrigger {
       locationUrl: locationUrl ?? this.locationUrl,
     );
   }
-
-  final String id;
-  final String event;
-  final String name;
-  final bool enabled;
-  final String messageTemplate;
-  final String messageType;
-  final String? templateId;
-  final String? templateName;
-  final String? templateEndpoint;
-  final String? headerMediaUrl;
-  final String? headerType;
-  final String language;
-  final String mediaUrl;
-  final bool includeCalendarLink;
-  final String locationUrl;
-
-  const CrmWhatsappTrigger({
-    required this.id,
-    required this.event,
-    required this.name,
-    this.enabled = true,
-    required this.messageTemplate,
-    this.messageType = 'TEXT',
-    this.templateId,
-    this.templateName,
-    this.templateEndpoint,
-    this.headerMediaUrl,
-    this.headerType,
-    this.language = 'en_US',
-    this.mediaUrl = '',
-    this.includeCalendarLink = false,
-    this.locationUrl = '',
-  });
 
   factory CrmWhatsappTrigger.fromJson(Map<String, dynamic> json) {
     return CrmWhatsappTrigger(

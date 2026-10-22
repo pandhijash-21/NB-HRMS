@@ -37,6 +37,7 @@ const MODULES = [
   { key: 'CRM',           name: 'CRM Pre-Sales', category: 'CRM' },
   { key: 'CRM_SALES',     name: 'Sales Management', category: 'CRM' },
   { key: 'CRM_VISITOR_DESK', name: 'Visitor Check-In Desk', category: 'CRM' },
+  { key: 'CRM_LEAD_TRANSFER', name: 'Allow Transfer Leads', category: 'CRM' },
   { key: 'TRACKING',      name: 'Live Tracking & Trips', category: 'HRMS' },
   { key: 'ADMIN_STORAGE', name: 'Storage & Document Quotas', category: 'HRMS' },
   { key: 'AUDIT',         name: 'Audit Logs', category: 'HRMS' },
@@ -80,6 +81,7 @@ const PERMISSION_MATRIX: PermissionMatrix = {
     CRM:           RW,
     CRM_SALES:     RW,
     CRM_VISITOR_DESK: RW,
+    CRM_LEAD_TRANSFER: RW,
   },
 };
 

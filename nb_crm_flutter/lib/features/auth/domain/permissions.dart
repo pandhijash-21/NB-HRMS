@@ -672,6 +672,14 @@ class Permissions {
         hasPermission(perms, 'FIN_CRM_PRE_SALES', 'WRITE');
   }
 
+  static bool canTransferLeads(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    return hasPermission(perms, 'CRM_LEAD_TRANSFER', 'READ') ||
+        hasPermission(perms, 'CRM_LEAD_TRANSFER', 'WRITE') ||
+        hasPermission(perms, 'CRM_TRANSFER_LEADS', 'READ') ||
+        hasPermission(perms, 'CRM_TRANSFER_LEADS', 'WRITE');
+  }
+
   static bool canWriteCrmPostSales(PermissionMap? perms, [String? role, String? scope]) {
     if (isAdmin(role)) return true;
     if (scope == 'NB_FINSERVE') {

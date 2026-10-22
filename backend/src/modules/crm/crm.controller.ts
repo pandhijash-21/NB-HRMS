@@ -273,6 +273,14 @@ export const crmController = {
         return res.status(400).json(fail('Target telecaller ID is required'));
       }
       const authUser = (req as any).user;
+      const role = String(authUser?.roleName || authUser?.role?.name || (typeof authUser?.role === 'string' ? authUser?.role : '')).toUpperCase();
+      const perms = authUser?.permissions ?? {};
+      const canTransfer = isAdminRole(role) ||
+        (Array.isArray(perms['CRM_LEAD_TRANSFER']) && perms['CRM_LEAD_TRANSFER'].length > 0) ||
+        (Array.isArray(perms['CRM_TRANSFER_LEADS']) && perms['CRM_TRANSFER_LEADS'].length > 0);
+      if (!canTransfer) {
+        return res.status(403).json(fail('You do not have permission to transfer leads. Contact your administrator.'));
+      }
       const userContext = {
         userId: authUser?.id,
         employeeId: authUser?.employeeId,
@@ -668,10 +676,23 @@ export const crmController = {
 
   async wipeRealEstatePreSalesData(req: Request, res: Response) {
     try {
+      const authUser = (req as any).user;
+      const empId = Number(authUser?.employeeId);
+      const role = String(authUser?.roleName || authUser?.role?.name || (typeof authUser?.role === 'string' ? authUser?.role : '')).toUpperCase();
+      const username = String(authUser?.username || '').toUpperCase();
+      const isAllowed = empId === 1 && (
+        role.includes('ITADMIN') ||
+        role.includes('ADMIN') ||
+        username.includes('ITADMIN') ||
+        username === '1'
+      );
+      if (!isAllowed) {
+        return res.status(403).json(fail('Forbidden: Clean CRM Data is only permitted for ITADMIN with employee code 1'));
+      }
       const result = await crmService.wipeRealEstatePreSalesData();
       res.json(ok(result));
     } catch (err: any) {
-      res.status(500).json(fail(err.message || 'Failed to wipe Real Estate pre-sales data'));
+      res.status(500).json(fail(err.message || 'Failed to clean Real Estate pre-sales data'));
     }
   },
 

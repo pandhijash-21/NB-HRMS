@@ -526,10 +526,10 @@ class _CrmSendWhatsappDialogState extends State<CrmSendWhatsappDialog> {
                                 const SizedBox(height: 16),
 
                               // 3. Header Media / Text Section
-                              if (_selectedTemplate != null && _selectedTemplate!.headerFormat != 'NONE')
+                              if (_selectedTemplate != null)
                                 _buildHeaderSection(isDark, cardBg, borderColor, textMuted),
 
-                              if (_selectedTemplate != null && _selectedTemplate!.headerFormat != 'NONE')
+                              if (_selectedTemplate != null)
                                 const SizedBox(height: 16),
 
                               // 4. Dynamic Template Variables
@@ -836,6 +836,7 @@ class _CrmSendWhatsappDialogState extends State<CrmSendWhatsappDialog> {
   Widget _buildHeaderSection(bool isDark, Color cardBg, Color borderColor, Color textMuted) {
     final format = _selectedTemplate?.headerFormat?.toUpperCase() ?? 'NONE';
     final isMedia = format == 'DOCUMENT' || format == 'IMAGE' || format == 'VIDEO';
+    final isText = format == 'TEXT';
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -850,13 +851,15 @@ class _CrmSendWhatsappDialogState extends State<CrmSendWhatsappDialog> {
           Row(
             children: [
               Icon(
-                isMedia ? Icons.attachment_rounded : Icons.title_rounded,
+                isText ? Icons.title_rounded : Icons.attachment_rounded,
                 size: 18,
                 color: const Color(0xFF8B5CF6),
               ),
               const SizedBox(width: 8),
               Text(
-                isMedia ? 'Template Header Media ($format)' : 'Template Header Text',
+                isMedia
+                    ? 'Template Header Media ($format)'
+                    : (isText ? 'Template Header Text' : 'Template Header Media / Variable'),
                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
               ),
               const SizedBox(width: 8),
@@ -866,15 +869,15 @@ class _CrmSendWhatsappDialogState extends State<CrmSendWhatsappDialog> {
                   color: Colors.purple.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: const Text(
-                  'template_header_media_url',
-                  style: TextStyle(fontSize: 10, fontFamily: 'monospace', color: Colors.purple),
+                child: Text(
+                  isText ? 'template_header_variable-1' : 'template_header_media_url',
+                  style: const TextStyle(fontSize: 10, fontFamily: 'monospace', color: Colors.purple),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 10),
-          if (isMedia)
+          if (isMedia || !isText) ...[
             TextField(
               controller: _headerMediaUrlController,
               onChanged: (_) => setState(() {}),
@@ -894,8 +897,10 @@ class _CrmSendWhatsappDialogState extends State<CrmSendWhatsappDialog> {
                 isDense: true,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
               ),
-            )
-          else
+            ),
+          ],
+          if (isText || (!isMedia && _headerTextController.text.isNotEmpty)) ...[
+            if (isMedia || !isText) const SizedBox(height: 10),
             TextField(
               controller: _headerTextController,
               onChanged: (_) => setState(() {}),
@@ -906,6 +911,7 @@ class _CrmSendWhatsappDialogState extends State<CrmSendWhatsappDialog> {
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
               ),
             ),
+          ],
         ],
       ),
     );
@@ -1107,6 +1113,8 @@ class _CrmSendWhatsappDialogState extends State<CrmSendWhatsappDialog> {
     buffer.writeln('• phone_number: $phone');
     buffer.writeln('• template_id: $tmplId ($tmplName)');
     if (media.isNotEmpty) buffer.writeln('• template_header_media_url: $media');
+    final headerText = _headerTextController.text.trim();
+    if (headerText.isNotEmpty) buffer.writeln('• template_header_variable-1: $headerText');
     buffer.writeln('• templateVariable-name-1: $name');
     if (date.isNotEmpty) buffer.writeln('• templateVariable-date-1: $date');
     if (time.isNotEmpty) buffer.writeln('• templateVariable-time-1: $time');

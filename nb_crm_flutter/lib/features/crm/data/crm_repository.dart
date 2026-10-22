@@ -812,5 +812,12 @@ class CrmRepository {
       parse: (raw) => Map<String, dynamic>.from(raw as Map),
     );
   }
+
+  Future<Map<String, dynamic>> wipeRealEstatePreSalesData() async {
+    return _dio.postEnvelope<Map<String, dynamic>>(
+      'crm/admin/wipe-real-estate-presales',
+      parse: (raw) => Map<String, dynamic>.from(raw as Map),
+    );
+  }
 }
 

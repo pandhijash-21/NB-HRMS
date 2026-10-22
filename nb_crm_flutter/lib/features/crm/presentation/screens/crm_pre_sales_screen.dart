@@ -346,6 +346,15 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     final currentUser = authState.user;
     final userRole = currentUser?.role.toUpperCase() ?? '';
     final userEmployeeId = currentUser?.employeeId;
+    final userName = (currentUser?.name ?? '').toUpperCase();
+    final userUsername = (currentUser?.username ?? '').toUpperCase();
+    final isItAdminEmp1 = userEmployeeId == 1 &&
+        (userRole.contains('ITADMIN') ||
+         userRole.contains('ADMIN') ||
+         userName.contains('ITADMIN') ||
+         userUsername.contains('ITADMIN') ||
+         userUsername == '1');
+    final canTransfer = Permissions.canTransferLeads(authState.permissions, authState.user?.role);
     final isAdmin = ['ADMIN', 'SUPER_ADMIN', 'SYSTEM_ADMIN'].contains(userRole);
     final canWrite = Permissions.canWriteCrmPreSales(authState.permissions, authState.user?.role);
     final repo = context.read<CrmRepository>();
@@ -616,37 +625,59 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                 Widget buildActionButtons({bool expand = false}) {
                   if (!canWrite) return const SizedBox.shrink();
                   if (expand) {
-                    return Row(
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        if (!isOnlyWebhook) ...[
-                          Expanded(
+                        Row(
+                          children: [
+                            if (!isOnlyWebhook) ...[
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: () => _handleExcelImport(context),
+                                  icon: const Icon(Icons.upload_file_rounded, size: 18),
+                                  label: const Text('Import Excel'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF16A34A),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                            ],
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () => _showAddLeadDialog(context, state.columns),
+                                icon: const Icon(Icons.person_add_rounded, size: 18),
+                                label: const Text('Add Lead'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: primaryColor,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (isItAdminEmp1) ...[
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            width: double.infinity,
                             child: ElevatedButton.icon(
-                              onPressed: () => _handleExcelImport(context),
-                              icon: const Icon(Icons.upload_file_rounded, size: 18),
-                              label: const Text('Import Excel'),
+                              onPressed: () => _handleCleanCrmData(context),
+                              icon: const Icon(Icons.delete_sweep_rounded, size: 18),
+                              label: const Text('Clean CRM Data'),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF16A34A),
+                                backgroundColor: const Color(0xFFDC2626),
                                 foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                               ),
                             ),
                           ),
-                          const SizedBox(width: 10),
                         ],
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: () => _showAddLeadDialog(context, state.columns),
-                            icon: const Icon(Icons.person_add_rounded, size: 18),
-                            label: const Text('Add Lead'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: primaryColor,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                            ),
-                          ),
-                        ),
                       ],
                     );
                   }
@@ -687,6 +718,20 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                           label: Text('Distribute (${leads.where((l) => l.isWaitingList).length})'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFFD97706),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                      if (isItAdminEmp1) ...[
+                        ElevatedButton.icon(
+                          onPressed: () => _handleCleanCrmData(context),
+                          icon: const Icon(Icons.delete_sweep_rounded, size: 18),
+                          label: const Text('Clean CRM Data'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFDC2626),
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -1063,7 +1108,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                               (lead.telecallerName != null && lead.telecallerName!.isNotEmpty)
                                   ? InkWell(
                                       borderRadius: BorderRadius.circular(6),
-                                      onTap: canAlterLead ? () => _showTransferLeadModal(context, lead, salesUsers) : null,
+                                      onTap: (canAlterLead && canTransfer) ? () => _showTransferLeadModal(context, lead, salesUsers) : null,
                                       child: Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                         decoration: BoxDecoration(
@@ -1080,25 +1125,27 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                               lead.telecallerName!,
                                               style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF16A34A)),
                                             ),
-                                            const SizedBox(width: 6),
-                                            Tooltip(
-                                              message: 'Transfer this lead to another telecaller',
-                                              child: Container(
-                                                padding: const EdgeInsets.all(2),
-                                                decoration: BoxDecoration(
-                                                  color: const Color(0xFF16A34A).withValues(alpha: 0.2),
-                                                  borderRadius: BorderRadius.circular(4),
+                                            if (canTransfer) ...[
+                                              const SizedBox(width: 6),
+                                              Tooltip(
+                                                message: 'Transfer this lead to another telecaller',
+                                                child: Container(
+                                                  padding: const EdgeInsets.all(2),
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(0xFF16A34A).withValues(alpha: 0.2),
+                                                    borderRadius: BorderRadius.circular(4),
+                                                  ),
+                                                  child: const Icon(Icons.swap_horiz_rounded, size: 12, color: Color(0xFF16A34A)),
                                                 ),
-                                                child: const Icon(Icons.swap_horiz_rounded, size: 12, color: Color(0xFF16A34A)),
                                               ),
-                                            ),
+                                            ],
                                           ],
                                         ),
                                       ),
                                     )
                                   : InkWell(
                                       borderRadius: BorderRadius.circular(6),
-                                      onTap: () => _showTransferLeadModal(context, lead, salesUsers),
+                                      onTap: canTransfer ? () => _showTransferLeadModal(context, lead, salesUsers) : null,
                                       child: Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                         decoration: BoxDecoration(
@@ -1106,17 +1153,19 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                           borderRadius: BorderRadius.circular(6),
                                           border: Border.all(color: const Color(0xFFD97706).withValues(alpha: 0.3)),
                                         ),
-                                        child: const Row(
+                                        child: Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
-                                            Icon(Icons.hourglass_top_rounded, size: 12, color: Color(0xFFD97706)),
-                                            SizedBox(width: 4),
-                                            Text(
+                                            const Icon(Icons.hourglass_top_rounded, size: 12, color: Color(0xFFD97706)),
+                                            const SizedBox(width: 4),
+                                            const Text(
                                               'Waiting List (WL)',
                                               style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFFD97706)),
                                             ),
-                                            SizedBox(width: 4),
-                                            Icon(Icons.swap_horiz_rounded, size: 12, color: Color(0xFFD97706)),
+                                            if (canTransfer) ...[
+                                              const SizedBox(width: 4),
+                                              const Icon(Icons.swap_horiz_rounded, size: 12, color: Color(0xFFD97706)),
+                                            ],
                                           ],
                                         ),
                                       ),
@@ -1257,7 +1306,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                       onPressed: () => _showAssignSalesManagerModal(context, lead, salesUsers),
                                     ),
                                   ],
-                                  if (isAdmin || !isBlockedForTelecaller)
+                                  if ((isAdmin || !isBlockedForTelecaller) && canTransfer)
                                     IconButton(
                                       icon: const Icon(Icons.swap_horiz_rounded, size: 18, color: Color(0xFF6366F1)),
                                       tooltip: 'Transfer Lead to another Telecaller',
@@ -3390,6 +3439,18 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     CrmLead lead,
     List<CrmSalesUser> salesUsers,
   ) {
+    final authState = context.read<AuthBloc>().state;
+    final canTransfer = Permissions.canTransferLeads(authState.permissions, authState.user?.role);
+    if (!canTransfer) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Lead transfer is disabled for your role in RBAC permissions.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
     int? selectedTelecallerId;
     final remarksCtrl = TextEditingController();
     String searchQuery = '';
@@ -5203,6 +5264,84 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
           SnackBar(
             backgroundColor: Colors.red.shade700,
             content: Text('Failed to distribute leads: $e'),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _handleCleanCrmData(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 26),
+            SizedBox(width: 10),
+            Text('Clean Real Estate CRM Data?'),
+          ],
+        ),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'This action is exclusively for ITADMIN (emp code 1).\n\nIt will wipe all Real Estate CRM pre-sales leads, follow-ups, and unbind call logs from the database without wiping the entire HRMS database.\n\nNB Finserve leads will NOT be affected.',
+              style: TextStyle(fontSize: 13, height: 1.4),
+            ),
+            SizedBox(height: 12),
+            Text(
+              'Are you sure you want to proceed?',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFFDC2626)),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Yes, Clean CRM Data'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
+    try {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cleaning CRM pre-sales data...'), duration: Duration(seconds: 2)),
+      );
+      final repo = context.read<CrmRepository>();
+      final res = await repo.wipeRealEstatePreSalesData();
+      if (!context.mounted) return;
+      final msg = res['message']?.toString() ?? 'Real Estate pre-sales data cleaned successfully!';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: const Color(0xFF16A34A),
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+              const SizedBox(width: 10),
+              Expanded(child: Text(msg, style: const TextStyle(fontWeight: FontWeight.bold))),
+            ],
+          ),
+        ),
+      );
+      context.read<CrmLeadsBloc>().add(const CrmLeadsRefreshRequested());
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.red.shade700,
+            content: Text('Failed to clean CRM data: $e'),
           ),
         );
       }

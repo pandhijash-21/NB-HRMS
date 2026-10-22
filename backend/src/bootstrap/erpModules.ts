@@ -146,6 +146,13 @@ export const SYSTEM_SUBMODULES: SystemSubmoduleDef[] = [
     category: 'CRM',
     sortOrder: 8,
   },
+  {
+    key: 'CRM_LEAD_TRANSFER',
+    name: 'Allow Transfer Leads',
+    description: 'Grant permission to transfer leads to another telecaller or team member',
+    category: 'CRM',
+    sortOrder: 9,
+  },
 
   // ── CRM MODULE (NB FINSERVE) ───────────────────────────────────────────────
   {

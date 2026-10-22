@@ -642,14 +642,32 @@ export class BotBizApiClient {
         formParams.set('template_name', params.templateName);
       }
 
-      // 3. Header Management
-      const headerMediaUrl = params.templateHeaderMediaUrl || formParams.get('template_header_media_url');
-      if (headerMediaUrl && headerMediaUrl.trim().length > 0) {
-        formParams.set('template_header_media_url', headerMediaUrl.trim());
+      // 3. Header Management (Media URL: DOCUMENT/PDF/IMAGE/VIDEO or Header Text Variable)
+      const headerMediaUrl =
+        params.templateHeaderMediaUrl ||
+        formParams.get('template_header_media_url') ||
+        params.variables?.header_media_url ||
+        params.variables?.headerMediaUrl;
+      if (headerMediaUrl && String(headerMediaUrl).trim().length > 0) {
+        const cleanMediaUrl = String(headerMediaUrl).trim();
+        formParams.set('template_header_media_url', cleanMediaUrl);
+        formParams.set('header_media_url', cleanMediaUrl);
+        formParams.set('templateHeaderMediaUrl', cleanMediaUrl);
       }
-      if (params.templateHeaderText) {
-        formParams.set('template_header_variable-1', params.templateHeaderText);
-        formParams.set('templateHeaderVariable-1', params.templateHeaderText);
+
+      const headerText =
+        params.templateHeaderText ||
+        formParams.get('template_header_variable-1') ||
+        params.variables?.header_variable ||
+        params.variables?.headerVariable ||
+        params.variables?.header_text ||
+        params.variables?.headerText;
+      if (headerText && String(headerText).trim().length > 0) {
+        const cleanHeaderText = String(headerText).trim();
+        formParams.set('template_header_variable-1', cleanHeaderText);
+        formParams.set('template_header_variable', cleanHeaderText);
+        formParams.set('templateHeaderVariable-1', cleanHeaderText);
+        formParams.set('template_header_text', cleanHeaderText);
       }
 
       // 4. Variables Management (e.g. templateVariable-name-1=Jash, templateVariable-date-1=..., templateVariable-time-1=...)

@@ -5,6 +5,7 @@ import { crmService } from './crm.service';
 import { ok, fail } from '../../utils/response';
 import { CLIENT_PORTAL_HTML } from './client-portal.template';
 import { isAdminRole } from '../auth/permissions-map';
+import { DEFAULT_BROCHURE_PDF_BASE64 } from './default-brochure';
 
 function getScope(req: Request): string {
   const fromParam = (req.query?.scope || req.body?.scope || req.headers['x-crm-scope'] || '').toString().toUpperCase().trim();
@@ -749,17 +750,8 @@ export const crmController = {
         return res.status(200).send(dummyJpg);
       }
 
-      // Serve official PDF brochure buffer
-      const title = isFinserve ? 'NB Finserve - Complete Loan & Advisory Solutions' : 'NB Legacy Tower - Science Park, Ahmedabad';
-      const subtitle = isFinserve ? 'Personal Loans, Home Loans, Business Financing' : 'Ultra-Luxury 4BHK Simplex & 5BHK Vertical Bungalows';
-      const company = isFinserve ? 'NB Finserve Advisory' : 'NB Infra Projects LTD - Since 1946';
-      const contact = isFinserve ? 'Call: +91 97271 14499 | https://nbdeveloper.co.in' : 'Call: +91 97271 14499 | https://nbsince1946.com';
-
-      const streamText = `BT\n/F1 18 Tf\n50 720 Td\n(${title}) Tj\n0 -30 Td\n/F1 12 Tf\n(${subtitle}) Tj\n0 -25 Td\n(${company}) Tj\n0 -20 Td\n(${contact}) Tj\nET`;
-      const streamLen = Buffer.byteLength(streamText);
-      const pdfContent = `%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n4 0 obj\n<< /Length ${streamLen} >>\nstream\n${streamText}\nendstream\nendobj\n5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\nxref\n0 6\n0000000000 65535 f \n0000000010 00000 n \n0000000060 00000 n \n0000000117 00000 n \n0000000247 00000 n \n0000000450 00000 n \ntrailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n530\n%%EOF`;
-
-      const pdfBuf = Buffer.from(pdfContent);
+      // Serve official 13KB+ PDF brochure buffer (compatible with Meta WhatsApp download)
+      const pdfBuf = Buffer.from(DEFAULT_BROCHURE_PDF_BASE64, 'base64');
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Length', String(pdfBuf.length));
       res.setHeader('Content-Disposition', `inline; filename="${safeFilename}"`);

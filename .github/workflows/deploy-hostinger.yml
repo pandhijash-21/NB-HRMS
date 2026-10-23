@@ -286,23 +286,8 @@ jobs:
         run: |
           # shellcheck disable=SC2086
           for attempt in 1 2 3; do
-            echo "Attempt $attempt: Connecting to VPS via SSH..."
-            if ssh -i ~/.ssh/deploy_key -p "${PORT:-22}" $SSH_OPTS \
-              "${USER}@${HOST}" 'bash -s' <<'EOS'
-          set -e
-          cd /opt/nb-crm
-          mkdir -p deploy
-          if [ -d deploy/frontend ]; then
-            rm -rf deploy/frontend.prev
-            cp -a deploy/frontend deploy/frontend.prev
-            echo "frontend.prev saved"
-          fi
-          if docker inspect --format='{{.Image}}' nb-crm-backend-1 >/dev/null 2>&1; then
-            docker inspect --format='{{.Image}}' nb-crm-backend-1 > .deploy-prev-backend-image
-            echo "prev backend image saved"
-          fi
-EOS
-            then
+            echo "Attempt $attempt: Connecting to VPS via SSH for backup..."
+            if ssh -i ~/.ssh/deploy_key -p "${PORT:-22}" $SSH_OPTS "${USER}@${HOST}" 'set -e; cd /opt/nb-crm; mkdir -p deploy; if [ -d deploy/frontend ]; then rm -rf deploy/frontend.prev; cp -a deploy/frontend deploy/frontend.prev; echo "frontend.prev saved"; fi; if docker inspect --format="{{.Image}}" nb-crm-backend-1 >/dev/null 2>&1; then docker inspect --format="{{.Image}}" nb-crm-backend-1 > .deploy-prev-backend-image; echo "prev backend image saved"; fi'; then
               echo "Backup completed successfully."
               break
             fi

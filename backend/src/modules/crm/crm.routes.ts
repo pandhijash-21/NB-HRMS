@@ -51,6 +51,11 @@ crmPublicRouter.post(
 crmPublicRouter.get('/client-portal/:token/download-docs-zip', crmController.downloadLeadDocsZipPublic);
 crmPublicRouter.get('/leads/:id/download-docs-zip', crmController.downloadLeadDocsZipPublic);
 
+// Public Brochure Delivery for WhatsApp Media Headers & Client Downloads
+crmPublicRouter.get('/brochures/:filename', crmController.servePublicBrochure);
+crmPublicRouter.get('/brochure/:filename', crmController.servePublicBrochure);
+crmPublicRouter.get('/brochures', crmController.servePublicBrochure);
+
 // Apply auth to all protected CRM routes
 crmRouter.use(requireAuth);
 

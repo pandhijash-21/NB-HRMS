@@ -497,7 +497,9 @@ export class WhatsappService {
         map.whatsapp_calendar_link ||
         '',
       defaultBrochureUrl:
-        map.whatsapp_default_brochure_url || '',
+        map.whatsapp_default_brochure_url && !map.whatsapp_default_brochure_url.includes('nbdeveloper.co.in/brochures/')
+          ? map.whatsapp_default_brochure_url
+          : `https://crm.nbdeveloper.co.in/api/crm-public/brochures/${isFinserve ? 'nb-finserve.pdf' : 'legacy-tower.pdf'}`,
       defaultBrochureName:
         map.whatsapp_default_brochure_name ||
         (isFinserve ? 'NB_Finserve_Loan_Guide.pdf' : 'Legacy_Tower_Brochure.pdf'),
@@ -1062,10 +1064,39 @@ export class WhatsappService {
       // Use internal BotBiz ID if present (BotBiz API requires internal template ID)
       const botbizInternalId = tmpl?.raw?.id ? String(tmpl.raw.id) : params.templateId;
 
-      const headerMediaUrl =
-        params.headerMediaUrl ||
-        params.mediaUrl ||
-        tmpl?.headerExampleUrl;
+      let headerMediaUrl = params.headerMediaUrl || params.mediaUrl;
+      // Strip any raw Meta handles (e.g. 4::...) or non-HTTP values
+      if (headerMediaUrl && (headerMediaUrl.startsWith('4::') || (!headerMediaUrl.startsWith('http://') && !headerMediaUrl.startsWith('https://')))) {
+        headerMediaUrl = undefined;
+      }
+      if (!headerMediaUrl && tmpl?.headerExampleUrl && (tmpl.headerExampleUrl.startsWith('http://') || tmpl.headerExampleUrl.startsWith('https://'))) {
+        headerMediaUrl = tmpl.headerExampleUrl;
+      }
+
+      // Check if template requires a media header (DOCUMENT, IMAGE, VIDEO)
+      const tmplHeaderType = (tmpl?.headerFormat || tmpl?.raw?.header_type || tmpl?.raw?.header_subtype || '').toString().toUpperCase();
+      const needsMediaHeader = tmplHeaderType.includes('DOCUMENT') || tmplHeaderType.includes('IMAGE') || tmplHeaderType.includes('VIDEO') || tmplHeaderType.includes('MEDIA');
+
+      if (!headerMediaUrl && needsMediaHeader) {
+        const host = process.env.PUBLIC_APP_URL || process.env.BACKEND_URL || 'https://crm.nbdeveloper.co.in';
+        const cleanHost = host.replace(/\/+$/, '');
+        const isFinserve = scope === 'NB_FINSERVE';
+        const isImage = tmplHeaderType.includes('IMAGE');
+        const defaultFilename = isImage
+          ? (isFinserve ? 'nb-finserve.jpg' : 'legacy-tower.jpg')
+          : (isFinserve ? 'nb-finserve.pdf' : 'legacy-tower.pdf');
+
+        if (
+          !isImage &&
+          raw.defaultBrochureUrl &&
+          (raw.defaultBrochureUrl.startsWith('http://') || raw.defaultBrochureUrl.startsWith('https://')) &&
+          !raw.defaultBrochureUrl.includes('nbdeveloper.co.in/brochures/')
+        ) {
+          headerMediaUrl = raw.defaultBrochureUrl;
+        } else {
+          headerMediaUrl = `${cleanHost}/api/crm-public/brochures/${defaultFilename}`;
+        }
+      }
 
       const sendRes = await this.botbizClient.sendTemplateMessage({
         phoneNumber: normalizedPhone,

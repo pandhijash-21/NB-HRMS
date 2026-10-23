@@ -121,8 +121,10 @@ class _CrmSendWhatsappDialogState extends State<CrmSendWhatsappDialog> {
             _calendarLinkController.text = config.defaultCalendarLink;
           }
           final headerUrl = chosenTemplate?.headerExampleUrl;
-          if (headerUrl != null && headerUrl.isNotEmpty) {
+          if (headerUrl != null && (headerUrl.startsWith('http://') || headerUrl.startsWith('https://'))) {
             _headerMediaUrlController.text = headerUrl;
+          } else {
+            _headerMediaUrlController.text = '';
           }
           _syncTemplateVariables(chosenTemplate);
           _isLoading = false;
@@ -205,8 +207,11 @@ class _CrmSendWhatsappDialogState extends State<CrmSendWhatsappDialog> {
     if (template == null) return;
     setState(() {
       _selectedTemplate = template;
-      if (template.headerExampleUrl != null && template.headerExampleUrl!.isNotEmpty) {
+      if (template.headerExampleUrl != null &&
+          (template.headerExampleUrl!.startsWith('http://') || template.headerExampleUrl!.startsWith('https://'))) {
         _headerMediaUrlController.text = template.headerExampleUrl!;
+      } else {
+        _headerMediaUrlController.text = '';
       }
       _syncTemplateVariables(template);
     });
@@ -343,8 +348,10 @@ class _CrmSendWhatsappDialogState extends State<CrmSendWhatsappDialog> {
         }
       }
 
-      final headerMedia = _headerMediaUrlController.text.trim().isNotEmpty
-          ? _headerMediaUrlController.text.trim()
+      final headerMediaText = _headerMediaUrlController.text.trim();
+      final headerMedia = headerMediaText.isNotEmpty &&
+              (headerMediaText.startsWith('http://') || headerMediaText.startsWith('https://'))
+          ? headerMediaText
           : null;
       final headerText = _headerTextController.text.trim().isNotEmpty
           ? _headerTextController.text.trim()
@@ -809,11 +816,11 @@ class _CrmSendWhatsappDialogState extends State<CrmSendWhatsappDialog> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          const Row(
             children: [
-              const Icon(Icons.visibility_rounded, size: 15, color: Color(0xFF64748B)),
-              const SizedBox(width: 6),
-              const Text(
+              Icon(Icons.visibility_rounded, size: 15, color: Color(0xFF64748B)),
+              SizedBox(width: 6),
+              Text(
                 'Template Message Preview:',
                 style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF64748B)),
               ),
@@ -877,25 +884,70 @@ class _CrmSendWhatsappDialogState extends State<CrmSendWhatsappDialog> {
             ],
           ),
           const SizedBox(height: 10),
-          if (isMedia || !isText) ...[
-            TextField(
-              controller: _headerMediaUrlController,
-              onChanged: (_) => setState(() {}),
-              decoration: InputDecoration(
-                labelText: 'Header Media URL (PDF, Wasabi S3, Image, Video)',
-                hintText: 'https://bot-data.s3.ap-southeast-1.wasabisys.com/...',
-                prefixIcon: const Icon(Icons.link_rounded, size: 18),
-                suffixIcon: _headerMediaUrlController.text.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, size: 16),
-                        onPressed: () {
-                          _headerMediaUrlController.clear();
-                          setState(() {});
-                        },
-                      )
-                    : null,
-                isDense: true,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          if (isMedia) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF10B981).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.check_circle_rounded, size: 20, color: Color(0xFF10B981)),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Document / Attachment Managed via BotBiz ($format)',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF047857)),
+                        ),
+                        const SizedBox(height: 2),
+                        const Text(
+                          'Attachment configured inside BotBiz is used automatically. No manual upload required.',
+                          style: TextStyle(fontSize: 11, color: Color(0xFF065F46)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            Theme(
+              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: const EdgeInsets.only(top: 8),
+                title: const Text(
+                  'Custom Attachment URL Override (Optional)',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF6366F1)),
+                ),
+                leading: const Icon(Icons.tune_rounded, size: 16, color: Color(0xFF6366F1)),
+                children: [
+                  TextField(
+                    controller: _headerMediaUrlController,
+                    onChanged: (_) => setState(() {}),
+                    decoration: InputDecoration(
+                      labelText: 'Override Media URL (Optional)',
+                      hintText: 'Leave empty to use BotBiz default document',
+                      prefixIcon: const Icon(Icons.link_rounded, size: 18),
+                      suffixIcon: _headerMediaUrlController.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear, size: 16),
+                              onPressed: () {
+                                _headerMediaUrlController.clear();
+                                setState(() {});
+                              },
+                            )
+                          : null,
+                      isDense: true,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -1109,10 +1161,19 @@ class _CrmSendWhatsappDialogState extends State<CrmSendWhatsappDialog> {
     final time = _timeController.text.trim();
     final cal = _calendarLinkController.text.trim();
 
+    final format = _selectedTemplate?.headerFormat?.toUpperCase() ?? 'NONE';
+    final isMedia = format == 'DOCUMENT' || format == 'IMAGE' || format == 'VIDEO';
+
     final buffer = StringBuffer();
     buffer.writeln('• phone_number: $phone');
     buffer.writeln('• template_id: $tmplId ($tmplName)');
-    if (media.isNotEmpty) buffer.writeln('• template_header_media_url: $media');
+    if (isMedia) {
+      if (media.isNotEmpty && (media.startsWith('http://') || media.startsWith('https://'))) {
+        buffer.writeln('• template_header_media_url: $media (Override)');
+      } else {
+        buffer.writeln('• template_header_media_url: [Managed via BotBiz Attachment]');
+      }
+    }
     final headerText = _headerTextController.text.trim();
     if (headerText.isNotEmpty) buffer.writeln('• template_header_variable-1: $headerText');
     buffer.writeln('• templateVariable-name-1: $name');

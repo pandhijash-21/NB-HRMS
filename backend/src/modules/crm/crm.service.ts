@@ -4102,7 +4102,18 @@ export const crmService = {
     file: { buffer: Buffer; originalname?: string; mimetype?: string },
     updatedBy?: string,
   ) {
-    const url = await uploadService.uploadToCloudinary(file, 'crm/brochures');
+    try {
+      const dir = path.join(process.cwd(), 'uploads', 'crm', 'brochures');
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'legacy-tower.pdf'), file.buffer);
+    } catch (_) {}
+
+    let url = 'https://crm.nbdeveloper.co.in/api/crm-public/brochures/legacy-tower.pdf';
+    try {
+      const cloudUrl = await uploadService.uploadToCloudinary(file, 'crm/brochures');
+      if (cloudUrl) url = cloudUrl;
+    } catch (_) {}
+
     await prisma.crmSetting.upsert({
       where: { key: 'whatsapp_default_brochure_url' },
       update: { value: url, updatedBy },

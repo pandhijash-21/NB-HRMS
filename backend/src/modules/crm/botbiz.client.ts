@@ -421,10 +421,16 @@ export class BotBizApiClient {
           : undefined;
         const headerFormat = headerComp?.format ? String(headerComp.format).toLowerCase() : undefined;
         let headerExampleUrl: string | undefined = undefined;
-        if (headerComp?.example?.header_handle && headerComp.example.header_handle[0]) {
-          headerExampleUrl = headerComp.example.header_handle[0];
-        } else if (headerComp?.example?.header_url && headerComp.example.header_url[0]) {
-          headerExampleUrl = headerComp.example.header_url[0];
+        if (headerComp?.example?.header_url && headerComp.example.header_url[0]) {
+          const u = String(headerComp.example.header_url[0]).trim();
+          if (u.startsWith('http://') || u.startsWith('https://')) {
+            headerExampleUrl = u;
+          }
+        } else if (headerComp?.example?.header_handle && headerComp.example.header_handle[0]) {
+          const h = String(headerComp.example.header_handle[0]).trim();
+          if (h.startsWith('http://') || h.startsWith('https://')) {
+            headerExampleUrl = h;
+          }
         }
         const bodyComp = Array.isArray(components)
           ? components.find((c: any) => c.type?.toUpperCase() === 'BODY')
@@ -643,11 +649,20 @@ export class BotBizApiClient {
       }
 
       // 3. Header Management (Media URL: DOCUMENT/PDF/IMAGE/VIDEO or Header Text Variable)
-      const headerMediaUrl =
+      let headerMediaUrl =
         params.templateHeaderMediaUrl ||
         formParams.get('template_header_media_url') ||
         params.variables?.header_media_url ||
         params.variables?.headerMediaUrl;
+
+      // Filter out Meta handles like 4::... or non-HTTP values
+      if (headerMediaUrl && (headerMediaUrl.startsWith('4::') || (!headerMediaUrl.startsWith('http://') && !headerMediaUrl.startsWith('https://')))) {
+        headerMediaUrl = undefined;
+        formParams.delete('template_header_media_url');
+        formParams.delete('header_media_url');
+        formParams.delete('templateHeaderMediaUrl');
+      }
+
       if (headerMediaUrl && String(headerMediaUrl).trim().length > 0) {
         const cleanMediaUrl = String(headerMediaUrl).trim();
         formParams.set('template_header_media_url', cleanMediaUrl);

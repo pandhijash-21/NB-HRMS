@@ -5,6 +5,7 @@ import {
   BotbizTemplateStatusResponse,
 } from './botbiz.client';
 import {
+  BOTBIZ_LEGACY_TOWER_PDF,
   CLOUDINARY_LEGACY_TOWER_PDF,
   CLOUDINARY_NB_FINSERVE_PDF,
 } from './default-brochure';
@@ -503,7 +504,7 @@ export class WhatsappService {
       defaultBrochureUrl:
         map.whatsapp_default_brochure_url && !map.whatsapp_default_brochure_url.includes('nbdeveloper.co.in/brochures/')
           ? map.whatsapp_default_brochure_url
-          : (isFinserve ? CLOUDINARY_NB_FINSERVE_PDF : CLOUDINARY_LEGACY_TOWER_PDF),
+          : (isFinserve ? CLOUDINARY_NB_FINSERVE_PDF : BOTBIZ_LEGACY_TOWER_PDF),
       defaultBrochureName:
         map.whatsapp_default_brochure_name ||
         (isFinserve ? 'NB_Finserve_Loan_Guide.pdf' : 'Legacy_Tower_Brochure.pdf'),
@@ -1098,7 +1099,7 @@ export class WhatsappService {
         ) {
           headerMediaUrl = raw.defaultBrochureUrl;
         } else {
-          headerMediaUrl = isFinserve ? CLOUDINARY_NB_FINSERVE_PDF : CLOUDINARY_LEGACY_TOWER_PDF;
+          headerMediaUrl = isFinserve ? CLOUDINARY_NB_FINSERVE_PDF : BOTBIZ_LEGACY_TOWER_PDF;
         }
       }
 

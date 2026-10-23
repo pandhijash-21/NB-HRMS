@@ -3,5 +3,8 @@ export const DEFAULT_BROCHURE_PDF_BASE64 = "JVBERi0xLjQKJcOkw7zDtsOfCjIgMCBvYmoK
 export const CLOUDINARY_LEGACY_TOWER_PDF =
   'https://res.cloudinary.com/drrlmkjwi/raw/upload/v1792734543/hrms/crm/brochures/ip4zbfjpbqvldlceh8yq';
 
+export const BOTBIZ_LEGACY_TOWER_PDF =
+  'https://bot-data.s3.ap-southeast-1.wasabisys.com/flowbuilder/306044/306044/whatsapp-440327/flowbuilder-306044-1792663002.pdf';
+
 export const CLOUDINARY_NB_FINSERVE_PDF =
   'https://res.cloudinary.com/drrlmkjwi/raw/upload/v1792734599/hrms/crm/brochures/ggimeoxwi8swmpsxk43v';

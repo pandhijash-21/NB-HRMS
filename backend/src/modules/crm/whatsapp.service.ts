@@ -422,48 +422,71 @@ export class WhatsappService {
     const isFinserve = scope === 'NB_FINSERVE';
     const prefix = isFinserve ? 'finserve_' : '';
 
+    const keysToFetch = [
+      `${prefix}whatsapp_enabled`,
+      `${prefix}whatsapp_provider`,
+      `${prefix}whatsapp_api_base`,
+      `${prefix}whatsapp_api_url`,
+      `${prefix}whatsapp_api_key`,
+      `${prefix}whatsapp_sender_id`,
+      `${prefix}whatsapp_default_calendar_link`,
+      `${prefix}whatsapp_calendar_link`,
+      `${prefix}whatsapp_default_brochure_url`,
+      `${prefix}whatsapp_default_brochure_name`,
+      `${prefix}whatsapp_default_location_url`,
+      `${prefix}whatsapp_default_project_name`,
+      `${prefix}whatsapp_triggers`,
+      `${prefix}whatsapp_last_verified_at`,
+      `${prefix}whatsapp_last_verification_result`,
+    ];
+    if (isFinserve) {
+      keysToFetch.push(
+        'whatsapp_enabled',
+        'whatsapp_provider',
+        'whatsapp_api_base',
+        'whatsapp_api_url',
+        'whatsapp_api_key',
+        'whatsapp_sender_id',
+        'whatsapp_default_calendar_link',
+        'whatsapp_calendar_link',
+        'whatsapp_default_brochure_url',
+        'whatsapp_default_brochure_name',
+        'whatsapp_default_location_url',
+        'whatsapp_default_project_name',
+      );
+    }
+
     const settings = await prisma.crmSetting.findMany({
       where: {
-        key: {
-          in: [
-            `${prefix}whatsapp_enabled`,
-            `${prefix}whatsapp_provider`,
-            `${prefix}whatsapp_api_base`,
-            `${prefix}whatsapp_api_url`,
-            `${prefix}whatsapp_api_key`,
-            `${prefix}whatsapp_sender_id`,
-            `${prefix}whatsapp_default_calendar_link`,
-            `${prefix}whatsapp_calendar_link`,
-            `${prefix}whatsapp_default_brochure_url`,
-            `${prefix}whatsapp_default_brochure_name`,
-            `${prefix}whatsapp_default_location_url`,
-            `${prefix}whatsapp_default_project_name`,
-            `${prefix}whatsapp_triggers`,
-            `${prefix}whatsapp_last_verified_at`,
-            `${prefix}whatsapp_last_verification_result`,
-          ],
-        },
+        key: { in: keysToFetch },
       },
     });
 
-    const map: Record<string, string> = {};
+    const defaultMap: Record<string, string> = {};
+    const finserveMap: Record<string, string> = {};
+
     for (const s of settings) {
       if (s.value !== undefined && s.value !== null) {
-        const rawKey = isFinserve && s.key.startsWith('finserve_')
-          ? s.key.substring('finserve_'.length)
-          : s.key;
-        map[rawKey] = s.value;
+        if (s.key.startsWith('finserve_')) {
+          finserveMap[s.key.substring('finserve_'.length)] = s.value;
+        } else {
+          defaultMap[s.key] = s.value;
+        }
       }
     }
 
-    // Merge DB values with Environment Variables
+    const map = isFinserve ? { ...defaultMap, ...finserveMap } : defaultMap;
+
+    // Merge DB values with Environment Variables (with fallback to main credentials)
     const envApiBase = process.env.BOTBIZ_API_BASE;
-    const envApiToken = isFinserve
-      ? (process.env.FINSERVE_BOTBIZ_API_TOKEN || '')
-      : (process.env.BOTBIZ_API_TOKEN || '');
-    const envPhoneId = isFinserve
-      ? (process.env.FINSERVE_BOTBIZ_PHONE_NUMBER_ID || '')
-      : (process.env.BOTBIZ_PHONE_NUMBER_ID || '');
+    const envApiToken =
+      (isFinserve ? process.env.FINSERVE_BOTBIZ_API_TOKEN : undefined) ||
+      process.env.BOTBIZ_API_TOKEN ||
+      '';
+    const envPhoneId =
+      (isFinserve ? process.env.FINSERVE_BOTBIZ_PHONE_NUMBER_ID : undefined) ||
+      process.env.BOTBIZ_PHONE_NUMBER_ID ||
+      '';
 
     const apiBase =
       map.whatsapp_api_base ||
@@ -754,15 +777,27 @@ export class WhatsappService {
     const row = await prisma.crmSetting.findUnique({
       where: { key },
     });
-    if (!row?.value) return { templates: [] };
+    if (!row?.value) {
+      if (isFinserve) {
+        return this.getCachedTemplates('NB_DEVELOPER');
+      }
+      return { templates: [] };
+    }
 
     try {
       const parsed = JSON.parse(row.value);
+      const list = parsed.templates || [];
+      if (list.length === 0 && isFinserve) {
+        return this.getCachedTemplates('NB_DEVELOPER');
+      }
       return {
         syncedAt: parsed.syncedAt,
-        templates: parsed.templates || [],
+        templates: list,
       };
     } catch {
+      if (isFinserve) {
+        return this.getCachedTemplates('NB_DEVELOPER');
+      }
       return { templates: [] };
     }
   }

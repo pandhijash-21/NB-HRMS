@@ -5,7 +5,11 @@ import { crmService } from './crm.service';
 import { ok, fail } from '../../utils/response';
 import { CLIENT_PORTAL_HTML } from './client-portal.template';
 import { isAdminRole } from '../auth/permissions-map';
-import { DEFAULT_BROCHURE_PDF_BASE64 } from './default-brochure';
+import {
+  DEFAULT_BROCHURE_PDF_BASE64,
+  BOTBIZ_LEGACY_TOWER_PDF,
+  CLOUDINARY_NB_FINSERVE_PDF,
+} from './default-brochure';
 
 function getScope(req: Request): string {
   const fromParam = (req.query?.scope || req.body?.scope || req.headers['x-crm-scope'] || '').toString().toUpperCase().trim();
@@ -717,12 +721,14 @@ export const crmController = {
 
       for (const p of diskPaths) {
         if (fs.existsSync(p)) {
-          const mime = isImage ? (safeFilename.endsWith('.png') ? 'image/png' : 'image/jpeg') : 'application/pdf';
-          res.setHeader('Content-Type', mime);
+          const absPath = path.resolve(p);
           res.setHeader('Content-Disposition', `inline; filename="${safeFilename}"`);
-          res.setHeader('Cache-Control', 'public, max-age=86400');
           res.setHeader('Access-Control-Allow-Origin', '*');
-          return fs.createReadStream(p).pipe(res);
+          return res.sendFile(absPath, {
+            acceptRanges: true,
+            cacheControl: true,
+            maxAge: 86400000,
+          });
         }
       }
 
@@ -750,14 +756,9 @@ export const crmController = {
         return res.status(200).send(dummyJpg);
       }
 
-      // Serve official 13KB+ PDF brochure buffer (compatible with Meta WhatsApp download)
-      const pdfBuf = Buffer.from(DEFAULT_BROCHURE_PDF_BASE64, 'base64');
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Length', String(pdfBuf.length));
-      res.setHeader('Content-Disposition', `inline; filename="${safeFilename}"`);
-      res.setHeader('Cache-Control', 'public, max-age=86400');
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      return res.status(200).send(pdfBuf);
+      // If not on disk, redirect to the official high-capacity Wasabi/Cloudinary brochure
+      const targetUrl = isFinserve ? CLOUDINARY_NB_FINSERVE_PDF : BOTBIZ_LEGACY_TOWER_PDF;
+      return res.redirect(302, targetUrl);
     } catch (err: any) {
       res.status(500).json(fail(err.message || 'Failed to serve brochure'));
     }

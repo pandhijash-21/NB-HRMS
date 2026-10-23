@@ -82,7 +82,7 @@ export class BotBizApiClient {
       apiToken: config?.apiToken || process.env.BOTBIZ_API_TOKEN || '',
       phoneNumberId:
         config?.phoneNumberId || process.env.BOTBIZ_PHONE_NUMBER_ID || '',
-      timeoutMs: config?.timeoutMs || 15000,
+      timeoutMs: config?.timeoutMs || 90000,
     };
   }
 

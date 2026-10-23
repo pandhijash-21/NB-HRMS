@@ -247,6 +247,20 @@ class _CrmWhatsappSettingsWidgetState extends State<CrmWhatsappSettingsWidget> {
             children: [
               Text(msg, style: const TextStyle(fontSize: 13)),
               const SizedBox(height: 12),
+              if (success) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF16A34A).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFF16A34A).withValues(alpha: 0.3)),
+                  ),
+                  child: const Text(
+                    'Note: "Test Connection" validates your API Token and Phone ID with BotBiz servers (no message is sent to phones). To send a live template message to your phone, click the green WhatsApp icon on any lead in Pre-sales.',
+                    style: TextStyle(fontSize: 12, color: Color(0xFF16A34A)),
+                  ),
+                ),
+              ],
               if (!success) ...[
                 Container(
                   padding: const EdgeInsets.all(12),
@@ -370,6 +384,25 @@ class _CrmWhatsappSettingsWidgetState extends State<CrmWhatsappSettingsWidget> {
   }
 
 
+
+  String _formatToIst(String rawTimestamp) {
+    if (rawTimestamp.isEmpty) return '';
+    try {
+      final dt = DateTime.parse(rawTimestamp);
+      final ist = dt.isUtc ? dt.add(const Duration(hours: 5, minutes: 30)) : dt.toLocal();
+      final y = ist.year;
+      final m = ist.month.toString().padLeft(2, '0');
+      final d = ist.day.toString().padLeft(2, '0');
+      final hr = ist.hour.toString().padLeft(2, '0');
+      final min = ist.minute.toString().padLeft(2, '0');
+      final sec = ist.second.toString().padLeft(2, '0');
+      return '$y-$m-$d $hr:$min:$sec IST';
+    } catch (_) {
+      return rawTimestamp.length > 19
+          ? rawTimestamp.substring(0, 19).replaceFirst('T', ' ')
+          : rawTimestamp;
+    }
+  }
 
   Future<void> _saveConfig() async {
     setState(() => _isSaving = true);
@@ -1879,9 +1912,7 @@ class _CrmWhatsappSettingsWidgetState extends State<CrmWhatsappSettingsWidget> {
                               ),
                               const Spacer(),
                               Text(
-                                log.timestamp.length > 19
-                                    ? log.timestamp.substring(0, 19).replaceFirst('T', ' ')
-                                    : log.timestamp,
+                                _formatToIst(log.timestamp),
                                 style: TextStyle(fontSize: 11, color: widget.textMuted),
                               ),
                             ],

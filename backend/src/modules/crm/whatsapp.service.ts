@@ -1021,15 +1021,16 @@ export class WhatsappService {
       return { success: false, error: 'WhatsApp automation is disabled' };
     }
 
-    // Deduplication check: prevent duplicate dispatch within 30 seconds
+    // Deduplication check: prevent duplicate dispatch within 30 seconds for automated background events
+    const isManual = params.event === 'MANUAL_DISPATCH' || params.event === 'MANUAL' || params.event === 'TEST';
     const dedupKey = `${scope}:${params.event || 'MSG'}:${normalizedPhone}:${params.leadId || ''}`;
     const lastSent = this.recentDispatches.get(dedupKey);
     const now = Date.now();
-    if (lastSent && now - lastSent < 30000) {
-      console.log(`[CRM WhatsApp - ${scope}] Suppressing duplicate dispatch to ${normalizedPhone} (${dedupKey})`);
+    if (!isManual && lastSent && now - lastSent < 30000) {
+      console.log(`[CRM WhatsApp - ${scope}] Suppressing duplicate automated dispatch to ${normalizedPhone} (${dedupKey})`);
       return {
         success: true,
-        data: { deduplicated: true, message: 'Duplicate dispatch suppressed' },
+        data: { deduplicated: true, message: 'Duplicate automated dispatch suppressed' },
       };
     }
     this.recentDispatches.set(dedupKey, now);

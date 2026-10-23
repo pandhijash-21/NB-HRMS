@@ -661,6 +661,9 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
           status: newStatus ?? l.status,
           name: event.data['name']?.toString() ?? l.name,
           phone: event.data['phone']?.toString() ?? l.phone,
+          customFields: event.data['customFields'] is Map
+              ? Map<String, dynamic>.from(event.data['customFields'] as Map)
+              : l.customFields,
         );
       }
       return l;

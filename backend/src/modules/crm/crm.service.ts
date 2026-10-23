@@ -1573,16 +1573,24 @@ export const crmService = {
       ? (dto.status as CrmLeadStatus)
       : (safeAssignedToId && safeAssignedToId > 0 && !dto.status ? ('ASSIGNED' as any) : undefined);
 
+    const rawPhoneVal = dto.phone || (dto.customFields && (dto.customFields['Phone'] || dto.customFields['phone'] || dto.customFields['phoneNumber'] || dto.customFields['mobile']));
+    const resolvedPhone = rawPhoneVal ? String(rawPhoneVal).replace(/\D/g, '').slice(-10) : undefined;
+
+    const rawNameVal = dto.name || (dto.customFields && (dto.customFields['Client_Name'] || dto.customFields['client_name'] || dto.customFields['name'] || dto.customFields['customer_name']));
+    const resolvedName = rawNameVal ? String(rawNameVal).trim() : undefined;
+
     const updated = await prisma.crmLead.update({
       where: { id: leadId },
       data: {
-        ...(dto.name && { name: dto.name }),
-        ...(dto.phone && { phone: dto.phone }),
+        ...(resolvedName ? { name: resolvedName } : {}),
+        ...(resolvedPhone ? { phone: resolvedPhone } : {}),
         ...(targetStatus ? { status: targetStatus } : {}),
-        ...((dto.customFields || (!isStatusValid && dto.status)) && {
+        ...((dto.customFields || (!isStatusValid && dto.status) || resolvedPhone || resolvedName) && {
           customFields: {
             ...((existing.customFields as Record<string, any>) || {}),
             ...(dto.customFields || {}),
+            ...(resolvedPhone ? { Phone: resolvedPhone, phone: resolvedPhone } : {}),
+            ...(resolvedName ? { Client_Name: resolvedName, client_name: resolvedName } : {}),
             ...(!isStatusValid && dto.status ? { status: dto.status } : {}),
           },
         }),
@@ -4019,6 +4027,7 @@ export const crmService = {
   async sendLeadWhatsapp(
     leadId: string,
     payload: {
+      phone?: string;
       event?: string;
       message?: string;
       mediaUrl?: string;
@@ -4053,12 +4062,19 @@ export const crmService = {
 
     if (!payload.message && !payload.templateId) throw new Error('Message content or Template ID is required');
 
+    // Resolve target recipient phone (from payload, variables, or lead record)
+    const recipientPhone =
+      (payload.phone && String(payload.phone).trim()) ||
+      (payload.variables?.phone && String(payload.variables.phone).trim()) ||
+      (payload.variables?.number && String(payload.variables.number).trim()) ||
+      lead.phone;
+
     // Resolve dynamic lead variables for BotBiz template (name, phone, date, time, calendar_link, etc.)
     const config = await whatsappService.getRawConfig(leadScope);
     const now = new Date();
     const formattedDate = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
     const formattedTime = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
-    const leadName = lead.name || (lead.customFields as any)?.client_name || (lead.customFields as any)?.name || 'Valued Client';
+    const leadName = lead.name || (lead.customFields as any)?.client_name || (lead.customFields as any)?.Client_Name || (lead.customFields as any)?.name || 'Valued Client';
     const calendarLink = config.defaultCalendarLink || '';
     const projectName = lead.campaign?.project?.name || (leadScope === 'NB_FINSERVE' ? 'NB Finserve' : 'Legacy Tower');
     const agentName = lead.assignedTo?.generalInfo?.fullName || 'Property Advisor';
@@ -4067,8 +4083,8 @@ export const crmService = {
       name: leadName,
       customerName: leadName,
       client_name: leadName,
-      phone: lead.phone,
-      number: lead.phone,
+      phone: recipientPhone,
+      number: recipientPhone,
       date: formattedDate,
       time: formattedTime,
       calendar_link: calendarLink,
@@ -4082,7 +4098,7 @@ export const crmService = {
     };
 
     return whatsappService.sendDirect({
-      phone: lead.phone,
+      phone: recipientPhone,
       message: payload.message || '',
       mediaUrl: payload.mediaUrl,
       headerMediaUrl: payload.headerMediaUrl || payload.mediaUrl,

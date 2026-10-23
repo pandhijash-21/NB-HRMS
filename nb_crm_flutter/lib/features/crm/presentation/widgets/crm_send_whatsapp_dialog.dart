@@ -359,6 +359,7 @@ class _CrmSendWhatsappDialogState extends State<CrmSendWhatsappDialog> {
 
       final res = await repo.sendLeadWhatsapp(
         widget.lead.id,
+        phone: phone,
         templateId: _selectedTemplate!.id,
         templateName: _selectedTemplate!.name,
         headerMediaUrl: headerMedia,

@@ -676,6 +676,7 @@ class CrmRepository {
 
   Future<Map<String, dynamic>> sendLeadWhatsapp(
     String leadId, {
+    String? phone,
     String? event,
     String? message,
     String? mediaUrl,
@@ -689,6 +690,7 @@ class CrmRepository {
     return _dio.postEnvelope<Map<String, dynamic>>(
       'crm/leads/$leadId/whatsapp',
       data: {
+        if (phone != null && phone.trim().isNotEmpty) 'phone': phone.trim(),
         if (event != null) 'event': event,
         if (message != null) 'message': message,
         if (mediaUrl != null) 'mediaUrl': mediaUrl,

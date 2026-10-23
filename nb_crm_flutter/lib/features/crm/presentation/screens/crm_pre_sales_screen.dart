@@ -4317,24 +4317,59 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     final controllers = <String, TextEditingController>{};
     for (final col in columns) {
       String initialVal = '';
-      if (col.columnKey == 'client_name' || col.columnKey == 'name') {
-        initialVal = lead.name;
-      } else if (col.columnKey == 'phone') {
-        initialVal = cleanMobile10(lead.phone);
-      } else if (isFinserve && (col.columnKey.toLowerCase().contains('loan') || col.columnKey.toLowerCase().contains('project') || col.label.toLowerCase().contains('project') || col.label.toLowerCase().contains('requirement'))) {
+      final keyLower = col.columnKey.toLowerCase().replaceAll(' ', '_');
+      final labelLower = col.label.toLowerCase();
+      final isNameCol = keyLower == 'client_name' ||
+          keyLower == 'name' ||
+          keyLower == 'customer_name' ||
+          labelLower.contains('name') ||
+          labelLower.contains('client');
+      final isPhoneCol = keyLower == 'phone' ||
+          keyLower == 'phone_number' ||
+          keyLower == 'mobile' ||
+          keyLower == 'contact' ||
+          labelLower.contains('phone') ||
+          labelLower.contains('mobile') ||
+          col.dataType == 'PHONE';
+
+      if (isNameCol) {
+        initialVal = lead.name.isNotEmpty
+            ? lead.name
+            : (lead.customFields[col.columnKey]?.toString() ??
+                lead.customFields['Client_Name']?.toString() ??
+                lead.customFields['client_name']?.toString() ??
+                '');
+      } else if (isPhoneCol) {
+        initialVal = cleanMobile10(lead.phone.isNotEmpty
+            ? lead.phone
+            : (lead.customFields[col.columnKey]?.toString() ??
+                lead.customFields['Phone']?.toString() ??
+                lead.customFields['phone']?.toString() ??
+                ''));
+      } else if (isFinserve &&
+          (keyLower.contains('loan') ||
+              keyLower.contains('project') ||
+              labelLower.contains('project') ||
+              labelLower.contains('requirement'))) {
         initialVal = lead.customFields['Loan_Type']?.toString() ??
             lead.customFields['loan_type']?.toString() ??
             lead.customFields['Project_Type']?.toString() ??
             lead.customFields['project_type']?.toString() ??
             (lead.customFields[col.columnKey]?.toString() ?? '');
-      } else if (isFinserve && (col.columnKey.toLowerCase() == 'budget' || col.columnKey.toLowerCase() == 'amount' || col.label.toLowerCase() == 'budget' || col.label.toLowerCase() == 'amount')) {
+      } else if (isFinserve &&
+          (keyLower == 'budget' ||
+              keyLower == 'amount' ||
+              labelLower == 'budget' ||
+              labelLower == 'amount')) {
         initialVal = lead.customFields['Amount']?.toString() ??
             lead.customFields['amount']?.toString() ??
             lead.customFields['Budget']?.toString() ??
             lead.customFields['budget']?.toString() ??
             (lead.customFields[col.columnKey]?.toString() ?? '');
       } else {
-        initialVal = lead.customFields[col.columnKey]?.toString() ?? '';
+        initialVal = lead.customFields[col.columnKey]?.toString() ??
+            lead.customFields[col.columnKey.toLowerCase()]?.toString() ??
+            '';
       }
       controllers[col.columnKey] = TextEditingController(text: initialVal);
     }
@@ -4538,7 +4573,11 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                 fillColor: effectiveReadOnly ? Colors.grey.withValues(alpha: 0.08) : null,
                               ),
                             )
-                          else if (col.dataType == 'PHONE' || col.columnKey == 'phone' || col.label.toLowerCase().contains('phone') || col.label.toLowerCase().contains('mobile'))
+                          else if (col.dataType == 'PHONE' ||
+                              col.columnKey.toLowerCase().contains('phone') ||
+                              col.columnKey.toLowerCase().contains('mobile') ||
+                              col.label.toLowerCase().contains('phone') ||
+                              col.label.toLowerCase().contains('mobile'))
                             TextField(
                               controller: controllers[col.columnKey],
                               readOnly: effectiveReadOnly,
@@ -4596,21 +4635,47 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
             if (!isReadOnly)
               ElevatedButton(
                 onPressed: () async {
-                  final customFields = <String, dynamic>{};
+                  final customFields = Map<String, dynamic>.from(lead.customFields);
                   String phone = lead.phone;
                   String name = lead.name;
 
                   for (final col in columns) {
                     final val = controllers[col.columnKey]?.text.trim() ?? '';
-                    final lowerKey = col.columnKey.toLowerCase();
-                    if (col.columnKey == 'phone') phone = val;
-                    if (col.columnKey == 'client_name') name = val;
-                    customFields[col.columnKey] = val;
+                    final keyLower = col.columnKey.toLowerCase().replaceAll(' ', '_');
+                    final labelLower = col.label.toLowerCase();
+                    final isNameCol = keyLower == 'client_name' ||
+                        keyLower == 'name' ||
+                        keyLower == 'customer_name' ||
+                        labelLower.contains('name') ||
+                        labelLower.contains('client');
+                    final isPhoneCol = keyLower == 'phone' ||
+                        keyLower == 'phone_number' ||
+                        keyLower == 'mobile' ||
+                        keyLower == 'contact' ||
+                        labelLower.contains('phone') ||
+                        labelLower.contains('mobile') ||
+                        col.dataType == 'PHONE';
+
+                    if (isPhoneCol) {
+                      final cleaned = cleanMobile10(val);
+                      if (cleaned.isNotEmpty) phone = cleaned;
+                      customFields[col.columnKey] = cleaned;
+                      customFields['Phone'] = cleaned;
+                      customFields['phone'] = cleaned;
+                    } else if (isNameCol) {
+                      if (val.isNotEmpty) name = val;
+                      customFields[col.columnKey] = val;
+                      customFields['Client_Name'] = val;
+                      customFields['client_name'] = val;
+                    } else {
+                      customFields[col.columnKey] = val;
+                    }
+
                     if (isFinserve) {
-                      if (lowerKey.contains('loan') || lowerKey.contains('project')) {
+                      if (keyLower.contains('loan') || keyLower.contains('project')) {
                         customFields['Loan_Type'] = val;
                       }
-                      if (lowerKey == 'budget' || lowerKey == 'amount') {
+                      if (keyLower == 'budget' || keyLower == 'amount') {
                         customFields['Amount'] = val;
                       }
                     }

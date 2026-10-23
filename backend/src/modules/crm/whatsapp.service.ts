@@ -1104,6 +1104,12 @@ export class WhatsappService {
         }
       }
 
+      const allowedVars = tmpl
+        ? (tmpl.bodyExampleVariables && tmpl.bodyExampleVariables.length > 0
+            ? tmpl.bodyExampleVariables
+            : (tmpl.variableCount === 0 || !tmpl.bodyText?.includes('{{') ? [] : undefined))
+        : undefined;
+
       const sendRes = await this.botbizClient.sendTemplateMessage({
         phoneNumber: normalizedPhone,
         templateId: botbizInternalId,
@@ -1112,6 +1118,7 @@ export class WhatsappService {
         templateHeaderMediaUrl: headerMediaUrl,
         templateHeaderText: params.headerText,
         variables: params.variables,
+        allowedVariableNames: allowedVars,
       });
 
       await this.addLog({

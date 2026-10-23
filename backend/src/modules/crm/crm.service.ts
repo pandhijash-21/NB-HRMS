@@ -3986,23 +3986,36 @@ export const crmService = {
 
   async sendTestWhatsappMessage(phone: string, message?: string, templateId?: string, scope: string = 'NB_DEVELOPER') {
     const isFinserve = scope === 'NB_FINSERVE';
-    if (templateId) {
-      const cached = await whatsappService.getCachedTemplates(scope);
+    const cached = await whatsappService.getCachedTemplates(scope);
+
+    // Default to first approved template if templateId is not provided
+    const targetTemplateId =
+      templateId ||
+      cached.templates.find((t) => t.status === 'APPROVED' && t.name === 'newlead')?.id ||
+      cached.templates.find((t) => t.status === 'APPROVED')?.id;
+
+    if (targetTemplateId) {
       const tmpl = cached.templates.find(
         (t) =>
-          t.id === templateId ||
-          String(t.raw?.id) === templateId ||
-          t.name === templateId,
+          t.id === targetTemplateId ||
+          String(t.raw?.id) === targetTemplateId ||
+          t.name === targetTemplateId,
       );
       return whatsappService.sendDirect({
         phone,
         message:
           message ||
           (tmpl ? `Test of template: ${tmpl.name}` : `Test template dispatch (${isFinserve ? 'NB Finserve' : 'NB Developer'})`),
-        event: 'TEST_CONNECTION',
+        event: 'TEST',
         messageType: 'TEMPLATE',
-        templateId: tmpl?.id || templateId,
+        templateId: tmpl?.id || targetTemplateId,
         templateName: tmpl?.name,
+        variables: {
+          name: 'Jash',
+          customerName: 'Jash',
+          client_name: 'Jash',
+          pname: isFinserve ? 'NB Finserve' : 'Legacy Tower',
+        },
         scope,
       });
     }
@@ -4015,7 +4028,8 @@ export const crmService = {
     return whatsappService.sendDirect({
       phone,
       message: text,
-      event: 'TEST_CONNECTION',
+      event: 'TEST',
+      messageType: 'TEXT',
       scope,
     });
   },

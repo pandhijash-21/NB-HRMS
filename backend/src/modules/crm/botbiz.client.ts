@@ -611,6 +611,7 @@ export class BotBizApiClient {
     templateHeaderMediaUrl?: string;
     templateHeaderText?: string;
     variables?: Record<string, string>;
+    allowedVariableNames?: string[];
   }): Promise<BotbizSendResponse> {
     const normalizedPhone = BotBizApiClient.normalizePhoneNumber(
       params.phoneNumber,
@@ -685,48 +686,45 @@ export class BotBizApiClient {
         formParams.set('template_header_text', cleanHeaderText);
       }
 
-      // 4. Variables Management (e.g. templateVariable-name-1=Jash, templateVariable-date-1=..., templateVariable-time-1=...)
+      // 4. Variables Management (e.g. templateVariable-name-1=Jash)
       if (params.variables) {
-        for (const [key, rawVal] of Object.entries(params.variables)) {
-          if (rawVal !== undefined && rawVal !== null) {
-            const val = String(rawVal);
-            const cleanKey = key.trim();
-            formParams.set(`templateVariable-${cleanKey}-1`, val);
-            formParams.set(`templateVariable-${cleanKey}`, val);
-          }
-        }
+        const allowed = params.allowedVariableNames;
 
-        // Standard positional aliases to guarantee compatibility with numbered templates {{1}}, {{2}}, {{3}}, {{4}}
-        if (params.variables.name) {
-          formParams.set('templateVariable-name-1', params.variables.name);
-          formParams.set('templateVariable-1-1', params.variables.name);
-          formParams.set('templateVariable-1', params.variables.name);
-        }
-        if (params.variables.date) {
-          formParams.set('templateVariable-date-1', params.variables.date);
-          formParams.set('templateVariable-2-1', params.variables.date);
-          formParams.set('templateVariable-2', params.variables.date);
-        }
-        if (params.variables.time) {
-          formParams.set('templateVariable-time-1', params.variables.time);
-          formParams.set('templateVariable-3-1', params.variables.time);
-          formParams.set('templateVariable-3', params.variables.time);
-        }
-        const calendarLink =
-          params.variables.calendar_link ||
-          params.variables.calendarLink ||
-          params.variables.link;
-        if (calendarLink) {
-          formParams.set('templateVariable-calendar_link-1', calendarLink);
-          formParams.set('templateVariable-calendar-1', calendarLink);
-          formParams.set('templateVariable-link-1', calendarLink);
-          formParams.set('templateVariable-4-1', calendarLink);
-          formParams.set('templateVariable-4', calendarLink);
-        }
-        if (params.variables.phone || params.variables.number) {
-          const ph = params.variables.phone || params.variables.number;
-          formParams.set('templateVariable-phone-1', ph);
-          formParams.set('templateVariable-number-1', ph);
+        if (allowed !== undefined && allowed.length === 0) {
+          // Template expects NO body variables (e.g. call, cal, fourbhk, fivebhk, fourfive).
+          // Do not append any templateVariable-* parameters.
+        } else if (allowed && allowed.length > 0) {
+          // Template expects specific variable names (e.g. ['name'] or ['pname'])
+          for (let i = 0; i < allowed.length; i++) {
+            const rawKey = allowed[i].trim();
+            const indexStr = String(i + 1);
+            const val =
+              params.variables[rawKey] ||
+              params.variables[rawKey.toLowerCase()] ||
+              params.variables[indexStr] ||
+              (rawKey.toLowerCase().includes('name')
+                ? (params.variables.name || params.variables.customerName || params.variables.client_name)
+                : undefined);
+            if (val !== undefined && val !== null) {
+              const cleanVal = String(val).trim();
+              formParams.set(`templateVariable-${rawKey}-1`, cleanVal);
+              formParams.set(`templateVariable-${indexStr}-1`, cleanVal);
+              formParams.set(`templateVariable-${indexStr}`, cleanVal);
+            }
+          }
+        } else {
+          // Standard variables mapping
+          for (const [key, rawVal] of Object.entries(params.variables)) {
+            if (rawVal !== undefined && rawVal !== null) {
+              const val = String(rawVal).trim();
+              const cleanKey = key.trim();
+              formParams.set(`templateVariable-${cleanKey}-1`, val);
+            }
+          }
+          if (params.variables.name) {
+            formParams.set('templateVariable-name-1', params.variables.name);
+            formParams.set('templateVariable-1', params.variables.name);
+          }
         }
       }
 

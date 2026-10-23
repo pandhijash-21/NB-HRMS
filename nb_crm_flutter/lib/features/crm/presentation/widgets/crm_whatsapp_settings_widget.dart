@@ -473,11 +473,12 @@ class _CrmWhatsappSettingsWidgetState extends State<CrmWhatsappSettingsWidget> {
         _selectedTestTemplateId,
       );
       if (!mounted) return;
+      final hasError = res['error'] != null || res['success'] == false;
       setState(() {
-        _testSuccess = res['success'] != false;
-        _testStatusMessage = res['error'] != null
-            ? 'Error: ${res['error']}'
-            : 'Test message dispatched to $phone! Check WhatsApp.';
+        _testSuccess = !hasError;
+        _testStatusMessage = hasError
+            ? 'Error: ${res['error'] ?? 'Failed to send test message'}'
+            : 'Test template dispatched to $phone! Check WhatsApp.';
       });
       _loadLogs();
     } catch (e) {

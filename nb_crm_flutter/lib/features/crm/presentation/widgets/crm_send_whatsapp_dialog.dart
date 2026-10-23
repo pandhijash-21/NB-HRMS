@@ -371,7 +371,7 @@ class _CrmSendWhatsappDialogState extends State<CrmSendWhatsappDialog> {
         setState(() => _isSending = false);
         Navigator.of(context).pop();
 
-        final isSuccess = res['success'] == true;
+        final isSuccess = res['success'] == true && res['error'] == null;
         final msg = isSuccess
             ? (res['message'] ?? 'WhatsApp message dispatched successfully via BotBiz!')
             : (res['error'] ?? res['message'] ?? 'Failed to send WhatsApp message');

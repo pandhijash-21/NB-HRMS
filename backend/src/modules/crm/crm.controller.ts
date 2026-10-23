@@ -653,6 +653,9 @@ export const crmController = {
       const { phone, message, templateId } = req.body;
       if (!phone) return res.status(400).json(fail('Phone number is required'));
       const result = await crmService.sendTestWhatsappMessage(phone, message, templateId, getScope(req));
+      if (!result.success) {
+        return res.status(400).json(fail((result as any).error || (result as any).message || 'Failed to send test WhatsApp message'));
+      }
       res.json(ok(result));
     } catch (err: any) {
       res.status(400).json(fail(err.message || 'Failed to send test WhatsApp message'));
@@ -673,6 +676,9 @@ export const crmController = {
     try {
       const leadId = String(req.params.id);
       const result = await crmService.sendLeadWhatsapp(leadId, req.body);
+      if (!result.success) {
+        return res.status(400).json(fail((result as any).error || (result as any).message || 'Failed to send lead WhatsApp message'));
+      }
       res.json(ok(result));
     } catch (err: any) {
       res.status(400).json(fail(err.message || 'Failed to send lead WhatsApp message'));
@@ -756,8 +762,20 @@ export const crmController = {
         return res.status(200).send(dummyJpg);
       }
 
-      // If not on disk, redirect to the official high-capacity Wasabi/Cloudinary brochure
+      // If not on disk, stream the official Wasabi/Cloudinary brochure directly with HTTP 200 (NO 302 redirect for WhatsApp crawler)
       const targetUrl = isFinserve ? CLOUDINARY_NB_FINSERVE_PDF : BOTBIZ_LEGACY_TOWER_PDF;
+      try {
+        const remoteRes = await fetch(targetUrl);
+        if (remoteRes.ok && remoteRes.body) {
+          res.setHeader('Content-Type', isImage ? 'image/jpeg' : 'application/pdf');
+          res.setHeader('Content-Disposition', `inline; filename="${safeFilename}"`);
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Cache-Control', 'public, max-age=86400');
+          const { Readable } = await import('stream');
+          return (Readable as any).fromWeb(remoteRes.body).pipe(res);
+        }
+      } catch {}
+
       return res.redirect(302, targetUrl);
     } catch (err: any) {
       res.status(500).json(fail(err.message || 'Failed to serve brochure'));

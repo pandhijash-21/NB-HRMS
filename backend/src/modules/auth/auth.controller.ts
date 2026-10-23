@@ -87,6 +87,20 @@ export const authController = {
     return res.json(ok(result));
   },
 
+  async verifyPassword(req: Request, res: Response) {
+    const password = typeof req.body?.password === 'string' ? req.body.password : '';
+    if (!password) {
+      return res.status(400).json(fail('Password is required'));
+    }
+
+    const result = await authService.verifyUserPassword(req.user!.id, password);
+    if ('error' in result) {
+      return res.status(result.status ?? 400).json(fail(result.error ?? 'Invalid password'));
+    }
+
+    return res.json(ok(result));
+  },
+
   async resetPassword(req: Request, res: Response) {
     const userId = String(req.params.userId);
     const customPassword = typeof req.body?.password === 'string' ? req.body.password : undefined;

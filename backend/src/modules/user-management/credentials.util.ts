@@ -37,7 +37,9 @@ export function buildCredentialView(user: UserWithRelations) {
   let passwordNote: string;
 
   if (password) {
-    passwordNote = 'Current saved password (updated on every set/change).';
+    passwordNote = user.isFirstLogin
+      ? 'Temporary / reset password (user will be forced to change password on next sign-in).'
+      : 'Current saved password.';
   } else if (user.isFirstLogin) {
     if (isAlias) {
       passwordNote =
@@ -45,8 +47,8 @@ export function buildCredentialView(user: UserWithRelations) {
     } else {
       password = resolveDefaultPassword(user);
       passwordNote = user.employee?.personalInfo?.birthDate
-        ? 'Default password: date of birth as DDMMYYYY.'
-        : 'Default password: 01011990.';
+        ? 'Default password: date of birth as DDMMYYYY. User will be forced to change password on login.'
+        : 'Default password: 01011990. User will be forced to change password on login.';
     }
   } else {
     passwordNote =

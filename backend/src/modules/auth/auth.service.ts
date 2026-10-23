@@ -539,6 +539,21 @@ export const authService = {
     return { message: 'Password changed. Please log in again.' };
   },
 
+  async verifyUserPassword(userId: string, password: string) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, passwordHash: true },
+    });
+    if (!user) return { error: 'User not found', status: 404 } as const;
+
+    const valid = await bcrypt.compare(password, user.passwordHash);
+    if (!valid) {
+      return { error: 'Incorrect password', status: 400 } as const;
+    }
+
+    return { valid: true };
+  },
+
   async resetPassword(
     targetUserId: string,
     requester: { id: string; role?: string; roleName?: string } | string,

@@ -8,3 +8,7 @@ export const BOTBIZ_LEGACY_TOWER_PDF =
 
 export const CLOUDINARY_NB_FINSERVE_PDF =
   'https://res.cloudinary.com/drrlmkjwi/raw/upload/v1792734599/hrms/crm/brochures/ggimeoxwi8swmpsxk43v';
+
+export const CLOUDINARY_DEFAULT_IMAGE =
+  'https://res.cloudinary.com/drrlmkjwi/image/upload/v1792752069/hrms/crm/whatsapp/lr46jmyt5qjryvdqjke3.jpg';
+

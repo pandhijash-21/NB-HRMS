@@ -1429,7 +1429,8 @@ class _CredentialsDialog extends StatefulWidget {
 
 class _CredentialsDialogState extends State<_CredentialsDialog> {
   AccountCredentials? _creds;
-  String? _revealedPassword;
+  String? _actualPassword;
+  bool _isPasswordVisible = false;
   bool _loading = true;
   bool _resetting = false;
   final _customPasswordController = TextEditingController();
@@ -1453,7 +1454,8 @@ class _CredentialsDialogState extends State<_CredentialsDialog> {
       if (mounted) {
         setState(() {
           _creds = creds;
-          _revealedPassword = creds.password;
+          _actualPassword = creds.password;
+          _isPasswordVisible = false; // Always masked as ****** by default
           _loading = false;
         });
       }
@@ -1464,6 +1466,211 @@ class _CredentialsDialogState extends State<_CredentialsDialog> {
           SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
         );
       }
+    }
+  }
+
+  Future<void> _showAdminPasswordPrompt({bool autoCopy = false}) async {
+    final passwordController = TextEditingController();
+    bool obscure = true;
+    bool verifying = false;
+    String? errorText;
+
+    final verified = await showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        return StatefulBuilder(
+          builder: (dialogCtx, setDialogState) {
+            return AlertDialog(
+              backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(
+                  color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.2) : const Color(0xFFCFD8DC),
+                  width: 1.5,
+                ),
+              ),
+              title: Row(
+                children: [
+                  const Icon(Icons.security_rounded, color: Color(0xFFC5A059), size: 22),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Admin Verification',
+                      style: TextStyle(
+                        color: isDark ? Colors.white : const Color(0xFF212F3D),
+                        fontWeight: FontWeight.w800,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 360,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Enter your current login password to view user credentials.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: isDark ? Colors.white70 : const Color(0xFF546E7A),
+                        fontWeight: FontWeight.w500,
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: passwordController,
+                      autofocus: true,
+                      obscureText: obscure,
+                      textInputAction: TextInputAction.done,
+                      style: TextStyle(
+                        color: isDark ? Colors.white : Colors.black,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      decoration: InputDecoration(
+                        labelText: 'Your Current Password',
+                        labelStyle: TextStyle(
+                          color: isDark ? const Color(0xFFC5A059) : const Color(0xFF37474F),
+                          fontSize: 13,
+                        ),
+                        errorText: errorText,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: Color(0xFFC5A059), width: 1.8),
+                        ),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            obscure ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                            size: 20,
+                            color: Colors.grey,
+                          ),
+                          onPressed: () => setDialogState(() => obscure = !obscure),
+                        ),
+                      ),
+                      onSubmitted: (_) async {
+                        final pw = passwordController.text;
+                        if (pw.isEmpty) {
+                          setDialogState(() => errorText = 'Password is required');
+                          return;
+                        }
+                        setDialogState(() {
+                          verifying = true;
+                          errorText = null;
+                        });
+                        try {
+                          final ok = await context.read<RbacRepository>().verifyAdminPassword(pw);
+                          if (ok && dialogCtx.mounted) {
+                            Navigator.of(dialogCtx).pop(true);
+                          } else if (dialogCtx.mounted) {
+                            setDialogState(() {
+                              verifying = false;
+                              errorText = 'Incorrect password. Verification failed.';
+                            });
+                          }
+                        } catch (e) {
+                          if (dialogCtx.mounted) {
+                            setDialogState(() {
+                              verifying = false;
+                              errorText = e.toString().replaceFirst('Exception: ', '');
+                            });
+                          }
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: verifying ? null : () => Navigator.of(dialogCtx).pop(false),
+                  child: Text(
+                    'Cancel',
+                    style: TextStyle(
+                      color: isDark ? Colors.white60 : const Color(0xFF78909C),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                FilledButton(
+                  onPressed: verifying
+                      ? null
+                      : () async {
+                          final pw = passwordController.text;
+                          if (pw.isEmpty) {
+                            setDialogState(() => errorText = 'Password is required');
+                            return;
+                          }
+                          setDialogState(() {
+                            verifying = true;
+                            errorText = null;
+                          });
+                          try {
+                            final ok = await context.read<RbacRepository>().verifyAdminPassword(pw);
+                            if (ok && dialogCtx.mounted) {
+                              Navigator.of(dialogCtx).pop(true);
+                            } else if (dialogCtx.mounted) {
+                              setDialogState(() {
+                                verifying = false;
+                                errorText = 'Incorrect password. Verification failed.';
+                              });
+                            }
+                          } catch (e) {
+                            if (dialogCtx.mounted) {
+                              setDialogState(() {
+                                verifying = false;
+                                errorText = e.toString().replaceFirst('Exception: ', '');
+                              });
+                            }
+                          }
+                        },
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFFC5A059),
+                    foregroundColor: const Color(0xFF1A1F1B),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: verifying
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text('Verify & View', style: TextStyle(fontWeight: FontWeight.w800)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    passwordController.dispose();
+
+    if (verified == true && mounted) {
+      setState(() => _isPasswordVisible = true);
+      if (autoCopy && _actualPassword != null) {
+        _copy(_actualPassword!, 'Password');
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Password unlocked'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
+
+  void _onTogglePasswordVisibility() {
+    if (_isPasswordVisible) {
+      setState(() => _isPasswordVisible = false);
+    } else {
+      _showAdminPasswordPrompt(autoCopy: false);
     }
   }
 
@@ -1485,15 +1692,16 @@ class _CredentialsDialogState extends State<_CredentialsDialog> {
           );
       if (mounted) {
         setState(() {
-          _revealedPassword = result.password;
+          _actualPassword = result.password;
+          _isPasswordVisible = true; // Auto-unmask the newly set password
           if (result.loginId != null && _creds != null) {
             _creds = AccountCredentials(
               userId: _creds!.userId,
               loginId: result.loginId,
               accountType: _creds!.accountType,
-              isFirstLogin: _creds!.isFirstLogin,
+              isFirstLogin: true,
               password: result.password,
-              passwordNote: _creds!.passwordNote,
+              passwordNote: 'Password reset. User will be forced to change password on next login.',
               canLogin: _creds!.canLogin,
             );
           }
@@ -1501,7 +1709,10 @@ class _CredentialsDialogState extends State<_CredentialsDialog> {
         });
         _customPasswordController.clear();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Password reset — share with the account holder')),
+          const SnackBar(
+            content: Text('Password reset! User must create a new password on their next login.'),
+            backgroundColor: Color(0xFF2E7D32),
+          ),
         );
       }
     } catch (e) {
@@ -1552,7 +1763,7 @@ class _CredentialsDialogState extends State<_CredentialsDialog> {
   @override
   Widget build(BuildContext context) {
     final loginId = _creds?.loginId;
-    final password = _revealedPassword ?? _creds?.password;
+    final password = _actualPassword ?? _creds?.password;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return AlertDialog(
@@ -1688,22 +1899,45 @@ class _CredentialsDialogState extends State<_CredentialsDialog> {
                           children: [
                             Expanded(
                               child: Text(
-                                password ?? '—', 
+                                _isPasswordVisible
+                                    ? (password ?? '—')
+                                    : (password != null ? '••••••••' : '—'), 
                                 style: TextStyle(
                                   fontFamily: 'monospace',
                                   fontWeight: FontWeight.w800,
                                   fontSize: 14,
+                                  letterSpacing: _isPasswordVisible ? 0 : 2,
                                   color: isDark ? Colors.white : const Color(0xFF212F3D),
                                 ),
                               ),
                             ),
-                            if (password != null)
+                            if (password != null) ...[
                               IconButton(
+                                tooltip: _isPasswordVisible ? 'Hide password' : 'View password (requires verification)',
+                                icon: Icon(
+                                  _isPasswordVisible ? Icons.visibility_off_rounded : Icons.visibility_rounded, 
+                                  size: 19, 
+                                  color: const Color(0xFFC5A059),
+                                ),
+                                onPressed: _onTogglePasswordVisibility,
+                                padding: const EdgeInsets.symmetric(horizontal: 4),
+                                constraints: const BoxConstraints(),
+                              ),
+                              const SizedBox(width: 8),
+                              IconButton(
+                                tooltip: 'Copy password',
                                 icon: const Icon(Icons.copy_rounded, size: 18, color: Color(0xFFC5A059)),
-                                onPressed: () => _copy(password, 'Password'),
+                                onPressed: () {
+                                  if (!_isPasswordVisible) {
+                                    _showAdminPasswordPrompt(autoCopy: true);
+                                  } else {
+                                    _copy(password, 'Password');
+                                  }
+                                },
                                 padding: EdgeInsets.zero,
                                 constraints: const BoxConstraints(),
                               ),
+                            ],
                           ],
                         ),
                         if (_creds != null) ...[
@@ -1731,11 +1965,20 @@ class _CredentialsDialogState extends State<_CredentialsDialog> {
                       color: isDark ? Colors.white : const Color(0xFF212F3D),
                     ),
                   ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Resetting will force the user to change their password on next login (Current Password, New Password, Confirm Password).',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: isDark ? Colors.white54 : const Color(0xFF78909C),
+                    ),
+                  ),
                   const SizedBox(height: 10),
                   TextField(
                     controller: _customPasswordController,
                     decoration: const InputDecoration(
-                      hintText: 'Optional custom password (6+ chars, A-z and a number)',
+                      hintText: 'Optional temporary password (leave blank for DOB/default)',
                       border: OutlineInputBorder(),
                     ),
                   ),

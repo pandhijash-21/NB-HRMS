@@ -81,6 +81,17 @@ class RbacRepository {
     );
   }
 
+  Future<bool> verifyAdminPassword(String password) async {
+    return _dio.postEnvelope<bool>(
+      'auth/verify-password',
+      data: {'password': password},
+      parse: (raw) {
+        if (raw is Map && raw['valid'] == true) return true;
+        return false;
+      },
+    );
+  }
+
   Future<PasswordResetResult> resetPassword(
     String userId, {
     String? password,

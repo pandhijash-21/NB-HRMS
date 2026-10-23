@@ -4106,6 +4106,7 @@ export const crmService = {
       link: calendarLink,
       project: projectName,
       projectName,
+      pname: projectName,
       advisor: agentName,
       salespersonName: agentName,
       ...(payload.variables || {}),

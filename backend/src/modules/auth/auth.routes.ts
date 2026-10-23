@@ -14,6 +14,7 @@ authRouter.post('/release-session', authController.releaseSession);
 // Authenticated
 authRouter.post('/logout',          requireAuth, authController.logout);
 authRouter.post('/change-password', requireAuth, authController.changePassword);
+authRouter.post('/verify-password', requireAuth, authController.verifyPassword);
 authRouter.get('/me',               requireAuth, authController.getMe);
 authRouter.post('/software-tour/seen', requireAuth, authController.markSoftwareTourSeen);
 

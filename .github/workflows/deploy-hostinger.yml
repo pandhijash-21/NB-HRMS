@@ -195,7 +195,8 @@ jobs:
         -o ServerAliveInterval=20
         -o ServerAliveCountMax=180
         -o TCPKeepAlive=yes
-        -o ConnectTimeout=30
+        -o ConnectTimeout=60
+        -o ConnectionAttempts=5
     steps:
       - uses: actions/checkout@v5
 
@@ -284,8 +285,10 @@ jobs:
           PORT: ${{ secrets.HOSTINGER_PORT }}
         run: |
           # shellcheck disable=SC2086
-          ssh -i ~/.ssh/deploy_key -p "${PORT:-22}" $SSH_OPTS \
-            "${USER}@${HOST}" 'bash -s' <<'EOS'
+          for attempt in 1 2 3; do
+            echo "Attempt $attempt: Connecting to VPS via SSH..."
+            if ssh -i ~/.ssh/deploy_key -p "${PORT:-22}" $SSH_OPTS \
+              "${USER}@${HOST}" 'bash -s' <<'EOS'
           set -e
           cd /opt/nb-crm
           mkdir -p deploy
@@ -298,7 +301,18 @@ jobs:
             docker inspect --format='{{.Image}}' nb-crm-backend-1 > .deploy-prev-backend-image
             echo "prev backend image saved"
           fi
-          EOS
+EOS
+            then
+              echo "Backup completed successfully."
+              break
+            fi
+            echo "SSH connection attempt $attempt failed, retrying in 10s..."
+            sleep 10
+            if [ "$attempt" -eq 3 ]; then
+              echo "SSH connection failed after 3 attempts."
+              exit 1
+            fi
+          done
 
       - name: Sync files to VPS
         env:

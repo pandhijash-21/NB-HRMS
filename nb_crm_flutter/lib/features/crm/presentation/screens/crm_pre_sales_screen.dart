@@ -380,7 +380,9 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
         return true;
       }
       if (effectiveFlow == 'EXCEL') {
-        return l.leadSource == 'EXCEL' || l.leadSource == null || l.leadSource == 'MANUAL';
+        return (l.leadSource == 'EXCEL' || l.leadSource == null) && !l.isManual;
+      } else if (effectiveFlow == 'MANUAL') {
+        return l.isManual || l.leadSource == 'MANUAL';
       } else if (effectiveFlow == 'WEBHOOK') {
         return l.leadSource == 'WEBHOOK' || l.leadSource == 'META';
       }
@@ -889,10 +891,18 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   ),
                   ChoiceChip(
                     avatar: const Icon(Icons.table_chart_rounded, size: 14, color: Color(0xFF16A34A)),
-                    label: Text('Excel Leads (${leads.where((l) => l.leadSource == 'EXCEL' || l.leadSource == null || l.leadSource == 'MANUAL').length})'),
+                    label: Text('Excel Leads (${leads.where((l) => (l.leadSource == 'EXCEL' || l.leadSource == null) && !l.isManual).length})'),
                     selected: state.leadFlowFilter == 'EXCEL',
                     onSelected: (val) {
                       if (val) context.read<CrmLeadsBloc>().add(const CrmLeadsLeadFlowFilterChanged('EXCEL'));
+                    },
+                  ),
+                  ChoiceChip(
+                    avatar: const Icon(Icons.edit_note_rounded, size: 14, color: Color(0xFF8B5CF6)),
+                    label: Text('Manual Leads (${leads.where((l) => l.isManual || l.leadSource == 'MANUAL').length})'),
+                    selected: state.leadFlowFilter == 'MANUAL',
+                    onSelected: (val) {
+                      if (val) context.read<CrmLeadsBloc>().add(const CrmLeadsLeadFlowFilterChanged('MANUAL'));
                     },
                   ),
                   ChoiceChip(
@@ -1055,14 +1065,53 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                       ),
                                       child: const Text('⚡ Meta', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF2563EB))),
                                     )
-                                  : Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF16A34A).withValues(alpha: 0.12),
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: const Text('📊 Excel', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF16A34A))),
-                                    ),
+                                  : (lead.isManual || lead.leadSource == 'MANUAL' || (lead.createdByName != null && lead.createdByName!.isNotEmpty))
+                                      ? Tooltip(
+                                          message: lead.createdByName != null && lead.createdByName!.isNotEmpty
+                                              ? 'Manually added by ${lead.createdByName}'
+                                              : 'Manually added lead',
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFF8B5CF6).withValues(alpha: 0.12),
+                                              borderRadius: BorderRadius.circular(6),
+                                              border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.3)),
+                                            ),
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                const Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    Text('✍️ Manual', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF8B5CF6))),
+                                                  ],
+                                                ),
+                                                if (lead.createdByName != null && lead.createdByName!.trim().isNotEmpty) ...[
+                                                  const SizedBox(height: 2),
+                                                  Text(
+                                                    lead.createdByName!.trim(),
+                                                    style: TextStyle(
+                                                      fontSize: 10,
+                                                      fontWeight: FontWeight.w600,
+                                                      color: isDark ? const Color(0xFFC4B5FD) : const Color(0xFF6D28D9),
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ],
+                                              ],
+                                            ),
+                                          ),
+                                        )
+                                      : Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF16A34A).withValues(alpha: 0.12),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: const Text('📊 Excel', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF16A34A))),
+                                        ),
                             ),
 
                             // Elision Phone Icon Column
@@ -4059,7 +4108,9 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     for (final col in columns) {
       controllers[col.columnKey] = TextEditingController();
     }
-    String selectedFlow = (context.read<CrmLeadsBloc>().state.leadFlowFilter == 'WEBHOOK') ? 'WEBHOOK' : 'EXCEL';
+    String selectedFlow = (context.read<CrmLeadsBloc>().state.leadFlowFilter == 'WEBHOOK')
+        ? 'WEBHOOK'
+        : (context.read<CrmLeadsBloc>().state.leadFlowFilter == 'EXCEL' ? 'EXCEL' : 'MANUAL');
     final settings = context.read<CrmLeadsBloc>().state.settings;
     String? selectedLoanType;
     final uploadedDocs = <String, Map<String, dynamic>>{};
@@ -4089,7 +4140,8 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                           isExpanded: true,
                           decoration: const InputDecoration(border: OutlineInputBorder(), prefixIcon: Icon(Icons.alt_route_rounded)),
                           items: const [
-                            DropdownMenuItem(value: 'EXCEL', child: Text('📊 Excel / Manual Flow (Auto-assign to Excel telecallers)', overflow: TextOverflow.ellipsis)),
+                            DropdownMenuItem(value: 'MANUAL', child: Text('✍️ Manual Addition (Added by Admin / Telecaller)', overflow: TextOverflow.ellipsis)),
+                            DropdownMenuItem(value: 'EXCEL', child: Text('📊 Excel Flow (Auto-assign to Excel telecallers)', overflow: TextOverflow.ellipsis)),
                             DropdownMenuItem(value: 'WEBHOOK', child: Text('⚡ Meta / Webhook Flow (Auto-assign to Meta telecallers)', overflow: TextOverflow.ellipsis)),
                           ],
                           onChanged: (val) {

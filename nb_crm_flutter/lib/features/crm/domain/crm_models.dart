@@ -320,6 +320,8 @@ class CrmLead {
   final String? channelPartnerName;
   final String? referenceType;
   final String? referenceName;
+  final String? createdById;
+  final String? createdByName;
   final bool isDeleted;
   final DateTime? deletedAt;
   final DateTime createdAt;
@@ -349,6 +351,8 @@ class CrmLead {
     this.channelPartnerName,
     this.referenceType,
     this.referenceName,
+    this.createdById,
+    this.createdByName,
     required this.isDeleted,
     this.deletedAt,
     required this.createdAt,
@@ -357,6 +361,11 @@ class CrmLead {
   });
 
   bool get isWaitingList => (telecallerId == null && assignedToId == null) || (status == CrmStatus.notStarted && telecallerId == null);
+
+  bool get isManual =>
+      leadSource?.toUpperCase() == 'MANUAL' ||
+      customFields['isManual'] == true ||
+      customFields['is_manual'] == true;
 
   String get allocatedAgentName {
     if (telecallerName != null && telecallerName!.trim().isNotEmpty) {
@@ -418,6 +427,9 @@ class CrmLead {
       channelPartnerName: json['channelPartnerName']?.toString(),
       referenceType: json['referenceType']?.toString(),
       referenceName: json['referenceName']?.toString(),
+      createdById: json['createdById']?.toString(),
+      createdByName: json['createdByName']?.toString() ??
+          (json['customFields'] is Map ? (json['customFields'] as Map)['createdByName']?.toString() : null),
       isDeleted: json['isDeleted'] as bool? ?? false,
       deletedAt: json['deletedAt'] != null ? DateTime.tryParse(json['deletedAt'].toString()) : null,
       createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ?? DateTime.now(),

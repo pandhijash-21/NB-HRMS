@@ -1019,8 +1019,18 @@ export const crmService = {
 
     if (query.leadFlow && query.leadFlow !== 'ALL') {
       const flow = query.leadFlow.toUpperCase();
-      if (flow === 'EXCEL') {
-        const excelCond = [{ leadSource: 'EXCEL' }, { leadSource: 'MANUAL' }, { leadSource: null }];
+      if (flow === 'MANUAL') {
+        const manualCond = [{ leadSource: 'MANUAL' }];
+        if (where.AND) {
+          where.AND.push({ OR: manualCond });
+        } else if (where.OR) {
+          where.AND = [{ OR: where.OR }, { OR: manualCond }];
+          delete where.OR;
+        } else {
+          where.OR = manualCond;
+        }
+      } else if (flow === 'EXCEL') {
+        const excelCond = [{ leadSource: 'EXCEL' }, { leadSource: null }];
         if (where.AND) {
           where.AND.push({ OR: excelCond });
         } else if (where.OR) {
@@ -1102,12 +1112,40 @@ export const crmService = {
       }),
     ]);
 
+    // Resolve creator display names for manual leads
+    const creatorIds = Array.from(new Set(items.map((i) => i.createdById).filter(Boolean))) as string[];
+    const creators = creatorIds.length > 0
+      ? await prisma.user.findMany({
+          where: { id: { in: creatorIds } },
+          select: {
+            id: true,
+            username: true,
+            employee: { select: { generalInfo: { select: { fullName: true } } } },
+            role: { select: { name: true } },
+          },
+        })
+      : [];
+    const creatorMap = new Map<string, string>();
+    for (const c of creators) {
+      const name = c.employee?.generalInfo?.fullName || c.username || c.role?.name || 'Admin';
+      creatorMap.set(c.id, name);
+    }
+
+    const enrichedItems = items.map((item) => {
+      const custom = (item.customFields && typeof item.customFields === 'object') ? (item.customFields as Record<string, any>) : {};
+      const creatorName = custom.createdByName || (item.createdById ? creatorMap.get(item.createdById) : undefined);
+      return {
+        ...item,
+        createdByName: creatorName,
+      };
+    });
+
     return {
       total,
       page,
       limit,
       totalPages: Math.ceil(total / limit),
-      items,
+      items: enrichedItems,
     };
   },
 
@@ -1124,8 +1162,25 @@ export const crmService = {
     const defaultCamp = await this.ensureDefaultCampaign('PRE_SALES', scope);
     const campaignId = dto.campaignId || defaultCamp.id;
 
-    const requestedSource = (dto.leadSource || custom.leadSource || custom.lead_source || 'EXCEL').toString().toUpperCase();
-    const finalSource = requestedSource.includes('WEBHOOK') || requestedSource.includes('META') ? 'WEBHOOK' : 'EXCEL';
+    const requestedSource = (dto.leadSource || custom.leadSource || custom.lead_source || 'MANUAL').toString().toUpperCase();
+    const finalSource = requestedSource.includes('WEBHOOK') || requestedSource.includes('META')
+      ? 'WEBHOOK'
+      : (requestedSource === 'EXCEL' ? 'EXCEL' : 'MANUAL');
+
+    let creatorName = 'Admin';
+    if (createdById) {
+      const creatorUser = await prisma.user.findUnique({
+        where: { id: createdById },
+        include: { employee: { include: { generalInfo: true } }, role: true },
+      });
+      if (creatorUser) {
+        creatorName = creatorUser.employee?.generalInfo?.fullName || creatorUser.username || creatorUser.role?.name || 'Admin';
+      }
+    }
+    custom.createdByName = creatorName;
+    if (finalSource === 'MANUAL') {
+      custom.isManual = true;
+    }
 
     let allocatedTelecallerId = dto.telecallerId || telecallerId;
     if (allocatedTelecallerId) {

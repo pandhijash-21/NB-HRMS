@@ -656,6 +656,15 @@ export const crmService = {
       }
     }
 
+    const isMetaWebhook = Boolean(
+      payload.leadgen_id ||
+      payload.field_data ||
+      payload.entry ||
+      sourceData.leadgen_id ||
+      payload.source === 'META' ||
+      payload.leadSource === 'META'
+    );
+
     const lead = await prisma.crmLead.create({
       data: {
         scope: campaignScope,
@@ -665,11 +674,12 @@ export const crmService = {
         status: CrmLeadStatus.NOT_STARTED,
         customFields: {
           ...normalizedPayload,
+          leadSourceType: isMetaWebhook ? 'Meta Ads' : 'Webhook Integration',
           ...(webhookAssignedTelecallerId ? { allocatedAt: new Date().toISOString() } : {}),
         },
         telecallerId: webhookAssignedTelecallerId,
         assignedToId: null,
-        leadSource: 'WEBHOOK',
+        leadSource: isMetaWebhook ? 'META' : 'WEBHOOK',
       },
     });
 
@@ -1163,11 +1173,26 @@ export const crmService = {
     const campaignId = dto.campaignId || defaultCamp.id;
 
     const requestedSource = (dto.leadSource || custom.leadSource || custom.lead_source || 'MANUAL').toString().toUpperCase();
-    const finalSource = requestedSource.includes('WEBHOOK') || requestedSource.includes('META')
-      ? 'WEBHOOK'
-      : (requestedSource === 'EXCEL' ? 'EXCEL' : 'MANUAL');
+    const finalSource = requestedSource.includes('META')
+      ? 'META'
+      : (requestedSource.includes('WEBHOOK')
+          ? 'WEBHOOK'
+          : (requestedSource === 'EXCEL' ? 'EXCEL' : 'MANUAL'));
+
+    // Preserve business source (Walk IN, Channel Partner, Reference, etc.) separately from technical flow
+    const rawBusinessSource =
+      dto.channelPartnerName || custom.channelPartnerName
+        ? 'Channel Partner'
+        : (dto.referenceName || custom.referenceName
+            ? 'Reference'
+            : (custom.lead_source_type || custom.leadSource || (dto.leadSource && !['MANUAL', 'EXCEL', 'WEBHOOK', 'META'].includes(dto.leadSource.toUpperCase()) ? dto.leadSource : 'Walk IN')));
+    if (!custom.lead_source_type && !custom.leadSource) {
+      custom.lead_source_type = rawBusinessSource;
+    }
 
     let creatorName = 'Admin';
+    let isCreatorTelecaller = false;
+    let creatorEmployeeId: number | null = null;
     if (createdById) {
       const creatorUser = await prisma.user.findUnique({
         where: { id: createdById },
@@ -1175,6 +1200,11 @@ export const crmService = {
       });
       if (creatorUser) {
         creatorName = creatorUser.employee?.generalInfo?.fullName || creatorUser.username || creatorUser.role?.name || 'Admin';
+        creatorEmployeeId = creatorUser.employeeId || creatorUser.employee?.id || null;
+        const roleName = String(creatorUser.role?.name || '').toLowerCase().trim();
+        const desig = String(creatorUser.employee?.generalInfo?.designation || '').toLowerCase().trim();
+        const isExcluded = ['admin', 'super_admin', 'system_admin'].some((r) => roleName.includes(r));
+        isCreatorTelecaller = !isExcluded && (roleName.includes('telecall') || desig.includes('telecall'));
       }
     }
     custom.createdByName = creatorName;
@@ -1182,9 +1212,26 @@ export const crmService = {
       custom.isManual = true;
     }
 
+    // Telecaller Manual Allocation Rule:
+    // 1. If explicit telecallerId was provided, honor it.
+    // 2. If MANUAL lead and creator is a telecaller, by default allocate to themselves.
+    // 3. If anyone else adds manually (e.g. Admin, Receptionist, Visitor Desk), do NOT allocate to them;
+    //    leave unallocated so round-robin / presence-absence dispatch can assign it to on-duty telecallers.
     let allocatedTelecallerId = dto.telecallerId || telecallerId;
+    let isSelfAllocated = false;
+
+    if (!allocatedTelecallerId && finalSource === 'MANUAL' && isCreatorTelecaller && creatorEmployeeId) {
+      allocatedTelecallerId = creatorEmployeeId;
+      isSelfAllocated = true;
+    }
+
     if (allocatedTelecallerId) {
       custom.allocatedAt = new Date().toISOString();
+      if (isSelfAllocated) {
+        custom.selfAllocated = true;
+        custom.selfAllocatedAt = new Date().toISOString();
+        custom.creatorEmployeeId = creatorEmployeeId;
+      }
     }
 
     const initialStatus = (dto.status as CrmLeadStatus) ||
@@ -2995,6 +3042,29 @@ export const crmService = {
       }
 
       const custom = (lead.customFields as any) || {};
+
+      // EXCLUSION: If a lead was manually added by a telecaller for themselves,
+      // DO NOT bring it back to waiting queue or recover it. Telecaller owns this lead personally.
+      if (custom.selfAllocated === true) {
+        continue;
+      }
+      if (
+        (lead.leadSource === 'MANUAL' || custom.isManual === true) &&
+        custom.creatorEmployeeId &&
+        lead.telecallerId === custom.creatorEmployeeId
+      ) {
+        continue;
+      }
+      if ((lead.leadSource === 'MANUAL' || custom.isManual === true) && lead.createdById && lead.telecallerId) {
+        const creator = await prisma.user.findUnique({
+          where: { id: lead.createdById },
+          select: { employeeId: true },
+        });
+        if (creator && creator.employeeId === lead.telecallerId) {
+          continue;
+        }
+      }
+
       let assignedTime = lead.updatedAt.getTime();
       if (custom.assignedAt) {
         const parsedAssigned = new Date(custom.assignedAt).getTime();

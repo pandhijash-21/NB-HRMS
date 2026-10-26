@@ -339,7 +339,11 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     final selectedProjectId = state.selectedProjectId;
     final campaigns = state.campaigns;
     final selectedCampaignId = state.selectedCampaignId;
-    final columns = state.columns.where((c) => c.isVisibleInTable && c.isActive).toList();
+    final columns = state.columns.where((c) {
+      if (!c.isVisibleInTable || !c.isActive) return false;
+      final k = c.columnKey.toLowerCase().replaceAll(' ', '_');
+      return !['flow', 'lead_flow', 'source', 'lead_source', 'leadsource'].contains(k);
+    }).toList();
     final leads = state.leads;
     final salesUsers = state.salesUsers;
 
@@ -906,8 +910,8 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                     },
                   ),
                   ChoiceChip(
-                    avatar: const Icon(Icons.campaign_rounded, size: 14, color: Color(0xFF2563EB)),
-                    label: Text('Meta / Webhook Leads (${leads.where((l) => l.leadSource == 'WEBHOOK' || l.leadSource == 'META').length})'),
+                    avatar: const Icon(Icons.campaign_rounded, size: 14, color: Color(0xFF0891B2)),
+                    label: Text('Webhook / Meta Leads (${leads.where((l) => l.leadSource == 'WEBHOOK' || l.leadSource == 'META').length})'),
                     selected: state.leadFlowFilter == 'WEBHOOK',
                     onSelected: (val) {
                       if (val) context.read<CrmLeadsBloc>().add(const CrmLeadsLeadFlowFilterChanged('WEBHOOK'));
@@ -985,6 +989,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                       columns: [
                         const DataColumn(label: Text('#', style: TextStyle(fontWeight: FontWeight.bold))),
                         const DataColumn(label: Text('Flow', style: TextStyle(fontWeight: FontWeight.bold))),
+                        const DataColumn(label: Text('Source', style: TextStyle(fontWeight: FontWeight.bold))),
                         const DataColumn(
                           label: Row(
                             children: [
@@ -1056,7 +1061,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                           cells: [
                             DataCell(Text('${index + 1}')),
                             DataCell(
-                              lead.leadSource == 'WEBHOOK' || lead.leadSource == 'META'
+                              lead.leadSource == 'META'
                                   ? Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                       decoration: BoxDecoration(
@@ -1065,53 +1070,138 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                       ),
                                       child: const Text('⚡ Meta', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF2563EB))),
                                     )
-                                  : (lead.isManual || lead.leadSource == 'MANUAL' || (lead.createdByName != null && lead.createdByName!.isNotEmpty))
-                                      ? Tooltip(
-                                          message: lead.createdByName != null && lead.createdByName!.isNotEmpty
-                                              ? 'Manually added by ${lead.createdByName}'
-                                              : 'Manually added lead',
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                            decoration: BoxDecoration(
-                                              color: const Color(0xFF8B5CF6).withValues(alpha: 0.12),
-                                              borderRadius: BorderRadius.circular(6),
-                                              border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.3)),
-                                            ),
-                                            child: Column(
-                                              mainAxisSize: MainAxisSize.min,
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              children: [
-                                                const Row(
-                                                  mainAxisSize: MainAxisSize.min,
-                                                  children: [
-                                                    Text('✍️ Manual', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF8B5CF6))),
-                                                  ],
-                                                ),
-                                                if (lead.createdByName != null && lead.createdByName!.trim().isNotEmpty) ...[
-                                                  const SizedBox(height: 2),
-                                                  Text(
-                                                    lead.createdByName!.trim(),
-                                                    style: TextStyle(
-                                                      fontSize: 10,
-                                                      fontWeight: FontWeight.w600,
-                                                      color: isDark ? const Color(0xFFC4B5FD) : const Color(0xFF6D28D9),
-                                                    ),
-                                                    maxLines: 1,
-                                                    overflow: TextOverflow.ellipsis,
-                                                  ),
-                                                ],
-                                              ],
-                                            ),
-                                          ),
-                                        )
-                                      : Container(
+                                  : lead.leadSource == 'WEBHOOK'
+                                      ? Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                           decoration: BoxDecoration(
-                                            color: const Color(0xFF16A34A).withValues(alpha: 0.12),
+                                            color: const Color(0xFF0891B2).withValues(alpha: 0.12),
                                             borderRadius: BorderRadius.circular(6),
                                           ),
-                                          child: const Text('📊 Excel', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF16A34A))),
+                                          child: const Text('⚡ Webhook', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF0891B2))),
+                                        )
+                                      : (lead.isManual || lead.leadSource == 'MANUAL' || (lead.createdByName != null && lead.createdByName!.isNotEmpty))
+                                          ? Tooltip(
+                                              message: lead.createdByName != null && lead.createdByName!.isNotEmpty
+                                                  ? 'Manually added by ${lead.createdByName}'
+                                                  : 'Manually added lead',
+                                              child: Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                decoration: BoxDecoration(
+                                                  color: const Color(0xFF8B5CF6).withValues(alpha: 0.12),
+                                                  borderRadius: BorderRadius.circular(6),
+                                                  border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.3)),
+                                                ),
+                                                child: Column(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    const Row(
+                                                      mainAxisSize: MainAxisSize.min,
+                                                      children: [
+                                                        Text('✍️ Manual', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF8B5CF6))),
+                                                      ],
+                                                    ),
+                                                    if (lead.createdByName != null && lead.createdByName!.trim().isNotEmpty) ...[
+                                                      const SizedBox(height: 2),
+                                                      Text(
+                                                        lead.createdByName!.trim(),
+                                                        style: TextStyle(
+                                                          fontSize: 10,
+                                                          fontWeight: FontWeight.w600,
+                                                          color: isDark ? const Color(0xFFC4B5FD) : const Color(0xFF6D28D9),
+                                                        ),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                    ],
+                                                  ],
+                                                ),
+                                              ),
+                                            )
+                                          : Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFF16A34A).withValues(alpha: 0.12),
+                                                borderRadius: BorderRadius.circular(6),
+                                              ),
+                                              child: const Text('📊 Excel', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF16A34A))),
+                                            ),
+                            ),
+
+                            // Source Column (Business Acquisition Source)
+                            DataCell(
+                              Builder(
+                                builder: (context) {
+                                  final cpName = lead.channelPartnerName ?? lead.customFields['channelPartnerName']?.toString();
+                                  final refName = lead.referenceName ?? lead.customFields['referenceName']?.toString();
+                                  final refType = lead.referenceType ?? lead.customFields['referenceType']?.toString() ?? 'Ref';
+                                  final explicitSource = lead.customFields['lead_source_type']?.toString() ??
+                                      lead.customFields['leadSource']?.toString() ??
+                                      lead.customFields['source']?.toString();
+
+                                  if (cpName != null && cpName.trim().isNotEmpty) {
+                                    return Tooltip(
+                                      message: 'Channel Partner: $cpName',
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
+                                          borderRadius: BorderRadius.circular(6),
                                         ),
+                                        child: Text(
+                                          '🤝 CP: $cpName',
+                                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFFD97706)),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                  if (refName != null && refName.trim().isNotEmpty) {
+                                    return Tooltip(
+                                      message: '$refType Reference: $refName',
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFEC4899).withValues(alpha: 0.12),
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          '👥 $refType: $refName',
+                                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFFDB2777)),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                  final displaySource = (explicitSource != null &&
+                                          explicitSource.trim().isNotEmpty &&
+                                          !['MANUAL', 'EXCEL', 'WEBHOOK', 'META'].contains(explicitSource.trim().toUpperCase()))
+                                      ? explicitSource.trim()
+                                      : (lead.isManual
+                                          ? 'Walk IN'
+                                          : (lead.leadSource == 'META'
+                                              ? 'Meta Ads'
+                                              : (lead.leadSource == 'WEBHOOK' ? 'Webhook' : 'Excel Import')));
+
+                                  return Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.05),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      displaySource,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: isDark ? const Color(0xFFE2E8F0) : const Color(0xFF334155),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
                             ),
 
                             // Elision Phone Icon Column
@@ -4149,7 +4239,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                           items: const [
                             DropdownMenuItem(value: 'MANUAL', child: Text('✍️ Manual Addition (Added by Admin / Telecaller)', overflow: TextOverflow.ellipsis)),
                             DropdownMenuItem(value: 'EXCEL', child: Text('📊 Excel Flow (Auto-assign to Excel telecallers)', overflow: TextOverflow.ellipsis)),
-                            DropdownMenuItem(value: 'WEBHOOK', child: Text('⚡ Meta / Webhook Flow (Auto-assign to Meta telecallers)', overflow: TextOverflow.ellipsis)),
+                            DropdownMenuItem(value: 'WEBHOOK', child: Text('⚡ Webhook Flow (Auto-assign to Webhook telecallers)', overflow: TextOverflow.ellipsis)),
                           ],
                           onChanged: (val) {
                             if (val != null) setDialogState(() => selectedFlow = val);

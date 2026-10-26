@@ -209,10 +209,9 @@ export const crmController = {
   async createLead(req: Request, res: Response) {
     try {
       const authUser = (req as any).user;
-      const isAdmin = isAdminRole(authUser?.roleName || authUser?.role);
       const explicitTelecallerId = req.body.telecallerId
         ? Number(req.body.telecallerId)
-        : (isAdmin ? undefined : authUser?.employeeId);
+        : undefined;
 
       const lead = await crmService.createLead(
         req.body,

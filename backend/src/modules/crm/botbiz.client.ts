@@ -679,15 +679,11 @@ export class BotBizApiClient {
         params.variables?.header_media_url ||
         params.variables?.headerMediaUrl;
 
-      // Filter out Meta handles like 4::... or non-HTTP values or slow Wasabi S3 URLs
+      // Filter out only truly invalid values: Meta internal handles (4::...) or non-HTTP strings
       if (
         headerMediaUrl &&
         (headerMediaUrl.startsWith('4::') ||
-          (!headerMediaUrl.startsWith('http://') && !headerMediaUrl.startsWith('https://')) ||
-          headerMediaUrl.includes('wasabisys.com') ||
-          headerMediaUrl.includes('bot-data.s3') ||
-          headerMediaUrl.includes('s3.amazonaws.com') ||
-          headerMediaUrl.includes('s3-ap-southeast'))
+          (!headerMediaUrl.startsWith('http://') && !headerMediaUrl.startsWith('https://')))
       ) {
         headerMediaUrl = undefined;
         formParams.delete('template_header_media_url');
@@ -695,12 +691,13 @@ export class BotBizApiClient {
         formParams.delete('templateHeaderMediaUrl');
       }
 
-      // Default brochure URL for newlead if omitted
+      // Default brochure URL for newlead if no header media URL was provided
       if (
         (!headerMediaUrl || headerMediaUrl.trim().length === 0) &&
         (resolvedTemplateId === '463170' || params.templateName?.toLowerCase() === 'newlead')
       ) {
-        headerMediaUrl = 'https://crm.nbdeveloper.co.in/api/crm-public/brochures/legacy-tower.pdf';
+        // Use the original official Wasabi S3 brochure — BotBiz fetches this server-side without local timeout
+        headerMediaUrl = 'https://bot-data.s3.ap-southeast-1.wasabisys.com/flowbuilder/306044/306044/whatsapp-440327/flowbuilder-306044-1792663002.pdf';
       }
 
       if (headerMediaUrl && String(headerMediaUrl).trim().length > 0) {

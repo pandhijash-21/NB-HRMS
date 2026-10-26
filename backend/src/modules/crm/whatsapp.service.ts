@@ -526,9 +526,8 @@ export class WhatsappService {
         map.whatsapp_calendar_link ||
         '',
       defaultBrochureUrl:
-        map.whatsapp_default_brochure_url && !map.whatsapp_default_brochure_url.includes('wasabisys.com')
-          ? map.whatsapp_default_brochure_url
-          : (isFinserve ? CLOUDINARY_NB_FINSERVE_PDF : BOTBIZ_LEGACY_TOWER_PDF),
+        map.whatsapp_default_brochure_url ||
+        (isFinserve ? CLOUDINARY_NB_FINSERVE_PDF : BOTBIZ_LEGACY_TOWER_PDF),
       defaultBrochureName:
         map.whatsapp_default_brochure_name ||
         (isFinserve ? 'NB_Finserve_Loan_Guide.pdf' : 'Legacy_Tower_Brochure.pdf'),
@@ -868,20 +867,11 @@ export class WhatsappService {
     return templates.map((t) => {
       const url = t.headerExampleUrl;
       if (!url) return t;
-      // Replace Meta internal handles (4:: prefix)
+      // Replace Meta internal handles (4:: prefix) — these are not public HTTP URLs
       if (url.startsWith('4::')) {
         return { ...t, headerExampleUrl: CLOUDINARY_DEFAULT_IMAGE };
       }
-      // Replace Wasabi S3 URLs or any non-cloudinary/non-local PDF
-      if (
-        url.includes('wasabisys.com') ||
-        url.includes('s3.amazonaws.com') ||
-        url.includes('s3-ap-southeast') ||
-        url.includes('bot-data.s3')
-      ) {
-        const isPdf = t.headerFormat === 'document' || url.endsWith('.pdf');
-        return { ...t, headerExampleUrl: isPdf ? localPdf : CLOUDINARY_DEFAULT_IMAGE };
-      }
+      // Keep valid HTTP/HTTPS URLs (including Wasabi S3 — BotBiz fetches these server-side)
       return t;
     });
   }
@@ -1165,22 +1155,12 @@ export class WhatsappService {
       if (
         headerMediaUrl &&
         (headerMediaUrl.startsWith('4::') ||
-          (!headerMediaUrl.startsWith('http://') && !headerMediaUrl.startsWith('https://')) ||
-          headerMediaUrl.includes('wasabisys.com') ||
-          headerMediaUrl.includes('bot-data.s3') ||
-          headerMediaUrl.includes('s3.amazonaws.com') ||
-          headerMediaUrl.includes('s3-ap-southeast'))
+          (!headerMediaUrl.startsWith('http://') && !headerMediaUrl.startsWith('https://')))
       ) {
         headerMediaUrl = undefined;
       }
       if (!headerMediaUrl && tmpl?.headerExampleUrl && (tmpl.headerExampleUrl.startsWith('http://') || tmpl.headerExampleUrl.startsWith('https://'))) {
-        if (
-          !tmpl.headerExampleUrl.includes('wasabisys.com') &&
-          !tmpl.headerExampleUrl.includes('bot-data.s3') &&
-          !tmpl.headerExampleUrl.includes('s3.amazonaws.com')
-        ) {
-          headerMediaUrl = tmpl.headerExampleUrl;
-        }
+        headerMediaUrl = tmpl.headerExampleUrl;
       }
 
       // Check if template requires a media header (DOCUMENT, IMAGE, VIDEO)
@@ -1196,22 +1176,18 @@ export class WhatsappService {
       }
       if (isDocument && (
         !headerMediaUrl ||
-        headerMediaUrl.includes('wasabisys.com') ||
-        headerMediaUrl.includes('bot-data.s3') ||
         /\.(jpe?g|png|webp)($|\?)/i.test(headerMediaUrl)
       )) {
-        headerMediaUrl = isFinserve ? CLOUDINARY_NB_FINSERVE_PDF : BOTBIZ_LEGACY_TOWER_PDF;
+        // For newlead (document header): use the original Wasabi S3 PDF — BotBiz fetches it server-side
+        headerMediaUrl = isNewlead
+          ? 'https://bot-data.s3.ap-southeast-1.wasabisys.com/flowbuilder/306044/306044/whatsapp-440327/flowbuilder-306044-1792663002.pdf'
+          : (isFinserve ? CLOUDINARY_NB_FINSERVE_PDF : BOTBIZ_LEGACY_TOWER_PDF);
       }
 
       if (!headerMediaUrl && needsMediaHeader) {
         if (isImage) {
           headerMediaUrl = CLOUDINARY_DEFAULT_IMAGE;
-        } else if (
-          raw.defaultBrochureUrl &&
-          (raw.defaultBrochureUrl.startsWith('http://') || raw.defaultBrochureUrl.startsWith('https://')) &&
-          !raw.defaultBrochureUrl.includes('wasabisys.com') &&
-          !raw.defaultBrochureUrl.includes('bot-data.s3')
-        ) {
+        } else if (raw.defaultBrochureUrl && (raw.defaultBrochureUrl.startsWith('http://') || raw.defaultBrochureUrl.startsWith('https://'))) {
           headerMediaUrl = raw.defaultBrochureUrl;
         } else {
           headerMediaUrl = isFinserve ? CLOUDINARY_NB_FINSERVE_PDF : BOTBIZ_LEGACY_TOWER_PDF;

@@ -424,11 +424,17 @@ export const crmController = {
   // Follow-ups
   async getFollowUps(req: Request, res: Response) {
     try {
+      const authUser = (req as any).user;
       const followUps = await crmService.getFollowUps({
         leadId: req.query.leadId as string,
         filter: req.query.filter as any,
         date: req.query.date as string,
         scope: getScope(req),
+        userContext: authUser ? {
+          userId: authUser.id,
+          employeeId: authUser.employeeId,
+          role: authUser.role,
+        } : undefined,
       });
       res.json(ok(followUps));
     } catch (err: any) {

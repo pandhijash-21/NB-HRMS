@@ -1557,6 +1557,8 @@ export const crmService = {
               ? 'Site Visit Scheduled'
               : (status === 'INTERESTED' ? 'Interested client sales meeting scheduled' : 'Follow-up scheduled'));
 
+      const followUpAssignedId = safeAssignedId || existing.telecallerId || userContext?.employeeId || null;
+
       if (existingPending) {
         await prisma.crmFollowUp.update({
           where: { id: existingPending.id },
@@ -1564,7 +1566,7 @@ export const crmService = {
             scheduledDate: scheduledDateTime,
             scheduledTime: payload.scheduledTime,
             remarks: payload.remarks || defaultRemark,
-            assignedToId: safeAssignedId,
+            assignedToId: followUpAssignedId,
             ...(userContext?.userId && { createdById: userContext.userId }),
           },
         });
@@ -1575,7 +1577,7 @@ export const crmService = {
             scheduledDate: scheduledDateTime,
             scheduledTime: payload.scheduledTime,
             remarks: payload.remarks || defaultRemark,
-            assignedToId: safeAssignedId,
+            assignedToId: followUpAssignedId,
             createdById: userContext?.userId,
           },
         });
@@ -1953,9 +1955,15 @@ export const crmService = {
     filter?: 'today' | 'upcoming' | 'all' | 'overdue';
     date?: string;
     scope?: string;
+    userContext?: { userId?: string; employeeId?: number; role?: string };
   }) {
     const scope = query.scope || 'NB_DEVELOPER';
-    const today = new Date();
+    let today: Date;
+    if (query.date) {
+      today = new Date(query.date);
+    } else {
+      today = new Date();
+    }
     today.setHours(0, 0, 0, 0);
 
     const tomorrow = new Date(today);
@@ -1978,7 +1986,7 @@ export const crmService = {
         gte: today,
         lt: tomorrow,
       };
-      where.status = { not: 'CANCELLED' };
+      where.status = 'PENDING';
     } else if (query.filter === 'upcoming') {
       where.scheduledDate = {
         gte: tomorrow,
@@ -1989,6 +1997,17 @@ export const crmService = {
         lt: today,
       };
       where.status = 'PENDING';
+    }
+
+    const userRole = query.userContext?.role?.toUpperCase() || '';
+    const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(userRole);
+    const userEmployeeId = query.userContext?.employeeId;
+
+    if (!isAdmin && userEmployeeId) {
+      where.OR = [
+        { assignedToId: userEmployeeId },
+        { lead: { isDeleted: false, scope, OR: [{ telecallerId: userEmployeeId }, { assignedToId: userEmployeeId }] } },
+      ];
     }
 
     return prisma.crmFollowUp.findMany({

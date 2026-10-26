@@ -2767,10 +2767,7 @@ export const crmService = {
       where: {
         isDeleted: false,
         scope,
-        OR: [
-          { telecallerId: employeeId },
-          { assignedToId: employeeId },
-        ],
+        telecallerId: employeeId,
         status: { in: [CrmLeadStatus.NOT_STARTED, CrmLeadStatus.CNR, CrmLeadStatus.ASSIGNED] },
       },
     });
@@ -2937,11 +2934,11 @@ export const crmService = {
         where: { id: lead.id },
         data: {
           telecallerId: candidateWithCapacity.employeeId,
-          assignedToId: candidateWithCapacity.employeeId,
           status: CrmLeadStatus.NOT_STARTED,
           customFields: {
             ...existingCustom,
             assignedAt,
+            allocatedAt: assignedAt,
           },
         },
       });

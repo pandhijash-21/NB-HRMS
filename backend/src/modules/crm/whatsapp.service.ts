@@ -1119,10 +1119,19 @@ export class WhatsappService {
       const tmplHeaderType = (tmpl?.headerFormat || tmpl?.raw?.header_type || tmpl?.raw?.header_subtype || '').toString().toUpperCase();
       const needsMediaHeader = tmplHeaderType.includes('DOCUMENT') || tmplHeaderType.includes('IMAGE') || tmplHeaderType.includes('VIDEO') || tmplHeaderType.includes('MEDIA');
 
-      if (!headerMediaUrl && needsMediaHeader) {
-        const isFinserve = scope === 'NB_FINSERVE';
-        const isImage = tmplHeaderType.includes('IMAGE');
+      const isFinserve = scope === 'NB_FINSERVE';
+      const isImage = tmplHeaderType.includes('IMAGE') || tmpl?.headerFormat?.toLowerCase() === 'image';
+      const isDocument = tmplHeaderType.includes('DOCUMENT') || tmpl?.headerFormat?.toLowerCase() === 'document';
 
+      // Auto-correct MIME mismatch: don't send a PDF to an image header, or an image to a document header
+      if (isImage && headerMediaUrl && (headerMediaUrl.toLowerCase().endsWith('.pdf') || headerMediaUrl.toLowerCase().includes('.pdf'))) {
+        headerMediaUrl = CLOUDINARY_DEFAULT_IMAGE;
+      }
+      if (isDocument && headerMediaUrl && /\.(jpe?g|png|webp)($|\?)/i.test(headerMediaUrl)) {
+        headerMediaUrl = isFinserve ? CLOUDINARY_NB_FINSERVE_PDF : BOTBIZ_LEGACY_TOWER_PDF;
+      }
+
+      if (!headerMediaUrl && needsMediaHeader) {
         if (isImage) {
           headerMediaUrl = CLOUDINARY_DEFAULT_IMAGE;
         } else if (

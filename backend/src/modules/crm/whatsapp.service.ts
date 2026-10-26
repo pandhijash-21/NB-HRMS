@@ -526,7 +526,7 @@ export class WhatsappService {
         map.whatsapp_calendar_link ||
         '',
       defaultBrochureUrl:
-        map.whatsapp_default_brochure_url && !map.whatsapp_default_brochure_url.includes('nbdeveloper.co.in/brochures/')
+        map.whatsapp_default_brochure_url && !map.whatsapp_default_brochure_url.includes('wasabisys.com')
           ? map.whatsapp_default_brochure_url
           : (isFinserve ? CLOUDINARY_NB_FINSERVE_PDF : BOTBIZ_LEGACY_TOWER_PDF),
       defaultBrochureName:
@@ -1137,7 +1137,7 @@ export class WhatsappService {
         } else if (
           raw.defaultBrochureUrl &&
           (raw.defaultBrochureUrl.startsWith('http://') || raw.defaultBrochureUrl.startsWith('https://')) &&
-          !raw.defaultBrochureUrl.includes('nbdeveloper.co.in/brochures/')
+          !raw.defaultBrochureUrl.includes('wasabisys.com')
         ) {
           headerMediaUrl = raw.defaultBrochureUrl;
         } else {

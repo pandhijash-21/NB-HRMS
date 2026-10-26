@@ -9,6 +9,7 @@ import {
   DEFAULT_BROCHURE_PDF_BASE64,
   BOTBIZ_LEGACY_TOWER_PDF,
   CLOUDINARY_NB_FINSERVE_PDF,
+  CLOUDINARY_DEFAULT_IMAGE,
 } from './default-brochure';
 
 function getScope(req: Request): string {
@@ -731,56 +732,33 @@ export const crmController = {
 
       for (const p of diskPaths) {
         if (fs.existsSync(p)) {
-          const absPath = path.resolve(p);
-          res.setHeader('Content-Disposition', `inline; filename="${safeFilename}"`);
-          res.setHeader('Access-Control-Allow-Origin', '*');
-          return res.sendFile(absPath, {
-            acceptRanges: true,
-            cacheControl: true,
-            maxAge: 86400000,
-          });
+          const stats = fs.statSync(p);
+          // If the file is on disk and has reasonable size (< 15MB), serve it directly
+          if (stats.size > 0 && stats.size < 15 * 1024 * 1024) {
+            const absPath = path.resolve(p);
+            res.setHeader('Content-Type', isImage ? 'image/jpeg' : 'application/pdf');
+            res.setHeader('Content-Length', String(stats.size));
+            res.setHeader('Content-Disposition', `inline; filename="${safeFilename}"`);
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.setHeader('Cache-Control', 'public, max-age=86400');
+            return res.sendFile(absPath);
+          }
         }
       }
 
       if (isImage) {
-        // Serve a minimal valid JPEG buffer
-        const dummyJpg = Buffer.from([
-          0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01,
-          0x01, 0x01, 0x00, 0x48, 0x00, 0x48, 0x00, 0x00, 0xff, 0xdb, 0x00, 0x43,
-          0x00, 0x08, 0x06, 0x06, 0x07, 0x06, 0x05, 0x08, 0x07, 0x07, 0x07, 0x09,
-          0x09, 0x08, 0x0a, 0x0c, 0x14, 0x0d, 0x0c, 0x0b, 0x0b, 0x0c, 0x19, 0x12,
-          0x13, 0x0f, 0x14, 0x1d, 0x1a, 0x1f, 0x1e, 0x1d, 0x1a, 0x1c, 0x1c, 0x20,
-          0x24, 0x2e, 0x27, 0x20, 0x22, 0x2c, 0x23, 0x1c, 0x1c, 0x28, 0x37, 0x29,
-          0x2c, 0x30, 0x31, 0x34, 0x34, 0x34, 0x1f, 0x27, 0x39, 0x3d, 0x38, 0x32,
-          0x3c, 0x2e, 0x33, 0x34, 0x32, 0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x01,
-          0x00, 0x01, 0x01, 0x01, 0x11, 0x00, 0xff, 0xc4, 0x00, 0x1f, 0x00, 0x00,
-          0x01, 0x05, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00,
-          0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-          0x09, 0x0a, 0x0b, 0xff, 0xda, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3f,
-          0x00, 0xbf, 0x80, 0xff, 0xd9,
-        ]);
-        res.setHeader('Content-Type', 'image/jpeg');
-        res.setHeader('Content-Disposition', `inline; filename="${safeFilename}"`);
-        res.setHeader('Cache-Control', 'public, max-age=86400');
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        return res.status(200).send(dummyJpg);
+        // Redirect to verified Cloudinary image asset
+        return res.redirect(302, CLOUDINARY_DEFAULT_IMAGE);
       }
 
-      // If not on disk, stream the official Wasabi/Cloudinary brochure directly with HTTP 200 (NO 302 redirect for WhatsApp crawler)
-      const targetUrl = isFinserve ? CLOUDINARY_NB_FINSERVE_PDF : BOTBIZ_LEGACY_TOWER_PDF;
-      try {
-        const remoteRes = await fetch(targetUrl);
-        if (remoteRes.ok && remoteRes.body) {
-          res.setHeader('Content-Type', isImage ? 'image/jpeg' : 'application/pdf');
-          res.setHeader('Content-Disposition', `inline; filename="${safeFilename}"`);
-          res.setHeader('Access-Control-Allow-Origin', '*');
-          res.setHeader('Cache-Control', 'public, max-age=86400');
-          const { Readable } = await import('stream');
-          return (Readable as any).fromWeb(remoteRes.body).pipe(res);
-        }
-      } catch {}
-
-      return res.redirect(302, targetUrl);
+      // Fast, lightweight, standard 13KB PDF brochure buffer with proper Content-Length and application/pdf headers
+      const pdfBuffer = Buffer.from(DEFAULT_BROCHURE_PDF_BASE64, 'base64');
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Length', String(pdfBuffer.length));
+      res.setHeader('Content-Disposition', `inline; filename="${safeFilename}"`);
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      return res.status(200).send(pdfBuffer);
     } catch (err: any) {
       res.status(500).json(fail(err.message || 'Failed to serve brochure'));
     }

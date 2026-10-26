@@ -728,17 +728,18 @@ export class BotBizApiClient {
         }
       }
 
-      // Construct target full URL with query string
-      const fullUrl = `${targetBase}?${formParams.toString()}`;
+      // BotBiz supports POST x-www-form-urlencoded (preferred) and GET fallback
+      const getUrl = targetBase.includes('?')
+        ? `${targetBase}&${formParams.toString()}`
+        : `${targetBase}?${formParams.toString()}`;
 
-      // BotBiz supports GET and POST x-www-form-urlencoded
       let response: Response;
       try {
-        response = await fetch(fullUrl, {
+        response = await fetch(targetBase, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
-            'Accept': 'application/json',
+            Accept: 'application/json',
           },
           body: formParams.toString(),
           signal: controller.signal,
@@ -746,17 +747,17 @@ export class BotBizApiClient {
 
         if (response.status === 405) {
           // If POST not allowed on endpoint, fallback to GET with query string
-          response = await fetch(fullUrl, {
+          response = await fetch(getUrl, {
             method: 'GET',
-            headers: { 'Accept': 'application/json' },
+            headers: { Accept: 'application/json' },
             signal: controller.signal,
           });
         }
       } catch {
         // Network fallback to GET
-        response = await fetch(fullUrl, {
+        response = await fetch(getUrl, {
           method: 'GET',
-          headers: { 'Accept': 'application/json' },
+          headers: { Accept: 'application/json' },
           signal: controller.signal,
         });
       }

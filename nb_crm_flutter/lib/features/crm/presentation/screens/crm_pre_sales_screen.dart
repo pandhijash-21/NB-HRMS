@@ -386,9 +386,9 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
       if (effectiveFlow == 'EXCEL') {
         return (l.leadSource == 'EXCEL' || l.leadSource == null) && !l.isManual;
       } else if (effectiveFlow == 'MANUAL') {
-        return l.isManual || l.leadSource == 'MANUAL';
+        return l.isManual;
       } else if (effectiveFlow == 'WEBHOOK') {
-        return l.leadSource == 'WEBHOOK' || l.leadSource == 'META';
+        return (l.leadSource == 'WEBHOOK' || l.leadSource == 'META') && !l.isManual;
       }
       return true;
     }).toList();
@@ -903,7 +903,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   ),
                   ChoiceChip(
                     avatar: const Icon(Icons.edit_note_rounded, size: 14, color: Color(0xFF8B5CF6)),
-                    label: Text('Manual Leads (${leads.where((l) => l.isManual || l.leadSource == 'MANUAL').length})'),
+                    label: Text('Manual Leads (${leads.where((l) => l.isManual).length})'),
                     selected: state.leadFlowFilter == 'MANUAL',
                     onSelected: (val) {
                       if (val) context.read<CrmLeadsBloc>().add(const CrmLeadsLeadFlowFilterChanged('MANUAL'));
@@ -911,7 +911,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   ),
                   ChoiceChip(
                     avatar: const Icon(Icons.campaign_rounded, size: 14, color: Color(0xFF0891B2)),
-                    label: Text('Webhook / Meta Leads (${leads.where((l) => l.leadSource == 'WEBHOOK' || l.leadSource == 'META').length})'),
+                    label: Text('Webhook / Meta Leads (${leads.where((l) => (l.leadSource == 'WEBHOOK' || l.leadSource == 'META') && !l.isManual).length})'),
                     selected: state.leadFlowFilter == 'WEBHOOK',
                     onSelected: (val) {
                       if (val) context.read<CrmLeadsBloc>().add(const CrmLeadsLeadFlowFilterChanged('WEBHOOK'));
@@ -1061,7 +1061,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                           cells: [
                             DataCell(Text('${index + 1}')),
                             DataCell(
-                              lead.leadSource == 'META'
+                              (!lead.isManual && lead.leadSource == 'META')
                                   ? Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                       decoration: BoxDecoration(
@@ -1070,7 +1070,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                       ),
                                       child: const Text('⚡ Meta', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF2563EB))),
                                     )
-                                  : lead.leadSource == 'WEBHOOK'
+                                  : (!lead.isManual && lead.leadSource == 'WEBHOOK')
                                       ? Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                           decoration: BoxDecoration(
@@ -1079,8 +1079,16 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                           ),
                                           child: const Text('⚡ Webhook', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF0891B2))),
                                         )
-                                      : (lead.isManual || lead.leadSource == 'MANUAL' || (lead.createdByName != null && lead.createdByName!.isNotEmpty))
-                                          ? Tooltip(
+                                      : (!lead.isManual && (lead.leadSource == 'EXCEL' || lead.leadSource == null))
+                                          ? Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFF16A34A).withValues(alpha: 0.12),
+                                                borderRadius: BorderRadius.circular(6),
+                                              ),
+                                              child: const Text('📊 Excel', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF16A34A))),
+                                            )
+                                          : Tooltip(
                                               message: lead.createdByName != null && lead.createdByName!.isNotEmpty
                                                   ? 'Manually added by ${lead.createdByName}'
                                                   : 'Manually added lead',
@@ -1117,14 +1125,6 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                                   ],
                                                 ),
                                               ),
-                                            )
-                                          : Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFF16A34A).withValues(alpha: 0.12),
-                                                borderRadius: BorderRadius.circular(6),
-                                              ),
-                                              child: const Text('📊 Excel', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF16A34A))),
                                             ),
                             ),
 
@@ -1135,9 +1135,11 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                   final cpName = lead.channelPartnerName ?? lead.customFields['channelPartnerName']?.toString();
                                   final refName = lead.referenceName ?? lead.customFields['referenceName']?.toString();
                                   final refType = lead.referenceType ?? lead.customFields['referenceType']?.toString() ?? 'Ref';
-                                  final explicitSource = lead.customFields['lead_source_type']?.toString() ??
+                                  final explicitSource = lead.customFields['Source']?.toString() ??
+                                      lead.customFields['source']?.toString() ??
+                                      lead.customFields['lead_source_type']?.toString() ??
                                       lead.customFields['leadSource']?.toString() ??
-                                      lead.customFields['source']?.toString();
+                                      lead.customFields['lead_source']?.toString();
 
                                   if (cpName != null && cpName.trim().isNotEmpty) {
                                     return Tooltip(
@@ -4196,14 +4198,19 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
   // Dialog: Add Lead Dynamically
   // ---------------------------------------------------------------------------
   void _showAddLeadDialog(BuildContext context, List<CrmColumnConfig> columns) {
+    // Exclude redundant source/flow keys so dynamic loop does not create duplicate Lead Source fields
+    final formColumns = columns.where((col) {
+      final k = col.columnKey.toLowerCase().replaceAll(' ', '_');
+      final l = col.label.toLowerCase().trim();
+      return !['flow', 'lead_flow', 'leadflow', 'source', 'lead_source', 'leadsource'].contains(k) &&
+             !['lead flow', 'flow', 'source', 'lead source'].contains(l);
+    }).toList();
+
     final controllers = <String, TextEditingController>{};
-    for (final col in columns) {
+    for (final col in formColumns) {
       controllers[col.columnKey] = TextEditingController();
     }
-    String selectedFlow = (context.read<CrmLeadsBloc>().state.leadFlowFilter == 'WEBHOOK')
-        ? 'WEBHOOK'
-        : (context.read<CrmLeadsBloc>().state.leadFlowFilter == 'EXCEL' ? 'EXCEL' : 'MANUAL');
-    String selectedLeadSource = 'Walk IN';
+    String selectedLeadSource = 'Walk-in';
     final cpNameController = TextEditingController();
     final cpPhoneController = TextEditingController();
     final refNameController = TextEditingController();
@@ -4224,32 +4231,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Lead Flow Selection
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Lead Flow / Acquisition Channel *', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                        const SizedBox(height: 6),
-                        DropdownButtonFormField<String>(
-                          value: selectedFlow,
-                          isExpanded: true,
-                          decoration: const InputDecoration(border: OutlineInputBorder(), prefixIcon: Icon(Icons.alt_route_rounded)),
-                          items: const [
-                            DropdownMenuItem(value: 'MANUAL', child: Text('✍️ Manual Addition (Added by Admin / Telecaller)', overflow: TextOverflow.ellipsis)),
-                            DropdownMenuItem(value: 'EXCEL', child: Text('📊 Excel Flow (Auto-assign to Excel telecallers)', overflow: TextOverflow.ellipsis)),
-                            DropdownMenuItem(value: 'WEBHOOK', child: Text('⚡ Webhook Flow (Auto-assign to Webhook telecallers)', overflow: TextOverflow.ellipsis)),
-                          ],
-                          onChanged: (val) {
-                            if (val != null) setDialogState(() => selectedFlow = val);
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Lead Source Selection (Walk IN, Channel Partner, Reference, Direct Call / Other)
+                  // Unified Lead Source Selection with Channel Partner, Reference, etc.
                   Padding(
                     padding: const EdgeInsets.only(bottom: 16),
                     child: Column(
@@ -4262,10 +4244,16 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                           isExpanded: true,
                           decoration: const InputDecoration(border: OutlineInputBorder(), prefixIcon: Icon(Icons.source_rounded)),
                           items: const [
-                            DropdownMenuItem(value: 'Walk IN', child: Text('🚶 Walk IN', overflow: TextOverflow.ellipsis)),
+                            DropdownMenuItem(value: 'Walk-in', child: Text('🚶 Walk-in', overflow: TextOverflow.ellipsis)),
                             DropdownMenuItem(value: 'Channel Partner', child: Text('🤝 Channel Partner', overflow: TextOverflow.ellipsis)),
-                            DropdownMenuItem(value: 'Reference', child: Text('👥 Reference', overflow: TextOverflow.ellipsis)),
-                            DropdownMenuItem(value: 'Direct Call / Other', child: Text('📞 Direct Call / Other', overflow: TextOverflow.ellipsis)),
+                            DropdownMenuItem(value: 'Reference', child: Text('👥 Reference / Referral', overflow: TextOverflow.ellipsis)),
+                            DropdownMenuItem(value: 'Direct Call', child: Text('📞 Direct Call', overflow: TextOverflow.ellipsis)),
+                            DropdownMenuItem(value: 'Website', child: Text('🌐 Website', overflow: TextOverflow.ellipsis)),
+                            DropdownMenuItem(value: 'Social Media', child: Text('📱 Social Media', overflow: TextOverflow.ellipsis)),
+                            DropdownMenuItem(value: 'Meta Ads', child: Text('⚡ Meta Ads', overflow: TextOverflow.ellipsis)),
+                            DropdownMenuItem(value: 'Google Ads', child: Text('🔍 Google Ads', overflow: TextOverflow.ellipsis)),
+                            DropdownMenuItem(value: 'Excel Import', child: Text('📊 Excel Import', overflow: TextOverflow.ellipsis)),
+                            DropdownMenuItem(value: 'Other', child: Text('📋 Other', overflow: TextOverflow.ellipsis)),
                           ],
                           onChanged: (val) {
                             if (val != null) setDialogState(() => selectedLeadSource = val);
@@ -4363,7 +4351,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                       ),
                     ),
                   ],
-                  ...columns.map((col) {
+                  ...formColumns.map((col) {
                     final isFinserve = CrmRepository.crmScopeNotifier.value == 'NB_FINSERVE';
                     final labelLower = col.label.toLowerCase();
                     final keyLower = col.columnKey.toLowerCase();
@@ -4562,6 +4550,9 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
               }
             }
 
+            customFields['Source'] = selectedLeadSource;
+            customFields['source'] = selectedLeadSource;
+            customFields['leadSource'] = selectedLeadSource;
             customFields['lead_source_type'] = selectedLeadSource;
             if (selectedLeadSource == 'Channel Partner') {
               customFields['channelPartnerName'] = cpName;
@@ -4585,7 +4576,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                     'name': name.isEmpty ? 'Unnamed Lead' : name,
                     'phone': phone,
                     'status': 'NOT_STARTED',
-                    'leadSource': selectedFlow,
+                    'leadSource': 'MANUAL',
                     'channelPartnerName': selectedLeadSource == 'Channel Partner' ? cpName : null,
                     'channelPartnerPhone': selectedLeadSource == 'Channel Partner' ? cpPhone : null,
                     'referenceType': selectedLeadSource == 'Reference' ? selectedRefType : null,

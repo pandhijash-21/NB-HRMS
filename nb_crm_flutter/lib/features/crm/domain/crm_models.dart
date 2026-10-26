@@ -362,10 +362,39 @@ class CrmLead {
 
   bool get isWaitingList => (telecallerId == null && assignedToId == null) || (status == CrmStatus.notStarted && telecallerId == null);
 
-  bool get isManual =>
-      leadSource?.toUpperCase() == 'MANUAL' ||
-      customFields['isManual'] == true ||
-      customFields['is_manual'] == true;
+  bool get isManual {
+    if (leadSource?.toUpperCase() == 'MANUAL' ||
+        customFields['isManual'] == true ||
+        customFields['is_manual'] == true) {
+      return true;
+    }
+    if (createdByName != null &&
+        createdByName!.trim().isNotEmpty &&
+        createdByName!.trim().toLowerCase() != 'system' &&
+        createdByName!.trim().toLowerCase() != 'webhook') {
+      return true;
+    }
+    final s = (customFields['lead_source_type'] ??
+            customFields['leadSource'] ??
+            customFields['Source'] ??
+            customFields['source'])
+        ?.toString()
+        .trim()
+        .toLowerCase();
+    if (s != null &&
+        [
+          'walk in',
+          'walk-in',
+          'channel partner',
+          'reference',
+          'referral',
+          'direct call',
+          'direct call / other',
+        ].contains(s)) {
+      return true;
+    }
+    return false;
+  }
 
   String get allocatedAgentName {
     if (telecallerName != null && telecallerName!.trim().isNotEmpty) {

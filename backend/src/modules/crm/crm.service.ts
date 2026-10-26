@@ -2035,7 +2035,24 @@ export const crmService = {
   // ---------------------------------------------------------------------------
   // Visitor Lookup & Check-In (Front Desk / Site Visit Desk)
   // ---------------------------------------------------------------------------
-  async visitorLookup(phone: string) {
+  async assertVisitorDeskAccess(userContext?: { employeeId?: number; role?: string }) {
+    const isSuperAdmin = ['ADMIN', 'SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(
+      userContext?.role?.toUpperCase() || '',
+    );
+    if (isSuperAdmin) return;
+    const settings = await this.getSettings('NB_DEVELOPER');
+    const designatedId = settings.site_visit_desk_employee_id
+      ? parseInt(String(settings.site_visit_desk_employee_id), 10)
+      : null;
+    if (!designatedId || userContext?.employeeId !== designatedId) {
+      throw new Error(
+        'Unauthorized: Only System Admins or the Designated Site Visit Desk In-Charge can use the Front Desk.',
+      );
+    }
+  },
+
+  async visitorLookup(phone: string, userContext?: { employeeId?: number; role?: string }) {
+    await this.assertVisitorDeskAccess(userContext);
     if (!phone || !phone.trim()) {
       return { exists: false, message: 'Phone number is required' };
     }
@@ -2823,20 +2840,18 @@ export const crmService = {
       };
     }
 
-    const settings = await this.getSettings(scope);
-    const requirePunchIn = settings.require_punch_in_for_leads === 'true';
-    const requireActive = settings.require_active_screen_for_leads === 'true';
-
-    // 1. Try finding telecallers meeting configured presence criteria
+    // 1. Primary: Find telecallers who have punched in today AND are active on screen
     let eligibleIds = await this.getEligibleTelecallers(scope, subOrganization, {
-      requirePunchIn,
-      requireActive,
+      requirePunchIn: true,
+      requireActive: true,
     });
 
-    // Fallback: If strict presence checks found 0 active telecallers, fallback to all eligible telecallers for this scope
+    // Fallback: If no one has screen activity right this second (e.g. idle timeout / brief pause),
+    // fallback to telecallers who ARE PUNCHED IN today (on duty), so leads only go to people at work.
+    // If an employee is NOT punched in today, leads will NEVER go to them.
     if (eligibleIds.length === 0) {
       eligibleIds = await this.getEligibleTelecallers(scope, subOrganization, {
-        requirePunchIn: false,
+        requirePunchIn: true,
         requireActive: false,
       });
     }
@@ -2849,6 +2864,8 @@ export const crmService = {
         candidateDetails: [],
       };
     }
+
+    const settings = await this.getSettings(scope);
 
     // 2. Compute workload and available capacity for each active telecaller
     const candidates: Array<{

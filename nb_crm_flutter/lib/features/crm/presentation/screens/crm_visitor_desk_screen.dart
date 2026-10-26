@@ -443,6 +443,15 @@ class _CrmVisitorDeskViewState extends State<_CrmVisitorDeskView> {
   }
 
   Future<void> _handleLookup(BuildContext context) async {
+    final authUser = context.read<AuthBloc>().state.user;
+    final role = authUser?.role.toUpperCase() ?? '';
+    final isAdminUser = ['ADMIN', 'SUPER_ADMIN', 'SYSTEM_ADMIN'].contains(role);
+    final deskId = context.read<CrmLeadsBloc>().state.settings?.siteVisitDeskEmployeeId;
+    final isDeskUser = deskId != null && authUser?.employeeId == deskId;
+    if (!isAdminUser && !isDeskUser) {
+      setState(() => _lookupError = 'Only System Admins or the designated Site Visit Desk In-Charge can look up numbers.');
+      return;
+    }
     final digits = cleanMobile10(_phoneController.text);
     if (digits.length != 10) {
       setState(() => _lookupError = 'Please enter a valid 10-digit mobile number.');

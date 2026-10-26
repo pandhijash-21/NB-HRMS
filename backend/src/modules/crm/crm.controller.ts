@@ -346,7 +346,11 @@ export const crmController = {
   async visitorLookup(req: Request, res: Response) {
     try {
       const phone = String(req.query.phone || '');
-      const result = await crmService.visitorLookup(phone);
+      const authUser = (req as any).user;
+      const result = await crmService.visitorLookup(phone, {
+        employeeId: authUser?.employeeId,
+        role: authUser?.role,
+      });
       res.json(ok(result));
     } catch (err: any) {
       res.status(400).json(fail(err.message || 'Failed to lookup visitor'));

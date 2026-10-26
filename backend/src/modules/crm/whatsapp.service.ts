@@ -740,19 +740,23 @@ export class WhatsappService {
     }
 
     const key = `${prefix}whatsapp_botbiz_templates`;
+    // Sanitize header URLs before persisting to cache:
+    // - Replace Wasabi S3 URLs (slow, >50MB) with reliable local brochure URL
+    // - Replace Meta 4:: handles (not public HTTP) with Cloudinary fallback image
+    const sanitized = this.sanitizeTemplateHeaderUrls(res.templates, isFinserve);
     await prisma.crmSetting.upsert({
       where: { key },
       update: {
         value: JSON.stringify({
           syncedAt: new Date().toISOString(),
-          templates: res.templates,
+          templates: sanitized,
         }),
       },
       create: {
         key,
         value: JSON.stringify({
           syncedAt: new Date().toISOString(),
-          templates: res.templates,
+          templates: sanitized,
         }),
         description: `Cached Meta WhatsApp templates for ${isFinserve ? 'NB Finserve' : 'NB Developer'} synced from BotBiz`,
       },
@@ -760,8 +764,8 @@ export class WhatsappService {
 
     return {
       success: true,
-      count: res.templates.length,
-      templates: res.templates,
+      count: sanitized.length,
+      templates: sanitized,
     };
   }
 
@@ -787,13 +791,13 @@ export class WhatsappService {
 
     try {
       const parsed = JSON.parse(row.value);
-      const list = parsed.templates || [];
+      const list: BotbizTemplate[] = parsed.templates || [];
       if (list.length === 0 && isFinserve) {
         return this.getCachedTemplates('NB_DEVELOPER');
       }
       return {
         syncedAt: parsed.syncedAt,
-        templates: list,
+        templates: this.sanitizeTemplateHeaderUrls(list, isFinserve),
       };
     } catch {
       if (isFinserve) {
@@ -853,10 +857,35 @@ export class WhatsappService {
   }
 
   /**
-   * Dynamic Variable Resolver
-   * Maps customerName, projectName, loanType, siteVisitDate, siteVisitTime, salespersonName, etc.
-   * Ensures no unresolved {{placeholder}} remains.
+   * Sanitize template header URLs:
+   * - Wasabi S3 URLs (large, slow) => local brochure URL
+   * - Meta 4:: handles (non-HTTP) => Cloudinary image or local PDF
    */
+  private sanitizeTemplateHeaderUrls(templates: BotbizTemplate[], isFinserve: boolean): BotbizTemplate[] {
+    const localPdf = isFinserve
+      ? CLOUDINARY_NB_FINSERVE_PDF
+      : BOTBIZ_LEGACY_TOWER_PDF;
+    return templates.map((t) => {
+      const url = t.headerExampleUrl;
+      if (!url) return t;
+      // Replace Meta internal handles (4:: prefix)
+      if (url.startsWith('4::')) {
+        return { ...t, headerExampleUrl: CLOUDINARY_DEFAULT_IMAGE };
+      }
+      // Replace Wasabi S3 URLs or any non-cloudinary/non-local PDF
+      if (
+        url.includes('wasabisys.com') ||
+        url.includes('s3.amazonaws.com') ||
+        url.includes('s3-ap-southeast') ||
+        url.includes('bot-data.s3')
+      ) {
+        const isPdf = t.headerFormat === 'document' || url.endsWith('.pdf');
+        return { ...t, headerExampleUrl: isPdf ? localPdf : CLOUDINARY_DEFAULT_IMAGE };
+      }
+      return t;
+    });
+  }
+
   renderTemplate(template: string, vars: Record<string, string>, scope: string = 'NB_DEVELOPER'): string {
     const isFinserve = scope === 'NB_FINSERVE';
     let rendered = template;

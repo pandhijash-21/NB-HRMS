@@ -183,6 +183,16 @@ export async function vpnBlockMiddleware(req: Request, res: Response, next: Next
     if (req.method === 'OPTIONS') return next();
     if (req.path === '/health' || req.path === '/system-health' || req.path === '/docs') return next();
     if (req.path === '/system-health.html' || req.path === '/project-documentation.html') return next();
+    if (
+      req.path.startsWith('/api/crm-public') ||
+      req.path.startsWith('/api/crm/public') ||
+      req.path.startsWith('/client-portal') ||
+      req.path.startsWith('/api/client-portal') ||
+      req.path.startsWith('/uploads/crm') ||
+      req.path.includes('/brochure')
+    ) {
+      return next();
+    }
 
     const ip = clientIp(req);
     const result = await isBlockedVpnIp(ip);

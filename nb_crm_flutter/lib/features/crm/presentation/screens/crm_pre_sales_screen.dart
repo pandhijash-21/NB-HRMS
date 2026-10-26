@@ -1157,7 +1157,9 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                               (lead.telecallerName != null && lead.telecallerName!.isNotEmpty)
                                   ? InkWell(
                                       borderRadius: BorderRadius.circular(6),
-                                      onTap: (canAlterLead && canTransfer) ? () => _showTransferLeadModal(context, lead, salesUsers) : null,
+                                      onTap: (isAdmin || (canAlterLead && canTransfer && userEmployeeId != null && userEmployeeId == lead.telecallerId))
+                                          ? () => _showTransferLeadModal(context, lead, salesUsers)
+                                          : null,
                                       child: Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                         decoration: BoxDecoration(
@@ -1174,7 +1176,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                               lead.telecallerName!,
                                               style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF16A34A)),
                                             ),
-                                            if (canTransfer) ...[
+                                            if (isAdmin || (canTransfer && userEmployeeId != null && userEmployeeId == lead.telecallerId)) ...[
                                               const SizedBox(width: 6),
                                               Tooltip(
                                                 message: 'Transfer this lead to another telecaller',
@@ -1194,7 +1196,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                     )
                                   : InkWell(
                                       borderRadius: BorderRadius.circular(6),
-                                      onTap: canTransfer ? () => _showTransferLeadModal(context, lead, salesUsers) : null,
+                                      onTap: isAdmin ? () => _showTransferLeadModal(context, lead, salesUsers) : null,
                                       child: Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                         decoration: BoxDecoration(
@@ -1211,7 +1213,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                               'Waiting List (WL)',
                                               style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFFD97706)),
                                             ),
-                                            if (canTransfer) ...[
+                                            if (isAdmin) ...[
                                               const SizedBox(width: 4),
                                               const Icon(Icons.swap_horiz_rounded, size: 12, color: Color(0xFFD97706)),
                                             ],
@@ -4111,6 +4113,11 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     String selectedFlow = (context.read<CrmLeadsBloc>().state.leadFlowFilter == 'WEBHOOK')
         ? 'WEBHOOK'
         : (context.read<CrmLeadsBloc>().state.leadFlowFilter == 'EXCEL' ? 'EXCEL' : 'MANUAL');
+    String selectedLeadSource = 'Walk IN';
+    final cpNameController = TextEditingController();
+    final cpPhoneController = TextEditingController();
+    final refNameController = TextEditingController();
+    String selectedRefType = 'Client';
     final settings = context.read<CrmLeadsBloc>().state.settings;
     String? selectedLoanType;
     final uploadedDocs = <String, Map<String, dynamic>>{};
@@ -4151,6 +4158,121 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                       ],
                     ),
                   ),
+
+                  // Lead Source Selection (Walk IN, Channel Partner, Reference, Direct Call / Other)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Lead Source *', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 6),
+                        DropdownButtonFormField<String>(
+                          value: selectedLeadSource,
+                          isExpanded: true,
+                          decoration: const InputDecoration(border: OutlineInputBorder(), prefixIcon: Icon(Icons.source_rounded)),
+                          items: const [
+                            DropdownMenuItem(value: 'Walk IN', child: Text('🚶 Walk IN', overflow: TextOverflow.ellipsis)),
+                            DropdownMenuItem(value: 'Channel Partner', child: Text('🤝 Channel Partner', overflow: TextOverflow.ellipsis)),
+                            DropdownMenuItem(value: 'Reference', child: Text('👥 Reference', overflow: TextOverflow.ellipsis)),
+                            DropdownMenuItem(value: 'Direct Call / Other', child: Text('📞 Direct Call / Other', overflow: TextOverflow.ellipsis)),
+                          ],
+                          onChanged: (val) {
+                            if (val != null) setDialogState(() => selectedLeadSource = val);
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // If Channel Partner is selected, show CP Name and CP Phone
+                  if (selectedLeadSource == 'Channel Partner') ...[
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Channel Partner Name *', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 6),
+                          TextField(
+                            controller: cpNameController,
+                            decoration: const InputDecoration(
+                              hintText: 'Enter Channel Partner name',
+                              prefixIcon: Icon(Icons.badge_rounded, size: 20),
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Channel Partner Number *', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 6),
+                          TextField(
+                            controller: cpPhoneController,
+                            keyboardType: TextInputType.phone,
+                            inputFormatters: mobileInputFormatters,
+                            decoration: InputDecoration(
+                              hintText: '10-digit CP number',
+                              prefixIcon: buildMobilePrefix(isDark: Theme.of(context).brightness == Brightness.dark),
+                              prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+                              border: const OutlineInputBorder(),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
+                  // If Reference is selected, show Reference Type & Name
+                  if (selectedLeadSource == 'Reference') ...[
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Reference Type *', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 6),
+                          DropdownButtonFormField<String>(
+                            value: selectedRefType,
+                            isExpanded: true,
+                            decoration: const InputDecoration(border: OutlineInputBorder(), prefixIcon: Icon(Icons.category_rounded)),
+                            items: const [
+                              DropdownMenuItem(value: 'Client', child: Text('Existing Client')),
+                              DropdownMenuItem(value: 'Employee', child: Text('Employee Reference')),
+                              DropdownMenuItem(value: 'B2B', child: Text('B2B Partner')),
+                              DropdownMenuItem(value: 'Other', child: Text('Other')),
+                            ],
+                            onChanged: (val) {
+                              if (val != null) setDialogState(() => selectedRefType = val);
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Referrer Name *', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 6),
+                          TextField(
+                            controller: refNameController,
+                            decoration: const InputDecoration(
+                              hintText: 'Enter referrer name',
+                              prefixIcon: Icon(Icons.person_pin_rounded, size: 20),
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   ...columns.map((col) {
                     final isFinserve = CrmRepository.crmScopeNotifier.value == 'NB_FINSERVE';
                     final labelLower = col.label.toLowerCase();
@@ -4324,6 +4446,41 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
               return;
             }
 
+            final cpName = cpNameController.text.trim();
+            final cpPhone = cleanMobile10(cpPhoneController.text);
+            final refName = refNameController.text.trim();
+
+            if (selectedLeadSource == 'Channel Partner') {
+              if (cpName.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Please enter Channel Partner Name.')),
+                );
+                return;
+              }
+              if (cpPhone.length != 10) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Channel Partner phone number must be exactly 10 digits.')),
+                );
+                return;
+              }
+            } else if (selectedLeadSource == 'Reference') {
+              if (refName.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Please enter Referrer Name.')),
+                );
+                return;
+              }
+            }
+
+            customFields['lead_source_type'] = selectedLeadSource;
+            if (selectedLeadSource == 'Channel Partner') {
+              customFields['channelPartnerName'] = cpName;
+              customFields['channelPartnerPhone'] = cpPhone;
+            } else if (selectedLeadSource == 'Reference') {
+              customFields['referenceType'] = selectedRefType;
+              customFields['referenceName'] = refName;
+            }
+
             final leadsState = context.read<CrmLeadsBloc>().state;
             final activeCampaignId = leadsState.selectedCampaignId;
             final campaigns = leadsState.campaigns;
@@ -4339,6 +4496,10 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                     'phone': phone,
                     'status': 'NOT_STARTED',
                     'leadSource': selectedFlow,
+                    'channelPartnerName': selectedLeadSource == 'Channel Partner' ? cpName : null,
+                    'channelPartnerPhone': selectedLeadSource == 'Channel Partner' ? cpPhone : null,
+                    'referenceType': selectedLeadSource == 'Reference' ? selectedRefType : null,
+                    'referenceName': selectedLeadSource == 'Reference' ? refName : null,
                     'campaignId': effectiveCampaignId,
                     'customFields': customFields,
                   }),

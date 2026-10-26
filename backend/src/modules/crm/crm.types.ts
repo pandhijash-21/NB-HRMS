@@ -84,6 +84,10 @@ export interface CreateLeadDto {
   assignedToId?: number | null;
   telecallerId?: number | null;
   leadSource?: string;
+  channelPartnerName?: string;
+  channelPartnerPhone?: string;
+  referenceType?: string;
+  referenceName?: string;
 }
 
 export interface UpdateLeadDto {
@@ -94,6 +98,10 @@ export interface UpdateLeadDto {
   assignedToId?: number | null;
   telecallerId?: number | null;
   leadSource?: string;
+  channelPartnerName?: string;
+  channelPartnerPhone?: string;
+  referenceType?: string;
+  referenceName?: string;
 }
 
 export interface ScheduleFollowUpDto {

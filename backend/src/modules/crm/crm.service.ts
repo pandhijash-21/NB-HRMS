@@ -1190,6 +1190,13 @@ export const crmService = {
     const initialStatus = (dto.status as CrmLeadStatus) ||
       (dto.assignedToId ? CrmLeadStatus.ASSIGNED : CrmLeadStatus.NOT_STARTED);
 
+    if (dto.channelPartnerPhone || custom.channelPartnerPhone) {
+      custom.channelPartnerPhone = dto.channelPartnerPhone || custom.channelPartnerPhone;
+    }
+    const finalCpName = dto.channelPartnerName || custom.channelPartnerName || custom.cpName || null;
+    const finalRefType = dto.referenceType || custom.referenceType || null;
+    const finalRefName = dto.referenceName || custom.referenceName || null;
+
     const newLead = await prisma.crmLead.create({
       data: {
         scope,
@@ -1199,6 +1206,9 @@ export const crmService = {
         status: initialStatus,
         customFields: custom,
         leadSource: finalSource,
+        channelPartnerName: finalCpName,
+        referenceType: finalRefType,
+        referenceName: finalRefName,
         assignedToId: dto.assignedToId || null,
         telecallerId: allocatedTelecallerId || null,
         createdById,
@@ -2137,6 +2147,21 @@ export const crmService = {
     },
     userContext?: { userId?: string; employeeId?: number; role?: string },
   ) {
+    const settings = await this.getSettings('NB_DEVELOPER');
+    const designatedId = settings.site_visit_desk_employee_id
+      ? parseInt(String(settings.site_visit_desk_employee_id), 10)
+      : null;
+    const isSuperAdmin = ['ADMIN', 'SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(
+      userContext?.role?.toUpperCase() || '',
+    );
+    if (!isSuperAdmin) {
+      if (!designatedId || userContext?.employeeId !== designatedId) {
+        throw new Error(
+          'Unauthorized: Only System Admins or the Designated Site Visit Desk In-Charge can register visitors and assign sales representatives.',
+        );
+      }
+    }
+
     if (!dto.assignedToId) {
       throw new Error('Assigned Sales Representative is required for visitor check-in');
     }
@@ -2798,11 +2823,23 @@ export const crmService = {
       };
     }
 
-    // 1. Find telecallers who have punched in today and are active on screen
-    const eligibleIds = await this.getEligibleTelecallers(scope, subOrganization, {
-      requirePunchIn: true,
-      requireActive: true,
+    const settings = await this.getSettings(scope);
+    const requirePunchIn = settings.require_punch_in_for_leads === 'true';
+    const requireActive = settings.require_active_screen_for_leads === 'true';
+
+    // 1. Try finding telecallers meeting configured presence criteria
+    let eligibleIds = await this.getEligibleTelecallers(scope, subOrganization, {
+      requirePunchIn,
+      requireActive,
     });
+
+    // Fallback: If strict presence checks found 0 active telecallers, fallback to all eligible telecallers for this scope
+    if (eligibleIds.length === 0) {
+      eligibleIds = await this.getEligibleTelecallers(scope, subOrganization, {
+        requirePunchIn: false,
+        requireActive: false,
+      });
+    }
 
     if (eligibleIds.length === 0) {
       return {
@@ -2812,8 +2849,6 @@ export const crmService = {
         candidateDetails: [],
       };
     }
-
-    const settings = await this.getSettings(scope);
 
     // 2. Compute workload and available capacity for each active telecaller
     const candidates: Array<{

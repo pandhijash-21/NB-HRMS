@@ -157,21 +157,33 @@ class _CrmVisitorDeskViewState extends State<_CrmVisitorDeskView> {
                 if (!hasAccess) ...[
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.all(14),
+                    padding: const EdgeInsets.all(16),
                     margin: const EdgeInsets.only(bottom: 16),
                     decoration: BoxDecoration(
-                      color: Colors.amber.withValues(alpha: 0.12),
+                      color: Colors.red.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.amber.withValues(alpha: 0.35)),
+                      border: Border.all(color: Colors.red.withValues(alpha: 0.35)),
                     ),
-                    child: const Row(
+                    child: Row(
                       children: [
-                        Icon(Icons.lock_rounded, color: Colors.amber, size: 20),
-                        SizedBox(width: 10),
+                        const Icon(Icons.gpp_bad_rounded, color: Colors.red, size: 24),
+                        const SizedBox(width: 12),
                         Expanded(
-                          child: Text(
-                            'Notice: Only Admins or the Designated Site Visit Desk In-Charge can register visitors and assign sales reps.',
-                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Front Desk Registration Restricted',
+                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.red),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                state.settings?.siteVisitDeskEmployeeId != null
+                                    ? 'Only System Admins or the Designated Site Visit Desk In-Charge (Employee #${state.settings!.siteVisitDeskEmployeeId}) can register visitors and assign sales representatives.'
+                                    : 'No Site Visit Desk In-Charge has been designated in CRM Settings. Only System Administrators are authorized to register visitors and assign leads.',
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ],
                           ),
                         ),
                       ],
@@ -490,6 +502,16 @@ class _CrmVisitorDeskViewState extends State<_CrmVisitorDeskView> {
     final prevMgrName = prevMgr?['fullName']?.toString() ?? lead?['assignedTo']?['generalInfo']?['fullName']?.toString();
     final prevMgrId = (prevMgr?['id'] as num?)?.toInt() ?? (lead?['assignedToId'] as num?)?.toInt();
 
+    final authState = context.watch<AuthBloc>().state;
+    final currentUser = authState.user;
+    final userRole = currentUser?.role.toUpperCase() ?? '';
+    final userEmployeeId = currentUser?.employeeId;
+    final isAdmin = ['ADMIN', 'SUPER_ADMIN', 'SYSTEM_ADMIN'].contains(userRole);
+    final isDesignatedDeskEmployee = userEmployeeId != null &&
+        state.settings?.siteVisitDeskEmployeeId != null &&
+        userEmployeeId == state.settings!.siteVisitDeskEmployeeId;
+    final hasAccess = isAdmin || isDesignatedDeskEmployee;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -791,8 +813,10 @@ class _CrmVisitorDeskViewState extends State<_CrmVisitorDeskView> {
               padding: const EdgeInsets.symmetric(vertical: 16),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
-            onPressed: () {
-              final digits = cleanMobile10(_phoneController.text);
+            onPressed: !hasAccess
+                ? null
+                : () {
+                    final digits = cleanMobile10(_phoneController.text);
               if (_selectedSalesId == null) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Please select an Assigned Sales Representative.')),

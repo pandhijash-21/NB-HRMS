@@ -1110,12 +1110,29 @@ export class WhatsappService {
     if (params.messageType === 'TEMPLATE' && params.templateId) {
       // Validate template approval status
       const cached = await this.getCachedTemplates(scope);
-      const tmpl = cached.templates.find(
+      let tmpl = cached.templates.find(
         (t) =>
           t.id === params.templateId ||
-          t.name === params.templateName ||
-          String(t.raw?.id) === params.templateId,
+          t.name?.toLowerCase() === params.templateName?.toLowerCase() ||
+          t.name?.toLowerCase() === params.templateId?.toLowerCase() ||
+          String(t.raw?.id) === params.templateId ||
+          String(t.raw?.template_id) === params.templateId,
       );
+
+      // Auto-refresh cache if template not found
+      if (!tmpl) {
+        try {
+          const syncRes = await this.syncTemplates(scope);
+          tmpl = syncRes.templates.find(
+            (t) =>
+              t.id === params.templateId ||
+              t.name?.toLowerCase() === params.templateName?.toLowerCase() ||
+              t.name?.toLowerCase() === params.templateId?.toLowerCase() ||
+              String(t.raw?.id) === params.templateId ||
+              String(t.raw?.template_id) === params.templateId,
+          );
+        } catch (_) {}
+      }
 
       if (tmpl && tmpl.status !== 'APPROVED') {
         const errMsg = `Template "${tmpl.name}" is currently ${tmpl.status}. Only APPROVED templates can be dispatched outside customer-care window.`;
@@ -1132,31 +1149,57 @@ export class WhatsappService {
         return { success: false, error: errMsg };
       }
 
-      // Use internal BotBiz ID if present (BotBiz API requires internal template ID)
-      const botbizInternalId = tmpl?.raw?.id ? String(tmpl.raw.id) : params.templateId;
+      const isNewlead =
+        params.templateId === '1443065537184471' ||
+        params.templateId === '463170' ||
+        params.templateName?.toLowerCase() === 'newlead' ||
+        tmpl?.name?.toLowerCase() === 'newlead';
+
+      // Use internal BotBiz ID (BotBiz API requires internal template ID like 463170, not Meta template ID)
+      const botbizInternalId = tmpl?.raw?.id
+        ? String(tmpl.raw.id)
+        : (isNewlead ? '463170' : params.templateId);
 
       let headerMediaUrl = params.headerMediaUrl || params.mediaUrl;
-      // Strip any raw Meta handles (e.g. 4::...) or non-HTTP values
-      if (headerMediaUrl && (headerMediaUrl.startsWith('4::') || (!headerMediaUrl.startsWith('http://') && !headerMediaUrl.startsWith('https://')))) {
+      // Strip any raw Meta handles (e.g. 4::...), slow Wasabi S3 URLs, or non-HTTP values
+      if (
+        headerMediaUrl &&
+        (headerMediaUrl.startsWith('4::') ||
+          (!headerMediaUrl.startsWith('http://') && !headerMediaUrl.startsWith('https://')) ||
+          headerMediaUrl.includes('wasabisys.com') ||
+          headerMediaUrl.includes('bot-data.s3') ||
+          headerMediaUrl.includes('s3.amazonaws.com') ||
+          headerMediaUrl.includes('s3-ap-southeast'))
+      ) {
         headerMediaUrl = undefined;
       }
       if (!headerMediaUrl && tmpl?.headerExampleUrl && (tmpl.headerExampleUrl.startsWith('http://') || tmpl.headerExampleUrl.startsWith('https://'))) {
-        headerMediaUrl = tmpl.headerExampleUrl;
+        if (
+          !tmpl.headerExampleUrl.includes('wasabisys.com') &&
+          !tmpl.headerExampleUrl.includes('bot-data.s3') &&
+          !tmpl.headerExampleUrl.includes('s3.amazonaws.com')
+        ) {
+          headerMediaUrl = tmpl.headerExampleUrl;
+        }
       }
 
       // Check if template requires a media header (DOCUMENT, IMAGE, VIDEO)
       const tmplHeaderType = (tmpl?.headerFormat || tmpl?.raw?.header_type || tmpl?.raw?.header_subtype || '').toString().toUpperCase();
-      const needsMediaHeader = tmplHeaderType.includes('DOCUMENT') || tmplHeaderType.includes('IMAGE') || tmplHeaderType.includes('VIDEO') || tmplHeaderType.includes('MEDIA');
-
       const isFinserve = scope === 'NB_FINSERVE';
       const isImage = tmplHeaderType.includes('IMAGE') || tmpl?.headerFormat?.toLowerCase() === 'image';
-      const isDocument = tmplHeaderType.includes('DOCUMENT') || tmpl?.headerFormat?.toLowerCase() === 'document';
+      const isDocument = isNewlead || tmplHeaderType.includes('DOCUMENT') || tmpl?.headerFormat?.toLowerCase() === 'document';
+      const needsMediaHeader = isImage || isDocument || tmplHeaderType.includes('VIDEO') || tmplHeaderType.includes('MEDIA');
 
       // Auto-correct MIME mismatch: don't send a PDF to an image header, or an image to a document header
       if (isImage && headerMediaUrl && (headerMediaUrl.toLowerCase().endsWith('.pdf') || headerMediaUrl.toLowerCase().includes('.pdf'))) {
         headerMediaUrl = CLOUDINARY_DEFAULT_IMAGE;
       }
-      if (isDocument && headerMediaUrl && /\.(jpe?g|png|webp)($|\?)/i.test(headerMediaUrl)) {
+      if (isDocument && (
+        !headerMediaUrl ||
+        headerMediaUrl.includes('wasabisys.com') ||
+        headerMediaUrl.includes('bot-data.s3') ||
+        /\.(jpe?g|png|webp)($|\?)/i.test(headerMediaUrl)
+      )) {
         headerMediaUrl = isFinserve ? CLOUDINARY_NB_FINSERVE_PDF : BOTBIZ_LEGACY_TOWER_PDF;
       }
 
@@ -1166,7 +1209,8 @@ export class WhatsappService {
         } else if (
           raw.defaultBrochureUrl &&
           (raw.defaultBrochureUrl.startsWith('http://') || raw.defaultBrochureUrl.startsWith('https://')) &&
-          !raw.defaultBrochureUrl.includes('wasabisys.com')
+          !raw.defaultBrochureUrl.includes('wasabisys.com') &&
+          !raw.defaultBrochureUrl.includes('bot-data.s3')
         ) {
           headerMediaUrl = raw.defaultBrochureUrl;
         } else {
@@ -1178,16 +1222,21 @@ export class WhatsappService {
         ? (tmpl.bodyExampleVariables && tmpl.bodyExampleVariables.length > 0
             ? tmpl.bodyExampleVariables
             : (tmpl.variableCount === 0 || !tmpl.bodyText?.includes('{{') ? [] : undefined))
-        : undefined;
+        : (isNewlead ? ['name'] : undefined);
+
+      const resolvedVariables = { ...(params.variables || {}) };
+      if (isNewlead && (!resolvedVariables.name || String(resolvedVariables.name).trim() === '')) {
+        resolvedVariables.name = resolvedVariables.customerName || resolvedVariables.client_name || 'Valued Client';
+      }
 
       const sendRes = await this.botbizClient.sendTemplateMessage({
         phoneNumber: normalizedPhone,
         templateId: botbizInternalId,
-        templateName: params.templateName || tmpl?.name || 'CRM_NOTIFICATION',
+        templateName: params.templateName || tmpl?.name || (isNewlead ? 'newlead' : 'CRM_NOTIFICATION'),
         templateEndpointUrl: params.templateEndpoint,
         templateHeaderMediaUrl: headerMediaUrl,
         templateHeaderText: params.headerText,
-        variables: params.variables,
+        variables: resolvedVariables,
         allowedVariableNames: allowedVars,
       });
 

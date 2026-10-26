@@ -121,7 +121,11 @@ class _CrmSendWhatsappDialogState extends State<CrmSendWhatsappDialog> {
             _calendarLinkController.text = config.defaultCalendarLink;
           }
           final headerUrl = chosenTemplate?.headerExampleUrl;
-          if (headerUrl != null && (headerUrl.startsWith('http://') || headerUrl.startsWith('https://'))) {
+          if (headerUrl != null &&
+              (headerUrl.startsWith('http://') || headerUrl.startsWith('https://')) &&
+              !headerUrl.contains('wasabisys.com') &&
+              !headerUrl.contains('bot-data.s3') &&
+              !headerUrl.contains('s3.amazonaws.com')) {
             _headerMediaUrlController.text = headerUrl;
           } else {
             _headerMediaUrlController.text = '';
@@ -208,7 +212,10 @@ class _CrmSendWhatsappDialogState extends State<CrmSendWhatsappDialog> {
     setState(() {
       _selectedTemplate = template;
       if (template.headerExampleUrl != null &&
-          (template.headerExampleUrl!.startsWith('http://') || template.headerExampleUrl!.startsWith('https://'))) {
+          (template.headerExampleUrl!.startsWith('http://') || template.headerExampleUrl!.startsWith('https://')) &&
+          !template.headerExampleUrl!.contains('wasabisys.com') &&
+          !template.headerExampleUrl!.contains('bot-data.s3') &&
+          !template.headerExampleUrl!.contains('s3.amazonaws.com')) {
         _headerMediaUrlController.text = template.headerExampleUrl!;
       } else {
         _headerMediaUrlController.text = '';
@@ -330,8 +337,14 @@ class _CrmSendWhatsappDialogState extends State<CrmSendWhatsappDialog> {
     try {
       final repo = context.read<CrmRepository>();
 
+      final clientName = _nameController.text.trim().isNotEmpty
+          ? _nameController.text.trim()
+          : (widget.lead.name.trim().isNotEmpty
+              ? widget.lead.name.trim()
+              : 'Valued Client');
+
       final variables = <String, String>{
-        'name': _nameController.text.trim(),
+        'name': clientName,
         'phone': phone,
         'number': phone,
         if (_dateController.text.trim().isNotEmpty) 'date': _dateController.text.trim(),

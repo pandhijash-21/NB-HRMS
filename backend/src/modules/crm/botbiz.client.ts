@@ -638,12 +638,35 @@ export class BotBizApiClient {
         }
       }
 
+      // Map known Meta template IDs or names to internal BotBiz IDs to prevent "Message template not found."
+      const BOTBIZ_INTERNAL_IDS: Record<string, string> = {
+        '1443065537184471': '463170', // newlead
+        '2903556339977365': '417854', // call
+        '1364454835831892': '417875', // cal
+        '2039206550319800': '418618', // fivebhk
+        '902523552910603': '418619',  // fourbhk
+        '1056714737048878': '418620', // fourfive
+        '2126132515445498': '448639', // modem
+        'newlead': '463170',
+        'call': '417854',
+        'cal': '417875',
+        'fivebhk': '418618',
+        'fourbhk': '418619',
+        'fourfive': '418620',
+        'modem': '448639',
+      };
+
+      const resolvedTemplateId =
+        BOTBIZ_INTERNAL_IDS[params.templateId] ||
+        (params.templateName ? BOTBIZ_INTERNAL_IDS[params.templateName.toLowerCase()] : undefined) ||
+        params.templateId;
+
       // 2. Set credentials and recipient
       formParams.set('apiToken', this.config.apiToken);
       formParams.set('phone_number_id', this.config.phoneNumberId);
       formParams.set('phone_number', normalizedPhone);
-      if (params.templateId) {
-        formParams.set('template_id', params.templateId);
+      if (resolvedTemplateId) {
+        formParams.set('template_id', resolvedTemplateId);
       }
       if (params.templateName) {
         formParams.set('template_name', params.templateName);
@@ -656,12 +679,28 @@ export class BotBizApiClient {
         params.variables?.header_media_url ||
         params.variables?.headerMediaUrl;
 
-      // Filter out Meta handles like 4::... or non-HTTP values
-      if (headerMediaUrl && (headerMediaUrl.startsWith('4::') || (!headerMediaUrl.startsWith('http://') && !headerMediaUrl.startsWith('https://')))) {
+      // Filter out Meta handles like 4::... or non-HTTP values or slow Wasabi S3 URLs
+      if (
+        headerMediaUrl &&
+        (headerMediaUrl.startsWith('4::') ||
+          (!headerMediaUrl.startsWith('http://') && !headerMediaUrl.startsWith('https://')) ||
+          headerMediaUrl.includes('wasabisys.com') ||
+          headerMediaUrl.includes('bot-data.s3') ||
+          headerMediaUrl.includes('s3.amazonaws.com') ||
+          headerMediaUrl.includes('s3-ap-southeast'))
+      ) {
         headerMediaUrl = undefined;
         formParams.delete('template_header_media_url');
         formParams.delete('header_media_url');
         formParams.delete('templateHeaderMediaUrl');
+      }
+
+      // Default brochure URL for newlead if omitted
+      if (
+        (!headerMediaUrl || headerMediaUrl.trim().length === 0) &&
+        (resolvedTemplateId === '463170' || params.templateName?.toLowerCase() === 'newlead')
+      ) {
+        headerMediaUrl = 'https://crm.nbdeveloper.co.in/api/crm-public/brochures/legacy-tower.pdf';
       }
 
       if (headerMediaUrl && String(headerMediaUrl).trim().length > 0) {
@@ -698,13 +737,16 @@ export class BotBizApiClient {
           for (let i = 0; i < allowed.length; i++) {
             const rawKey = allowed[i].trim();
             const indexStr = String(i + 1);
-            const val =
+            let val =
               params.variables[rawKey] ||
               params.variables[rawKey.toLowerCase()] ||
               params.variables[indexStr] ||
               (rawKey.toLowerCase().includes('name')
                 ? (params.variables.name || params.variables.customerName || params.variables.client_name)
                 : undefined);
+            if (rawKey.toLowerCase().includes('name') && (!val || String(val).trim() === '')) {
+              val = 'Valued Client';
+            }
             if (val !== undefined && val !== null) {
               const cleanVal = String(val).trim();
               formParams.set(`templateVariable-${rawKey}-1`, cleanVal);

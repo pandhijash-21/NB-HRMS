@@ -527,47 +527,98 @@ class _CrmDashboardView extends StatelessWidget {
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: borderColor),
                 ),
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: state.todayFollowUps.length > 5 ? 5 : state.todayFollowUps.length,
-                  separatorBuilder: (_, __) => Divider(height: 1, color: borderColor),
-                  itemBuilder: (context, index) {
-                    final item = state.todayFollowUps[index];
-                    return ListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                      leading: CircleAvatar(
-                        radius: 18,
-                        backgroundColor: const Color(0xFFEA580C).withValues(alpha: 0.12),
-                        child: const Icon(Icons.phone_in_talk_rounded, size: 18, color: Color(0xFFEA580C)),
-                      ),
-                      title: Text(
-                        item.leadName ?? 'Unnamed Lead',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: isDark ? Colors.white : const Color(0xFF1E293B),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: state.todayFollowUps.length > 5 ? 5 : state.todayFollowUps.length,
+                      separatorBuilder: (_, __) => Divider(height: 1, color: borderColor),
+                      itemBuilder: (context, index) {
+                        final item = state.todayFollowUps[index];
+                        return ListTile(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                          leading: CircleAvatar(
+                            radius: 18,
+                            backgroundColor: const Color(0xFFEA580C).withValues(alpha: 0.12),
+                            child: const Icon(Icons.phone_in_talk_rounded, size: 18, color: Color(0xFFEA580C)),
+                          ),
+                          title: Text(
+                            item.leadName ?? 'Unnamed Lead',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? Colors.white : const Color(0xFF1E293B),
+                            ),
+                          ),
+                          subtitle: Text(
+                            '${item.leadPhone ?? "No phone"} • Time: ${item.scheduledTime}${item.remarks != null ? " • ${item.remarks}" : ""}',
+                            style: TextStyle(fontSize: 12, color: textMuted),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.phone_in_talk_rounded, color: Color(0xFF16A34A), size: 18),
+                                tooltip: 'Call Lead',
+                                onPressed: () {
+                                  context.read<CrmRepository>().clickToCall(item.leadId);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Calling ${item.leadName ?? item.leadPhone}...'),
+                                      backgroundColor: const Color(0xFF16A34A),
+                                      duration: const Duration(seconds: 2),
+                                    ),
+                                  );
+                                },
+                              ),
+                              const SizedBox(width: 4),
+                              ElevatedButton(
+                                onPressed: () => bloc.add(CrmDashboardFollowUpCompleted(item.id, remarks: 'Completed from Dashboard')),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  minimumSize: const Size(60, 32),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                ),
+                                child: const Text('Done', style: TextStyle(fontSize: 12)),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                    if (state.todayFollowUps.length > 5) ...[
+                      Divider(height: 1, color: borderColor),
+                      InkWell(
+                        onTap: () => context.go('/crm/pre-sales'),
+                        borderRadius: const BorderRadius.only(
+                          bottomLeft: Radius.circular(14),
+                          bottomRight: Radius.circular(14),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          child: Center(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'View all ${state.todayFollowUps.length} follow-ups in Pre-Sales',
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFEA580C)),
+                                ),
+                                const SizedBox(width: 4),
+                                const Icon(Icons.arrow_forward_rounded, size: 14, color: Color(0xFFEA580C)),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
-                      subtitle: Text(
-                        '${item.leadPhone ?? "No phone"} • Time: ${item.scheduledTime}${item.remarks != null ? " • ${item.remarks}" : ""}',
-                        style: TextStyle(fontSize: 12, color: textMuted),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      trailing: ElevatedButton(
-                        onPressed: () => bloc.add(CrmDashboardFollowUpCompleted(item.id, remarks: 'Completed from Dashboard')),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          minimumSize: const Size(60, 32),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        ),
-                        child: const Text('Done', style: TextStyle(fontSize: 12)),
-                      ),
-                    );
-                  },
+                    ],
+                  ],
                 ),
               ),
             const SizedBox(height: 24),

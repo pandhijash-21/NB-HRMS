@@ -693,7 +693,24 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
     final newStatus = CrmStatus.fromString(event.status);
     final optimisticallyUpdated = state.leads.map((l) {
       if (l.id == event.leadId) {
-        return l.copyWith(status: newStatus);
+        CrmFollowUp? updatedFollowUp = l.latestFollowUp;
+        if (event.scheduledDate != null && event.scheduledTime != null) {
+          updatedFollowUp = CrmFollowUp(
+            id: l.latestFollowUp?.id ?? 'optimistic-${DateTime.now().millisecondsSinceEpoch}',
+            leadId: l.id,
+            leadName: l.name,
+            leadPhone: l.phone,
+            scheduledDate: DateTime.tryParse(event.scheduledDate!) ?? DateTime.now(),
+            scheduledTime: event.scheduledTime!,
+            remarks: event.remarks,
+            status: 'PENDING',
+            createdAt: DateTime.now(),
+          );
+        }
+        return l.copyWith(
+          status: newStatus,
+          latestFollowUp: updatedFollowUp,
+        );
       }
       return l;
     }).toList();
@@ -717,6 +734,12 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
         notInterestedRemark: event.notInterestedRemark,
       );
       await _refreshLeadsOnly(emit);
+      if (event.scheduledDate != null || event.status == 'FOLLOW_UP') {
+        try {
+          final updatedFollowUps = await _crmRepository.getFollowUps(filter: state.followUpFilter);
+          emit(state.copyWith(followUps: updatedFollowUps));
+        } catch (_) {}
+      }
     } catch (e) {
       emit(state.copyWith(errorMessage: 'Status update failed: $e'));
     }

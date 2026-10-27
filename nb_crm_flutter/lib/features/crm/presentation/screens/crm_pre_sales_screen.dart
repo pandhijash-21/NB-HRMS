@@ -986,6 +986,8 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                       ),
                       horizontalMargin: 16,
                       columnSpacing: 20,
+                      dataRowMinHeight: 48,
+                      dataRowMaxHeight: 66,
                       columns: [
                         const DataColumn(label: Text('#', style: TextStyle(fontWeight: FontWeight.bold))),
                         const DataColumn(label: Text('Flow', style: TextStyle(fontWeight: FontWeight.bold))),
@@ -1460,6 +1462,12 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                     tooltip: 'Send WhatsApp Template (BotBiz)',
                                     onPressed: () => showSendWhatsappDialog(context, lead: lead),
                                   ),
+                                  if (canAlterLead)
+                                    IconButton(
+                                      icon: const Icon(Icons.event_repeat_rounded, size: 18, color: Color(0xFFEA580C)),
+                                      tooltip: lead.latestFollowUp != null ? 'Edit Scheduled Follow-up' : 'Schedule Follow-up',
+                                      onPressed: () => _showFollowUpSchedulingModal(context, lead),
+                                    ),
                                   IconButton(
                                     icon: Icon(
                                       canAlterLead ? Icons.edit_outlined : Icons.lock_outline_rounded,
@@ -1620,6 +1628,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
         : <CrmStatus>[
             CrmStatus.notStarted,
             CrmStatus.cnr,
+            CrmStatus.followUp,
             CrmStatus.scheduledVisit,
             CrmStatus.notInterested,
           ];
@@ -1627,120 +1636,160 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
       dropdownItems.add(lead.status);
     }
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: badgeBg,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: badgeBorder, width: 1),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<CrmStatus>(
-          value: lead.status,
-          isDense: true,
-          dropdownColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
-          borderRadius: BorderRadius.circular(10),
-          icon: Icon(Icons.arrow_drop_down_rounded, size: 18, color: badgeFg),
-          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: badgeFg),
-          selectedItemBuilder: (BuildContext ctx) {
-            return dropdownItems.map((s) {
-              return Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  s.displayName,
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: badgeFg),
-                ),
-              );
-            }).toList();
-          },
-          items: dropdownItems.map((s) {
-            Color dotColor;
-            switch (s) {
-              case CrmStatus.notStarted:
-                dotColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
-                break;
-              case CrmStatus.assigned:
-                dotColor = const Color(0xFF6366F1);
-                break;
-              case CrmStatus.cnr:
-                dotColor = const Color(0xFFF59E0B);
-                break;
-              case CrmStatus.scheduledVisit:
-                dotColor = const Color(0xFF2563EB);
-                break;
-              case CrmStatus.notInterested:
-                dotColor = const Color(0xFFEF4444);
-                break;
-              case CrmStatus.siteVisitDone:
-                dotColor = const Color(0xFF10B981);
-                break;
-              case CrmStatus.followUp:
-                dotColor = isDark ? const Color(0xFFFB923C) : const Color(0xFFEA580C);
-                break;
-              case CrmStatus.interested:
-                dotColor = isDark ? const Color(0xFF4ADE80) : const Color(0xFF16A34A);
-                break;
-              case CrmStatus.proposalSent:
-                dotColor = const Color(0xFFF59E0B);
-                break;
-              case CrmStatus.bookingConfirmed:
-                dotColor = const Color(0xFF16A34A);
-                break;
-              case CrmStatus.rejected:
-                dotColor = const Color(0xFFEF4444);
-                break;
-            }
-            return DropdownMenuItem<CrmStatus>(
-              value: s,
+    final hasFollowUp = lead.status == CrmStatus.followUp;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: badgeBg,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: badgeBorder, width: 1),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<CrmStatus>(
+              value: lead.status,
+              isDense: true,
+              dropdownColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              icon: Icon(Icons.arrow_drop_down_rounded, size: 18, color: badgeFg),
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: badgeFg),
+              selectedItemBuilder: (BuildContext ctx) {
+                return dropdownItems.map((s) {
+                  return Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      s.displayName,
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: badgeFg),
+                    ),
+                  );
+                }).toList();
+              },
+              items: dropdownItems.map((s) {
+                Color dotColor;
+                switch (s) {
+                  case CrmStatus.notStarted:
+                    dotColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+                    break;
+                  case CrmStatus.assigned:
+                    dotColor = const Color(0xFF6366F1);
+                    break;
+                  case CrmStatus.cnr:
+                    dotColor = const Color(0xFFF59E0B);
+                    break;
+                  case CrmStatus.scheduledVisit:
+                    dotColor = const Color(0xFF2563EB);
+                    break;
+                  case CrmStatus.notInterested:
+                    dotColor = const Color(0xFFEF4444);
+                    break;
+                  case CrmStatus.siteVisitDone:
+                    dotColor = const Color(0xFF10B981);
+                    break;
+                  case CrmStatus.followUp:
+                    dotColor = isDark ? const Color(0xFFFB923C) : const Color(0xFFEA580C);
+                    break;
+                  case CrmStatus.interested:
+                    dotColor = isDark ? const Color(0xFF4ADE80) : const Color(0xFF16A34A);
+                    break;
+                  case CrmStatus.proposalSent:
+                    dotColor = const Color(0xFFF59E0B);
+                    break;
+                  case CrmStatus.bookingConfirmed:
+                    dotColor = const Color(0xFF16A34A);
+                    break;
+                  case CrmStatus.rejected:
+                    dotColor = const Color(0xFFEF4444);
+                    break;
+                }
+                return DropdownMenuItem<CrmStatus>(
+                  value: s,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: dotColor,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        s.displayName,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white : const Color(0xFF1E293B),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+              onChanged: (newStatus) {
+                if (newStatus == null || newStatus == lead.status) return;
+
+                if (newStatus == CrmStatus.cnr) {
+                  _showCnrModal(context, lead);
+                } else if (newStatus == CrmStatus.followUp) {
+                  _showFollowUpSchedulingModal(context, lead);
+                } else if (newStatus == CrmStatus.notInterested) {
+                  _showNotInterestedModal(context, lead, context.read<CrmLeadsBloc>().state.settings);
+                } else if (newStatus == CrmStatus.assigned) {
+                  if (lead.assignedToId != null) {
+                    _updateLeadStatus(lead.id, 'ASSIGNED');
+                  } else {
+                    _showAssignSalesManagerModal(context, lead, salesUsers);
+                  }
+                } else if (newStatus == CrmStatus.scheduledVisit) {
+                  _showScheduleVisitModal(context, lead);
+                } else if (newStatus == CrmStatus.notStarted) {
+                  _updateLeadStatus(lead.id, 'NOT_STARTED');
+                } else if (newStatus == CrmStatus.interested) {
+                  _showInterestedSalesAssignmentModal(context, lead);
+                }
+              },
+            ),
+          ),
+        ),
+        if (hasFollowUp) ...[
+          const SizedBox(height: 3),
+          InkWell(
+            onTap: canAlter ? () => _showFollowUpSchedulingModal(context, lead) : null,
+            borderRadius: BorderRadius.circular(5),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEA580C).withValues(alpha: isDark ? 0.20 : 0.12),
+                borderRadius: BorderRadius.circular(5),
+                border: Border.all(color: const Color(0xFFEA580C).withValues(alpha: 0.35)),
+              ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: dotColor,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
+                  const Icon(Icons.alarm_rounded, size: 11, color: Color(0xFFEA580C)),
+                  const SizedBox(width: 4),
                   Text(
-                    s.displayName,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: isDark ? Colors.white : const Color(0xFF1E293B),
-                    ),
+                    lead.latestFollowUp != null
+                        ? '${DateFormat("dd MMM").format(lead.latestFollowUp!.scheduledDate.toLocal())} • ${lead.latestFollowUp!.scheduledTime}'
+                        : 'Set Date & Time',
+                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFFEA580C)),
                   ),
+                  if (canAlter) ...[
+                    const SizedBox(width: 4),
+                    const Icon(Icons.edit_rounded, size: 10, color: Color(0xFFEA580C)),
+                  ],
                 ],
               ),
-            );
-          }).toList(),
-          onChanged: (newStatus) {
-            if (newStatus == null || newStatus == lead.status) return;
-
-            if (newStatus == CrmStatus.cnr) {
-              _showCnrModal(context, lead);
-            } else if (newStatus == CrmStatus.followUp) {
-              _showFollowUpSchedulingModal(context, lead);
-            } else if (newStatus == CrmStatus.notInterested) {
-              _showNotInterestedModal(context, lead, context.read<CrmLeadsBloc>().state.settings);
-            } else if (newStatus == CrmStatus.assigned) {
-              if (lead.assignedToId != null) {
-                _updateLeadStatus(lead.id, 'ASSIGNED');
-              } else {
-                _showAssignSalesManagerModal(context, lead, salesUsers);
-              }
-            } else if (newStatus == CrmStatus.scheduledVisit) {
-              _showScheduleVisitModal(context, lead);
-            } else if (newStatus == CrmStatus.notStarted) {
-              _updateLeadStatus(lead.id, 'NOT_STARTED');
-            } else if (newStatus == CrmStatus.interested) {
-              _showInterestedSalesAssignmentModal(context, lead);
-            }
-          },
-        ),
-      ),
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -1900,6 +1949,33 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                         icon: const Icon(Icons.phone_in_talk_rounded, color: Color(0xFF16A34A)),
                         onPressed: () {
                           context.read<CrmLeadsBloc>().add(CrmLeadsClickToCallRequested(f.leadId));
+                        },
+                      ),
+                      IconButton(
+                        tooltip: 'Reschedule Follow-up',
+                        icon: const Icon(Icons.edit_calendar_rounded, color: Color(0xFFEA580C)),
+                        onPressed: () {
+                          final matchingLead = state.leads.firstWhere(
+                            (l) => l.id == f.leadId,
+                            orElse: () => CrmLead(
+                              id: f.leadId,
+                              scope: CrmRepository.crmScopeNotifier.value,
+                              phone: f.leadPhone ?? '',
+                              name: f.leadName ?? '',
+                              status: CrmStatus.followUp,
+                              latestFollowUp: f,
+                              createdAt: DateTime.now(),
+                              updatedAt: DateTime.now(),
+                            ),
+                          );
+                          _showFollowUpSchedulingModal(context, matchingLead);
+                        },
+                      ),
+                      IconButton(
+                        tooltip: 'Mark Complete',
+                        icon: const Icon(Icons.check_circle_outline_rounded, color: Colors.green),
+                        onPressed: () {
+                          context.read<CrmLeadsBloc>().add(CrmLeadsFollowUpCompleted(f.id, remarks: 'Completed'));
                         },
                       ),
                     ],
@@ -2427,169 +2503,371 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
   // Modal: Follow-up Scheduling (Date, Time, Remarks)
   // ---------------------------------------------------------------------------
   void _showFollowUpSchedulingModal(BuildContext context, CrmLead lead) {
+    final now = DateTime.now();
     DateTime selectedDate = lead.latestFollowUp?.scheduledDate != null
         ? lead.latestFollowUp!.scheduledDate.toLocal()
-        : DateTime.now().add(const Duration(days: 1));
+        : DateTime(now.year, now.month, now.day + 1);
 
     TimeOfDay selectedTime = const TimeOfDay(hour: 11, minute: 0);
     if (lead.latestFollowUp?.scheduledTime != null) {
-      final parts = lead.latestFollowUp!.scheduledTime.split(':');
+      final str = lead.latestFollowUp!.scheduledTime.trim();
+      final isPm = str.toUpperCase().contains('PM');
+      final isAm = str.toUpperCase().contains('AM');
+      final clean = str.replaceAll(RegExp(r'[^\d:]'), '');
+      final parts = clean.split(':');
       if (parts.length >= 2) {
-        final h = int.tryParse(parts[0]) ?? 11;
-        final m = int.tryParse(parts[1].split(' ').first) ?? 0;
+        int h = int.tryParse(parts[0]) ?? 11;
+        final m = int.tryParse(parts[1]) ?? 0;
+        if (isPm && h < 12) h += 12;
+        if (isAm && h == 12) h = 0;
         selectedTime = TimeOfDay(hour: h, minute: m);
       }
     }
 
-    final remarksCtrl = TextEditingController(text: lead.latestFollowUp?.remarks ?? '');
+    final initialRemark = (lead.latestFollowUp?.remarks != null && lead.latestFollowUp!.remarks!.isNotEmpty)
+        ? lead.latestFollowUp!.remarks!
+        : 'Client asked to call back';
+    final remarksCtrl = TextEditingController(text: initialRemark);
 
     showDialog(
       context: context,
-      builder: (dialogCtx) => StatefulBuilder(
-        builder: (ctx, setModalState) => AlertDialog(
-          title: Row(
-            children: [
-              const Icon(Icons.schedule_rounded, color: Color(0xFFEA580C)),
-              const SizedBox(width: 10),
-              Expanded(child: Text('Schedule Follow-up: ${lead.name}')),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Container(
-              constraints: const BoxConstraints(maxWidth: 440),
-              width: double.maxFinite,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (lead.latestFollowUp != null) ...[
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+      builder: (dialogCtx) {
+        final isDark = Theme.of(dialogCtx).brightness == Brightness.dark;
+        return StatefulBuilder(
+          builder: (ctx, setModalState) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEA580C).withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.schedule_rounded, color: Color(0xFFEA580C), size: 22),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Schedule Follow-up Call',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                       ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.history_rounded, size: 16, color: Colors.orange),
-                          const SizedBox(width: 8),
-                          Expanded(
+                      Text(
+                        lead.name.isNotEmpty ? lead.name : 'Lead ${lead.phone}',
+                        style: TextStyle(fontSize: 13, color: isDark ? Colors.white70 : const Color(0xFF64748B)),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 460),
+                width: double.maxFinite,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (lead.latestFollowUp != null) ...[
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.history_rounded, size: 16, color: Colors.orange),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Current Follow-up: ${DateFormat("dd MMM yyyy").format(lead.latestFollowUp!.scheduledDate.toLocal())} at ${lead.latestFollowUp!.scheduledTime}. Updating here will reschedule the active follow-up.',
+                                style: const TextStyle(fontSize: 12, color: Colors.orange),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+
+                    Text(
+                      'Client Contact: ${lead.phone.isNotEmpty ? lead.phone : "No phone"}',
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Quick Date Chips
+                    Row(
+                      children: [
+                        const Text('Follow-up Date *', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                        const Spacer(),
+                        InkWell(
+                          onTap: () => setModalState(() => selectedDate = DateTime(now.year, now.month, now.day)),
+                          borderRadius: BorderRadius.circular(4),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: (selectedDate.year == now.year && selectedDate.month == now.month && selectedDate.day == now.day)
+                                  ? const Color(0xFFEA580C)
+                                  : (isDark ? Colors.white12 : Colors.grey.shade200),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
                             child: Text(
-                              'Current Follow-up: ${DateFormat("dd MMM yyyy").format(lead.latestFollowUp!.scheduledDate.toLocal())} at ${lead.latestFollowUp!.scheduledTime}. Updating here will change the single active follow-up.',
-                              style: const TextStyle(fontSize: 12, color: Colors.orange),
+                              'Today',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: (selectedDate.year == now.year && selectedDate.month == now.month && selectedDate.day == now.day)
+                                    ? Colors.white
+                                    : (isDark ? Colors.white70 : Colors.black87),
+                              ),
                             ),
                           ),
-                        ],
+                        ),
+                        const SizedBox(width: 4),
+                        InkWell(
+                          onTap: () => setModalState(() => selectedDate = DateTime(now.year, now.month, now.day + 1)),
+                          borderRadius: BorderRadius.circular(4),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: (selectedDate.year == now.year && selectedDate.month == now.month && selectedDate.day == now.day + 1)
+                                  ? const Color(0xFFEA580C)
+                                  : (isDark ? Colors.white12 : Colors.grey.shade200),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              'Tomorrow',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: (selectedDate.year == now.year && selectedDate.month == now.month && selectedDate.day == now.day + 1)
+                                    ? Colors.white
+                                    : (isDark ? Colors.white70 : Colors.black87),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        InkWell(
+                          onTap: () => setModalState(() => selectedDate = DateTime(now.year, now.month, now.day + 2)),
+                          borderRadius: BorderRadius.circular(4),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: (selectedDate.year == now.year && selectedDate.month == now.month && selectedDate.day == now.day + 2)
+                                  ? const Color(0xFFEA580C)
+                                  : (isDark ? Colors.white12 : Colors.grey.shade200),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              '+2 Days',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: (selectedDate.year == now.year && selectedDate.month == now.month && selectedDate.day == now.day + 2)
+                                    ? Colors.white
+                                    : (isDark ? Colors.white70 : Colors.black87),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    InkWell(
+                      onTap: () async {
+                        final effectiveFirstDate = selectedDate.isBefore(DateTime.now().subtract(const Duration(days: 30)))
+                            ? selectedDate
+                            : DateTime.now().subtract(const Duration(days: 30));
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: selectedDate,
+                          firstDate: effectiveFirstDate,
+                          lastDate: DateTime.now().add(const Duration(days: 365)),
+                        );
+                        if (picked != null) {
+                          setModalState(() => selectedDate = picked);
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey.shade400),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              DateFormat('dd MMM yyyy (EEEE)').format(selectedDate),
+                              style: const TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                            const Icon(Icons.calendar_today_rounded, size: 18, color: Color(0xFFEA580C)),
+                          ],
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 14),
+
+                    // Quick Time Chips
+                    Row(
+                      children: [
+                        const Text('Follow-up Time *', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                        const Spacer(),
+                        InkWell(
+                          onTap: () => setModalState(() => selectedTime = const TimeOfDay(hour: 11, minute: 0)),
+                          borderRadius: BorderRadius.circular(4),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: isDark ? Colors.white12 : Colors.grey.shade200,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text('11:00 AM', style: TextStyle(fontSize: 11)),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        InkWell(
+                          onTap: () => setModalState(() => selectedTime = const TimeOfDay(hour: 15, minute: 0)),
+                          borderRadius: BorderRadius.circular(4),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: isDark ? Colors.white12 : Colors.grey.shade200,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text('03:00 PM', style: TextStyle(fontSize: 11)),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        InkWell(
+                          onTap: () => setModalState(() => selectedTime = const TimeOfDay(hour: 17, minute: 30)),
+                          borderRadius: BorderRadius.circular(4),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: isDark ? Colors.white12 : Colors.grey.shade200,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text('05:30 PM', style: TextStyle(fontSize: 11)),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    InkWell(
+                      onTap: () async {
+                        final picked = await showTimePicker(
+                          context: context,
+                          initialTime: selectedTime,
+                        );
+                        if (picked != null) {
+                          setModalState(() => selectedTime = picked);
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey.shade400),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(selectedTime.format(context), style: const TextStyle(fontWeight: FontWeight.w600)),
+                            const Icon(Icons.access_time_rounded, size: 18, color: Color(0xFFEA580C)),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Remarks & Quick Note Chips
+                    const Text('Call Notes / Remarks *', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: [
+                        'Call back requested',
+                        'Discuss project details',
+                        'Send brochure & follow up',
+                        'Busy, call back later',
+                      ].map((note) {
+                        return ActionChip(
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          label: Text(note, style: const TextStyle(fontSize: 11)),
+                          onPressed: () {
+                            setModalState(() => remarksCtrl.text = note);
+                          },
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: remarksCtrl,
+                      maxLines: 3,
+                      decoration: const InputDecoration(
+                        hintText: 'Enter discussion notes, client feedback, or callback requirements...',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
                   ],
-
-                  Text('Client Phone: ${lead.phone}', style: const TextStyle(fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 16),
-
-                  // Date Picker
-                  const Text('Follow-up Date *', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 6),
-                  InkWell(
-                    onTap: () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: selectedDate,
-                        firstDate: DateTime.now().subtract(const Duration(days: 30)),
-                        lastDate: DateTime.now().add(const Duration(days: 365)),
-                      );
-                      if (picked != null) {
-                        setModalState(() => selectedDate = picked);
-                      }
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade400),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(DateFormat('dd MMM yyyy').format(selectedDate)),
-                          const Icon(Icons.calendar_today_rounded, size: 18),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-
-                  // Time Picker
-                  const Text('Follow-up Time *', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 6),
-                  InkWell(
-                    onTap: () async {
-                      final picked = await showTimePicker(
-                        context: context,
-                        initialTime: selectedTime,
-                      );
-                      if (picked != null) {
-                        setModalState(() => selectedTime = picked);
-                      }
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade400),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(selectedTime.format(context)),
-                          const Icon(Icons.access_time_rounded, size: 18),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-
-                  // Remarks
-                  const Text('Call Notes / Remarks', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 6),
-                  TextField(
-                    controller: remarksCtrl,
-                    maxLines: 3,
-                    decoration: const InputDecoration(
-                      hintText: 'Enter discussion notes, client feedback, or visit requirements...',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogCtx),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                Navigator.pop(dialogCtx);
-                final dateIso = selectedDate.toIso8601String().split('T').first;
-                final timeFormatted = selectedTime.format(context);
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogCtx),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFEA580C),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                icon: const Icon(Icons.check_rounded, size: 18),
+                onPressed: () async {
+                  Navigator.pop(dialogCtx);
+                  final dateIso = '${selectedDate.year.toString().padLeft(4, "0")}-${selectedDate.month.toString().padLeft(2, "0")}-${selectedDate.day.toString().padLeft(2, "0")}';
+                  final timeFormatted = selectedTime.format(context);
+                  final remarkText = remarksCtrl.text.trim().isNotEmpty
+                      ? remarksCtrl.text.trim()
+                      : 'Client requested follow-up';
 
-                _updateLeadStatus(
-                  lead.id,
-                  'FOLLOW_UP',
-                  scheduledDate: dateIso,
-                  scheduledTime: timeFormatted,
-                  remarks: remarksCtrl.text.trim(),
-                );
-              },
-              child: const Text('Save & Schedule'),
-            ),
-          ],
-        ),
-      ),
+                  _updateLeadStatus(
+                    lead.id,
+                    'FOLLOW_UP',
+                    scheduledDate: dateIso,
+                    scheduledTime: timeFormatted,
+                    remarks: remarkText,
+                  );
+
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Follow-up scheduled for ${lead.name.isNotEmpty ? lead.name : "client"} on ${DateFormat("dd MMM yyyy").format(selectedDate)} at $timeFormatted'),
+                      backgroundColor: const Color(0xFFEA580C),
+                      duration: const Duration(seconds: 3),
+                    ),
+                  );
+                },
+                label: const Text('Save & Schedule', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 

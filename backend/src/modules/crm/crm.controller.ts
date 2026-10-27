@@ -528,6 +528,8 @@ export const crmController = {
         getScope(req),
         authUser?.role,
         authUser?.employeeId,
+        authUser?.id,
+        req.query.date as string | undefined,
       );
       res.json(ok(metrics));
     } catch (err: any) {

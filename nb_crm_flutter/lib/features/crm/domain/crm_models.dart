@@ -256,7 +256,7 @@ enum CrmStatus {
       case CrmStatus.siteVisitDone:
         return 'Visit Done';
       case CrmStatus.followUp:
-        return 'Follow up';
+        return 'Follow Up';
       case CrmStatus.interested:
         return 'Interested';
       case CrmStatus.proposalSent:
@@ -336,7 +336,7 @@ class CrmLead {
     required this.phone,
     required this.name,
     required this.status,
-    required this.customFields,
+    this.customFields = const {},
     this.assignedToId,
     this.assignedToName,
     this.telecallerId,
@@ -353,7 +353,7 @@ class CrmLead {
     this.referenceName,
     this.createdById,
     this.createdByName,
-    required this.isDeleted,
+    this.isDeleted = false,
     this.deletedAt,
     required this.createdAt,
     required this.updatedAt,

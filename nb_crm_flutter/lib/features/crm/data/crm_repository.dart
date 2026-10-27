@@ -399,8 +399,12 @@ class CrmRepository {
   // Follow-ups
   // ---------------------------------------------------------------------------
   Future<List<CrmFollowUp>> getFollowUps({String? filter, String? leadId}) async {
+    final now = DateTime.now();
+    final localDate =
+        '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
     final query = <String, dynamic>{
       'scope': crmScopeNotifier.value,
+      'date': localDate,
     };
     if (filter != null) query['filter'] = filter;
     if (leadId != null) query['leadId'] = leadId;
@@ -506,7 +510,12 @@ class CrmRepository {
     String? projectId,
     String? campaignId,
   }) async {
-    final query = <String, dynamic>{};
+    final now = DateTime.now();
+    final localDate =
+        '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    final query = <String, dynamic>{
+      'date': localDate,
+    };
     if (projectId != null && projectId.isNotEmpty && projectId != 'ALL') {
       query['projectId'] = projectId;
     }

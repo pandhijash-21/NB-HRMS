@@ -5,6 +5,7 @@ import * as crypto from 'crypto';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as xlsx from 'xlsx';
+// @ts-ignore
 import * as archiverModule from 'archiver';
 
 function initZipArchive(options: any = { zlib: { level: 9 } }): any {
@@ -1541,11 +1542,20 @@ export const crmService = {
 
     if (payload.telecallerId !== undefined) {
       updateData.telecallerId = payload.telecallerId && payload.telecallerId > 0 ? payload.telecallerId : null;
+    } else if (!existing.telecallerId && userContext?.employeeId) {
+      updateData.telecallerId = userContext.employeeId;
     }
 
     // Schedule or reschedule single active follow-up if date and time provided
     if (payload.scheduledDate && payload.scheduledTime) {
-      const scheduledDateTime = new Date(payload.scheduledDate);
+      let scheduledDateTime: Date;
+      if (payload.scheduledDate.includes('T')) {
+        scheduledDateTime = new Date(payload.scheduledDate);
+      } else {
+        const [year, month, day] = payload.scheduledDate.split('-').map(Number);
+        scheduledDateTime = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+      }
+
       const existingPending = await prisma.crmFollowUp.findFirst({
         where: { leadId, status: 'PENDING' },
         orderBy: { createdAt: 'desc' },
@@ -1555,7 +1565,9 @@ export const crmService = {
           ? 'CNR - Call rescheduled (Call Not Received)'
           : (status === 'SCHEDULED_VISIT'
               ? 'Site Visit Scheduled'
-              : (status === 'INTERESTED' ? 'Interested client sales meeting scheduled' : 'Follow-up scheduled'));
+              : (status === 'INTERESTED'
+                  ? 'Interested client sales meeting scheduled'
+                  : 'Follow-up call requested by client'));
 
       const followUpAssignedId = safeAssignedId || existing.telecallerId || userContext?.employeeId || null;
 
@@ -1960,14 +1972,14 @@ export const crmService = {
     const scope = query.scope || 'NB_DEVELOPER';
     let today: Date;
     if (query.date) {
-      today = new Date(query.date);
+      const [year, month, day] = query.date.split('-').map(Number);
+      today = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
     } else {
-      today = new Date();
+      const now = new Date();
+      today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
     }
-    today.setHours(0, 0, 0, 0);
 
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
 
     // Strictly ensure follow-ups are only returned for ACTIVE (non-deleted / non-binned) leads
     const where: any = {
@@ -2002,12 +2014,18 @@ export const crmService = {
     const userRole = query.userContext?.role?.toUpperCase() || '';
     const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(userRole);
     const userEmployeeId = query.userContext?.employeeId;
+    const userId = query.userContext?.userId;
 
-    if (!isAdmin && userEmployeeId) {
-      where.OR = [
-        { assignedToId: userEmployeeId },
-        { lead: { isDeleted: false, scope, OR: [{ telecallerId: userEmployeeId }, { assignedToId: userEmployeeId }] } },
-      ];
+    if (!isAdmin) {
+      if (userEmployeeId) {
+        where.OR = [
+          { assignedToId: userEmployeeId },
+          ...(userId ? [{ createdById: userId }] : []),
+          { lead: { isDeleted: false, scope, OR: [{ telecallerId: userEmployeeId }, { assignedToId: userEmployeeId }] } },
+        ];
+      } else if (userId) {
+        where.createdById = userId;
+      }
     }
 
     return prisma.crmFollowUp.findMany({
@@ -3960,11 +3978,18 @@ export const crmService = {
     scope: string = 'NB_DEVELOPER',
     userRole?: string,
     userEmployeeId?: number,
+    userId?: string,
+    dateStr?: string,
   ) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    let today: Date;
+    if (dateStr) {
+      const [year, month, day] = dateStr.split('-').map(Number);
+      today = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+    } else {
+      const now = new Date();
+      today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+    }
+    const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
 
     const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(
       userRole?.toUpperCase() || ''
@@ -3991,11 +4016,16 @@ export const crmService = {
       status: 'PENDING',
       lead: { ...leadWhere },
     };
-    if (!isAdmin && userEmployeeId) {
-      followUpWhere.OR = [
-        { assignedToId: userEmployeeId },
-        { lead: { isDeleted: false, scope, OR: [{ telecallerId: userEmployeeId }, { assignedToId: userEmployeeId }] } },
-      ];
+    if (!isAdmin) {
+      if (userEmployeeId) {
+        followUpWhere.OR = [
+          { assignedToId: userEmployeeId },
+          ...(userId ? [{ createdById: userId }] : []),
+          { lead: { isDeleted: false, scope, OR: [{ telecallerId: userEmployeeId }, { assignedToId: userEmployeeId }] } },
+        ];
+      } else if (userId) {
+        followUpWhere.createdById = userId;
+      }
     }
 
     const callLogWhere: Record<string, unknown> = {};

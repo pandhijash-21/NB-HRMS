@@ -88,6 +88,13 @@ export interface CreateLeadDto {
   channelPartnerPhone?: string;
   referenceType?: string;
   referenceName?: string;
+  allowDuplicate?: boolean;
+}
+
+export interface MergeLeadsDto {
+  primaryLeadId: string;
+  duplicateLeadId: string;
+  remarks?: string;
 }
 
 export interface UpdateLeadDto {

@@ -134,6 +134,7 @@ class CrmLeadsExcelImported extends CrmLeadsEvent {
     this.assignmentMode,
     this.telecallerId,
     this.assignedTelecallerIds,
+    this.skipDuplicates = true,
   });
   final Uint8List fileBytes;
   final String fileName;
@@ -141,6 +142,7 @@ class CrmLeadsExcelImported extends CrmLeadsEvent {
   final String? assignmentMode;
   final int? telecallerId;
   final List<int>? assignedTelecallerIds;
+  final bool skipDuplicates;
 
   @override
   List<Object?> get props => [
@@ -150,7 +152,22 @@ class CrmLeadsExcelImported extends CrmLeadsEvent {
         assignmentMode,
         telecallerId,
         assignedTelecallerIds,
+        skipDuplicates,
       ];
+}
+
+class CrmLeadsMergeRequested extends CrmLeadsEvent {
+  const CrmLeadsMergeRequested({
+    required this.primaryLeadId,
+    required this.duplicateLeadId,
+    this.remarks,
+  });
+  final String primaryLeadId;
+  final String duplicateLeadId;
+  final String? remarks;
+
+  @override
+  List<Object?> get props => [primaryLeadId, duplicateLeadId, remarks];
 }
 
 class CrmLeadTransferRequested extends CrmLeadsEvent {
@@ -413,6 +430,7 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
     on<CrmLeadsLeadStatusUpdated>(_onLeadStatusUpdated);
     on<CrmLeadsLeadMovedToBin>(_onLeadMovedToBin);
     on<CrmLeadsExcelImported>(_onExcelImported);
+    on<CrmLeadsMergeRequested>(_onMergeRequested);
     on<CrmLeadTransferRequested>(_onLeadTransferRequested);
     on<CrmLeadsFollowUpFilterChanged>(_onFollowUpFilterChanged);
     on<CrmLeadsFollowUpScheduled>(_onFollowUpScheduled);
@@ -775,6 +793,7 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
         assignmentMode: event.assignmentMode,
         telecallerId: event.telecallerId,
         assignedTelecallerIds: event.assignedTelecallerIds,
+        skipDuplicates: event.skipDuplicates,
       );
       final count = res['count'] ?? 0;
       final msg = res['message'] ?? 'Imported $count leads';
@@ -789,6 +808,31 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
       );
     } catch (e) {
       emit(state.copyWith(isActing: false, errorMessage: e.toString()));
+    }
+  }
+
+  Future<void> _onMergeRequested(
+    CrmLeadsMergeRequested event,
+    Emitter<CrmLeadsState> emit,
+  ) async {
+    emit(state.copyWith(isActing: true));
+    try {
+      await _crmRepository.mergeLeads(
+        primaryLeadId: event.primaryLeadId,
+        duplicateLeadId: event.duplicateLeadId,
+        remarks: event.remarks,
+      );
+      emit(state.copyWith(
+        isActing: false,
+        actionSuccessMessage: 'Leads merged successfully',
+      ));
+      await _fetchData(
+        emit,
+        projectId: state.selectedProjectId,
+        campaignId: state.selectedCampaignId,
+      );
+    } catch (e) {
+      emit(state.copyWith(isActing: false, errorMessage: 'Merge failed: $e'));
     }
   }
 

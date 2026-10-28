@@ -1485,12 +1485,18 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                       isReadOnly: !canAlterLead,
                                     ),
                                   ),
-                                  if (canAlterLead && (isAdmin || !isBlockedForTelecaller))
+                                  if (canAlterLead && (isAdmin || !isBlockedForTelecaller)) ...[
+                                    IconButton(
+                                      icon: const Icon(Icons.call_merge_rounded, size: 18, color: Color(0xFF0284C7)),
+                                      tooltip: 'Merge duplicate lead',
+                                      onPressed: () => _showMergeLeadModal(context, lead),
+                                    ),
                                     IconButton(
                                       icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.redAccent),
                                       tooltip: 'Move to Bin',
                                       onPressed: () => _confirmMoveToBin(context, lead),
                                     ),
+                                  ],
                                 ],
                               ),
                             ),
@@ -3458,6 +3464,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     String assignmentMode = 'ROUND_ROBIN';
     int? specificTelecallerId;
     List<int> multiSelectedTelecallerIds = [];
+    bool skipDuplicates = true;
 
     showDialog(
       context: context,
@@ -3682,6 +3689,17 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                       subtitle: const Text('Leads will enter the waiting list or auto-dispatch queue', style: TextStyle(fontSize: 11, color: Colors.grey)),
                       onChanged: (val) => setModalState(() => assignmentMode = val ?? 'UNASSIGNED'),
                     ),
+                    const SizedBox(height: 12),
+                    const Divider(),
+                    CheckboxListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      value: skipDuplicates,
+                      activeColor: const Color(0xFF16A34A),
+                      title: const Text('Skip duplicate numbers (Recommended)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                      subtitle: const Text('Automatically ignore rows whose phone numbers already exist in CRM', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                      onChanged: (val) => setModalState(() => skipDuplicates = val ?? true),
+                    ),
                   ],
                 ),
               ),
@@ -3726,6 +3744,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                       assignmentMode: assignmentMode,
                       telecallerId: assignmentMode == 'SPECIFIC' ? specificTelecallerId : null,
                       assignedTelecallerIds: assignmentMode == 'ROUND_ROBIN' ? multiSelectedTelecallerIds : null,
+                      skipDuplicates: skipDuplicates,
                     ),
                   );
                 },
@@ -4496,6 +4515,9 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     final settings = context.read<CrmLeadsBloc>().state.settings;
     String? selectedLoanType;
     final uploadedDocs = <String, Map<String, dynamic>>{};
+    Map<String, dynamic>? existingLeadInfo;
+    bool isCheckingPhone = false;
+    bool allowDuplicate = false;
 
     showDialog(
       context: context,
@@ -4699,16 +4721,91 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                           },
                         )
                       else if (col.dataType == 'PHONE' || col.columnKey == 'phone' || col.label.toLowerCase().contains('phone') || col.label.toLowerCase().contains('mobile'))
-                        TextField(
-                          controller: controllers[col.columnKey],
-                          keyboardType: TextInputType.phone,
-                          inputFormatters: mobileInputFormatters,
-                          decoration: InputDecoration(
-                            hintText: '10-digit number',
-                            prefixIcon: buildMobilePrefix(isDark: Theme.of(context).brightness == Brightness.dark),
-                            prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
-                            border: const OutlineInputBorder(),
-                          ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            TextField(
+                              controller: controllers[col.columnKey],
+                              keyboardType: TextInputType.phone,
+                              inputFormatters: mobileInputFormatters,
+                              onChanged: (val) async {
+                                final clean = cleanMobile10(val);
+                                if (clean.length == 10) {
+                                  setDialogState(() => isCheckingPhone = true);
+                                  final res = await context.read<CrmRepository>().checkPhone(clean);
+                                  setDialogState(() {
+                                    isCheckingPhone = false;
+                                    existingLeadInfo = res['exists'] == true ? (res['lead'] as Map<String, dynamic>?) : null;
+                                    if (existingLeadInfo == null) allowDuplicate = false;
+                                  });
+                                } else if (existingLeadInfo != null) {
+                                  setDialogState(() {
+                                    existingLeadInfo = null;
+                                    allowDuplicate = false;
+                                  });
+                                }
+                              },
+                              decoration: InputDecoration(
+                                hintText: '10-digit number',
+                                prefixIcon: buildMobilePrefix(isDark: Theme.of(context).brightness == Brightness.dark),
+                                prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+                                border: const OutlineInputBorder(),
+                                suffixIcon: isCheckingPhone
+                                    ? const Padding(
+                                        padding: EdgeInsets.all(12),
+                                        child: SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+                                      )
+                                    : (existingLeadInfo != null
+                                        ? const Tooltip(
+                                            message: 'Phone number already exists in CRM',
+                                            child: Icon(Icons.warning_amber_rounded, color: Colors.amber),
+                                          )
+                                        : null),
+                              ),
+                            ),
+                            if (existingLeadInfo != null) ...[
+                              const SizedBox(height: 8),
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: Colors.amber.shade50,
+                                  border: Border.all(color: Colors.amber.shade400),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Icon(Icons.warning_amber_rounded, size: 16, color: Colors.amber.shade900),
+                                        const SizedBox(width: 6),
+                                        Expanded(
+                                          child: Text(
+                                            'Lead already exists: ${existingLeadInfo!['name'] ?? "Unnamed"}',
+                                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.amber.shade900),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Status: ${existingLeadInfo!['status'] ?? "Not started"} | Telecaller: ${existingLeadInfo!['telecallerName'] ?? "Unassigned"}',
+                                      style: TextStyle(fontSize: 11, color: Colors.grey.shade800),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    CheckboxListTile(
+                                      dense: true,
+                                      contentPadding: EdgeInsets.zero,
+                                      value: allowDuplicate,
+                                      activeColor: Colors.amber.shade800,
+                                      title: const Text('Allow creating duplicate lead anyway', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                                      onChanged: (v) => setDialogState(() => allowDuplicate = v ?? false),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ],
                         )
                       else
                         TextField(
@@ -4840,6 +4937,16 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
               customFields['referenceName'] = refName;
             }
 
+            if (existingLeadInfo != null && !allowDuplicate) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('A lead with phone $phone already exists ("${existingLeadInfo!['name']}"). Check "Allow creating duplicate lead anyway" or search and update the existing lead.'),
+                  backgroundColor: Colors.amber.shade900,
+                ),
+              );
+              return;
+            }
+
             final leadsState = context.read<CrmLeadsBloc>().state;
             final activeCampaignId = leadsState.selectedCampaignId;
             final campaigns = leadsState.campaigns;
@@ -4861,6 +4968,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                     'referenceName': selectedLeadSource == 'Reference' ? refName : null,
                     'campaignId': effectiveCampaignId,
                     'customFields': customFields,
+                    'allowDuplicate': allowDuplicate,
                   }),
                 );
           },
@@ -5284,6 +5392,216 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
       );
     },
   );
+  }
+
+  void _showMergeLeadModal(BuildContext context, CrmLead primaryLead) {
+    final leadsState = context.read<CrmLeadsBloc>().state;
+    final allLeads = leadsState.leads.where((l) => l.id != primaryLead.id).toList();
+
+    // Prioritize leads with the exact same phone number
+    final samePhoneLeads = allLeads.where((l) => cleanMobile10(l.phone) == cleanMobile10(primaryLead.phone)).toList();
+    CrmLead? selectedDuplicateLead = samePhoneLeads.isNotEmpty ? samePhoneLeads.first : (allLeads.isNotEmpty ? allLeads.first : null);
+    final remarksController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setModalState) {
+          return AlertDialog(
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0284C7).withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.call_merge_rounded, color: Color(0xFF0284C7), size: 22),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Merge Duplicate Leads', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 2),
+                      Text('Combine inquiries, call logs & requirements into one record', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            content: Container(
+              constraints: const BoxConstraints(maxWidth: 520),
+              width: double.maxFinite,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Primary Lead Info Box
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0284C7).withValues(alpha: 0.08),
+                        border: Border.all(color: const Color(0xFF0284C7).withValues(alpha: 0.3)),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: const [
+                              Icon(Icons.star_rounded, size: 16, color: Color(0xFF0284C7)),
+                              SizedBox(width: 6),
+                              Text('PRIMARY LEAD (Will be retained as active)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF0284C7))),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text('${primaryLead.name} | ${primaryLead.phone}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5)),
+                          const SizedBox(height: 2),
+                          Text('Status: ${primaryLead.status.name} | Telecaller: ${primaryLead.telecallerName ?? "Unassigned"}', style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+                          if (primaryLead.customFields.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              'Requirements: ${primaryLead.customFields.entries.take(4).map((e) => "${e.key}: ${e.value}").join(" | ")}',
+                              style: TextStyle(fontSize: 11.5, color: Colors.grey.shade600),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Duplicate Lead Selector
+                    const Text('Select Duplicate Lead to Merge into Primary *', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 6),
+                    if (allLeads.isEmpty)
+                      const Text('No other leads available to merge.', style: TextStyle(color: Colors.red, fontSize: 12))
+                    else
+                      DropdownButtonFormField<CrmLead>(
+                        isExpanded: true,
+                        value: selectedDuplicateLead,
+                        decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                          prefixIcon: Icon(Icons.person_search_rounded, size: 20),
+                        ),
+                        items: allLeads.map((lead) {
+                          final isExactPhone = cleanMobile10(lead.phone) == cleanMobile10(primaryLead.phone);
+                          return DropdownMenuItem<CrmLead>(
+                            value: lead,
+                            child: Text(
+                              '${lead.name} (${lead.phone}) ${isExactPhone ? "★ Exact Number Match" : ""} [${lead.status.name}]',
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: isExactPhone ? FontWeight.bold : FontWeight.normal,
+                                color: isExactPhone ? const Color(0xFF0284C7) : null,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (lead) => setModalState(() => selectedDuplicateLead = lead),
+                      ),
+
+                    if (selectedDuplicateLead != null) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.shade50,
+                          border: Border.all(color: Colors.amber.shade400),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.copy_rounded, size: 16, color: Colors.amber.shade900),
+                                const SizedBox(width: 6),
+                                Text('DUPLICATE LEAD (Will be merged and archived)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.amber.shade900)),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text('${selectedDuplicateLead!.name} | ${selectedDuplicateLead!.phone}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                            const SizedBox(height: 2),
+                            Text('Status: ${selectedDuplicateLead!.status.name} | Telecaller: ${selectedDuplicateLead!.telecallerName ?? "Unassigned"}', style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+                            if (selectedDuplicateLead!.customFields.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                'Requirements: ${selectedDuplicateLead!.customFields.entries.take(4).map((e) => "${e.key}: ${e.value}").join(" | ")}',
+                                style: TextStyle(fontSize: 11.5, color: Colors.grey.shade800),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: remarksController,
+                      decoration: const InputDecoration(
+                        labelText: 'Merge Remarks / Note (Optional)',
+                        hintText: 'e.g. Combined inquiries for Legacy Tower & 4 BHK Simplex',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.check_circle_outline_rounded, size: 18, color: Color(0xFF16A34A)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'All follow-ups and call records will be moved to the primary lead automatically.',
+                              style: TextStyle(fontSize: 11.5, color: Colors.green.shade800),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancel')),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF0284C7),
+                  foregroundColor: Colors.white,
+                ),
+                icon: const Icon(Icons.call_merge_rounded, size: 16),
+                label: const Text('Confirm Merge'),
+                onPressed: selectedDuplicateLead == null
+                    ? null
+                    : () {
+                        Navigator.pop(dialogCtx);
+                        context.read<CrmLeadsBloc>().add(
+                              CrmLeadsMergeRequested(
+                                primaryLeadId: primaryLead.id,
+                                duplicateLeadId: selectedDuplicateLead!.id,
+                                remarks: remarksController.text.trim(),
+                              ),
+                            );
+                      },
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   void _confirmMoveToBin(BuildContext context, CrmLead lead) {

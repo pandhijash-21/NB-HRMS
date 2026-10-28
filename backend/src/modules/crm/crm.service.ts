@@ -666,6 +666,103 @@ export const crmService = {
       payload.leadSource === 'META'
     );
 
+    // Smart Deduplication for incoming Webhook / Meta Ads:
+    // If an active lead with the same phone (matched on 10 digits) already exists in this scope,
+    // do NOT create a duplicate lead row! Instead, append the new inquiry into the existing lead's
+    // activity history and notify/log follow-up for the telecaller.
+    const cleanPhoneDigits = rawPhone.replace(/\D/g, '');
+    const phone10 = cleanPhoneDigits.length >= 10 ? cleanPhoneDigits.slice(-10) : cleanPhoneDigits;
+
+    if (phone10.length >= 7) {
+      const existingLead = await prisma.crmLead.findFirst({
+        where: {
+          scope: campaignScope,
+          isDeleted: false,
+          phone: { contains: phone10 },
+        },
+        include: {
+          campaign: { select: { id: true, name: true, project: { select: { name: true } } } },
+          telecaller: { include: { generalInfo: true } },
+          assignedTo: { include: { generalInfo: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (existingLead) {
+        const existingCustom = (existingLead.customFields && typeof existingLead.customFields === 'object')
+          ? (existingLead.customFields as Record<string, any>)
+          : {};
+
+        const reInquiries = Array.isArray(existingCustom.reInquiries) ? [...existingCustom.reInquiries] : [];
+        reInquiries.push({
+          timestamp: new Date().toISOString(),
+          source: isMetaWebhook ? 'Meta Ads' : 'Webhook Integration',
+          campaignName: campaign.name,
+          campaignId: campaign.id,
+          payload: normalizedPayload,
+        });
+
+        // Merge newly arriving payload values into existing customFields
+        const mergedCustom: Record<string, any> = {
+          ...existingCustom,
+          ...normalizedPayload,
+          reInquiries,
+          lastReInquiryAt: new Date().toISOString(),
+          reInquiryCount: reInquiries.length + 1,
+        };
+
+        const updatedLead = await prisma.crmLead.update({
+          where: { id: existingLead.id },
+          data: {
+            customFields: mergedCustom,
+            updatedAt: new Date(),
+          },
+          include: {
+            campaign: { select: { id: true, name: true, project: { select: { name: true } } } },
+            telecaller: { include: { generalInfo: true } },
+            assignedTo: { include: { generalInfo: true } },
+          },
+        });
+
+        // Log follow-up notice so telecaller/sales agent is aware of the re-inquiry
+        const summaryFields = Object.entries(normalizedPayload)
+          .filter(([k]) => !['phone', 'name', 'mobile', 'Phone', 'Name', 'Mobile'].includes(k))
+          .map(([k, v]) => `${k}: ${v}`)
+          .slice(0, 5)
+          .join(', ');
+
+        await prisma.crmFollowUp.create({
+          data: {
+            leadId: existingLead.id,
+            scheduledDate: new Date(),
+            scheduledTime: `${String(new Date().getHours()).padStart(2, '0')}:${String(new Date().getMinutes()).padStart(2, '0')}`,
+            status: 'PENDING',
+            remarks: `Customer re-inquired via ${isMetaWebhook ? 'Meta Ads' : 'Webhook Integration'} on "${campaign.name}". Details: ${summaryFields || 'Re-submitted inquiry'}`,
+            assignedToId: existingLead.assignedToId || null,
+          },
+        });
+
+        // WhatsApp Automation on re-inquiry
+        whatsappService
+          .triggerEvent('LEAD_CREATED', updatedLead, {
+            projectName: campaign.project?.name || (campaign.scope === 'NB_FINSERVE' ? 'NB Finserve' : 'Legacy Tower'),
+          })
+          .catch((err) => console.error('[CRM WhatsApp Hook Error - Re-inquiry]:', err));
+
+        return {
+          status: 'success',
+          message: `Re-inquiry logged for existing lead (${existingLead.name || phone10})`,
+          leadId: existingLead.id,
+          campaignId: campaign.id,
+          campaignName: campaign.name,
+          projectName: campaign.project?.name || null,
+          deduplicated: true,
+          reInquiryCount: reInquiries.length,
+          headersDiscovered: Object.keys(normalizedPayload),
+        };
+      }
+    }
+
     const lead = await prisma.crmLead.create({
       data: {
         scope: campaignScope,
@@ -1245,6 +1342,31 @@ export const crmService = {
     const finalRefType = dto.referenceType || custom.referenceType || null;
     const finalRefName = dto.referenceName || custom.referenceName || null;
 
+    // Duplicate Lead Prevention for Manual / API Creation:
+    const cleanDigits = phone.replace(/\D/g, '');
+    const phone10 = cleanDigits.length >= 10 ? cleanDigits.slice(-10) : cleanDigits;
+
+    if (phone10.length >= 7 && !dto.allowDuplicate) {
+      const existingLead = await prisma.crmLead.findFirst({
+        where: {
+          scope,
+          isDeleted: false,
+          phone: { contains: phone10 },
+        },
+        include: {
+          telecaller: { include: { generalInfo: true } },
+          assignedTo: { include: { generalInfo: true } },
+        },
+      });
+
+      if (existingLead) {
+        const assignedStaff = existingLead.telecaller?.generalInfo?.fullName || existingLead.assignedTo?.generalInfo?.fullName || 'Unassigned';
+        throw new Error(
+          `DUPLICATE_LEAD: A lead with phone ${phone} already exists ("${existingLead.name || 'Unnamed'}", Status: ${existingLead.status}, Assigned to: ${assignedStaff}). ID: ${existingLead.id}`
+        );
+      }
+    }
+
     const newLead = await prisma.crmLead.create({
       data: {
         scope,
@@ -1303,6 +1425,7 @@ export const crmService = {
     options?: {
       assignmentMode?: 'SPECIFIC' | 'ROUND_ROBIN' | 'UNASSIGNED';
       assignedTelecallerIds?: number[];
+      skipDuplicates?: boolean;
     },
   ) {
     const workbook = xlsx.read(fileBuffer, { type: 'buffer' });
@@ -1349,8 +1472,28 @@ export const crmService = {
       }
     }
 
+    const shouldSkipDuplicates = options?.skipDuplicates !== false;
+    let skippedDuplicatesCount = 0;
+    const existingPhonesSet = new Set<string>();
+
+    if (shouldSkipDuplicates) {
+      const existingLeads = await prisma.crmLead.findMany({
+        where: {
+          scope: campaignScope,
+          isDeleted: false,
+        },
+        select: { phone: true },
+      });
+      for (const el of existingLeads) {
+        const d = String(el.phone || '').replace(/\D/g, '');
+        if (d.length >= 10) existingPhonesSet.add(d.slice(-10));
+        else if (d.length >= 7) existingPhonesSet.add(d);
+      }
+    }
+
     let insertedCount = 0;
     const leadsToInsert: any[] = [];
+    const seenInSheetPhones = new Set<string>();
 
     for (const row of rows) {
       const customFields: Record<string, any> = {};
@@ -1388,6 +1531,18 @@ export const crmService = {
       if (!name && customFields.client_name) name = String(customFields.client_name);
 
       if (phone || name) {
+        const cleanDigits = String(phone || customFields.phone || '').replace(/\D/g, '');
+        const phone10 = cleanDigits.length >= 10 ? cleanDigits.slice(-10) : cleanDigits;
+
+        if (shouldSkipDuplicates && phone10.length >= 7) {
+          if (seenInSheetPhones.has(phone10) || existingPhonesSet.has(phone10)) {
+            skippedDuplicatesCount++;
+            continue;
+          }
+          seenInSheetPhones.add(phone10);
+          existingPhonesSet.add(phone10);
+        }
+
         let rowTelecallerId = telecallerId;
         let rowAssignedToId: number | undefined = undefined;
 
@@ -1448,10 +1603,13 @@ export const crmService = {
 
     return {
       count: insertedCount,
+      skippedDuplicates: skippedDuplicatesCount,
       totalRows: rows.length,
       dispatchedCount: dispatchResult.dispatchedCount,
       queuedCount: dispatchResult.remainingQueuedCount,
-      message: `Successfully imported ${insertedCount} leads from Excel (${dispatchResult.dispatchedCount} dispatched to active telecallers, ${dispatchResult.remainingQueuedCount} waiting in queue)`,
+      message: skippedDuplicatesCount > 0
+        ? `Successfully imported ${insertedCount} leads (${skippedDuplicatesCount} duplicate records skipped)`
+        : `Successfully imported ${insertedCount} leads from Excel (${dispatchResult.dispatchedCount} dispatched to active telecallers, ${dispatchResult.remainingQueuedCount} waiting in queue)`,
     };
   },
 
@@ -1878,6 +2036,174 @@ export const crmService = {
     }
 
     return updated;
+  },
+
+  async checkPhone(phone: string, scope: string = 'NB_DEVELOPER') {
+    const cleanDigits = phone.replace(/\D/g, '');
+    const phone10 = cleanDigits.length >= 10 ? cleanDigits.slice(-10) : cleanDigits;
+    if (phone10.length < 7) {
+      return { exists: false };
+    }
+    const matchedLead = await prisma.crmLead.findFirst({
+      where: {
+        scope,
+        isDeleted: false,
+        phone: { contains: phone10 },
+      },
+      include: {
+        telecaller: { include: { generalInfo: true } },
+        assignedTo: { include: { generalInfo: true } },
+        campaign: { select: { id: true, name: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!matchedLead) {
+      return { exists: false };
+    }
+    return {
+      exists: true,
+      lead: {
+        id: matchedLead.id,
+        name: matchedLead.name,
+        phone: matchedLead.phone,
+        status: matchedLead.status,
+        scope: matchedLead.scope,
+        campaignName: matchedLead.campaign?.name,
+        telecallerName: matchedLead.telecaller?.generalInfo?.fullName,
+        assignedToName: matchedLead.assignedTo?.generalInfo?.fullName,
+        createdAt: matchedLead.createdAt,
+        customFields: matchedLead.customFields,
+      },
+    };
+  },
+
+  async mergeLeads(
+    primaryLeadId: string,
+    duplicateLeadId: string,
+    userContext?: { userId?: string; employeeId?: number },
+    remarks?: string,
+  ) {
+    if (!primaryLeadId || !duplicateLeadId) {
+      throw new Error('Both primaryLeadId and duplicateLeadId are required');
+    }
+    if (primaryLeadId === duplicateLeadId) {
+      throw new Error('Cannot merge a lead into itself');
+    }
+
+    const [primaryLead, duplicateLead] = await Promise.all([
+      prisma.crmLead.findUnique({
+        where: { id: primaryLeadId },
+        include: {
+          campaign: true,
+          telecaller: { include: { generalInfo: true } },
+          assignedTo: { include: { generalInfo: true } },
+        },
+      }),
+      prisma.crmLead.findUnique({
+        where: { id: duplicateLeadId },
+        include: {
+          campaign: true,
+          telecaller: { include: { generalInfo: true } },
+          assignedTo: { include: { generalInfo: true } },
+        },
+      }),
+    ]);
+
+    if (!primaryLead || primaryLead.isDeleted) {
+      throw new Error('Primary lead not found or already deleted');
+    }
+    if (!duplicateLead || duplicateLead.isDeleted) {
+      throw new Error('Duplicate lead not found or already deleted');
+    }
+
+    // 1. Move all follow-ups from duplicate to primary
+    await prisma.crmFollowUp.updateMany({
+      where: { leadId: duplicateLeadId },
+      data: { leadId: primaryLeadId },
+    });
+
+    // 2. Move all call logs from duplicate to primary
+    await prisma.crmCallLog.updateMany({
+      where: { leadId: duplicateLeadId },
+      data: { leadId: primaryLeadId },
+    });
+
+    // 3. Merge custom fields
+    const pCustom = (primaryLead.customFields && typeof primaryLead.customFields === 'object')
+      ? (primaryLead.customFields as Record<string, any>)
+      : {};
+    const dCustom = (duplicateLead.customFields && typeof duplicateLead.customFields === 'object')
+      ? (duplicateLead.customFields as Record<string, any>)
+      : {};
+
+    const mergedCustom: Record<string, any> = { ...dCustom, ...pCustom };
+
+    const mergeHistory = Array.isArray(pCustom.mergeHistory) ? [...pCustom.mergeHistory] : [];
+    mergeHistory.push({
+      mergedLeadId: duplicateLead.id,
+      mergedLeadName: duplicateLead.name,
+      mergedLeadPhone: duplicateLead.phone,
+      mergedAt: new Date().toISOString(),
+      mergedBy: userContext?.userId || 'Admin',
+      duplicateCustomFields: dCustom,
+      remarks: remarks || 'Merged duplicate lead',
+    });
+    mergedCustom.mergeHistory = mergeHistory;
+
+    // Preserve any critical fields from duplicate if primary was empty
+    if (!primaryLead.channelPartnerName && duplicateLead.channelPartnerName) {
+      mergedCustom.channelPartnerName = duplicateLead.channelPartnerName;
+    }
+    if (!primaryLead.referenceName && duplicateLead.referenceName) {
+      mergedCustom.referenceName = duplicateLead.referenceName;
+    }
+
+    // 4. Update primary lead
+    const updatedPrimary = await prisma.crmLead.update({
+      where: { id: primaryLeadId },
+      data: {
+        customFields: mergedCustom,
+        updatedAt: new Date(),
+      },
+      include: {
+        campaign: { select: { id: true, name: true, project: { select: { name: true } } } },
+        telecaller: { include: { generalInfo: true } },
+        assignedTo: { include: { generalInfo: true } },
+        followUps: { orderBy: { scheduledDate: 'desc' } },
+      },
+    });
+
+    // 5. Soft-delete duplicate lead
+    await prisma.crmLead.update({
+      where: { id: duplicateLeadId },
+      data: {
+        isDeleted: true,
+        deletedAt: new Date(),
+        status: 'NOT_INTERESTED',
+        notInterestedReason: 'DUPLICATE_MERGED',
+        notInterestedRemark: `Merged into lead "${primaryLead.name || primaryLead.id}" (${primaryLead.phone}) on ${new Date().toLocaleString()}`,
+        customFields: {
+          ...dCustom,
+          mergedIntoLeadId: primaryLeadId,
+          mergedAt: new Date().toISOString(),
+        },
+      },
+    });
+
+    // 6. Log follow-up entry on primary lead
+    await prisma.crmFollowUp.create({
+      data: {
+        leadId: primaryLeadId,
+        scheduledDate: new Date(),
+        scheduledTime: `${String(new Date().getHours()).padStart(2, '0')}:${String(new Date().getMinutes()).padStart(2, '0')}`,
+        status: 'COMPLETED',
+        remarks: `Merged duplicate lead "${duplicateLead.name || 'Unnamed'}" (${duplicateLead.phone}). Requirements and history combined. ${remarks ? `Note: ${remarks}` : ''}`,
+        createdById: userContext?.userId,
+        assignedToId: primaryLead.assignedToId || null,
+      },
+    });
+
+    return updatedPrimary;
   },
 
   async moveToBin(

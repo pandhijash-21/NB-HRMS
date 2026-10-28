@@ -252,6 +252,10 @@ export const crmController = {
         ? Number(req.body.telecallerId)
         : (isAdmin ? undefined : authUser?.employeeId);
 
+      const skipDuplicates = req.body.skipDuplicates !== false &&
+        req.body.skipDuplicates !== 'false' &&
+        req.body.skipDuplicates !== 0;
+
       const result = await crmService.importExcelLeads(
         req.file.buffer,
         authUser?.id,
@@ -262,11 +266,39 @@ export const crmController = {
         {
           assignmentMode,
           assignedTelecallerIds,
+          skipDuplicates,
         },
       );
       res.json(ok(result));
     } catch (err: any) {
       res.status(400).json(fail(err.message || 'Failed to import Excel leads'));
+    }
+  },
+
+  async checkPhone(req: Request, res: Response) {
+    try {
+      const phone = String(req.query.phone || req.body.phone || '');
+      const scope = (req.query.scope as string) || getScope(req);
+      const result = await crmService.checkPhone(phone, scope);
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to check phone duplicate'));
+    }
+  },
+
+  async mergeLeads(req: Request, res: Response) {
+    try {
+      const { primaryLeadId, duplicateLeadId, remarks } = req.body;
+      const authUser = (req as any).user;
+      const result = await crmService.mergeLeads(
+        primaryLeadId,
+        duplicateLeadId,
+        { userId: authUser?.id, employeeId: authUser?.employeeId },
+        remarks,
+      );
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to merge leads'));
     }
   },
 

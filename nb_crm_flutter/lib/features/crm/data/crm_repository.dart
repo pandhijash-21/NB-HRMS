@@ -260,9 +260,11 @@ class CrmRepository {
     String? assignmentMode,
     int? telecallerId,
     List<int>? assignedTelecallerIds,
+    bool skipDuplicates = true,
   }) async {
     final map = <String, dynamic>{
       'file': MultipartFile.fromBytes(fileBytes, filename: fileName),
+      'skipDuplicates': skipDuplicates,
     };
     if (campaignId != null && campaignId.isNotEmpty) {
       map['campaignId'] = campaignId;
@@ -288,6 +290,43 @@ class CrmRepository {
       return Map<String, dynamic>.from(res.data!['data'] as Map);
     }
     return {'count': 0, 'message': 'Upload completed'};
+  }
+
+  Future<Map<String, dynamic>> checkPhone(String phone, {String? scope}) async {
+    try {
+      final query = <String, dynamic>{
+        'phone': phone,
+        if (scope != null && scope.isNotEmpty) 'scope': scope,
+      };
+      final res = await _dio.dio.get<Map<String, dynamic>>(
+        'crm/leads/check-phone',
+        queryParameters: query,
+      );
+      if (res.data != null && res.data!['data'] is Map) {
+        return Map<String, dynamic>.from(res.data!['data'] as Map);
+      }
+    } catch (_) {}
+    return {'exists': false};
+  }
+
+  Future<Map<String, dynamic>> mergeLeads({
+    required String primaryLeadId,
+    required String duplicateLeadId,
+    String? remarks,
+  }) async {
+    final res = await _dio.dio.post<Map<String, dynamic>>(
+      'crm/leads/merge',
+      data: {
+        'primaryLeadId': primaryLeadId,
+        'duplicateLeadId': duplicateLeadId,
+        if (remarks != null && remarks.isNotEmpty) 'remarks': remarks,
+      },
+    );
+    notifyLeadMutated();
+    if (res.data != null && res.data!['data'] is Map) {
+      return Map<String, dynamic>.from(res.data!['data'] as Map);
+    }
+    return {'status': 'success'};
   }
 
   Future<Map<String, dynamic>> transferLead(

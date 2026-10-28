@@ -435,25 +435,38 @@ class _CrmPartnersScreenState extends State<CrmPartnersScreen> {
                       ? null
                       : () async {
                           if (!formKey.currentState!.validate()) return;
-                          setDialogState(() => isSaving = true);
+                          final firm = companyCtrl.text.trim();
+                          final contact = contactCtrl.text.trim();
+                          final cleanEmail = emailCtrl.text.trim().toLowerCase();
+                          final cleanUsername = usernameCtrl.text.trim();
 
                           final payload = {
                             'role': role,
                             'status': status,
-                            'username': usernameCtrl.text.trim(),
-                            'email': emailCtrl.text.trim(),
+                            'username': cleanUsername,
+                            'email': cleanEmail,
                             'phone': phoneCtrl.text.trim(),
-                            'company_or_firm_name': companyCtrl.text.trim(),
-                            'contact_person_name': contactCtrl.text.trim(),
+                            'company_or_firm_name': firm,
+                            'companyOrFirmName': firm,
+                            'contact_person_name': contact,
+                            'contactPersonName': contact,
+                            'name': contact.isNotEmpty ? contact : firm,
                             'professional_stream': streamCtrl.text.trim(),
+                            'professionalStream': streamCtrl.text.trim(),
                             'pan': panCtrl.text.trim().toUpperCase(),
                             'gstin': gstinCtrl.text.trim().toUpperCase(),
                             'rera_no': reraCtrl.text.trim(),
+                            'reraNo': reraCtrl.text.trim(),
                             'icai_membership_no': icaiCtrl.text.trim(),
+                            'icaiMembershipNo': icaiCtrl.text.trim(),
                             'address': addressCtrl.text.trim(),
                             'city': cityCtrl.text.trim(),
                             'pincode': pincodeCtrl.text.trim(),
                             'website': websiteCtrl.text.trim(),
+                            'declaration_accepted': true,
+                            'declarationAccepted': true,
+                            'permission_level': 'READ_ONLY',
+                            'permissionLevel': 'READ_ONLY',
                           };
 
                           try {
@@ -1186,218 +1199,311 @@ class _CrmPartnersScreenState extends State<CrmPartnersScreen> {
       );
     }
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final crossAxisCount = constraints.maxWidth > 1400
-            ? 3
-            : (constraints.maxWidth > 900 ? 2 : 1);
-
-        return GridView.builder(
-          padding: const EdgeInsets.all(24),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: crossAxisCount,
-            childAspectRatio: 1.65,
-            crossAxisSpacing: 16,
-            mainAxisSpacing: 16,
+    return Column(
+      children: [
+        // Table Header
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 10),
+          margin: const EdgeInsets.only(top: 12),
+          child: const Row(
+            children: [
+              SizedBox(width: 48), // Avatar space
+              Expanded(
+                flex: 3,
+                child: Text(
+                  'PARTNER & FIRM',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF64748B), letterSpacing: 0.5),
+                ),
+              ),
+              SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: Text(
+                  'ROLE & STATUS',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF64748B), letterSpacing: 0.5),
+                ),
+              ),
+              SizedBox(width: 12),
+              Expanded(
+                flex: 3,
+                child: Text(
+                  'CONTACT INFO',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF64748B), letterSpacing: 0.5),
+                ),
+              ),
+              SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: Text(
+                  'LOCATION & PAN',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF64748B), letterSpacing: 0.5),
+                ),
+              ),
+              SizedBox(width: 8),
+              SizedBox(
+                width: 110,
+                child: Text(
+                  'ACTIONS',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF64748B), letterSpacing: 0.5),
+                ),
+              ),
+            ],
           ),
-          itemCount: filtered.length,
-          itemBuilder: (context, index) {
-            final partner = filtered[index];
-            return _buildPartnerCard(partner);
-          },
-        );
-      },
+        ),
+        // List of compact single-line partner rows
+        Expanded(
+          child: ListView.separated(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+            itemCount: filtered.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 8),
+            itemBuilder: (context, index) {
+              final partner = filtered[index];
+              return _buildPartnerSingleLineRow(partner);
+            },
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _buildPartnerCard(HubPartner partner) {
+  Widget _buildPartnerSingleLineRow(HubPartner partner) {
     final roleColor = partner.role == 'CP'
         ? const Color(0xFF0D9488)
         : (partner.role == 'AP' ? const Color(0xFF7C3AED) : const Color(0xFF2563EB));
 
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: Colors.grey.shade200),
+    final firm = (partner.companyOrFirmName ?? '').trim();
+    final contact = (partner.contactPersonName ?? '').trim();
+    final primaryTitle = firm.isNotEmpty ? firm : (contact.isNotEmpty ? contact : partner.username);
+    final secondaryTitle = firm.isNotEmpty && contact.isNotEmpty ? contact : (firm.isEmpty ? partner.username : '');
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
+          ),
+        ],
       ),
-      color: Colors.white,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: () => _showPartnerProfile(partner),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Top row: Avatar + Name + Badges
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  CircleAvatar(
-                    radius: 20,
-                    backgroundColor: roleColor.withValues(alpha: 0.12),
-                    child: Text(
-                      partner.displayName.isNotEmpty ? partner.displayName[0].toUpperCase() : 'P',
-                      style: TextStyle(fontWeight: FontWeight.bold, color: roleColor, fontSize: 16),
-                    ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: () => _showPartnerProfile(partner),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Row(
+              children: [
+                // 1. Avatar
+                CircleAvatar(
+                  radius: 17,
+                  backgroundColor: roleColor.withValues(alpha: 0.12),
+                  child: Text(
+                    primaryTitle.isNotEmpty ? primaryTitle[0].toUpperCase() : 'P',
+                    style: TextStyle(fontWeight: FontWeight.bold, color: roleColor, fontSize: 14),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
+                ),
+                const SizedBox(width: 14),
+
+                // 2. Partner / Firm & Contact Person
+                Expanded(
+                  flex: 3,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        primaryTitle,
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (secondaryTitle.isNotEmpty)
                         Text(
-                          partner.displayName,
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          secondaryTitle,
+                          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        if (partner.contactPersonName != null && partner.contactPersonName!.isNotEmpty)
-                          Text(
-                            partner.contactPersonName!,
-                            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                    ],
+                  ),
+                ),
+
+                const SizedBox(width: 12),
+
+                // 3. Role & Status Badges
+                Expanded(
+                  flex: 2,
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: roleColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          partner.role,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: roleColor,
                           ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: partner.isActive ? Colors.green.shade50 : Colors.red.shade50,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 6,
+                              height: 6,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: partner.isActive ? Colors.green.shade600 : Colors.red.shade600,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              partner.status,
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: partner.isActive ? Colors.green.shade700 : Colors.red.shade700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(width: 12),
+
+                // 4. Contact (Email & Phone)
+                Expanded(
+                  flex: 3,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.email_outlined, size: 13, color: Colors.grey.shade500),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              partner.email,
+                              style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (partner.phone != null && partner.phone!.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Icon(Icons.phone_outlined, size: 13, color: Colors.grey.shade500),
+                            const SizedBox(width: 6),
+                            Text(
+                              partner.phone!,
+                              style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                            ),
+                          ],
+                        ),
                       ],
-                    ),
+                    ],
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: roleColor.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      partner.role,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: roleColor,
-                      ),
-                    ),
+                ),
+
+                const SizedBox(width: 12),
+
+                // 5. City & PAN
+                Expanded(
+                  flex: 2,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (partner.city != null && partner.city!.isNotEmpty)
+                        Row(
+                          children: [
+                            Icon(Icons.location_on_outlined, size: 13, color: Colors.grey.shade500),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                partner.city!,
+                                style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        )
+                      else
+                        Text('—', style: TextStyle(fontSize: 12, color: Colors.grey.shade400)),
+                      if (partner.pan != null && partner.pan!.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: Colors.blue.shade200),
+                          ),
+                          child: Text(
+                            'PAN: ${partner.pan}',
+                            style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Colors.blue.shade900),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
-                  const SizedBox(width: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: partner.isActive ? Colors.green.shade50 : Colors.red.shade50,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      partner.status,
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: partner.isActive ? Colors.green.shade700 : Colors.red.shade700,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              const Divider(height: 1),
-              const SizedBox(height: 10),
-              // Contact details
-              Row(
-                children: [
-                  Icon(Icons.email_outlined, size: 14, color: Colors.grey.shade500),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      partner.email,
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-              if (partner.phone != null && partner.phone!.isNotEmpty) ...[
-                const SizedBox(height: 4),
+                ),
+
+                const SizedBox(width: 8),
+
+                // 6. Action buttons
                 Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.phone_outlined, size: 14, color: Colors.grey.shade500),
-                    const SizedBox(width: 6),
-                    Text(
-                      partner.phone!,
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                    IconButton(
+                      icon: const Icon(Icons.visibility_outlined, size: 18),
+                      tooltip: 'View Profile',
+                      onPressed: () => _showPartnerProfile(partner),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.edit_outlined, size: 18),
+                      tooltip: 'Edit Partner',
+                      onPressed: () => _openAddEditPartnerDialog(partner),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                      tooltip: 'Move to Trash',
+                      onPressed: () => _confirmDeletePartner(partner),
+                      visualDensity: VisualDensity.compact,
                     ),
                   ],
                 ),
               ],
-              if (partner.city != null && partner.city!.isNotEmpty) ...[
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Icon(Icons.location_on_outlined, size: 14, color: Colors.grey.shade500),
-                    const SizedBox(width: 6),
-                    Text(
-                      partner.city!,
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-                    ),
-                  ],
-                ),
-              ],
-              const Spacer(),
-              // Tags / Reg row
-              Row(
-                children: [
-                  if (partner.reraNo != null && partner.reraNo!.isNotEmpty)
-                    Container(
-                      margin: const EdgeInsets.only(right: 6),
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.amber.shade50,
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: Colors.amber.shade200),
-                      ),
-                      child: Text(
-                        'RERA: ${partner.reraNo}',
-                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.amber.shade900),
-                      ),
-                    ),
-                  if (partner.pan != null && partner.pan!.isNotEmpty)
-                    Container(
-                      margin: const EdgeInsets.only(right: 6),
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.shade50,
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: Colors.blue.shade200),
-                      ),
-                      child: Text(
-                        'PAN: ${partner.pan}',
-                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.blue.shade900),
-                      ),
-                    ),
-                  const Spacer(),
-                  // Action buttons
-                  IconButton(
-                    icon: const Icon(Icons.visibility_outlined, size: 18),
-                    tooltip: 'View Profile',
-                    constraints: const BoxConstraints(),
-                    padding: const EdgeInsets.all(6),
-                    onPressed: () => _showPartnerProfile(partner),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.edit_outlined, size: 18),
-                    tooltip: 'Edit Partner',
-                    constraints: const BoxConstraints(),
-                    padding: const EdgeInsets.all(6),
-                    onPressed: () => _openAddEditPartnerDialog(partner),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
-                    tooltip: 'Move to Trash',
-                    constraints: const BoxConstraints(),
-                    padding: const EdgeInsets.all(6),
-                    onPressed: () => _confirmDeletePartner(partner),
-                  ),
-                ],
-              ),
-            ],
+            ),
           ),
         ),
       ),

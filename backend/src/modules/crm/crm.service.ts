@@ -4685,12 +4685,15 @@ export const crmService = {
             fullName: true,
             designation: true,
             department: true,
+            organization: true,
+            subOrganization: true,
           },
         },
         user: {
           select: {
             id: true,
             username: true,
+            subOrganization: true,
             role: { select: { name: true } },
           },
         },
@@ -4705,6 +4708,8 @@ export const crmService = {
       designation: emp.generalInfo?.designation || 'Sales Executive',
       department: emp.generalInfo?.department || 'Sales & Marketing',
       role: emp.user?.role?.name || 'SALES',
+      organization: emp.generalInfo?.organization || null,
+      subOrganization: emp.generalInfo?.subOrganization || emp.user?.subOrganization || null,
     }));
 
     if (isTelecallersOnly) {

@@ -675,6 +675,8 @@ class CrmSalesUser {
   final String? designation;
   final String? department;
   final String? role;
+  final String? organization;
+  final String? subOrganization;
 
   const CrmSalesUser({
     required this.employeeId,
@@ -682,6 +684,8 @@ class CrmSalesUser {
     this.designation,
     this.department,
     this.role,
+    this.organization,
+    this.subOrganization,
   });
 
   bool get isTelecaller {
@@ -701,6 +705,8 @@ class CrmSalesUser {
     String? desig = json['designation']?.toString();
     String? dept = json['department']?.toString();
     String? role = json['role']?.toString();
+    String? org = json['organization']?.toString();
+    String? subOrg = json['subOrganization']?.toString();
 
     if (json['generalInfo'] is Map) {
       final gi = json['generalInfo'] as Map;
@@ -709,12 +715,20 @@ class CrmSalesUser {
       }
       if (gi['designation'] != null) desig = gi['designation'].toString().trim();
       if (gi['department'] != null) dept = gi['department'].toString().trim();
+      if (gi['organization'] != null) org = gi['organization'].toString().trim();
+      if (gi['subOrganization'] != null) subOrg = gi['subOrganization'].toString().trim();
     }
 
-    if (json['user'] is Map && (json['user'] as Map)['role'] is Map) {
-      final roleMap = (json['user'] as Map)['role'] as Map;
-      if (roleMap['name'] != null) {
-        role = roleMap['name'].toString();
+    if (json['user'] is Map) {
+      final u = json['user'] as Map;
+      if (u['subOrganization'] != null && (subOrg == null || subOrg.isEmpty)) {
+        subOrg = u['subOrganization'].toString().trim();
+      }
+      if (u['role'] is Map) {
+        final roleMap = u['role'] as Map;
+        if (roleMap['name'] != null) {
+          role = roleMap['name'].toString();
+        }
       }
     }
 
@@ -724,6 +738,8 @@ class CrmSalesUser {
       designation: desig,
       department: dept,
       role: role,
+      organization: org?.trim().isNotEmpty == true ? org!.trim() : null,
+      subOrganization: subOrg?.trim().isNotEmpty == true ? subOrg!.trim() : null,
     );
   }
 }

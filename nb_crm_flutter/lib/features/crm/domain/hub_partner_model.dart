@@ -85,8 +85,8 @@ class HubPartner {
       email: (json['email'] ?? '').toString(),
       username: (json['username'] ?? '').toString(),
       phone: json['phone']?.toString(),
-      companyOrFirmName: (json['company_or_firm_name'] ?? json['companyOrFirmName'])?.toString(),
-      contactPersonName: (json['contact_person_name'] ?? json['contactPersonName'] ?? json['name'])?.toString(),
+      companyOrFirmName: (json['company_or_firm_name'] ?? json['companyOrFirmName'] ?? json['firmName'] ?? json['companyName'])?.toString(),
+      contactPersonName: (json['contact_person_name'] ?? json['contactPersonName'] ?? json['name'] ?? json['fullName'])?.toString(),
       companyLogo: (json['company_logo'] ?? json['companyLogo'])?.toString(),
       professionalStream: (json['professional_stream'] ?? json['professionalStream'])?.toString(),
       constitution: json['constitution']?.toString(),
@@ -106,30 +106,57 @@ class HubPartner {
           json['declarationAccepted'] == true ||
           json['declaration_accepted'] == 1,
       status: (json['status'] ?? 'ACTIVE').toString().toUpperCase(),
-      permissionLevel: (json['permission_level'] ?? json['permissionLevel'] ?? 'L1').toString(),
+      permissionLevel: (json['permission_level'] ?? json['permissionLevel'] ?? 'READ_ONLY').toString(),
       createdAt: parseDateTime(json['created_at'] ?? json['createdAt']),
       updatedAt: parseDateTime(json['updated_at'] ?? json['updatedAt']),
     );
   }
 
   Map<String, dynamic> toJson() {
+    final firm = companyOrFirmName?.trim();
+    final contact = contactPersonName?.trim();
     return {
       'id': id,
       'role': role,
-      'email': email,
-      'username': username,
+      'email': email.trim().toLowerCase(),
+      'username': username.trim(),
       if (phone != null) 'phone': phone,
-      if (companyOrFirmName != null) 'company_or_firm_name': companyOrFirmName,
-      if (contactPersonName != null) 'contact_person_name': contactPersonName,
-      if (companyLogo != null) 'company_logo': companyLogo,
-      if (professionalStream != null) 'professional_stream': professionalStream,
+      if (firm != null && firm.isNotEmpty) ...{
+        'company_or_firm_name': firm,
+        'companyOrFirmName': firm,
+      },
+      if (contact != null && contact.isNotEmpty) ...{
+        'contact_person_name': contact,
+        'contactPersonName': contact,
+        'name': contact,
+      },
+      if (companyLogo != null) ...{
+        'company_logo': companyLogo,
+        'companyLogo': companyLogo,
+      },
+      if (professionalStream != null) ...{
+        'professional_stream': professionalStream,
+        'professionalStream': professionalStream,
+      },
       if (constitution != null) 'constitution': constitution,
-      if (icaiMembershipNo != null) 'icai_membership_no': icaiMembershipNo,
-      if (copNo != null) 'cop_no': copNo,
+      if (icaiMembershipNo != null) ...{
+        'icai_membership_no': icaiMembershipNo,
+        'icaiMembershipNo': icaiMembershipNo,
+      },
+      if (copNo != null) ...{
+        'cop_no': copNo,
+        'copNo': copNo,
+      },
       if (pan != null) 'pan': pan,
       if (gstin != null) 'gstin': gstin,
-      if (reraNo != null) 'rera_no': reraNo,
-      if (dateOfIncorporation != null) 'date_of_incorporation': dateOfIncorporation,
+      if (reraNo != null) ...{
+        'rera_no': reraNo,
+        'reraNo': reraNo,
+      },
+      if (dateOfIncorporation != null) ...{
+        'date_of_incorporation': dateOfIncorporation,
+        'dateOfIncorporation': dateOfIncorporation,
+      },
       if (address != null) 'address': address,
       if (city != null) 'city': city,
       if (pincode != null) 'pincode': pincode,
@@ -137,8 +164,10 @@ class HubPartner {
       'nature_of_business': natureOfBusiness,
       'areas_of_practice': areasOfPractice,
       'declaration_accepted': declarationAccepted,
+      'declarationAccepted': declarationAccepted,
       'status': status,
       'permission_level': permissionLevel,
+      'permissionLevel': permissionLevel,
       if (createdAt != null) 'created_at': createdAt!.toIso8601String(),
       if (updatedAt != null) 'updated_at': updatedAt!.toIso8601String(),
     };

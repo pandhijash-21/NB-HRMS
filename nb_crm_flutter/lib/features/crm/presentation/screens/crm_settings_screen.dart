@@ -4601,6 +4601,8 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
   }) {
     List<int> tempSelected = List<int>.from(initialSelectedIds);
     String searchQuery = '';
+    String selectedOrg = 'ALL';
+    String selectedSubOrg = 'ALL';
 
     showDialog(
       context: context,
@@ -4609,16 +4611,44 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
           builder: (ctx, setDialogState) {
             final telecallerCandidates = employees.where((e) => e.isTelecaller).toList();
             final candidatePool = telecallerCandidates.isNotEmpty ? telecallerCandidates : employees;
+
+            // Extract dynamic unique organizations
+            final uniqueOrgs = candidatePool
+                .map((e) => e.organization)
+                .where((o) => o != null && o.trim().isNotEmpty)
+                .cast<String>()
+                .toSet()
+                .toList()
+              ..sort();
+
+            // Extract dynamic unique sub-organizations (optionally filtered by selectedOrg)
+            final subOrgPool = selectedOrg == 'ALL'
+                ? candidatePool
+                : candidatePool.where((e) => e.organization == selectedOrg);
+            final uniqueSubOrgs = subOrgPool
+                .map((e) => e.subOrganization)
+                .where((s) => s != null && s.trim().isNotEmpty)
+                .cast<String>()
+                .toSet()
+                .toList()
+              ..sort();
+
             final filtered = candidatePool.where((e) {
+              if (selectedOrg != 'ALL' && e.organization != selectedOrg) return false;
+              if (selectedSubOrg != 'ALL' && e.subOrganization != selectedSubOrg) return false;
+              if (searchQuery.isEmpty) return true;
               final q = searchQuery.toLowerCase();
               return e.fullName.toLowerCase().contains(q) ||
                   (e.designation ?? '').toLowerCase().contains(q) ||
                   (e.department ?? '').toLowerCase().contains(q) ||
                   (e.role ?? '').toLowerCase().contains(q) ||
+                  (e.organization ?? '').toLowerCase().contains(q) ||
+                  (e.subOrganization ?? '').toLowerCase().contains(q) ||
                   e.employeeId.toString().contains(q);
             }).toList();
 
             return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               title: Row(
                 children: [
                   Icon(Icons.checklist_rtl_rounded, color: primaryColor),
@@ -4632,13 +4662,98 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
                 ],
               ),
               content: SizedBox(
-                width: 480,
-                height: 520,
+                width: 540,
+                height: 560,
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Dynamic Org & Sub-Org Bifurcation Dropdowns
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF262320) : const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: isDark ? Colors.white12 : Colors.grey.shade300),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(Icons.business_rounded, size: 16, color: Color(0xFF6366F1)),
+                              SizedBox(width: 6),
+                              Text(
+                                'Filter by Organization & Sub-Organization',
+                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              // Organization dropdown
+                              Expanded(
+                                child: DropdownButtonFormField<String>(
+                                  initialValue: selectedOrg,
+                                  isExpanded: true,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Organization',
+                                    border: OutlineInputBorder(),
+                                    isDense: true,
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                  ),
+                                  items: [
+                                    const DropdownMenuItem(value: 'ALL', child: Text('All Organizations', style: TextStyle(fontSize: 12))),
+                                    ...uniqueOrgs.map((org) => DropdownMenuItem(
+                                          value: org,
+                                          child: Text(org, style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis),
+                                        )),
+                                  ],
+                                  onChanged: (v) {
+                                    if (v != null) {
+                                      setDialogState(() {
+                                        selectedOrg = v;
+                                        selectedSubOrg = 'ALL';
+                                      });
+                                    }
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              // Sub-Organization dropdown
+                              Expanded(
+                                child: DropdownButtonFormField<String>(
+                                  initialValue: selectedSubOrg,
+                                  isExpanded: true,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Sub Organization',
+                                    border: OutlineInputBorder(),
+                                    isDense: true,
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                  ),
+                                  items: [
+                                    const DropdownMenuItem(value: 'ALL', child: Text('All Sub-Orgs', style: TextStyle(fontSize: 12))),
+                                    ...uniqueSubOrgs.map((subOrg) => DropdownMenuItem(
+                                          value: subOrg,
+                                          child: Text(subOrg, style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis),
+                                        )),
+                                  ],
+                                  onChanged: (v) {
+                                    if (v != null) {
+                                      setDialogState(() => selectedSubOrg = v);
+                                    }
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
                     TextField(
                       decoration: InputDecoration(
-                        hintText: 'Search employee by name, role or ID...',
+                        hintText: 'Search telecaller by name, role, sub-org...',
                         prefixIcon: const Icon(Icons.search_rounded, size: 20),
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -4648,12 +4763,12 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
                         setDialogState(() => searchQuery = val.trim());
                       },
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 8),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          '${tempSelected.length} of ${candidatePool.length} selected',
+                          '${tempSelected.length} selected (${filtered.length} visible in filter)',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
@@ -4665,18 +4780,24 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
                             TextButton(
                               onPressed: () {
                                 setDialogState(() {
-                                  tempSelected = candidatePool.map((e) => e.employeeId).toList();
+                                  for (final e in filtered) {
+                                    if (!tempSelected.contains(e.employeeId)) {
+                                      tempSelected.add(e.employeeId);
+                                    }
+                                  }
                                 });
                               },
-                              child: const Text('Select All', style: TextStyle(fontSize: 12)),
+                              child: const Text('Select Filtered', style: TextStyle(fontSize: 12)),
                             ),
                             TextButton(
                               onPressed: () {
                                 setDialogState(() {
-                                  tempSelected.clear();
+                                  for (final e in filtered) {
+                                    tempSelected.remove(e.employeeId);
+                                  }
                                 });
                               },
-                              child: const Text('Clear All', style: TextStyle(fontSize: 12, color: Colors.redAccent)),
+                              child: const Text('Clear Filtered', style: TextStyle(fontSize: 12, color: Colors.redAccent)),
                             ),
                           ],
                         ),
@@ -4685,21 +4806,55 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
                     const Divider(),
                     Expanded(
                       child: filtered.isEmpty
-                          ? const Center(child: Text('No employees found matching search.'))
+                          ? Center(
+                              child: Text(
+                                selectedSubOrg != 'ALL'
+                                    ? 'No telecallers found in Sub-Org "$selectedSubOrg".'
+                                    : (selectedOrg != 'ALL'
+                                        ? 'No telecallers found in Organization "$selectedOrg".'
+                                        : 'No employees found matching filter.'),
+                                style: const TextStyle(fontSize: 13, color: Colors.grey),
+                              ),
+                            )
                           : ListView.builder(
                               itemCount: filtered.length,
                               itemBuilder: (ctx, i) {
                                 final emp = filtered[i];
                                 final isChecked = tempSelected.contains(emp.employeeId);
+                                final subOrgLabel = emp.subOrganization != null && emp.subOrganization!.isNotEmpty
+                                    ? emp.subOrganization!
+                                    : (emp.organization ?? '');
                                 return CheckboxListTile(
                                   dense: true,
                                   value: isChecked,
-                                  title: Text(
-                                    emp.fullName,
-                                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                                  title: Row(
+                                    children: [
+                                      Text(
+                                        emp.fullName,
+                                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                                      ),
+                                      if (subOrgLabel.isNotEmpty) ...[
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF6366F1).withValues(alpha: 0.12),
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Text(
+                                            subOrgLabel,
+                                            style: const TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                              color: Color(0xFF6366F1),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
                                   ),
                                   subtitle: Text(
-                                    '${emp.designation ?? "Employee"}${emp.department != null ? " • ${emp.department}" : ""} (Emp #${emp.employeeId})',
+                                    '${emp.designation ?? "Telecaller"}${emp.department != null ? " • ${emp.department}" : ""} (Emp #${emp.employeeId})',
                                     style: const TextStyle(fontSize: 11),
                                   ),
                                   activeColor: primaryColor,

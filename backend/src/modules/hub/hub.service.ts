@@ -77,13 +77,39 @@ export class HubApiService {
     return res.user || res.data || null;
   }
 
+  private normalizePartnerPayload(payload: any) {
+    const p = { ...payload };
+    const firm = p.companyOrFirmName || p.company_or_firm_name || p.firmName || '';
+    const contact = p.contactPersonName || p.contact_person_name || p.name || '';
+    const email = (p.email || '').toString().trim().toLowerCase();
+    const username = (p.username || '').toString().trim();
+
+    return {
+      ...p,
+      email,
+      username,
+      companyOrFirmName: firm,
+      company_or_firm_name: firm,
+      contactPersonName: contact,
+      contact_person_name: contact,
+      name: contact || firm,
+      role: (p.role || 'CP').toString().toUpperCase(),
+      status: (p.status || 'ACTIVE').toString().toUpperCase(),
+      permissionLevel: p.permissionLevel || p.permission_level || 'READ_ONLY',
+      permission_level: p.permissionLevel || p.permission_level || 'READ_ONLY',
+      declarationAccepted: p.declarationAccepted !== false && p.declaration_accepted !== false,
+      declaration_accepted: p.declarationAccepted !== false && p.declaration_accepted !== false,
+    };
+  }
+
   /**
    * Create a new partner / onboarding record in NB Hub.
    */
   async createPartner(payload: Partial<HubPartner> | CreateHubPartnerDto): Promise<HubPartner> {
+    const normalized = this.normalizePartnerPayload(payload);
     const res = await this.request<HubPartner>('/admin/onboarding', {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: JSON.stringify(normalized),
     });
     if (!res.data && res.user) return res.user;
     if (!res.data) throw new Error(res.message || 'Failed to create partner in NB Hub');
@@ -94,9 +120,10 @@ export class HubApiService {
    * Update an existing partner in NB Hub.
    */
   async updatePartner(id: string, payload: Partial<HubPartner> | UpdateHubPartnerDto): Promise<HubPartner> {
+    const normalized = this.normalizePartnerPayload(payload);
     const res = await this.request<HubPartner>(`/admin/onboarding/${encodeURIComponent(id)}`, {
       method: 'PUT',
-      body: JSON.stringify(payload),
+      body: JSON.stringify(normalized),
     });
     if (!res.data && res.user) return res.user;
     if (!res.data) throw new Error(res.message || 'Failed to update partner in NB Hub');

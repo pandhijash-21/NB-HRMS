@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:url_launcher/url_launcher.dart';
 
@@ -30,6 +31,16 @@ Future<bool> openExternalUrl(String url) async {
 }
 
 Future<bool> downloadUrl(String url, String fileName) => openExternalUrl(url);
+
+Future<bool> downloadBytes(Uint8List bytes, String fileName, {String mimeType = 'application/octet-stream'}) async {
+  try {
+    final file = File(fileName);
+    await file.writeAsBytes(bytes);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
 
 (void Function(String url), void Function())? openPendingTab() {
   return (

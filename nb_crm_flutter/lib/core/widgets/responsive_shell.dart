@@ -37,7 +37,6 @@ class _SideC {
   static const line = Color(0xFF2A322C);
   static const darkSurface = Color(0xFF161C18);
   static const darkLine = Color(0xFF2A322C);
-  static const selectedBg = Color(0xFF222A25);
 }
 class ResponsiveShell extends ConsumerStatefulWidget {
   const ResponsiveShell({super.key, required this.child});
@@ -130,6 +129,111 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
         onPrimaryColor: mainIconColor,
         tourTargetId: 'shell.suite_switcher',
         items: items,
+      ),
+    );
+  }
+
+  Widget _buildSuiteSwitcher(
+    BuildContext context,
+    List<String> accessibleSuites,
+    AppModule currentModule,
+    bool expanded,
+  ) {
+    final suites = [
+      if (accessibleSuites.contains('HRMS')) (AppModule.hrms, 'HRMS', Icons.groups_rounded, '/home'),
+      if (accessibleSuites.contains('ERP')) (AppModule.erp, 'ERP', Icons.account_balance_rounded, '/erp/home'),
+      if (accessibleSuites.contains('CRM')) (AppModule.crm, 'CRM', Icons.support_agent_rounded, '/crm/dashboard'),
+    ];
+
+    if (suites.length <= 1) return const SizedBox.shrink();
+
+    if (!expanded) {
+      final current = suites.firstWhere(
+        (s) => s.$1 == currentModule,
+        orElse: () => suites.first,
+      );
+      return Tooltip(
+        message: 'Current: ${current.$2} (Click to switch)',
+        child: InkWell(
+          onTap: () {
+            final nextIdx = (suites.indexWhere((s) => s.$1 == currentModule) + 1) % suites.length;
+            final target = suites[nextIdx];
+            context.read<AppModuleCubit>().setModule(target.$1);
+            context.go(target.$4);
+          },
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            height: 36,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: _SideC.darkSurface,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: _SideC.gold.withValues(alpha: 0.5)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(current.$3, size: 18, color: _SideC.goldSoft),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: _SideC.darkSurface,
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: _SideC.line),
+      ),
+      child: Row(
+        children: suites.map((suite) {
+          final isSelected = suite.$1 == currentModule;
+          return Expanded(
+            child: InkWell(
+              onTap: () {
+                if (!isSelected) {
+                  context.read<AppModuleCubit>().setModule(suite.$1);
+                  context.go(suite.$4);
+                }
+              },
+              borderRadius: BorderRadius.circular(7),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                decoration: BoxDecoration(
+                  color: isSelected ? _SideC.gold.withValues(alpha: 0.22) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(7),
+                  border: isSelected
+                      ? Border.all(color: _SideC.gold.withValues(alpha: 0.6), width: 1.2)
+                      : null,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      suite.$3,
+                      size: 13,
+                      color: isSelected ? _SideC.goldSoft : _SideC.mute,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      suite.$2,
+                      style: GoogleFonts.sourceSans3(
+                        fontSize: 11.5,
+                        fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                        color: isSelected ? _SideC.ink : _SideC.mute,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }).toList(),
       ),
     );
   }
@@ -491,16 +595,13 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             '  ↳ Headers',
             section: 'CRM',
           ),
-        if (Permissions.canReadCrmPreSales(auth.permissions, auth.user?.role, crmScope) ||
-            Permissions.canReadCrmSales(auth.permissions, auth.user?.role, crmScope) ||
-            Permissions.canReadCrmDashboard(auth.permissions, auth.user?.role, crmScope))
-          const _Destination(
-            '/crm/partners',
-            Icons.handshake_outlined,
-            Icons.handshake,
-            'Partners',
-            section: 'CRM',
-          ),
+        const _Destination(
+          '/crm/partners',
+          Icons.handshake_outlined,
+          Icons.handshake,
+          'Partners',
+          section: 'CRM',
+        ),
         if (crmScope != 'NB_FINSERVE' &&
 
             Permissions.canReadCrmVisitorDesk(auth.permissions, auth.user?.role, crmScope))
@@ -781,6 +882,10 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
         return;
       }
       if (closeDrawer) Navigator.pop(context);
+      final inferred = inferAppModule(d.route, module);
+      if (inferred != module) {
+        context.read<AppModuleCubit>().setModule(inferred);
+      }
       context.go(d.route);
     }
 
@@ -880,6 +985,10 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                           letterSpacing: 1.2,
                         ),
                       ),
+                    ],
+                    if (accessibleSuites.length > 1) ...[
+                      const SizedBox(height: 12),
+                      _buildSuiteSwitcher(context, accessibleSuites, module, true),
                     ],
                     const SizedBox(height: 14),
                     _buildNavSearchField(true, expandedHint: true),
@@ -1039,6 +1148,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                 alertCount: alertCount,
                 chatUnread: chatUnread,
                 module: module,
+                accessibleSuites: accessibleSuites,
               ),
               Expanded(child: _tourPageChild()),
             ],
@@ -1559,6 +1669,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     bool allowExpanded = true,
     int alertCount = 0,
     int chatUnread = 0,
+    required List<String> accessibleSuites,
   }) {
     final expanded = allowExpanded && _isExpanded;
     final authOnTrip = context.watch<AuthBloc>().state.user?.onTrip == true;
@@ -1650,6 +1761,17 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                     ],
                   ),
           ),
+          
+          if (accessibleSuites.length > 1)
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                expanded ? 12 : 8,
+                8,
+                expanded ? 12 : 8,
+                2,
+              ),
+              child: _buildSuiteSwitcher(context, accessibleSuites, module, expanded),
+            ),
           
           if (expanded)
             Padding(

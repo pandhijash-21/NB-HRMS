@@ -1,3 +1,5 @@
+import 'dart:js_interop';
+import 'dart:typed_data';
 import 'package:web/web.dart';
 
 Future<bool> openExternalUrl(String url) async {
@@ -50,5 +52,20 @@ Future<bool> downloadUrl(String url, String fileName) async {
   document.body?.append(a);
   a.click();
   a.remove();
+  return true;
+}
+
+Future<bool> downloadBytes(Uint8List bytes, String fileName, {String mimeType = 'application/octet-stream'}) async {
+  final parts = [bytes.toJS].toJS as JSArray<BlobPart>;
+  final blob = Blob(parts, BlobPropertyBag(type: mimeType));
+  final url = URL.createObjectURL(blob);
+  final a = HTMLAnchorElement()
+    ..href = url
+    ..download = fileName
+    ..rel = 'noopener';
+  document.body?.append(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
   return true;
 }

@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/tour/models/tour_models.dart';
 import '../../../../core/tour/widgets/tour_target.dart';
+import '../../../../core/utils/open_url.dart';
 import '../../../../core/widgets/mobile_input_formatter.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../auth/domain/permissions.dart';
@@ -379,6 +380,14 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
       if (state.statusFilter == 'WL') {
         return l.isWaitingList;
       }
+      if (state.fromDate != null) {
+        final start = DateTime(state.fromDate!.year, state.fromDate!.month, state.fromDate!.day);
+        if (l.createdAt.isBefore(start)) return false;
+      }
+      if (state.toDate != null) {
+        final end = DateTime(state.toDate!.year, state.toDate!.month, state.toDate!.day, 23, 59, 59, 999);
+        if (l.createdAt.isAfter(end)) return false;
+      }
       // Leads directly assigned to this employee (as sales rep or telecaller) are always visible to them
       if (!isAdmin && userEmployeeId != null && (l.assignedToId == userEmployeeId || l.telecallerId == userEmployeeId)) {
         return true;
@@ -628,6 +637,210 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   );
                 }
 
+                Widget buildDateFilterBar() {
+                  final hasDateFilter = state.fromDate != null || state.toDate != null;
+                  final dateFormat = DateFormat('dd MMM yyyy');
+
+                  String dateRangeLabel;
+                  if (state.fromDate != null && state.toDate != null) {
+                    if (DateUtils.isSameDay(state.fromDate!, state.toDate!)) {
+                      dateRangeLabel = dateFormat.format(state.fromDate!);
+                    } else {
+                      dateRangeLabel = '${dateFormat.format(state.fromDate!)} - ${dateFormat.format(state.toDate!)}';
+                    }
+                  } else if (state.fromDate != null) {
+                    dateRangeLabel = 'From ${dateFormat.format(state.fromDate!)}';
+                  } else if (state.toDate != null) {
+                    dateRangeLabel = 'Until ${dateFormat.format(state.toDate!)}';
+                  } else {
+                    dateRangeLabel = 'Custom Dates';
+                  }
+
+                  void setPreset(String preset) {
+                    final now = DateTime.now();
+                    DateTime? from;
+                    DateTime? to;
+                    if (preset == 'today') {
+                      from = DateTime(now.year, now.month, now.day);
+                      to = DateTime(now.year, now.month, now.day);
+                    } else if (preset == 'yesterday') {
+                      final y = now.subtract(const Duration(days: 1));
+                      from = DateTime(y.year, y.month, y.day);
+                      to = DateTime(y.year, y.month, y.day);
+                    } else if (preset == 'this_week') {
+                      final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
+                      from = DateTime(startOfWeek.year, startOfWeek.month, startOfWeek.day);
+                      to = DateTime(now.year, now.month, now.day);
+                    } else if (preset == 'this_month') {
+                      from = DateTime(now.year, now.month, 1);
+                      to = DateTime(now.year, now.month, now.day);
+                    } else if (preset == 'all') {
+                      from = null;
+                      to = null;
+                    }
+                    context.read<CrmLeadsBloc>().add(CrmLeadsDateFilterChanged(
+                      fromDate: from,
+                      toDate: to,
+                      datePreset: preset,
+                    ));
+                  }
+
+                  Future<void> pickCustomRange() async {
+                    final bloc = context.read<CrmLeadsBloc>();
+                    final initialRange = (state.fromDate != null && state.toDate != null)
+                        ? DateTimeRange(start: state.fromDate!, end: state.toDate!)
+                        : DateTimeRange(
+                            start: DateTime.now().subtract(const Duration(days: 7)),
+                            end: DateTime.now(),
+                          );
+                    final picked = await showDateRangePicker(
+                      context: context,
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime.now().add(const Duration(days: 365)),
+                      initialDateRange: initialRange,
+                      builder: (ctx, child) {
+                        return Theme(
+                          data: Theme.of(ctx).copyWith(
+                            colorScheme: Theme.of(ctx).colorScheme.copyWith(
+                              primary: primaryColor,
+                              onPrimary: Colors.white,
+                            ),
+                          ),
+                          child: child!,
+                        );
+                      },
+                    );
+                    if (picked != null) {
+                      bloc.add(CrmLeadsDateFilterChanged(
+                        fromDate: picked.start,
+                        toDate: picked.end,
+                        datePreset: 'custom',
+                      ));
+                    }
+                  }
+
+                  Widget presetChip(String label, bool isSelected, VoidCallback onTap) {
+                    return InkWell(
+                      onTap: onTap,
+                      borderRadius: BorderRadius.circular(6),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? primaryColor
+                              : (isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFE2E8F0)),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          label,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                            color: isSelected
+                                ? Colors.white
+                                : (isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569)),
+                          ),
+                        ),
+                      ),
+                    );
+                  }
+
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF1E1B18) : const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: hasDateFilter ? primaryColor.withValues(alpha: 0.5) : borderColor,
+                      ),
+                    ),
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.calendar_month_rounded, size: 16, color: hasDateFilter ? primaryColor : textMuted),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Datewise:',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: hasDateFilter ? primaryColor : (isDark ? Colors.white70 : const Color(0xFF334155)),
+                              ),
+                            ),
+                          ],
+                        ),
+                        presetChip('All', state.datePreset == 'all' && !hasDateFilter, () => setPreset('all')),
+                        presetChip('Today', state.datePreset == 'today', () => setPreset('today')),
+                        presetChip('Yesterday', state.datePreset == 'yesterday', () => setPreset('yesterday')),
+                        presetChip('This Week', state.datePreset == 'this_week', () => setPreset('this_week')),
+                        presetChip('This Month', state.datePreset == 'this_month', () => setPreset('this_month')),
+                        InkWell(
+                          onTap: pickCustomRange,
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: state.datePreset == 'custom' || hasDateFilter
+                                  ? primaryColor.withValues(alpha: 0.15)
+                                  : (isDark ? Colors.white.withValues(alpha: 0.05) : Colors.white),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: state.datePreset == 'custom' || hasDateFilter
+                                    ? primaryColor
+                                    : borderColor,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.date_range_rounded, size: 14, color: hasDateFilter ? primaryColor : textMuted),
+                                const SizedBox(width: 6),
+                                Text(
+                                  dateRangeLabel,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: hasDateFilter ? FontWeight.bold : FontWeight.w500,
+                                    color: hasDateFilter ? primaryColor : (isDark ? Colors.white : const Color(0xFF1E293B)),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        if (hasDateFilter)
+                          IconButton(
+                            tooltip: 'Clear Date Filter (Show all dates)',
+                            icon: const Icon(Icons.close_rounded, size: 16),
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+                            onPressed: () => setPreset('all'),
+                          ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: (hasDateFilter ? primaryColor : const Color(0xFF64748B)).withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            '${filteredLeads.length} leads in range',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: hasDateFilter ? primaryColor : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569)),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
                 Widget buildActionButtons({bool expand = false}) {
                   if (!canWrite) return const SizedBox.shrink();
                   if (expand) {
@@ -636,7 +849,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                       children: [
                         Row(
                           children: [
-                            if (!isOnlyWebhook) ...[
+                            if (isAdmin && !isOnlyWebhook) ...[
                               Expanded(
                                 child: ElevatedButton.icon(
                                   onPressed: () => _handleExcelImport(context),
@@ -645,12 +858,28 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: const Color(0xFF16A34A),
                                     foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: 10),
+                              const SizedBox(width: 8),
+                            ],
+                            if (isAdmin) ...[
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: () => _handleExportExcel(context, filteredLeads, state),
+                                  icon: const Icon(Icons.file_download_outlined, size: 18),
+                                  label: const Text('Export Excel'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF0D9488),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
                             ],
                             Expanded(
                               child: ElevatedButton.icon(
@@ -660,7 +889,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: primaryColor,
                                   foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                 ),
                               ),
@@ -703,13 +932,27 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                         ),
                       ),
                       const SizedBox(width: 8),
-                      if (!isOnlyWebhook) ...[
+                      if (isAdmin && !isOnlyWebhook) ...[
                         ElevatedButton.icon(
                           onPressed: () => _handleExcelImport(context),
                           icon: const Icon(Icons.upload_file_rounded, size: 18),
                           label: const Text('Import Excel'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF16A34A),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                      if (isAdmin) ...[
+                        ElevatedButton.icon(
+                          onPressed: () => _handleExportExcel(context, filteredLeads, state),
+                          icon: const Icon(Icons.file_download_outlined, size: 18),
+                          label: const Text('Export Excel'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF0D9488),
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -793,6 +1036,8 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                           ),
                         ],
                       ),
+                      const SizedBox(height: 10),
+                      buildDateFilterBar(),
                       if (canWrite) ...[
                         const SizedBox(height: 12),
                         buildActionButtons(expand: true),
@@ -801,17 +1046,25 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   );
                 }
 
-                return Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  alignment: WrapAlignment.spaceBetween,
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    SizedBox(width: 170, child: buildProjectSelector()),
-                    SizedBox(width: 170, child: buildCampaignSelector()),
-                    SizedBox(width: 190, child: buildSearchField()),
-                    SizedBox(width: 150, child: buildStatusFilter()),
-                    if (canWrite) buildActionButtons(expand: false),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      alignment: WrapAlignment.spaceBetween,
+                      children: [
+                        SizedBox(width: 170, child: buildProjectSelector()),
+                        SizedBox(width: 170, child: buildCampaignSelector()),
+                        SizedBox(width: 190, child: buildSearchField()),
+                        SizedBox(width: 150, child: buildStatusFilter()),
+                        if (canWrite) buildActionButtons(expand: false),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    buildDateFilterBar(),
                   ],
                 );
               },
@@ -992,6 +1245,16 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                         const DataColumn(label: Text('#', style: TextStyle(fontWeight: FontWeight.bold))),
                         const DataColumn(label: Text('Flow', style: TextStyle(fontWeight: FontWeight.bold))),
                         const DataColumn(label: Text('Source', style: TextStyle(fontWeight: FontWeight.bold))),
+                        const DataColumn(
+                          label: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.calendar_today_rounded, size: 14),
+                              SizedBox(width: 4),
+                              Text('Date Added', style: TextStyle(fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
                         const DataColumn(
                           label: Row(
                             children: [
@@ -1205,6 +1468,28 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                     ),
                                   );
                                 },
+                              ),
+                            ),
+
+                            // Date Added Column
+                            DataCell(
+                              Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    DateFormat('dd MMM yyyy').format(lead.createdAt.toLocal()),
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: isDark ? Colors.white : const Color(0xFF1E293B),
+                                    ),
+                                  ),
+                                  Text(
+                                    DateFormat('hh:mm a').format(lead.createdAt.toLocal()),
+                                    style: TextStyle(fontSize: 10, color: textMuted),
+                                  ),
+                                ],
                               ),
                             ),
 
@@ -3447,6 +3732,70 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
           SnackBar(content: Text('Failed to import Excel: $e'), backgroundColor: Colors.red),
         );
       }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Excel Lead Export Handler (Admin Only)
+  // ---------------------------------------------------------------------------
+  Future<void> _handleExportExcel(
+    BuildContext context,
+    List<CrmLead> leadsToExport,
+    CrmLeadsState state,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+              ),
+              SizedBox(width: 12),
+              Text('Generating Excel export...'),
+            ],
+          ),
+          duration: Duration(seconds: 2),
+        ),
+      );
+
+      final repo = context.read<CrmRepository>();
+      final bytes = await repo.exportLeadsExcel(
+        projectId: state.selectedProjectId,
+        campaignId: state.selectedCampaignId,
+        status: state.statusFilter == 'ALL' ? null : state.statusFilter,
+        leadFlow: state.leadFlowFilter == 'ALL' ? null : state.leadFlowFilter,
+        search: state.search.isEmpty ? null : state.search,
+        fromDate: state.fromDate,
+        toDate: state.toDate,
+      );
+
+      final dateTag = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
+      final fileName = 'crm_leads_$dateTag.xlsx';
+
+      await downloadBytes(
+        bytes,
+        fileName,
+        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Successfully exported ${leadsToExport.length} leads to $fileName'),
+          backgroundColor: const Color(0xFF16A34A),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Failed to export Excel: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 

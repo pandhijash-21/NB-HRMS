@@ -169,12 +169,26 @@ crmRouter.post('/campaigns', generalCrmGuard, crmController.createCampaign);
 crmRouter.put('/campaigns/:id', generalCrmGuard, crmController.updateCampaign);
 crmRouter.delete('/campaigns/:id', generalCrmGuard, crmController.deleteCampaign);
 
+// Admin-only operations within CRM (Excel import & export)
+const crmAdminGuard = (req: any, res: any, next: any) => {
+  const role = String(req.user?.roleName ?? req.user?.role ?? '').toUpperCase();
+  const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'SUPERADMIN', 'SYSTEM_ADMIN', 'ITADMIN'].some((r) => role.includes(r));
+  if (!isAdmin) {
+    return res.status(403).json({
+      success: false,
+      message: 'Forbidden: Administrator privileges required for this action',
+    });
+  }
+  return next();
+};
+
 // Leads & Excel
+crmRouter.get('/leads/export-excel', generalCrmGuard, crmAdminGuard, crmController.exportLeadsExcel);
 crmRouter.get('/leads', generalCrmGuard, crmController.getLeads);
 crmRouter.get('/leads/check-phone', generalCrmGuard, crmController.checkPhone);
 crmRouter.post('/leads', generalCrmGuard, crmController.createLead);
 crmRouter.post('/leads/merge', generalCrmGuard, crmController.mergeLeads);
-crmRouter.post('/leads/import-excel', generalCrmGuard, upload.single('file'), crmController.importExcel);
+crmRouter.post('/leads/import-excel', generalCrmGuard, crmAdminGuard, upload.single('file'), crmController.importExcel);
 crmRouter.post('/leads/:id/transfer', generalCrmGuard, crmController.transferLead);
 crmRouter.patch('/leads/:id/status', generalCrmGuard, crmController.updateLeadStatus);
 crmRouter.patch('/leads/:id', generalCrmGuard, crmController.updateLead);

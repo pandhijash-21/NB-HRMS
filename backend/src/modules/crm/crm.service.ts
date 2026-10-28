@@ -1083,10 +1083,14 @@ export const crmService = {
     limit?: number;
     scope?: string;
     inWaitingQueue?: boolean;
+    fromDate?: string;
+    toDate?: string;
+    startDate?: string;
+    endDate?: string;
   }) {
     const scope = query.scope || 'NB_DEVELOPER';
     const page = Math.max(1, query.page || 1);
-    const limit = Math.min(100, query.limit || 50);
+    const limit = Math.min(2000, query.limit || 50);
     const skip = (page - 1) * limit;
 
     const where: any = {
@@ -1196,13 +1200,29 @@ export const crmService = {
       }
     }
 
+    const from = query.fromDate || query.startDate;
+    const to = query.toDate || query.endDate;
+    if (from || to) {
+      where.createdAt = {};
+      if (from) {
+        const start = new Date(from);
+        start.setHours(0, 0, 0, 0);
+        where.createdAt.gte = start;
+      }
+      if (to) {
+        const end = new Date(to);
+        end.setHours(23, 59, 59, 999);
+        where.createdAt.lte = end;
+      }
+    }
+
     const [total, items] = await Promise.all([
       prisma.crmLead.count({ where }),
       prisma.crmLead.findMany({
         where,
         skip,
         take: limit,
-        orderBy: { updatedAt: 'desc' },
+        orderBy: { createdAt: 'desc' },
         include: {
           campaign: { select: { id: true, name: true, code: true, projectId: true } },
           assignedTo: {
@@ -1255,6 +1275,201 @@ export const crmService = {
       totalPages: Math.ceil(total / limit),
       items: enrichedItems,
     };
+  },
+
+  async exportLeadsExcel(query: {
+    projectId?: string;
+    campaignId?: string;
+    status?: string;
+    search?: string;
+    assignedToId?: number;
+    telecallerId?: number;
+    leadFlow?: string;
+    userRole?: string;
+    userEmployeeId?: number;
+    scope?: string;
+    fromDate?: string;
+    toDate?: string;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<Buffer> {
+    const scope = query.scope || 'NB_DEVELOPER';
+
+    const where: any = {
+      isDeleted: false,
+      scope,
+    };
+
+    const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'SUPERADMIN', 'SYSTEM_ADMIN', 'ITADMIN'].includes(
+      query.userRole?.toUpperCase() || ''
+    );
+
+    if (!isAdmin && query.userEmployeeId) {
+      where.OR = [
+        { telecallerId: query.userEmployeeId },
+        { assignedToId: query.userEmployeeId },
+      ];
+    }
+
+    if (query.leadFlow && query.leadFlow !== 'ALL') {
+      const flow = query.leadFlow.toUpperCase();
+      if (flow === 'MANUAL') {
+        const manualCond = [{ leadSource: 'MANUAL' }];
+        if (where.AND) where.AND.push({ OR: manualCond });
+        else where.OR = manualCond;
+      } else if (flow === 'EXCEL') {
+        const excelCond = [{ leadSource: 'EXCEL' }, { leadSource: null }];
+        if (where.AND) where.AND.push({ OR: excelCond });
+        else where.OR = excelCond;
+      } else if (flow === 'WEBHOOK' || flow === 'META') {
+        if (where.AND) where.AND.push({ leadSource: { in: ['WEBHOOK', 'META'] } });
+        else where.leadSource = { in: ['WEBHOOK', 'META'] };
+      }
+    }
+
+    if (query.campaignId && query.campaignId !== 'ALL') {
+      where.campaignId = query.campaignId;
+    } else if (query.projectId && query.projectId !== 'ALL') {
+      where.campaign = { projectId: query.projectId, scope };
+    }
+
+    if (query.status && query.status !== 'ALL') {
+      where.status = query.status as CrmLeadStatus;
+    }
+
+    if (query.assignedToId) {
+      where.assignedToId = query.assignedToId;
+    }
+    if (query.telecallerId) {
+      where.telecallerId = query.telecallerId;
+    }
+
+    if (query.search && query.search.trim()) {
+      const s = query.search.trim();
+      const searchCond = [
+        { name: { contains: s, mode: 'insensitive' } },
+        { phone: { contains: s, mode: 'insensitive' } },
+      ];
+      if (where.OR) {
+        where.AND = [{ OR: where.OR }, { OR: searchCond }];
+        delete where.OR;
+      } else {
+        where.OR = searchCond;
+      }
+    }
+
+    const from = query.fromDate || query.startDate;
+    const to = query.toDate || query.endDate;
+    if (from || to) {
+      where.createdAt = {};
+      if (from) {
+        const start = new Date(from);
+        start.setHours(0, 0, 0, 0);
+        where.createdAt.gte = start;
+      }
+      if (to) {
+        const end = new Date(to);
+        end.setHours(23, 59, 59, 999);
+        where.createdAt.lte = end;
+      }
+    }
+
+    const leads = await prisma.crmLead.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: 5000,
+      include: {
+        campaign: { select: { id: true, name: true, projectId: true } },
+        assignedTo: {
+          include: { generalInfo: { select: { fullName: true } } },
+        },
+        telecaller: {
+          include: { generalInfo: { select: { fullName: true } } },
+        },
+        followUps: {
+          where: { status: 'PENDING' },
+          orderBy: { scheduledDate: 'desc' },
+          take: 1,
+        },
+      },
+    });
+
+    const rows = leads.map((lead, idx) => {
+      const custom = (lead.customFields && typeof lead.customFields === 'object') ? (lead.customFields as Record<string, any>) : {};
+      const createdStr = lead.createdAt ? new Date(lead.createdAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : '';
+      const lastCallStr = lead.lastCallAt ? new Date(lead.lastCallAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : '';
+      const scheduledVisitStr = lead.scheduledVisitAt ? new Date(lead.scheduledVisitAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : '';
+      const visitedStr = lead.visitedAt ? new Date(lead.visitedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : '';
+      const pendingFollowUp = lead.followUps?.[0]
+        ? `${lead.followUps[0].scheduledDate.toISOString().split('T')[0]} ${lead.followUps[0].scheduledTime}`
+        : '';
+
+      const isManual = lead.leadSource === 'MANUAL' || custom.isManual === true;
+      const flow = isManual ? 'Manual' : (lead.leadSource || 'Excel');
+      const source = lead.channelPartnerName
+        ? `CP: ${lead.channelPartnerName}`
+        : (lead.referenceName ? `Ref: ${lead.referenceName}` : (custom.lead_source_type || custom.leadSource || flow));
+
+      const rowData: Record<string, any> = {
+        'S.No': idx + 1,
+        'Lead Date': createdStr,
+        'Flow': flow,
+        'Source': source,
+        'Client Name': lead.name || '',
+        'Phone Number': lead.phone || '',
+        'Status': lead.status || '',
+        'Allocated Telecaller': lead.telecaller?.generalInfo?.fullName || 'Unallocated',
+        'Assigned Sales Manager': lead.assignedTo?.generalInfo?.fullName || 'Unassigned',
+        'Project': lead.campaign?.projectId || '',
+        'Campaign': lead.campaign?.name || '',
+        'Pending Follow-up': pendingFollowUp,
+        'Last Call At': lastCallStr,
+        'Scheduled Visit At': scheduledVisitStr,
+        'Visited At': visitedStr,
+      };
+
+      if (custom.budget || custom.Budget || custom.amount || custom.Amount) {
+        rowData['Budget / Amount'] = custom.budget || custom.Budget || custom.amount || custom.Amount;
+      }
+      if (custom.requirement || custom.Requirement || custom.loan_type || custom.Loan_Type) {
+        rowData['Requirement / Type'] = custom.requirement || custom.Requirement || custom.loan_type || custom.Loan_Type;
+      }
+      if (custom.city || custom.City) {
+        rowData['City'] = custom.city || custom.City;
+      }
+      if (custom.email || custom.Email) {
+        rowData['Email'] = custom.email || custom.Email;
+      }
+      if (custom.remarks || custom.Remarks) {
+        rowData['Remarks'] = custom.remarks || custom.Remarks;
+      }
+
+      return rowData;
+    });
+
+    const wb = xlsx.utils.book_new();
+    const ws = xlsx.utils.json_to_sheet(rows.length > 0 ? rows : [{ Message: 'No leads found for selected filters' }]);
+    ws['!cols'] = [
+      { wch: 6 },
+      { wch: 20 },
+      { wch: 12 },
+      { wch: 18 },
+      { wch: 22 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 22 },
+      { wch: 22 },
+      { wch: 18 },
+      { wch: 20 },
+      { wch: 22 },
+      { wch: 20 },
+      { wch: 20 },
+      { wch: 20 },
+      { wch: 18 },
+      { wch: 20 },
+    ];
+    xlsx.utils.book_append_sheet(wb, ws, 'Pre-Sales Leads');
+    return xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
   },
 
   async createLead(

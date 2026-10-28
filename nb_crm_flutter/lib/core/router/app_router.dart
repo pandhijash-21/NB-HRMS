@@ -348,9 +348,11 @@ GoRouter createAppRouter(AuthBloc authBloc) {
             } else if (loc.startsWith('/crm/sales') && !Permissions.canReadCrmSales(perms, role)) {
               next = '/crm/pre-sales';
             } else if (loc.startsWith('/crm/partners') &&
-                (!Permissions.canReadCrmPreSales(perms, role) &&
-                 !Permissions.canReadCrmSales(perms, role) &&
-                 !Permissions.canReadCrmDashboard(perms, role))) {
+                !Permissions.isAdmin(role) &&
+                !Permissions.canReadCrm(perms, role) &&
+                !Permissions.canReadCrmPreSales(perms, role) &&
+                !Permissions.canReadCrmSales(perms, role) &&
+                !Permissions.canReadCrmDashboard(perms, role)) {
               next = defaultRoute;
             } else if (loc.startsWith('/crm/virtual-building') &&
                 (!Permissions.canReadCrmSales(perms, role) && !Permissions.canReadCrmVisitorDesk(perms, role))) {

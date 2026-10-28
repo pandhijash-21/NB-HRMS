@@ -196,13 +196,42 @@ export const crmController = {
         userRole: authUser?.role,
         userEmployeeId: authUser?.employeeId,
         page: req.query.page ? parseInt(req.query.page as string, 10) : 1,
-        limit: req.query.limit ? parseInt(req.query.limit as string, 10) : 50,
+        limit: req.query.limit ? parseInt(req.query.limit as string, 10) : 100,
         scope: getScope(req),
         inWaitingQueue: req.query.inWaitingQueue === 'true' || req.query.status === 'WL' || req.query.status === 'WAITING_LIST',
+        fromDate: (req.query.fromDate || req.query.startDate) as string,
+        toDate: (req.query.toDate || req.query.endDate) as string,
       });
       res.json(ok(leads));
     } catch (err: any) {
       res.status(500).json(fail(err.message || 'Failed to fetch leads'));
+    }
+  },
+
+  async exportLeadsExcel(req: Request, res: Response) {
+    try {
+      const authUser = (req as any).user;
+      const buffer = await crmService.exportLeadsExcel({
+        projectId: req.query.projectId as string,
+        campaignId: req.query.campaignId as string,
+        status: req.query.status as string,
+        search: req.query.search as string,
+        assignedToId: req.query.assignedToId ? parseInt(req.query.assignedToId as string, 10) : undefined,
+        telecallerId: req.query.telecallerId ? parseInt(req.query.telecallerId as string, 10) : undefined,
+        leadFlow: req.query.leadFlow as string,
+        userRole: authUser?.role,
+        userEmployeeId: authUser?.employeeId,
+        scope: getScope(req),
+        fromDate: (req.query.fromDate || req.query.startDate) as string,
+        toDate: (req.query.toDate || req.query.endDate) as string,
+      });
+
+      const dateTag = new Date().toISOString().split('T')[0];
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="leads_export_${dateTag}.xlsx"`);
+      res.send(buffer);
+    } catch (err: any) {
+      res.status(500).json(fail(err.message || 'Failed to export leads to Excel'));
     }
   },
 

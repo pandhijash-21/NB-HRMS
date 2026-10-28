@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'open_url_io.dart' if (dart.library.html) 'open_url_web.dart' as impl;
 
 /// Opens an http(s) URL in the system browser / a new tab.
@@ -5,6 +6,10 @@ Future<bool> openExternalUrl(String url) => impl.openExternalUrl(url);
 
 /// Best-effort file download. Cross-origin hosts may still open in a tab.
 Future<bool> downloadUrl(String url, String fileName) => impl.downloadUrl(url, fileName);
+
+/// Download raw in-memory bytes as a file (supports web blob URLs and native disk save).
+Future<bool> downloadBytes(Uint8List bytes, String fileName, {String mimeType = 'application/octet-stream'}) =>
+    impl.downloadBytes(bytes, fileName, mimeType: mimeType);
 
 /// A tab opened during a click so it can be pointed at a URL after an await
 /// (browsers otherwise block `window.open` once the gesture is gone).

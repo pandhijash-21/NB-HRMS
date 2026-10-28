@@ -214,8 +214,10 @@ class CrmRepository {
     String? search,
     String? leadFlow,
     int? assignedToId,
+    DateTime? fromDate,
+    DateTime? toDate,
     int page = 1,
-    int limit = 100,
+    int limit = 500,
   }) async {
     final query = <String, dynamic>{
       'page': page,
@@ -232,6 +234,8 @@ class CrmRepository {
     if (search != null && search.isNotEmpty) query['search'] = search;
     if (assignedToId != null) query['assignedToId'] = assignedToId;
     if (leadFlow != null && leadFlow != 'ALL') query['leadFlow'] = leadFlow;
+    if (fromDate != null) query['fromDate'] = fromDate.toIso8601String();
+    if (toDate != null) query['toDate'] = toDate.toIso8601String();
 
     return _dio.getEnvelope<List<CrmLead>>(
       'crm/leads',
@@ -245,6 +249,40 @@ class CrmRepository {
             .toList();
       },
     );
+  }
+
+  Future<Uint8List> exportLeadsExcel({
+    String? projectId,
+    String? campaignId,
+    String? status,
+    String? search,
+    String? leadFlow,
+    int? assignedToId,
+    DateTime? fromDate,
+    DateTime? toDate,
+  }) async {
+    final query = <String, dynamic>{
+      'scope': crmScopeNotifier.value,
+    };
+    if (projectId != null && projectId != 'ALL' && projectId.isNotEmpty) {
+      query['projectId'] = projectId;
+    }
+    if (campaignId != null && campaignId != 'ALL' && campaignId.isNotEmpty) {
+      query['campaignId'] = campaignId;
+    }
+    if (status != null && status != 'ALL') query['status'] = status;
+    if (search != null && search.isNotEmpty) query['search'] = search;
+    if (assignedToId != null) query['assignedToId'] = assignedToId;
+    if (leadFlow != null && leadFlow != 'ALL') query['leadFlow'] = leadFlow;
+    if (fromDate != null) query['fromDate'] = fromDate.toIso8601String();
+    if (toDate != null) query['toDate'] = toDate.toIso8601String();
+
+    final response = await _dio.dio.get<List<int>>(
+      'crm/leads/export-excel',
+      queryParameters: query,
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return Uint8List.fromList(response.data ?? []);
   }
 
   Future<CrmLead> createLead(Map<String, dynamic> data) async {

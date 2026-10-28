@@ -64,6 +64,20 @@ class CrmLeadsSearchChanged extends CrmLeadsEvent {
   List<Object?> get props => [search];
 }
 
+class CrmLeadsDateFilterChanged extends CrmLeadsEvent {
+  const CrmLeadsDateFilterChanged({
+    this.fromDate,
+    this.toDate,
+    this.datePreset = 'all',
+  });
+  final DateTime? fromDate;
+  final DateTime? toDate;
+  final String datePreset;
+
+  @override
+  List<Object?> get props => [fromDate, toDate, datePreset];
+}
+
 class CrmLeadsLeadCreated extends CrmLeadsEvent {
   const CrmLeadsLeadCreated(this.data);
   final Map<String, dynamic> data;
@@ -288,6 +302,9 @@ class CrmLeadsState extends Equatable {
     this.statusFilter = 'ALL',
     this.leadFlowFilter = 'ALL',
     this.search = '',
+    this.fromDate,
+    this.toDate,
+    this.datePreset = 'all',
     this.salesUsers = const [],
     this.followUps = const [],
     this.followUpFilter = 'today',
@@ -312,6 +329,9 @@ class CrmLeadsState extends Equatable {
   final String statusFilter;
   final String leadFlowFilter;
   final String search;
+  final DateTime? fromDate;
+  final DateTime? toDate;
+  final String datePreset;
   final List<CrmSalesUser> salesUsers;
   final List<CrmFollowUp> followUps;
   final String followUpFilter;
@@ -338,6 +358,11 @@ class CrmLeadsState extends Equatable {
     String? statusFilter,
     String? leadFlowFilter,
     String? search,
+    DateTime? fromDate,
+    bool clearFromDate = false,
+    DateTime? toDate,
+    bool clearToDate = false,
+    String? datePreset,
     List<CrmSalesUser>? salesUsers,
     List<CrmFollowUp>? followUps,
     String? followUpFilter,
@@ -366,6 +391,9 @@ class CrmLeadsState extends Equatable {
       statusFilter: statusFilter ?? this.statusFilter,
       leadFlowFilter: leadFlowFilter ?? this.leadFlowFilter,
       search: search ?? this.search,
+      fromDate: clearFromDate ? null : (fromDate ?? this.fromDate),
+      toDate: clearToDate ? null : (toDate ?? this.toDate),
+      datePreset: datePreset ?? this.datePreset,
       salesUsers: salesUsers ?? this.salesUsers,
       followUps: followUps ?? this.followUps,
       followUpFilter: followUpFilter ?? this.followUpFilter,
@@ -396,6 +424,9 @@ class CrmLeadsState extends Equatable {
         statusFilter,
         leadFlowFilter,
         search,
+        fromDate,
+        toDate,
+        datePreset,
         salesUsers,
         followUps,
         followUpFilter,
@@ -425,6 +456,7 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
     on<CrmLeadsStatusFilterChanged>(_onStatusFilterChanged);
     on<CrmLeadsLeadFlowFilterChanged>(_onLeadFlowFilterChanged);
     on<CrmLeadsSearchChanged>(_onSearchChanged);
+    on<CrmLeadsDateFilterChanged>(_onDateFilterChanged);
     on<CrmLeadsLeadCreated>(_onLeadCreated);
     on<CrmLeadsLeadUpdated>(_onLeadUpdated);
     on<CrmLeadsLeadStatusUpdated>(_onLeadStatusUpdated);
@@ -464,6 +496,20 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
     await _refreshLeadsOnly(emit);
   }
 
+  Future<void> _onDateFilterChanged(
+    CrmLeadsDateFilterChanged event,
+    Emitter<CrmLeadsState> emit,
+  ) async {
+    emit(state.copyWith(
+      fromDate: event.fromDate,
+      clearFromDate: event.fromDate == null,
+      toDate: event.toDate,
+      clearToDate: event.toDate == null,
+      datePreset: event.datePreset,
+    ));
+    await _refreshLeadsOnly(emit);
+  }
+
   Future<void> _refreshLeadsOnly(Emitter<CrmLeadsState> emit) async {
     try {
       final effectiveStatus = state.statusFilter;
@@ -476,6 +522,8 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
         status: effectiveStatus == 'ALL' ? null : effectiveStatus,
         leadFlow: effectiveLeadFlow == 'ALL' ? null : effectiveLeadFlow,
         search: effectiveSearch.isEmpty ? null : effectiveSearch,
+        fromDate: state.fromDate,
+        toDate: state.toDate,
       );
       emit(state.copyWith(leads: updatedLeads));
     } catch (_) {
@@ -508,6 +556,8 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
           status: effectiveStatus == 'ALL' ? null : effectiveStatus,
           leadFlow: effectiveLeadFlow == 'ALL' ? null : effectiveLeadFlow,
           search: effectiveSearch.isEmpty ? null : effectiveSearch,
+          fromDate: state.fromDate,
+          toDate: state.toDate,
         ),
         _crmRepository.getHrmsEmployees(),
         _crmRepository.getFollowUps(filter: effectiveFollowUp),

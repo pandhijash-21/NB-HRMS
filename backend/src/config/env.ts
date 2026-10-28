@@ -123,7 +123,11 @@ const envSchema = z.object({
 
   CLAMAV_HOST: optionalNonEmptyString,
   CLAMAV_PORT: z.coerce.number().int().positive().default(3310),
+
+  /** NB Hub REST API URL (Partners, Onboarding & Profile records) */
+  NB_HUB_API_URL: z.string().default('https://crm.nbdeveloper.co.in/hub-api/api'),
 })
+
 
 export type Env = z.infer<typeof envSchema>;
 

@@ -68,18 +68,37 @@ class OrgRepository {
   }
 
   Future<List<Institute>> listInstitutes({bool includeInactive = true}) async {
-    return _dio.getEnvelope<List<Institute>>(
-      'admin/institutes',
-      queryParameters: includeInactive ? {'includeInactive': 'true'} : null,
-      parse: (raw) {
-        if (raw is! List) {
-          throw const FormatException('Invalid institutes response');
-        }
-        return raw
-            .map((e) => Institute.fromJson(Map<String, dynamic>.from(e as Map)))
-            .toList();
-      },
-    );
+    try {
+      return await _dio.getEnvelope<List<Institute>>(
+        'institutes',
+        queryParameters: includeInactive ? {'includeInactive': 'true'} : null,
+        parse: (raw) {
+          if (raw is! List) {
+            throw const FormatException('Invalid institutes response');
+          }
+          return raw
+              .map((e) => Institute.fromJson(Map<String, dynamic>.from(e as Map)))
+              .toList();
+        },
+      );
+    } catch (_) {
+      try {
+        return await _dio.getEnvelope<List<Institute>>(
+          'admin/institutes',
+          queryParameters: includeInactive ? {'includeInactive': 'true'} : null,
+          parse: (raw) {
+            if (raw is! List) {
+              throw const FormatException('Invalid institutes response');
+            }
+            return raw
+                .map((e) => Institute.fromJson(Map<String, dynamic>.from(e as Map)))
+                .toList();
+          },
+        );
+      } catch (_) {
+        return listActiveInstitutes().catchError((_) => <Institute>[]);
+      }
+    }
   }
 
   Future<List<Institute>> listActiveInstitutes() async {

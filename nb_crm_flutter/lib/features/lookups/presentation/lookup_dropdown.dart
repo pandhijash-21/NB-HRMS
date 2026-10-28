@@ -183,6 +183,143 @@ Widget lookupMultiCheckbox({
   );
 }
 
+/// Multi-select checkbox field in an InputDecorator box (stores codes as a set).
+Widget lookupCheckboxGroup({
+  dynamic ref,
+  BuildContext? context,
+  required String category,
+  required String label,
+  required Set<String> selected,
+  required ValueChanged<Set<String>> onChanged,
+  bool required = false,
+  String? errorText,
+}) {
+  return _LookupContextWrapper(
+    category: category,
+    builder: (ctx, options, isLoading) {
+      if (isLoading && options.isEmpty) {
+        return InputDecorator(
+          decoration: InputDecoration(
+            labelText: required ? '$label *' : label,
+            border: const OutlineInputBorder(),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          ),
+          child: const SizedBox(
+            height: 28,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          ),
+        );
+      }
+      if (options.isEmpty) {
+        return InputDecorator(
+          decoration: InputDecoration(
+            labelText: required ? '$label *' : label,
+            border: const OutlineInputBorder(),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          ),
+          child: const Text('No options configured', style: TextStyle(color: Colors.grey, fontSize: 13)),
+        );
+      }
+
+      return _LookupCheckboxGroupField(
+        label: label,
+        options: options,
+        selected: selected,
+        onChanged: onChanged,
+        required: required,
+        errorText: errorText,
+      );
+    },
+  );
+}
+
+class _LookupCheckboxGroupField extends StatelessWidget {
+  const _LookupCheckboxGroupField({
+    required this.label,
+    required this.options,
+    required this.selected,
+    required this.onChanged,
+    this.required = false,
+    this.errorText,
+  });
+
+  final String label;
+  final List<LookupOption> options;
+  final Set<String> selected;
+  final ValueChanged<Set<String>> onChanged;
+  final bool required;
+  final String? errorText;
+
+  @override
+  Widget build(BuildContext context) {
+    return InputDecorator(
+      decoration: InputDecoration(
+        labelText: required ? '$label *' : label,
+        border: const OutlineInputBorder(),
+        contentPadding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+        errorText: errorText,
+      ),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          for (final o in options)
+            InkWell(
+              onTap: () {
+                final next = Set<String>.from(selected);
+                if (next.contains(o.code)) {
+                  next.remove(o.code);
+                } else {
+                  next.add(o.code);
+                }
+                onChanged(next);
+              },
+              borderRadius: BorderRadius.circular(4),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Checkbox(
+                      value: selected.contains(o.code),
+                      onChanged: (bool? checked) {
+                        final next = Set<String>.from(selected);
+                        if (checked == true) {
+                          next.add(o.code);
+                        } else {
+                          next.remove(o.code);
+                        }
+                        onChanged(next);
+                      },
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      o.label,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: selected.contains(o.code) ? FontWeight.w600 : FontWeight.normal,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _LookupMultiChipField extends StatelessWidget {
   const _LookupMultiChipField({
     required this.label,

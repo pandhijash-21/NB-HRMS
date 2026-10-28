@@ -4,6 +4,7 @@ import { requireAuth } from '../../middleware/auth';
 import { requirePermission } from '../../middleware/rbac';
 import { ok, fail } from '../../utils/response';
 import { uploadService } from '../personal-education/upload.service';
+import { prisma } from '../../config/prisma';
 import { projectService } from './project.service';
 import { towerService } from './tower.service';
 import { paymentTermService } from './payment-term.service';
@@ -45,6 +46,32 @@ projectRouter.get(
     }
   },
 );
+
+projectRouter.get(
+  '/owners',
+  requireAuth,
+  requirePermission('PROJECTS', 'READ'),
+  async (_req: Request, res: Response) => {
+    try {
+      const employees = await prisma.employee.findMany({
+        where: { status: 'ACTIVE' },
+        include: {
+          generalInfo: { select: { fullName: true, designation: true } },
+        },
+        orderBy: { id: 'asc' },
+      });
+      const data = employees.map((e) => ({
+        id: e.id,
+        fullName: e.generalInfo?.fullName || `Employee #${e.id}`,
+        designation: e.generalInfo?.designation,
+      }));
+      return res.json(ok(data));
+    } catch (e: unknown) {
+      return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed to list owners'));
+    }
+  },
+);
+
 
 projectRouter.post(
   '/upload',

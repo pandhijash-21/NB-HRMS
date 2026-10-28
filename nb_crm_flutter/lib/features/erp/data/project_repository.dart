@@ -195,26 +195,58 @@ class ProjectRepository {
   }
 
   Future<List<ProjectEmployeeOption>> listEmployees({int limit = 500}) async {
-    return _dio.getEnvelope<List<ProjectEmployeeOption>>(
-      'employees',
-      queryParameters: {'limit': limit},
-      parse: (raw) {
-        if (raw is! Map) return [];
-        final items = raw['items'] ?? raw['employees'] ?? raw;
-        if (items is! List) return [];
-        return items.map((e) {
-          final map = Map<String, dynamic>.from(e as Map);
-          final general = map['generalInfo'] ?? map['general_info'];
-          final g = general is Map ? Map<String, dynamic>.from(general) : map;
-          return ProjectEmployeeOption(
-            id: int.tryParse('${map['id']}') ?? 0,
-            fullName: g['fullName']?.toString() ??
-                g['full_name']?.toString() ??
-                'Employee #${map['id']}',
-          );
-        }).toList();
-      },
-    );
+    try {
+      return await _dio.getEnvelope<List<ProjectEmployeeOption>>(
+        'projects/owners',
+        parse: (raw) {
+          if (raw is! List) return [];
+          return raw.map((e) {
+            final map = Map<String, dynamic>.from(e as Map);
+            return ProjectEmployeeOption(
+              id: int.tryParse('${map['id']}') ?? 0,
+              fullName: map['fullName']?.toString() ?? 'Employee #${map['id']}',
+            );
+          }).toList();
+        },
+      );
+    } catch (_) {
+      try {
+        return await _dio.getEnvelope<List<ProjectEmployeeOption>>(
+          'employees/names',
+          parse: (raw) {
+            if (raw is! List) return [];
+            return raw.map((e) {
+              final map = Map<String, dynamic>.from(e as Map);
+              return ProjectEmployeeOption(
+                id: int.tryParse('${map['id']}') ?? 0,
+                fullName: map['fullName']?.toString() ?? 'Employee #${map['id']}',
+              );
+            }).toList();
+          },
+        );
+      } catch (_) {
+        return _dio.getEnvelope<List<ProjectEmployeeOption>>(
+          'employees',
+          queryParameters: {'limit': limit},
+          parse: (raw) {
+            if (raw is! Map) return [];
+            final items = raw['items'] ?? raw['employees'] ?? raw;
+            if (items is! List) return [];
+            return items.map((e) {
+              final map = Map<String, dynamic>.from(e as Map);
+              final general = map['generalInfo'] ?? map['general_info'];
+              final g = general is Map ? Map<String, dynamic>.from(general) : map;
+              return ProjectEmployeeOption(
+                id: int.tryParse('${map['id']}') ?? 0,
+                fullName: g['fullName']?.toString() ??
+                    g['full_name']?.toString() ??
+                    'Employee #${map['id']}',
+              );
+            }).toList();
+          },
+        ).catchError((_) => <ProjectEmployeeOption>[]);
+      }
+    }
   }
 
   Future<List<ErpPaymentPlan>> listPaymentPlans({bool includeInactive = false}) async {

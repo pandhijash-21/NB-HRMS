@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 
 import '../../../core/network/dio_client.dart';
 import '../domain/crm_models.dart';
+import '../domain/hub_partner_model.dart';
+
 
 class CrmRepository {
   final DioClient _dio;
@@ -869,5 +871,76 @@ class CrmRepository {
       parse: (raw) => Map<String, dynamic>.from(raw as Map),
     );
   }
+
+  // ---------------------------------------------------------------------------
+  // NB Hub Partners Integration
+  // ---------------------------------------------------------------------------
+  Future<List<HubPartner>> getHubPartners({String? role, String? status, String? search}) async {
+    return _dio.getEnvelope<List<HubPartner>>(
+      'crm/partners',
+      queryParameters: {
+        if (role != null && role.isNotEmpty && role != 'ALL') 'role': role,
+        if (status != null && status.isNotEmpty && status != 'ALL') 'status': status,
+        if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+      },
+      parse: (raw) {
+        if (raw is! List) return [];
+        return raw
+            .map((e) => HubPartner.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList();
+      },
+    );
+  }
+
+  Future<HubPartner?> getHubPartnerProfile(String identifier) async {
+    return _dio.getEnvelope<HubPartner?>(
+      'crm/partners/profile/${Uri.encodeComponent(identifier)}',
+      parse: (raw) {
+        if (raw == null) return null;
+        if (raw is Map) {
+          final m = Map<String, dynamic>.from(raw);
+          return HubPartner.fromJson(m);
+        }
+        return null;
+      },
+    );
+  }
+
+  Future<HubPartner> createHubPartner(Map<String, dynamic> data) async {
+    return _dio.postEnvelope<HubPartner>(
+      'crm/partners',
+      data: data,
+      parse: (raw) => HubPartner.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
+  Future<HubPartner> updateHubPartner(String id, Map<String, dynamic> data) async {
+    return _dio.putEnvelope<HubPartner>(
+      'crm/partners/${Uri.encodeComponent(id)}',
+      data: data,
+      parse: (raw) => HubPartner.fromJson(Map<String, dynamic>.from(raw as Map)),
+    );
+  }
+
+  Future<bool> deleteHubPartner(String id) async {
+    return _dio.deleteEnvelope<bool>(
+      'crm/partners/${Uri.encodeComponent(id)}',
+      parse: (raw) {
+        if (raw is Map && raw['success'] == true) return true;
+        return true;
+      },
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getHubTrash() async {
+    return _dio.getEnvelope<List<Map<String, dynamic>>>(
+      'crm/partners/trash',
+      parse: (raw) {
+        if (raw is! List) return [];
+        return raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      },
+    );
+  }
 }
+
 

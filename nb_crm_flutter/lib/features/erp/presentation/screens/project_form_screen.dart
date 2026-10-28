@@ -60,9 +60,9 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
   String? _organizationId;
   String? _instituteId;
   String? _categoryCode;
-  String? _subCategoryCode;
-  String? _structureCode;
-  String? _segmentCode;
+  final _subCategoryCodes = <String>{};
+  final _structureCodes = <String>{};
+  final _segmentCodes = <String>{};
   DateTime? _completion;
   String? _statusCode = 'ACTIVE';
   int? _ownerEmployeeId;
@@ -103,14 +103,30 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
       final projectRepo = context.read<ProjectRepository>();
       final orgRepo = context.read<OrgRepository>();
 
+      final orgsFuture = orgRepo.listActiveOrganizations().catchError((e) {
+        debugPrint('Failed to load active organizations: $e');
+        return <Organization>[];
+      });
+      final institutesFuture = orgRepo.listActiveInstitutes().catchError((e) {
+        debugPrint('Failed to load active institutes: $e');
+        return <Institute>[];
+      });
+      final ownersFuture = projectRepo.listEmployees().catchError((e) {
+        debugPrint('Failed to load project owners: $e');
+        return <ProjectEmployeeOption>[];
+      });
+      final nextOrProjectFuture = _isEdit
+          ? projectRepo.getById(widget.projectId!)
+          : projectRepo.nextNumber().catchError((e) {
+              debugPrint('Failed to get next number: $e');
+              return (projectNo: 1, displayId: '0001');
+            });
+
       final futures = await Future.wait([
-        orgRepo.listActiveOrganizations(),
-        orgRepo.listInstitutes(includeInactive: false),
-        projectRepo.listEmployees(),
-        if (_isEdit)
-          projectRepo.getById(widget.projectId!)
-        else
-          projectRepo.nextNumber(),
+        orgsFuture,
+        institutesFuture,
+        ownersFuture,
+        nextOrProjectFuture,
       ]);
 
       if (!mounted) return;
@@ -123,6 +139,9 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
         } else {
           final next = futures[3] as ({int projectNo, String displayId});
           _projectId.text = next.displayId;
+          if (_organizationId == null && _orgs.isNotEmpty) {
+            _organizationId = _orgs.first.id;
+          }
         }
         _loadingInitial = false;
       });
@@ -160,9 +179,24 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
     _organizationId = p.organizationId;
     _instituteId = p.instituteId;
     _categoryCode = p.categoryCode;
-    _subCategoryCode = p.subCategoryCode;
-    _structureCode = p.structureCode;
-    _segmentCode = p.segmentCode;
+    _subCategoryCodes
+      ..clear()
+      ..addAll((p.subCategoryCode ?? '')
+          .split(',')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty));
+    _structureCodes
+      ..clear()
+      ..addAll((p.structureCode ?? '')
+          .split(',')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty));
+    _segmentCodes
+      ..clear()
+      ..addAll((p.segmentCode ?? '')
+          .split(',')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty));
     _rera.text = p.reraNo ?? '';
     _completion = p.expectedCompletionDate;
     _notes.text = p.notes ?? '';
@@ -294,6 +328,18 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
       );
       return;
     }
+    if (_subCategoryCodes.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('At least one Project Sub Category is required')),
+      );
+      return;
+    }
+    if (_structureCodes.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('At least one Project Structure is required')),
+      );
+      return;
+    }
     if (_devAuthorityCodes.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('At least one Development authority is required')),
@@ -314,9 +360,12 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
       'organizationId': _organizationId,
       'instituteId': _instituteId,
       'categoryCode': _categoryCode,
-      'subCategoryCode': _subCategoryCode,
-      'structureCode': _structureCode,
-      'segmentCode': _segmentCode,
+      'subCategoryCode': _subCategoryCodes.join(','),
+      'subCategoryCodes': _subCategoryCodes.toList(),
+      'structureCode': _structureCodes.join(','),
+      'structureCodes': _structureCodes.toList(),
+      'segmentCode': _segmentCodes.join(','),
+      'segmentCodes': _segmentCodes.toList(),
       'reraNo': _rera.text.trim(),
       'expectedCompletionDate':
           '${_completion!.year.toString().padLeft(4, '0')}-${_completion!.month.toString().padLeft(2, '0')}-${_completion!.day.toString().padLeft(2, '0')}',
@@ -416,11 +465,19 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
       key: ValueKey('$label-$value-${items.length}'),
       isExpanded: true,
       initialValue: valid ? value : null,
-      decoration: _dec(label, required: required, hint: hint),
-      hint: hint != null ? Text(hint, overflow: TextOverflow.ellipsis) : null,
-      items: items,
-      onChanged: onChanged,
-      validator: required ? (v) => v == null ? 'Required' : null : null,
+      decoration: _dec(label, required: required, hint: items.isEmpty ? 'No $label found' : hint),
+      hint: hint != null ? Text(items.isEmpty ? 'No $label found' : hint, overflow: TextOverflow.ellipsis) : null,
+      items: items.isEmpty
+          ? [
+              DropdownMenuItem<String>(
+                value: '__EMPTY__',
+                enabled: false,
+                child: Text('No $label found', style: const TextStyle(color: Colors.grey)),
+              )
+            ]
+          : items,
+      onChanged: items.isEmpty ? null : onChanged,
+      validator: required ? (v) => (v == null || v == '__EMPTY__') ? 'Required' : null : null,
     );
   }
 
@@ -583,28 +640,40 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
                   required: true,
                   onChanged: (v) => setState(() => _categoryCode = v),
                 ),
-                lookupDropdown(
+                lookupCheckboxGroup(
                   context: context,
                   category: 'PROJECT_SUB_CATEGORY',
                   label: 'Project Sub Category',
-                  value: _subCategoryCode,
+                  selected: _subCategoryCodes,
                   required: true,
-                  onChanged: (v) => setState(() => _subCategoryCode = v),
+                  onChanged: (v) => setState(() {
+                    _subCategoryCodes
+                      ..clear()
+                      ..addAll(v);
+                  }),
                 ),
-                lookupDropdown(
+                lookupCheckboxGroup(
                   context: context,
                   category: 'PROJECT_STRUCTURE',
                   label: 'Project Structure',
-                  value: _structureCode,
+                  selected: _structureCodes,
                   required: true,
-                  onChanged: (v) => setState(() => _structureCode = v),
+                  onChanged: (v) => setState(() {
+                    _structureCodes
+                      ..clear()
+                      ..addAll(v);
+                  }),
                 ),
-                lookupNullableDropdown(
+                lookupCheckboxGroup(
                   context: context,
                   category: 'PROJECT_SEGMENT',
                   label: 'Project Segment',
-                  value: _segmentCode,
-                  onChanged: (v) => setState(() => _segmentCode = v),
+                  selected: _segmentCodes,
+                  onChanged: (v) => setState(() {
+                    _segmentCodes
+                      ..clear()
+                      ..addAll(v);
+                  }),
                 ),
                 TextFormField(
                   controller: _rera,

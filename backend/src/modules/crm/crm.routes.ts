@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { crmController } from './crm.controller';
+import { hubRouter } from '../hub';
 import { requireAuth } from '../../middleware/auth';
+
 import { requirePermission, requireAnyPermission, type PermissionAction } from '../../middleware/rbac';
 
 const upload = multer({
@@ -150,8 +152,13 @@ const visitorDeskGuard = (req: any, res: any, next: any) => {
   return requireAnyPermission(modules, actionFor(req.method))(req, res, next);
 };
 
+// NB Hub Partners Integration (Read & Manage NB Hub partners, onboarding & profiles via HTTP API)
+crmRouter.use('/partners', generalCrmGuard, hubRouter);
+crmRouter.use('/hub/partners', generalCrmGuard, hubRouter);
+
 // Projects
 crmRouter.get('/projects', generalCrmGuard, crmController.getProjects);
+
 crmRouter.post('/projects', generalCrmGuard, crmController.createProject);
 crmRouter.put('/projects/:id', generalCrmGuard, crmController.updateProject);
 crmRouter.delete('/projects/:id', generalCrmGuard, crmController.deleteProject);

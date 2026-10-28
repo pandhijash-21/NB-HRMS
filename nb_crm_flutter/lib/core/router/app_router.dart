@@ -131,6 +131,7 @@ import '../../features/crm/presentation/screens/crm_bin_screen.dart';
 import '../../features/crm/presentation/screens/crm_visitor_desk_screen.dart';
 import '../../features/crm/presentation/screens/crm_sales_screen.dart';
 import '../../features/crm/presentation/screens/crm_virtual_building_screen.dart';
+import '../../features/crm/presentation/screens/crm_partners_screen.dart';
 import '../../features/platform/presentation/screens/platform_console_screen.dart';
 import '../../features/tour/presentation/software_tour_hub_screen.dart';
 import '../../features/earth/presentation/screens/earth_hub_screen.dart';
@@ -346,6 +347,11 @@ GoRouter createAppRouter(AuthBloc authBloc) {
               next = Permissions.canReadCrmDashboard(perms, role) ? '/crm/dashboard' : defaultRoute;
             } else if (loc.startsWith('/crm/sales') && !Permissions.canReadCrmSales(perms, role)) {
               next = '/crm/pre-sales';
+            } else if (loc.startsWith('/crm/partners') &&
+                (!Permissions.canReadCrmPreSales(perms, role) &&
+                 !Permissions.canReadCrmSales(perms, role) &&
+                 !Permissions.canReadCrmDashboard(perms, role))) {
+              next = defaultRoute;
             } else if (loc.startsWith('/crm/virtual-building') &&
                 (!Permissions.canReadCrmSales(perms, role) && !Permissions.canReadCrmVisitorDesk(perms, role))) {
               next = '/crm/pre-sales';
@@ -500,6 +506,10 @@ GoRouter createAppRouter(AuthBloc authBloc) {
           GoRoute(
             path: '/crm/presales',
             redirect: (context, state) => '/crm/pre-sales',
+          ),
+          GoRoute(
+            path: '/crm/partners',
+            builder: (context, state) => const CrmPartnersScreen(),
           ),
           GoRoute(
             path: '/crm/sales',

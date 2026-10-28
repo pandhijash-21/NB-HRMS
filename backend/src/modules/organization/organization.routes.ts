@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { requireAuth } from '../../middleware/auth';
-import { requirePermission } from '../../middleware/rbac';
+import { requirePermission, requireAnyPermission } from '../../middleware/rbac';
 import { ok, fail } from '../../utils/response';
 import { organizationService } from './organization.service';
 
@@ -22,7 +22,7 @@ organizationRouter.get('/organizations', requireAuth, async (req: Request, res: 
 organizationRouter.get(
   '/admin/organizations',
   requireAuth,
-  requirePermission('USER_MGMT', 'READ'),
+  requireAnyPermission(['USER_MGMT', 'PROJECTS'], 'READ'),
   async (_req: Request, res: Response) => {
     try {
       const data = await organizationService.list({ activeOnly: false });

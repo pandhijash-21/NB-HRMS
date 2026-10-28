@@ -40,6 +40,7 @@ import { repositoryRouter } from './modules/repository';
 import { organizationRouter } from './modules/organization';
 import { orgTreeRouter } from './modules/org-tree';
 import { crmRouter, crmPublicRouter, clientPortalPageRouter } from './modules/crm/crm.routes';
+import { hubRouter } from './modules/hub';
 import { platformRouter } from './modules/platform/platform.routes';
 import { earthRouter } from './modules/earth';
 
@@ -198,6 +199,8 @@ app.use('/client-portal', clientPortalPageRouter);
 app.use('/api/client-portal', clientPortalPageRouter);
 app.use('/api/crm-public/portal', clientPortalPageRouter);
 app.use('/api/crm', ...crmLicenseGuard, crmRouter);
+app.use('/crm/api/hub/partners', ...crmLicenseGuard, hubRouter);
+app.use('/api/hub/partners', ...crmLicenseGuard, hubRouter);
 app.use('/api/earth', earthRouter);
 app.use('/api/tasks', tasksRouter);
 app.use('/api/support', supportRouter);

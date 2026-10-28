@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { requireAuth } from '../../middleware/auth';
-import { requirePermission } from '../../middleware/rbac';
+import { requirePermission, requireAnyPermission } from '../../middleware/rbac';
 import { ok, fail } from '../../utils/response';
 import { instituteService } from './institute.service';
 
@@ -21,7 +21,7 @@ instituteRouter.get('/institutes', requireAuth, async (req: Request, res: Respon
 instituteRouter.get(
   '/admin/institutes',
   requireAuth,
-  requirePermission('USER_MGMT', 'READ'),
+  requireAnyPermission(['USER_MGMT', 'PROJECTS'], 'READ'),
   async (_req: Request, res: Response) => {
     try {
       const data = await instituteService.list({ activeOnly: false });

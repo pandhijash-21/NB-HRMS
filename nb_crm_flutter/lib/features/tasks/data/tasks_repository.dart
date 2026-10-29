@@ -90,6 +90,53 @@ class TasksRepository {
     );
   }
 
+  Future<WorkTask> acceptAssignment(String id) {
+    return _dio.postEnvelope<WorkTask>(
+      'tasks/$id/accept',
+      data: const {},
+      parse: (raw) {
+        if (raw is! Map) throw const FormatException('Invalid task response');
+        return WorkTask.fromJson(Map<String, dynamic>.from(raw));
+      },
+    );
+  }
+
+  Future<WorkTask> proposeTimeline(
+    String id, {
+    required DateTime proposedDeadline,
+    String? remarks,
+  }) {
+    return _dio.postEnvelope<WorkTask>(
+      'tasks/$id/propose-timeline',
+      data: {
+        'proposedDeadline': proposedDeadline.toUtc().toIso8601String(),
+        if (remarks != null) 'remarks': remarks,
+      },
+      parse: (raw) {
+        if (raw is! Map) throw const FormatException('Invalid task response');
+        return WorkTask.fromJson(Map<String, dynamic>.from(raw));
+      },
+    );
+  }
+
+  Future<WorkTask> decideTimeline(
+    String id, {
+    required String action,
+    String? remarks,
+  }) {
+    return _dio.postEnvelope<WorkTask>(
+      'tasks/$id/decide-timeline',
+      data: {
+        'action': action,
+        if (remarks != null) 'remarks': remarks,
+      },
+      parse: (raw) {
+        if (raw is! Map) throw const FormatException('Invalid task response');
+        return WorkTask.fromJson(Map<String, dynamic>.from(raw));
+      },
+    );
+  }
+
   Future<WorkTask> requestExtraApproval(String id, String extraApproverUserId) {
     return _dio.postEnvelope<WorkTask>(
       'tasks/$id/extra-approval',

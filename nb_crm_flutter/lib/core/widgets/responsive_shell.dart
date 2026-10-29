@@ -595,13 +595,14 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             '  ↳ Headers',
             section: 'CRM',
           ),
-        const _Destination(
-          '/crm/partners',
-          Icons.handshake_outlined,
-          Icons.handshake,
-          'Partners',
-          section: 'CRM',
-        ),
+        if (Permissions.canReadCrmPartners(auth.permissions, auth.user?.role))
+          const _Destination(
+            '/crm/partners',
+            Icons.handshake_outlined,
+            Icons.handshake,
+            'Partners',
+            section: 'CRM',
+          ),
         if (crmScope != 'NB_FINSERVE' &&
 
             Permissions.canReadCrmVisitorDesk(auth.permissions, auth.user?.role, crmScope))

@@ -122,6 +122,8 @@ class _TaskDetailSheetState extends ConsumerState<TaskDetailSheet> {
               children: [
                 _chip(taskStatusLabel(_task.status), _statusColor(_task.status)),
                 _chip('Due ${_fmt(_task.deadline)}', const Color(0xFFC5A059)),
+                if (_task.proposedDeadline != null)
+                  _chip('Proposed ${_fmt(_task.proposedDeadline!)}', const Color(0xFF7c3aed)),
               ],
             ),
             const SizedBox(height: 12),
@@ -151,6 +153,27 @@ class _TaskDetailSheetState extends ConsumerState<TaskDetailSheet> {
                 style: TextStyle(color: isDark ? Colors.white70 : const Color(0xFF607D8B)),
               ),
             ],
+            if (_task.awaitsAcceptance) ...[
+              const SizedBox(height: 12),
+              Text(
+                isAssignee
+                    ? 'Accept this assignment to start work, or request a revised timeline if you need more time.'
+                    : 'Waiting for ${_task.assignee.name} to accept or request a revised timeline.',
+                style: const TextStyle(color: Color(0xFF0284c7), fontWeight: FontWeight.w700),
+              ),
+            ],
+            if (_task.awaitsTimelineDecision) ...[
+              const SizedBox(height: 12),
+              Text(
+                isAssigner
+                    ? '${_task.assignee.name} requested a revised timeline'
+                        '${_task.proposedDeadline == null ? '' : ' (${_fmt(_task.proposedDeadline!)})'}'
+                        '${_task.proposedDeadlineRemarks == null || _task.proposedDeadlineRemarks!.isEmpty ? '' : ': ${_task.proposedDeadlineRemarks}'}'
+                        '. Accept the new timeline, or keep the original due date.'
+                    : 'Your revised timeline request is with ${_task.assigner.name}. Work starts after they decide.',
+                style: const TextStyle(color: Color(0xFF7c3aed), fontWeight: FontWeight.w700),
+              ),
+            ],
             if (_task.status == 'CHANGES_REQUESTED') ...[
               const SizedBox(height: 12),
               Text(
@@ -175,7 +198,10 @@ class _TaskDetailSheetState extends ConsumerState<TaskDetailSheet> {
                 CheckboxListTile(
                   contentPadding: EdgeInsets.zero,
                   value: sub.isDone,
-                  onChanged: isAssignee && !_task.isClosed
+                  onChanged: isAssignee &&
+                          !_task.isClosed &&
+                          !_task.awaitsAcceptance &&
+                          !_task.awaitsTimelineDecision
                       ? (checked) => _run(
                             () => ref.read(tasksRepositoryProvider).setSubtaskDone(
                                   _task.id,
@@ -217,15 +243,65 @@ class _TaskDetailSheetState extends ConsumerState<TaskDetailSheet> {
             ],
             const SizedBox(height: 16),
             if (_busy) const LinearProgressIndicator(),
-            if (isAssignee && !_task.isClosed && _task.subtasks.isEmpty) ...[
+            if (isAssignee && !_task.isClosed && _task.awaitsAcceptance) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  FilledButton(
+                    onPressed: _busy
+                        ? null
+                        : () => _run(() => ref.read(tasksRepositoryProvider).acceptAssignment(_task.id)),
+                    child: const Text('Accept assignment'),
+                  ),
+                  OutlinedButton(
+                    onPressed: _busy
+                        ? null
+                        : () async {
+                            final remarks = await _askRemarks(
+                              title: 'Request revised timeline',
+                              hint: 'Why do you need more time? (optional)',
+                            );
+                            if (!mounted || remarks == null) return;
+                            final date = await showDatePicker(
+                              context: this.context,
+                              initialDate: _task.deadline.isAfter(DateTime.now())
+                                  ? _task.deadline.add(const Duration(days: 2))
+                                  : DateTime.now().add(const Duration(days: 2)),
+                              firstDate: DateTime.now().add(const Duration(days: 1)),
+                              lastDate: DateTime.now().add(const Duration(days: 730)),
+                            );
+                            if (!mounted || date == null) return;
+                            final time = await showTimePicker(
+                              context: this.context,
+                              initialTime: TimeOfDay.fromDateTime(_task.deadline),
+                            );
+                            if (!mounted) return;
+                            final proposed = DateTime(
+                              date.year,
+                              date.month,
+                              date.day,
+                              time?.hour ?? 18,
+                              time?.minute ?? 0,
+                            );
+                            await _run(
+                              () => ref.read(tasksRepositoryProvider).proposeTimeline(
+                                    _task.id,
+                                    proposedDeadline: proposed,
+                                    remarks: remarks.isEmpty ? null : remarks,
+                                  ),
+                            );
+                          },
+                    child: const Text('Request revised timeline'),
+                  ),
+                ],
+              ),
+            ],
+            if (isAssignee && !_task.isClosed && _task.subtasks.isEmpty && !_task.awaitsAcceptance && !_task.awaitsTimelineDecision) ...[
               Wrap(
                 spacing: 8,
                 children: [
-                  if (_task.status == 'ASSIGNED')
-                    FilledButton(
-                      onPressed: () => _run(() => ref.read(tasksRepositoryProvider).setStatus(_task.id, 'ONGOING')),
-                      child: const Text('Start (Ongoing)'),
-                    ),
                   if (_task.status == 'ONGOING' || _task.status == 'CHANGES_REQUESTED')
                     FilledButton(
                       onPressed: () => _run(() => ref.read(tasksRepositoryProvider).setStatus(_task.id, 'COMPLETED')),
@@ -277,6 +353,37 @@ class _TaskDetailSheetState extends ConsumerState<TaskDetailSheet> {
                 label: const Text('Need approval from someone else'),
               ),
             ],
+            if (isAssigner && _task.awaitsTimelineDecision) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  FilledButton(
+                    onPressed: _busy
+                        ? null
+                        : () => _run(
+                              () => ref.read(tasksRepositoryProvider).decideTimeline(
+                                    _task.id,
+                                    action: 'accept',
+                                  ),
+                            ),
+                    child: const Text('Accept revised timeline'),
+                  ),
+                  OutlinedButton(
+                    onPressed: _busy
+                        ? null
+                        : () => _run(
+                              () => ref.read(tasksRepositoryProvider).decideTimeline(
+                                    _task.id,
+                                    action: 'keep_original',
+                                  ),
+                            ),
+                    child: const Text('Keep original timeline'),
+                  ),
+                ],
+              ),
+            ],
             if (isAssigner && _task.status == 'COMPLETED') ...[
               const SizedBox(height: 8),
               const Text(
@@ -299,16 +406,16 @@ class _TaskDetailSheetState extends ConsumerState<TaskDetailSheet> {
                   OutlinedButton(
                     onPressed: () async {
                       final remarks = await _askRemarks(title: 'Ask for changes', hint: 'What needs to change?');
-                      if (remarks == null || remarks.isEmpty) return;
+                      if (!mounted || remarks == null || remarks.isEmpty) return;
                       final date = await showDatePicker(
-                        context: context,
+                        context: this.context,
                         initialDate: _task.deadline.isAfter(DateTime.now()) ? _task.deadline : DateTime.now().add(const Duration(days: 2)),
                         firstDate: DateTime.now(),
                         lastDate: DateTime.now().add(const Duration(days: 730)),
                       );
-                      if (date == null || !mounted) return;
+                      if (!mounted || date == null) return;
                       final time = await showTimePicker(
-                        context: context,
+                        context: this.context,
                         initialTime: TimeOfDay.fromDateTime(_task.deadline),
                       );
                       if (!mounted) return;
@@ -401,6 +508,8 @@ Color _statusColor(String status) {
       return const Color(0xFF7c3aed);
     case 'CHANGES_REQUESTED':
       return const Color(0xFFea580c);
+    case 'TIMELINE_REVISION_REQUESTED':
+      return const Color(0xFF9333ea);
     case 'APPROVED':
       return const Color(0xFF16a34a);
     case 'REJECTED':

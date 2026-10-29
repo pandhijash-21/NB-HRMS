@@ -55,6 +55,7 @@ function inferCategory(
       'CRM_PRE_SALES',
       'CRM_SALES',
       'CRM_VISITOR_DESK',
+      'CRM_PARTNERS',
       'SALES',
       'CRM_POST_SALES',
       'CRM_HEADERS',

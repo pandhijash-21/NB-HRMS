@@ -32,6 +32,8 @@ function mapTask(row: Awaited<ReturnType<typeof loadTask>>) {
     description: row.description,
     status: row.status,
     deadline: row.deadline.toISOString(),
+    proposedDeadline: row.proposedDeadline?.toISOString() ?? null,
+    proposedDeadlineRemarks: row.proposedDeadlineRemarks,
     startedAt: row.startedAt?.toISOString() ?? null,
     completedAt: row.completedAt?.toISOString() ?? null,
     reviewedAt: row.reviewedAt?.toISOString() ?? null,
@@ -214,16 +216,26 @@ export const taskService = {
     return mapTask(await loadTask(created.id));
   },
 
-  async listMine(userId: string, filter?: 'inbox' | 'assigned' | 'review' | 'extra' | 'all') {
+  async listMine(
+    userId: string,
+    filter?: 'inbox' | 'assigned' | 'review' | 'extra' | 'timeline' | 'all',
+  ) {
     const where =
       filter === 'inbox'
-        ? { assigneeUserId: userId, status: { in: ['ASSIGNED', 'ONGOING', 'CHANGES_REQUESTED'] as WorkTaskStatus[] } }
+        ? {
+            assigneeUserId: userId,
+            status: {
+              in: ['ASSIGNED', 'ONGOING', 'CHANGES_REQUESTED', 'TIMELINE_REVISION_REQUESTED'] as WorkTaskStatus[],
+            },
+          }
         : filter === 'assigned'
           ? { assignerUserId: userId }
           : filter === 'review'
             ? { assignerUserId: userId, status: 'COMPLETED' as const }
             : filter === 'extra'
               ? { extraApproverUserId: userId, extraApprovalStatus: 'PENDING' as const }
+              : filter === 'timeline'
+                ? { assignerUserId: userId, status: 'TIMELINE_REVISION_REQUESTED' as const }
               : {
                   OR: [
                     { assigneeUserId: userId },
@@ -241,11 +253,11 @@ export const taskService = {
   },
 
   async summary(userId: string) {
-    const [inbox, review, extra, changes] = await Promise.all([
+    const [inbox, review, extra, changes, timeline] = await Promise.all([
       prisma.workTask.count({
         where: {
           assigneeUserId: userId,
-          status: { in: ['ASSIGNED', 'ONGOING', 'CHANGES_REQUESTED'] },
+          status: { in: ['ASSIGNED', 'ONGOING', 'CHANGES_REQUESTED', 'TIMELINE_REVISION_REQUESTED'] },
         },
       }),
       prisma.workTask.count({
@@ -257,8 +269,11 @@ export const taskService = {
       prisma.workTask.count({
         where: { assigneeUserId: userId, status: 'CHANGES_REQUESTED' },
       }),
+      prisma.workTask.count({
+        where: { assignerUserId: userId, status: 'TIMELINE_REVISION_REQUESTED' },
+      }),
     ]);
-    return { inbox, review, extra, changes };
+    return { inbox, review, extra, changes, timeline };
   },
 
   async getById(id: string, userId: string) {
@@ -280,15 +295,20 @@ export const taskService = {
     }
     if (CLOSED.includes(row.status)) throw new Error('This task is already closed');
 
+    // ASSIGNED → ONGOING is handled by acceptAssignment (explicit acceptance).
     const allowed: Record<WorkTaskStatus, WorkTaskStatus[]> = {
-      ASSIGNED: ['ONGOING'],
+      ASSIGNED: [],
       ONGOING: ['COMPLETED'],
       CHANGES_REQUESTED: ['ONGOING', 'COMPLETED'],
+      TIMELINE_REVISION_REQUESTED: [],
       COMPLETED: [],
       APPROVED: [],
       REJECTED: [],
     };
     if (!allowed[row.status].includes(params.status)) {
+      if (row.status === 'ASSIGNED' && params.status === 'ONGOING') {
+        throw new Error('Accept the assignment (or request a revised timeline) before starting work');
+      }
       throw new Error(`Cannot move from ${row.status} to ${params.status}`);
     }
 
@@ -308,6 +328,143 @@ export const taskService = {
             type: 'STATUS_CHANGED',
             fromStatus: row.status,
             toStatus: params.status,
+          },
+        },
+      },
+    });
+    return mapTask(await loadTask(updated.id));
+  },
+
+  /** Assignee accepts the assignment with the original deadline and starts work. */
+  async acceptAssignment(params: { taskId: string; actorUserId: string }) {
+    const row = await prisma.workTask.findUnique({ where: { id: params.taskId } });
+    if (!row) throw new Error('Task not found');
+    if (row.assigneeUserId !== params.actorUserId) {
+      throw new Error('Only the assignee can accept this task');
+    }
+    if (row.status !== 'ASSIGNED') {
+      throw new Error('Only newly assigned tasks can be accepted');
+    }
+
+    const now = new Date();
+    const updated = await prisma.workTask.update({
+      where: { id: row.id },
+      data: {
+        status: 'ONGOING',
+        startedAt: row.startedAt ?? now,
+        proposedDeadline: null,
+        proposedDeadlineRemarks: null,
+        events: {
+          create: {
+            actorUserId: params.actorUserId,
+            type: 'ASSIGNMENT_ACCEPTED',
+            fromStatus: row.status,
+            toStatus: 'ONGOING',
+            remarks: 'Assignment accepted with original timeline',
+          },
+        },
+      },
+    });
+    return mapTask(await loadTask(updated.id));
+  },
+
+  /** Assignee requests a later (or different) deadline before accepting. */
+  async proposeTimeline(params: {
+    taskId: string;
+    actorUserId: string;
+    proposedDeadline: Date | string;
+    remarks?: string | null;
+  }) {
+    const row = await prisma.workTask.findUnique({ where: { id: params.taskId } });
+    if (!row) throw new Error('Task not found');
+    if (row.assigneeUserId !== params.actorUserId) {
+      throw new Error('Only the assignee can request a revised timeline');
+    }
+    if (row.status !== 'ASSIGNED') {
+      throw new Error('A revised timeline can only be requested before accepting the assignment');
+    }
+
+    const proposedDeadline = new Date(params.proposedDeadline);
+    if (Number.isNaN(proposedDeadline.getTime())) {
+      throw new Error('A valid proposed deadline is required');
+    }
+    if (proposedDeadline.getTime() <= Date.now()) {
+      throw new Error('Proposed deadline must be in the future');
+    }
+    if (proposedDeadline.getTime() === row.deadline.getTime()) {
+      throw new Error('Proposed deadline must differ from the current deadline');
+    }
+
+    const remarks = params.remarks?.trim() || null;
+    const updated = await prisma.workTask.update({
+      where: { id: row.id },
+      data: {
+        status: 'TIMELINE_REVISION_REQUESTED',
+        proposedDeadline,
+        proposedDeadlineRemarks: remarks,
+        events: {
+          create: {
+            actorUserId: params.actorUserId,
+            type: 'TIMELINE_REVISION_REQUESTED',
+            fromStatus: row.status,
+            toStatus: 'TIMELINE_REVISION_REQUESTED',
+            remarks: remarks || 'Requested a revised timeline',
+            newDeadline: proposedDeadline,
+          },
+        },
+      },
+    });
+    return mapTask(await loadTask(updated.id));
+  },
+
+  /**
+   * Assigner decides on a timeline revision request.
+   * - accept: task starts with the proposed deadline
+   * - keep_original: task starts with the original deadline
+   */
+  async decideTimeline(params: {
+    taskId: string;
+    actorUserId: string;
+    action: 'accept' | 'keep_original';
+    remarks?: string | null;
+  }) {
+    const row = await prisma.workTask.findUnique({ where: { id: params.taskId } });
+    if (!row) throw new Error('Task not found');
+    if (row.assignerUserId !== params.actorUserId) {
+      throw new Error('Only the person who assigned this task can decide the timeline');
+    }
+    if (row.status !== 'TIMELINE_REVISION_REQUESTED') {
+      throw new Error('There is no pending timeline revision for this task');
+    }
+    if (!row.proposedDeadline) {
+      throw new Error('Proposed deadline is missing');
+    }
+
+    const now = new Date();
+    const acceptRevision = params.action === 'accept';
+    const nextDeadline = acceptRevision ? row.proposedDeadline : row.deadline;
+    const remarks =
+      params.remarks?.trim() ||
+      (acceptRevision
+        ? 'Revised timeline accepted'
+        : 'Kept original timeline');
+
+    const updated = await prisma.workTask.update({
+      where: { id: row.id },
+      data: {
+        status: 'ONGOING',
+        deadline: nextDeadline,
+        proposedDeadline: null,
+        proposedDeadlineRemarks: null,
+        startedAt: row.startedAt ?? now,
+        events: {
+          create: {
+            actorUserId: params.actorUserId,
+            type: 'TIMELINE_REVISION_DECIDED',
+            fromStatus: row.status,
+            toStatus: 'ONGOING',
+            remarks,
+            newDeadline: nextDeadline,
           },
         },
       },
@@ -521,6 +678,9 @@ export const taskService = {
       throw new Error('Only the assignee can check subtasks');
     }
     if (CLOSED.includes(row.status)) throw new Error('This task is already closed');
+    if (row.status === 'ASSIGNED' || row.status === 'TIMELINE_REVISION_REQUESTED') {
+      throw new Error('Accept the assignment (or wait for the timeline decision) before working on subtasks');
+    }
 
     const sub = row.subtasks.find((s) => s.id === params.subtaskId);
     if (!sub) throw new Error('Subtask not found');
@@ -542,11 +702,9 @@ export const taskService = {
     const allDone = total > 0 && doneCount === total;
 
     let nextStatus: WorkTaskStatus = row.status;
-    if (allDone && (row.status === 'ASSIGNED' || row.status === 'ONGOING' || row.status === 'CHANGES_REQUESTED')) {
+    if (allDone && (row.status === 'ONGOING' || row.status === 'CHANGES_REQUESTED')) {
       nextStatus = 'COMPLETED';
     } else if (!allDone && row.status === 'COMPLETED') {
-      nextStatus = 'ONGOING';
-    } else if (!allDone && doneCount > 0 && row.status === 'ASSIGNED') {
       nextStatus = 'ONGOING';
     }
 

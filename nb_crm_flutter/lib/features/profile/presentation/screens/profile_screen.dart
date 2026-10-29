@@ -129,39 +129,63 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         actions: [
           if (canEdit)
             Padding(
-              padding: const EdgeInsets.only(right: 16.0),
+              padding: const EdgeInsets.only(right: 8.0),
               child: TourTarget(
                 id: TourIds.step('hrms.profile', 3),
-                child: OutlinedButton.icon(
-                onPressed: () => context.push(
-                  widget.employeeId != null
-                      ? '/profile/edit?employeeId=$empId'
-                      : '/profile/edit',
+                child: Builder(
+                  builder: (context) {
+                    final isPhone = MediaQuery.sizeOf(context).width < 600;
+                    void onEdit() {
+                      context.push(
+                        widget.employeeId != null
+                            ? '/profile/edit?employeeId=$empId'
+                            : '/profile/edit',
+                      );
+                    }
+
+                    if (isPhone) {
+                      return IconButton(
+                        tooltip: 'Edit Profile',
+                        onPressed: onEdit,
+                        icon: Icon(
+                          Icons.edit_outlined,
+                          color: isDark
+                              ? const Color(0xFFE2D6BE)
+                              : const Color(0xFF263238),
+                        ),
+                      );
+                    }
+                    return OutlinedButton.icon(
+                      onPressed: onEdit,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: isDark
+                            ? const Color(0xFFE2D6BE)
+                            : const Color(0xFF263238),
+                        side: BorderSide(
+                          color: isDark
+                              ? const Color(0xFFC5A059).withValues(alpha: 0.4)
+                              : const Color(0xFF263238).withValues(alpha: 0.5),
+                          width: 1.2,
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      icon: const Icon(Icons.edit_outlined, size: 16),
+                      label: const Text(
+                        'Edit Profile',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
+                      ),
+                    );
+                  },
                 ),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: isDark
-                      ? const Color(0xFFE2D6BE)
-                      : const Color(0xFF263238),
-                  side: BorderSide(
-                    color: isDark
-                        ? const Color(0xFFC5A059).withValues(alpha: 0.4)
-                        : const Color(0xFF263238).withValues(alpha: 0.5),
-                    width: 1.2,
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                icon: const Icon(Icons.edit_outlined, size: 16),
-                label: const Text(
-                  'Edit Profile',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-                ),
-              ),
               ),
             ),
         ],
@@ -295,6 +319,29 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     bool isDark,
   ) {
     final statusColor = _getStatusColor(profile.status, context);
+    final isPhone = MediaQuery.sizeOf(context).width < 600;
+    final avatarRadius = isPhone ? 32.0 : 40.0;
+
+    final statusChip = Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: isPhone ? 8 : 12,
+        vertical: isPhone ? 3 : 5,
+      ),
+      decoration: BoxDecoration(
+        color: statusColor.withValues(alpha: 0.12),
+        border: Border.all(color: statusColor, width: 1.2),
+        borderRadius: BorderRadius.circular(30),
+      ),
+      child: Text(
+        profile.status.toUpperCase(),
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+          color: statusColor,
+          letterSpacing: 1,
+        ),
+      ),
+    );
 
     return Container(
       decoration: BoxDecoration(
@@ -324,7 +371,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           ),
         ),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+      padding: EdgeInsets.symmetric(
+        horizontal: isPhone ? 16 : 24,
+        vertical: isPhone ? 16 : 28,
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -335,7 +385,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                 color: isDark
                     ? const Color(0xFFC5A059).withValues(alpha: 0.4)
                     : const Color(0xFF263238).withValues(alpha: 0.2),
-                width: 3,
+                width: isPhone ? 2 : 3,
               ),
               boxShadow: [
                 BoxShadow(
@@ -349,79 +399,81 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
               url: profile.photoUrl,
               name: profile.generalInfo?.fullName,
               identity: 'profile-${profile.id}',
-              radius: 40,
+              radius: avatarRadius,
               backgroundColor: isDark ? const Color(0xFF2B2722) : Colors.white,
               foregroundColor: isDark ? const Color(0xFFE2D6BE) : const Color(0xFF263238),
             ),
           ),
-          const SizedBox(width: 24),
+          SizedBox(width: isPhone ? 14 : 24),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        profile.generalInfo?.fullName ?? 'Unnamed Employee',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
-                          color: isDark
-                              ? Colors.white
-                              : const Color(0xFF212F3D),
-                          letterSpacing: -0.3,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                if (isPhone) ...[
+                  Text(
+                    profile.generalInfo?.fullName ?? 'Unnamed Employee',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: isDark
+                          ? Colors.white
+                          : const Color(0xFF212F3D),
+                      letterSpacing: -0.3,
                     ),
-                    const SizedBox(width: 12),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.12),
-                        border: Border.all(color: statusColor, width: 1.2),
-                        borderRadius: BorderRadius.circular(30),
-                      ),
-                      child: Text(
-                        profile.status.toUpperCase(),
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          color: statusColor,
-                          letterSpacing: 1,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 6),
+                  statusChip,
+                ] else
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          profile.generalInfo?.fullName ?? 'Unnamed Employee',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                            color: isDark
+                                ? Colors.white
+                                : const Color(0xFF212F3D),
+                            letterSpacing: -0.3,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                    ),
-                  ],
-                ),
+                      const SizedBox(width: 12),
+                      statusChip,
+                    ],
+                  ),
                 const SizedBox(height: 6),
                 Text(
                   profile.generalInfo?.designation.toUpperCase() ??
                       'NO DESIGNATION ASSIGNED',
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: isPhone ? 11 : 12,
                     color: isDark
                         ? const Color(0xFFD4C3A3)
                         : const Color(0xFF607D8B),
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.8,
                   ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 4),
                 Text(
                   profile.generalInfo?.department ?? 'No Department Assigned',
                   style: TextStyle(
-                    fontSize: 14,
+                    fontSize: isPhone ? 13 : 14,
                     fontWeight: FontWeight.w500,
                     color: isDark
                         ? Colors.white70
                         : const Color(0xFF263238).withValues(alpha: 0.7),
                   ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 10),
                 Row(
@@ -434,16 +486,20 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                           : const Color(0xFF607D8B).withValues(alpha: 0.8),
                     ),
                     const SizedBox(width: 6),
-                    Text(
-                      profile.generalInfo != null
-                          ? 'Joined ${_formatDate(profile.generalInfo!.joiningDate)}'
-                          : 'No Joining Date',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: isDark
-                            ? Colors.white54
-                            : const Color(0xFF607D8B),
+                    Expanded(
+                      child: Text(
+                        profile.generalInfo != null
+                            ? 'Joined ${_formatDate(profile.generalInfo!.joiningDate)}'
+                            : 'No Joining Date',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: isDark
+                              ? Colors.white54
+                              : const Color(0xFF607D8B),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
@@ -478,9 +534,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       child: TabBar(
         controller: tabController,
         isScrollable: true,
+        tabAlignment: TabAlignment.start,
         indicatorColor: isDark ? const Color(0xFFC5A059) : Colors.black,
         indicatorWeight: 3,
         labelColor: isDark ? const Color(0xFFE2D6BE) : Colors.black,
+        labelPadding: EdgeInsets.symmetric(
+          horizontal: MediaQuery.sizeOf(context).width < 600 ? 12 : 16,
+        ),
         labelStyle: const TextStyle(
           fontWeight: FontWeight.w700,
           fontSize: 13,

@@ -139,6 +139,7 @@ class Permissions {
           'CRM_PRE_SALES',
           'CRM_SALES',
           'CRM_VISITOR_DESK',
+          'CRM_PARTNERS',
           'SALES',
           'CRM_POST_SALES',
           'CRM_HEADERS',
@@ -330,7 +331,18 @@ class Permissions {
         hasPermission(perms, 'CRM_HEADERS', 'READ') ||
         hasPermission(perms, 'CRM_SETTINGS', 'READ') ||
         hasPermission(perms, 'CRM_BIN', 'READ') ||
-        hasPermission(perms, 'CRM_VISITOR_DESK', 'READ');
+        hasPermission(perms, 'CRM_VISITOR_DESK', 'READ') ||
+        hasPermission(perms, 'CRM_PARTNERS', 'READ');
+  }
+
+  static bool canReadCrmPartners(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    return hasPermission(perms, 'CRM_PARTNERS', 'READ');
+  }
+
+  static bool canWriteCrmPartners(PermissionMap? perms, [String? role]) {
+    if (isSuperAdmin(role)) return true;
+    return hasPermission(perms, 'CRM_PARTNERS', 'WRITE');
   }
 
   static bool canAccessFinserveCrm(PermissionMap? perms, [String? role]) {

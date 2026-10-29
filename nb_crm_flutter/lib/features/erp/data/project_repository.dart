@@ -195,58 +195,109 @@ class ProjectRepository {
   }
 
   Future<List<ProjectEmployeeOption>> listEmployees({int limit = 500}) async {
-    try {
-      return await _dio.getEnvelope<List<ProjectEmployeeOption>>(
+    Future<List<ProjectEmployeeOption>> fromOwners() {
+      return _dio.getEnvelope<List<ProjectEmployeeOption>>(
         'projects/owners',
         parse: (raw) {
           if (raw is! List) return [];
-          return raw.map((e) {
-            final map = Map<String, dynamic>.from(e as Map);
-            return ProjectEmployeeOption(
-              id: int.tryParse('${map['id']}') ?? 0,
-              fullName: map['fullName']?.toString() ?? 'Employee #${map['id']}',
-            );
-          }).toList();
+          return raw
+              .whereType<Map>()
+              .map((e) {
+                final map = Map<String, dynamic>.from(e);
+                final id = int.tryParse('${map['id']}') ?? 0;
+                return ProjectEmployeeOption(
+                  id: id,
+                  fullName: map['fullName']?.toString() ?? 'Employee #$id',
+                );
+              })
+              .where((e) => e.id > 0)
+              .toList();
         },
       );
-    } catch (_) {
+    }
+
+    Future<List<ProjectEmployeeOption>> fromNames() {
+      return _dio.getEnvelope<List<ProjectEmployeeOption>>(
+        'employees/names',
+        parse: (raw) {
+          if (raw is! List) return [];
+          return raw
+              .whereType<Map>()
+              .map((e) {
+                final map = Map<String, dynamic>.from(e);
+                // Directory mixes employees + position slots; only real employee ids.
+                final type = map['type']?.toString().toUpperCase();
+                if (type != null && type.isNotEmpty && type != 'EMPLOYEE') {
+                  return const ProjectEmployeeOption(id: 0, fullName: '');
+                }
+                final id = int.tryParse('${map['id']}') ?? 0;
+                return ProjectEmployeeOption(
+                  id: id,
+                  fullName: map['fullName']?.toString() ?? 'Employee #$id',
+                );
+              })
+              .where((e) => e.id > 0 && e.fullName.isNotEmpty)
+              .toList();
+        },
+      );
+    }
+
+    Future<List<ProjectEmployeeOption>> fromEmployeesList() {
+      return _dio.getEnvelope<List<ProjectEmployeeOption>>(
+        'employees',
+        queryParameters: {'limit': limit},
+        parse: (raw) {
+          if (raw is! Map) return [];
+          final items = raw['items'] ?? raw['employees'] ?? raw;
+          if (items is! List) return [];
+          return items
+              .whereType<Map>()
+              .map((e) {
+                final map = Map<String, dynamic>.from(e);
+                final general = map['generalInfo'] ?? map['general_info'];
+                final g = general is Map ? Map<String, dynamic>.from(general) : map;
+                final id = int.tryParse('${map['id']}') ?? 0;
+                return ProjectEmployeeOption(
+                  id: id,
+                  fullName: g['fullName']?.toString() ??
+                      g['full_name']?.toString() ??
+                      'Employee #$id',
+                );
+              })
+              .where((e) => e.id > 0)
+              .toList();
+        },
+      );
+    }
+
+    // Prefer PROJECTS-scoped owners, but keep trying if the call fails OR returns [].
+    // An empty success used to short-circuit and leave the Project Owner dropdown disabled.
+    final sources = <Future<List<ProjectEmployeeOption>> Function()>[
+      fromOwners,
+      fromNames,
+      fromEmployeesList,
+    ];
+    Object? lastError;
+    for (final source in sources) {
       try {
-        return await _dio.getEnvelope<List<ProjectEmployeeOption>>(
-          'employees/names',
-          parse: (raw) {
-            if (raw is! List) return [];
-            return raw.map((e) {
-              final map = Map<String, dynamic>.from(e as Map);
-              return ProjectEmployeeOption(
-                id: int.tryParse('${map['id']}') ?? 0,
-                fullName: map['fullName']?.toString() ?? 'Employee #${map['id']}',
-              );
-            }).toList();
-          },
-        );
-      } catch (_) {
-        return _dio.getEnvelope<List<ProjectEmployeeOption>>(
-          'employees',
-          queryParameters: {'limit': limit},
-          parse: (raw) {
-            if (raw is! Map) return [];
-            final items = raw['items'] ?? raw['employees'] ?? raw;
-            if (items is! List) return [];
-            return items.map((e) {
-              final map = Map<String, dynamic>.from(e as Map);
-              final general = map['generalInfo'] ?? map['general_info'];
-              final g = general is Map ? Map<String, dynamic>.from(general) : map;
-              return ProjectEmployeeOption(
-                id: int.tryParse('${map['id']}') ?? 0,
-                fullName: g['fullName']?.toString() ??
-                    g['full_name']?.toString() ??
-                    'Employee #${map['id']}',
-              );
-            }).toList();
-          },
-        ).catchError((_) => <ProjectEmployeeOption>[]);
+        final list = await source();
+        if (list.isNotEmpty) {
+          final byId = <int, ProjectEmployeeOption>{};
+          for (final e in list) {
+            byId.putIfAbsent(e.id, () => e);
+          }
+          final merged = byId.values.toList()
+            ..sort((a, b) => a.fullName.toLowerCase().compareTo(b.fullName.toLowerCase()));
+          return merged;
+        }
+      } catch (e) {
+        lastError = e;
       }
     }
+    if (lastError != null) {
+      throw lastError;
+    }
+    return const [];
   }
 
   Future<List<ErpPaymentPlan>> listPaymentPlans({bool includeInactive = false}) async {

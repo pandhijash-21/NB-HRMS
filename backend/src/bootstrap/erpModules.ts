@@ -153,6 +153,13 @@ export const SYSTEM_SUBMODULES: SystemSubmoduleDef[] = [
     category: 'CRM',
     sortOrder: 9,
   },
+  {
+    key: 'CRM_PARTNERS',
+    name: 'NB Hub Partners',
+    description: 'Channel partners (CP) and associate partners (AP) — onboarding, profiles, and Hub partner management',
+    category: 'CRM',
+    sortOrder: 10,
+  },
 
   // ── CRM MODULE (NB FINSERVE) ───────────────────────────────────────────────
   {
@@ -660,6 +667,7 @@ export async function ensureErpModulePermissions(): Promise<void> {
             'CRM_PRE_SALES',
             'CRM_SALES',
             'CRM_VISITOR_DESK',
+            'CRM_PARTNERS',
             'FIN_CRM_PRE_SALES',
             'FIN_CRM_DASHBOARD',
             'FIN_CRM_HEADERS',

@@ -37,14 +37,223 @@ class AttendanceScreen extends StatelessWidget {
   }
 }
 
-class _AttendanceView extends StatelessWidget {
+class _AttendanceView extends StatefulWidget {
   const _AttendanceView();
+
+  @override
+  State<_AttendanceView> createState() => _AttendanceViewState();
+}
+
+class _AttendanceViewState extends State<_AttendanceView> {
+  /// Blocks double-tap / Safari double-submit while verifying, then for 30s after click.
+  static const _punchCooldown = Duration(seconds: 30);
+
+  bool _punchInFlight = false;
+  DateTime? _punchLockedUntil;
+  int _cooldownTick = 0;
+
+  bool get _punchButtonLocked {
+    if (_punchInFlight) return true;
+    final until = _punchLockedUntil;
+    if (until == null) return false;
+    return DateTime.now().isBefore(until);
+  }
+
+  int get _punchCooldownRemainingSec {
+    final until = _punchLockedUntil;
+    if (until == null) return 0;
+    final left = until.difference(DateTime.now()).inSeconds;
+    return left > 0 ? left : 0;
+  }
+
+  void _startPunchCooldown() {
+    _punchLockedUntil = DateTime.now().add(_punchCooldown);
+    void tick() {
+      if (!mounted) return;
+      setState(() => _cooldownTick++);
+      if (_punchCooldownRemainingSec > 0 || _punchInFlight) {
+        Future<void>.delayed(const Duration(seconds: 1), tick);
+      }
+    }
+
+    Future<void>.delayed(const Duration(seconds: 1), tick);
+  }
+
+  Future<void> _onPunchPressed({
+    required AuthState auth,
+    required AttendanceState state,
+    required bool canPunchSelectedDay,
+    required String todayYmd,
+  }) async {
+    if (_punchButtonLocked) {
+      final wait = _punchCooldownRemainingSec;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            wait > 0
+                ? 'Please wait ${wait}s before punching again.'
+                : 'Punch already in progress…',
+          ),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    if (kIsWeb) {
+      final gate = state.webGate ?? await WebAttendanceGate.evaluate();
+      if (!gate.allowed) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(gate.message ?? 'Web attendance is not allowed on this browser.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+    }
+
+    if (!mounted) return;
+
+    if (!canPunchSelectedDay) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            state.selectedDate.isEmpty
+                ? 'Select today ($todayYmd) to punch in/out.'
+                : 'Punch in/out is only allowed for today ($todayYmd). Past or future days are view-only.',
+          ),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    final empId = auth.user?.employeeId;
+    if (empId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Employee ID not found in session.'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    final settings = state.settings;
+    if (settings == null || settings.biometricToken == null || settings.biometricToken!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            kIsWeb
+                ? 'Register Safari first (Attendance → Register Safari).'
+                : 'Fingerprint/Face ID not registered. Please register it first.',
+          ),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    if (!state.hasLocalToken) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            kIsWeb
+                ? 'Safari is not linked yet. Tap “Register Safari” first.'
+                : 'Fingerprint not set on this device. Please register it first.',
+          ),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    final currentDayData = state.dayDetail;
+    if (currentDayData != null) {
+      if (currentDayData.punches.length >= 2) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Maximum 2 punches allowed per day (1 In, 1 Out).'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
+      if (currentDayData.punches.isNotEmpty) {
+        final lastPunch = currentDayData.punches.last;
+        final lastPunchTime = DateTime.parse(lastPunch.punchAt);
+        final diff = DateTime.now().difference(lastPunchTime);
+        if (diff.inMinutes < 20) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Please wait ${20 - diff.inMinutes} minutes before punching again.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+          return;
+        }
+      }
+
+      if (currentDayData.punches.length == 1) {
+        if (!mounted) return;
+        final confirm = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Confirm Punch Out'),
+            content: const Text('Are you sure you want to punch out for the day?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFC5A059),
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Punch Out'),
+              ),
+            ],
+          ),
+        );
+        if (confirm != true) return;
+      }
+    }
+
+    if (!mounted) return;
+
+    // Lock immediately so Safari double-tap / overlapping taps cannot fire twice.
+    setState(() => _punchInFlight = true);
+    _startPunchCooldown();
+
+    try {
+      final dio = context.read<DioClient>();
+      final svc = GeofencedPunchService(dio);
+      await svc.executePunch(context, empId);
+      if (mounted) {
+        context.read<AttendanceBloc>().add(AttendanceRefreshRequested(employeeId: empId));
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _punchInFlight = false;
+          _cooldownTick++;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthBloc>().state;
     final state = context.watch<AttendanceBloc>().state;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    // Keep FAB label reactive while cooldown ticks down.
+    // ignore: unused_local_variable
+    final _ = _cooldownTick;
 
     final webGate = state.webGate;
     final webAllowed = !kIsWeb || (webGate?.allowed == true);
@@ -56,12 +265,27 @@ class _AttendanceView extends StatelessWidget {
     // Punch In/Out is only for the current calendar day (IST).
     final todayYmd = _attendanceTodayYmdIst();
     final canPunchSelectedDay = state.selectedDate == todayYmd;
+    final punchLocked = _punchButtonLocked;
+    final cooldownSec = _punchCooldownRemainingSec;
 
     final year = state.year == 0 ? DateTime.now().year : state.year;
     final month = state.month == 0 ? DateTime.now().month : state.month;
 
     final daysInMonth = DateTime(year, month + 1, 0).day;
     final firstWeekday = DateTime(year, month, 1).weekday;
+
+    String punchLabel;
+    if (punchLocked) {
+      punchLabel = _punchInFlight
+          ? 'Verifying…'
+          : (cooldownSec > 0 ? 'Wait ${cooldownSec}s' : 'Punch In/Out');
+    } else if (!canPunchSelectedDay) {
+      punchLabel = 'Today only';
+    } else if (kIsWeb) {
+      punchLabel = 'Punch (iOS Safari)';
+    } else {
+      punchLabel = 'Punch In/Out';
+    }
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
@@ -91,141 +315,57 @@ class _AttendanceView extends StatelessWidget {
           ? TourTarget(
               id: TourIds.step('hrms.attendance', 2),
               child: FloatingActionButton.extended(
-        onPressed: () async {
-          if (kIsWeb) {
-            final gate = state.webGate ?? await WebAttendanceGate.evaluate();
-            if (!gate.allowed) {
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(gate.message ?? 'Web attendance is not allowed on this browser.'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-              }
-              return;
-            }
-          }
-
-          if (!canPunchSelectedDay) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  state.selectedDate.isEmpty
-                      ? 'Select today ($todayYmd) to punch in/out.'
-                      : 'Punch in/out is only allowed for today ($todayYmd). Past or future days are view-only.',
+                onPressed: (canPunchSelectedDay && !punchLocked)
+                    ? () => _onPunchPressed(
+                          auth: auth,
+                          state: state,
+                          canPunchSelectedDay: canPunchSelectedDay,
+                          todayYmd: todayYmd,
+                        )
+                    : () {
+                        if (punchLocked) {
+                          final wait = _punchCooldownRemainingSec;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                wait > 0
+                                    ? 'Please wait ${wait}s before punching again.'
+                                    : 'Punch already in progress…',
+                              ),
+                              backgroundColor: Colors.orange,
+                            ),
+                          );
+                          return;
+                        }
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              state.selectedDate.isEmpty
+                                  ? 'Select today ($todayYmd) to punch in/out.'
+                                  : 'Punch in/out is only allowed for today ($todayYmd). Past or future days are view-only.',
+                            ),
+                            backgroundColor: Colors.orange,
+                          ),
+                        );
+                      },
+                backgroundColor: (canPunchSelectedDay && !punchLocked)
+                    ? const Color(0xFFC5A059)
+                    : Colors.grey.shade500,
+                icon: _punchInFlight
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.fingerprint_rounded, color: Colors.white),
+                label: Text(
+                  punchLabel,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                 ),
-                backgroundColor: Colors.orange,
               ),
-            );
-            return;
-          }
-
-          final empId = auth.user?.employeeId;
-          if (empId == null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Employee ID not found in session.'), backgroundColor: Colors.red),
-            );
-            return;
-          }
-
-          // Check if biometrics is registered
-          final settings = state.settings;
-          if (settings == null || settings.biometricToken == null || settings.biometricToken!.isEmpty) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                  kIsWeb
-                      ? 'Register Safari first (Attendance → Register Safari).'
-                      : 'Fingerprint/Face ID not registered. Please register it first.',
-                ),
-                backgroundColor: Colors.orange,
-              ),
-            );
-            return;
-          }
-
-          final hasLocal = state.hasLocalToken;
-          if (!hasLocal) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                  kIsWeb
-                      ? 'Safari is not linked yet. Tap “Register Safari” first.'
-                      : 'Fingerprint not set on this device. Please register it first.',
-                ),
-                backgroundColor: Colors.orange,
-              ),
-            );
-            return;
-          }
-
-          final currentDayData = state.dayDetail;
-          if (currentDayData != null) {
-            if (currentDayData.punches.length >= 2) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Maximum 2 punches allowed per day (1 In, 1 Out).'), backgroundColor: Colors.orange),
-              );
-              return;
-            }
-
-            if (currentDayData.punches.isNotEmpty) {
-              final lastPunch = currentDayData.punches.last;
-              final lastPunchTime = DateTime.parse(lastPunch.punchAt);
-              final diff = DateTime.now().difference(lastPunchTime);
-              if (diff.inMinutes < 20) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Please wait ${20 - diff.inMinutes} minutes before punching again.'), backgroundColor: Colors.orange),
-                );
-                return;
-              }
-            }
-
-            if (currentDayData.punches.length == 1) {
-              final confirm = await showDialog<bool>(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: const Text('Confirm Punch Out'),
-                  content: const Text('Are you sure you want to punch out for the day?'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop(false),
-                      child: const Text('Cancel'),
-                    ),
-                    ElevatedButton(
-                      onPressed: () => Navigator.of(context).pop(true),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFC5A059),
-                        foregroundColor: Colors.white,
-                      ),
-                      child: const Text('Punch Out'),
-                    ),
-                  ],
-                ),
-              );
-              if (confirm != true) return;
-            }
-          }
-
-          final dio = context.read<DioClient>();
-          final svc = GeofencedPunchService(dio);
-          if (context.mounted) {
-            await svc.executePunch(context, empId);
-            if (context.mounted) {
-              context.read<AttendanceBloc>().add(AttendanceRefreshRequested(employeeId: empId));
-            }
-          }
-        },
-        backgroundColor:
-            canPunchSelectedDay ? const Color(0xFFC5A059) : Colors.grey.shade500,
-        icon: const Icon(Icons.fingerprint_rounded, color: Colors.white),
-        label: Text(
-          kIsWeb
-              ? (canPunchSelectedDay ? 'Punch (iOS Safari)' : 'Today only')
-              : (canPunchSelectedDay ? 'Punch In/Out' : 'Today only'),
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-      ),
             )
           : null,
       body: TweenAnimationBuilder<double>(

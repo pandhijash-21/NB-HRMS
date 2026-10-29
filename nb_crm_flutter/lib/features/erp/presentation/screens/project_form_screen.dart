@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/utils/platform_file_picker.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../lookups/presentation/lookup_dropdown.dart';
 import '../../../org/data/org_repository.dart';
 import '../../../org/domain/org_models.dart';
@@ -88,7 +89,9 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
   List<Organization> _orgs = const [];
   List<Institute> _institutes = const [];
   List<ProjectEmployeeOption> _owners = const [];
+  String? _ownersError;
   bool _loadingInitial = true;
+  bool _reloadingOwners = false;
 
   bool get _isEdit => widget.projectId != null;
 
@@ -98,10 +101,58 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadInitialData());
   }
 
+  void _ensureOwnerInList(List<ProjectEmployeeOption> owners, {int? preferId, String? preferName}) {
+    if (preferId == null || preferId <= 0) return;
+    if (owners.any((o) => o.id == preferId)) return;
+    owners.add(
+      ProjectEmployeeOption(
+        id: preferId,
+        fullName: (preferName != null && preferName.trim().isNotEmpty)
+            ? preferName.trim()
+            : 'Employee #$preferId',
+      ),
+    );
+  }
+
+  Future<void> _reloadOwners() async {
+    if (_reloadingOwners) return;
+    setState(() {
+      _reloadingOwners = true;
+      _ownersError = null;
+    });
+    try {
+      final projectRepo = context.read<ProjectRepository>();
+      final authUser = context.read<AuthBloc>().state.user;
+      final owners = List<ProjectEmployeeOption>.from(await projectRepo.listEmployees());
+      _ensureOwnerInList(
+        owners,
+        preferId: _ownerEmployeeId ?? authUser?.employeeId,
+        preferName: authUser?.name,
+      );
+      owners.sort((a, b) => a.fullName.toLowerCase().compareTo(b.fullName.toLowerCase()));
+      if (!mounted) return;
+      setState(() {
+        _owners = owners;
+        _ownersError = owners.isEmpty ? 'No active employees found for Project Owner' : null;
+        if (!_isEdit && _ownerEmployeeId == null && authUser?.employeeId != null) {
+          _ownerEmployeeId = authUser!.employeeId;
+        }
+        _reloadingOwners = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _ownersError = '$e';
+        _reloadingOwners = false;
+      });
+    }
+  }
+
   Future<void> _loadInitialData() async {
     try {
       final projectRepo = context.read<ProjectRepository>();
       final orgRepo = context.read<OrgRepository>();
+      final authUser = context.read<AuthBloc>().state.user;
 
       final orgsFuture = orgRepo.listActiveOrganizations().catchError((e) {
         debugPrint('Failed to load active organizations: $e');
@@ -111,38 +162,58 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
         debugPrint('Failed to load active institutes: $e');
         return <Institute>[];
       });
-      final ownersFuture = projectRepo.listEmployees().catchError((e) {
+      List<ProjectEmployeeOption> owners = const [];
+      String? ownersError;
+      try {
+        owners = await projectRepo.listEmployees();
+      } catch (e) {
         debugPrint('Failed to load project owners: $e');
-        return <ProjectEmployeeOption>[];
-      });
-      final nextOrProjectFuture = _isEdit
-          ? projectRepo.getById(widget.projectId!)
-          : projectRepo.nextNumber().catchError((e) {
+        ownersError = '$e';
+      }
+
+      final nextOrProject = _isEdit
+          ? await projectRepo.getById(widget.projectId!)
+          : await projectRepo.nextNumber().catchError((e) {
               debugPrint('Failed to get next number: $e');
               return (projectNo: 1, displayId: '0001');
             });
 
-      final futures = await Future.wait([
-        orgsFuture,
-        institutesFuture,
-        ownersFuture,
-        nextOrProjectFuture,
-      ]);
+      final orgs = await orgsFuture;
+      final institutes = await institutesFuture;
+      final mutableOwners = List<ProjectEmployeeOption>.from(owners);
 
       if (!mounted) return;
       setState(() {
-        _orgs = futures[0] as List<Organization>;
-        _institutes = futures[1] as List<Institute>;
-        _owners = futures[2] as List<ProjectEmployeeOption>;
+        _orgs = orgs;
+        _institutes = institutes;
         if (_isEdit) {
-          _hydrate(futures[3] as ErpProject);
+          _hydrate(nextOrProject as ErpProject);
+          _ensureOwnerInList(
+            mutableOwners,
+            preferId: _ownerEmployeeId,
+          );
         } else {
-          final next = futures[3] as ({int projectNo, String displayId});
+          final next = nextOrProject as ({int projectNo, String displayId});
           _projectId.text = next.displayId;
           if (_organizationId == null && _orgs.isNotEmpty) {
             _organizationId = _orgs.first.id;
           }
+          if (_ownerEmployeeId == null && authUser?.employeeId != null) {
+            _ownerEmployeeId = authUser!.employeeId;
+          }
+          _ensureOwnerInList(
+            mutableOwners,
+            preferId: _ownerEmployeeId,
+            preferName: authUser?.name,
+          );
         }
+        mutableOwners.sort(
+          (a, b) => a.fullName.toLowerCase().compareTo(b.fullName.toLowerCase()),
+        );
+        _owners = mutableOwners;
+        _ownersError = mutableOwners.isEmpty
+            ? (ownersError ?? 'No active employees found for Project Owner')
+            : null;
         _loadingInitial = false;
       });
     } catch (e) {
@@ -701,26 +772,79 @@ class _ProjectFormScreenState extends State<ProjectFormScreen> {
                   required: true,
                   onChanged: (v) => setState(() => _statusCode = v),
                 ),
-                DropdownButtonFormField<int>(
-                  key: ValueKey('owner-$_ownerEmployeeId-${owners.length}'),
-                  isExpanded: true,
-                  initialValue:
-                      owners.any((o) => o.id == _ownerEmployeeId) ? _ownerEmployeeId : null,
-                  decoration: _dec('Project Owner', required: true),
-                  hint: const Text('Select Owner', overflow: TextOverflow.ellipsis),
-                  items: owners
-                      .map(
-                        (o) => DropdownMenuItem(
-                          value: o.id,
-                          child: Text(
-                            '#${o.id} ${o.fullName}',
-                            overflow: TextOverflow.ellipsis,
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    DropdownButtonFormField<int>(
+                      key: ValueKey('owner-$_ownerEmployeeId-${owners.length}'),
+                      isExpanded: true,
+                      initialValue:
+                          owners.any((o) => o.id == _ownerEmployeeId) ? _ownerEmployeeId : null,
+                      decoration: _dec(
+                        'Project Owner',
+                        required: true,
+                        hint: owners.isEmpty ? 'No owners loaded' : null,
+                      ),
+                      hint: Text(
+                        owners.isEmpty ? 'No owners loaded' : 'Select Owner',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      items: owners.isEmpty
+                          ? const [
+                              DropdownMenuItem<int>(
+                                value: -1,
+                                enabled: false,
+                                child: Text(
+                                  'No owners loaded',
+                                  style: TextStyle(color: Colors.grey),
+                                ),
+                              ),
+                            ]
+                          : owners
+                              .map(
+                                (o) => DropdownMenuItem(
+                                  value: o.id,
+                                  child: Text(
+                                    '#${o.id} ${o.fullName}',
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                      onChanged: owners.isEmpty
+                          ? null
+                          : (v) => setState(() => _ownerEmployeeId = v),
+                      validator: (v) =>
+                          (v == null || v <= 0) ? 'Required' : null,
+                    ),
+                    if (_ownersError != null || owners.isEmpty) ...[
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _ownersError ?? 'Could not load project owners',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                            ),
                           ),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (v) => setState(() => _ownerEmployeeId = v),
-                  validator: (v) => v == null ? 'Required' : null,
+                          TextButton.icon(
+                            onPressed: _reloadingOwners ? null : _reloadOwners,
+                            icon: _reloadingOwners
+                                ? const SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                : const Icon(Icons.refresh, size: 16),
+                            label: const Text('Retry'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
                 ),
                 TextFormField(
                   controller: _projectArea,

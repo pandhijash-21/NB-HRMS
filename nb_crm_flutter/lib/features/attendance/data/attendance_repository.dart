@@ -307,6 +307,20 @@ class AttendanceRepository {
     );
   }
 
+  /// Clears server-side fingerprint/Safari registration for all employees.
+  Future<int> resetAllEmployeeBiometrics() async {
+    return _dio.postEnvelope<int>(
+      'attendance/admin/reset-biometrics-all',
+      data: const {},
+      parse: (raw) {
+        if (raw is Map && raw['resetCount'] != null) {
+          return int.tryParse('${raw['resetCount']}') ?? 0;
+        }
+        return 0;
+      },
+    );
+  }
+
   Future<void> adminAddPunch({
     required int employeeId,
     required String punchAt,

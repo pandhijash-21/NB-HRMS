@@ -279,11 +279,13 @@ class SystemModule {
       return 'ERP';
     }
     if (k.startsWith('CRM_') ||
+        k.startsWith('FIN_CRM_') ||
         const [
           'CRM',
           'CRM_PRE_SALES',
           'CRM_SALES',
           'CRM_VISITOR_DESK',
+          'CRM_PARTNERS',
           'SALES',
           'CRM_POST_SALES',
           'CRM_HEADERS',

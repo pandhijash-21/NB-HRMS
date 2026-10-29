@@ -1548,6 +1548,28 @@ export const attendanceService = {
     const d = istNow.getUTCDate();
     const startOfDay = new Date(Date.UTC(y, m, d, -5, -30, 0, 0));
     const endOfDay = new Date(Date.UTC(y, m, d, 18, 29, 59, 999));
+
+    // Block accidental double-submit (Safari double-tap / overlapping POSTs).
+    // Client also disables the button for 30s; this is the authoritative guard.
+    const MIN_APP_PUNCH_INTERVAL_MS = 30_000;
+    const lastAppPunch = await prisma.attendancePunch.findFirst({
+      where: {
+        employeeId: params.employeeId,
+        source: 'MOBILE_APP',
+        punchType: 'APP_PUNCH',
+      },
+      orderBy: { punchAt: 'desc' },
+      select: { punchAt: true },
+    });
+    if (lastAppPunch) {
+      const elapsed = dt.getTime() - lastAppPunch.punchAt.getTime();
+      if (elapsed >= 0 && elapsed < MIN_APP_PUNCH_INTERVAL_MS) {
+        const waitSec = Math.ceil((MIN_APP_PUNCH_INTERVAL_MS - elapsed) / 1000);
+        throw new Error(
+          `Punch already registered. Please wait ${waitSec}s before punching again.`,
+        );
+      }
+    }
     
     const todaysPunchesCount = await prisma.attendancePunch.count({
       where: {
@@ -1706,7 +1728,21 @@ export const attendanceService = {
     });
 
     return { success: true };
-  }
+  },
+
+  async resetAllBiometricTokens(updatedBy: string) {
+    const result = await prisma.employeeAttendanceSettings.updateMany({
+      where: { biometricToken: { not: null } },
+      data: {
+        biometricToken: null,
+        biometricDeviceLabel: null,
+        biometricDevicePlatform: null,
+        updatedBy,
+      },
+    });
+
+    return { success: true, resetCount: result.count };
+  },
 };
 
 

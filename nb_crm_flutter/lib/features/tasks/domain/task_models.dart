@@ -103,6 +103,8 @@ class WorkTask {
     this.description,
     required this.status,
     required this.deadline,
+    this.proposedDeadline,
+    this.proposedDeadlineRemarks,
     this.startedAt,
     this.completedAt,
     this.reviewedAt,
@@ -128,6 +130,8 @@ class WorkTask {
   final String? description;
   final String status;
   final DateTime deadline;
+  final DateTime? proposedDeadline;
+  final String? proposedDeadlineRemarks;
   final DateTime? startedAt;
   final DateTime? completedAt;
   final DateTime? reviewedAt;
@@ -149,6 +153,10 @@ class WorkTask {
 
   bool get isClosed => status == 'APPROVED' || status == 'REJECTED';
 
+  bool get awaitsAcceptance => status == 'ASSIGNED';
+
+  bool get awaitsTimelineDecision => status == 'TIMELINE_REVISION_REQUESTED';
+
   int get subtasksDone => subtasks.where((s) => s.isDone).length;
 
   double get subtaskProgress => subtasks.isEmpty ? 0 : subtasksDone / subtasks.length;
@@ -160,6 +168,8 @@ class WorkTask {
       description: json['description'] as String?,
       status: json['status'] as String? ?? 'ASSIGNED',
       deadline: parseTaskDate(json['deadline']) ?? DateTime.now(),
+      proposedDeadline: parseTaskDate(json['proposedDeadline']),
+      proposedDeadlineRemarks: json['proposedDeadlineRemarks'] as String?,
       startedAt: parseTaskDate(json['startedAt']),
       completedAt: parseTaskDate(json['completedAt']),
       reviewedAt: parseTaskDate(json['reviewedAt']),
@@ -243,12 +253,14 @@ class TaskSummary {
     required this.review,
     required this.extra,
     required this.changes,
+    this.timeline = 0,
   });
 
   final int inbox;
   final int review;
   final int extra;
   final int changes;
+  final int timeline;
 
   factory TaskSummary.fromJson(Map<String, dynamic> json) {
     return TaskSummary(
@@ -256,6 +268,7 @@ class TaskSummary {
       review: json['review'] as int? ?? 0,
       extra: json['extra'] as int? ?? 0,
       changes: json['changes'] as int? ?? 0,
+      timeline: json['timeline'] as int? ?? 0,
     );
   }
 }
@@ -263,13 +276,15 @@ class TaskSummary {
 String taskStatusLabel(String status) {
   switch (status) {
     case 'ASSIGNED':
-      return 'Assigned';
+      return 'Awaiting acceptance';
     case 'ONGOING':
       return 'Ongoing';
     case 'COMPLETED':
       return 'Completed';
     case 'CHANGES_REQUESTED':
       return 'Changes requested';
+    case 'TIMELINE_REVISION_REQUESTED':
+      return 'Timeline revision requested';
     case 'APPROVED':
       return 'Approved';
     case 'REJECTED':
@@ -302,6 +317,14 @@ String taskEventSummary(TaskEvent event) {
         return 'Status changed to ${taskStatusLabel(event.toStatus!)}';
       }
       return 'Status changed';
+    case 'ASSIGNMENT_ACCEPTED':
+      return 'Assignment accepted';
+    case 'TIMELINE_REVISION_REQUESTED':
+      return 'Revised timeline requested'
+          '${event.newDeadline == null ? '' : ' · proposed ${_fmtEventDate(event.newDeadline!)}'}';
+    case 'TIMELINE_REVISION_DECIDED':
+      return 'Timeline decision'
+          '${event.newDeadline == null ? '' : ' · due ${_fmtEventDate(event.newDeadline!)}'}';
     case 'REVIEWED':
       if (event.toStatus != null) {
         return 'Reviewed · status set to ${taskStatusLabel(event.toStatus!)}';
@@ -316,4 +339,10 @@ String taskEventSummary(TaskEvent event) {
     default:
       return event.type.replaceAll('_', ' ').toLowerCase();
   }
+}
+
+String _fmtEventDate(DateTime d) {
+  final local = d.toLocal();
+  return '${local.day.toString().padLeft(2, '0')}/${local.month.toString().padLeft(2, '0')}/${local.year} '
+      '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
 }

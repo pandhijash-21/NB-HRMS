@@ -407,17 +407,48 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Toolbar: Progressive Project & Campaign Selection, Search, Status, Import, Add Lead
+          // Toolbar: Filters → Actions → Datewise
           Container(
-            padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: cardBg,
               borderRadius: BorderRadius.circular(14),
               border: Border.all(color: borderColor),
             ),
+            clipBehavior: Clip.antiAlias,
             child: LayoutBuilder(
               builder: (context, constraints) {
-                final isNarrow = constraints.maxWidth < 950;
+                final isNarrow = constraints.maxWidth < 900;
+                final waitingCount = leads.where((l) => l.isWaitingList).length;
+                final fieldFill = isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFF8FAFC);
+                final fieldRadius = BorderRadius.circular(10);
+
+                InputDecoration filterDecoration({required Widget prefixIcon, String? hint}) {
+                  return InputDecoration(
+                    prefixIcon: prefixIcon,
+                    hintText: hint,
+                    isDense: true,
+                    filled: true,
+                    fillColor: fieldFill,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                    border: OutlineInputBorder(borderRadius: fieldRadius, borderSide: BorderSide(color: borderColor)),
+                    enabledBorder: OutlineInputBorder(borderRadius: fieldRadius, borderSide: BorderSide(color: borderColor)),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: fieldRadius,
+                      borderSide: BorderSide(color: primaryColor, width: 1.4),
+                    ),
+                  );
+                }
+
+                ButtonStyle secondaryOutlineStyle() {
+                  return OutlinedButton.styleFrom(
+                    foregroundColor: isDark ? Colors.white70 : const Color(0xFF334155),
+                    side: BorderSide(color: borderColor),
+                    backgroundColor: isDark ? Colors.white.withValues(alpha: 0.03) : Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                    visualDensity: VisualDensity.compact,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  );
+                }
 
                 Widget buildProjectSelector() {
                   final effectiveSelectedId = (selectedProjectId != null && projects.any((p) => p.id == selectedProjectId))
@@ -427,11 +458,8 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   return DropdownButtonFormField<String>(
                     isExpanded: true,
                     initialValue: effectiveSelectedId,
-                    decoration: InputDecoration(
+                    decoration: filterDecoration(
                       prefixIcon: Icon(Icons.apartment_rounded, size: 18, color: primaryColor),
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                     ),
                     items: [
                       const DropdownMenuItem(
@@ -466,11 +494,8 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   return DropdownButtonFormField<String>(
                     isExpanded: true,
                     initialValue: effectiveSelectedId,
-                    decoration: InputDecoration(
+                    decoration: filterDecoration(
                       prefixIcon: Icon(Icons.campaign_rounded, size: 18, color: primaryColor),
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                     ),
                     items: [
                       DropdownMenuItem(
@@ -501,12 +526,9 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                 Widget buildSearchField() {
                   return TextField(
                     controller: _searchController,
-                    decoration: InputDecoration(
-                      hintText: 'Search name or phone...',
-                      prefixIcon: const Icon(Icons.search_rounded, size: 18),
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    decoration: filterDecoration(
+                      prefixIcon: Icon(Icons.search_rounded, size: 18, color: textMuted),
+                      hint: 'Search name or phone...',
                     ),
                     onChanged: (val) {
                       context.read<CrmLeadsBloc>().add(CrmLeadsSearchChanged(val.trim()));
@@ -519,10 +541,8 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                     isExpanded: true,
                     initialValue: state.statusFilter,
                     dropdownColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
-                    decoration: InputDecoration(
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    decoration: filterDecoration(
+                      prefixIcon: Icon(Icons.filter_list_rounded, size: 18, color: primaryColor),
                     ),
                     items: [
                       DropdownMenuItem(
@@ -536,7 +556,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                           children: [
                             Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFFD97706), shape: BoxShape.circle)),
                             const SizedBox(width: 8),
-                            Text('⏳ Waiting List (WL)', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: isDark ? const Color(0xFFFBBF24) : const Color(0xFFB45309))),
+                            Text('Waiting List (WL)', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: isDark ? const Color(0xFFFBBF24) : const Color(0xFFB45309))),
                           ],
                         ),
                       ),
@@ -722,20 +742,25 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   Widget presetChip(String label, bool isSelected, VoidCallback onTap) {
                     return InkWell(
                       onTap: onTap,
-                      borderRadius: BorderRadius.circular(6),
+                      borderRadius: BorderRadius.circular(20),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
                           color: isSelected
                               ? primaryColor
-                              : (isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFE2E8F0)),
-                          borderRadius: BorderRadius.circular(6),
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: isSelected
+                                ? primaryColor
+                                : (isDark ? Colors.white24 : const Color(0xFFCBD5E1)),
+                          ),
                         ),
                         child: Text(
                           label,
                           style: TextStyle(
                             fontSize: 11,
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                             color: isSelected
                                 ? Colors.white
                                 : (isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569)),
@@ -745,15 +770,8 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                     );
                   }
 
-                  return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                    decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF1E1B18) : const Color(0xFFF1F5F9),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: hasDateFilter ? primaryColor.withValues(alpha: 0.5) : borderColor,
-                      ),
-                    ),
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
                     child: Wrap(
                       spacing: 8,
                       runSpacing: 6,
@@ -762,13 +780,13 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.calendar_month_rounded, size: 16, color: hasDateFilter ? primaryColor : textMuted),
+                            Icon(Icons.calendar_month_rounded, size: 15, color: hasDateFilter ? primaryColor : textMuted),
                             const SizedBox(width: 6),
                             Text(
-                              'Datewise:',
+                              'Date',
                               style: TextStyle(
                                 fontSize: 12,
-                                fontWeight: FontWeight.bold,
+                                fontWeight: FontWeight.w700,
                                 color: hasDateFilter ? primaryColor : (isDark ? Colors.white70 : const Color(0xFF334155)),
                               ),
                             ),
@@ -781,30 +799,30 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                         presetChip('This Month', state.datePreset == 'this_month', () => setPreset('this_month')),
                         InkWell(
                           onTap: pickCustomRange,
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(20),
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                             decoration: BoxDecoration(
                               color: state.datePreset == 'custom' || hasDateFilter
-                                  ? primaryColor.withValues(alpha: 0.15)
-                                  : (isDark ? Colors.white.withValues(alpha: 0.05) : Colors.white),
-                              borderRadius: BorderRadius.circular(8),
+                                  ? primaryColor.withValues(alpha: 0.12)
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(20),
                               border: Border.all(
                                 color: state.datePreset == 'custom' || hasDateFilter
                                     ? primaryColor
-                                    : borderColor,
+                                    : (isDark ? Colors.white24 : const Color(0xFFCBD5E1)),
                               ),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(Icons.date_range_rounded, size: 14, color: hasDateFilter ? primaryColor : textMuted),
-                                const SizedBox(width: 6),
+                                Icon(Icons.date_range_rounded, size: 13, color: hasDateFilter ? primaryColor : textMuted),
+                                const SizedBox(width: 5),
                                 Text(
                                   dateRangeLabel,
                                   style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: hasDateFilter ? FontWeight.bold : FontWeight.w500,
+                                    fontSize: 11,
+                                    fontWeight: hasDateFilter ? FontWeight.w700 : FontWeight.w500,
                                     color: hasDateFilter ? primaryColor : (isDark ? Colors.white : const Color(0xFF1E293B)),
                                   ),
                                 ),
@@ -814,7 +832,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                         ),
                         if (hasDateFilter)
                           IconButton(
-                            tooltip: 'Clear Date Filter (Show all dates)',
+                            tooltip: 'Clear date filter',
                             icon: const Icon(Icons.close_rounded, size: 16),
                             visualDensity: VisualDensity.compact,
                             padding: EdgeInsets.zero,
@@ -824,14 +842,14 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
-                            color: (hasDateFilter ? primaryColor : const Color(0xFF64748B)).withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(6),
+                            color: (hasDateFilter ? primaryColor : const Color(0xFF64748B)).withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
-                            '${filteredLeads.length} leads in range',
+                            '${filteredLeads.length} leads',
                             style: TextStyle(
                               fontSize: 11,
-                              fontWeight: FontWeight.bold,
+                              fontWeight: FontWeight.w700,
                               color: hasDateFilter ? primaryColor : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569)),
                             ),
                           ),
@@ -841,208 +859,129 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   );
                 }
 
-                Widget buildActionButtons({bool expand = false}) {
-                  if (!canWrite) return const SizedBox.shrink();
-                  if (expand) {
-                    return Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          children: [
-                            if (isAdmin && !isOnlyWebhook) ...[
-                              Expanded(
-                                child: ElevatedButton.icon(
-                                  onPressed: () => _handleExcelImport(context),
-                                  icon: const Icon(Icons.upload_file_rounded, size: 18),
-                                  label: const Text('Import Excel'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFF16A34A),
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                            ],
-                            if (isAdmin) ...[
-                              Expanded(
-                                child: ElevatedButton.icon(
-                                  onPressed: () => _handleExportExcel(context, filteredLeads, state),
-                                  icon: const Icon(Icons.file_download_outlined, size: 18),
-                                  label: const Text('Export Excel'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFF0D9488),
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                            ],
-                            Expanded(
-                              child: ElevatedButton.icon(
-                                onPressed: () => _showAddLeadDialog(context, state.columns),
-                                icon: const Icon(Icons.person_add_rounded, size: 18),
-                                label: const Text('Add Lead'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: primaryColor,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        if (isItAdminEmp1) ...[
-                          const SizedBox(height: 8),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton.icon(
-                              onPressed: () => _handleCleanCrmData(context),
-                              icon: const Icon(Icons.delete_sweep_rounded, size: 18),
-                              label: const Text('Clean CRM Data'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFFDC2626),
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                              ),
-                            ),
-                          ),
+                Widget buildFiltersRow() {
+                  if (isNarrow) {
+                    final half = constraints.maxWidth < 500
+                        ? constraints.maxWidth
+                        : (constraints.maxWidth - 24 - 10) / 2;
+                    return Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
+                      child: Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: [
+                          SizedBox(width: half, child: buildProjectSelector()),
+                          SizedBox(width: half, child: buildCampaignSelector()),
+                          SizedBox(width: half, child: buildSearchField()),
+                          SizedBox(width: half, child: buildStatusFilter()),
                         ],
-                      ],
+                      ),
                     );
                   }
-
-                  return Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      OutlinedButton.icon(
-                        onPressed: () => _showMergeColumnsDialog(context, primaryColor),
-                        icon: const Icon(Icons.call_merge_rounded, size: 16),
-                        label: const Text('Merge Columns'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: primaryColor,
-                          side: BorderSide(color: primaryColor),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      if (isAdmin && !isOnlyWebhook) ...[
-                        ElevatedButton.icon(
-                          onPressed: () => _handleExcelImport(context),
-                          icon: const Icon(Icons.upload_file_rounded, size: 18),
-                          label: const Text('Import Excel'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF16A34A),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
+                    child: Row(
+                      children: [
+                        Expanded(flex: 3, child: buildProjectSelector()),
+                        const SizedBox(width: 10),
+                        Expanded(flex: 3, child: buildCampaignSelector()),
+                        const SizedBox(width: 10),
+                        Expanded(flex: 4, child: buildSearchField()),
+                        const SizedBox(width: 10),
+                        Expanded(flex: 3, child: buildStatusFilter()),
                       ],
-                      if (isAdmin) ...[
-                        ElevatedButton.icon(
-                          onPressed: () => _handleExportExcel(context, filteredLeads, state),
-                          icon: const Icon(Icons.file_download_outlined, size: 18),
-                          label: const Text('Export Excel'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF0D9488),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                      ],
-                      if (isAdmin) ...[
-                        ElevatedButton.icon(
-                          onPressed: () => _handleDistributeLeads(context),
-                          icon: const Icon(Icons.bolt_rounded, size: 18),
-                          label: Text('Distribute (${leads.where((l) => l.isWaitingList).length})'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFD97706),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                      ],
-                      if (isItAdminEmp1) ...[
-                        ElevatedButton.icon(
-                          onPressed: () => _handleCleanCrmData(context),
-                          icon: const Icon(Icons.delete_sweep_rounded, size: 18),
-                          label: const Text('Clean CRM Data'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFDC2626),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                      ],
-                      ElevatedButton.icon(
-                        onPressed: () => _showAddLeadDialog(context, state.columns),
-                        icon: const Icon(Icons.person_add_rounded, size: 18),
-                        label: const Text('Add Lead'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: primaryColor,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                      ),
-                    ],
+                    ),
                   );
                 }
 
-                if (isNarrow) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: [
-                          SizedBox(
-                            width: constraints.maxWidth < 500 ? double.infinity : (constraints.maxWidth - 10) / 2,
-                            child: buildProjectSelector(),
+                Widget buildActionsRow() {
+                  if (!canWrite) return const SizedBox.shrink();
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      alignment: isNarrow ? WrapAlignment.start : WrapAlignment.end,
+                      children: [
+                        if (isAdmin && !isOnlyWebhook)
+                          OutlinedButton.icon(
+                            onPressed: () => _handleExcelImport(context),
+                            icon: const Icon(Icons.upload_file_rounded, size: 16),
+                            label: const Text('Import'),
+                            style: secondaryOutlineStyle(),
                           ),
-                          SizedBox(
-                            width: constraints.maxWidth < 500 ? double.infinity : (constraints.maxWidth - 10) / 2,
-                            child: buildCampaignSelector(),
+                        if (isAdmin)
+                          OutlinedButton.icon(
+                            onPressed: () => _handleExportExcel(context, filteredLeads, state),
+                            icon: const Icon(Icons.file_download_outlined, size: 16),
+                            label: const Text('Export'),
+                            style: secondaryOutlineStyle(),
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: [
-                          SizedBox(
-                            width: constraints.maxWidth < 500 ? double.infinity : (constraints.maxWidth - 10) / 2,
-                            child: buildSearchField(),
+                        if (isAdmin)
+                          OutlinedButton.icon(
+                            onPressed: () => _handleDistributeLeads(context),
+                            icon: const Icon(Icons.bolt_rounded, size: 16),
+                            label: Text('Distribute ($waitingCount)'),
+                            style: secondaryOutlineStyle(),
                           ),
-                          SizedBox(
-                            width: constraints.maxWidth < 500 ? double.infinity : (constraints.maxWidth - 10) / 2,
-                            child: buildStatusFilter(),
+                        PopupMenuButton<String>(
+                          tooltip: 'More actions',
+                          offset: const Offset(0, 40),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          onSelected: (value) {
+                            if (value == 'merge') {
+                              _showMergeColumnsDialog(context, primaryColor);
+                            } else if (value == 'clean') {
+                              _handleCleanCrmData(context);
+                            }
+                          },
+                          itemBuilder: (ctx) => [
+                            const PopupMenuItem(
+                              value: 'merge',
+                              child: ListTile(
+                                dense: true,
+                                contentPadding: EdgeInsets.zero,
+                                leading: Icon(Icons.call_merge_rounded, size: 20),
+                                title: Text('Merge Columns'),
+                              ),
+                            ),
+                            if (isItAdminEmp1)
+                              const PopupMenuItem(
+                                value: 'clean',
+                                child: ListTile(
+                                  dense: true,
+                                  contentPadding: EdgeInsets.zero,
+                                  leading: Icon(Icons.delete_sweep_rounded, size: 20, color: Color(0xFFDC2626)),
+                                  title: Text('Clean CRM Data', style: TextStyle(color: Color(0xFFDC2626))),
+                                ),
+                              ),
+                          ],
+                          child: Container(
+                            height: 40,
+                            width: 40,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: borderColor),
+                              color: isDark ? Colors.white.withValues(alpha: 0.03) : Colors.white,
+                            ),
+                            child: Icon(Icons.more_horiz_rounded, size: 20, color: isDark ? Colors.white70 : const Color(0xFF475569)),
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      buildDateFilterBar(),
-                      if (canWrite) ...[
-                        const SizedBox(height: 12),
-                        buildActionButtons(expand: true),
+                        ),
+                        FilledButton.icon(
+                          onPressed: () => _showAddLeadDialog(context, state.columns),
+                          icon: const Icon(Icons.person_add_rounded, size: 16),
+                          label: const Text('Add Lead'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: primaryColor,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+                            visualDensity: VisualDensity.compact,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
                       ],
-                    ],
+                    ),
                   );
                 }
 
@@ -1050,20 +989,10 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      alignment: WrapAlignment.spaceBetween,
-                      children: [
-                        SizedBox(width: 170, child: buildProjectSelector()),
-                        SizedBox(width: 170, child: buildCampaignSelector()),
-                        SizedBox(width: 190, child: buildSearchField()),
-                        SizedBox(width: 150, child: buildStatusFilter()),
-                        if (canWrite) buildActionButtons(expand: false),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
+                    buildFiltersRow(),
+                    if (canWrite) buildActionsRow(),
+                    const SizedBox(height: 12),
+                    Divider(height: 1, thickness: 1, color: borderColor.withValues(alpha: 0.7)),
                     buildDateFilterBar(),
                   ],
                 );
@@ -1079,7 +1008,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 color: const Color(0xFF16A34A).withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: const Color(0xFF16A34A).withValues(alpha: 0.3)),
               ),
               child: const Row(
@@ -1088,7 +1017,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      '📊 Excel Leads Desk — You are assigned to handle Excel / Manual leads.',
+                      'Excel Leads Desk — You are assigned to handle Excel / Manual leads.',
                       style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF16A34A)),
                     ),
                   ),
@@ -1101,7 +1030,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 color: const Color(0xFF2563EB).withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: const Color(0xFF2563EB).withValues(alpha: 0.3)),
               ),
               child: const Row(
@@ -1110,7 +1039,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      '⚡ Meta & Webhook Campaigns Desk — You are assigned to handle online campaign leads.',
+                      'Meta & Webhook Campaigns Desk — You are assigned to handle online campaign leads.',
                       style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
                     ),
                   ),
@@ -1120,14 +1049,14 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
           else
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 color: cardBg,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(14),
                 border: Border.all(color: borderColor),
               ),
               child: Wrap(
-                spacing: 10,
+                spacing: 8,
                 runSpacing: 8,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
@@ -1136,45 +1065,122 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                     children: [
                       Icon(Icons.alt_route_rounded, size: 16, color: primaryColor),
                       const SizedBox(width: 6),
-                      Text('Lead Flow Desk:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: isDark ? Colors.white : const Color(0xFF1E293B))),
+                      Text(
+                        'Lead flow',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: isDark ? Colors.white70 : const Color(0xFF475569),
+                        ),
+                      ),
                     ],
                   ),
                   ChoiceChip(
-                    label: Text('All Flows (${leads.length})'),
+                    label: Text('All (${leads.length})'),
                     selected: state.leadFlowFilter == 'ALL',
+                    selectedColor: primaryColor.withValues(alpha: 0.18),
+                    side: BorderSide(
+                      color: state.leadFlowFilter == 'ALL' ? primaryColor : borderColor,
+                    ),
+                    labelStyle: TextStyle(
+                      fontSize: 12,
+                      fontWeight: state.leadFlowFilter == 'ALL' ? FontWeight.w700 : FontWeight.w500,
+                      color: state.leadFlowFilter == 'ALL'
+                          ? primaryColor
+                          : (isDark ? Colors.white70 : const Color(0xFF334155)),
+                    ),
                     onSelected: (val) {
                       if (val) context.read<CrmLeadsBloc>().add(const CrmLeadsLeadFlowFilterChanged('ALL'));
                     },
                   ),
                   ChoiceChip(
-                    avatar: const Icon(Icons.table_chart_rounded, size: 14, color: Color(0xFF16A34A)),
-                    label: Text('Excel Leads (${leads.where((l) => (l.leadSource == 'EXCEL' || l.leadSource == null) && !l.isManual).length})'),
+                    avatar: Icon(
+                      Icons.table_chart_rounded,
+                      size: 14,
+                      color: state.leadFlowFilter == 'EXCEL' ? primaryColor : const Color(0xFF16A34A),
+                    ),
+                    label: Text('Excel (${leads.where((l) => (l.leadSource == 'EXCEL' || l.leadSource == null) && !l.isManual).length})'),
                     selected: state.leadFlowFilter == 'EXCEL',
+                    selectedColor: primaryColor.withValues(alpha: 0.18),
+                    side: BorderSide(
+                      color: state.leadFlowFilter == 'EXCEL' ? primaryColor : borderColor,
+                    ),
+                    labelStyle: TextStyle(
+                      fontSize: 12,
+                      fontWeight: state.leadFlowFilter == 'EXCEL' ? FontWeight.w700 : FontWeight.w500,
+                      color: state.leadFlowFilter == 'EXCEL'
+                          ? primaryColor
+                          : (isDark ? Colors.white70 : const Color(0xFF334155)),
+                    ),
                     onSelected: (val) {
                       if (val) context.read<CrmLeadsBloc>().add(const CrmLeadsLeadFlowFilterChanged('EXCEL'));
                     },
                   ),
                   ChoiceChip(
-                    avatar: const Icon(Icons.edit_note_rounded, size: 14, color: Color(0xFF8B5CF6)),
-                    label: Text('Manual Leads (${leads.where((l) => l.isManual).length})'),
+                    avatar: Icon(
+                      Icons.edit_note_rounded,
+                      size: 14,
+                      color: state.leadFlowFilter == 'MANUAL' ? primaryColor : const Color(0xFF8B5CF6),
+                    ),
+                    label: Text('Manual (${leads.where((l) => l.isManual).length})'),
                     selected: state.leadFlowFilter == 'MANUAL',
+                    selectedColor: primaryColor.withValues(alpha: 0.18),
+                    side: BorderSide(
+                      color: state.leadFlowFilter == 'MANUAL' ? primaryColor : borderColor,
+                    ),
+                    labelStyle: TextStyle(
+                      fontSize: 12,
+                      fontWeight: state.leadFlowFilter == 'MANUAL' ? FontWeight.w700 : FontWeight.w500,
+                      color: state.leadFlowFilter == 'MANUAL'
+                          ? primaryColor
+                          : (isDark ? Colors.white70 : const Color(0xFF334155)),
+                    ),
                     onSelected: (val) {
                       if (val) context.read<CrmLeadsBloc>().add(const CrmLeadsLeadFlowFilterChanged('MANUAL'));
                     },
                   ),
                   ChoiceChip(
-                    avatar: const Icon(Icons.campaign_rounded, size: 14, color: Color(0xFF0891B2)),
-                    label: Text('Webhook / Meta Leads (${leads.where((l) => (l.leadSource == 'WEBHOOK' || l.leadSource == 'META') && !l.isManual).length})'),
+                    avatar: Icon(
+                      Icons.campaign_rounded,
+                      size: 14,
+                      color: state.leadFlowFilter == 'WEBHOOK' ? primaryColor : const Color(0xFF0891B2),
+                    ),
+                    label: Text('Webhook / Meta (${leads.where((l) => (l.leadSource == 'WEBHOOK' || l.leadSource == 'META') && !l.isManual).length})'),
                     selected: state.leadFlowFilter == 'WEBHOOK',
+                    selectedColor: primaryColor.withValues(alpha: 0.18),
+                    side: BorderSide(
+                      color: state.leadFlowFilter == 'WEBHOOK' ? primaryColor : borderColor,
+                    ),
+                    labelStyle: TextStyle(
+                      fontSize: 12,
+                      fontWeight: state.leadFlowFilter == 'WEBHOOK' ? FontWeight.w700 : FontWeight.w500,
+                      color: state.leadFlowFilter == 'WEBHOOK'
+                          ? primaryColor
+                          : (isDark ? Colors.white70 : const Color(0xFF334155)),
+                    ),
                     onSelected: (val) {
                       if (val) context.read<CrmLeadsBloc>().add(const CrmLeadsLeadFlowFilterChanged('WEBHOOK'));
                     },
                   ),
                   ChoiceChip(
-                    avatar: const Icon(Icons.hourglass_top_rounded, size: 14, color: Color(0xFFD97706)),
-                    label: Text('Waiting List (${leads.where((l) => l.isWaitingList).length})'),
+                    avatar: Icon(
+                      Icons.hourglass_top_rounded,
+                      size: 14,
+                      color: state.statusFilter == 'WL' ? primaryColor : const Color(0xFFD97706),
+                    ),
+                    label: Text('Waiting (${leads.where((l) => l.isWaitingList).length})'),
                     selected: state.statusFilter == 'WL',
-                    selectedColor: const Color(0xFFF59E0B).withValues(alpha: 0.25),
+                    selectedColor: primaryColor.withValues(alpha: 0.18),
+                    side: BorderSide(
+                      color: state.statusFilter == 'WL' ? primaryColor : borderColor,
+                    ),
+                    labelStyle: TextStyle(
+                      fontSize: 12,
+                      fontWeight: state.statusFilter == 'WL' ? FontWeight.w700 : FontWeight.w500,
+                      color: state.statusFilter == 'WL'
+                          ? primaryColor
+                          : (isDark ? Colors.white70 : const Color(0xFF334155)),
+                    ),
                     onSelected: (val) {
                       context.read<CrmLeadsBloc>().add(CrmLeadsStatusFilterChanged(val ? 'WL' : 'ALL'));
                     },

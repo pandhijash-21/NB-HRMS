@@ -157,6 +157,8 @@ class _AdminAttendanceView extends StatelessWidget {
               const SizedBox(height: 12),
               _DayOverrideCard(date: date, globalPolicy: state.policy!),
             ],
+            const SizedBox(height: 12),
+            const _ResetAllBiometricsCard(),
             const SizedBox(height: 24),
             Text(
               'Employees',
@@ -215,6 +217,145 @@ class _AdminAttendanceView extends StatelessWidget {
               ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ResetAllBiometricsCard extends StatefulWidget {
+  const _ResetAllBiometricsCard();
+
+  @override
+  State<_ResetAllBiometricsCard> createState() => _ResetAllBiometricsCardState();
+}
+
+class _ResetAllBiometricsCardState extends State<_ResetAllBiometricsCard> {
+  bool _busy = false;
+
+  Future<void> _confirmAndReset() async {
+    if (_busy) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        return AlertDialog(
+          backgroundColor: isDark ? const Color(0xFF1E1B18) : Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text(
+            'Reset all fingerprints?',
+            style: TextStyle(fontWeight: FontWeight.w800),
+          ),
+          content: const Text(
+            'This clears Fingerprint / Face ID / Safari registration for every employee.\n\n'
+            'Everyone must register again on their phone (or Safari) before they can punch.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Reset all'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _busy = true);
+    try {
+      final count = await context.read<AttendanceRepository>().resetAllEmployeeBiometrics();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            count > 0
+                ? 'Reset $count fingerprint registration${count == 1 ? '' : 's'}.'
+                : 'No fingerprint registrations were active.',
+          ),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceAll('Exception: ', '')),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return _SectionCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.fingerprint_rounded,
+                color: isDark ? const Color(0xFFE2D6BE) : const Color(0xFFC5A059),
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'App fingerprints',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                    color: isDark ? Colors.white : const Color(0xFF212F3D),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Force every employee to re-register Fingerprint / Face ID / Safari on their device.',
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.35,
+              color: isDark ? Colors.white54 : const Color(0xFF607D8B),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _busy ? null : _confirmAndReset,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.red,
+                side: BorderSide(color: Colors.red.withValues(alpha: _busy ? 0.4 : 1)),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              icon: _busy
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.red),
+                    )
+                  : const Icon(Icons.lock_reset_rounded, size: 18),
+              label: Text(
+                _busy ? 'Resetting…' : 'Reset all fingerprints',
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1043,7 +1184,7 @@ Future<void> showAdminPunchDialog(
                         try {
                           final ymd =
                               '${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}';
-                          final punchAt = '$ymd\T$time:00+05:30';
+                          final punchAt = '${ymd}T$time:00+05:30';
                           if (bloc != null) {
                             if (existing == null) {
                               bloc.add(AdminAttendancePunchAdded(

@@ -2062,6 +2062,13 @@ class ExperienceViewTab extends StatelessWidget {
   }
 }
 
+bool _profileIsPhone(BuildContext context) =>
+    MediaQuery.sizeOf(context).width < 600;
+
+double? _profileFieldWidth(BuildContext context, {double desktop = 250}) {
+  return _profileIsPhone(context) ? double.infinity : desktop;
+}
+
 Widget _buildSectionCard({
   required BuildContext context,
   required String title,
@@ -2069,6 +2076,7 @@ Widget _buildSectionCard({
   required List<Widget> children,
 }) {
   final isDark = Theme.of(context).brightness == Brightness.dark;
+  final isPhone = _profileIsPhone(context);
   return Card(
     elevation: 0,
     color: isDark ? const Color(0xFF1E1B18) : Colors.white,
@@ -2080,7 +2088,7 @@ Widget _buildSectionCard({
       ),
     ),
     child: Padding(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(isPhone ? 14 : 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -2088,24 +2096,28 @@ Widget _buildSectionCard({
             children: [
               Icon(icon, color: const Color(0xFFC5A059), size: 22),
               const SizedBox(width: 10),
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: isDark ? Colors.white : const Color(0xFF212F3D),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: isDark ? Colors.white : const Color(0xFF212F3D),
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
           ),
           Divider(
-            height: 28, 
+            height: isPhone ? 20 : 28,
             thickness: 1.2,
             color: isDark ? const Color(0xFFC5A059).withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.06),
           ),
           Wrap(
-            spacing: 24,
-            runSpacing: 20,
+            spacing: isPhone ? 0 : 24,
+            runSpacing: isPhone ? 14 : 20,
             children: children,
           ),
         ],
@@ -2117,7 +2129,7 @@ Widget _buildSectionCard({
 Widget _buildField(BuildContext context, String label, String value) {
   final isDark = Theme.of(context).brightness == Brightness.dark;
   return SizedBox(
-    width: 250,
+    width: _profileFieldWidth(context),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2153,7 +2165,7 @@ Widget _buildEmailField(
   final display = (email == null || email.trim().isEmpty) ? '—' : email.trim();
   final hasEmail = display != '—';
   return SizedBox(
-    width: 280,
+    width: _profileFieldWidth(context, desktop: 280),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2262,7 +2274,7 @@ Widget _buildMediaPlaceholder(
   final isDark = Theme.of(context).brightness == Brightness.dark;
   final hasUrl = url != null && url.isNotEmpty;
   return SizedBox(
-    width: 250,
+    width: _profileFieldWidth(context),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2329,7 +2341,7 @@ Widget _buildDocItem(BuildContext context, String label, String? url) {
   final isDark = Theme.of(context).brightness == Brightness.dark;
   final hasUrl = url != null && url.isNotEmpty;
   return SizedBox(
-    width: 250,
+    width: _profileFieldWidth(context),
     child: Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(

@@ -569,6 +569,15 @@ attendanceRouter.post('/admin/reset-biometrics/:employeeId', requireAuth, requir
   }
 });
 
-
+/** Clear fingerprint / Safari registration for every employee in one action. */
+attendanceRouter.post('/admin/reset-biometrics-all', requireAuth, requirePermission('ATTENDANCE', 'WRITE'), async (req: Request, res: Response) => {
+  try {
+    const updatedBy = String(req.user!.id ?? (req.user as any)?.userId ?? 'unknown');
+    const data = await attendanceService.resetAllBiometricTokens(updatedBy);
+    return res.json(ok(data));
+  } catch (e: any) {
+    return res.status(400).json(fail(e.message));
+  }
+});
 
 

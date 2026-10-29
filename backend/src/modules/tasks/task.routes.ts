@@ -58,7 +58,7 @@ tasksRouter.get('/summary', async (req: Request, res: Response) => {
 tasksRouter.get('/', async (req: Request, res: Response) => {
   try {
     const filter = String(req.query.filter ?? 'all');
-    const allowed = ['inbox', 'assigned', 'review', 'extra', 'all'] as const;
+    const allowed = ['inbox', 'assigned', 'review', 'extra', 'timeline', 'all'] as const;
     const use = (allowed as readonly string[]).includes(filter) ? (filter as typeof allowed[number]) : 'all';
     const data = await taskService.listMine(req.user!.id, use);
     return res.json(ok(data));
@@ -119,7 +119,15 @@ tasksRouter.post('/', upload.single('file'), async (req: Request, res: Response)
 tasksRouter.post('/:id/status', async (req: Request, res: Response) => {
   try {
     const Schema = z.object({
-      status: z.enum(['ASSIGNED', 'ONGOING', 'COMPLETED', 'CHANGES_REQUESTED', 'APPROVED', 'REJECTED']),
+      status: z.enum([
+        'ASSIGNED',
+        'ONGOING',
+        'COMPLETED',
+        'CHANGES_REQUESTED',
+        'TIMELINE_REVISION_REQUESTED',
+        'APPROVED',
+        'REJECTED',
+      ]),
     });
     const body = Schema.safeParse(req.body);
     if (!body.success) return res.status(400).json(fail(body.error.issues[0]?.message ?? 'Validation error'));
@@ -131,6 +139,62 @@ tasksRouter.post('/:id/status', async (req: Request, res: Response) => {
     return res.json(ok(data));
   } catch (e: unknown) {
     return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed to update status'));
+  }
+});
+
+tasksRouter.post('/:id/accept', async (req: Request, res: Response) => {
+  try {
+    const data = await taskService.acceptAssignment({
+      taskId: p(req.params.id),
+      actorUserId: req.user!.id,
+    });
+    return res.json(ok(data));
+  } catch (e: unknown) {
+    return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed to accept task'));
+  }
+});
+
+tasksRouter.post('/:id/propose-timeline', async (req: Request, res: Response) => {
+  try {
+    const Schema = z.object({
+      proposedDeadline: z.string().min(1),
+      remarks: z.string().optional().nullable(),
+    });
+    const body = Schema.safeParse(req.body);
+    if (!body.success) {
+      return res.status(400).json(fail(body.error.issues[0]?.message ?? 'proposedDeadline is required'));
+    }
+    const data = await taskService.proposeTimeline({
+      taskId: p(req.params.id),
+      actorUserId: req.user!.id,
+      proposedDeadline: body.data.proposedDeadline,
+      remarks: body.data.remarks ?? null,
+    });
+    return res.json(ok(data));
+  } catch (e: unknown) {
+    return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed to request revised timeline'));
+  }
+});
+
+tasksRouter.post('/:id/decide-timeline', async (req: Request, res: Response) => {
+  try {
+    const Schema = z.object({
+      action: z.enum(['accept', 'keep_original']),
+      remarks: z.string().optional().nullable(),
+    });
+    const body = Schema.safeParse(req.body);
+    if (!body.success) {
+      return res.status(400).json(fail(body.error.issues[0]?.message ?? 'action is required'));
+    }
+    const data = await taskService.decideTimeline({
+      taskId: p(req.params.id),
+      actorUserId: req.user!.id,
+      action: body.data.action,
+      remarks: body.data.remarks ?? null,
+    });
+    return res.json(ok(data));
+  } catch (e: unknown) {
+    return res.status(400).json(fail(e instanceof Error ? e.message : 'Failed to decide timeline'));
   }
 });
 

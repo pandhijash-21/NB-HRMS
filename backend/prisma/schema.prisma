@@ -2085,6 +2085,7 @@ enum WorkTaskStatus {
   ONGOING
   COMPLETED
   CHANGES_REQUESTED
+  TIMELINE_REVISION_REQUESTED
   APPROVED
   REJECTED
 }
@@ -2102,6 +2103,9 @@ enum WorkTaskEventType {
   EXTRA_APPROVAL_DECIDED
   REVIEWED
   SUBTASK_UPDATED
+  ASSIGNMENT_ACCEPTED
+  TIMELINE_REVISION_REQUESTED
+  TIMELINE_REVISION_DECIDED
 }
 
 model WorkTask {
@@ -2115,6 +2119,8 @@ model WorkTask {
   assigneeEmployeeId Int    @map("assignee_employee_id")
 
   deadline    DateTime
+  proposedDeadline        DateTime? @map("proposed_deadline")
+  proposedDeadlineRemarks String?   @map("proposed_deadline_remarks") @db.Text
   startedAt   DateTime? @map("started_at")
   completedAt DateTime? @map("completed_at")
   reviewedAt  DateTime? @map("reviewed_at")

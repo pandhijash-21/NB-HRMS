@@ -40,7 +40,7 @@ class _TasksHubScreenState extends ConsumerState<TasksHubScreen> with SingleTick
     final tasksAsync = ref.watch(myTasksProvider);
     final summary = ref.watch(taskSummaryProvider).asData?.value;
     final reportees = ref.watch(taskReporteesProvider).asData?.value ?? const [];
-    final reviewBadge = summary?.review ?? 0;
+    final reviewBadge = (summary?.review ?? 0) + (summary?.timeline ?? 0);
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF8FAFC),
@@ -77,7 +77,7 @@ class _TasksHubScreenState extends ConsumerState<TasksHubScreen> with SingleTick
           labelColor: isDark ? const Color(0xFFC5A059) : const Color(0xFF212F3D),
           indicatorColor: const Color(0xFFC5A059),
           tabs: [
-            Tab(text: reviewBadge > 0 ? 'Board ($reviewBadge to review)' : 'Board'),
+            Tab(text: reviewBadge > 0 ? 'Board ($reviewBadge pending)' : 'Board'),
             const Tab(text: 'Gantt'),
           ],
         ),
@@ -126,6 +126,7 @@ class _BoardTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final me = ref.watch(authMeId);
     final review = tasks.where((t) => t.assigner.id == me && t.status == 'COMPLETED').toList();
+    final timeline = tasks.where((t) => t.assigner.id == me && t.awaitsTimelineDecision).toList();
     final extra = tasks.where((t) => t.extraApprover?.id == me && t.extraApprovalStatus == 'PENDING').toList();
     final mine = tasks.where((t) => t.assignee.id == me && !t.isClosed).toList();
     final assigned = tasks.where((t) => t.assigner.id == me).toList();
@@ -133,9 +134,16 @@ class _BoardTab extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
       children: [
+        if (timeline.isNotEmpty)
+          _section(
+            context,
+            'Timeline revisions',
+            'Assignee asked for a new due date — accept it or keep the original',
+            timeline,
+          ),
         if (review.isNotEmpty) _section(context, 'Waiting for your review', 'Assignee marked complete — approve, reject, or ask for changes', review),
         if (extra.isNotEmpty) _section(context, 'Extra approvals', 'Someone asked you to sign off', extra),
-        _section(context, 'My tasks', 'Assigned to you', mine),
+        _section(context, 'My tasks', 'Assigned to you — accept or request a revised timeline when new', mine),
         _section(context, 'Assigned by me', 'Only 1st reporting can assign — people who list you as 1st reporting', assigned),
       ],
     );

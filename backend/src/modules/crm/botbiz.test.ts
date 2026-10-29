@@ -349,6 +349,32 @@ async function runTests() {
         capturedBody.includes('templateVariable-1=Aarav%20Patel'),
       'Also fills Meta {{1}} with the lead name for name-only templates',
     );
+
+    // Pre-sales path: unknown allowed list + time in payload must still NOT overwrite name
+    capturedBody = '';
+    await client.sendTemplateMessage({
+      phoneNumber: '9876543210',
+      templateId: '417875',
+      templateName: 'cal',
+      // allowedVariableNames omitted (same as poorly synced template cache)
+      variables: {
+        name: 'Aarav Patel',
+        customerName: 'Aarav Patel',
+        date: '29/10/2026',
+        time: '12:32 PM',
+        siteVisitTime: '12:32 PM',
+      },
+    });
+    assert(
+      capturedBody.includes('templateVariable-name-1=Aarav+Patel') ||
+        capturedBody.includes('templateVariable-name-1=Aarav%20Patel'),
+      'Pre-sales unknown-allowed still sends person name',
+    );
+    assert(
+      !capturedBody.includes('templateVariable-time-1=') &&
+        !capturedBody.includes('templateVariable-3='),
+      'Pre-sales unknown-allowed does not send time (avoids BotBiz last-wins into name slot)',
+    );
   }
 
   // Test 6: Dynamic Variable Resolver (no unresolved placeholders)

@@ -858,8 +858,7 @@ export class BotBizApiClient {
             k === 'customername' ||
             k === 'customer_name' ||
             k === 'client_name' ||
-            k === 'clientname' ||
-            k === 'pname'
+            k === 'clientname'
           );
         };
         const isDateKey = (key: string) => {
@@ -898,46 +897,70 @@ export class BotBizApiClient {
           }
         };
 
+        const looksLikeClock = (s: string) =>
+          /^\d{1,2}:\d{2}(\s*[AaPp][Mm])?$/.test(String(s).trim());
+
+        // Person name only — never allow a clock time into the name slot.
+        const personName = (() => {
+          const raw =
+            pick('name', 'customerName', 'client_name', 'customer_name', '1') || 'Valued Client';
+          return looksLikeClock(raw) ? 'Valued Client' : raw;
+        })();
+
         if (allowed !== undefined && allowed.length === 0) {
           // Template expects NO body variables — send none.
         } else if (allowed && allowed.length > 0) {
-          let nameValueForPositional: string | undefined;
-          for (const raw of allowed) {
-            const rawKey = String(raw || '').trim();
-            if (!rawKey) continue;
-            const val = resolveValue(rawKey);
-            if (val == null || val === '') continue;
-            setNamedVar(rawKey, val);
-            if (isNameKey(rawKey)) nameValueForPositional = val;
-          }
-          // If template only declares a named "name" (BotBiz), also fill Meta {{1}}.
-          // Do NOT map date/time onto positional slots — that caused "Dear 12:00 PM".
-          if (nameValueForPositional && allowed.every((k) => isNameKey(String(k)))) {
-            formParams.set('templateVariable-1', nameValueForPositional);
-            formParams.set('templateVariable-1-1', nameValueForPositional);
+          const wantsName = allowed.some((k) => isNameKey(String(k)));
+          const wantsDate = allowed.some((k) => isDateKey(String(k)));
+          const wantsTime = allowed.some((k) => isTimeKey(String(k)));
+          // If BotBiz/Meta only exposes a name placeholder, ignore date/time keys that
+          // may have been mis-detected from body text — extra templateVariable-time-1
+          // was overwriting the single name slot ("Dear 12:32 PM").
+          const nameOnlyTemplate = wantsName && !wantsDate && !wantsTime;
+
+          if (nameOnlyTemplate || (wantsName && allowed.length === 1)) {
+            setNamedVar('name', personName);
+            formParams.set('templateVariable-1', personName);
+            formParams.set('templateVariable-1-1', personName);
+            for (const raw of allowed) {
+              if (isNameKey(String(raw))) setNamedVar(String(raw).trim(), personName);
+            }
+          } else {
+            for (const raw of allowed) {
+              const rawKey = String(raw || '').trim();
+              if (!rawKey) continue;
+              const val = isNameKey(rawKey) ? personName : resolveValue(rawKey);
+              if (val == null || val === '') continue;
+              setNamedVar(rawKey, val);
+            }
+            // Semantic positional binding (Meta {{1}}/{{2}}/{{3}}) — name first, never time.
+            formParams.set('templateVariable-1', personName);
+            formParams.set('templateVariable-1-1', personName);
+            setNamedVar('name', personName);
+            if (wantsDate) {
+              const dateVal = resolveValue('date') || pick('date', 'visit_date', 'siteVisitDate', '2');
+              if (dateVal) {
+                setNamedVar('date', dateVal);
+                formParams.set('templateVariable-2', dateVal);
+                formParams.set('templateVariable-2-1', dateVal);
+              }
+            }
+            if (wantsTime) {
+              const timeVal = resolveValue('time') || pick('time', 'visit_time', 'siteVisitTime', '3');
+              if (timeVal) {
+                setNamedVar('time', timeVal);
+                formParams.set('templateVariable-3', timeVal);
+                formParams.set('templateVariable-3-1', timeVal);
+              }
+            }
           }
         } else {
-          // Unknown placeholder list: send a small whitelist only (never the full CRM bag).
-          const nameVal =
-            pick('name', 'customerName', 'client_name', 'customer_name', '1') || 'Valued Client';
-          const dateVal = pick('date', 'visit_date', 'siteVisitDate', '2');
-          const timeVal = pick('time', 'visit_time', 'siteVisitTime', '3');
-          const projectVal = pick('projectName', 'project_name', 'project', 'pname');
-
-          setNamedVar('name', nameVal);
-          formParams.set('templateVariable-1', nameVal);
-          formParams.set('templateVariable-1-1', nameVal);
-          if (dateVal) {
-            setNamedVar('date', dateVal);
-            formParams.set('templateVariable-2', dateVal);
-            formParams.set('templateVariable-2-1', dateVal);
-          }
-          if (timeVal) {
-            setNamedVar('time', timeVal);
-            formParams.set('templateVariable-3', timeVal);
-            formParams.set('templateVariable-3-1', timeVal);
-          }
-          if (projectVal) setNamedVar('pname', projectVal);
+          // Unknown placeholders: match Settings test behavior — send NAME only.
+          // Pre-sales was also sending date/time; BotBiz single-slot templates then
+          // bound the last value (time) into {{name}}.
+          setNamedVar('name', personName);
+          formParams.set('templateVariable-1', personName);
+          formParams.set('templateVariable-1-1', personName);
         }
       }
 

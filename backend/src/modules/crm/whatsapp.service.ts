@@ -1240,11 +1240,12 @@ export class WhatsappService {
             lower === 'customername' ||
             lower === 'customer_name' ||
             lower === 'client_name' ||
-            lower === 'clientname' ||
-            lower === 'pname'
+            lower === 'clientname'
           ) {
             resolvedVariables[key] =
               pickVar('name', 'customerName', 'client_name', 'customer_name', '1') || 'Valued Client';
+          } else if ( lower === 'pname' ) {
+            resolvedVariables[key] = pickVar('pname', 'projectName', 'project', 'project_name') || '';
           } else if (
             lower === '2' ||
             lower === 'date' ||
@@ -1273,28 +1274,43 @@ export class WhatsappService {
 
       // If BotBiz/Meta template only declares `name`, force that value from the lead —
       // never allow an empty name to fall through to another field.
+      const isPersonNameKey = (k: string) => {
+        const lower = String(k).toLowerCase();
+        return (
+          lower === 'name' ||
+          lower === '1' ||
+          lower === 'customername' ||
+          lower === 'customer_name' ||
+          lower === 'client_name' ||
+          lower === 'clientname'
+        );
+      };
       const nameOnly =
         Array.isArray(allowedVars) &&
         allowedVars.length > 0 &&
-        allowedVars.every((k) => {
-          const lower = String(k).toLowerCase();
-          return (
-            lower === 'name' ||
-            lower === '1' ||
-            lower === 'customername' ||
-            lower === 'customer_name' ||
-            lower === 'client_name' ||
-            lower === 'clientname' ||
-            lower === 'pname'
-          );
-        });
-      if (nameOnly || allowedVars === undefined) {
-        const leadName =
+        allowedVars.every((k) => isPersonNameKey(String(k)));
+      // Always sanitize the person name — reject clock times that leaked into name.
+      {
+        const looksLikeClock = (s: string) =>
+          /^\d{1,2}:\d{2}(\s*[AaPp][Mm])?$/.test(String(s).trim());
+        let leadName =
           (resolvedVariables.name && String(resolvedVariables.name).trim()) ||
           (resolvedVariables.customerName && String(resolvedVariables.customerName).trim()) ||
           (resolvedVariables.client_name && String(resolvedVariables.client_name).trim()) ||
           'Valued Client';
+        if (looksLikeClock(leadName)) {
+          leadName =
+            (resolvedVariables.customerName &&
+              !looksLikeClock(String(resolvedVariables.customerName)) &&
+              String(resolvedVariables.customerName).trim()) ||
+            (resolvedVariables.client_name &&
+              !looksLikeClock(String(resolvedVariables.client_name)) &&
+              String(resolvedVariables.client_name).trim()) ||
+            'Valued Client';
+        }
         resolvedVariables.name = leadName;
+        resolvedVariables.customerName = leadName;
+        resolvedVariables.client_name = leadName;
         if (nameOnly) {
           for (const k of allowedVars!) {
             resolvedVariables[k] = leadName;

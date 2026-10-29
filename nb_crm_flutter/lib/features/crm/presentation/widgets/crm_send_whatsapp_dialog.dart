@@ -120,16 +120,7 @@ class _CrmSendWhatsappDialogState extends State<CrmSendWhatsappDialog> {
           if (config.defaultCalendarLink.isNotEmpty) {
             _calendarLinkController.text = config.defaultCalendarLink;
           }
-          final headerUrl = chosenTemplate?.headerExampleUrl;
-          if (headerUrl != null &&
-              (headerUrl.startsWith('http://') || headerUrl.startsWith('https://')) &&
-              !headerUrl.contains('wasabisys.com') &&
-              !headerUrl.contains('bot-data.s3') &&
-              !headerUrl.contains('s3.amazonaws.com')) {
-            _headerMediaUrlController.text = headerUrl;
-          } else {
-            _headerMediaUrlController.text = '';
-          }
+          _applyHeaderDefaults(chosenTemplate);
           _syncTemplateVariables(chosenTemplate);
           _isLoading = false;
         });
@@ -182,11 +173,67 @@ class _CrmSendWhatsappDialogState extends State<CrmSendWhatsappDialog> {
     }
   }
 
+  String _crmField(String key) {
+    final custom = widget.lead.customFields;
+    final direct = custom[key]?.toString().trim();
+    if (direct != null && direct.isNotEmpty) return direct;
+    final lower = key.toLowerCase();
+    for (final entry in custom.entries) {
+      if (entry.key.toLowerCase() == lower) {
+        final v = entry.value?.toString().trim();
+        if (v != null && v.isNotEmpty) return v;
+      }
+    }
+    return '';
+  }
+
+  void _applyHeaderDefaults(BotbizTemplateModel? template) {
+    if (template == null) return;
+    final format = template.headerFormat?.toUpperCase() ?? '';
+
+    if (template.headerExampleUrl != null &&
+        (template.headerExampleUrl!.startsWith('http://') ||
+            template.headerExampleUrl!.startsWith('https://')) &&
+        !template.headerExampleUrl!.contains('wasabisys.com') &&
+        !template.headerExampleUrl!.contains('bot-data.s3') &&
+        !template.headerExampleUrl!.contains('s3.amazonaws.com')) {
+      _headerMediaUrlController.text = template.headerExampleUrl!;
+    } else {
+      _headerMediaUrlController.text = '';
+    }
+
+    // TEXT headers: prefill from CRM project / lead name when empty.
+    if (format == 'TEXT' && _headerTextController.text.trim().isEmpty) {
+      final fromCrm = _crmField('project_name').isNotEmpty
+          ? _crmField('project_name')
+          : (_crmField('project').isNotEmpty
+              ? _crmField('project')
+              : (widget.lead.campaignName?.trim().isNotEmpty == true
+                  ? widget.lead.campaignName!.trim()
+                  : (_nameController.text.trim().isNotEmpty
+                      ? _nameController.text.trim()
+                      : (template.headerExampleText ?? ''))));
+      _headerTextController.text = fromCrm;
+    }
+  }
+
   void _syncTemplateVariables(BotbizTemplateModel? template) {
     if (template == null) return;
 
-    // Check variables defined in the template
-    final standardKeys = {'1', '2', '3', '4', 'name', 'date', 'time', 'calendar_link', 'calendarlink', 'phone', 'number'};
+    // Placeholder names/indexes from synced template ({{name}}, {{1}}, …)
+    final standardKeys = {
+      '1',
+      '2',
+      '3',
+      '4',
+      'name',
+      'date',
+      'time',
+      'calendar_link',
+      'calendarlink',
+      'phone',
+      'number',
+    };
     final detected = template.bodyExampleVariables;
 
     for (final rawKey in detected) {
@@ -195,11 +242,16 @@ class _CrmSendWhatsappDialogState extends State<CrmSendWhatsappDialog> {
       if (standardKeys.contains(key.toLowerCase())) continue;
 
       if (!_customVarControllers.containsKey(key)) {
-        String initialVal = '';
-        if (key.toLowerCase().contains('project')) {
-          initialVal = widget.lead.campaignName ?? 'Legacy Tower';
-        } else if (key.toLowerCase().contains('advisor') || key.toLowerCase().contains('agent')) {
+        String initialVal = _crmField(key);
+        final lower = key.toLowerCase();
+        if (initialVal.isEmpty && lower.contains('project')) {
+          initialVal = widget.lead.campaignName ?? _crmField('project_name');
+          if (initialVal.isEmpty) initialVal = 'Legacy Tower';
+        } else if (initialVal.isEmpty &&
+            (lower.contains('advisor') || lower.contains('agent'))) {
           initialVal = widget.lead.assignedToName ?? 'Property Advisor';
+        } else if (initialVal.isEmpty && lower.contains('name')) {
+          initialVal = _nameController.text.trim();
         }
         _customVarControllers[key] = TextEditingController(text: initialVal);
         _customVarKeys.add(key);
@@ -211,15 +263,7 @@ class _CrmSendWhatsappDialogState extends State<CrmSendWhatsappDialog> {
     if (template == null) return;
     setState(() {
       _selectedTemplate = template;
-      if (template.headerExampleUrl != null &&
-          (template.headerExampleUrl!.startsWith('http://') || template.headerExampleUrl!.startsWith('https://')) &&
-          !template.headerExampleUrl!.contains('wasabisys.com') &&
-          !template.headerExampleUrl!.contains('bot-data.s3') &&
-          !template.headerExampleUrl!.contains('s3.amazonaws.com')) {
-        _headerMediaUrlController.text = template.headerExampleUrl!;
-      } else {
-        _headerMediaUrlController.text = '';
-      }
+      _applyHeaderDefaults(template);
       _syncTemplateVariables(template);
     });
   }
@@ -384,24 +428,39 @@ class _CrmSendWhatsappDialogState extends State<CrmSendWhatsappDialog> {
         setState(() => _isSending = false);
         Navigator.of(context).pop();
 
-        final isSuccess = res['success'] == true && res['error'] == null;
-        final msg = isSuccess
-            ? (res['message'] ?? 'WhatsApp message dispatched successfully via BotBiz!')
-            : (res['error'] ?? res['message'] ?? 'Failed to send WhatsApp message');
+        // Backend only sets success=true after BotBiz confirms status "1" (or an intentional skip).
+        final isSkipped = res['skipped'] == true ||
+            (res['data'] is Map && (res['data'] as Map)['skipped'] == true);
+        final isSuccess = res['success'] == true &&
+            (res['error'] == null || '${res['error']}'.trim().isEmpty);
+        final msg = isSkipped
+            ? (res['message'] ?? 'WhatsApp send skipped (duplicate / not configured).')
+            : (isSuccess
+                ? (res['message'] ??
+                    'WhatsApp message accepted by BotBiz. Delivery may still take a moment.')
+                : (res['error'] ??
+                    res['message'] ??
+                    'Failed to send WhatsApp message'));
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
               children: [
                 Icon(
-                  isSuccess ? Icons.check_circle_rounded : Icons.error_outline_rounded,
+                  isSkipped
+                      ? Icons.info_outline_rounded
+                      : (isSuccess
+                          ? Icons.check_circle_rounded
+                          : Icons.error_outline_rounded),
                   color: Colors.white,
                 ),
                 const SizedBox(width: 10),
                 Expanded(child: Text(msg.toString())),
               ],
             ),
-            backgroundColor: isSuccess ? const Color(0xFF16A34A) : Colors.redAccent,
+            backgroundColor: isSkipped
+                ? Colors.orange.shade700
+                : (isSuccess ? const Color(0xFF16A34A) : Colors.redAccent),
             behavior: SnackBarBehavior.floating,
           ),
         );

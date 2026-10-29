@@ -1998,6 +1998,7 @@ class BotbizTemplateModel {
     this.variableCount,
     this.headerFormat,
     this.headerExampleUrl,
+    this.headerExampleText,
     this.bodyText,
     this.bodyExampleVariables = const [],
   });
@@ -2010,6 +2011,7 @@ class BotbizTemplateModel {
   final int? variableCount;
   final String? headerFormat;
   final String? headerExampleUrl;
+  final String? headerExampleText;
   final String? bodyText;
   final List<String> bodyExampleVariables;
 
@@ -2030,6 +2032,7 @@ class BotbizTemplateModel {
       variableCount: json['variableCount'] is num ? (json['variableCount'] as num).toInt() : null,
       headerFormat: json['headerFormat']?.toString(),
       headerExampleUrl: json['headerExampleUrl']?.toString(),
+      headerExampleText: json['headerExampleText']?.toString(),
       bodyText: json['bodyText']?.toString(),
       bodyExampleVariables: vars,
     );

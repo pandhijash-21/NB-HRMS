@@ -55,9 +55,72 @@ export interface BotbizTemplate {
   variableCount?: number;
   headerFormat?: 'document' | 'image' | 'video' | 'text' | 'location' | 'none' | string;
   headerExampleUrl?: string;
+  /** Sample header text from Meta examples (TEXT headers). */
+  headerExampleText?: string;
   bodyText?: string;
+  /**
+   * Placeholder names/indexes expected by the template body
+   * (e.g. `name`, `1`, `date`) — NOT Meta example sample values.
+   */
   bodyExampleVariables?: string[];
   raw?: any;
+}
+
+/** BotBiz documents status "1" as success. Null/empty wa_message_id must NOT count as success. */
+export function isBotbizSendSuccess(resJson: any, httpOk: boolean): boolean {
+  if (!httpOk || !resJson || typeof resJson !== 'object') return false;
+
+  const status = resJson.status;
+  if (status === '0' || status === 0 || status === 'error' || status === 'failed' || status === false) {
+    return false;
+  }
+
+  if (status === '1' || status === 1 || status === 'success' || status === true) {
+    return true;
+  }
+
+  const waId = resJson.wa_message_id ?? resJson.message_id ?? resJson.wamid;
+  if (waId != null && String(waId).trim() !== '' && String(waId).toLowerCase() !== 'null') {
+    return true;
+  }
+
+  return false;
+}
+
+function extractBodyVariableNames(bodyText?: string, exampleBodyRow?: any[]): string[] {
+  const names: string[] = [];
+  if (bodyText) {
+    const matches = bodyText.match(/\{\{([a-zA-Z0-9_-]+)\}\}/g);
+    if (matches) {
+      for (const m of matches) {
+        const name = m.replace(/[{}]/g, '').trim();
+        if (name && !names.includes(name)) names.push(name);
+      }
+    }
+  }
+
+  // Meta example.body_text is sample VALUES, not names. Only use positional indexes
+  // when the body has no named/numbered placeholders we could parse.
+  if (names.length === 0 && Array.isArray(exampleBodyRow) && exampleBodyRow.length > 0) {
+    for (let i = 0; i < exampleBodyRow.length; i++) {
+      names.push(String(i + 1));
+    }
+  }
+
+  return names;
+}
+
+function normalizeHeaderFormat(raw: any): string | undefined {
+  if (raw == null) return undefined;
+  const s = String(raw).trim().toLowerCase();
+  if (!s) return undefined;
+  if (s.includes('document') || s === 'pdf' || s === 'file') return 'document';
+  if (s.includes('image') || s === 'img' || s === 'photo') return 'image';
+  if (s.includes('video')) return 'video';
+  if (s.includes('text')) return 'text';
+  if (s.includes('location')) return 'location';
+  if (s === 'none' || s === 'null') return 'none';
+  return s;
 }
 
 export interface BotbizTemplateStatusResponse {
@@ -218,19 +281,17 @@ export class BotBizApiClient {
         resJson = { raw: rawText };
       }
 
-      // BotBiz documentation specifies status: "1" as success indicator
-      const isSuccess =
-        response.ok &&
-        (resJson.status === '1' ||
-          resJson.status === 1 ||
-          resJson.status === 'success' ||
-          resJson.wa_message_id !== undefined);
+      // BotBiz documentation specifies status: "1" as success indicator.
+      // Do NOT treat wa_message_id: null / missing as success (common false-positive).
+      const isSuccess = isBotbizSendSuccess(resJson, response.ok);
 
+      // Never invent synthetic wa ids — logs must show real BotBiz/Meta ids only.
+      const waMessageIdRaw =
+        resJson.wa_message_id || resJson.message_id || resJson.wamid || null;
       const waMessageId =
-        resJson.wa_message_id ||
-        resJson.message_id ||
-        resJson.id ||
-        (isSuccess ? `botbiz_${Date.now()}` : undefined);
+        waMessageIdRaw != null && String(waMessageIdRaw).trim() !== '' && String(waMessageIdRaw).toLowerCase() !== 'null'
+          ? String(waMessageIdRaw)
+          : undefined;
 
       let errorMessage: string | undefined;
       if (!isSuccess) {
@@ -343,27 +404,8 @@ export class BotBizApiClient {
         };
       }
 
-      // BotBiz returns HTTP 200 with status: "0" when business ID, token, or account fails
-      if (
-        resJson.status === '0' ||
-        resJson.status === 0 ||
-        resJson.status === 'error' ||
-        (typeof resJson.message === 'string' && resJson.status !== '1' && resJson.status !== 1 && !Array.isArray(resJson))
-      ) {
-        return {
-          success: false,
-          templates: [],
-          httpStatus: response.status,
-          error:
-            typeof resJson.message === 'string'
-              ? resJson.message
-              : 'BotBiz returned status: 0 (Account or token verification failed)',
-          raw: resJson,
-        };
-      }
-
-      // Normalize template data from response
-      // BotBiz returns templates in resJson.message or resJson.data or directly as array
+      // Normalize template data from response first — some BotBiz payloads omit status: "1"
+      // but still return a usable template array (message/data/templates).
       let rawList: any[] = [];
       if (Array.isArray(resJson)) {
         rawList = resJson;
@@ -377,6 +419,35 @@ export class BotBizApiClient {
         rawList = resJson.template_list;
       } else if (resJson.data && typeof resJson.data === 'object') {
         rawList = Object.values(resJson.data);
+      }
+
+      // Explicit account/token failure — only when there is no usable template list.
+      const explicitlyFailed =
+        resJson.status === '0' ||
+        resJson.status === 0 ||
+        resJson.status === 'error' ||
+        resJson.status === 'failed';
+      if (explicitlyFailed && rawList.length === 0) {
+        return {
+          success: false,
+          templates: [],
+          httpStatus: response.status,
+          error:
+            typeof resJson.message === 'string'
+              ? resJson.message
+              : 'BotBiz returned status: 0 (Account or token verification failed)',
+          raw: resJson,
+        };
+      }
+
+      if (rawList.length === 0 && typeof resJson.message === 'string' && resJson.status !== '1' && resJson.status !== 1) {
+        return {
+          success: false,
+          templates: [],
+          httpStatus: response.status,
+          error: resJson.message || 'No templates returned from BotBiz',
+          raw: resJson,
+        };
       }
 
       const normalized: BotbizTemplate[] = rawList.map((item: any, idx: number) => {
@@ -415,41 +486,81 @@ export class BotBizApiClient {
           status = 'DISABLED';
         }
 
-        const components = item.components || (item.template_json ? JSON.parse(item.template_json).components : []);
+        let components: any[] = [];
+        try {
+          if (Array.isArray(item.components)) {
+            components = item.components;
+          } else if (typeof item.template_json === 'string' && item.template_json.trim()) {
+            const parsed = JSON.parse(item.template_json);
+            components = Array.isArray(parsed?.components) ? parsed.components : (Array.isArray(parsed) ? parsed : []);
+          } else if (item.template_json && typeof item.template_json === 'object') {
+            components = Array.isArray(item.template_json.components) ? item.template_json.components : [];
+          }
+        } catch {
+          components = [];
+        }
+
         const headerComp = Array.isArray(components)
-          ? components.find((c: any) => c.type?.toUpperCase() === 'HEADER')
+          ? components.find((c: any) => String(c.type || '').toUpperCase() === 'HEADER')
           : undefined;
-        const headerFormat = headerComp?.format ? String(headerComp.format).toLowerCase() : undefined;
+
+        const headerFormat =
+          normalizeHeaderFormat(headerComp?.format) ||
+          normalizeHeaderFormat(item.header_format) ||
+          normalizeHeaderFormat(item.header_type) ||
+          normalizeHeaderFormat(item.header_subtype) ||
+          normalizeHeaderFormat(item.headerFormat);
+
         let headerExampleUrl: string | undefined = undefined;
-        if (headerComp?.example?.header_url && headerComp.example.header_url[0]) {
-          const u = String(headerComp.example.header_url[0]).trim();
+        const candidateUrls = [
+          headerComp?.example?.header_url?.[0],
+          headerComp?.example?.header_handle?.[0],
+          item.header_url,
+          item.header_example_url,
+          item.headerExampleUrl,
+          item.media_url,
+          item.example_header_url,
+        ];
+        for (const candidate of candidateUrls) {
+          if (candidate == null) continue;
+          const u = String(candidate).trim();
           if (u.startsWith('http://') || u.startsWith('https://')) {
             headerExampleUrl = u;
-          }
-        } else if (headerComp?.example?.header_handle && headerComp.example.header_handle[0]) {
-          const h = String(headerComp.example.header_handle[0]).trim();
-          if (h.startsWith('http://') || h.startsWith('https://')) {
-            headerExampleUrl = h;
+            break;
           }
         }
+
+        let headerExampleText: string | undefined = undefined;
+        if (headerFormat === 'text') {
+          const textCandidates = [
+            headerComp?.example?.header_text?.[0],
+            headerComp?.example?.header_text,
+            headerComp?.text,
+            item.header_text,
+            item.headerExampleText,
+          ];
+          for (const candidate of textCandidates) {
+            if (candidate == null) continue;
+            const t = Array.isArray(candidate) ? String(candidate[0] ?? '').trim() : String(candidate).trim();
+            if (t && !t.startsWith('http://') && !t.startsWith('https://') && !t.startsWith('4::')) {
+              headerExampleText = t;
+              break;
+            }
+          }
+        }
+
         const bodyComp = Array.isArray(components)
-          ? components.find((c: any) => c.type?.toUpperCase() === 'BODY')
+          ? components.find((c: any) => String(c.type || '').toUpperCase() === 'BODY')
           : undefined;
-        const bodyText = bodyComp?.text ? String(bodyComp.text) : undefined;
-        let bodyExampleVariables: string[] = [];
-        if (bodyComp?.example?.body_text && Array.isArray(bodyComp.example.body_text[0])) {
-          bodyExampleVariables = bodyComp.example.body_text[0].map(String);
-        } else if (bodyText) {
-          const matches = bodyText.match(/\{\{([a-zA-Z0-9_-]+)\}\}/g);
-          if (matches) {
-            matches.forEach((m: string) => {
-              const name = m.replace(/[\{\}]/g, '').trim();
-              if (!bodyExampleVariables.includes(name)) {
-                bodyExampleVariables.push(name);
-              }
-            });
-          }
-        }
+        const bodyText =
+          (bodyComp?.text ? String(bodyComp.text) : undefined) ||
+          (item.body_text ? String(item.body_text) : undefined) ||
+          (item.bodyText ? String(item.bodyText) : undefined);
+
+        const exampleBodyRow = Array.isArray(bodyComp?.example?.body_text?.[0])
+          ? bodyComp.example.body_text[0]
+          : undefined;
+        const bodyExampleVariables = extractBodyVariableNames(bodyText, exampleBodyRow);
 
         return {
           id: String(id),
@@ -461,6 +572,7 @@ export class BotBizApiClient {
           components,
           headerFormat,
           headerExampleUrl,
+          headerExampleText,
           bodyText,
           bodyExampleVariables,
           variableCount: bodyExampleVariables.length > 0
@@ -811,21 +923,24 @@ export class BotBizApiClient {
         resJson = { raw: rawText };
       }
 
-      const isSuccess =
-        response.ok &&
-        (resJson.status === '1' ||
-          resJson.status === 1 ||
-          resJson.status === 'success' ||
-          resJson.wa_message_id !== undefined);
+      const isSuccess = isBotbizSendSuccess(resJson, response.ok);
+      const waMessageIdRaw =
+        resJson.wa_message_id || resJson.message_id || resJson.wamid || null;
+      const waMessageId =
+        waMessageIdRaw != null && String(waMessageIdRaw).trim() !== '' && String(waMessageIdRaw).toLowerCase() !== 'null'
+          ? String(waMessageIdRaw)
+          : undefined;
 
       return {
         success: isSuccess,
         status: isSuccess ? '1' : '0',
-        waMessageId: resJson.wa_message_id || resJson.id,
+        waMessageId,
         message: resJson.message || (isSuccess ? 'Template message sent' : 'Template dispatch failed'),
         rawResponse: resJson,
         httpStatus: response.status,
-        error: isSuccess ? undefined : resJson.message || `HTTP ${response.status}`,
+        error: isSuccess
+          ? undefined
+          : resJson.message || resJson.error || `HTTP ${response.status}: BotBiz did not confirm delivery`,
       };
     } catch (err: any) {
       clearTimeout(timer);

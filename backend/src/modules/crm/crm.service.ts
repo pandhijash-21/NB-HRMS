@@ -4835,12 +4835,31 @@ export const crmService = {
     const leadScope = lead.scope || 'NB_DEVELOPER';
 
     if (payload.event) {
-      await whatsappService.triggerEvent(payload.event, lead, {
+      const triggerRes = await whatsappService.triggerEvent(payload.event, lead, {
         projectName: lead.campaign?.project?.name || (leadScope === 'NB_FINSERVE' ? 'NB Finserve' : 'Legacy Tower'),
         agentName: lead.assignedTo?.generalInfo?.fullName,
         scope: leadScope,
       });
-      return { success: true, message: `Triggered ${payload.event} for lead` };
+      if (triggerRes?.skipped) {
+        return {
+          success: true,
+          skipped: true,
+          message: triggerRes.message || triggerRes.error || `Trigger ${payload.event} skipped`,
+          error: undefined,
+        };
+      }
+      if (!triggerRes?.success) {
+        return {
+          success: false,
+          error: triggerRes?.error || `Failed to trigger ${payload.event}`,
+          message: triggerRes?.message || triggerRes?.error,
+        };
+      }
+      return {
+        success: true,
+        message: triggerRes.message || `Triggered ${payload.event} for lead`,
+        data: triggerRes.data,
+      };
     }
 
     if (!payload.message && !payload.templateId) throw new Error('Message content or Template ID is required');
@@ -4857,12 +4876,43 @@ export const crmService = {
     const now = new Date();
     const formattedDate = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
     const formattedTime = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
-    const leadName = lead.name || (lead.customFields as any)?.client_name || (lead.customFields as any)?.Client_Name || (lead.customFields as any)?.name || 'Valued Client';
+    const custom = (lead.customFields && typeof lead.customFields === 'object')
+      ? (lead.customFields as Record<string, any>)
+      : {};
+    const leadName =
+      lead.name ||
+      custom.client_name ||
+      custom.Client_Name ||
+      custom.name ||
+      custom.customerName ||
+      custom.customer_name ||
+      'Valued Client';
     const calendarLink = config.defaultCalendarLink || '';
-    const projectName = lead.campaign?.project?.name || (leadScope === 'NB_FINSERVE' ? 'NB Finserve' : 'Legacy Tower');
+    const projectName =
+      lead.campaign?.project?.name ||
+      custom.project_name ||
+      custom.Project_Name ||
+      custom.project ||
+      (leadScope === 'NB_FINSERVE' ? 'NB Finserve' : 'Legacy Tower');
     const agentName = lead.assignedTo?.generalInfo?.fullName || 'Property Advisor';
 
+    // Flatten CRM custom field headers into template variables (string values only).
+    const customVarMap: Record<string, string> = {};
+    for (const [k, v] of Object.entries(custom)) {
+      if (v == null) continue;
+      const str = String(v).trim();
+      if (!str) continue;
+      customVarMap[k] = str;
+      customVarMap[k.toLowerCase()] = str;
+      const snake = k
+        .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+        .replace(/\s+/g, '_')
+        .toLowerCase();
+      if (snake !== k.toLowerCase()) customVarMap[snake] = str;
+    }
+
     const mergedVariables: Record<string, string> = {
+      ...customVarMap,
       name: leadName,
       customerName: leadName,
       client_name: leadName,
@@ -4878,15 +4928,24 @@ export const crmService = {
       pname: projectName,
       advisor: agentName,
       salespersonName: agentName,
+      // Explicit payload overrides win over CRM defaults.
       ...(payload.variables || {}),
     };
+
+    // TEXT header: prefer explicit payload, else project / lead name from CRM.
+    const headerText =
+      (payload.headerText && String(payload.headerText).trim()) ||
+      mergedVariables.header_text ||
+      mergedVariables.headerText ||
+      projectName ||
+      leadName;
 
     return whatsappService.sendDirect({
       phone: recipientPhone,
       message: payload.message || '',
       mediaUrl: payload.mediaUrl,
       headerMediaUrl: payload.headerMediaUrl || payload.mediaUrl,
-      headerText: payload.headerText,
+      headerText,
       event: 'MANUAL_DISPATCH',
       leadId: lead.id,
       messageType: payload.templateId ? 'TEMPLATE' : (payload.messageType || 'TEXT'),

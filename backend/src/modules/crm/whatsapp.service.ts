@@ -1083,9 +1083,16 @@ export class WhatsappService {
     const now = Date.now();
     if (!isManual && lastSent && now - lastSent < 30000) {
       console.log(`[CRM WhatsApp - ${scope}] Suppressing duplicate automated dispatch to ${normalizedPhone} (${dedupKey})`);
+      // Not a delivery success — caller must not treat this as "message sent to WhatsApp".
       return {
         success: true,
-        data: { deduplicated: true, message: 'Duplicate automated dispatch suppressed' },
+        skipped: true,
+        data: {
+          deduplicated: true,
+          skipped: true,
+          message: 'Duplicate automated dispatch suppressed (already sent within 30s)',
+        },
+        message: 'Duplicate automated dispatch suppressed (already sent within 30s)',
       };
     }
     this.recentDispatches.set(dedupKey, now);
@@ -1168,6 +1175,7 @@ export class WhatsappService {
       const isFinserve = scope === 'NB_FINSERVE';
       const isImage = tmplHeaderType.includes('IMAGE') || tmpl?.headerFormat?.toLowerCase() === 'image';
       const isDocument = isNewlead || tmplHeaderType.includes('DOCUMENT') || tmpl?.headerFormat?.toLowerCase() === 'document';
+      const isTextHeader = tmplHeaderType.includes('TEXT') || tmpl?.headerFormat?.toLowerCase() === 'text';
       const needsMediaHeader = isImage || isDocument || tmplHeaderType.includes('VIDEO') || tmplHeaderType.includes('MEDIA');
 
       // Auto-correct MIME mismatch: don't send a PDF to an image header, or an image to a document header
@@ -1194,6 +1202,7 @@ export class WhatsappService {
         }
       }
 
+      // Prefer placeholder names parsed from body text ({{name}}, {{1}}) — never Meta sample values.
       const allowedVars = tmpl
         ? (tmpl.bodyExampleVariables && tmpl.bodyExampleVariables.length > 0
             ? tmpl.bodyExampleVariables
@@ -1205,13 +1214,53 @@ export class WhatsappService {
         resolvedVariables.name = resolvedVariables.customerName || resolvedVariables.client_name || 'Valued Client';
       }
 
+      // Map positional {{1}} / {{2}} from common CRM fields when the template uses indexes.
+      if (allowedVars && allowedVars.length > 0) {
+        for (let i = 0; i < allowedVars.length; i++) {
+          const key = allowedVars[i];
+          if (resolvedVariables[key] != null && String(resolvedVariables[key]).trim() !== '') continue;
+          const lower = key.toLowerCase();
+          if (lower === '1' || lower === 'name' || lower.includes('name') || lower === 'pname') {
+            resolvedVariables[key] =
+              resolvedVariables.name ||
+              resolvedVariables.customerName ||
+              resolvedVariables.client_name ||
+              'Valued Client';
+          } else if (lower === '2' || lower.includes('date')) {
+            resolvedVariables[key] = resolvedVariables.date || resolvedVariables.visit_date || '';
+          } else if (lower === '3' || lower.includes('time')) {
+            resolvedVariables[key] = resolvedVariables.time || resolvedVariables.visit_time || '';
+          } else if (lower.includes('project')) {
+            resolvedVariables[key] = resolvedVariables.projectName || resolvedVariables.project || resolvedVariables.pname || '';
+          } else if (lower.includes('phone') || lower.includes('number')) {
+            resolvedVariables[key] = resolvedVariables.phone || resolvedVariables.number || normalizedPhone;
+          } else if (resolvedVariables[lower] != null) {
+            resolvedVariables[key] = resolvedVariables[lower];
+          }
+        }
+      }
+
+      // TEXT header variable — fill from CRM lead when caller didn't override.
+      let headerText = params.headerText?.trim() || undefined;
+      if (isTextHeader && !headerText) {
+        headerText =
+          resolvedVariables.header_text ||
+          resolvedVariables.headerText ||
+          resolvedVariables.header_variable ||
+          resolvedVariables.projectName ||
+          resolvedVariables.project ||
+          resolvedVariables.name ||
+          tmpl?.headerExampleText ||
+          undefined;
+      }
+
       const sendRes = await this.botbizClient.sendTemplateMessage({
         phoneNumber: normalizedPhone,
         templateId: botbizInternalId,
         templateName: params.templateName || tmpl?.name || (isNewlead ? 'newlead' : 'CRM_NOTIFICATION'),
         templateEndpointUrl: params.templateEndpoint,
         templateHeaderMediaUrl: headerMediaUrl,
-        templateHeaderText: params.headerText,
+        templateHeaderText: headerText,
         variables: resolvedVariables,
         allowedVariableNames: allowedVars,
       });
@@ -1289,12 +1338,14 @@ export class WhatsappService {
       loanType?: string;
       scope?: string;
     },
-  ) {
+  ): Promise<{ success: boolean; skipped?: boolean; error?: string; data?: any; message?: string }> {
     try {
       const scope = context?.scope || (lead as any)?.scope || 'NB_DEVELOPER';
       const isFinserve = scope === 'NB_FINSERVE';
       const raw = await this.getRawConfig(scope);
-      if (!raw.enabled) return;
+      if (!raw.enabled) {
+        return { success: false, skipped: true, error: 'WhatsApp automation is disabled' };
+      }
 
       const normalizedEvent = event.toUpperCase();
       const trigger = raw.triggers.find(
@@ -1307,7 +1358,7 @@ export class WhatsappService {
           t.enabled,
       );
       if (!trigger) {
-        return; // Trigger not active or configured
+        return { success: false, skipped: true, error: `No enabled WhatsApp trigger for ${normalizedEvent}` };
       }
 
       const phone =
@@ -1315,7 +1366,9 @@ export class WhatsappService {
         (lead.customFields &&
           (lead.customFields.phone || lead.customFields.Phone)) ||
         '';
-      if (!phone) return;
+      if (!phone) {
+        return { success: false, error: 'Lead has no phone number for WhatsApp dispatch' };
+      }
 
       const customerName =
         lead.name ||
@@ -1417,7 +1470,7 @@ export class WhatsappService {
         `[CRM WhatsApp - ${scope}] Triggering "${trigger.name}" (${trigger.event}) for lead ${lead.id || 'N/A'} (${phone})`,
       );
 
-      await this.sendDirect({
+      const sendRes = await this.sendDirect({
         phone,
         message: finalMessage,
         mediaUrl: trigger.mediaUrl,
@@ -1431,8 +1484,19 @@ export class WhatsappService {
         variables,
         scope,
       });
-    } catch (err) {
+      return {
+        success: !!sendRes?.success,
+        skipped: !!(sendRes as any)?.skipped,
+        error: (sendRes as any)?.error,
+        data: (sendRes as any)?.data,
+        message: (sendRes as any)?.message,
+      };
+    } catch (err: any) {
       console.error(`[CRM WhatsApp - ${event} Error]:`, err);
+      return {
+        success: false,
+        error: err?.message || `WhatsApp trigger ${event} failed`,
+      };
     }
   }
 }

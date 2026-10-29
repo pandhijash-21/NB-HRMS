@@ -152,6 +152,21 @@ async function runTests() {
       resLimit.message.includes('Subscriber monthly message limit reached'),
       'Passes through provider error message',
     );
+
+    // HTTP 200 + null wa_message_id must NOT look like success (false "message sent")
+    mockFetchResponse(200, {
+      status: '0',
+      wa_message_id: null,
+      message: 'Queued but rejected by WhatsApp',
+    });
+    const resNullId = await client.sendTextMessage({
+      phoneNumber: '9876543210',
+      message: 'Test message',
+    });
+    assert(
+      resNullId.success === false,
+      'Does not treat wa_message_id: null as success',
+    );
   }
 
   // Test 4: Fetch templates (POST /whatsapp/get/template/list)
@@ -167,7 +182,16 @@ async function runTests() {
           category: 'UTILITY',
           status: 'APPROVED',
           components: [
-            { type: 'BODY', text: 'Hello {{1}}, site visit at {{2}}' },
+            {
+              type: 'HEADER',
+              format: 'TEXT',
+              example: { header_text: ['Legacy Tower'] },
+            },
+            {
+              type: 'BODY',
+              text: 'Hello {{name}}, site visit at {{date}}',
+              example: { body_text: [['Sample Person', '01/01/2026']] },
+            },
           ],
         },
         {
@@ -176,6 +200,8 @@ async function runTests() {
           language: 'en_US',
           category: 'MARKETING',
           status: 'PENDING',
+          header_type: 'DOCUMENT',
+          header_url: 'https://cdn.example.com/brochure.pdf',
         },
       ],
     });
@@ -196,6 +222,23 @@ async function runTests() {
     assert(
       tmplRes.templates[1].status === 'PENDING',
       'Normalizes PENDING status',
+    );
+    assert(
+      tmplRes.templates[0].headerFormat === 'text',
+      'Parses TEXT header format from components',
+    );
+    assert(
+      JSON.stringify(tmplRes.templates[0].bodyExampleVariables) ===
+        JSON.stringify(['name', 'date']),
+      'Uses placeholder names from body text, not Meta example sample values',
+    );
+    assert(
+      tmplRes.templates[1].headerFormat === 'document',
+      'Falls back to item.header_type when components missing',
+    );
+    assert(
+      tmplRes.templates[1].headerExampleUrl === 'https://cdn.example.com/brochure.pdf',
+      'Reads header media URL from flat BotBiz fields',
     );
   }
 

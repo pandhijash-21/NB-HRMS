@@ -4879,14 +4879,16 @@ export const crmService = {
     const custom = (lead.customFields && typeof lead.customFields === 'object')
       ? (lead.customFields as Record<string, any>)
       : {};
-    const leadName =
+    // Pre-Sales Client Name (CRM) — this is what fills WhatsApp {{name}} / Dear …
+    const leadName = String(
       lead.name ||
-      custom.client_name ||
-      custom.Client_Name ||
-      custom.name ||
-      custom.customerName ||
-      custom.customer_name ||
-      'Valued Client';
+        custom.Client_Name ||
+        custom.client_name ||
+        custom.customerName ||
+        custom.customer_name ||
+        custom.name ||
+        '',
+    ).trim() || 'Valued Client';
     const calendarLink = config.defaultCalendarLink || '';
     const projectName =
       lead.campaign?.project?.name ||
@@ -4937,16 +4939,33 @@ export const crmService = {
     const headerText =
       (payload.headerText && String(payload.headerText).trim()) || undefined;
 
-    // Match Settings test payload shape for name: keep CRM name authoritative and
-    // do not let dialog date/time stomp the name slot on BotBiz.
+    // Greeting must be Pre-Sales CRM Client Name. Reject only exact project labels
+    // (not substring matches — a client can be named e.g. "Amit Legacy Tower Buyer").
+    const projectCmp = String(projectName || '').trim().toLowerCase();
+    const knownProjects = new Set([
+      'legacy tower',
+      'nb legacy tower',
+      'nb finserve',
+      'nb infra',
+      'nb infra projects',
+      'nb infra projects ltd',
+    ]);
+    const isProjectLabel = (s: string) => {
+      const n = s.trim().toLowerCase().replace(/\s+/g, ' ');
+      if (!n) return true;
+      return n === projectCmp || knownProjects.has(n);
+    };
+    // Prefer CRM leadName first, then dialog override if user edited Client Name in the send form.
     const safeName =
-      (mergedVariables.name && String(mergedVariables.name).trim()) ||
-      leadName;
+      [leadName, mergedVariables.name, mergedVariables.customerName, mergedVariables.client_name, mergedVariables.Client_Name]
+        .map((v) => (v == null ? '' : String(v).trim()))
+        .find((v) => v && !isProjectLabel(v)) || 'Valued Client';
     const outboundVariables: Record<string, string> = {
       ...mergedVariables,
       name: safeName,
       customerName: safeName,
       client_name: safeName,
+      Client_Name: safeName,
     };
 
     return whatsappService.sendDirect({

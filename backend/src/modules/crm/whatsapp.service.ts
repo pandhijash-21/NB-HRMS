@@ -1291,28 +1291,53 @@ export class WhatsappService {
         Array.isArray(allowedVars) &&
         allowedVars.length > 0 &&
         allowedVars.every((k) => isPersonNameKey(String(k)));
-      // Always sanitize the person name — reject clock times that leaked into name.
+      // Always sanitize the person name — reject clock / project values in the greeting.
       {
         const looksLikeClock = (s: string) =>
           /^\d{1,2}:\d{2}(\s*[AaPp][Mm])?$/.test(String(s).trim());
-        let leadName =
-          (resolvedVariables.name && String(resolvedVariables.name).trim()) ||
-          (resolvedVariables.customerName && String(resolvedVariables.customerName).trim()) ||
-          (resolvedVariables.client_name && String(resolvedVariables.client_name).trim()) ||
-          'Valued Client';
-        if (looksLikeClock(leadName)) {
-          leadName =
-            (resolvedVariables.customerName &&
-              !looksLikeClock(String(resolvedVariables.customerName)) &&
-              String(resolvedVariables.customerName).trim()) ||
-            (resolvedVariables.client_name &&
-              !looksLikeClock(String(resolvedVariables.client_name)) &&
-              String(resolvedVariables.client_name).trim()) ||
-            'Valued Client';
-        }
+        const looksLikeProject = (s: string) => {
+          const n = String(s || '')
+            .trim()
+            .toLowerCase()
+            .replace(/\s+/g, ' ');
+          if (!n) return false;
+          const projectCmp = String(
+            resolvedVariables.projectName ||
+              resolvedVariables.project ||
+              resolvedVariables.pname ||
+              '',
+          )
+            .trim()
+            .toLowerCase();
+          const known = new Set([
+            'legacy tower',
+            'nb legacy tower',
+            'nb finserve',
+            'nb infra',
+            'nb infra projects',
+            'nb infra projects ltd',
+          ]);
+          return n === projectCmp || known.has(n);
+        };
+        const safePerson = (...vals: Array<string | undefined>) => {
+          for (const v of vals) {
+            if (!v) continue;
+            const s = String(v).trim();
+            if (!s || looksLikeClock(s) || looksLikeProject(s)) continue;
+            return s;
+          }
+          return 'Valued Client';
+        };
+        const leadName = safePerson(
+          resolvedVariables.name,
+          resolvedVariables.customerName,
+          resolvedVariables.client_name,
+          resolvedVariables.Client_Name,
+        );
         resolvedVariables.name = leadName;
         resolvedVariables.customerName = leadName;
         resolvedVariables.client_name = leadName;
+        resolvedVariables.Client_Name = leadName;
         if (nameOnly) {
           for (const k of allowedVars!) {
             resolvedVariables[k] = leadName;
@@ -1320,18 +1345,53 @@ export class WhatsappService {
         }
       }
 
-      // TEXT header variable — fill from CRM lead when caller didn't override.
+      // TEXT header — never auto-fill with project name (BotBiz leaked that into
+      // body {{1}} as "Dear Legacy Tower"). Only forward an explicit safe header.
       let headerText = params.headerText?.trim() || undefined;
+      if (headerText) {
+        const ht = headerText.toLowerCase().replace(/\s+/g, ' ');
+        const projectCmp = String(
+          resolvedVariables.projectName || resolvedVariables.project || '',
+        )
+          .trim()
+          .toLowerCase();
+        const known = new Set([
+          'legacy tower',
+          'nb legacy tower',
+          'nb finserve',
+          'nb infra',
+          'nb infra projects',
+          'nb infra projects ltd',
+        ]);
+        if (ht === projectCmp || known.has(ht) || /^\d{1,2}:\d{2}/.test(headerText.trim())) {
+          headerText = undefined;
+        }
+      }
       if (isTextHeader && !headerText) {
-        headerText =
+        const candidate =
           resolvedVariables.header_text ||
           resolvedVariables.headerText ||
           resolvedVariables.header_variable ||
-          resolvedVariables.projectName ||
-          resolvedVariables.project ||
-          resolvedVariables.name ||
-          tmpl?.headerExampleText ||
           undefined;
+        if (candidate && String(candidate).trim()) {
+          const ct = String(candidate).trim().toLowerCase().replace(/\s+/g, ' ');
+          const projectCmp = String(
+            resolvedVariables.projectName || resolvedVariables.project || '',
+          )
+            .trim()
+            .toLowerCase();
+          const known = new Set([
+            'legacy tower',
+            'nb legacy tower',
+            'nb finserve',
+            'nb infra',
+            'nb infra projects',
+            'nb infra projects ltd',
+          ]);
+          if (ct !== projectCmp && !known.has(ct)) {
+            headerText = String(candidate).trim();
+          }
+        }
       }
 
       const sendRes = await this.botbizClient.sendTemplateMessage({

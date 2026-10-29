@@ -838,24 +838,62 @@ export class BotBizApiClient {
       };
       const looksLikeClock = (s: string) =>
         /^\d{1,2}:\d{2}(\s*[AaPp][Mm])?$/.test(String(s).trim());
-
-      let personName =
-        pick('name', 'customerName', 'client_name', 'customer_name') || 'Valued Client';
-      if (looksLikeClock(personName)) {
-        personName =
-          pick('customerName', 'client_name', 'customer_name') || 'Valued Client';
-        if (looksLikeClock(personName)) personName = 'Valued Client';
-      }
+      const isProjectKey = (key: string) => {
+        const k = key.toLowerCase();
+        return (
+          k === 'pname' ||
+          k === 'project' ||
+          k === 'projectname' ||
+          k === 'project_name'
+        );
+      };
 
       const dateVal = pick('date', 'visit_date', 'siteVisitDate', '2');
       const timeVal = pick('time', 'visit_time', 'siteVisitTime', '3');
       const projectVal = pick('pname', 'projectName', 'project', 'project_name');
+
+      // Exact project labels only — do NOT use includes() (CRM client names can mention the project).
+      const looksLikeProject = (s: string) => {
+        const n = String(s || '')
+          .trim()
+          .toLowerCase()
+          .replace(/\s+/g, ' ');
+        if (!n) return false;
+        const known = new Set([
+          'legacy tower',
+          'nb legacy tower',
+          'nb finserve',
+          'nb infra',
+          'nb infra projects',
+          'nb infra projects ltd',
+        ]);
+        if (known.has(n)) return true;
+        if (projectVal && n === String(projectVal).trim().toLowerCase()) return true;
+        return false;
+      };
+
+      // Greeting {{name}} = CRM person only (Pre-Sales Client Name), never project/clock.
+      const pickPerson = (...keys: string[]) => {
+        for (const k of keys) {
+          const v = vars[k];
+          if (v == null) continue;
+          const s = String(v).trim();
+          if (!s || looksLikeClock(s) || looksLikeProject(s)) continue;
+          return s;
+        }
+        return undefined;
+      };
+      const personName =
+        pickPerson('name', 'customerName', 'client_name', 'customer_name', 'Client_Name') ||
+        'Valued Client';
 
       const allowed = (params.allowedVariableNames || [])
         .map((k) => String(k || '').trim())
         .filter(Boolean);
       const explicitNoBodyVars =
         Array.isArray(params.allowedVariableNames) && allowed.length === 0;
+      const allowedWantsProject =
+        allowed.length > 0 && allowed.some((k) => isProjectKey(k));
 
       // Drop any preset variable keys copied from a BotBiz endpoint URL.
       for (const key of [...formParams.keys()]) {
@@ -871,12 +909,19 @@ export class BotBizApiClient {
         }
       }
 
+      // Never send project/clock as header — BotBiz can leak it into body {{1}}
+      // ("Dear Legacy Tower"). Skip unsafe header values entirely.
       if (params.templateHeaderText && String(params.templateHeaderText).trim()) {
         const cleanHeaderText = String(params.templateHeaderText).trim();
-        const headerVal = looksLikeClock(cleanHeaderText) ? personName : cleanHeaderText;
-        formParams.set('template_header_variable-1', headerVal);
-        formParams.set('template_header_variable', headerVal);
-        formParams.set('templateHeaderVariable-1', headerVal);
+        if (
+          !looksLikeClock(cleanHeaderText) &&
+          !looksLikeProject(cleanHeaderText) &&
+          !(projectVal && cleanHeaderText.toLowerCase() === projectVal.toLowerCase())
+        ) {
+          formParams.set('template_header_variable-1', cleanHeaderText);
+          formParams.set('template_header_variable', cleanHeaderText);
+          formParams.set('templateHeaderVariable-1', cleanHeaderText);
+        }
       }
 
       if (!explicitNoBodyVars) {
@@ -902,12 +947,13 @@ export class BotBizApiClient {
           formParams.set('templateVariable-3-1', timeVal);
         }
 
-        if (projectVal && !looksLikeClock(projectVal)) {
+        // Project only when template explicitly allows it.
+        if (allowedWantsProject && projectVal && !looksLikeClock(projectVal)) {
           formParams.set('templateVariable-pname-1', projectVal);
           formParams.set('templateVariable-project-1', projectVal);
         }
 
-        // Any other allowed keys (excluding name/date/time) — do not touch slots 1–3.
+        // Any other allowed keys (excluding name/date/time/project) — do not touch slots 1–3.
         for (const rawKey of allowed) {
           const k = rawKey.toLowerCase();
           if (
@@ -920,15 +966,12 @@ export class BotBizApiClient {
             k === 'customername' ||
             k === 'client_name' ||
             k === 'customer_name' ||
-            k === 'pname' ||
-            k === 'project' ||
-            k === 'projectname' ||
-            k === 'project_name'
+            isProjectKey(k)
           ) {
             continue;
           }
           const v = pick(rawKey, rawKey.toLowerCase());
-          if (!v || looksLikeClock(v)) continue;
+          if (!v || looksLikeClock(v) || looksLikeProject(v)) continue;
           formParams.set(`templateVariable-${rawKey}-1`, v);
         }
 

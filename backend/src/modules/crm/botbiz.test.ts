@@ -398,6 +398,46 @@ async function runTests() {
         capturedBody.includes('templateVariable-3=12'),
       'Pre-sales sends time into time/{{3}} slot',
     );
+
+    // Project must never become the greeting ("Dear Legacy Tower")
+    capturedBody = '';
+    await client.sendTemplateMessage({
+      phoneNumber: '9876543210',
+      templateId: '417875',
+      templateName: 'cal',
+      allowedVariableNames: ['name', 'date', 'time'],
+      templateHeaderText: 'Legacy Tower',
+      variables: {
+        name: 'Legacy Tower',
+        customerName: 'Mehul',
+        client_name: 'Mehul',
+        date: '29/10/2026',
+        time: '01:57 PM',
+        projectName: 'Legacy Tower',
+        project: 'Legacy Tower',
+        pname: 'Legacy Tower',
+      },
+    });
+    assert(
+      capturedBody.includes('templateVariable-name-1=Mehul') ||
+        capturedBody.includes('templateVariable-1=Mehul'),
+      'Rejects project as name and uses real person name',
+    );
+    assert(
+      !capturedBody.includes('templateVariable-name-1=Legacy') &&
+        !capturedBody.includes('templateVariable-1=Legacy'),
+      'Does not put Legacy Tower into name/{{1}}',
+    );
+    assert(
+      !capturedBody.includes('template_header_variable-1=Legacy') &&
+        !capturedBody.includes('templateHeaderVariable-1=Legacy'),
+      'Does not send project name as header variable',
+    );
+    assert(
+      !capturedBody.includes('templateVariable-pname-1=') &&
+        !capturedBody.includes('templateVariable-project-1='),
+      'Does not dump project vars when template only allows name/date/time',
+    );
   }
 
   // Test 6: Dynamic Variable Resolver (no unresolved placeholders)

@@ -55,13 +55,18 @@ class _CrmSendWhatsappDialogState extends State<CrmSendWhatsappDialog> {
     final dateStr = DateFormat('dd/MM/yyyy').format(now);
     final timeStr = DateFormat('hh:mm a').format(now);
 
-    final initialName = widget.lead.name.trim().isNotEmpty
+    // Prefill from Pre-Sales CRM Client Name (lead.name / Client_Name column).
+    final crmClientName = widget.lead.name.trim().isNotEmpty
         ? widget.lead.name.trim()
-        : (widget.lead.customFields['client_name']?.toString() ??
-            widget.lead.customFields['name']?.toString() ??
-            'Valued Client');
+        : (widget.lead.customFields['Client_Name']?.toString().trim().isNotEmpty == true
+            ? widget.lead.customFields['Client_Name']!.toString().trim()
+            : (widget.lead.customFields['client_name']?.toString().trim().isNotEmpty == true
+                ? widget.lead.customFields['client_name']!.toString().trim()
+                : (widget.lead.customFields['customer_name']?.toString().trim().isNotEmpty == true
+                    ? widget.lead.customFields['customer_name']!.toString().trim()
+                    : 'Valued Client')));
 
-    _nameController = TextEditingController(text: initialName);
+    _nameController = TextEditingController(text: crmClientName);
     _phoneController = TextEditingController(text: widget.lead.phone);
     _dateController = TextEditingController(text: dateStr);
     _timeController = TextEditingController(text: timeStr);
@@ -202,18 +207,24 @@ class _CrmSendWhatsappDialogState extends State<CrmSendWhatsappDialog> {
       _headerMediaUrlController.text = '';
     }
 
-    // TEXT headers: prefill from CRM project / lead name when empty.
+    // TEXT headers: leave empty unless template has an explicit non-project example.
+    // Prefilling with project name made BotBiz render "Dear Legacy Tower".
     if (format == 'TEXT' && _headerTextController.text.trim().isEmpty) {
-      final fromCrm = _crmField('project_name').isNotEmpty
-          ? _crmField('project_name')
-          : (_crmField('project').isNotEmpty
-              ? _crmField('project')
-              : (widget.lead.campaignName?.trim().isNotEmpty == true
-                  ? widget.lead.campaignName!.trim()
-                  : (_nameController.text.trim().isNotEmpty
-                      ? _nameController.text.trim()
-                      : (template.headerExampleText ?? ''))));
-      _headerTextController.text = fromCrm;
+      final example = (template.headerExampleText ?? '').trim();
+      final lower = example.toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+      const knownProjects = {
+        'legacy tower',
+        'nb legacy tower',
+        'nb finserve',
+        'nb infra',
+        'nb infra projects',
+        'nb infra projects ltd',
+      };
+      final campaign = (widget.lead.campaignName ?? '').trim().toLowerCase();
+      final isProjectExample = example.isEmpty ||
+          knownProjects.contains(lower) ||
+          (campaign.isNotEmpty && lower == campaign);
+      _headerTextController.text = isProjectExample ? '' : example;
     }
   }
 
@@ -381,18 +392,24 @@ class _CrmSendWhatsappDialogState extends State<CrmSendWhatsappDialog> {
     try {
       final repo = context.read<CrmRepository>();
 
+      // Always send Pre-Sales CRM Client Name into {{name}} (editable in this dialog).
+      final crmFallback = widget.lead.name.trim().isNotEmpty
+          ? widget.lead.name.trim()
+          : (widget.lead.customFields['Client_Name']?.toString().trim().isNotEmpty == true
+              ? widget.lead.customFields['Client_Name']!.toString().trim()
+              : (widget.lead.customFields['client_name']?.toString().trim().isNotEmpty == true
+                  ? widget.lead.customFields['client_name']!.toString().trim()
+                  : 'Valued Client'));
       final clientName = _nameController.text.trim().isNotEmpty
           ? _nameController.text.trim()
-          : (widget.lead.name.trim().isNotEmpty
-              ? widget.lead.name.trim()
-              : 'Valued Client');
+          : crmFallback;
 
-      // Send name + date + time in separate keys. Backend maps them to strict BotBiz slots
-      // (name→{{1}}, date→{{2}}, time→{{3}}) so time cannot overwrite the greeting.
+      // name/customerName/client_name → BotBiz {{1}}; date→{{2}}; time→{{3}}
       final variables = <String, String>{
         'name': clientName,
         'customerName': clientName,
         'client_name': clientName,
+        'Client_Name': clientName,
         'phone': phone,
         'number': phone,
         if (_dateController.text.trim().isNotEmpty) 'date': _dateController.text.trim(),

@@ -1042,7 +1042,13 @@ export class WhatsappService {
     templateEndpoint?: string;
     variables?: Record<string, string>;
     scope?: string;
-  }): Promise<{ success: boolean; data?: any; error?: string }> {
+  }): Promise<{
+    success: boolean;
+    data?: any;
+    error?: string;
+    skipped?: boolean;
+    message?: string;
+  }> {
     const scope = params.scope || 'NB_DEVELOPER';
     const raw = await this.getRawConfig(scope);
     const normalizedPhone = this.normalizePhoneNumber(params.phone);

@@ -387,21 +387,60 @@ class _CrmSendWhatsappDialogState extends State<CrmSendWhatsappDialog> {
               ? widget.lead.name.trim()
               : 'Valued Client');
 
+      // Mirror CRM Settings test payload: always send name.
+      // Only include date/time when the synced template explicitly declares those placeholders.
+      // Sending time alongside a BotBiz name-only template made {{name}} become the clock time.
+      final declared = _selectedTemplate!.bodyExampleVariables
+          .map((e) => e.trim().toLowerCase())
+          .where((e) => e.isNotEmpty)
+          .toSet();
+      final nameOnlyTemplate = declared.isEmpty ||
+          declared.every((k) =>
+              k == 'name' ||
+              k == '1' ||
+              k == 'customername' ||
+              k == 'customer_name' ||
+              k == 'client_name' ||
+              k == 'clientname');
+
       final variables = <String, String>{
         'name': clientName,
+        'customerName': clientName,
+        'client_name': clientName,
         'phone': phone,
         'number': phone,
-        if (_dateController.text.trim().isNotEmpty) 'date': _dateController.text.trim(),
-        if (_timeController.text.trim().isNotEmpty) 'time': _timeController.text.trim(),
-        if (_calendarLinkController.text.trim().isNotEmpty)
-          'calendar_link': _calendarLinkController.text.trim(),
       };
 
-      // Add all detected / custom variables
-      for (final k in _customVarKeys) {
-        final ctrl = _customVarControllers[k];
-        if (ctrl != null && ctrl.text.trim().isNotEmpty) {
-          variables[k] = ctrl.text.trim();
+      if (!nameOnlyTemplate) {
+        if (declared.contains('date') ||
+            declared.contains('2') ||
+            declared.contains('visit_date') ||
+            declared.contains('sitevisitdate')) {
+          if (_dateController.text.trim().isNotEmpty) {
+            variables['date'] = _dateController.text.trim();
+          }
+        }
+        if (declared.contains('time') ||
+            declared.contains('3') ||
+            declared.contains('visit_time') ||
+            declared.contains('sitevisittime')) {
+          if (_timeController.text.trim().isNotEmpty) {
+            variables['time'] = _timeController.text.trim();
+          }
+        }
+        if (_calendarLinkController.text.trim().isNotEmpty &&
+            (declared.contains('calendar_link') ||
+                declared.contains('calendarlink') ||
+                declared.contains('link'))) {
+          variables['calendar_link'] = _calendarLinkController.text.trim();
+        }
+        for (final k in _customVarKeys) {
+          final keyLower = k.trim().toLowerCase();
+          if (keyLower == 'name' || keyLower == 'time' || keyLower == 'date') continue;
+          final ctrl = _customVarControllers[k];
+          if (ctrl != null && ctrl.text.trim().isNotEmpty) {
+            variables[k] = ctrl.text.trim();
+          }
         }
       }
 
@@ -410,7 +449,10 @@ class _CrmSendWhatsappDialogState extends State<CrmSendWhatsappDialog> {
               (headerMediaText.startsWith('http://') || headerMediaText.startsWith('https://'))
           ? headerMediaText
           : null;
-      final headerText = _headerTextController.text.trim().isNotEmpty
+      // Only send header text when template header is TEXT — never leak time into header slot.
+      final headerIsText =
+          (_selectedTemplate!.headerFormat ?? '').toUpperCase() == 'TEXT';
+      final headerText = headerIsText && _headerTextController.text.trim().isNotEmpty
           ? _headerTextController.text.trim()
           : null;
 

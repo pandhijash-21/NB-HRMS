@@ -4932,13 +4932,22 @@ export const crmService = {
       ...(payload.variables || {}),
     };
 
-    // TEXT header: prefer explicit payload, else project / lead name from CRM.
+    // Only forward an explicit header text from the client. Auto-filling header with
+    // project/lead name was colliding with BotBiz body {{name}} on some templates.
     const headerText =
-      (payload.headerText && String(payload.headerText).trim()) ||
-      mergedVariables.header_text ||
-      mergedVariables.headerText ||
-      projectName ||
+      (payload.headerText && String(payload.headerText).trim()) || undefined;
+
+    // Match Settings test payload shape for name: keep CRM name authoritative and
+    // do not let dialog date/time stomp the name slot on BotBiz.
+    const safeName =
+      (mergedVariables.name && String(mergedVariables.name).trim()) ||
       leadName;
+    const outboundVariables: Record<string, string> = {
+      ...mergedVariables,
+      name: safeName,
+      customerName: safeName,
+      client_name: safeName,
+    };
 
     return whatsappService.sendDirect({
       phone: recipientPhone,
@@ -4952,7 +4961,7 @@ export const crmService = {
       templateId: payload.templateId,
       templateName: payload.templateName,
       templateEndpoint: payload.templateEndpoint,
-      variables: mergedVariables,
+      variables: outboundVariables,
       scope: leadScope,
     });
   },

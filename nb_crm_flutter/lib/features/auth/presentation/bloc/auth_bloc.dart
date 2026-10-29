@@ -60,7 +60,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
   void _startSessionWatch() {
     _stopSessionWatch();
-    _sessionWatch = Timer.periodic(const Duration(seconds: 5), (_) {
+    // 30s is enough for lockout / role changes — 5s caused needless network + rebuilds.
+    _sessionWatch = Timer.periodic(const Duration(seconds: 30), (_) {
       add(const AuthPermissionsRefreshRequested());
     });
   }

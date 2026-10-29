@@ -20,6 +20,6 @@ void stopSplashPageAudio() {
 
 void startSplashOverlay() {
   try {
-    __nbStartSplash('mrnb.gif');
+    __nbStartSplash('mrnb_splash.webp');
   } catch (_) {}
 }

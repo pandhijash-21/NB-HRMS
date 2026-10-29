@@ -539,6 +539,7 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
     String? leadFlowFilter,
     String? search,
     String? followUpFilter,
+    bool includeCallLogs = false,
   }) async {
     try {
       final effectiveStatus = statusFilter ?? state.statusFilter;
@@ -546,6 +547,7 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
       final effectiveSearch = search ?? state.search;
       final effectiveFollowUp = followUpFilter ?? state.followUpFilter;
 
+      // Critical path only — call recordings load lazily when that tab is used.
       final results = await Future.wait([
         _crmRepository.getProjects(),
         _crmRepository.getCampaigns(module: 'PRE_SALES', projectId: projectId),
@@ -561,13 +563,14 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
         ),
         _crmRepository.getHrmsEmployees(),
         _crmRepository.getFollowUps(filter: effectiveFollowUp),
-        _crmRepository.getCallLogs(
-          search: state.callRecordingSearch.isEmpty ? null : state.callRecordingSearch,
-          dateFilter: state.callRecordingFilterDate == 'all' ? null : state.callRecordingFilterDate,
-          callStatus: state.callRecordingFilterStatus == 'ALL' ? null : state.callRecordingFilterStatus,
-          hasRecording: state.callRecordingsOnlyWithAudio ? true : null,
-        ),
         _crmRepository.getSettings(),
+        if (includeCallLogs)
+          _crmRepository.getCallLogs(
+            search: state.callRecordingSearch.isEmpty ? null : state.callRecordingSearch,
+            dateFilter: state.callRecordingFilterDate == 'all' ? null : state.callRecordingFilterDate,
+            callStatus: state.callRecordingFilterStatus == 'ALL' ? null : state.callRecordingFilterStatus,
+            hasRecording: state.callRecordingsOnlyWithAudio ? true : null,
+          ),
       ]);
 
       emit(state.copyWith(
@@ -578,8 +581,8 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
         leads: results[3] as List<CrmLead>,
         salesUsers: results[4] as List<CrmSalesUser>,
         followUps: results[5] as List<CrmFollowUp>,
-        callLogs: results[6] as List<CrmCallLog>,
-        settings: results[7] as CrmSettings,
+        settings: results[6] as CrmSettings,
+        callLogs: includeCallLogs ? results[7] as List<CrmCallLog> : state.callLogs,
       ));
     } catch (e) {
       emit(state.copyWith(status: LoadStatus.failure, errorMessage: e.toString()));
@@ -591,12 +594,7 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
     Emitter<CrmLeadsState> emit,
   ) async {
     emit(state.copyWith(leadFlowFilter: event.leadFlow));
-    await _fetchData(
-      emit,
-      projectId: state.selectedProjectId,
-      campaignId: state.selectedCampaignId,
-      leadFlowFilter: event.leadFlow,
-    );
+    await _refreshLeadsOnly(emit);
   }
 
   Future<void> _onLoad(
@@ -615,11 +613,12 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
     CrmLeadsRefreshRequested event,
     Emitter<CrmLeadsState> emit,
   ) async {
-    await _fetchData(
-      emit,
-      projectId: state.selectedProjectId,
-      campaignId: state.selectedCampaignId,
-    );
+    // Soft refresh: leads + follow-ups only (keeps UI snappy).
+    await _refreshLeadsOnly(emit);
+    try {
+      final followUps = await _crmRepository.getFollowUps(filter: state.followUpFilter);
+      emit(state.copyWith(followUps: followUps));
+    } catch (_) {}
   }
 
   Future<void> _onProjectSelected(
@@ -655,26 +654,16 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
     CrmLeadsStatusFilterChanged event,
     Emitter<CrmLeadsState> emit,
   ) async {
-    emit(state.copyWith(status: LoadStatus.loading, statusFilter: event.status));
-    await _fetchData(
-      emit,
-      projectId: state.selectedProjectId,
-      campaignId: state.selectedCampaignId,
-      statusFilter: event.status,
-    );
+    emit(state.copyWith(statusFilter: event.status));
+    await _refreshLeadsOnly(emit);
   }
 
   Future<void> _onSearchChanged(
     CrmLeadsSearchChanged event,
     Emitter<CrmLeadsState> emit,
   ) async {
-    emit(state.copyWith(status: LoadStatus.loading, search: event.search));
-    await _fetchData(
-      emit,
-      projectId: state.selectedProjectId,
-      campaignId: state.selectedCampaignId,
-      search: event.search,
-    );
+    emit(state.copyWith(search: event.search));
+    await _refreshLeadsOnly(emit);
   }
 
   Future<void> _onLeadCreated(

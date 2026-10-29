@@ -59,8 +59,20 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    _tabController.addListener(_onTabChanged);
     CrmRepository.crmScopeNotifier.addListener(_onScopeChanged);
     _setupInactivityTracker();
+  }
+
+  void _onTabChanged() {
+    if (_tabController.indexIsChanging) return;
+    // Lazily load call recordings only when that tab is opened.
+    if (_tabController.index == 2 && mounted) {
+      final bloc = context.read<CrmLeadsBloc>();
+      if (bloc.state.callLogs.isEmpty) {
+        bloc.add(const CrmLeadsCallLogsFilterChanged());
+      }
+    }
   }
 
   bool _isTelecallerUser() {
@@ -143,6 +155,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     _idleTimer?.cancel();
     _heartbeatTimer?.cancel();
     CrmRepository.crmScopeNotifier.removeListener(_onScopeChanged);
+    _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
     _searchController.dispose();
     _horizontalScrollController.dispose();
@@ -4873,6 +4886,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     Map<String, dynamic>? existingLeadInfo;
     bool isCheckingPhone = false;
     bool allowDuplicate = false;
+    bool sendWhatsapp = true;
 
     showDialog(
       context: context,
@@ -5194,6 +5208,22 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                     setDialogState(() => uploadedDocs.remove(docId));
                   },
                 ),
+              const SizedBox(height: 8),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                value: sendWhatsapp,
+                onChanged: (v) => setDialogState(() => sendWhatsapp = v ?? true),
+                controlAffinity: ListTileControlAffinity.leading,
+                title: const Text(
+                  'Send WhatsApp welcome after creating?',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+                subtitle: const Text(
+                  'Opens the WhatsApp template dialog for this new lead',
+                  style: TextStyle(fontSize: 11),
+                ),
+              ),
             ],
           ),
         ),
@@ -5309,23 +5339,50 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                 ? activeCampaignId
                 : (campaigns.isNotEmpty ? campaigns.first.id : null);
 
+            final shouldSendWa = sendWhatsapp;
+            final payload = <String, dynamic>{
+              'name': name.isEmpty ? 'Unnamed Lead' : name,
+              'phone': phone,
+              'status': 'NOT_STARTED',
+              'leadSource': 'MANUAL',
+              'channelPartnerName': selectedLeadSource == 'Channel Partner' ? cpName : null,
+              'channelPartnerPhone': selectedLeadSource == 'Channel Partner' ? cpPhone : null,
+              'referenceType': selectedLeadSource == 'Reference' ? selectedRefType : null,
+              'referenceName': selectedLeadSource == 'Reference' ? refName : null,
+              'campaignId': effectiveCampaignId,
+              'customFields': customFields,
+              'allowDuplicate': allowDuplicate,
+            };
+
             Navigator.pop(dialogCtx);
 
-            context.read<CrmLeadsBloc>().add(
-                  CrmLeadsLeadCreated({
-                    'name': name.isEmpty ? 'Unnamed Lead' : name,
-                    'phone': phone,
-                    'status': 'NOT_STARTED',
-                    'leadSource': 'MANUAL',
-                    'channelPartnerName': selectedLeadSource == 'Channel Partner' ? cpName : null,
-                    'channelPartnerPhone': selectedLeadSource == 'Channel Partner' ? cpPhone : null,
-                    'referenceType': selectedLeadSource == 'Reference' ? selectedRefType : null,
-                    'referenceName': selectedLeadSource == 'Reference' ? refName : null,
-                    'campaignId': effectiveCampaignId,
-                    'customFields': customFields,
-                    'allowDuplicate': allowDuplicate,
-                  }),
+            try {
+              final created = await context.read<CrmRepository>().createLead(payload);
+              if (!context.mounted) return;
+              context.read<CrmLeadsBloc>().add(const CrmLeadsRefreshRequested());
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Lead created successfully'),
+                  backgroundColor: Colors.green,
+                  duration: Duration(seconds: 2),
+                ),
+              );
+              if (shouldSendWa) {
+                showSendWhatsappDialog(
+                  context,
+                  lead: created,
+                  preferredTemplateName: 'newlead',
                 );
+              }
+            } catch (e) {
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Failed to create lead: $e'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
           },
           child: const Text('Create Lead'),
         ),
@@ -6177,6 +6234,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     DateTime selectedDate = tomorrow;
     TimeOfDay selectedTime = const TimeOfDay(hour: 11, minute: 0);
     final remarkController = TextEditingController(text: 'Site visit scheduled.');
+    bool sendWhatsapp = true;
 
     showDialog(
       context: context,
@@ -6194,6 +6252,8 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
               selectedTime.hour,
               selectedTime.minute,
             );
+            final waDateStr = DateFormat('dd/MM/yyyy').format(visitDateTime);
+            final waTimeStr = DateFormat('hh:mm a').format(visitDateTime);
 
             return AlertDialog(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -6355,6 +6415,22 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                         ),
                       ),
+                      const SizedBox(height: 12),
+                      CheckboxListTile(
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                        value: sendWhatsapp,
+                        onChanged: (v) => setModalState(() => sendWhatsapp = v ?? true),
+                        controlAffinity: ListTileControlAffinity.leading,
+                        title: const Text(
+                          'Send WhatsApp site-visit confirmation?',
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: Text(
+                          'Uses CRM client name + $waDateStr at $waTimeStr',
+                          style: TextStyle(fontSize: 11, color: isDark ? Colors.white60 : Colors.black54),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -6373,15 +6449,28 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                   onPressed: () {
+                    final shouldSendWa = sendWhatsapp;
+                    final visitIso = visitDateTime.toIso8601String();
+                    final d = waDateStr;
+                    final t = waTimeStr;
                     Navigator.pop(dialogCtx);
                     _updateLeadStatus(
                       lead.id,
                       'SCHEDULED_VISIT',
                       scheduledDate: dateStr,
                       scheduledTime: timeStr,
-                      scheduledVisitAt: visitDateTime.toIso8601String(),
+                      scheduledVisitAt: visitIso,
                       remarks: remarkController.text.trim(),
                     );
+                    if (shouldSendWa && context.mounted) {
+                      showSendWhatsappDialog(
+                        context,
+                        lead: lead.copyWith(scheduledVisitAt: visitDateTime),
+                        preferredTemplateName: 'cal',
+                        initialDate: d,
+                        initialTime: t,
+                      );
+                    }
                   },
                 ),
               ],

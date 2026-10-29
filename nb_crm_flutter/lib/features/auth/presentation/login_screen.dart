@@ -13,7 +13,6 @@ import '../../../core/app_version.dart';
 import '../../../core/network/api_url_cubit.dart';
 import '../../../core/network/app_config.dart';
 import '../../../core/services/location_access_gate.dart';
-import '../../../core/tour/mascot/mascot_clip_registry.dart';
 import '../../../core/widgets/backend_env_switcher.dart';
 import '../data/auth_repository.dart';
 import 'bloc/auth_bloc.dart';
@@ -55,10 +54,12 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     _enter = AnimationController(vsync: this, duration: const Duration(milliseconds: 850));
     _enter.forward();
     _loadRememberedCredentials();
-    // Ask for location as soon as login is visible (before credentials submit).
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      unawaited(LocationAccessGate.requestPermissionPrompt());
-    });
+    // Defer location prompt — asking on first paint blocks web login feel.
+    if (!kIsWeb) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        unawaited(LocationAccessGate.requestPermissionPrompt());
+      });
+    }
   }
 
   Future<void> _loadRememberedCredentials() async {
@@ -242,19 +243,23 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
 class _LoginBackdrop extends StatelessWidget {
   const _LoginBackdrop();
 
-  static const _bg = 'assets/images/nbbg.png';
+  static const _bg = 'assets/images/nbbg.webp';
 
   @override
   Widget build(BuildContext context) {
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    final w = MediaQuery.sizeOf(context).width;
+    final cacheW = (w * dpr).round().clamp(720, 1920);
     return Image.asset(
       _bg,
       fit: BoxFit.cover,
       width: double.infinity,
       height: double.infinity,
       alignment: Alignment.center,
-      filterQuality: FilterQuality.high,
+      filterQuality: FilterQuality.medium,
+      cacheWidth: cacheW,
       errorBuilder: (_, error, __) {
-        debugPrint('nbbg.png failed: $error');
+        debugPrint('nbbg.webp failed: $error');
         return const ColoredBox(color: Color(0xFF0B100E));
       },
     );
@@ -602,10 +607,17 @@ class _LoginMrNbHelloState extends State<_LoginMrNbHello>
                   child: ColoredBox(
                     color: const Color(0xFF0B0B0B),
                     child: Image.asset(
-                      MascotClipRegistry.wave.gif,
+                      // Light still (~11KB). Wave GIF is ~5MB and stalled login on web.
+                      'assets/images/mrnb_splash.webp',
                       fit: BoxFit.cover,
                       gaplessPlayback: true,
-                      filterQuality: FilterQuality.high,
+                      filterQuality: FilterQuality.medium,
+                      cacheWidth: 264,
+                      errorBuilder: (_, __, ___) => Image.asset(
+                        'assets/images/mr_nb.jpg',
+                        fit: BoxFit.cover,
+                        cacheWidth: 264,
+                      ),
                     ),
                   ),
                 ),

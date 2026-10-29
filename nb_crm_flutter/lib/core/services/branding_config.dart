@@ -76,9 +76,9 @@ class BrandingConfig {
     }
   }
 
-  /// Branded GIF splash asset
+  /// Light splash still (GIF was ~4.4MB and slowed every cold start).
   static String resolveSplashSource() {
-    return 'assets/images/mrnb.gif';
+    return 'assets/images/mrnb_splash.webp';
   }
 
   static bool get hasRemoteSplash => false;

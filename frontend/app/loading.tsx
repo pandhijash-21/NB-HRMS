@@ -7,7 +7,7 @@ export default function Loading() {
         <div className="absolute inset-0 rounded-full bg-[#c5a36a]/20 animate-ping opacity-25" />
         <div className="relative w-28 h-28 rounded-full overflow-hidden border border-[#c5a36a]/40 shadow-[0_0_25px_rgba(197,163,106,0.3)] bg-[#0d0a07]">
           <Image
-            src="/mrnb.gif"
+            src="/mrnb_splash.webp"
             alt="Loading..."
             width={112}
             height={112}

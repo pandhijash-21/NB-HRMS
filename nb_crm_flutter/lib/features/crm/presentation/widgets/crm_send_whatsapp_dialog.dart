@@ -7,20 +7,34 @@ import '../../domain/crm_models.dart';
 void showSendWhatsappDialog(
   BuildContext context, {
   required CrmLead lead,
+  String? preferredTemplateName,
+  String? initialDate,
+  String? initialTime,
 }) {
   showDialog(
     context: context,
     barrierDismissible: false,
-    builder: (ctx) => CrmSendWhatsappDialog(lead: lead),
+    builder: (ctx) => CrmSendWhatsappDialog(
+      lead: lead,
+      preferredTemplateName: preferredTemplateName,
+      initialDate: initialDate,
+      initialTime: initialTime,
+    ),
   );
 }
 
 class CrmSendWhatsappDialog extends StatefulWidget {
   final CrmLead lead;
+  final String? preferredTemplateName;
+  final String? initialDate;
+  final String? initialTime;
 
   const CrmSendWhatsappDialog({
     super.key,
     required this.lead,
+    this.preferredTemplateName,
+    this.initialDate,
+    this.initialTime,
   });
 
   @override
@@ -52,8 +66,17 @@ class _CrmSendWhatsappDialogState extends State<CrmSendWhatsappDialog> {
   void initState() {
     super.initState();
     final now = DateTime.now();
-    final dateStr = DateFormat('dd/MM/yyyy').format(now);
-    final timeStr = DateFormat('hh:mm a').format(now);
+    final visitAt = widget.lead.scheduledVisitAt;
+    final dateStr = (widget.initialDate != null && widget.initialDate!.trim().isNotEmpty)
+        ? widget.initialDate!.trim()
+        : (visitAt != null
+            ? DateFormat('dd/MM/yyyy').format(visitAt.toLocal())
+            : DateFormat('dd/MM/yyyy').format(now));
+    final timeStr = (widget.initialTime != null && widget.initialTime!.trim().isNotEmpty)
+        ? widget.initialTime!.trim()
+        : (visitAt != null
+            ? DateFormat('hh:mm a').format(visitAt.toLocal())
+            : DateFormat('hh:mm a').format(now));
 
     // Prefill from Pre-Sales CRM Client Name (lead.name / Client_Name column).
     final crmClientName = widget.lead.name.trim().isNotEmpty
@@ -110,12 +133,21 @@ class _CrmSendWhatsappDialogState extends State<CrmSendWhatsappDialog> {
 
       BotbizTemplateModel? chosenTemplate;
       if (templates.isNotEmpty) {
-        // Prefer 'newlead' if available as requested by user
-        final newLeadTmpl = templates.firstWhere(
-          (t) => t.name.toLowerCase() == 'newlead',
-          orElse: () => templates.first,
-        );
-        chosenTemplate = newLeadTmpl;
+        BotbizTemplateModel? matchBy(String needle) {
+          final n = needle.trim().toLowerCase();
+          if (n.isEmpty) return null;
+          for (final t in templates) {
+            final name = t.name.toLowerCase();
+            if (name == n || name.contains(n)) return t;
+          }
+          return null;
+        }
+
+        chosenTemplate =
+            matchBy(widget.preferredTemplateName ?? '') ??
+            matchBy('newlead') ??
+            matchBy('cal') ??
+            templates.first;
       }
 
       if (mounted) {

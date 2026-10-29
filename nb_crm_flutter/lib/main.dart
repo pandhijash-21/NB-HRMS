@@ -46,11 +46,13 @@ void main() async {
   configureAppUrlStrategy();
   Bloc.observer = const AppBlocObserver();
 
-  // Restore last local/live API choice before Dio and session bootstrap.
-  await AppConfig.hydrate();
-  await BrandingConfig.hydrateFromCache();
+  // Parallel prefs hydrate — sequential SharedPreferences awaits delayed first frame.
+  await Future.wait([
+    AppConfig.hydrate(),
+    BrandingConfig.hydrateFromCache(),
+  ]);
 
-  // Allow Google Fonts runtime fetching on web / mobile
+  // Fonts may fetch once then cache; image weight was the real login bottleneck.
   GoogleFonts.config.allowRuntimeFetching = true;
 
   retainMaterialIconGlyphs();
@@ -79,9 +81,13 @@ void main() async {
   final appRepositories = AppRepositories();
   // Do not block first frame on branding API — cached URL (or asset) is enough to start splash.
   unawaited(BrandingConfig.fetch(appRepositories.dioClient).then((_) {
-    unawaited(SplashVideoCache.prefetch(BrandingConfig.splashVideoUrl));
+    if (!kIsWeb) {
+      unawaited(SplashVideoCache.prefetch(BrandingConfig.splashVideoUrl));
+    }
   }));
-  unawaited(SplashVideoCache.prefetch(BrandingConfig.splashVideoUrl));
+  if (!kIsWeb) {
+    unawaited(SplashVideoCache.prefetch(BrandingConfig.splashVideoUrl));
+  }
 
   // DI: Global BLoCs & Cubits
   final themeCubit = ThemeCubit();

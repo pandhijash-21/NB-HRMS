@@ -217,7 +217,7 @@ class CrmRepository {
     DateTime? fromDate,
     DateTime? toDate,
     int page = 1,
-    int limit = 500,
+    int limit = 100,
   }) async {
     final query = <String, dynamic>{
       'page': page,

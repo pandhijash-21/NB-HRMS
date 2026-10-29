@@ -71,10 +71,11 @@ flutter:
   assets:
     - assets/images/
     - assets/images/nb-logo.png
-    - assets/images/login_bg.png
-    - assets/images/nbbg.png
-    - assets/images/nbbglogo.jpg
+    - assets/images/nbbg.webp
     - assets/images/mr_nb.jpg
+    - assets/images/mrnb_splash.webp
+    - assets/images/nbdeveloperlogo.png
+    - assets/images/golden_map.jpg
     - assets/images/earth/
     - assets/sounds/
     - assets/clips/processed/

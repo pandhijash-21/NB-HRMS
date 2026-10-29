@@ -13,7 +13,7 @@ class SplashVideoHost extends StatefulWidget {
     this.onDismissed,
   });
 
-  static const gifAsset = 'assets/images/mrnb.gif';
+  static const gifAsset = 'assets/images/mrnb_splash.webp';
 
   /// If true, signals that the underlying page is ready and triggers smooth fadeout.
   /// If false, the loader animation keeps looping continuously.

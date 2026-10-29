@@ -175,13 +175,17 @@ class _Backdrop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    final w = MediaQuery.sizeOf(context).width;
+    final cacheW = (w * dpr).round().clamp(720, 1920);
     return Image.asset(
-      'assets/images/nbbg.png',
+      'assets/images/nbbg.webp',
       fit: BoxFit.cover,
       width: double.infinity,
       height: double.infinity,
       alignment: Alignment.center,
-      filterQuality: FilterQuality.high,
+      filterQuality: FilterQuality.medium,
+      cacheWidth: cacheW,
       errorBuilder: (_, __, ___) => const ColoredBox(color: Color(0xFF0B100E)),
     );
   }

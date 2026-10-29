@@ -34,6 +34,7 @@
 
   <title>NB CRM</title>
   <link rel="manifest" href="manifest.json">
+  <link rel="preload" as="image" href="mrnb_splash.webp" type="image/webp">
   <style>
     html, body { height: 100%; margin: 0; background: #000; }
     .flutter-loader,
@@ -54,7 +55,7 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      transition: opacity 0.4s ease;
+      transition: opacity 0.28s ease;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
     #nb-splash.nb-off {
@@ -63,8 +64,8 @@
     }
     .nb-gif-wrapper {
       position: relative;
-      width: 220px;
-      height: 220px;
+      width: 160px;
+      height: 160px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -83,16 +84,17 @@
       border: 1.5px solid rgba(197,163,106,0.18);
       border-top-color: #E8C98A;
       border-right-color: rgba(197,163,106,0.55);
-      animation: nbspin 2.2s linear infinite;
+      animation: nbspin 1.4s linear infinite;
     }
     #nb-splash-gif {
-      width: 200px;
-      height: 200px;
+      width: 140px;
+      height: 140px;
       object-fit: contain;
       border-radius: 50%;
       position: relative;
       z-index: 1;
       box-shadow: 0 0 25px rgba(197,163,106,0.2);
+      background: #0b0b0b;
     }
     #nb-splash-title {
       color: #E8C98A;
@@ -135,24 +137,17 @@
       pointer-events: none;
     }
   </style>
-  <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.3.0/model-viewer.min.js"></script>
-
-  <!-- RoakBot Encrypted Widget (Tamper-Proof) -->
-  <script src="https://roakbot.web.app/widget.js" data-roak-token="ROAK_SEC_CEWIe17_zxTZAEAyedVDygI2Ge5liaAl9qQ_ndk2tRo6TKD-BN_U_w4os83t0pKPBRFIomFIByifPuPZqGhB2ExTgkUylpxlqCCg8DlBb4GVF9Z0tUHOJFOFI5ztZFP535Ye0EJ6s1Cnq5qKa20Xkr0Y10bLTB0cEppweAJHmnX2Zglp8L51Yp6-jkQIiDLwTMuryYMizCWO_Xc142NpqCloeYNksENI-sXIsAg9Ev0q4RLZc01AQriNyQ36Zfb0QgqApOKiCWF-mLmON_3AO-3PbATWUWrDzl_RsFyyDBA3qNJaa6flR5Rd6HoTgRY-F91eOForwYg4_Bvz3gyWMQN0F76nYybK-12lc-Ri0GzJKzSRihTQUwKkwjKk6E-RzP6WvBu3P7MwkerfWVlspbQRE2AORKZDamL4vD1k00XmthhyfRGJQ9qVshleCSxIEdwUgI5i-iLM1u2UjEgcz9akqWOSbLepXPfs1r9NU5yqEQF2eTGTw0CU_4qEBjMr50UO9PsndMPiPUvuMWzMEru1ZoIrxRH3lCEl76XvoQGnqfGnWnnXWSs8bJPzdCJo7p11jFuX9axBGLBbyD2ZPP-uBa6Yux4" async></script>
-
-  <!-- RoakBot Secure Dynamic Loader (Encrypted & Protected) -->
-  <script>(function(r,o,a,k,b,t){r[b]=r[b]||function(){(r[b].q=r[b].q||[]).push(arguments)};t=o.createElement(a);t.async=1;t.src=k;t.setAttribute("data-roak-token","ROAK_SEC_CEWIe17_zxTZAEAyedVDygI2Ge5liaAl9qQ_ndk2tRo6TKD-BN_U_w4os83t0pKPBRFIomFIByifPuPZqGhB2ExTgkUylpxlqCCg8DlBb4GVF9Z0tUHOJFOFI5ztZFP535Ye0EJ6s1Cnq5qKa20Xkr0Y10bLTB0cEppweAJHmnX2Zglp8L51Yp6-jkQIiDLwTMuryYMizCWO_Xc142NpqCloeYNksENI-sXIsAg9Ev0q4RLZc01AQriNyQ36Zfb0QgqApOKiCWF-mLmON_3AO-3PbATWUWrDzl_RsFyyDBA3qNJaa6flR5Rd6HoTgRY-F91eOForwYg4_Bvz3gyWMQN0F76nYybK-12lc-Ri0GzJKzSRihTQUwKkwjKk6E-RzP6WvBu3P7MwkerfWVlspbQRE2AORKZDamL4vD1k00XmthhyfRGJQ9qVshleCSxIEdwUgI5i-iLM1u2UjEgcz9akqWOSbLepXPfs1r9NU5yqEQF2eTGTw0CU_4qEBjMr50UO9PsndMPiPUvuMWzMEru1ZoIrxRH3lCEl76XvoQGnqfGnWnnXWSs8bJPzdCJo7p11jFuX9axBGLBbyD2ZPP-uBa6Yux4");o.head.appendChild(t);})(window,document,"script","https://roakbot.web.app/widget.js","RoakBot");</script>
 </head>
 <body>
   <div id="nb-splash">
     <div class="nb-gif-wrapper">
       <div class="nb-loader-glow"></div>
       <div class="nb-loader-orbit"></div>
-      <img id="nb-splash-gif" src="mrnb.gif" alt="Mr NB" />
+      <img id="nb-splash-gif" src="mrnb_splash.webp" alt="Mr NB" width="140" height="140" />
     </div>
     <div id="nb-splash-title">Welcome to NB Group</div>
     <div id="nb-splash-subtitle">Real Estate & Financial Services</div>
-    <div id="nb-splash-status">Starting application…</div>
+    <div id="nb-splash-status">Starting…</div>
     <div id="nb-splash-version">v1.0.1</div>
   </div>
   <script>
@@ -177,25 +172,48 @@
         if (dismissed) return;
         dismissed = true;
         overlay.classList.add('nb-off');
-        setTimeout(function () { overlay.style.display = 'none'; }, 420);
+        setTimeout(function () { overlay.style.display = 'none'; }, 300);
+        // Heavy chat / 3D widgets only after first paint — keep login snappy.
+        window.setTimeout(loadDeferredWidgets, 1200);
       }
 
-      // Keep loader in loop continuously until Flutter signals that the page is loaded!
+      function loadDeferredWidgets() {
+        try {
+          if (!document.querySelector('script[data-nb-roak]')) {
+            var s = document.createElement('script');
+            s.src = 'https://roakbot.web.app/widget.js';
+            s.async = true;
+            s.defer = true;
+            s.setAttribute('data-nb-roak', '1');
+            s.setAttribute('data-roak-token', 'ROAK_SEC_CEWIe17_zxTZAEAyedVDygI2Ge5liaAl9qQ_ndk2tRo6TKD-BN_U_w4os83t0pKPBRFIomFIByifPuPZqGhB2ExTgkUylpxlqCCg8DlBb4GVF9Z0tUHOJFOFI5ztZFP535Ye0EJ6s1Cnq5qKa20Xkr0Y10bLTB0cEppweAJHmnX2Zglp8L51Yp6-jkQIiDLwTMuryYMizCWO_Xc142NpqCloeYNksENI-sXIsAg9Ev0q4RLZc01AQriNyQ36Zfb0QgqApOKiCWF-mLmON_3AO-3PbATWUWrDzl_RsFyyDBA3qNJaa6flR5Rd6HoTgRY-F91eOForwYg4_Bvz3gyWMQN0F76nYybK-12lc-Ri0GzJKzSRihTQUwKkwjKk6E-RzP6WvBu3P7MwkerfWVlspbQRE2AORKZDamL4vD1k00XmthhyfRGJQ9qVshleCSxIEdwUgI5i-iLM1u2UjEgcz9akqWOSbLepXPfs1r9NU5yqEQF2eTGTw0CU_4qEBjMr50UO9PsndMPiPUvuMWzMEru1ZoIrxRH3lCEl76XvoQGnqfGnWnnXWSs8bJPzdCJo7p11jFuX9axBGLBbyD2ZPP-uBa6Yux4');
+            document.head.appendChild(s);
+          }
+        } catch (_) {}
+        try {
+          if (!document.querySelector('script[data-nb-model-viewer]')) {
+            var m = document.createElement('script');
+            m.type = 'module';
+            m.async = true;
+            m.src = 'https://ajax.googleapis.com/ajax/libs/model-viewer/3.3.0/model-viewer.min.js';
+            m.setAttribute('data-nb-model-viewer', '1');
+            document.head.appendChild(m);
+          }
+        } catch (_) {}
+      }
+
       window.__nbAbortSplash = dismiss;
       window.__nbStopSplashSound = dismiss;
-      window.__nbStartSplash = function () {
-        // Kept open in loop until page actually loads
-      };
+      window.__nbStartSplash = function () {};
 
-      // Listen for Flutter's first frame event
       window.addEventListener('flutter-first-frame', function () {
+        setStatus('Ready');
         dismiss();
       });
 
-      // Generous failsafe (60s) strictly to prevent indefinite UI lockup only if unexpected script crash occurs
-      setTimeout(function () { if (!dismissed) dismiss(); }, 60000);
+      // Failsafe — never leave users stuck on splash
+      setTimeout(function () { if (!dismissed) dismiss(); }, 12000);
     })();
   </script>
-  <script src="flutter_bootstrap.js?v=crm-botbiz-v3" async></script>
+  <script src="flutter_bootstrap.js?v=crm-fast-boot-v1" async></script>
 </body>
 </html>

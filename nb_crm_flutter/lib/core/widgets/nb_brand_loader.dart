@@ -139,10 +139,16 @@ class _NbBrandLoaderState extends State<NbBrandLoader>
                       ),
                       clipBehavior: Clip.antiAlias,
                       child: Image.asset(
-                        'assets/images/mrnb.gif',
+                        'assets/images/mrnb_splash.webp',
                         fit: BoxFit.contain,
                         gaplessPlayback: true,
                         filterQuality: FilterQuality.medium,
+                        cacheWidth: 280,
+                        errorBuilder: (_, __, ___) => Image.asset(
+                          'assets/images/mr_nb.jpg',
+                          fit: BoxFit.contain,
+                          cacheWidth: 280,
+                        ),
                       ),
                     ),
                   ],

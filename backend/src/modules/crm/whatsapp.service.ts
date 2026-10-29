@@ -1208,28 +1208,14 @@ export class WhatsappService {
         }
       }
 
-      // Prefer placeholder names parsed from body text ({{name}}, {{1}}) — never Meta sample values.
-      // Site-visit / cal templates are name-only on BotBiz even when body text mentions date/time.
-      const tmplNameLower = (params.templateName || tmpl?.name || '').toLowerCase();
-      const forceNameOnlyTmpl =
-        tmplNameLower === 'cal' ||
-        tmplNameLower === 'call' ||
-        tmplNameLower.includes('visit') ||
-        tmplNameLower.includes('schedule') ||
-        tmpl?.variableCount === 1 ||
-        (Array.isArray(tmpl?.bodyExampleVariables) &&
-          tmpl!.bodyExampleVariables.length === 1 &&
-          ['name', '1', 'customername', 'client_name', 'customer_name'].includes(
-            String(tmpl!.bodyExampleVariables[0]).toLowerCase(),
-          ));
-
-      const allowedVars = forceNameOnlyTmpl
-        ? ['name']
-        : tmpl
-          ? (tmpl.bodyExampleVariables && tmpl.bodyExampleVariables.length > 0
-              ? tmpl.bodyExampleVariables
-              : (tmpl.variableCount === 0 || !tmpl.bodyText?.includes('{{') ? [] : undefined))
-          : (isNewlead ? ['name'] : undefined);
+      // Prefer placeholder names from body text. Site-visit templates need name+date+time.
+      const allowedVars = tmpl
+        ? (tmpl.bodyExampleVariables && tmpl.bodyExampleVariables.length > 0
+            ? tmpl.bodyExampleVariables
+            : (tmpl.variableCount === 0 || !tmpl.bodyText?.includes('{{')
+                ? []
+                : ['name', 'date', 'time']))
+        : (isNewlead ? ['name'] : ['name', 'date', 'time']);
 
       const resolvedVariables = { ...(params.variables || {}) };
       if (isNewlead && (!resolvedVariables.name || String(resolvedVariables.name).trim() === '')) {

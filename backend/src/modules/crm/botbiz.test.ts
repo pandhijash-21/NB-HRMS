@@ -340,9 +340,18 @@ async function runTests() {
       'Does not put visit time into the name variable',
     );
     assert(
-      !capturedBody.includes('templateVariable-time-1=') &&
-        !capturedBody.includes('templateVariable-calendarLink-1='),
-      'Does not dump unrelated CRM fields when template only allows name',
+      !capturedBody.includes('templateVariable-calendarLink-1='),
+      'Does not dump unrelated CRM fields (calendarLink) when not allowed',
+    );
+    assert(
+      capturedBody.includes('templateVariable-time-1=12') ||
+        capturedBody.includes('templateVariable-3=12'),
+      'Still sends time into its own slot (not the name slot)',
+    );
+    assert(
+      capturedBody.includes('templateVariable-date-1=30') ||
+        capturedBody.includes('templateVariable-2=30'),
+      'Still sends date into its own slot',
     );
     assert(
       capturedBody.includes('templateVariable-1=Aarav+Patel') ||
@@ -350,13 +359,12 @@ async function runTests() {
       'Also fills Meta {{1}} with the lead name for name-only templates',
     );
 
-    // Pre-sales path: unknown allowed list + time in payload must still NOT overwrite name
+    // Pre-sales path: name + date + time in separate slots (name must not become time)
     capturedBody = '';
     await client.sendTemplateMessage({
       phoneNumber: '9876543210',
       templateId: '417875',
       templateName: 'cal',
-      // allowedVariableNames omitted (same as poorly synced template cache)
       variables: {
         name: 'Aarav Patel',
         customerName: 'Aarav Patel',
@@ -368,12 +376,27 @@ async function runTests() {
     assert(
       capturedBody.includes('templateVariable-name-1=Aarav+Patel') ||
         capturedBody.includes('templateVariable-name-1=Aarav%20Patel'),
-      'Pre-sales unknown-allowed still sends person name',
+      'Pre-sales sends person name into name slot',
     );
     assert(
-      !capturedBody.includes('templateVariable-time-1=') &&
-        !capturedBody.includes('templateVariable-3='),
-      'Pre-sales unknown-allowed does not send time (avoids BotBiz last-wins into name slot)',
+      capturedBody.includes('templateVariable-1=Aarav+Patel') ||
+        capturedBody.includes('templateVariable-1=Aarav%20Patel'),
+      'Pre-sales keeps {{1}} as person name (not time)',
+    );
+    assert(
+      !capturedBody.includes('templateVariable-1=12') &&
+        !capturedBody.includes('templateVariable-name-1=12'),
+      'Pre-sales does not put clock time into name/{{1}}',
+    );
+    assert(
+      capturedBody.includes('templateVariable-date-1=29') ||
+        capturedBody.includes('templateVariable-2=29'),
+      'Pre-sales sends date into date/{{2}} slot',
+    );
+    assert(
+      capturedBody.includes('templateVariable-time-1=12') ||
+        capturedBody.includes('templateVariable-3=12'),
+      'Pre-sales sends time into time/{{3}} slot',
     );
   }
 

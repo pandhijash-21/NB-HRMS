@@ -822,9 +822,12 @@ export class BotBizApiClient {
       // Header text is applied later (after clearing preset URL vars) only when
       // params.templateHeaderText is explicitly provided by the caller.
 
-      // 4. Variables — BotBiz single-slot "name" templates treat EXTRA templateVariable-*
-      // fields as last-wins into {{name}}. Settings test only sends name (works).
-      // Pre-sales used to also send date/time → "Dear 12:32 PM". Always send name last.
+      // 4. Variables — strict slots:
+      //   name  → templateVariable-name-1 / {{1}}
+      //   date  → templateVariable-date-1 / {{2}}
+      //   time  → templateVariable-time-1 / {{3}}
+      // Never put time into the name/{{1}} keys (that caused "Dear 12:32 PM").
+      // Always send date/time when present (blocking them caused "Date: - / Time: -").
       const vars = params.variables || {};
       const pick = (...keys: string[]): string | undefined => {
         for (const k of keys) {
@@ -835,25 +838,6 @@ export class BotBizApiClient {
       };
       const looksLikeClock = (s: string) =>
         /^\d{1,2}:\d{2}(\s*[AaPp][Mm])?$/.test(String(s).trim());
-      const isNameKey = (key: string) => {
-        const k = key.toLowerCase();
-        return (
-          k === 'name' ||
-          k === '1' ||
-          k === 'customername' ||
-          k === 'customer_name' ||
-          k === 'client_name' ||
-          k === 'clientname'
-        );
-      };
-      const isDateKey = (key: string) => {
-        const k = key.toLowerCase();
-        return k === 'date' || k === '2' || k === 'visit_date' || k === 'sitevisitdate' || k === 'site_visit_date';
-      };
-      const isTimeKey = (key: string) => {
-        const k = key.toLowerCase();
-        return k === 'time' || k === '3' || k === 'visit_time' || k === 'sitevisittime' || k === 'site_visit_time';
-      };
 
       let personName =
         pick('name', 'customerName', 'client_name', 'customer_name') || 'Valued Client';
@@ -863,21 +847,15 @@ export class BotBizApiClient {
         if (looksLikeClock(personName)) personName = 'Valued Client';
       }
 
+      const dateVal = pick('date', 'visit_date', 'siteVisitDate', '2');
+      const timeVal = pick('time', 'visit_time', 'siteVisitTime', '3');
+      const projectVal = pick('pname', 'projectName', 'project', 'project_name');
+
       const allowed = (params.allowedVariableNames || [])
         .map((k) => String(k || '').trim())
         .filter(Boolean);
-      const tmplName = (params.templateName || '').toLowerCase();
-      // Known BotBiz single-name templates + any allow-list that is only name/{{1}}.
-      const forceNameOnly =
-        allowed.length === 0 ||
-        allowed.every((k) => isNameKey(k)) ||
-        tmplName === 'cal' ||
-        tmplName === 'call' ||
-        tmplName.includes('visit') ||
-        tmplName.includes('schedule');
-
-      const wantsDate = !forceNameOnly && allowed.some((k) => isDateKey(k));
-      const wantsTime = !forceNameOnly && allowed.some((k) => isTimeKey(k));
+      const explicitNoBodyVars =
+        Array.isArray(params.allowedVariableNames) && allowed.length === 0;
 
       // Drop any preset variable keys copied from a BotBiz endpoint URL.
       for (const key of [...formParams.keys()]) {
@@ -893,54 +871,68 @@ export class BotBizApiClient {
         }
       }
 
-      // Re-apply header text only for true TEXT headers (caller passes templateHeaderText).
       if (params.templateHeaderText && String(params.templateHeaderText).trim()) {
         const cleanHeaderText = String(params.templateHeaderText).trim();
-        // Never put a clock time into the header slot either.
         const headerVal = looksLikeClock(cleanHeaderText) ? personName : cleanHeaderText;
         formParams.set('template_header_variable-1', headerVal);
         formParams.set('template_header_variable', headerVal);
         formParams.set('templateHeaderVariable-1', headerVal);
       }
 
-      if (allowed.length === 0 && params.allowedVariableNames !== undefined) {
-        // Explicit empty allow-list: template has zero body vars — send none.
-      } else {
-        // Always bind the person name (BotBiz + Meta {{1}}).
+      if (!explicitNoBodyVars) {
+        // {{1}} / name — person only
         formParams.set('templateVariable-name-1', personName);
         formParams.set('templateVariable-name', personName);
         formParams.set('templateVariable-1', personName);
         formParams.set('templateVariable-1-1', personName);
 
-        if (!forceNameOnly) {
-          if (wantsDate) {
-            const dateVal =
-              pick('date', 'visit_date', 'siteVisitDate', '2') || '';
-            if (dateVal && !looksLikeClock(dateVal)) {
-              formParams.set('templateVariable-date-1', dateVal);
-              formParams.set('templateVariable-2', dateVal);
-              formParams.set('templateVariable-2-1', dateVal);
-            }
-          }
-          if (wantsTime) {
-            const timeVal =
-              pick('time', 'visit_time', 'siteVisitTime', '3') || '';
-            if (timeVal) {
-              formParams.set('templateVariable-time-1', timeVal);
-              formParams.set('templateVariable-3', timeVal);
-              formParams.set('templateVariable-3-1', timeVal);
-            }
-          }
-          // Other explicitly allowed non-name keys (e.g. pname) — never overwrite name slot.
-          for (const rawKey of allowed) {
-            if (isNameKey(rawKey) || isDateKey(rawKey) || isTimeKey(rawKey)) continue;
-            const v = pick(rawKey, rawKey.toLowerCase());
-            if (!v || looksLikeClock(v)) continue;
-            formParams.set(`templateVariable-${rawKey}-1`, v);
-          }
+        // {{2}} / date
+        if (dateVal && !looksLikeClock(dateVal)) {
+          formParams.set('templateVariable-date-1', dateVal);
+          formParams.set('templateVariable-date', dateVal);
+          formParams.set('templateVariable-2', dateVal);
+          formParams.set('templateVariable-2-1', dateVal);
         }
 
-        // LAST WINS: re-assert name after every other field so BotBiz cannot keep time in {{name}}.
+        // {{3}} / time — own keys only, never {{1}} or name
+        if (timeVal) {
+          formParams.set('templateVariable-time-1', timeVal);
+          formParams.set('templateVariable-time', timeVal);
+          formParams.set('templateVariable-3', timeVal);
+          formParams.set('templateVariable-3-1', timeVal);
+        }
+
+        if (projectVal && !looksLikeClock(projectVal)) {
+          formParams.set('templateVariable-pname-1', projectVal);
+          formParams.set('templateVariable-project-1', projectVal);
+        }
+
+        // Any other allowed keys (excluding name/date/time) — do not touch slots 1–3.
+        for (const rawKey of allowed) {
+          const k = rawKey.toLowerCase();
+          if (
+            k === 'name' ||
+            k === '1' ||
+            k === 'date' ||
+            k === '2' ||
+            k === 'time' ||
+            k === '3' ||
+            k === 'customername' ||
+            k === 'client_name' ||
+            k === 'customer_name' ||
+            k === 'pname' ||
+            k === 'project' ||
+            k === 'projectname' ||
+            k === 'project_name'
+          ) {
+            continue;
+          }
+          const v = pick(rawKey, rawKey.toLowerCase());
+          if (!v || looksLikeClock(v)) continue;
+          formParams.set(`templateVariable-${rawKey}-1`, v);
+        }
+
+        // Re-assert name/{{1}} last so nothing else can own that slot.
         formParams.set('templateVariable-name-1', personName);
         formParams.set('templateVariable-name', personName);
         formParams.set('templateVariable-1', personName);
@@ -948,7 +940,7 @@ export class BotBizApiClient {
       }
 
       console.log(
-        `[BotBiz sendTemplate] template=${params.templateName || params.templateId} forceNameOnly=${forceNameOnly} name=${personName} keys=${[...formParams.keys()].filter((k) => /variable/i.test(k)).join(',')}`,
+        `[BotBiz sendTemplate] template=${params.templateName || params.templateId} name=${personName} date=${dateVal || '-'} time=${timeVal || '-'} keys=${[...formParams.keys()].filter((k) => /variable/i.test(k)).join(',')}`,
       );
 
       // BotBiz supports POST x-www-form-urlencoded (preferred) and GET fallback

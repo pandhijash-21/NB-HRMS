@@ -835,47 +835,109 @@ export class BotBizApiClient {
       }
 
       // 4. Variables Management (e.g. templateVariable-name-1=Jash)
+      // IMPORTANT: only send placeholders the template actually expects.
+      // Dumping every CRM field (time, calendarLink, …) as templateVariable-* made BotBiz
+      // bind the wrong value into {{name}} (e.g. "Dear 12:00 PM").
       if (params.variables) {
         const allowed = params.allowedVariableNames;
+        const vars = params.variables;
+
+        const pick = (...keys: string[]): string | undefined => {
+          for (const k of keys) {
+            const v = vars[k];
+            if (v != null && String(v).trim() !== '') return String(v).trim();
+          }
+          return undefined;
+        };
+
+        const isNameKey = (key: string) => {
+          const k = key.toLowerCase();
+          return (
+            k === 'name' ||
+            k === '1' ||
+            k === 'customername' ||
+            k === 'customer_name' ||
+            k === 'client_name' ||
+            k === 'clientname' ||
+            k === 'pname'
+          );
+        };
+        const isDateKey = (key: string) => {
+          const k = key.toLowerCase();
+          return k === 'date' || k === '2' || k === 'visit_date' || k === 'sitevisitdate' || k === 'site_visit_date';
+        };
+        const isTimeKey = (key: string) => {
+          const k = key.toLowerCase();
+          return k === 'time' || k === '3' || k === 'visit_time' || k === 'sitevisittime' || k === 'site_visit_time';
+        };
+
+        const resolveValue = (rawKey: string): string | undefined => {
+          if (isNameKey(rawKey)) {
+            return (
+              pick(rawKey, rawKey.toLowerCase(), 'name', 'customerName', 'client_name', 'customer_name', '1') ||
+              'Valued Client'
+            );
+          }
+          if (isDateKey(rawKey)) {
+            return pick(rawKey, rawKey.toLowerCase(), 'date', 'visit_date', 'siteVisitDate', '2') || '';
+          }
+          if (isTimeKey(rawKey)) {
+            return pick(rawKey, rawKey.toLowerCase(), 'time', 'visit_time', 'siteVisitTime', '3') || '';
+          }
+          return pick(rawKey, rawKey.toLowerCase());
+        };
+
+        const setNamedVar = (key: string, value: string) => {
+          const cleanKey = key.trim();
+          if (!cleanKey || !value) return;
+          formParams.set(`templateVariable-${cleanKey}-1`, value);
+          // Meta-style numeric placeholders ({{1}}) — only when the key itself is numeric.
+          if (/^\d+$/.test(cleanKey)) {
+            formParams.set(`templateVariable-${cleanKey}`, value);
+            formParams.set(`templateVariable-${cleanKey}-1`, value);
+          }
+        };
 
         if (allowed !== undefined && allowed.length === 0) {
-          // Template expects NO body variables (e.g. call, cal, fourbhk, fivebhk, fourfive).
-          // Do not append any templateVariable-* parameters.
+          // Template expects NO body variables — send none.
         } else if (allowed && allowed.length > 0) {
-          // Template expects specific variable names (e.g. ['name'] or ['pname'])
-          for (let i = 0; i < allowed.length; i++) {
-            const rawKey = allowed[i].trim();
-            const indexStr = String(i + 1);
-            let val =
-              params.variables[rawKey] ||
-              params.variables[rawKey.toLowerCase()] ||
-              params.variables[indexStr] ||
-              (rawKey.toLowerCase().includes('name')
-                ? (params.variables.name || params.variables.customerName || params.variables.client_name)
-                : undefined);
-            if (rawKey.toLowerCase().includes('name') && (!val || String(val).trim() === '')) {
-              val = 'Valued Client';
-            }
-            if (val !== undefined && val !== null) {
-              const cleanVal = String(val).trim();
-              formParams.set(`templateVariable-${rawKey}-1`, cleanVal);
-              formParams.set(`templateVariable-${indexStr}-1`, cleanVal);
-              formParams.set(`templateVariable-${indexStr}`, cleanVal);
-            }
+          let nameValueForPositional: string | undefined;
+          for (const raw of allowed) {
+            const rawKey = String(raw || '').trim();
+            if (!rawKey) continue;
+            const val = resolveValue(rawKey);
+            if (val == null || val === '') continue;
+            setNamedVar(rawKey, val);
+            if (isNameKey(rawKey)) nameValueForPositional = val;
+          }
+          // If template only declares a named "name" (BotBiz), also fill Meta {{1}}.
+          // Do NOT map date/time onto positional slots — that caused "Dear 12:00 PM".
+          if (nameValueForPositional && allowed.every((k) => isNameKey(String(k)))) {
+            formParams.set('templateVariable-1', nameValueForPositional);
+            formParams.set('templateVariable-1-1', nameValueForPositional);
           }
         } else {
-          // Standard variables mapping
-          for (const [key, rawVal] of Object.entries(params.variables)) {
-            if (rawVal !== undefined && rawVal !== null) {
-              const val = String(rawVal).trim();
-              const cleanKey = key.trim();
-              formParams.set(`templateVariable-${cleanKey}-1`, val);
-            }
+          // Unknown placeholder list: send a small whitelist only (never the full CRM bag).
+          const nameVal =
+            pick('name', 'customerName', 'client_name', 'customer_name', '1') || 'Valued Client';
+          const dateVal = pick('date', 'visit_date', 'siteVisitDate', '2');
+          const timeVal = pick('time', 'visit_time', 'siteVisitTime', '3');
+          const projectVal = pick('projectName', 'project_name', 'project', 'pname');
+
+          setNamedVar('name', nameVal);
+          formParams.set('templateVariable-1', nameVal);
+          formParams.set('templateVariable-1-1', nameVal);
+          if (dateVal) {
+            setNamedVar('date', dateVal);
+            formParams.set('templateVariable-2', dateVal);
+            formParams.set('templateVariable-2-1', dateVal);
           }
-          if (params.variables.name) {
-            formParams.set('templateVariable-name-1', params.variables.name);
-            formParams.set('templateVariable-1', params.variables.name);
+          if (timeVal) {
+            setNamedVar('time', timeVal);
+            formParams.set('templateVariable-3', timeVal);
+            formParams.set('templateVariable-3-1', timeVal);
           }
+          if (projectVal) setNamedVar('pname', projectVal);
         }
       }
 

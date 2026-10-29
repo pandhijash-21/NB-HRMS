@@ -288,6 +288,69 @@ async function runTests() {
     );
   }
 
+  // Test 5b: name-only template must not receive time in the name slot
+  {
+    console.log('\nTest Suite 5b: Name-only template variable binding');
+    let capturedBody = '';
+    global.fetch = async (_url: any, init: any) => {
+      capturedBody = init?.body?.toString() || '';
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            status: '1',
+            wa_message_id: 'wamid.name_only_test',
+            message: 'Message sent successfully.',
+          }),
+      } as any;
+    };
+
+    const client = new BotBizApiClient({
+      apiBase: 'https://dash.botbiz.io/api/v1',
+      apiToken: 'mock_token',
+      phoneNumberId: 'phone_id_999',
+    });
+
+    await client.sendTemplateMessage({
+      phoneNumber: '9876543210',
+      templateId: '417875',
+      templateName: 'cal',
+      allowedVariableNames: ['name'],
+      variables: {
+        name: 'Aarav Patel',
+        customerName: 'Aarav Patel',
+        date: '30/10/2026',
+        time: '12:00 PM',
+        siteVisitTime: '12:00 PM',
+        projectName: 'NB Legacy Tower',
+        calendarLink: 'https://calendar.google.com/example',
+      },
+    });
+
+    assert(
+      capturedBody.includes('templateVariable-name-1=Aarav+Patel') ||
+        capturedBody.includes('templateVariable-name-1=Aarav%20Patel'),
+      'Sends lead name into templateVariable-name-1',
+    );
+    assert(
+      !capturedBody.includes('templateVariable-name-1=12%3A00') &&
+        !capturedBody.includes('templateVariable-name-1=12%3A00+PM') &&
+        !capturedBody.includes('templateVariable-name-1=12%3A00%20PM'),
+      'Does not put visit time into the name variable',
+    );
+    assert(
+      !capturedBody.includes('templateVariable-time-1=') &&
+        !capturedBody.includes('templateVariable-calendarLink-1='),
+      'Does not dump unrelated CRM fields when template only allows name',
+    );
+    assert(
+      capturedBody.includes('templateVariable-1=Aarav+Patel') ||
+        capturedBody.includes('templateVariable-1=Aarav%20Patel'),
+      'Also fills Meta {{1}} with the lead name for name-only templates',
+    );
+  }
+
   // Test 6: Dynamic Variable Resolver (no unresolved placeholders)
   {
     console.log('\nTest Suite 6: Dynamic Variable Resolver');

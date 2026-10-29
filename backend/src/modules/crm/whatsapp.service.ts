@@ -1220,28 +1220,84 @@ export class WhatsappService {
         resolvedVariables.name = resolvedVariables.customerName || resolvedVariables.client_name || 'Valued Client';
       }
 
-      // Map positional {{1}} / {{2}} from common CRM fields when the template uses indexes.
+      // Fill missing placeholder values with strict aliases only.
+      // Do NOT use includes('name') / includes('time') — that mapped projectName→name and
+      // could leave the wrong value on the name slot for BotBiz.
       if (allowedVars && allowedVars.length > 0) {
-        for (let i = 0; i < allowedVars.length; i++) {
-          const key = allowedVars[i];
+        const pickVar = (...keys: string[]) => {
+          for (const k of keys) {
+            const v = resolvedVariables[k];
+            if (v != null && String(v).trim() !== '') return String(v).trim();
+          }
+          return undefined;
+        };
+        for (const key of allowedVars) {
           if (resolvedVariables[key] != null && String(resolvedVariables[key]).trim() !== '') continue;
-          const lower = key.toLowerCase();
-          if (lower === '1' || lower === 'name' || lower.includes('name') || lower === 'pname') {
+          const lower = String(key).toLowerCase();
+          if (
+            lower === '1' ||
+            lower === 'name' ||
+            lower === 'customername' ||
+            lower === 'customer_name' ||
+            lower === 'client_name' ||
+            lower === 'clientname' ||
+            lower === 'pname'
+          ) {
             resolvedVariables[key] =
-              resolvedVariables.name ||
-              resolvedVariables.customerName ||
-              resolvedVariables.client_name ||
-              'Valued Client';
-          } else if (lower === '2' || lower.includes('date')) {
-            resolvedVariables[key] = resolvedVariables.date || resolvedVariables.visit_date || '';
-          } else if (lower === '3' || lower.includes('time')) {
-            resolvedVariables[key] = resolvedVariables.time || resolvedVariables.visit_time || '';
-          } else if (lower.includes('project')) {
-            resolvedVariables[key] = resolvedVariables.projectName || resolvedVariables.project || resolvedVariables.pname || '';
-          } else if (lower.includes('phone') || lower.includes('number')) {
-            resolvedVariables[key] = resolvedVariables.phone || resolvedVariables.number || normalizedPhone;
+              pickVar('name', 'customerName', 'client_name', 'customer_name', '1') || 'Valued Client';
+          } else if (
+            lower === '2' ||
+            lower === 'date' ||
+            lower === 'visit_date' ||
+            lower === 'sitevisitdate' ||
+            lower === 'site_visit_date'
+          ) {
+            resolvedVariables[key] = pickVar('date', 'visit_date', 'siteVisitDate', '2') || '';
+          } else if (
+            lower === '3' ||
+            lower === 'time' ||
+            lower === 'visit_time' ||
+            lower === 'sitevisittime' ||
+            lower === 'site_visit_time'
+          ) {
+            resolvedVariables[key] = pickVar('time', 'visit_time', 'siteVisitTime', '3') || '';
+          } else if (lower === 'project' || lower === 'projectname' || lower === 'project_name') {
+            resolvedVariables[key] = pickVar('projectName', 'project', 'pname', 'project_name') || '';
+          } else if (lower === 'phone' || lower === 'number') {
+            resolvedVariables[key] = pickVar('phone', 'number') || normalizedPhone;
           } else if (resolvedVariables[lower] != null) {
-            resolvedVariables[key] = resolvedVariables[lower];
+            resolvedVariables[key] = String(resolvedVariables[lower]);
+          }
+        }
+      }
+
+      // If BotBiz/Meta template only declares `name`, force that value from the lead —
+      // never allow an empty name to fall through to another field.
+      const nameOnly =
+        Array.isArray(allowedVars) &&
+        allowedVars.length > 0 &&
+        allowedVars.every((k) => {
+          const lower = String(k).toLowerCase();
+          return (
+            lower === 'name' ||
+            lower === '1' ||
+            lower === 'customername' ||
+            lower === 'customer_name' ||
+            lower === 'client_name' ||
+            lower === 'clientname' ||
+            lower === 'pname'
+          );
+        });
+      if (nameOnly || allowedVars === undefined) {
+        const leadName =
+          (resolvedVariables.name && String(resolvedVariables.name).trim()) ||
+          (resolvedVariables.customerName && String(resolvedVariables.customerName).trim()) ||
+          (resolvedVariables.client_name && String(resolvedVariables.client_name).trim()) ||
+          'Valued Client';
+        resolvedVariables.name = leadName;
+        if (nameOnly) {
+          for (const k of allowedVars!) {
+            resolvedVariables[k] = leadName;
           }
         }
       }

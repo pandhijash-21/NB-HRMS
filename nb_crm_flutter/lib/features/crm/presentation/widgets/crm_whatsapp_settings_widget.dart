@@ -77,6 +77,7 @@ class _CrmWhatsappSettingsWidgetState extends State<CrmWhatsappSettingsWidget> {
     'SITE_VISIT_RESCHEDULED': 'Site Visit Rescheduled Notice',
     'SITE_VISIT_CANCELLED': 'Site Visit Cancelled Notice',
     'SITE_VISIT_DONE': 'Post Site Visit Follow-up & Feedback',
+    'SITE_VISIT_REMINDER': 'Site Visit Day Reminder (auto)',
     'LEAD_CREATED': 'New Lead Received & Welcome Brochure',
     'LEAD_ASSIGNED': 'Property Advisor Assigned Notification',
     'FOLLOW_UP_DUE': 'Customer Follow-Up Due Reminder',
@@ -189,8 +190,49 @@ class _CrmWhatsappSettingsWidgetState extends State<CrmWhatsappSettingsWidget> {
           );
           _selectedTestTemplateId = approved.id;
         }
+        _autoBindTriggersToTemplates();
       });
     } catch (_) {}
+  }
+
+  /// Map each trigger to a synced BotBiz template by id/name (admin can still change dropdown).
+  void _autoBindTriggersToTemplates() {
+    if (_templates.isEmpty || _triggers.isEmpty) return;
+
+    BotbizTemplateModel? findMatch(CrmWhatsappTrigger t) {
+      for (final x in _templates) {
+        if (t.templateId != null &&
+            t.templateId!.isNotEmpty &&
+            (x.id == t.templateId ||
+                x.name.toLowerCase() == t.templateId!.toLowerCase())) {
+          return x;
+        }
+      }
+      final want =
+          (t.templateName ?? _suggestedTemplateName(t.event) ?? '').trim().toLowerCase();
+      if (want.isEmpty) return null;
+      for (final x in _templates) {
+        if (x.name.toLowerCase() == want) return x;
+      }
+      return null;
+    }
+
+    var changed = false;
+    final next = <CrmWhatsappTrigger>[];
+    for (final t in _triggers) {
+      final m = findMatch(t);
+      if (m != null && (t.templateId != m.id || t.templateName != m.name)) {
+        changed = true;
+        next.add(t.copyWith(
+          templateId: m.id,
+          templateName: m.name,
+          messageType: 'TEMPLATE',
+        ));
+      } else {
+        next.add(t);
+      }
+    }
+    if (changed) _triggers = next;
   }
 
   Future<void> _loadLogs() async {
@@ -306,11 +348,19 @@ class _CrmWhatsappSettingsWidgetState extends State<CrmWhatsappSettingsWidget> {
 
       setState(() => _isSyncingTemplates = false);
       if (res['success'] == true) {
-        await _loadTemplates();
+        // Backend auto-binds triggers → templates on sync; reload both lists.
+        await Future.wait([_loadConfig(), _loadTemplates()]);
         if (!mounted) return;
+        if (_triggers.any((t) => t.templateId != null && t.templateId!.isNotEmpty)) {
+          await _saveConfig();
+        }
+        if (!mounted) return;
+        final mapped = _triggers.where((t) => t.templateId != null && t.templateId!.isNotEmpty).length;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Synced ${res['count'] ?? 0} templates from BotBiz!'),
+            content: Text(
+              'Synced ${res['count'] ?? 0} templates · $mapped triggers mapped. Change any dropdown below, then Save.',
+            ),
             backgroundColor: Colors.green,
           ),
         );
@@ -1602,18 +1652,47 @@ class _CrmWhatsappSettingsWidgetState extends State<CrmWhatsappSettingsWidget> {
     );
   }
 
+  String? _suggestedTemplateName(String event) {
+    switch (event.toUpperCase()) {
+      case 'SITE_VISIT_REMINDER':
+        return 'visit_reminder';
+      case 'SITE_VISIT_SCHEDULED':
+      case 'SCHEDULED_VISIT':
+      case 'VISIT_SCHEDULED':
+      case 'SITE_VISIT_RESCHEDULED':
+        return 'cal';
+      case 'LEAD_CREATED':
+        return 'newlead';
+      case 'SITE_VISIT_DONE':
+      case 'VISIT_DONE':
+        return 'visit_done';
+      default:
+        return null;
+    }
+  }
+
   Widget _buildTriggerCard(CrmWhatsappTrigger trigger, int index) {
-    // Find matching template in synced list
+    // Match by template id OR name (case-insensitive) so Settings shows the selection.
     BotbizTemplateModel? matchedTmpl;
     if (_templates.isNotEmpty) {
-      try {
-        matchedTmpl = _templates.firstWhere(
-          (t) => t.id == trigger.templateId || t.name == trigger.templateName,
-        );
-      } catch (_) {}
+      for (final t in _templates) {
+        final idHit = trigger.templateId != null &&
+            trigger.templateId!.isNotEmpty &&
+            (t.id == trigger.templateId ||
+                t.name.toLowerCase() == trigger.templateId!.toLowerCase());
+        final nameHit = trigger.templateName != null &&
+            trigger.templateName!.trim().isNotEmpty &&
+            t.name.toLowerCase() == trigger.templateName!.trim().toLowerCase();
+        if (idHit || nameHit) {
+          matchedTmpl = t;
+          break;
+        }
+      }
     }
 
-    final hasTemplate = matchedTmpl != null || (trigger.templateId != null && trigger.templateId!.isNotEmpty);
+    final hasTemplate = matchedTmpl != null;
+    final selectedId = matchedTmpl?.id;
+    final eventLabel = _activeEventLabels[trigger.event] ?? trigger.event;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -1653,7 +1732,7 @@ class _CrmWhatsappSettingsWidgetState extends State<CrmWhatsappSettingsWidget> {
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
-                  hasTemplate ? 'META TEMPLATE' : 'UNMAPPED',
+                  hasTemplate ? 'MAPPED' : 'PICK TEMPLATE',
                   style: TextStyle(
                     fontSize: 9,
                     fontWeight: FontWeight.bold,
@@ -1664,7 +1743,7 @@ class _CrmWhatsappSettingsWidgetState extends State<CrmWhatsappSettingsWidget> {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  trigger.name,
+                  trigger.name.isNotEmpty ? trigger.name : eventLabel,
                   style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                 ),
               ),
@@ -1687,6 +1766,11 @@ class _CrmWhatsappSettingsWidgetState extends State<CrmWhatsappSettingsWidget> {
               ),
             ],
           ),
+          const SizedBox(height: 4),
+          Text(
+            'When this event fires, send the WhatsApp template you select below.',
+            style: TextStyle(fontSize: 11, color: widget.isDark ? Colors.white60 : Colors.black54),
+          ),
           const SizedBox(height: 12),
 
           // Meta Approved Template Mapping Dropdown
@@ -1694,59 +1778,76 @@ class _CrmWhatsappSettingsWidgetState extends State<CrmWhatsappSettingsWidget> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Select Meta Approved Template:',
+                'WhatsApp template for this trigger:',
                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 6),
               DropdownButtonFormField<String>(
-                value: matchedTmpl?.id,
+                value: selectedId != null &&
+                        _templates.any((t) => t.id == selectedId)
+                    ? selectedId
+                    : '',
+                isExpanded: true,
                 decoration: InputDecoration(
-                  hintText: _templates.isEmpty ? 'No synced templates found' : 'Choose Meta Template',
+                  hintText: _templates.isEmpty
+                      ? 'Sync templates from BotBiz first'
+                      : 'Choose which template to send',
                   isDense: true,
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 ),
                 items: [
                   const DropdownMenuItem<String>(
-                    value: null,
+                    value: '',
                     child: Text('-- Select Template --', style: TextStyle(fontSize: 13, color: Colors.grey)),
                   ),
                   ..._templates.map((t) {
                     final isApproved = t.status == 'APPROVED';
                     return DropdownMenuItem<String>(
                       value: t.id,
-                      child: Row(
-                        children: [
-                          Icon(
-                            isApproved ? Icons.check_circle_rounded : Icons.info_outline_rounded,
-                            size: 14,
-                            color: isApproved ? const Color(0xFF16A34A) : Colors.orange,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            '${t.name} (${t.category ?? "Template"} - ${t.status})',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: isApproved ? FontWeight.w600 : FontWeight.normal,
-                            ),
-                          ),
-                        ],
+                      child: Text(
+                        '${t.name} (${t.status})',
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: isApproved ? FontWeight.w600 : FontWeight.normal,
+                        ),
                       ),
                     );
                   }),
                 ],
                 onChanged: (val) {
-                  final sel = val != null ? _templates.firstWhere((t) => t.id == val, orElse: () => _templates.first) : null;
+                  if (val == null || val.isEmpty) {
+                    setState(() {
+                      _triggers[index] = trigger.copyWith(
+                        clearTemplate: true,
+                        messageType: 'TEXT',
+                        messageTemplate: '',
+                      );
+                    });
+                    return;
+                  }
+                  final sel = _templates.firstWhere(
+                    (t) => t.id == val,
+                    orElse: () => _templates.first,
+                  );
                   setState(() {
                     _triggers[index] = trigger.copyWith(
-                      templateId: val,
-                      templateName: sel?.name,
-                      messageType: val != null && val.isNotEmpty ? 'TEMPLATE' : 'TEXT',
-                      messageTemplate: sel != null ? 'Template: ${sel.name}' : '',
+                      templateId: sel.id,
+                      templateName: sel.name,
+                      messageType: 'TEMPLATE',
+                      messageTemplate: 'Template: ${sel.name}',
                     );
                   });
                 },
               ),
+              if (matchedTmpl == null && _suggestedTemplateName(trigger.event) != null) ...[
+                const SizedBox(height: 6),
+                Text(
+                  'Suggested Meta template: "${_suggestedTemplateName(trigger.event)}" — Sync Templates, then pick it above (or Save after auto-map).',
+                  style: TextStyle(fontSize: 11, color: Colors.orange.shade800),
+                ),
+              ],
             ],
           ),
           if (matchedTmpl != null) ...[

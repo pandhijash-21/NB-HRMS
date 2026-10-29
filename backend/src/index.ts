@@ -217,6 +217,20 @@ async function start() {
     console.warn('CRM lead recovery worker setup notice:', err);
   }
 
+  // Site-visit day WhatsApp reminder (visit_reminder template) — every 2 minutes
+  try {
+    const { runVisitReminders } = require('./modules/crm/visitReminder.job') as typeof import('./modules/crm/visitReminder.job');
+    setTimeout(() => {
+      void runVisitReminders();
+    }, 15000);
+    setInterval(() => {
+      void runVisitReminders();
+    }, 2 * 60 * 1000);
+    console.log('CRM site-visit WhatsApp reminders started (every 2 min from 07:00 IST)');
+  } catch (err) {
+    console.warn('CRM visit reminder worker setup notice:', err);
+  }
+
   server.listen(env.PORT, () => {
     console.log(`Server running on port ${env.PORT}`);
   });

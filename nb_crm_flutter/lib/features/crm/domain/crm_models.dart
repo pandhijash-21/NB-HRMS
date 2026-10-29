@@ -1808,6 +1808,7 @@ class CrmWhatsappTrigger {
     String? mediaUrl,
     bool? includeCalendarLink,
     String? locationUrl,
+    bool clearTemplate = false,
   }) {
     return CrmWhatsappTrigger(
       id: id ?? this.id,
@@ -1816,8 +1817,8 @@ class CrmWhatsappTrigger {
       enabled: enabled ?? this.enabled,
       messageTemplate: messageTemplate ?? this.messageTemplate,
       messageType: messageType ?? this.messageType,
-      templateId: templateId ?? this.templateId,
-      templateName: templateName ?? this.templateName,
+      templateId: clearTemplate ? null : (templateId ?? this.templateId),
+      templateName: clearTemplate ? null : (templateName ?? this.templateName),
       templateEndpoint: templateEndpoint ?? this.templateEndpoint,
       headerMediaUrl: headerMediaUrl ?? this.headerMediaUrl,
       headerType: headerType ?? this.headerType,

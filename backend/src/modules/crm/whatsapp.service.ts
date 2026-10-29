@@ -78,9 +78,9 @@ const DEFAULT_TRIGGERS: CrmWhatsappTrigger[] = [
     event: 'SITE_VISIT_SCHEDULED',
     name: 'Site Visit Confirmed & Calendar Reminder',
     enabled: true,
-    messageType: 'TEXT',
-    messageTemplate:
-      'Dear {{customerName}},\n\nYour site visit for *{{projectName}}* has been confirmed! 🎉\n\n📅 *Date:* {{siteVisitDate}}\n⏰ *Time:* {{siteVisitTime}}\n📍 *Location Pin:* {{locationUrl}}\n\nTap below to automatically add this visit to your Google Calendar:\n👉 {{calendarLink}}\n\nOur property advisor {{salespersonName}} will be waiting to assist you. See you soon!',
+    messageType: 'TEMPLATE',
+    templateName: 'cal',
+    messageTemplate: 'Template: cal',
     mediaUrl: '',
     includeCalendarLink: true,
     locationUrl: 'https://maps.google.com/?q=Legacy+Tower',
@@ -90,9 +90,9 @@ const DEFAULT_TRIGGERS: CrmWhatsappTrigger[] = [
     event: 'SITE_VISIT_RESCHEDULED',
     name: 'Site Visit Rescheduled Notice',
     enabled: true,
-    messageType: 'TEXT',
-    messageTemplate:
-      'Hello {{customerName}},\n\nYour site visit for *{{projectName}}* has been rescheduled to:\n\n📅 *New Date:* {{siteVisitDate}}\n⏰ *New Time:* {{siteVisitTime}}\n📍 *Location:* {{locationUrl}}\n\nAdd updated reminder to your calendar:\n👉 {{calendarLink}}\n\nFor any questions, feel free to reply directly to this message.',
+    messageType: 'TEMPLATE',
+    templateName: 'cal',
+    messageTemplate: 'Template: cal',
     mediaUrl: '',
     includeCalendarLink: true,
     locationUrl: 'https://maps.google.com/?q=Legacy+Tower',
@@ -114,21 +114,33 @@ const DEFAULT_TRIGGERS: CrmWhatsappTrigger[] = [
     event: 'SITE_VISIT_DONE',
     name: 'Post Site Visit Follow-up & Feedback',
     enabled: true,
-    messageType: 'TEXT',
-    messageTemplate:
-      'Dear {{customerName}},\n\nThank you for visiting *{{projectName}}* today! ✨ We hope you loved experiencing the project.\n\nAttached is our full project deck with floor layouts and pricing details: {{brochureUrl}}\n\nOur property advisor {{salespersonName}} will connect with you to answer any questions.',
+    messageType: 'TEMPLATE',
+    templateName: 'visit_done',
+    messageTemplate: 'Template: visit_done',
     mediaUrl: 'https://nbdeveloper.co.in/brochures/legacy-tower.pdf',
     includeCalendarLink: false,
     locationUrl: '',
+  },
+  {
+    id: 'trigger_site_visit_reminder',
+    event: 'SITE_VISIT_REMINDER',
+    name: 'Site Visit Day Reminder',
+    enabled: true,
+    messageType: 'TEMPLATE',
+    templateName: 'visit_reminder',
+    messageTemplate: 'Template: visit_reminder',
+    mediaUrl: '',
+    includeCalendarLink: false,
+    locationUrl: 'https://maps.google.com/?q=Legacy+Tower',
   },
   {
     id: 'trigger_lead_created',
     event: 'LEAD_CREATED',
     name: 'New Lead Welcome (Inquiry Acknowledgment)',
     enabled: true,
-    messageType: 'TEXT',
-    messageTemplate:
-      'Hello {{customerName}},\n\nThank you for your interest in *{{projectName}}*! 🏢\n\nWe have received your inquiry. Attached is the exclusive brochure with floor plans, amenities, and connectivity.\n\nBrochure: {{brochureUrl}}\n\nOur team will be in touch with you shortly!',
+    messageType: 'TEMPLATE',
+    templateName: 'newlead',
+    messageTemplate: 'Template: newlead',
     mediaUrl: 'https://nbdeveloper.co.in/brochures/legacy-tower.pdf',
     includeCalendarLink: false,
     locationUrl: 'https://maps.google.com/?q=Legacy+Tower',
@@ -403,6 +415,85 @@ export class WhatsappService {
   }
 
   /**
+   * Suggested BotBiz template names per CRM event (admin can override in Settings).
+   */
+  private suggestedTemplateNameForEvent(event: string): string | undefined {
+    const e = String(event || '').toUpperCase();
+    const map: Record<string, string> = {
+      SITE_VISIT_REMINDER: 'visit_reminder',
+      SITE_VISIT_SCHEDULED: 'cal',
+      SCHEDULED_VISIT: 'cal',
+      VISIT_SCHEDULED: 'cal',
+      SITE_VISIT_RESCHEDULED: 'cal',
+      LEAD_CREATED: 'newlead',
+      SITE_VISIT_DONE: 'visit_done',
+      VISIT_DONE: 'visit_done',
+    };
+    return map[e];
+  }
+
+  /**
+   * Bind each trigger to a synced Meta template by id or name.
+   * Keeps admin choice dynamic — never hard-locks a template id.
+   */
+  bindTriggersToTemplates(
+    triggers: CrmWhatsappTrigger[],
+    templates: BotbizTemplate[],
+  ): { triggers: CrmWhatsappTrigger[]; changed: boolean } {
+    if (!Array.isArray(triggers) || triggers.length === 0) {
+      return { triggers: triggers || [], changed: false };
+    }
+    let changed = false;
+    const next = triggers.map((t) => {
+      const byId = t.templateId
+        ? templates.find(
+            (x) =>
+              x.id === t.templateId ||
+              String(x.raw?.id) === t.templateId ||
+              String(x.raw?.template_id) === t.templateId ||
+              x.name?.toLowerCase() === String(t.templateId).toLowerCase(),
+          )
+        : undefined;
+      if (byId) {
+        if (t.templateName !== byId.name || t.messageType !== 'TEMPLATE') {
+          changed = true;
+          return {
+            ...t,
+            templateId: byId.id,
+            templateName: byId.name,
+            messageType: 'TEMPLATE' as WhatsappMessageType,
+          };
+        }
+        return t;
+      }
+
+      const wantName = (
+        t.templateName ||
+        this.suggestedTemplateNameForEvent(t.event) ||
+        ''
+      )
+        .trim()
+        .toLowerCase();
+      if (!wantName) return t;
+
+      const byName = templates.find((x) => x.name?.toLowerCase() === wantName);
+      if (!byName) return t;
+
+      changed = true;
+      return {
+        ...t,
+        templateId: byName.id,
+        templateName: byName.name,
+        messageType: 'TEMPLATE' as WhatsappMessageType,
+        messageTemplate: t.messageTemplate?.startsWith('Template:')
+          ? `Template: ${byName.name}`
+          : t.messageTemplate || `Template: ${byName.name}`,
+      };
+    });
+    return { triggers: next, changed };
+  }
+
+  /**
    * Internal helper: read raw unmasked configuration
    */
   async getRawConfig(scope: string = 'NB_DEVELOPER'): Promise<{
@@ -508,12 +599,42 @@ export class WhatsappService {
           const missingDefaults = defaultList.filter(
             (dt) => !existingEventIds.has(dt.event),
           );
-          triggers = [...parsed, ...missingDefaults];
+          // Repair older saved TEXT triggers that never had a Meta template mapped:
+          // keep admin overrides (templateId / templateName) but fill suggested names.
+          const repaired = parsed.map((t: CrmWhatsappTrigger) => {
+            const def = defaultList.find((d) => d.event === t.event);
+            const suggested =
+              (t.templateName && String(t.templateName).trim()) ||
+              def?.templateName ||
+              this.suggestedTemplateNameForEvent(t.event);
+            if (!suggested) return t;
+            if (t.templateId || (t.messageType === 'TEMPLATE' && t.templateName)) {
+              return t;
+            }
+            return {
+              ...t,
+              messageType: 'TEMPLATE' as WhatsappMessageType,
+              templateName: suggested,
+              messageTemplate:
+                t.messageTemplate?.startsWith('Template:') || !t.messageTemplate
+                  ? `Template: ${suggested}`
+                  : t.messageTemplate,
+            };
+          });
+          triggers = [...repaired, ...missingDefaults];
         }
       } catch (err) {
         console.error(`[CRM WhatsApp - ${scope}] Failed to parse triggers JSON:`, err);
       }
     }
+
+    // Resolve each trigger's Meta template dynamically from the synced BotBiz list.
+    try {
+      const cached = await this.getCachedTemplates(scope);
+      if (cached.templates.length > 0) {
+        triggers = this.bindTriggersToTemplates(triggers, cached.templates).triggers;
+      }
+    } catch (_) {}
 
     return {
       enabled: map.whatsapp_enabled !== 'false',
@@ -760,6 +881,24 @@ export class WhatsappService {
         description: `Cached Meta WhatsApp templates for ${isFinserve ? 'NB Finserve' : 'NB Developer'} synced from BotBiz`,
       },
     });
+
+    // After sync: auto-map unmapped triggers (by name / event suggestion) and persist.
+    try {
+      const bound = this.bindTriggersToTemplates(raw.triggers, sanitized);
+      if (bound.changed) {
+        await prisma.crmSetting.upsert({
+          where: { key: `${prefix}whatsapp_triggers` },
+          update: { value: JSON.stringify(bound.triggers) },
+          create: {
+            key: `${prefix}whatsapp_triggers`,
+            value: JSON.stringify(bound.triggers),
+            description: `WhatsApp event triggers for ${isFinserve ? 'NB Finserve' : 'NB Developer'}`,
+          },
+        });
+      }
+    } catch (err) {
+      console.warn(`[CRM WhatsApp - ${scope}] Trigger auto-bind after sync failed:`, err);
+    }
 
     return {
       success: true,
@@ -1110,31 +1249,45 @@ export class WhatsappService {
     );
 
     // 1. Template Message Dispatch (Meta Approved Template)
-    if (params.messageType === 'TEMPLATE' && params.templateId) {
-      // Validate template approval status
+    // Allow templateName-only (e.g. visit_reminder) — resolve BotBiz id from cache.
+    if (params.messageType === 'TEMPLATE' && (params.templateId || params.templateName)) {
       const cached = await this.getCachedTemplates(scope);
-      let tmpl = cached.templates.find(
-        (t) =>
-          t.id === params.templateId ||
-          t.name?.toLowerCase() === params.templateName?.toLowerCase() ||
-          t.name?.toLowerCase() === params.templateId?.toLowerCase() ||
-          String(t.raw?.id) === params.templateId ||
-          String(t.raw?.template_id) === params.templateId,
-      );
+      const matchTmpl = (list: typeof cached.templates) =>
+        list.find(
+          (t) =>
+            (params.templateId &&
+              (t.id === params.templateId ||
+                t.name?.toLowerCase() === params.templateId?.toLowerCase() ||
+                String(t.raw?.id) === params.templateId ||
+                String(t.raw?.template_id) === params.templateId)) ||
+            (params.templateName &&
+              t.name?.toLowerCase() === params.templateName.toLowerCase()),
+        );
+      let tmpl = matchTmpl(cached.templates);
 
       // Auto-refresh cache if template not found
       if (!tmpl) {
         try {
           const syncRes = await this.syncTemplates(scope);
-          tmpl = syncRes.templates.find(
-            (t) =>
-              t.id === params.templateId ||
-              t.name?.toLowerCase() === params.templateName?.toLowerCase() ||
-              t.name?.toLowerCase() === params.templateId?.toLowerCase() ||
-              String(t.raw?.id) === params.templateId ||
-              String(t.raw?.template_id) === params.templateId,
-          );
+          tmpl = matchTmpl(syncRes.templates);
         } catch (_) {}
+      }
+
+      if (!params.templateId && tmpl?.id) {
+        params.templateId = tmpl.id;
+      }
+      if (!params.templateId) {
+        const errMsg = `WhatsApp template "${params.templateName || 'unknown'}" not found. Sync templates from BotBiz first.`;
+        await this.addLog({
+          phone: normalizedPhone,
+          event: params.event || 'MANUAL',
+          leadId: params.leadId,
+          message: messageText,
+          messageType: 'TEMPLATE',
+          status: 'FAILED',
+          error: errMsg,
+        }, scope);
+        return { success: false, error: errMsg };
       }
 
       if (tmpl && tmpl.status !== 'APPROVED') {
@@ -1528,9 +1681,11 @@ export class WhatsappService {
       const brochureUrl =
         trigger.mediaUrl || raw.defaultBrochureUrl || '';
 
-      // Format Date & Time
+      // Format Date & Time (BotBiz slots prefer dd/MM/yyyy + hh:mm a)
       let formattedDate = 'Upcoming Date';
+      let botbizDate = formattedDate;
       let rawDateStr = '';
+      let formattedTime = context?.visitTime || '';
       if (context?.visitDate) {
         const d = new Date(context.visitDate);
         if (!isNaN(d.getTime())) {
@@ -1539,12 +1694,37 @@ export class WhatsappService {
             day: 'numeric',
             month: 'short',
             year: 'numeric',
+            timeZone: 'Asia/Kolkata',
+          });
+          botbizDate = d.toLocaleDateString('en-GB', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            timeZone: 'Asia/Kolkata',
           });
           rawDateStr = d.toISOString();
+          if (!formattedTime) {
+            formattedTime = d.toLocaleTimeString('en-IN', {
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: true,
+              timeZone: 'Asia/Kolkata',
+            });
+          }
         }
       }
-
-      const formattedTime = context?.visitTime || '11:00 AM';
+      if (!formattedTime) formattedTime = '11:00 AM';
+      // Normalize "11:00" → "11:00 AM" when caller passed 24h HH:mm
+      if (/^\d{1,2}:\d{2}$/.test(String(formattedTime).trim())) {
+        const [hh, mm] = String(formattedTime).trim().split(':').map(Number);
+        const probe = new Date();
+        probe.setHours(hh, mm, 0, 0);
+        formattedTime = probe.toLocaleTimeString('en-IN', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+        });
+      }
 
       // Generate Calendar Link
       let calendarLink = '';
@@ -1583,8 +1763,8 @@ export class WhatsappService {
         loantype: loanType,
         loan_type: loanType,
         siteVisitDate: formattedDate,
-        visit_date: formattedDate,
-        date: formattedDate,
+        visit_date: botbizDate,
+        date: botbizDate,
         siteVisitTime: formattedTime,
         visit_time: formattedTime,
         time: formattedTime,

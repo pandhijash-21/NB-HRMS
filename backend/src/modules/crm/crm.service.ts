@@ -1886,6 +1886,16 @@ export const crmService = {
       } else if (payload.scheduledDate) {
         updateData.scheduledVisitAt = new Date(payload.scheduledDate);
       }
+      // New / changed visit slot → allow a fresh day-of visit_reminder
+      const prevCustom =
+        existing.customFields && typeof existing.customFields === 'object'
+          ? { ...(existing.customFields as Record<string, any>) }
+          : {};
+      delete prevCustom.visitReminderFor;
+      delete prevCustom.visitReminderSentAt;
+      delete prevCustom.visit_reminder_sent_at;
+      delete prevCustom.visitReminderDay;
+      updateData.customFields = prevCustom;
     }
 
     if (status === 'SITE_VISIT_DONE') {

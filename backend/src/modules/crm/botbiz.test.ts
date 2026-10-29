@@ -398,6 +398,21 @@ async function runTests() {
         capturedBody.includes('templateVariable-3=12'),
       'Pre-sales sends time into time/{{3}} slot',
     );
+    // BotBiz last-wins by form order — name keys must appear AFTER time keys
+    {
+      const nameIdx = Math.max(
+        capturedBody.indexOf('templateVariable-name-1='),
+        capturedBody.indexOf('templateVariable-1='),
+      );
+      const timeIdx = Math.max(
+        capturedBody.indexOf('templateVariable-time-1='),
+        capturedBody.indexOf('templateVariable-3='),
+      );
+      assert(
+        nameIdx > timeIdx && timeIdx >= 0,
+        'Name keys serialize AFTER time keys (BotBiz last-wins fix)',
+      );
+    }
 
     // Project must never become the greeting ("Dear Legacy Tower")
     capturedBody = '';

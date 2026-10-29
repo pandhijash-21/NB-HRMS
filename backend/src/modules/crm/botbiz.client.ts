@@ -925,13 +925,13 @@ export class BotBizApiClient {
       }
 
       if (!explicitNoBodyVars) {
-        // {{1}} / name — person only
-        formParams.set('templateVariable-name-1', personName);
-        formParams.set('templateVariable-name', personName);
-        formParams.set('templateVariable-1', personName);
-        formParams.set('templateVariable-1-1', personName);
+        // BotBiz last-wins into {{name}} by FORM FIELD ORDER.
+        // URLSearchParams.set() updates in place and does NOT move keys to the end —
+        // so if we set name, then time, then "re-set" name, time still serializes
+        // AFTER name → "Dear 02:17 PM". Fix: set date/time/other FIRST, then append
+        // name keys last (delete + set so they are new entries at the end).
 
-        // {{2}} / date
+        // {{2}} / date first
         if (dateVal && !looksLikeClock(dateVal)) {
           formParams.set('templateVariable-date-1', dateVal);
           formParams.set('templateVariable-date', dateVal);
@@ -975,7 +975,15 @@ export class BotBizApiClient {
           formParams.set(`templateVariable-${rawKey}-1`, v);
         }
 
-        // Re-assert name/{{1}} last so nothing else can own that slot.
+        // {{1}} / name LAST in the body so BotBiz last-wins keeps the CRM client name.
+        for (const k of [
+          'templateVariable-name-1',
+          'templateVariable-name',
+          'templateVariable-1',
+          'templateVariable-1-1',
+        ]) {
+          formParams.delete(k);
+        }
         formParams.set('templateVariable-name-1', personName);
         formParams.set('templateVariable-name', personName);
         formParams.set('templateVariable-1', personName);

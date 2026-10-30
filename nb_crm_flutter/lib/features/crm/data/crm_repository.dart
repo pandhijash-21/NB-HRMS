@@ -613,6 +613,31 @@ class CrmRepository {
     );
   }
 
+  Future<Map<String, dynamic>> createNineanceAgent({
+    required String name,
+    required String phone,
+    String access = '2',
+    String? sipPassword,
+  }) async {
+    return _dio.postEnvelope<Map<String, dynamic>>(
+      'crm/telephony/agents',
+      data: {
+        'name': name,
+        'phone': phone,
+        'access': access,
+        if (sipPassword != null && sipPassword.isNotEmpty) 'sip_password': sipPassword,
+      },
+      parse: (raw) => Map<String, dynamic>.from(raw as Map? ?? {}),
+    );
+  }
+
+  Future<void> deleteNineanceAgent(String agentId) async {
+    await _dio.deleteEnvelope<void>(
+      'crm/telephony/agents/$agentId',
+      parse: (_) {},
+    );
+  }
+
   Future<List<Map<String, dynamic>>> syncNineanceAgents() async {
     return _dio.postEnvelope<List<Map<String, dynamic>>>(
       'crm/telephony/agents/sync',

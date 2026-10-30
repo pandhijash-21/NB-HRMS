@@ -123,12 +123,34 @@ crmRouter.patch('/telephony/call-logs/:id', requireCrmSubmodule('CRM_SETTINGS'),
 crmRouter.post('/telephony/test-connection', requireCrmSubmodule('CRM_SETTINGS'), crmController.testNineanceConnection);
 crmRouter.post('/telephony/activate', requireCrmSubmodule('CRM_SETTINGS'), crmController.activateNineance);
 crmRouter.get('/telephony/agents', requireCrmSubmodule('CRM_SETTINGS'), crmController.listNineanceAgents);
+crmRouter.post('/telephony/agents', requireCrmSubmodule('CRM_SETTINGS'), crmController.createNineanceAgent);
 crmRouter.post('/telephony/agents/sync', requireCrmSubmodule('CRM_SETTINGS'), crmController.syncNineanceAgents);
+crmRouter.post('/telephony/agents/bulk-assign', requireCrmSubmodule('CRM_SETTINGS'), crmController.bulkAssignNineanceAgents);
+crmRouter.get('/telephony/agents/me', requireCrmSubmodule('CRM_SETTINGS'), crmController.getNineanceMyAgent);
+crmRouter.get('/telephony/agents/me/status', requireCrmSubmodule('CRM_SETTINGS'), crmController.getNineanceMyAgentStatus);
+crmRouter.post('/telephony/agents/me/status', requireCrmSubmodule('CRM_SETTINGS'), crmController.setNineanceMyAgentStatus);
+crmRouter.get('/telephony/agents/me/softphone-config', requireCrmSubmodule('CRM_SETTINGS'), crmController.getNineanceSoftphoneConfig);
 crmRouter.post('/telephony/agents/:id/assign', requireCrmSubmodule('CRM_SETTINGS'), crmController.assignNineanceAgent);
+crmRouter.delete('/telephony/agents/:id', requireCrmSubmodule('CRM_SETTINGS'), crmController.deleteNineanceAgent);
 crmRouter.get('/telephony/dids', requireCrmSubmodule('CRM_SETTINGS'), crmController.listNineanceDids);
 crmRouter.post('/telephony/dids/sync', requireCrmSubmodule('CRM_SETTINGS'), crmController.syncNineanceDids);
 crmRouter.post('/telephony/dids/:id/set-default', requireCrmSubmodule('CRM_SETTINGS'), crmController.setNineanceDefaultDid);
 crmRouter.post('/telephony/calls/sync', requireCrmSubmodule('CRM_SETTINGS'), crmController.syncNineanceCalls);
+crmRouter.get('/telephony/webhook-urls', requireCrmSubmodule('CRM_SETTINGS'), crmController.getNineanceWebhookUrls);
+crmRouter.get('/telephony/provider-configs', requireCrmSubmodule('CRM_SETTINGS'), crmController.listNineanceProviderConfigs);
+crmRouter.post('/telephony/provider-configs', requireCrmSubmodule('CRM_SETTINGS'), crmController.createNineanceProviderConfig);
+crmRouter.patch('/telephony/provider-configs/:id', requireCrmSubmodule('CRM_SETTINGS'), crmController.updateNineanceProviderConfig);
+crmRouter.delete('/telephony/provider-configs/:id', requireCrmSubmodule('CRM_SETTINGS'), crmController.deleteNineanceProviderConfig);
+crmRouter.post('/telephony/provider-configs/:id/enable', requireCrmSubmodule('CRM_SETTINGS'), crmController.enableNineanceProviderConfig);
+crmRouter.get('/telephony/call-groups', requireCrmSubmodule('CRM_SETTINGS'), crmController.listNineanceCallGroups);
+crmRouter.post('/telephony/call-groups', requireCrmSubmodule('CRM_SETTINGS'), crmController.createNineanceCallGroup);
+crmRouter.get('/telephony/transcription/capability', requireCrmSubmodule('CRM_SETTINGS'), crmController.nineanceTranscriptionCapability);
+crmRouter.get('/telephony/transcription/settings', requireCrmSubmodule('CRM_SETTINGS'), crmController.getNineanceTranscriptionSettings);
+crmRouter.post('/telephony/transcription/settings', requireCrmSubmodule('CRM_SETTINGS'), crmController.updateNineanceTranscriptionSettings);
+crmRouter.get('/telephony/config', requireCrmSubmodule('CRM_SETTINGS'), crmController.getNineanceRemoteConfig);
+crmRouter.put('/telephony/config', requireCrmSubmodule('CRM_SETTINGS'), crmController.updateNineanceRemoteConfig);
+crmRouter.delete('/telephony/config', requireCrmSubmodule('CRM_SETTINGS'), crmController.deleteNineanceRemoteConfig);
+crmRouter.get('/telephony/auth/products', requireCrmSubmodule('CRM_SETTINGS'), crmController.listNineanceAuthProducts);
 crmRouter.get(
   '/telephony/dialer-config',
   requireAnyPermission(['CRM_SETTINGS', 'CRM_PRE_SALES', 'FIN_CRM_SETTINGS', 'FIN_CRM_PRE_SALES'], 'READ'),
@@ -166,7 +188,11 @@ crmRouter.post('/telephony/campaigns/:id/start', requireCrmSubmodule('CRM_SETTIN
 crmRouter.post('/telephony/campaigns/:id/stop', requireCrmSubmodule('CRM_SETTINGS'), crmController.stopNineanceCampaign);
 crmRouter.get('/telephony/campaigns/:id/report', requireCrmSubmodule('CRM_SETTINGS'), crmController.nineanceCampaignReport);
 crmRouter.get('/telephony/dispositions', requireCrmSubmodule('CRM_SETTINGS'), crmController.listNineanceDispositions);
+crmRouter.post('/telephony/dispositions', requireCrmSubmodule('CRM_SETTINGS'), crmController.createNineanceDisposition);
+crmRouter.put('/telephony/dispositions/:id', requireCrmSubmodule('CRM_SETTINGS'), crmController.updateNineanceDisposition);
+crmRouter.delete('/telephony/dispositions/:id', requireCrmSubmodule('CRM_SETTINGS'), crmController.deleteNineanceDisposition);
 crmRouter.get('/telephony/analytics', requireCrmSubmodule('CRM_SETTINGS'), crmController.nineanceAnalytics);
+crmRouter.get('/telephony/analytics/me', requireCrmSubmodule('CRM_SETTINGS'), crmController.nineanceMyAnalytics);
 crmRouter.get('/telephony/dashboard', requireCrmSubmodule('CRM_SETTINGS'), crmController.nineanceProviderDashboard);
 
 // WhatsApp Automation Configuration, Testing & Logs (BotBiz WhatsApp Integration)

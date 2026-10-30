@@ -244,6 +244,125 @@ class _CrmNineanceTelephonyTabState extends State<CrmNineanceTelephonyTab> {
     }
   }
 
+  Future<void> _createAgentDialog() async {
+    final nameCtrl = TextEditingController();
+    final phoneCtrl = TextEditingController();
+    final sipCtrl = TextEditingController();
+    String access = '2';
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: const Text('Create 9ance agent'),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(labelText: 'Name', hintText: 'Ramesh'),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: phoneCtrl,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(
+                    labelText: 'Phone (10 digits)',
+                    hintText: '9876543210',
+                  ),
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  value: access,
+                  decoration: const InputDecoration(labelText: 'Access'),
+                  items: const [
+                    DropdownMenuItem(value: '2', child: Text('Agent (2)')),
+                    DropdownMenuItem(value: '1', child: Text('Admin (1)')),
+                  ],
+                  onChanged: (v) => setLocal(() => access = v ?? '2'),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: sipCtrl,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'SIP password (optional)',
+                    hintText: 'Write-only; never returned',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Create'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (ok != true) {
+      nameCtrl.dispose();
+      phoneCtrl.dispose();
+      sipCtrl.dispose();
+      return;
+    }
+    final name = nameCtrl.text.trim();
+    final phone = phoneCtrl.text.trim();
+    final sip = sipCtrl.text.trim();
+    nameCtrl.dispose();
+    phoneCtrl.dispose();
+    sipCtrl.dispose();
+    if (name.isEmpty || phone.isEmpty) {
+      _snack('Name and phone are required', error: true);
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      await context.read<CrmRepository>().createNineanceAgent(
+            name: name,
+            phone: phone,
+            access: access,
+            sipPassword: sip.isEmpty ? null : sip,
+          );
+      await _refreshAgentsAndDids(silent: true);
+      _snack('Agent created on 9ance');
+    } catch (e) {
+      _snack('$e', error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _deleteAgent(String agentId, String name) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete agent?'),
+        content: Text('Delete "$name" from 9ance? This cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await context.read<CrmRepository>().deleteNineanceAgent(agentId);
+      await _refreshAgentsAndDids(silent: true);
+      _snack('Agent deleted');
+    } catch (e) {
+      _snack('$e', error: true);
+    }
+  }
+
   Future<void> _mapAgent(String agentId, int? employeeId) async {
     if (employeeId == null) return;
     try {
@@ -517,14 +636,27 @@ class _CrmNineanceTelephonyTabState extends State<CrmNineanceTelephonyTab> {
                   children: [
                     Align(
                       alignment: Alignment.centerRight,
-                      child: TextButton.icon(
-                        onPressed: _busy ? null : () => _refreshAgentsAndDids(),
-                        icon: const Icon(Icons.sync, size: 16),
-                        label: const Text('Sync agents'),
+                      child: Wrap(
+                        spacing: 8,
+                        children: [
+                          TextButton.icon(
+                            onPressed: _busy ? null : _createAgentDialog,
+                            icon: const Icon(Icons.person_add_alt_1, size: 16),
+                            label: const Text('Create agent'),
+                          ),
+                          TextButton.icon(
+                            onPressed: _busy ? null : () => _refreshAgentsAndDids(),
+                            icon: const Icon(Icons.sync, size: 16),
+                            label: const Text('Sync agents'),
+                          ),
+                        ],
                       ),
                     ),
                     if (_agents.isEmpty)
-                      Text('No agents yet. Activate & sync first.', style: TextStyle(color: widget.textMuted))
+                      Text(
+                        'No agents yet. Create one here or Sync from 9ance.',
+                        style: TextStyle(color: widget.textMuted),
+                      )
                     else ...[
                       Text(
                         'Real/mobile number is on each agent (shown below). Virtual DID is separate (Numbers section).',
@@ -535,8 +667,8 @@ class _CrmNineanceTelephonyTabState extends State<CrmNineanceTelephonyTab> {
                         final id = a['id']?.toString() ?? '';
                         final name = a['name']?.toString() ?? 'Agent';
                         final phone = a['phone']?.toString() ?? '';
-                        final did = a['default_did_number']?.toString() ||
-                            a['effective_did']?.toString() ||
+                        final did = a['default_did_number']?.toString() ??
+                            a['effective_did']?.toString() ??
                             '';
                         final mapped = _employeeMappedTo(id);
                         return Card(
@@ -563,25 +695,36 @@ class _CrmNineanceTelephonyTabState extends State<CrmNineanceTelephonyTab> {
                                     style: TextStyle(fontSize: 12, color: widget.textMuted),
                                   ),
                                 const SizedBox(height: 8),
-                                DropdownButtonFormField<int?>(
-                                  value: mapped,
-                                  decoration: InputDecoration(
-                                    labelText: 'Map to telecaller',
-                                    isDense: true,
-                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                  ),
-                                  items: [
-                                    const DropdownMenuItem<int?>(value: null, child: Text('— Not mapped —')),
-                                    ..._uniqueTelecallers.map(
-                                      (t) => DropdownMenuItem<int?>(
-                                        value: t.employeeId,
-                                        child: Text(t.name),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: DropdownButtonFormField<int?>(
+                                        value: mapped,
+                                        decoration: InputDecoration(
+                                          labelText: 'Map to telecaller',
+                                          isDense: true,
+                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                        ),
+                                        items: [
+                                          const DropdownMenuItem<int?>(value: null, child: Text('— Not mapped —')),
+                                          ..._uniqueTelecallers.map(
+                                            (t) => DropdownMenuItem<int?>(
+                                              value: t.employeeId,
+                                              child: Text(t.name),
+                                            ),
+                                          ),
+                                        ],
+                                        onChanged: (empId) {
+                                          if (empId != null) _mapAgent(id, empId);
+                                        },
                                       ),
                                     ),
+                                    IconButton(
+                                      tooltip: 'Delete agent',
+                                      icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                                      onPressed: id.isEmpty ? null : () => _deleteAgent(id, name),
+                                    ),
                                   ],
-                                  onChanged: (empId) {
-                                    if (empId != null) _mapAgent(id, empId);
-                                  },
                                 ),
                               ],
                             ),

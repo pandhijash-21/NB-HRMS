@@ -890,6 +890,285 @@ export const crmController = {
     }
   },
 
+  async createNineanceAgent(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const result = await telephonyService.createAgent(req.body || {}, getScope(req));
+      res.status(201).json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to create agent'));
+    }
+  },
+
+  async deleteNineanceAgent(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      await telephonyService.deleteAgent(String(req.params.id), getScope(req));
+      res.json(ok({ deleted: true }));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to delete agent'));
+    }
+  },
+
+  async bulkAssignNineanceAgents(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const assignments = Array.isArray(req.body?.assignments)
+        ? req.body.assignments
+        : Array.isArray(req.body)
+          ? req.body
+          : [];
+      const result = await telephonyService.bulkAssignAgents(assignments, getScope(req));
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to bulk-assign agents'));
+    }
+  },
+
+  async getNineanceMyAgent(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const result = await telephonyService.getMyAgent(getScope(req));
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to load my agent'));
+    }
+  },
+
+  async getNineanceMyAgentStatus(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const result = await telephonyService.getMyAgentStatus(getScope(req));
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to load agent status'));
+    }
+  },
+
+  async setNineanceMyAgentStatus(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const status = String(req.body?.status || 'ready');
+      const result = await telephonyService.setMyAgentStatus(
+        status,
+        req.body?.break_type,
+        getScope(req),
+      );
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to update agent status'));
+    }
+  },
+
+  async getNineanceSoftphoneConfig(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const result = await telephonyService.getSoftphoneConfig(getScope(req));
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to load softphone config'));
+    }
+  },
+
+  async getNineanceWebhookUrls(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const result = await telephonyService.getWebhookUrls(getScope(req));
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to load webhook URLs'));
+    }
+  },
+
+  async listNineanceProviderConfigs(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const result = await telephonyService.listProviderConfigs(getScope(req));
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to list provider configs'));
+    }
+  },
+
+  async createNineanceProviderConfig(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const result = await telephonyService.createProviderConfig(req.body || {}, getScope(req));
+      res.status(201).json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to create provider config'));
+    }
+  },
+
+  async updateNineanceProviderConfig(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const result = await telephonyService.updateProviderConfig(
+        String(req.params.id),
+        req.body || {},
+        getScope(req),
+      );
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to update provider config'));
+    }
+  },
+
+  async deleteNineanceProviderConfig(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      await telephonyService.deleteProviderConfig(String(req.params.id), getScope(req));
+      res.json(ok({ deleted: true }));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to delete provider config'));
+    }
+  },
+
+  async enableNineanceProviderConfig(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const result = await telephonyService.enableProviderConfig(String(req.params.id), getScope(req));
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to enable provider config'));
+    }
+  },
+
+  async listNineanceCallGroups(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const result = await telephonyService.listCallGroups(getScope(req));
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to list call groups'));
+    }
+  },
+
+  async createNineanceCallGroup(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const result = await telephonyService.createCallGroup(req.body || {}, getScope(req));
+      res.status(201).json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to create call group'));
+    }
+  },
+
+  async nineanceTranscriptionCapability(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const result = await telephonyService.transcriptionCapability(getScope(req));
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to load transcription capability'));
+    }
+  },
+
+  async getNineanceTranscriptionSettings(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const result = await telephonyService.getTranscriptionSettings(getScope(req));
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to load transcription settings'));
+    }
+  },
+
+  async updateNineanceTranscriptionSettings(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const result = await telephonyService.updateTranscriptionSettings(req.body || {}, getScope(req));
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to update transcription settings'));
+    }
+  },
+
+  async getNineanceRemoteConfig(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const result = await telephonyService.getNineanceConfig(getScope(req));
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to load remote config'));
+    }
+  },
+
+  async updateNineanceRemoteConfig(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const result = await telephonyService.updateNineanceConfig(req.body || {}, getScope(req));
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to update remote config'));
+    }
+  },
+
+  async deleteNineanceRemoteConfig(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      await telephonyService.deleteNineanceConfig(getScope(req));
+      res.json(ok({ deleted: true }));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to delete remote config'));
+    }
+  },
+
+  async listNineanceAuthProducts(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const result = await telephonyService.listAuthProducts();
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to list auth products'));
+    }
+  },
+
+  async createNineanceDisposition(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const result = await telephonyService.createDisposition(req.body || {}, getScope(req));
+      res.status(201).json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to create disposition'));
+    }
+  },
+
+  async updateNineanceDisposition(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const result = await telephonyService.updateDisposition(
+        String(req.params.id),
+        req.body || {},
+        getScope(req),
+      );
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to update disposition'));
+    }
+  },
+
+  async deleteNineanceDisposition(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      await telephonyService.deleteDisposition(String(req.params.id), getScope(req));
+      res.json(ok({ deleted: true }));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to delete disposition'));
+    }
+  },
+
+  async nineanceMyAnalytics(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const date = req.query.date ? String(req.query.date) : undefined;
+      const result = await telephonyService.myAnalytics(getScope(req), date);
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to load my analytics'));
+    }
+  },
+
   async streamCallAudio(req: Request, res: Response) {
     try {
       const id = String(req.params.id);

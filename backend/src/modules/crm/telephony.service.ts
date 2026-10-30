@@ -1197,6 +1197,24 @@ class TelephonyService {
     return client.listDispositions();
   }
 
+  async createDisposition(
+    payload: { label: string; value: string; color?: string },
+    scope: string = 'NB_DEVELOPER',
+  ) {
+    const client = await this.ensureAuthenticated(scope);
+    return client.createDisposition(payload);
+  }
+
+  async updateDisposition(id: string, payload: Record<string, any>, scope: string = 'NB_DEVELOPER') {
+    const client = await this.ensureAuthenticated(scope);
+    return client.updateDisposition(id, payload);
+  }
+
+  async deleteDisposition(id: string, scope: string = 'NB_DEVELOPER') {
+    const client = await this.ensureAuthenticated(scope);
+    return client.deleteDisposition(id);
+  }
+
   async providerDashboard(scope: string = 'NB_DEVELOPER') {
     const client = await this.ensureAuthenticated(scope);
     return client.providerDashboard();
@@ -1205,6 +1223,147 @@ class TelephonyService {
   async agentAnalytics(scope: string = 'NB_DEVELOPER', date?: string) {
     const client = await this.ensureAuthenticated(scope);
     return client.agentAnalytics(date);
+  }
+
+  async myAnalytics(scope: string = 'NB_DEVELOPER', date?: string) {
+    const client = await this.ensureAuthenticated(scope);
+    return client.myAnalytics(date);
+  }
+
+  async createAgent(
+    payload: { name: string; phone: string; access?: string; sip_password?: string },
+    scope: string = 'NB_DEVELOPER',
+  ) {
+    const client = await this.ensureAuthenticated(scope);
+    const phone = normalizePhone10(payload.phone);
+    if (!payload.name?.trim() || !phone) {
+      throw new Error('Agent name and 10-digit phone are required');
+    }
+    return client.createAgent({
+      name: payload.name.trim(),
+      phone,
+      access: payload.access || '2',
+      sip_password: payload.sip_password,
+    });
+  }
+
+  async deleteAgent(id: string, scope: string = 'NB_DEVELOPER') {
+    const client = await this.ensureAuthenticated(scope);
+    return client.deleteAgent(id);
+  }
+
+  async bulkAssignAgents(
+    assignments: Array<{ agent_id: string; user_id: string | null }>,
+    scope: string = 'NB_DEVELOPER',
+  ) {
+    const client = await this.ensureAuthenticated(scope);
+    return client.bulkAssignAgents(assignments);
+  }
+
+  async getMyAgent(scope: string = 'NB_DEVELOPER') {
+    const client = await this.ensureAuthenticated(scope);
+    return client.getMyAgent();
+  }
+
+  async getMyAgentStatus(scope: string = 'NB_DEVELOPER') {
+    const client = await this.ensureAuthenticated(scope);
+    return client.getMyAgentStatus();
+  }
+
+  async setMyAgentStatus(status: string, breakType?: string, scope: string = 'NB_DEVELOPER') {
+    const client = await this.ensureAuthenticated(scope);
+    return client.setMyAgentStatus(status, breakType);
+  }
+
+  async listProviderConfigs(scope: string = 'NB_DEVELOPER') {
+    const client = await this.ensureAuthenticated(scope);
+    return client.listProviderConfigs();
+  }
+
+  async createProviderConfig(payload: Record<string, any>, scope: string = 'NB_DEVELOPER') {
+    const client = await this.ensureAuthenticated(scope);
+    return client.createProviderConfig(payload);
+  }
+
+  async updateProviderConfig(id: string, payload: Record<string, any>, scope: string = 'NB_DEVELOPER') {
+    const client = await this.ensureAuthenticated(scope);
+    return client.updateProviderConfig(id, payload);
+  }
+
+  async deleteProviderConfig(id: string, scope: string = 'NB_DEVELOPER') {
+    const client = await this.ensureAuthenticated(scope);
+    return client.deleteProviderConfig(id);
+  }
+
+  async enableProviderConfig(id: string, scope: string = 'NB_DEVELOPER') {
+    const client = await this.ensureAuthenticated(scope);
+    return client.enableProviderConfig(id);
+  }
+
+  async listCallGroups(scope: string = 'NB_DEVELOPER') {
+    const client = await this.ensureAuthenticated(scope);
+    return client.listCallGroups();
+  }
+
+  async createCallGroup(
+    payload: { group_name: string; members: string[]; ring_type?: string },
+    scope: string = 'NB_DEVELOPER',
+  ) {
+    const client = await this.ensureAuthenticated(scope);
+    return client.createCallGroup(payload);
+  }
+
+  async transcriptionCapability(scope: string = 'NB_DEVELOPER') {
+    const client = await this.ensureAuthenticated(scope);
+    return client.transcriptionCapability();
+  }
+
+  async getTranscriptionSettings(scope: string = 'NB_DEVELOPER') {
+    const client = await this.ensureAuthenticated(scope);
+    return client.getTranscriptionSettings();
+  }
+
+  async updateTranscriptionSettings(payload: Record<string, any>, scope: string = 'NB_DEVELOPER') {
+    const client = await this.ensureAuthenticated(scope);
+    return client.updateTranscriptionSettings(payload);
+  }
+
+  async getNineanceConfig(scope: string = 'NB_DEVELOPER') {
+    const client = await this.ensureAuthenticated(scope);
+    return client.getConfig();
+  }
+
+  async updateNineanceConfig(payload: Record<string, any>, scope: string = 'NB_DEVELOPER') {
+    const client = await this.ensureAuthenticated(scope);
+    return client.updateConfig(payload);
+  }
+
+  async deleteNineanceConfig(scope: string = 'NB_DEVELOPER') {
+    const client = await this.ensureAuthenticated(scope);
+    return client.deleteConfig();
+  }
+
+  async getSoftphoneConfig(scope: string = 'NB_DEVELOPER') {
+    const client = await this.ensureAuthenticated(scope);
+    return client.getSoftphoneConfig();
+  }
+
+  async listAuthProducts() {
+    const client = new NineanceClient((await this.getNineanceSettings()).base_url);
+    return client.listProducts();
+  }
+
+  async getWebhookUrls(scope: string = 'NB_DEVELOPER') {
+    const s = await this.getNineanceSettings(scope);
+    const client = this.getClient(scope);
+    client.setBaseUrl(s.base_url);
+    const token = s.webhook_token;
+    return {
+      webhook_token: token,
+      webhook_url: token ? client.buildWebhookUrl(token, false) : s.webhook_url,
+      live_calls_webhook_url: token ? client.buildWebhookUrl(token, true) : '',
+      crm_receiver_url: 'https://crm.nbdeveloper.co.in/api/crm/telephony/webhook',
+    };
   }
 }
 

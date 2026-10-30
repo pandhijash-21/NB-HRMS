@@ -1,5 +1,5 @@
 /**
- * 9ance Cloud Telephony API client
+ * 9ance Cloud Telephony API client — full coverage of Developer Documentation endpoint index.
  * Base: https://crmapi.9ance.com
  * Auth: Bearer JWT (access ~1h, refresh ~7d)
  */
@@ -19,7 +19,6 @@ export interface NineanceRequestOptions {
   rawBody?: BodyInit;
   contentType?: string;
   accessToken?: string;
-  /** Skip auth header (login / refresh) */
   noAuth?: boolean;
   timeoutMs?: number;
 }
@@ -59,7 +58,6 @@ export class NineanceClient {
     if (tokens.refresh) this.refreshToken = tokens.refresh;
   }
 
-  /** Called when a 401 is received so the service can refresh from stored credentials */
   onNeedRefresh(handler: () => Promise<NineanceTokens | null>) {
     this.refreshHandler = handler;
   }
@@ -75,6 +73,31 @@ export class NineanceClient {
       }
     }
     return url.toString();
+  }
+
+  private extractErrorMessage(json: any, status: number): string {
+    if (!json || typeof json !== 'object') return `9ance API ${status}`;
+
+    const details = json.details || json.detail;
+    if (typeof details === 'string' && details.trim()) return details.trim();
+    if (Array.isArray(details) && details.length) {
+      return details.map((d) => (typeof d === 'string' ? d : JSON.stringify(d))).join('; ');
+    }
+    if (details && typeof details === 'object') {
+      const parts: string[] = [];
+      for (const [k, v] of Object.entries(details)) {
+        if (Array.isArray(v)) parts.push(`${k}: ${v.join(', ')}`);
+        else if (v != null) parts.push(`${k}: ${v}`);
+      }
+      if (parts.length) return parts.join('; ');
+    }
+
+    if (typeof json.message === 'string' && json.message.trim()) return json.message.trim();
+    if (typeof json.error === 'string' && json.error.trim()) return json.error.trim();
+    if (typeof json.provider_error === 'string' && json.provider_error.trim()) {
+      return json.provider_error.trim();
+    }
+    return `9ance API ${status}`;
   }
 
   async request<T = any>(path: string, opts: NineanceRequestOptions = {}, retried = false): Promise<T> {
@@ -126,8 +149,7 @@ export class NineanceClient {
       }
 
       if (!res.ok) {
-        const msg = this.extractErrorMessage(json, res.status);
-        throw new NineanceApiError(res.status, msg, json);
+        throw new NineanceApiError(res.status, this.extractErrorMessage(json, res.status), json);
       }
 
       return (json ?? {}) as T;
@@ -136,32 +158,7 @@ export class NineanceClient {
     }
   }
 
-  private extractErrorMessage(json: any, status: number): string {
-    if (!json || typeof json !== 'object') return `9ance API ${status}`;
-
-    const details = json.details || json.detail;
-    if (typeof details === 'string' && details.trim()) return details.trim();
-    if (Array.isArray(details) && details.length) {
-      return details.map((d) => (typeof d === 'string' ? d : JSON.stringify(d))).join('; ');
-    }
-    if (details && typeof details === 'object') {
-      const parts: string[] = [];
-      for (const [k, v] of Object.entries(details)) {
-        if (Array.isArray(v)) parts.push(`${k}: ${v.join(', ')}`);
-        else if (v != null) parts.push(`${k}: ${v}`);
-      }
-      if (parts.length) return parts.join('; ');
-    }
-
-    if (typeof json.message === 'string' && json.message.trim()) return json.message.trim();
-    if (typeof json.error === 'string' && json.error.trim()) return json.error.trim();
-    if (typeof json.provider_error === 'string' && json.provider_error.trim()) {
-      return json.provider_error.trim();
-    }
-    return `9ance API ${status}`;
-  }
-
-  // ── Auth ──────────────────────────────────────────────────────────────────
+  // ── Auth (PDF §3) ─────────────────────────────────────────────────────────
 
   async login(email: string, password: string): Promise<NineanceTokens & { user?: any; tenant?: any }> {
     const cleanEmail = String(email || '').trim();
@@ -170,9 +167,6 @@ export class NineanceClient {
       throw new NineanceApiError(400, 'Email and password are required for 9ance login');
     }
 
-    // 1) Plain login (docs)
-    // 2) Retry with force_logout if session-limit error
-    // 3) Fallback token endpoint
     let lastErr: any;
     const attempts: Array<Record<string, any>> = [
       { email: cleanEmail, password: cleanPassword },
@@ -198,10 +192,8 @@ export class NineanceClient {
       } catch (err: any) {
         lastErr = err;
         const msg = String(err?.message || err?.detail || '').toLowerCase();
-        // Only continue to force_logout attempt on session-limit style errors
         if (body.force_logout) break;
         if (!msg.includes('session') && !msg.includes('concurrent') && !msg.includes('logged in')) {
-          // wrong password / validation — try token endpoint once, then stop
           break;
         }
       }
@@ -227,6 +219,14 @@ export class NineanceClient {
     }
   }
 
+  async getTokenPair(email: string, password: string) {
+    return this.request<NineanceTokens>('/api/auth/token/', {
+      method: 'POST',
+      noAuth: true,
+      body: { email, password },
+    });
+  }
+
   async refreshAccessToken(refresh?: string): Promise<NineanceTokens> {
     const data = await this.request<any>('/api/auth/token/refresh/', {
       method: 'POST',
@@ -241,7 +241,33 @@ export class NineanceClient {
     return tokens;
   }
 
-  // ── Config ────────────────────────────────────────────────────────────────
+  async signup(payload: {
+    email: string;
+    password: string;
+    name: string;
+    company_name: string;
+  }) {
+    return this.request('/api/auth/signup/', { method: 'POST', noAuth: true, body: payload });
+  }
+
+  async signupProduct(payload: {
+    email: string;
+    password: string;
+    name: string;
+    product: string;
+  }) {
+    return this.request('/api/auth/signup/product/', {
+      method: 'POST',
+      noAuth: true,
+      body: payload,
+    });
+  }
+
+  async listProducts() {
+    return this.request('/api/auth/products/', { method: 'GET', noAuth: true });
+  }
+
+  // ── Config (PDF §4) ───────────────────────────────────────────────────────
 
   async createConfig(payload: {
     provider_key: string;
@@ -268,7 +294,30 @@ export class NineanceClient {
     return this.request<{ success?: boolean }>('/api/telephony/config/test/', { method: 'POST' });
   }
 
-  // ── Agents ────────────────────────────────────────────────────────────────
+  async listProviderConfigs() {
+    return this.request('/api/telephony/provider-configs/', { method: 'GET' });
+  }
+
+  async createProviderConfig(payload: Record<string, any>) {
+    return this.request('/api/telephony/provider-configs/', { method: 'POST', body: payload });
+  }
+
+  async updateProviderConfig(configId: string, payload: Record<string, any>) {
+    return this.request(`/api/telephony/provider-configs/${configId}/`, {
+      method: 'PATCH',
+      body: payload,
+    });
+  }
+
+  async deleteProviderConfig(configId: string) {
+    return this.request(`/api/telephony/provider-configs/${configId}/`, { method: 'DELETE' });
+  }
+
+  async enableProviderConfig(configId: string) {
+    return this.request(`/api/telephony/provider-configs/${configId}/enable/`, { method: 'POST' });
+  }
+
+  // ── Agents (PDF §5) ───────────────────────────────────────────────────────
 
   async listAgents() {
     return this.request<any>('/api/telephony/agents/', { method: 'GET' });
@@ -327,7 +376,11 @@ export class NineanceClient {
     return this.request('/api/telephony/agents/me/status/', { method: 'POST', body });
   }
 
-  // ── DIDs ──────────────────────────────────────────────────────────────────
+  async getMySoftphoneConfig() {
+    return this.request('/api/telephony/agents/me/softphone-config/', { method: 'GET' });
+  }
+
+  // ── DIDs (PDF §6) ─────────────────────────────────────────────────────────
 
   async listDids() {
     return this.request<any>('/api/telephony/dids/', { method: 'GET' });
@@ -341,7 +394,7 @@ export class NineanceClient {
     return this.request(`/api/telephony/dids/${id}/set-default/`, { method: 'POST' });
   }
 
-  // ── Calls ─────────────────────────────────────────────────────────────────
+  // ── Calls (PDF §7–10) ─────────────────────────────────────────────────────
 
   async clickToCall(payload: {
     customer_number: string;
@@ -373,7 +426,6 @@ export class NineanceClient {
     });
   }
 
-  /** Stream recording bytes with auth */
   async fetchRecordingResponse(callId: string, rangeHeader?: string): Promise<Response> {
     const url = this.buildUrl(`/api/telephony/calls/${callId}/recording/`);
     const headers: Record<string, string> = {};
@@ -408,10 +460,10 @@ export class NineanceClient {
   }
 
   async getSoftphoneConfig() {
-    return this.request('/api/telephony/agents/me/softphone-config/', { method: 'GET' });
+    return this.getMySoftphoneConfig();
   }
 
-  // ── Campaigns ─────────────────────────────────────────────────────────────
+  // ── Campaigns (PDF §11) ───────────────────────────────────────────────────
 
   async listCampaigns() {
     return this.request('/api/telephony/campaigns/', { method: 'GET' });
@@ -419,6 +471,11 @@ export class NineanceClient {
 
   async createCampaignJson(payload: Record<string, any>) {
     return this.request('/api/telephony/campaigns/', { method: 'POST', body: payload });
+  }
+
+  /** CSV / multipart campaign create */
+  async createCampaignMultipart(form: FormData) {
+    return this.request('/api/telephony/campaigns/', { method: 'POST', formData: form });
   }
 
   async startCampaign(id: string) {
@@ -440,7 +497,7 @@ export class NineanceClient {
     });
   }
 
-  // ── Dispositions / groups / analytics ─────────────────────────────────────
+  // ── Dispositions (PDF §12) ────────────────────────────────────────────────
 
   async listDispositions() {
     return this.request('/api/telephony/dispositions/', { method: 'GET' });
@@ -449,6 +506,16 @@ export class NineanceClient {
   async createDisposition(payload: { label: string; value: string; color?: string }) {
     return this.request('/api/telephony/dispositions/', { method: 'POST', body: payload });
   }
+
+  async updateDisposition(id: string, payload: Record<string, any>) {
+    return this.request(`/api/telephony/dispositions/${id}/`, { method: 'PUT', body: payload });
+  }
+
+  async deleteDisposition(id: string) {
+    return this.request(`/api/telephony/dispositions/${id}/`, { method: 'DELETE' });
+  }
+
+  // ── Call groups (PDF §13) ─────────────────────────────────────────────────
 
   async listCallGroups() {
     return this.request('/api/telephony/call-groups/', { method: 'GET' });
@@ -461,6 +528,8 @@ export class NineanceClient {
   }) {
     return this.request('/api/telephony/call-groups/', { method: 'POST', body: payload });
   }
+
+  // ── Analytics (PDF §14–15) ────────────────────────────────────────────────
 
   async providerDashboard() {
     return this.request('/api/telephony/provider-dashboard/', { method: 'GET' });
@@ -479,6 +548,77 @@ export class NineanceClient {
       query: date ? { date } : undefined,
     });
   }
+
+  // ── Transcription (PDF §18) ───────────────────────────────────────────────
+
+  async transcriptionCapability() {
+    return this.request('/api/telephony/calls/transcription/capability/', { method: 'GET' });
+  }
+
+  async getTranscriptionSettings() {
+    return this.request('/api/telephony/calls/transcription/settings/', { method: 'GET' });
+  }
+
+  async updateTranscriptionSettings(payload: Record<string, any>) {
+    return this.request('/api/telephony/calls/transcription/settings/', {
+      method: 'POST',
+      body: payload,
+    });
+  }
+
+  // ── Webhooks (PDF §17) — provider posts TO these 9ance URLs ───────────────
+
+  buildWebhookUrl(webhookToken: string, live = false) {
+    const base = `${this.baseUrl}/api/telephony/webhooks/indiavoice/${webhookToken}/`;
+    return live ? `${base}live-calls/` : base;
+  }
 }
 
 export const DEFAULT_NINEANCE_BASE = DEFAULT_BASE;
+
+/** PDF endpoint checklist (for ops / UI completeness markers). */
+export const NINEANCE_PDF_ENDPOINTS = [
+  'POST /api/auth/login/',
+  'POST /api/auth/token/',
+  'POST /api/auth/token/refresh/',
+  'POST /api/auth/signup/',
+  'POST /api/auth/signup/product/',
+  'GET /api/auth/products/',
+  'POST|GET|PUT|DELETE /api/telephony/config/',
+  'POST /api/telephony/config/test/',
+  'GET|POST /api/telephony/provider-configs/',
+  'PATCH|DELETE /api/telephony/provider-configs/<id>/',
+  'POST /api/telephony/provider-configs/<id>/enable/',
+  'GET|POST /api/telephony/agents/',
+  'DELETE /api/telephony/agents/<id>/',
+  'POST /api/telephony/agents/sync/',
+  'POST /api/telephony/agents/<id>/assign/',
+  'POST /api/telephony/agents/bulk-assign/',
+  'POST /api/telephony/agents/<id>/status/',
+  'GET /api/telephony/agents/me/',
+  'GET|POST /api/telephony/agents/me/status/',
+  'GET /api/telephony/agents/me/softphone-config/',
+  'GET /api/telephony/dids/',
+  'POST /api/telephony/dids/sync/',
+  'POST /api/telephony/dids/<id>/set-default/',
+  'POST /api/telephony/calls/click-to-call/',
+  'GET /api/telephony/calls/',
+  'GET /api/telephony/calls/<id>/recording/',
+  'POST /api/telephony/calls/<id>/disposition/',
+  'GET /api/telephony/calls/live/',
+  'GET /api/telephony/calls/match/',
+  'GET /api/telephony/dialer/config/',
+  'WS /ws/telephony/calls/',
+  'GET|POST /api/telephony/campaigns/',
+  'POST /api/telephony/campaigns/<id>/start|stop/',
+  'GET /api/telephony/campaigns/<id>/report/',
+  'POST /api/telephony/campaigns/preview-dial-list/',
+  'GET|POST /api/telephony/dispositions/',
+  'PUT|DELETE /api/telephony/dispositions/<id>/',
+  'GET|POST /api/telephony/call-groups/',
+  'GET /api/telephony/provider-dashboard/',
+  'GET /api/telephony/analytics/agents|me/',
+  'GET|POST /api/telephony/calls/transcription/settings/',
+  'GET /api/telephony/calls/transcription/capability/',
+  'POST /api/telephony/webhooks/indiavoice/<token>/[+live-calls]',
+] as const;

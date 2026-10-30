@@ -320,6 +320,32 @@ class _CrmNineanceTelephonyTabState extends State<CrmNineanceTelephonyTab> {
     return null;
   }
 
+  List<Map<String, dynamic>> get _uniqueAgents {
+    final seen = <String>{};
+    final out = <Map<String, dynamic>>[];
+    for (final a in _agents) {
+      final id = a['id']?.toString() ?? '';
+      final key = id.isNotEmpty
+          ? id
+          : '${a['name']}|${a['phone']}|${a['provider_agent_id']}';
+      if (seen.contains(key)) continue;
+      seen.add(key);
+      out.add(a);
+    }
+    return out;
+  }
+
+  List<CrmTelecallerTelephony> get _uniqueTelecallers {
+    final seen = <int>{};
+    final out = <CrmTelecallerTelephony>[];
+    for (final t in _telecallers) {
+      if (seen.contains(t.employeeId)) continue;
+      seen.add(t.employeeId);
+      out.add(t);
+    }
+    return out;
+  }
+
   @override
   Widget build(BuildContext context) {
     final titleColor = widget.isDark ? Colors.white : const Color(0xFF1E293B);
@@ -499,11 +525,19 @@ class _CrmNineanceTelephonyTabState extends State<CrmNineanceTelephonyTab> {
                     ),
                     if (_agents.isEmpty)
                       Text('No agents yet. Activate & sync first.', style: TextStyle(color: widget.textMuted))
-                    else
-                      ..._agents.map((a) {
+                    else ...[
+                      Text(
+                        'Real/mobile number is on each agent (shown below). Virtual DID is separate (Numbers section).',
+                        style: TextStyle(fontSize: 11, color: widget.textMuted),
+                      ),
+                      const SizedBox(height: 8),
+                      ..._uniqueAgents.map((a) {
                         final id = a['id']?.toString() ?? '';
                         final name = a['name']?.toString() ?? 'Agent';
                         final phone = a['phone']?.toString() ?? '';
+                        final did = a['default_did_number']?.toString() ||
+                            a['effective_did']?.toString() ||
+                            '';
                         final mapped = _employeeMappedTo(id);
                         return Card(
                           margin: const EdgeInsets.only(bottom: 8),
@@ -514,8 +548,20 @@ class _CrmNineanceTelephonyTabState extends State<CrmNineanceTelephonyTab> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('$name${phone.isNotEmpty ? ' · $phone' : ''}',
+                                Text(name,
                                     style: TextStyle(fontWeight: FontWeight.w700, color: titleColor)),
+                                const SizedBox(height: 4),
+                                Text(
+                                  phone.isNotEmpty
+                                      ? 'Real phone (rings first): $phone'
+                                      : 'Real phone: not set on 9ance agent — edit in 9ance → Users',
+                                  style: TextStyle(fontSize: 12, color: widget.textMuted),
+                                ),
+                                if (did.isNotEmpty)
+                                  Text(
+                                    'Outbound DID: $did',
+                                    style: TextStyle(fontSize: 12, color: widget.textMuted),
+                                  ),
                                 const SizedBox(height: 8),
                                 DropdownButtonFormField<int?>(
                                   value: mapped,
@@ -526,7 +572,7 @@ class _CrmNineanceTelephonyTabState extends State<CrmNineanceTelephonyTab> {
                                   ),
                                   items: [
                                     const DropdownMenuItem<int?>(value: null, child: Text('— Not mapped —')),
-                                    ..._telecallers.map(
+                                    ..._uniqueTelecallers.map(
                                       (t) => DropdownMenuItem<int?>(
                                         value: t.employeeId,
                                         child: Text(t.name),
@@ -542,6 +588,7 @@ class _CrmNineanceTelephonyTabState extends State<CrmNineanceTelephonyTab> {
                           ),
                         );
                       }),
+                    ],
                   ],
                 ),
               ),

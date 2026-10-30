@@ -126,10 +126,7 @@ export class NineanceClient {
       }
 
       if (!res.ok) {
-        const msg =
-          (typeof json?.detail === 'string' && json.detail) ||
-          (typeof json?.message === 'string' && json.message) ||
-          `9ance API ${res.status}`;
+        const msg = this.extractErrorMessage(json, res.status);
         throw new NineanceApiError(res.status, msg, json);
       }
 
@@ -139,35 +136,95 @@ export class NineanceClient {
     }
   }
 
+  private extractErrorMessage(json: any, status: number): string {
+    if (!json || typeof json !== 'object') return `9ance API ${status}`;
+
+    const details = json.details || json.detail;
+    if (typeof details === 'string' && details.trim()) return details.trim();
+    if (Array.isArray(details) && details.length) {
+      return details.map((d) => (typeof d === 'string' ? d : JSON.stringify(d))).join('; ');
+    }
+    if (details && typeof details === 'object') {
+      const parts: string[] = [];
+      for (const [k, v] of Object.entries(details)) {
+        if (Array.isArray(v)) parts.push(`${k}: ${v.join(', ')}`);
+        else if (v != null) parts.push(`${k}: ${v}`);
+      }
+      if (parts.length) return parts.join('; ');
+    }
+
+    if (typeof json.message === 'string' && json.message.trim()) return json.message.trim();
+    if (typeof json.error === 'string' && json.error.trim()) return json.error.trim();
+    if (typeof json.provider_error === 'string' && json.provider_error.trim()) {
+      return json.provider_error.trim();
+    }
+    return `9ance API ${status}`;
+  }
+
   // ── Auth ──────────────────────────────────────────────────────────────────
 
   async login(email: string, password: string): Promise<NineanceTokens & { user?: any; tenant?: any }> {
-    // force_logout avoids "max 4 concurrent sessions" blocking CRM service-account login
-    let data: any;
-    try {
-      data = await this.request<any>('/api/auth/login/', {
-        method: 'POST',
-        noAuth: true,
-        body: { email, password, force_logout: true },
-      });
-    } catch (err: any) {
-      // Fallback: token-only endpoint (same credentials, smaller payload)
+    const cleanEmail = String(email || '').trim();
+    const cleanPassword = String(password || '').trim();
+    if (!cleanEmail || !cleanPassword) {
+      throw new NineanceApiError(400, 'Email and password are required for 9ance login');
+    }
+
+    // 1) Plain login (docs)
+    // 2) Retry with force_logout if session-limit error
+    // 3) Fallback token endpoint
+    let lastErr: any;
+    const attempts: Array<Record<string, any>> = [
+      { email: cleanEmail, password: cleanPassword },
+      { email: cleanEmail, password: cleanPassword, force_logout: true },
+    ];
+
+    for (const body of attempts) {
       try {
-        data = await this.request<any>('/api/auth/token/', {
+        const data = await this.request<any>('/api/auth/login/', {
           method: 'POST',
           noAuth: true,
-          body: { email, password },
+          body,
         });
-      } catch {
-        throw err;
+        const tokens = {
+          access: String(data.access || ''),
+          refresh: String(data.refresh || ''),
+        };
+        if (!tokens.access) {
+          throw new NineanceApiError(401, '9ance login returned no access token', data);
+        }
+        this.setTokens(tokens);
+        return { ...tokens, user: data.user, tenant: data.tenant };
+      } catch (err: any) {
+        lastErr = err;
+        const msg = String(err?.message || err?.detail || '').toLowerCase();
+        // Only continue to force_logout attempt on session-limit style errors
+        if (body.force_logout) break;
+        if (!msg.includes('session') && !msg.includes('concurrent') && !msg.includes('logged in')) {
+          // wrong password / validation — try token endpoint once, then stop
+          break;
+        }
       }
     }
-    const tokens = { access: String(data.access || ''), refresh: String(data.refresh || '') };
-    if (!tokens.access) {
-      throw new NineanceApiError(401, '9ance login returned no access token', data);
+
+    try {
+      const data = await this.request<any>('/api/auth/token/', {
+        method: 'POST',
+        noAuth: true,
+        body: { email: cleanEmail, password: cleanPassword },
+      });
+      const tokens = {
+        access: String(data.access || ''),
+        refresh: String(data.refresh || ''),
+      };
+      if (!tokens.access) {
+        throw lastErr || new NineanceApiError(401, '9ance login returned no access token', data);
+      }
+      this.setTokens(tokens);
+      return { ...tokens, user: data.user, tenant: data.tenant };
+    } catch (err: any) {
+      throw lastErr || err;
     }
-    this.setTokens(tokens);
-    return { ...tokens, user: data.user, tenant: data.tenant };
   }
 
   async refreshAccessToken(refresh?: string): Promise<NineanceTokens> {

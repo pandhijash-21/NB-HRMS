@@ -56,13 +56,25 @@ function normalizePhone10(v: string): string {
 }
 
 function asList(data: any): any[] {
-  if (Array.isArray(data)) return data;
-  if (Array.isArray(data?.results)) return data.results;
-  if (Array.isArray(data?.data)) return data.data;
-  if (Array.isArray(data?.agents)) return data.agents;
-  if (Array.isArray(data?.dids)) return data.dids;
-  if (Array.isArray(data?.calls)) return data.calls;
-  return [];
+  let list: any[] = [];
+  if (Array.isArray(data)) list = data;
+  else if (Array.isArray(data?.results)) list = data.results;
+  else if (Array.isArray(data?.data)) list = data.data;
+  else if (Array.isArray(data?.agents)) list = data.agents;
+  else if (Array.isArray(data?.dids)) list = data.dids;
+  else if (Array.isArray(data?.calls)) list = data.calls;
+
+  // Dedupe by id (9ance sync can return / accumulate duplicates)
+  const seen = new Set<string>();
+  const out: any[] = [];
+  for (const item of list) {
+    const id = item?.id != null ? String(item.id) : '';
+    const key = id || `${item?.name || ''}|${item?.phone || item?.number || ''}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(item);
+  }
+  return out;
 }
 
 class TelephonyService {
@@ -136,7 +148,7 @@ class TelephonyService {
       password,
       api_key,
       api_secret,
-      provider_key: provider_key || 'indiavoice',
+      provider_key: (provider_key || 'indiavoice').toLowerCase(),
       display_name: display_name || (scope === 'NB_FINSERVE' ? 'NB Finserve Dialer' : 'NB Developer Dialer'),
       access_token,
       refresh_token,
@@ -196,7 +208,10 @@ class TelephonyService {
     await write('nineance_password', dto.nineance_password ?? dto.password, true);
     await write('nineance_api_key', dto.nineance_api_key ?? dto.api_key, true);
     await write('nineance_api_secret', dto.nineance_api_secret ?? dto.api_secret, true);
-    await write('nineance_provider_key', dto.nineance_provider_key ?? dto.provider_key);
+    const providerRaw = dto.nineance_provider_key ?? dto.provider_key;
+    if (providerRaw !== undefined) {
+      await write('nineance_provider_key', String(providerRaw).trim().toLowerCase());
+    }
     await write('nineance_display_name', dto.nineance_display_name ?? dto.display_name);
     if (dto.nineance_default_did_id !== undefined) {
       await write('nineance_default_did_id', dto.nineance_default_did_id);

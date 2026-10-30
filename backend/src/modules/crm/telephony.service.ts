@@ -55,6 +55,30 @@ function normalizePhone10(v: string): string {
   return d;
 }
 
+function agentDedupeKey(item: any): string {
+  const providerId = item?.provider_agent_id != null ? String(item.provider_agent_id).trim() : '';
+  if (providerId) return `p:${providerId}`;
+  const phone = normalizePhone10(String(item?.phone || item?.sip_username || ''));
+  if (phone.length >= 10) return `ph:${phone}`;
+  const id = item?.id != null ? String(item.id) : '';
+  if (id) return `id:${id}`;
+  const name = String(item?.name || '').trim().toLowerCase();
+  return `n:${name}|${phone}`;
+}
+
+function preferAgent(a: any, b: any): any {
+  const score = (x: any) => {
+    let s = 0;
+    if (x?.user || x?.user_id || x?.user_name) s += 8;
+    if (x?.is_active === true) s += 4;
+    if (x?.sip_password_set === true) s += 2;
+    if (x?.phone) s += 1;
+    const t = Date.parse(String(x?.updated_at || x?.last_synced_at || '')) || 0;
+    return s * 1e15 + t;
+  };
+  return score(a) >= score(b) ? a : b;
+}
+
 function asList(data: any): any[] {
   let list: any[] = [];
   if (Array.isArray(data)) list = data;
@@ -64,17 +88,16 @@ function asList(data: any): any[] {
   else if (Array.isArray(data?.dids)) list = data.dids;
   else if (Array.isArray(data?.calls)) list = data.calls;
 
-  // Dedupe by id (9ance sync can return / accumulate duplicates)
-  const seen = new Set<string>();
-  const out: any[] = [];
+  // 9ance often returns the same person twice (sync + create) with different UUIDs.
+  // Collapse by provider_agent_id → phone → id.
+  const byKey = new Map<string, any>();
   for (const item of list) {
-    const id = item?.id != null ? String(item.id) : '';
-    const key = id || `${item?.name || ''}|${item?.phone || item?.number || ''}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(item);
+    if (!item || typeof item !== 'object') continue;
+    const key = agentDedupeKey(item);
+    const prev = byKey.get(key);
+    byKey.set(key, prev ? preferAgent(prev, item) : item);
   }
-  return out;
+  return Array.from(byKey.values());
 }
 
 class TelephonyService {
@@ -440,16 +463,24 @@ class TelephonyService {
     const configs = await this._readTelecallerConfigMap(scope);
     const settings = await this.getNineanceSettings(scope);
 
-    const telecallers = await prisma.employee.findMany({
+    // Include telecallers + anyone already mapped (sales/admin/etc can own an agent).
+    const mappedIds = Object.entries(configs)
+      .filter(([, cfg]) => Boolean(cfg?.agent_id || cfg?.agent_number || cfg?.agent_email))
+      .map(([id]) => Number(id))
+      .filter((id) => Number.isFinite(id) && id > 0);
+
+    const employees = await prisma.employee.findMany({
       where: {
         status: 'ACTIVE',
         OR: [
-          { generalInfo: { designation: { equals: 'Telecaller', mode: 'insensitive' } } },
+          { generalInfo: { designation: { contains: 'telecall', mode: 'insensitive' } } },
           {
             generalInfo: {
-              designationRef: { name: { equals: 'Telecaller', mode: 'insensitive' } },
+              designationRef: { name: { contains: 'telecall', mode: 'insensitive' } },
             },
           },
+          { user: { role: { name: { contains: 'telecall', mode: 'insensitive' } } } },
+          ...(mappedIds.length ? [{ id: { in: mappedIds } }] : []),
         ],
       },
       select: {
@@ -467,14 +498,14 @@ class TelephonyService {
         did_id: settings.default_did_id,
         connected: settings.connected,
       },
-      telecallers: telecallers.map((e) => {
+      telecallers: employees.map((e) => {
         const cfg = configs[String(e.id)] ?? {};
         return {
           employeeId: e.id,
           userId: e.userId,
           name: e.generalInfo?.fullName ?? `Employee #${e.id}`,
           employeeCode: e.generalInfo?.employeeCode ?? null,
-          designation: e.generalInfo?.designation ?? 'Telecaller',
+          designation: e.generalInfo?.designation ?? null,
           configured: Boolean(cfg.agent_id || cfg.agent_number || cfg.agent_email),
           config: {
             agent_id: cfg.agent_id || '',
@@ -496,18 +527,13 @@ class TelephonyService {
     if (!Number.isFinite(employeeId) || employeeId <= 0) throw new Error('Invalid employee id');
     const emp = await prisma.employee.findUnique({
       where: { id: employeeId },
-      include: {
-        generalInfo: {
-          select: { designation: true, designationRef: { select: { name: true } } },
-        },
+      select: {
+        id: true,
+        generalInfo: { select: { fullName: true, employeeCode: true, designation: true } },
+        userId: true,
       },
     });
     if (!emp) throw new Error('Employee not found');
-    const desig =
-      emp.generalInfo?.designationRef?.name ?? emp.generalInfo?.designation ?? '';
-    if (!/telecaller/i.test(desig)) {
-      throw new Error('Employee designation must be Telecaller');
-    }
 
     const map = await this._readTelecallerConfigMap(scope);
     const prev = map[String(employeeId)] || {};
@@ -523,8 +549,21 @@ class TelephonyService {
       did_id: body.did_id != null ? String(body.did_id).trim() : prev.did_id,
     };
     await this._writeTelecallerConfigMap(map, updatedBy, scope);
-    const list = await this.listTelecallerTelephony(scope);
-    return list.telecallers.find((t) => t.employeeId === employeeId) ?? null;
+    const cfg = map[String(employeeId)];
+    return {
+      employeeId: emp.id,
+      userId: emp.userId,
+      name: emp.generalInfo?.fullName ?? `Employee #${emp.id}`,
+      employeeCode: emp.generalInfo?.employeeCode ?? null,
+      designation: emp.generalInfo?.designation ?? null,
+      configured: Boolean(cfg.agent_id || cfg.agent_number || cfg.agent_email),
+      config: {
+        agent_id: cfg.agent_id || '',
+        agent_number: cfg.agent_number || '',
+        agent_email: cfg.agent_email || '',
+        did_id: cfg.did_id || '',
+      },
+    };
   }
 
   // ── Agents / DIDs ─────────────────────────────────────────────────────────

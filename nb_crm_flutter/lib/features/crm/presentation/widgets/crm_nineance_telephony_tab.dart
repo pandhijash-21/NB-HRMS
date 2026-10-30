@@ -48,6 +48,7 @@ class _CrmNineanceTelephonyTabState extends State<CrmNineanceTelephonyTab> {
   List<Map<String, dynamic>> _agents = [];
   List<Map<String, dynamic>> _dids = [];
   List<CrmTelecallerTelephony> _telecallers = [];
+  List<CrmSalesUser> _users = [];
   List<Map<String, dynamic>> _campaigns = [];
   String? _defaultDidId;
 
@@ -90,9 +91,15 @@ class _CrmNineanceTelephonyTabState extends State<CrmNineanceTelephonyTab> {
   Future<void> _bootstrap() async {
     try {
       final repo = context.read<CrmRepository>();
-      final tc = await repo.listTelecallerTelephony();
+      final results = await Future.wait([
+        repo.listTelecallerTelephony(),
+        repo.getHrmsEmployees(),
+      ]);
       if (!mounted) return;
-      setState(() => _telecallers = tc.telecallers);
+      setState(() {
+        _telecallers = (results[0] as CrmTelecallerTelephonyList).telecallers;
+        _users = results[1] as List<CrmSalesUser>;
+      });
       if (_connected) {
         await _refreshAgentsAndDids(silent: true);
         await _refreshCampaigns(silent: true);
@@ -367,6 +374,14 @@ class _CrmNineanceTelephonyTabState extends State<CrmNineanceTelephonyTab> {
     if (employeeId == null) return;
     try {
       final repo = context.read<CrmRepository>();
+      final previous = _employeeMappedTo(agentId);
+      if (previous != null && previous != employeeId) {
+        await repo.saveTelecallerTelephony(previous, {
+          'agent_id': '',
+          'agent_number': '',
+          'agent_email': '',
+        });
+      }
       await repo.assignNineanceAgent(agentId, employeeId: employeeId);
       Map<String, dynamic>? agent;
       for (final a in _agents) {
@@ -383,7 +398,7 @@ class _CrmNineanceTelephonyTabState extends State<CrmNineanceTelephonyTab> {
       final tc = await repo.listTelecallerTelephony();
       if (!mounted) return;
       setState(() => _telecallers = tc.telecallers);
-      _snack('Agent mapped to telecaller');
+      _snack('Agent mapped to ${_mappedUserLabel(employeeId)}');
     } catch (e) {
       _snack('$e', error: true);
     }
@@ -439,30 +454,182 @@ class _CrmNineanceTelephonyTabState extends State<CrmNineanceTelephonyTab> {
     return null;
   }
 
-  List<Map<String, dynamic>> get _uniqueAgents {
-    final seen = <String>{};
-    final out = <Map<String, dynamic>>[];
-    for (final a in _agents) {
-      final id = a['id']?.toString() ?? '';
-      final key = id.isNotEmpty
-          ? id
-          : '${a['name']}|${a['phone']}|${a['provider_agent_id']}';
-      if (seen.contains(key)) continue;
-      seen.add(key);
-      out.add(a);
+  String _mappedUserLabel(int? employeeId) {
+    if (employeeId == null) return '— Not mapped —';
+    for (final u in _users) {
+      if (u.employeeId == employeeId) {
+        final role = (u.role ?? u.designation ?? '').trim();
+        return role.isEmpty ? u.fullName : '${u.fullName} · $role';
+      }
     }
-    return out;
+    for (final t in _telecallers) {
+      if (t.employeeId == employeeId) {
+        final desig = (t.designation ?? '').trim();
+        return desig.isEmpty ? t.name : '${t.name} · $desig';
+      }
+    }
+    return 'Employee #$employeeId';
   }
 
-  List<CrmTelecallerTelephony> get _uniqueTelecallers {
-    final seen = <int>{};
-    final out = <CrmTelecallerTelephony>[];
-    for (final t in _telecallers) {
-      if (seen.contains(t.employeeId)) continue;
-      seen.add(t.employeeId);
-      out.add(t);
+  Future<void> _pickUserForAgent(String agentId) async {
+    if (_users.isEmpty) {
+      try {
+        final users = await context.read<CrmRepository>().getHrmsEmployees();
+        if (!mounted) return;
+        setState(() => _users = users);
+      } catch (e) {
+        _snack('$e', error: true);
+        return;
+      }
     }
-    return out;
+
+    String query = '';
+    final selected = await showDialog<int?>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            final q = query.trim().toLowerCase();
+            final filtered = _users.where((u) {
+              if (q.isEmpty) return true;
+              return u.fullName.toLowerCase().contains(q) ||
+                  (u.designation ?? '').toLowerCase().contains(q) ||
+                  (u.department ?? '').toLowerCase().contains(q) ||
+                  (u.role ?? '').toLowerCase().contains(q) ||
+                  (u.organization ?? '').toLowerCase().contains(q) ||
+                  (u.subOrganization ?? '').toLowerCase().contains(q) ||
+                  u.employeeId.toString().contains(q);
+            }).toList()
+              ..sort((a, b) => a.fullName.toLowerCase().compareTo(b.fullName.toLowerCase()));
+
+            return AlertDialog(
+              title: const Text('Map agent to user'),
+              content: SizedBox(
+                width: 480,
+                height: 520,
+                child: Column(
+                  children: [
+                    TextField(
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        prefixIcon: const Icon(Icons.search),
+                        hintText: 'Search name, role, dept, org…',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        isDense: true,
+                      ),
+                      onChanged: (v) => setLocal(() => query = v),
+                    ),
+                    const SizedBox(height: 10),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        '${filtered.length} users',
+                        style: TextStyle(fontSize: 12, color: widget.textMuted),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Expanded(
+                      child: filtered.isEmpty
+                          ? Center(
+                              child: Text('No users match', style: TextStyle(color: widget.textMuted)),
+                            )
+                          : ListView.builder(
+                              itemCount: filtered.length,
+                              itemBuilder: (_, i) {
+                                final u = filtered[i];
+                                final subtitle = [
+                                  if ((u.role ?? '').isNotEmpty) u.role,
+                                  if ((u.designation ?? '').isNotEmpty) u.designation,
+                                  if ((u.department ?? '').isNotEmpty) u.department,
+                                ].whereType<String>().join(' · ');
+                                return ListTile(
+                                  dense: true,
+                                  title: Text(u.fullName),
+                                  subtitle: subtitle.isEmpty ? null : Text(subtitle),
+                                  onTap: () => Navigator.pop(ctx, u.employeeId),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, -1),
+                  child: const Text('Clear mapping'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (selected == null) return;
+    if (selected == -1) {
+      await _unmapAgent(agentId);
+      return;
+    }
+    await _mapAgent(agentId, selected);
+  }
+
+  Future<void> _unmapAgent(String agentId) async {
+    final empId = _employeeMappedTo(agentId);
+    if (empId == null) return;
+    try {
+      final repo = context.read<CrmRepository>();
+      await repo.saveTelecallerTelephony(empId, {
+        'agent_id': '',
+        'agent_number': '',
+        'agent_email': '',
+      });
+      final tc = await repo.listTelecallerTelephony();
+      if (!mounted) return;
+      setState(() => _telecallers = tc.telecallers);
+      _snack('Mapping cleared');
+    } catch (e) {
+      _snack('$e', error: true);
+    }
+  }
+
+  String _agentDedupeKey(Map<String, dynamic> a) {
+    final providerId = a['provider_agent_id']?.toString().trim() ?? '';
+    if (providerId.isNotEmpty) return 'p:$providerId';
+    var phone = (a['phone'] ?? a['sip_username'] ?? '').toString().replaceAll(RegExp(r'\D'), '');
+    if (phone.length > 10 && phone.startsWith('91')) phone = phone.substring(2);
+    if (phone.length >= 10) return 'ph:$phone';
+    final id = a['id']?.toString() ?? '';
+    if (id.isNotEmpty) return 'id:$id';
+    final name = (a['name'] ?? '').toString().trim().toLowerCase();
+    return 'n:$name|$phone';
+  }
+
+  int _agentScore(Map<String, dynamic> a) {
+    var s = 0;
+    if (a['user'] != null || a['user_id'] != null || (a['user_name']?.toString().isNotEmpty ?? false)) {
+      s += 8;
+    }
+    if (a['is_active'] == true) s += 4;
+    if (a['sip_password_set'] == true) s += 2;
+    if ((a['phone']?.toString() ?? '').isNotEmpty) s += 1;
+    return s;
+  }
+
+  List<Map<String, dynamic>> get _uniqueAgents {
+    final best = <String, Map<String, dynamic>>{};
+    for (final a in _agents) {
+      final key = _agentDedupeKey(a);
+      final prev = best[key];
+      if (prev == null || _agentScore(a) >= _agentScore(prev)) {
+        best[key] = a;
+      }
+    }
+    return best.values.toList();
   }
 
   @override
@@ -631,26 +798,27 @@ class _CrmNineanceTelephonyTabState extends State<CrmNineanceTelephonyTab> {
                 icon: Icons.headset_mic_rounded,
                 iconColor: const Color(0xFF7C3AED),
                 title: '3. Agents',
-                subtitle: 'Map each 9ance agent to a Telecaller employee for click-to-call.',
+                subtitle: 'Map each 9ance agent to any CRM user (searchable) for click-to-call.',
                 child: Column(
                   children: [
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: Wrap(
-                        spacing: 8,
-                        children: [
-                          TextButton.icon(
-                            onPressed: _busy ? null : _createAgentDialog,
-                            icon: const Icon(Icons.person_add_alt_1, size: 16),
-                            label: const Text('Create agent'),
+                    Row(
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: _busy ? null : _createAgentDialog,
+                          icon: const Icon(Icons.person_add_alt_1, size: 18),
+                          label: const Text('Create agent'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF7C3AED),
+                            foregroundColor: Colors.white,
                           ),
-                          TextButton.icon(
-                            onPressed: _busy ? null : () => _refreshAgentsAndDids(),
-                            icon: const Icon(Icons.sync, size: 16),
-                            label: const Text('Sync agents'),
-                          ),
-                        ],
-                      ),
+                        ),
+                        const SizedBox(width: 8),
+                        OutlinedButton.icon(
+                          onPressed: _busy ? null : () => _refreshAgentsAndDids(),
+                          icon: const Icon(Icons.sync, size: 16),
+                          label: const Text('Sync agents'),
+                        ),
+                      ],
                     ),
                     if (_agents.isEmpty)
                       Text(
@@ -698,25 +866,20 @@ class _CrmNineanceTelephonyTabState extends State<CrmNineanceTelephonyTab> {
                                 Row(
                                   children: [
                                     Expanded(
-                                      child: DropdownButtonFormField<int?>(
-                                        value: mapped,
-                                        decoration: InputDecoration(
-                                          labelText: 'Map to telecaller',
-                                          isDense: true,
-                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                        ),
-                                        items: [
-                                          const DropdownMenuItem<int?>(value: null, child: Text('— Not mapped —')),
-                                          ..._uniqueTelecallers.map(
-                                            (t) => DropdownMenuItem<int?>(
-                                              value: t.employeeId,
-                                              child: Text(t.name),
-                                            ),
+                                      child: OutlinedButton.icon(
+                                        onPressed: id.isEmpty ? null : () => _pickUserForAgent(id),
+                                        icon: const Icon(Icons.person_search_rounded, size: 18),
+                                        label: Align(
+                                          alignment: Alignment.centerLeft,
+                                          child: Text(
+                                            _mappedUserLabel(mapped),
+                                            overflow: TextOverflow.ellipsis,
                                           ),
-                                        ],
-                                        onChanged: (empId) {
-                                          if (empId != null) _mapAgent(id, empId);
-                                        },
+                                        ),
+                                        style: OutlinedButton.styleFrom(
+                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                                          alignment: Alignment.centerLeft,
+                                        ),
                                       ),
                                     ),
                                     IconButton(

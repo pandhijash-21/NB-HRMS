@@ -389,13 +389,16 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     final isFinserve = repo.scope == 'NB_FINSERVE';
 
     final excelAssignedIds = state.settings?.excelAssignedTelecallerIds ?? [];
-    final webhookAssignedIds = state.settings?.webhookAssignedTelecallerIds ?? [];
+    final metaAssignedIds = state.settings?.webhookAssignedTelecallerIds ?? [];
+    final googleAssignedIds = state.settings?.googleAssignedTelecallerIds ?? [];
 
     final isExcelAssigned = userEmployeeId != null && excelAssignedIds.contains(userEmployeeId);
-    final isWebhookAssigned = userEmployeeId != null && webhookAssignedIds.contains(userEmployeeId);
+    final isMetaAssigned = userEmployeeId != null && metaAssignedIds.contains(userEmployeeId);
+    final isGoogleAssigned = userEmployeeId != null && googleAssignedIds.contains(userEmployeeId);
+    final isAdsDesk = isMetaAssigned || isGoogleAssigned;
 
-    final isOnlyExcel = !isAdmin && isExcelAssigned && !isWebhookAssigned;
-    final isOnlyWebhook = !isAdmin && isWebhookAssigned && !isExcelAssigned;
+    final isOnlyExcel = !isAdmin && isExcelAssigned && !isAdsDesk;
+    final isOnlyWebhook = !isAdmin && isAdsDesk && !isExcelAssigned;
     final effectiveFlow = isOnlyExcel ? 'EXCEL' : (isOnlyWebhook ? 'WEBHOOK' : state.leadFlowFilter);
 
     final filteredLeads = leads.where((l) {
@@ -420,7 +423,13 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
       } else if (effectiveFlow == 'MANUAL') {
         return l.isManual;
       } else if (effectiveFlow == 'WEBHOOK') {
-        return (l.leadSource == 'WEBHOOK' || l.leadSource == 'META') && !l.isManual;
+        // Desk-scoped: Meta pool sees META+WEBHOOK; Google pool sees GOOGLE; both see both.
+        if (!isAdmin && isAdsDesk) {
+          final allowMeta = isMetaAssigned && (l.leadSource == 'META' || l.leadSource == 'WEBHOOK');
+          final allowGoogle = isGoogleAssigned && l.leadSource == 'GOOGLE';
+          return !l.isManual && (allowMeta || allowGoogle);
+        }
+        return (l.leadSource == 'WEBHOOK' || l.leadSource == 'META' || l.leadSource == 'GOOGLE') && !l.isManual;
       }
       return true;
     }).toList();
@@ -1048,26 +1057,42 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
               ),
             )
           else if (isOnlyWebhook)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: const Color(0xFF2563EB).withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFF2563EB).withValues(alpha: 0.3)),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.campaign_rounded, size: 18, color: Color(0xFF2563EB)),
-                  SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Meta & Webhook Campaigns Desk — You are assigned to handle online campaign leads.',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
-                    ),
+            Builder(
+              builder: (_) {
+                final googleOnly = isGoogleAssigned && !isMetaAssigned;
+                final metaOnly = isMetaAssigned && !isGoogleAssigned;
+                final accent = googleOnly ? const Color(0xFFEA4335) : const Color(0xFF2563EB);
+                final label = googleOnly
+                    ? 'Google Ads Desk — You handle Google campaign leads.'
+                    : metaOnly
+                        ? 'Meta Ads Desk — You handle Meta / website webhook leads.'
+                        : 'Ads Desk — You handle Meta and Google campaign leads.';
+                return Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: accent.withValues(alpha: 0.3)),
                   ),
-                ],
-              ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        googleOnly ? Icons.search_rounded : Icons.campaign_rounded,
+                        size: 18,
+                        color: accent,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          label,
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: accent),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
             )
           else
             Container(
@@ -1168,7 +1193,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                       size: 14,
                       color: state.leadFlowFilter == 'WEBHOOK' ? primaryColor : const Color(0xFF0891B2),
                     ),
-                    label: Text('Webhook / Meta (${leads.where((l) => (l.leadSource == 'WEBHOOK' || l.leadSource == 'META') && !l.isManual).length})'),
+                    label: Text('Ads / Webhook (${leads.where((l) => (l.leadSource == 'WEBHOOK' || l.leadSource == 'META' || l.leadSource == 'GOOGLE') && !l.isManual).length})'),
                     selected: state.leadFlowFilter == 'WEBHOOK',
                     selectedColor: primaryColor.withValues(alpha: 0.18),
                     side: BorderSide(
@@ -1240,7 +1265,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                     Text('No Pre-Sales Leads Found in this Flow', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: isDark ? Colors.white : const Color(0xFF1E293B))),
                     const SizedBox(height: 6),
                     Text(isOnlyWebhook
-                        ? 'New leads from Meta / Webhooks will appear here automatically.'
+                        ? 'New leads from Meta / Google Ads / Webhooks will appear here automatically.'
                         : 'Click "Import Excel" to upload leads or "Add Lead" to enter manually.',
                         style: TextStyle(fontSize: 13, color: textMuted)),
                   ],
@@ -1364,6 +1389,15 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                       ),
                                       child: const Text('⚡ Meta', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF2563EB))),
                                     )
+                                  : (!lead.isManual && lead.leadSource == 'GOOGLE')
+                                      ? Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFEA4335).withValues(alpha: 0.12),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: const Text('🔍 Google', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFFEA4335))),
+                                        )
                                   : (!lead.isManual && lead.leadSource == 'WEBHOOK')
                                       ? Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -1473,13 +1507,15 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                   }
                                   final displaySource = (explicitSource != null &&
                                           explicitSource.trim().isNotEmpty &&
-                                          !['MANUAL', 'EXCEL', 'WEBHOOK', 'META'].contains(explicitSource.trim().toUpperCase()))
+                                          !['MANUAL', 'EXCEL', 'WEBHOOK', 'META', 'GOOGLE'].contains(explicitSource.trim().toUpperCase()))
                                       ? explicitSource.trim()
                                       : (lead.isManual
                                           ? 'Walk IN'
                                           : (lead.leadSource == 'META'
                                               ? 'Meta Ads'
-                                              : (lead.leadSource == 'WEBHOOK' ? 'Webhook' : 'Excel Import')));
+                                              : (lead.leadSource == 'GOOGLE'
+                                                  ? 'Google Ads'
+                                                  : (lead.leadSource == 'WEBHOOK' ? 'Webhook' : 'Excel Import'))));
 
                                   return Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),

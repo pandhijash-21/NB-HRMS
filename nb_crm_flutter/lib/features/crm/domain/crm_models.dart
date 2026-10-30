@@ -61,6 +61,8 @@ class CrmCampaign {
   final String name;
   final String code;
   final String? adId;
+  /// META | GOOGLE | WEBHOOK
+  final String platform;
   final String? webhookToken;
   final String? description;
   final DateTime? startDate;
@@ -78,6 +80,7 @@ class CrmCampaign {
     required this.name,
     required this.code,
     this.adId,
+    this.platform = 'WEBHOOK',
     this.webhookToken,
     this.description,
     this.startDate,
@@ -94,6 +97,17 @@ class CrmCampaign {
     return 'https://crm.nbdeveloper.co.in/api/crm/campaigns/$webhookToken/webhook';
   }
 
+  String get platformLabel {
+    switch (platform.toUpperCase()) {
+      case 'META':
+        return 'Meta Ads';
+      case 'GOOGLE':
+        return 'Google Ads';
+      default:
+        return 'Website / Other';
+    }
+  }
+
   factory CrmCampaign.fromJson(Map<String, dynamic> json) {
     return CrmCampaign(
       id: json['id'] as String? ?? '',
@@ -102,6 +116,7 @@ class CrmCampaign {
       name: json['name'] as String? ?? '',
       code: json['code'] as String? ?? '',
       adId: json['adId'] as String?,
+      platform: (json['platform'] as String?)?.toUpperCase() ?? 'WEBHOOK',
       webhookToken: json['webhookToken'] as String?,
       description: json['description'] as String?,
       startDate: json['startDate'] != null
@@ -129,6 +144,7 @@ class CrmCampaign {
         'name': name,
         'code': code,
         'adId': adId,
+        'platform': platform,
         'webhookToken': webhookToken,
         'description': description,
         'startDate': startDate?.toIso8601String(),
@@ -791,7 +807,10 @@ class CrmSettings {
 
   // Dual-Flow Lead Routing & Assignment
   final List<int> excelAssignedTelecallerIds;
+  /// Meta Ads + generic website webhook desk
   final List<int> webhookAssignedTelecallerIds;
+  /// Google Ads campaign desk (separate from Meta)
+  final List<int> googleAssignedTelecallerIds;
 
   // Waiting Queue, Inactivity & Workload Management
   final int maxTelecallerActiveWorkload;
@@ -916,6 +935,7 @@ class CrmSettings {
     this.kpiShowConversionRate = true,
     this.excelAssignedTelecallerIds = const [],
     this.webhookAssignedTelecallerIds = const [],
+    this.googleAssignedTelecallerIds = const [],
     this.maxTelecallerActiveWorkload = 20,
     this.telecallerMaxWorkloadMap = const {},
     this.untouchedLeadTimeoutMinutes = 30,
@@ -1071,6 +1091,7 @@ class CrmSettings {
       kpiShowConversionRate: json['kpi_show_conversion_rate']?.toString() != 'false',
       excelAssignedTelecallerIds: _parseIntList(json['excel_assigned_telecaller_ids']),
       webhookAssignedTelecallerIds: _parseIntList(json['webhook_assigned_telecaller_ids']),
+      googleAssignedTelecallerIds: _parseIntList(json['google_assigned_telecaller_ids']),
       maxTelecallerActiveWorkload: int.tryParse(json['max_telecaller_active_workload']?.toString() ?? '20') ?? 20,
       telecallerMaxWorkloadMap: _parseWorkloadMap(json['telecaller_max_workload_map']),
       untouchedLeadTimeoutMinutes: int.tryParse(json['untouched_lead_timeout_minutes']?.toString() ?? '30') ?? 30,

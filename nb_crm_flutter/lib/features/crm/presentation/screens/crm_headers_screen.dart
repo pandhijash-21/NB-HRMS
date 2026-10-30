@@ -611,7 +611,31 @@ class _CrmHeadersView extends StatelessWidget {
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
-                                    if (activeCamp.adId != null) ...[
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: activeCamp.platform == 'GOOGLE'
+                                            ? const Color(0xFFEA4335).withValues(alpha: 0.12)
+                                            : activeCamp.platform == 'META'
+                                                ? const Color(0xFF2563EB).withValues(alpha: 0.12)
+                                                : Colors.grey.withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        activeCamp.platformLabel,
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          color: activeCamp.platform == 'GOOGLE'
+                                              ? const Color(0xFFEA4335)
+                                              : activeCamp.platform == 'META'
+                                                  ? const Color(0xFF2563EB)
+                                                  : Colors.grey.shade700,
+                                        ),
+                                      ),
+                                    ),
+                                    if (activeCamp.adId != null && activeCamp.adId!.isNotEmpty) ...[
                                       const SizedBox(width: 8),
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -620,7 +644,7 @@ class _CrmHeadersView extends StatelessWidget {
                                           borderRadius: BorderRadius.circular(6),
                                         ),
                                         child: Text(
-                                          'Ad ID: ${activeCamp.adId}',
+                                          'Tag: ${activeCamp.adId}',
                                           style: const TextStyle(fontSize: 11, color: Colors.purple, fontWeight: FontWeight.w600),
                                         ),
                                       ),
@@ -663,7 +687,7 @@ class _CrmHeadersView extends StatelessWidget {
                                       const Icon(Icons.people_alt_rounded, size: 13, color: Colors.blue),
                                       const SizedBox(width: 4),
                                       Text(
-                                        '${activeCamp.assignedTelecallerIds.length} Telecaller(s) Allocated (${activeCamp.assignmentMode == "SPECIFIC" ? "Specific" : "Round-Robin"})',
+                                        '${activeCamp.assignedTelecallerIds.length} person(s) allocated (${activeCamp.assignmentMode == "SPECIFIC" ? "Specific" : "Round-Robin"})',
                                         style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.blue),
                                       ),
                                     ],
@@ -678,7 +702,7 @@ class _CrmHeadersView extends StatelessWidget {
                               Icon(Icons.link_rounded, color: textMuted, size: 16),
                               const SizedBox(width: 6),
                               Text(
-                                'Inbound Webhook URL (Meta / Google Ads / Website)',
+                                'Inbound Webhook URL (paste into Meta / Google Lead Form / n8n)',
                                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textMuted),
                               ),
                             ],
@@ -707,7 +731,7 @@ class _CrmHeadersView extends StatelessWidget {
                                           Clipboard.setData(ClipboardData(text: webhookUrl));
                                           ScaffoldMessenger.of(context).showSnackBar(
                                             const SnackBar(
-                                              content: Text('Webhook URL copied to clipboard! Paste into Meta/Google Ads webhook settings.'),
+                                              content: Text('Webhook URL copied! Paste into Meta / Google Lead Form / n8n.'),
                                               backgroundColor: Colors.green,
                                             ),
                                           );
@@ -1151,6 +1175,7 @@ class _CrmHeadersView extends StatelessWidget {
     DateTime selectedDate = DateTime.now();
     List<int> selectedTelecallerIds = [];
     String assignmentMode = 'ROUND_ROBIN';
+    String platform = 'GOOGLE';
     List<CrmSalesUser> employees = [];
     bool employeesLoaded = false;
 
@@ -1170,6 +1195,11 @@ class _CrmHeadersView extends StatelessWidget {
           }
 
           final selectedEmployees = employees.where((e) => selectedTelecallerIds.contains(e.employeeId)).toList();
+          final tagHint = platform == 'GOOGLE'
+              ? 'e.g. AW-18215320232, G-XXXXXXXX, GTM-XXXXXX'
+              : platform == 'META'
+                  ? 'e.g. 2385194820194 (Meta Ad ID)'
+                  : 'e.g. website form tag / external id';
 
           return AlertDialog(
             title: Text('Add Campaign — ${project.name}'),
@@ -1186,19 +1216,46 @@ class _CrmHeadersView extends StatelessWidget {
                     TextField(
                       controller: nameCtrl,
                       decoration: const InputDecoration(
-                        hintText: 'e.g. Meta Lead Ads, Google Search 2026',
+                        hintText: 'e.g. Google Search 2026, Meta Lead Ads',
                         border: OutlineInputBorder(),
                       ),
                     ),
                     const SizedBox(height: 14),
 
-                    const Text('Ad ID (ad_id) *', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                    const Text('Platform *', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        ChoiceChip(
+                          label: const Text('Google Ads', style: TextStyle(fontSize: 11)),
+                          selected: platform == 'GOOGLE',
+                          onSelected: (_) => setDialogState(() => platform = 'GOOGLE'),
+                        ),
+                        ChoiceChip(
+                          label: const Text('Meta Ads', style: TextStyle(fontSize: 11)),
+                          selected: platform == 'META',
+                          onSelected: (_) => setDialogState(() => platform = 'META'),
+                        ),
+                        ChoiceChip(
+                          label: const Text('Website / Other', style: TextStyle(fontSize: 11)),
+                          selected: platform == 'WEBHOOK',
+                          onSelected: (_) => setDialogState(() => platform = 'WEBHOOK'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+
+                    const Text('Tag / Ad ID *', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 6),
                     TextField(
                       controller: adIdCtrl,
-                      decoration: const InputDecoration(
-                        hintText: 'e.g. 2385194820194, AD_FB_01',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        hintText: tagHint,
+                        border: const OutlineInputBorder(),
+                        helperText: 'One campaign = one tag. Create another campaign for another Google/Meta tag.',
+                        helperMaxLines: 2,
                       ),
                     ),
                     const SizedBox(height: 14),
@@ -1234,10 +1291,12 @@ class _CrmHeadersView extends StatelessWidget {
                     ),
                     const SizedBox(height: 14),
 
-                    // Campaign-wise Telecaller Allocation
-                    const Text('Allocate Telecaller(s) to this Campaign', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                    const Text('Assign leads to person(s)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
                     const SizedBox(height: 2),
-                    const Text('Meta leads from this campaign will be allocated to these telecallers (Default status: Not Started)', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                    const Text(
+                      'Incoming leads from this campaign webhook are routed to these people (status: Not Started).',
+                      style: TextStyle(fontSize: 11, color: Colors.grey),
+                    ),
                     const SizedBox(height: 8),
 
                     InkWell(
@@ -1260,7 +1319,7 @@ class _CrmHeadersView extends StatelessWidget {
                             Expanded(
                               child: Text(
                                 selectedTelecallerIds.isEmpty
-                                    ? 'Select telecallers with checkboxes...'
+                                    ? 'Select people with checkboxes...'
                                     : '${selectedTelecallerIds.length} person(s) assigned (Click to modify)',
                                 style: TextStyle(
                                   fontSize: 12.5,
@@ -1336,7 +1395,7 @@ class _CrmHeadersView extends StatelessWidget {
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
-                              'A unique Webhook URL will be automatically generated upon creation.',
+                              'A unique Webhook URL will be generated. Paste it into Meta / Google Lead Form / n8n so leads come into CRM.',
                               style: TextStyle(fontSize: 12, color: primaryColor),
                             ),
                           ),
@@ -1356,7 +1415,7 @@ class _CrmHeadersView extends StatelessWidget {
                   final adId = adIdCtrl.text.trim();
                   if (name.isEmpty || adId.isEmpty) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Please enter Campaign Name and Ad ID')),
+                      const SnackBar(content: Text('Please enter Campaign Name and Tag / Ad ID')),
                     );
                     return;
                   }
@@ -1367,6 +1426,7 @@ class _CrmHeadersView extends StatelessWidget {
                           'projectId': project.id,
                           'name': name,
                           'adId': adId,
+                          'platform': platform,
                           'startDate': selectedDate.toIso8601String(),
                           'description': descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim(),
                           'module': 'PRE_SALES',
@@ -1761,6 +1821,7 @@ class _CrmHeadersView extends StatelessWidget {
     final descCtrl = TextEditingController(text: camp.description ?? '');
     List<int> selectedTelecallerIds = List.from(camp.assignedTelecallerIds);
     String assignmentMode = camp.assignmentMode.isNotEmpty ? camp.assignmentMode : 'ROUND_ROBIN';
+    String platform = camp.platform.isNotEmpty ? camp.platform.toUpperCase() : 'WEBHOOK';
     List<CrmSalesUser> employees = [];
     bool employeesLoaded = false;
 
@@ -1780,6 +1841,11 @@ class _CrmHeadersView extends StatelessWidget {
           }
 
           final selectedEmployees = employees.where((e) => selectedTelecallerIds.contains(e.employeeId)).toList();
+          final tagHint = platform == 'GOOGLE'
+              ? 'e.g. AW-18215320232, G-XXXXXXXX, GTM-XXXXXX'
+              : platform == 'META'
+                  ? 'e.g. 2385194820194 (Meta Ad ID)'
+                  : 'e.g. website form tag / external id';
 
           return AlertDialog(
             title: Text('Edit Campaign — ${camp.name}'),
@@ -1796,16 +1862,46 @@ class _CrmHeadersView extends StatelessWidget {
                       decoration: const InputDecoration(labelText: 'Campaign Name *', border: OutlineInputBorder()),
                     ),
                     const SizedBox(height: 12),
+                    const Text('Platform', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        ChoiceChip(
+                          label: const Text('Google Ads', style: TextStyle(fontSize: 11)),
+                          selected: platform == 'GOOGLE',
+                          onSelected: (_) => setDialogState(() => platform = 'GOOGLE'),
+                        ),
+                        ChoiceChip(
+                          label: const Text('Meta Ads', style: TextStyle(fontSize: 11)),
+                          selected: platform == 'META',
+                          onSelected: (_) => setDialogState(() => platform = 'META'),
+                        ),
+                        ChoiceChip(
+                          label: const Text('Website / Other', style: TextStyle(fontSize: 11)),
+                          selected: platform == 'WEBHOOK',
+                          onSelected: (_) => setDialogState(() => platform = 'WEBHOOK'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
                     TextField(
                       controller: adIdCtrl,
-                      decoration: const InputDecoration(labelText: 'Ad ID', border: OutlineInputBorder()),
+                      decoration: InputDecoration(
+                        labelText: 'Tag / Ad ID',
+                        hintText: tagHint,
+                        border: const OutlineInputBorder(),
+                      ),
                     ),
                     const SizedBox(height: 14),
 
-                    // Campaign-wise Telecaller Allocation
-                    const Text('Allocate Telecaller(s) to this Campaign', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                    const Text('Assign leads to person / group', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
                     const SizedBox(height: 2),
-                    const Text('Meta leads from this campaign will be allocated to these telecallers (Default status: Not Started)', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                    const Text(
+                      'Inbound leads from this campaign webhook go to these people (status: Not Started)',
+                      style: TextStyle(fontSize: 11, color: Colors.grey),
+                    ),
                     const SizedBox(height: 8),
 
                     InkWell(
@@ -1828,8 +1924,8 @@ class _CrmHeadersView extends StatelessWidget {
                             Expanded(
                               child: Text(
                                 selectedTelecallerIds.isEmpty
-                                    ? 'Select telecallers with checkboxes...'
-                                    : '${selectedTelecallerIds.length} telecaller(s) allocated (Click to modify)',
+                                    ? 'Select people with checkboxes...'
+                                    : '${selectedTelecallerIds.length} person(s) assigned (Click to modify)',
                                 style: TextStyle(
                                   fontSize: 12.5,
                                   fontWeight: selectedTelecallerIds.isEmpty ? FontWeight.normal : FontWeight.bold,
@@ -1900,6 +1996,7 @@ class _CrmHeadersView extends StatelessWidget {
                     CrmHeadersCampaignUpdated(camp.id, {
                       'name': name,
                       'adId': adIdCtrl.text.trim().isEmpty ? null : adIdCtrl.text.trim(),
+                      'platform': platform,
                       'description': descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim(),
                       'assignedTelecallerIds': selectedTelecallerIds,
                       'assignmentMode': assignmentMode,

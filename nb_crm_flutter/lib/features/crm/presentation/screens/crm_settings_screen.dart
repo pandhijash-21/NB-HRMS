@@ -101,6 +101,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
   int? _siteVisitDeskEmployeeId;
   List<int> _excelAssignedTelecallerIds = [];
   List<int> _webhookAssignedTelecallerIds = [];
+  List<int> _googleAssignedTelecallerIds = [];
   List<String> _loanTypes = [
     'Home Loan',
     'Personal Loan',
@@ -206,6 +207,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
       _siteVisitDeskEmployeeId = settings.siteVisitDeskEmployeeId;
       _excelAssignedTelecallerIds = List<int>.from(settings.excelAssignedTelecallerIds);
       _webhookAssignedTelecallerIds = List<int>.from(settings.webhookAssignedTelecallerIds);
+      _googleAssignedTelecallerIds = List<int>.from(settings.googleAssignedTelecallerIds);
       _loanTypes = List<String>.from(settings.loanTypes);
       _loanDocTypes = List<CrmLoanDocType>.from(settings.loanDocTypes);
       _loanTypeDocsMap = Map<String, List<String>>.from(
@@ -1341,7 +1343,13 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
                 icon: Icons.campaign_rounded,
                 label: 'Meta Desk',
                 value: '${_webhookAssignedTelecallerIds.length} Reps',
-                color: const Color(0xFF3B82F6),
+                color: const Color(0xFF2563EB),
+              ),
+              _buildMetricChip(
+                icon: Icons.search_rounded,
+                label: 'Google Desk',
+                value: '${_googleAssignedTelecallerIds.length} Reps',
+                color: const Color(0xFFEA4335),
               ),
               _buildMetricChip(
                 icon: Icons.speed_rounded,
@@ -1908,14 +1916,15 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
         _PresalesCategoryMeta(
           id: 'lead_routing',
           title: 'Lead Flow & Desk Routing',
-          subtitle: 'Round-robin assignment pools for Excel uploads and Meta/Webhook campaigns',
+          subtitle: 'Round-robin assignment pools for Excel uploads and Meta/Google/Webhook campaigns',
           icon: Icons.alt_route_rounded,
           color: const Color(0xFF059669),
           badges: [
             '${_excelAssignedTelecallerIds.length} Excel Reps',
             '${_webhookAssignedTelecallerIds.length} Meta Reps',
+            '${_googleAssignedTelecallerIds.length} Google Reps',
           ],
-          previews: const ['Excel Desk Round-Robin', 'Meta / Campaign Desk Round-Robin'],
+          previews: const ['Excel Desk', 'Meta Desk', 'Google Desk'],
         ),
         _PresalesCategoryMeta(
           id: 'workload_queue',
@@ -1971,14 +1980,15 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
       _PresalesCategoryMeta(
         id: 'lead_routing',
         title: 'Lead Flow & Desk Routing',
-        subtitle: 'Round-robin assignment pools for Excel uploads and Meta/Webhook campaigns',
+        subtitle: 'Round-robin assignment pools for Excel uploads and Meta/Google/Webhook campaigns',
         icon: Icons.alt_route_rounded,
         color: const Color(0xFF059669),
         badges: [
           '${_excelAssignedTelecallerIds.length} Excel Reps',
           '${_webhookAssignedTelecallerIds.length} Meta Reps',
+          '${_googleAssignedTelecallerIds.length} Google Reps',
         ],
-        previews: const ['Excel Desk Round-Robin', 'Meta / Campaign Desk Round-Robin'],
+        previews: const ['Excel Desk', 'Meta Desk', 'Google Desk'],
       ),
       _PresalesCategoryMeta(
         id: 'workload_queue',
@@ -2756,7 +2766,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Configure separate telecaller teams for Excel uploads and Meta/Webhook campaigns. Leads will automatically be round-robin distributed among selected members, and team members will only see their respective modules.',
+                      'Configure separate desks for Excel, Meta Ads, and Google Ads. Members only see leads for their desk(s).',
                       style: TextStyle(fontSize: 13, color: textMuted),
                     ),
                   ],
@@ -2768,7 +2778,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
           _buildMultiSelectTelecallerCard(
             context: context,
             title: 'Assign Excel leads to',
-            description: 'Select team members/telecallers who will handle leads uploaded via Excel or created manually under Excel flow.',
+            description: 'Select team members who handle Excel uploads and related manual Excel-flow leads.',
             icon: Icons.table_chart_rounded,
             iconColor: const Color(0xFF16A34A),
             selectedIds: _excelAssignedTelecallerIds,
@@ -2783,13 +2793,29 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
           const SizedBox(height: 16),
           _buildMultiSelectTelecallerCard(
             context: context,
-            title: 'Assign Meta / Campaign leads to',
-            description: 'Select team members/telecallers who will handle online webhook leads arriving from Meta Graph API or Ads campaigns.',
+            title: 'Assign Meta Ads leads to',
+            description: 'Meta Lead Ads (+ generic website webhooks). Separate from Google.',
             icon: Icons.campaign_rounded,
             iconColor: const Color(0xFF2563EB),
             selectedIds: _webhookAssignedTelecallerIds,
             employees: employees,
             onChanged: (updated) => setState(() => _webhookAssignedTelecallerIds = updated),
+            isDark: isDark,
+            cardBg: cardBg,
+            borderColor: borderColor,
+            textMuted: textMuted,
+            primaryColor: primaryColor,
+          ),
+          const SizedBox(height: 16),
+          _buildMultiSelectTelecallerCard(
+            context: context,
+            title: 'Assign Google Ads leads to',
+            description: 'Google Ads / Tag campaigns only. Does not include Meta leads.',
+            icon: Icons.search_rounded,
+            iconColor: const Color(0xFFEA4335),
+            selectedIds: _googleAssignedTelecallerIds,
+            employees: employees,
+            onChanged: (updated) => setState(() => _googleAssignedTelecallerIds = updated),
             isDark: isDark,
             cardBg: cardBg,
             borderColor: borderColor,
@@ -3825,6 +3851,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
         'not_interested_reasons': jsonEncode(_notInterestedReasons),
         'excel_assigned_telecaller_ids': jsonEncode(_excelAssignedTelecallerIds),
         'webhook_assigned_telecaller_ids': jsonEncode(_webhookAssignedTelecallerIds),
+        'google_assigned_telecaller_ids': jsonEncode(_googleAssignedTelecallerIds),
         'max_telecaller_active_workload': _maxWorkloadController.text.trim(),
         'telecaller_max_workload_map': jsonEncode(_telecallerMaxWorkloadMap),
         'untouched_lead_timeout_minutes': _untouchedTimeoutController.text.trim(),
@@ -3839,6 +3866,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
         'site_visit_desk_employee_id': _siteVisitDeskEmployeeId?.toString() ?? '',
         'excel_assigned_telecaller_ids': jsonEncode(_excelAssignedTelecallerIds),
         'webhook_assigned_telecaller_ids': jsonEncode(_webhookAssignedTelecallerIds),
+        'google_assigned_telecaller_ids': jsonEncode(_googleAssignedTelecallerIds),
         'max_telecaller_active_workload': _maxWorkloadController.text.trim(),
         'telecaller_max_workload_map': jsonEncode(_telecallerMaxWorkloadMap),
         'untouched_lead_timeout_minutes': _untouchedTimeoutController.text.trim(),

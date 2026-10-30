@@ -14,11 +14,15 @@ export interface UpdateProjectDto {
   isActive?: boolean;
 }
 
+export type CampaignPlatform = 'META' | 'GOOGLE' | 'WEBHOOK';
+
 export interface CreateCampaignDto {
   projectId?: string | null;
   name: string;
   code?: string;
   adId?: string;
+  /** META | GOOGLE | WEBHOOK */
+  platform?: CampaignPlatform;
   description?: string;
   startDate?: string;
   module?: string;
@@ -31,6 +35,7 @@ export interface UpdateCampaignDto {
   projectId?: string | null;
   name?: string;
   adId?: string;
+  platform?: CampaignPlatform;
   description?: string;
   startDate?: string;
   isActive?: boolean;
@@ -140,7 +145,10 @@ export interface UpdateCrmSettingsDto {
   not_interested_retention_days?: string;
   bin_retention_days?: string;
   excel_assigned_telecaller_ids?: string | number[];
+  /** Meta Ads + generic website webhook desk */
   webhook_assigned_telecaller_ids?: string | number[];
+  /** Google Ads campaign desk (separate from Meta) */
+  google_assigned_telecaller_ids?: string | number[];
   max_telecaller_active_workload?: number | string;
   telecaller_max_workload_map?: string | Record<string, number>;
   untouched_lead_timeout_minutes?: number | string;

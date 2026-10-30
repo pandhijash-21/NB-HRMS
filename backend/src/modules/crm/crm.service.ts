@@ -377,16 +377,35 @@ export const crmService = {
       name: c.name,
       code: c.code,
       adId: c.adId,
+      platform: (c as any).platform || 'WEBHOOK',
       webhookToken: c.webhookToken,
       description: c.description,
       startDate: c.startDate,
       module: c.module,
+      assignedTelecallerIds: (c as any).assignedTelecallerIds || [],
+      assignmentMode: (c as any).assignmentMode || 'ROUND_ROBIN',
       isActive: c.isActive,
       columnsCount: c._count.columns,
       leadsCount: c._count.leads,
       createdAt: c.createdAt,
       updatedAt: c.updatedAt,
     }));
+  },
+
+  _normalizeCampaignPlatform(raw?: string | null): 'META' | 'GOOGLE' | 'WEBHOOK' {
+    const p = String(raw || '').trim().toUpperCase();
+    if (p === 'META' || p === 'FACEBOOK' || p === 'FB') return 'META';
+    if (p === 'GOOGLE' || p === 'GOOGLE_ADS' || p === 'ADS') return 'GOOGLE';
+    return 'WEBHOOK';
+  },
+
+  _inferCampaignPlatformFromAdId(adId?: string | null): 'META' | 'GOOGLE' | 'WEBHOOK' | null {
+    const id = String(adId || '').trim().toUpperCase();
+    if (!id) return null;
+    if (id.startsWith('AW-') || id.startsWith('G-') || id.startsWith('GTM-') || id.startsWith('GT-')) {
+      return 'GOOGLE';
+    }
+    return null;
   },
 
   async createCampaign(dto: CreateCampaignDto, scope: string = 'NB_DEVELOPER') {
@@ -398,6 +417,9 @@ export const crmService = {
       : dto.name.trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_') + '_' + Date.now().toString().slice(-4);
 
     const webhookToken = crypto.randomBytes(12).toString('hex');
+    const platform = this._normalizeCampaignPlatform(
+      dto.platform || this._inferCampaignPlatformFromAdId(dto.adId) || 'WEBHOOK',
+    );
 
     const created = await prisma.crmCampaign.create({
       data: {
@@ -405,6 +427,7 @@ export const crmService = {
         name: dto.name.trim(),
         code: generatedCode,
         adId: dto.adId?.trim() || null,
+        platform,
         webhookToken,
         description: dto.description?.trim() || null,
         startDate: dto.startDate ? new Date(dto.startDate) : null,
@@ -471,11 +494,19 @@ export const crmService = {
   },
 
   async updateCampaign(id: string, dto: UpdateCampaignDto) {
+    const platformUpdate =
+      dto.platform !== undefined
+        ? this._normalizeCampaignPlatform(dto.platform)
+        : dto.adId !== undefined
+          ? this._inferCampaignPlatformFromAdId(dto.adId) || undefined
+          : undefined;
+
     return prisma.crmCampaign.update({
       where: { id },
       data: {
         ...(dto.name && { name: dto.name.trim() }),
         ...(dto.adId !== undefined && { adId: dto.adId?.trim() || null }),
+        ...(platformUpdate !== undefined && { platform: platformUpdate }),
         ...(dto.projectId !== undefined && { projectId: dto.projectId }),
         ...(dto.description !== undefined && { description: dto.description?.trim() || null }),
         ...(dto.startDate !== undefined && { startDate: dto.startDate ? new Date(dto.startDate) : null }),
@@ -658,16 +689,36 @@ export const crmService = {
       }
     }
 
-    const isMetaWebhook = Boolean(
-      payload.leadgen_id ||
-      payload.field_data ||
-      payload.entry ||
-      sourceData.leadgen_id ||
-      payload.source === 'META' ||
-      payload.leadSource === 'META'
+    const campaignPlatform = this._normalizeCampaignPlatform(
+      (campaign as any).platform || this._inferCampaignPlatformFromAdId((campaign as any).adId),
     );
+    const payloadSource = String(
+      payload.source || payload.leadSource || payload.platform || sourceData.source || '',
+    ).toUpperCase();
+    const isMetaWebhook =
+      campaignPlatform === 'META' ||
+      Boolean(
+        payload.leadgen_id ||
+          payload.field_data ||
+          payload.entry ||
+          sourceData.leadgen_id ||
+          payloadSource.includes('META') ||
+          payloadSource.includes('FACEBOOK') ||
+          payloadSource.includes('FB'),
+      );
+    const isGoogleWebhook =
+      !isMetaWebhook &&
+      (campaignPlatform === 'GOOGLE' ||
+        payloadSource.includes('GOOGLE') ||
+        Boolean(payload.gclid || payload.google_key || sourceData.gclid || sourceData.google_key));
+    const inboundSourceLabel = isMetaWebhook
+      ? 'Meta Ads'
+      : isGoogleWebhook
+        ? 'Google Ads'
+        : 'Webhook Integration';
+    const inboundLeadSource = isMetaWebhook ? 'META' : isGoogleWebhook ? 'GOOGLE' : 'WEBHOOK';
 
-    // Smart Deduplication for incoming Webhook / Meta Ads:
+    // Smart Deduplication for incoming Webhook / Meta / Google Ads:
     // If an active lead with the same phone (matched on 10 digits) already exists in this scope,
     // do NOT create a duplicate lead row! Instead, append the new inquiry into the existing lead's
     // activity history and notify/log follow-up for the telecaller.
@@ -697,7 +748,7 @@ export const crmService = {
         const reInquiries = Array.isArray(existingCustom.reInquiries) ? [...existingCustom.reInquiries] : [];
         reInquiries.push({
           timestamp: new Date().toISOString(),
-          source: isMetaWebhook ? 'Meta Ads' : 'Webhook Integration',
+          source: inboundSourceLabel,
           campaignName: campaign.name,
           campaignId: campaign.id,
           payload: normalizedPayload,
@@ -738,7 +789,7 @@ export const crmService = {
             scheduledDate: new Date(),
             scheduledTime: `${String(new Date().getHours()).padStart(2, '0')}:${String(new Date().getMinutes()).padStart(2, '0')}`,
             status: 'PENDING',
-            remarks: `Customer re-inquired via ${isMetaWebhook ? 'Meta Ads' : 'Webhook Integration'} on "${campaign.name}". Details: ${summaryFields || 'Re-submitted inquiry'}`,
+            remarks: `Customer re-inquired via ${inboundSourceLabel} on "${campaign.name}". Details: ${summaryFields || 'Re-submitted inquiry'}`,
             assignedToId: existingLead.assignedToId || null,
           },
         });
@@ -773,12 +824,14 @@ export const crmService = {
         status: CrmLeadStatus.NOT_STARTED,
         customFields: {
           ...normalizedPayload,
-          leadSourceType: isMetaWebhook ? 'Meta Ads' : 'Webhook Integration',
+          leadSourceType: inboundSourceLabel,
+          campaignPlatform,
+          campaignTagId: (campaign as any).adId || null,
           ...(webhookAssignedTelecallerId ? { allocatedAt: new Date().toISOString() } : {}),
         },
         telecallerId: webhookAssignedTelecallerId,
         assignedToId: null,
-        leadSource: isMetaWebhook ? 'META' : 'WEBHOOK',
+        leadSource: inboundLeadSource,
       },
     });
 
@@ -1107,7 +1160,8 @@ export const crmService = {
     if (!isAdmin && query.userEmployeeId) {
       const pools = await this.getAssignedTelecallerPools(scope);
       const isExcelAssigned = pools.excelIds.includes(query.userEmployeeId);
-      const isWebhookAssigned = pools.webhookIds.includes(query.userEmployeeId);
+      const isMetaAssigned = pools.webhookIds.includes(query.userEmployeeId);
+      const isGoogleAssigned = pools.googleIds.includes(query.userEmployeeId);
 
       // Non-admin sees leads assigned to them either as telecaller OR as sales rep/manager
       const userAssignmentCond = [
@@ -1115,16 +1169,21 @@ export const crmService = {
         { assignedToId: query.userEmployeeId },
       ];
 
-      if (isExcelAssigned && !isWebhookAssigned) {
-        where.AND = [
-          { OR: userAssignmentCond },
-          { OR: [{ leadSource: 'EXCEL' }, { leadSource: 'MANUAL' }, { leadSource: null }] },
-        ];
-      } else if (isWebhookAssigned && !isExcelAssigned) {
-        where.AND = [
-          { OR: userAssignmentCond },
-          { leadSource: { in: ['WEBHOOK', 'META'] } },
-        ];
+      const sourceFilters: any[] = [];
+      if (isExcelAssigned) {
+        sourceFilters.push({ OR: [{ leadSource: 'EXCEL' }, { leadSource: 'MANUAL' }, { leadSource: null }] });
+      }
+      if (isMetaAssigned) {
+        sourceFilters.push({ leadSource: { in: ['META', 'WEBHOOK'] } });
+      }
+      if (isGoogleAssigned) {
+        sourceFilters.push({ leadSource: 'GOOGLE' });
+      }
+
+      if (sourceFilters.length === 1) {
+        where.AND = [{ OR: userAssignmentCond }, sourceFilters[0]];
+      } else if (sourceFilters.length > 1) {
+        where.AND = [{ OR: userAssignmentCond }, { OR: sourceFilters }];
       } else {
         where.OR = userAssignmentCond;
       }
@@ -1152,11 +1211,11 @@ export const crmService = {
         } else {
           where.OR = excelCond;
         }
-      } else if (flow === 'WEBHOOK' || flow === 'META') {
+      } else if (flow === 'WEBHOOK' || flow === 'META' || flow === 'GOOGLE') {
         if (where.AND) {
-          where.AND.push({ leadSource: { in: ['WEBHOOK', 'META'] } });
+          where.AND.push({ leadSource: { in: ['WEBHOOK', 'META', 'GOOGLE'] } });
         } else {
-          where.leadSource = { in: ['WEBHOOK', 'META'] };
+          where.leadSource = { in: ['WEBHOOK', 'META', 'GOOGLE'] };
         }
       }
     }
@@ -1322,9 +1381,9 @@ export const crmService = {
         const excelCond = [{ leadSource: 'EXCEL' }, { leadSource: null }];
         if (where.AND) where.AND.push({ OR: excelCond });
         else where.OR = excelCond;
-      } else if (flow === 'WEBHOOK' || flow === 'META') {
-        if (where.AND) where.AND.push({ leadSource: { in: ['WEBHOOK', 'META'] } });
-        else where.leadSource = { in: ['WEBHOOK', 'META'] };
+      } else if (flow === 'WEBHOOK' || flow === 'META' || flow === 'GOOGLE') {
+        if (where.AND) where.AND.push({ leadSource: { in: ['WEBHOOK', 'META', 'GOOGLE'] } });
+        else where.leadSource = { in: ['WEBHOOK', 'META', 'GOOGLE'] };
       }
     }
 
@@ -1489,9 +1548,11 @@ export const crmService = {
     const requestedSource = (dto.leadSource || custom.leadSource || custom.lead_source || 'MANUAL').toString().toUpperCase();
     const finalSource = requestedSource.includes('META')
       ? 'META'
-      : (requestedSource.includes('WEBHOOK')
-          ? 'WEBHOOK'
-          : (requestedSource === 'EXCEL' ? 'EXCEL' : 'MANUAL'));
+      : (requestedSource.includes('GOOGLE')
+          ? 'GOOGLE'
+          : (requestedSource.includes('WEBHOOK')
+              ? 'WEBHOOK'
+              : (requestedSource === 'EXCEL' ? 'EXCEL' : 'MANUAL')));
 
     // Preserve business source (Walk IN, Channel Partner, Reference, etc.) separately from technical flow
     const rawBusinessSource =
@@ -1499,7 +1560,7 @@ export const crmService = {
         ? 'Channel Partner'
         : (dto.referenceName || custom.referenceName
             ? 'Reference'
-            : (custom.lead_source_type || custom.leadSource || (dto.leadSource && !['MANUAL', 'EXCEL', 'WEBHOOK', 'META'].includes(dto.leadSource.toUpperCase()) ? dto.leadSource : 'Walk IN')));
+            : (custom.lead_source_type || custom.leadSource || (dto.leadSource && !['MANUAL', 'EXCEL', 'WEBHOOK', 'META', 'GOOGLE'].includes(dto.leadSource.toUpperCase()) ? dto.leadSource : 'Walk IN')));
     if (!custom.lead_source_type && !custom.leadSource) {
       custom.lead_source_type = rawBusinessSource;
     }
@@ -3066,6 +3127,7 @@ export const crmService = {
       kpi_show_conversion_rate: 'true',
       excel_assigned_telecaller_ids: JSON.stringify([]),
       webhook_assigned_telecaller_ids: JSON.stringify([]),
+      google_assigned_telecaller_ids: JSON.stringify([]),
       max_telecaller_active_workload: '20',
       telecaller_max_workload_map: JSON.stringify({}),
       untouched_lead_timeout_minutes: '30',
@@ -3335,7 +3397,9 @@ export const crmService = {
     } else {
       // Fallback: Check if explicit pools were configured in CRM Settings
       const pools = await this.getAssignedTelecallerPools(scope);
-      const configuredPool = Array.from(new Set([...pools.excelIds, ...pools.webhookIds]));
+      const configuredPool = Array.from(
+        new Set([...pools.excelIds, ...pools.webhookIds, ...pools.googleIds]),
+      );
       if (configuredPool.length > 0) {
         const nonAdminPool = configuredPool.filter((id) => {
           const user = users.find((u) => u.employeeId === id);
@@ -3857,29 +3921,24 @@ export const crmService = {
     return eligibleIds[index];
   },
 
+  _parseIdListSetting(raw: unknown): number[] {
+    try {
+      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      if (!Array.isArray(parsed)) return [];
+      return parsed.map(Number).filter((n) => !isNaN(n) && n > 0);
+    } catch {
+      return [];
+    }
+  },
+
   async getAssignedTelecallerPools(scope: string = 'NB_DEVELOPER') {
     const settings = await this.getSettings(scope);
-    let excelIds: number[] = [];
-    let webhookIds: number[] = [];
-    try {
-      excelIds = typeof settings.excel_assigned_telecaller_ids === 'string'
-        ? JSON.parse(settings.excel_assigned_telecaller_ids)
-        : (settings.excel_assigned_telecaller_ids || []);
-      if (!Array.isArray(excelIds)) excelIds = [];
-    } catch {
-      excelIds = [];
-    }
-    try {
-      webhookIds = typeof settings.webhook_assigned_telecaller_ids === 'string'
-        ? JSON.parse(settings.webhook_assigned_telecaller_ids)
-        : (settings.webhook_assigned_telecaller_ids || []);
-      if (!Array.isArray(webhookIds)) webhookIds = [];
-    } catch {
-      webhookIds = [];
-    }
     return {
-      excelIds: excelIds.map(Number).filter((n) => !isNaN(n) && n > 0),
-      webhookIds: webhookIds.map(Number).filter((n) => !isNaN(n) && n > 0),
+      excelIds: this._parseIdListSetting(settings.excel_assigned_telecaller_ids),
+      /** Meta Ads + generic website webhooks */
+      webhookIds: this._parseIdListSetting(settings.webhook_assigned_telecaller_ids),
+      /** Google Ads campaigns only */
+      googleIds: this._parseIdListSetting(settings.google_assigned_telecaller_ids),
     };
   },
 

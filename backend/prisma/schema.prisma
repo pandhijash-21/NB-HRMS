@@ -3612,6 +3612,8 @@ model CrmCampaign {
   name         String
   code         String    @unique
   adId         String?   @map("ad_id")
+  /// META | GOOGLE | WEBHOOK — which ads platform owns this campaign tag
+  platform     String    @default("WEBHOOK") @map("platform")
   webhookToken String?   @unique @map("webhook_token")
   description  String?
   startDate    DateTime? @map("start_date")
@@ -3627,6 +3629,7 @@ model CrmCampaign {
   leads   CrmLead[]
 
   @@index([scope])
+  @@index([platform])
   @@map("crm_campaigns")
 }
 

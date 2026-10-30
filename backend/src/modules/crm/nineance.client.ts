@@ -142,12 +142,30 @@ export class NineanceClient {
   // ── Auth ──────────────────────────────────────────────────────────────────
 
   async login(email: string, password: string): Promise<NineanceTokens & { user?: any; tenant?: any }> {
-    const data = await this.request<any>('/api/auth/login/', {
-      method: 'POST',
-      noAuth: true,
-      body: { email, password },
-    });
+    // force_logout avoids "max 4 concurrent sessions" blocking CRM service-account login
+    let data: any;
+    try {
+      data = await this.request<any>('/api/auth/login/', {
+        method: 'POST',
+        noAuth: true,
+        body: { email, password, force_logout: true },
+      });
+    } catch (err: any) {
+      // Fallback: token-only endpoint (same credentials, smaller payload)
+      try {
+        data = await this.request<any>('/api/auth/token/', {
+          method: 'POST',
+          noAuth: true,
+          body: { email, password },
+        });
+      } catch {
+        throw err;
+      }
+    }
     const tokens = { access: String(data.access || ''), refresh: String(data.refresh || '') };
+    if (!tokens.access) {
+      throw new NineanceApiError(401, '9ance login returned no access token', data);
+    }
     this.setTokens(tokens);
     return { ...tokens, user: data.user, tenant: data.tenant };
   }

@@ -283,14 +283,40 @@ class TelephonyService {
     }
   }
 
+  private formatNineanceError(err: any, step: string): Error {
+    if (err instanceof NineanceApiError) {
+      const bits = [`9ance ${step} failed (${err.status})`, err.detail || err.message];
+      if (err.providerError) bits.push(`provider: ${err.providerError}`);
+      return new Error(bits.filter(Boolean).join(' — '));
+    }
+    return new Error(err?.message || `9ance ${step} failed`);
+  }
+
   async activate(scope: string = 'NB_DEVELOPER', updatedBy?: string) {
     const s = await this.getNineanceSettings(scope);
-    if (!s.email || !s.password) throw new Error('Save 9ance email and password first');
-    if (!s.api_key || !s.api_secret) throw new Error('Save 9ance API key and API secret first');
+    if (!s.email || !s.password) {
+      throw new Error(
+        'Missing login email/password. Fill Email + Password (portal login), then Save or Activate again.',
+      );
+    }
+    if (!s.api_key || !s.api_secret) {
+      throw new Error(
+        'Missing API Username/Password. Put API Username in API key and API password in API secret, then Activate again.',
+      );
+    }
 
     const client = this.getClient(scope);
     client.setBaseUrl(s.base_url);
-    const login = await client.login(s.email, s.password);
+
+    let login: NineanceTokens & { user?: any; tenant?: any };
+    try {
+      login = await client.login(s.email, s.password);
+    } catch (err: any) {
+      throw this.formatNineanceError(
+        err,
+        'login',
+      );
+    }
     await this.persistTokens(scope, login, updatedBy);
 
     let config: any;
@@ -303,17 +329,21 @@ class TelephonyService {
       });
     } catch (err: any) {
       if (err instanceof NineanceApiError && err.status === 409) {
-        config = await client.updateConfig({
-          provider_key: s.provider_key || 'indiavoice',
-          display_name: s.display_name,
-          credentials: { api_key: s.api_key, api_secret: s.api_secret },
-        });
+        try {
+          config = await client.updateConfig({
+            provider_key: s.provider_key || 'indiavoice',
+            display_name: s.display_name,
+            credentials: { api_key: s.api_key, api_secret: s.api_secret },
+          });
+        } catch (updErr: any) {
+          throw this.formatNineanceError(updErr, 'config update');
+        }
       } else {
         // try get existing
         try {
           config = await client.getConfig();
         } catch {
-          throw err;
+          throw this.formatNineanceError(err, 'config create');
         }
       }
     }

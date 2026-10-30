@@ -149,6 +149,23 @@ class _CrmNineanceTelephonyTabState extends State<CrmNineanceTelephonyTab> {
   }
 
   Future<void> _activate() async {
+    if (_email.text.trim().isEmpty) {
+      _snack('Email is required', error: true);
+      return;
+    }
+    if (_password.text.trim().isEmpty && !widget.settings.nineanceHasPassword) {
+      _snack('Password (portal login) is required', error: true);
+      return;
+    }
+    if (_apiKey.text.trim().isEmpty && !widget.settings.nineanceHasApiKey) {
+      _snack('API key (API Username) is required', error: true);
+      return;
+    }
+    if (_apiSecret.text.trim().isEmpty && !widget.settings.nineanceHasApiSecret) {
+      _snack('API secret (API password) is required', error: true);
+      return;
+    }
+
     setState(() => _busy = true);
     try {
       final body = <String, dynamic>{
@@ -171,7 +188,20 @@ class _CrmNineanceTelephonyTabState extends State<CrmNineanceTelephonyTab> {
       _snack(res['message']?.toString() ?? 'Activated');
       widget.onSettingsChanged();
     } catch (e) {
-      _snack('$e', error: true);
+      final msg = '$e';
+      _snack(msg, error: true);
+      if (mounted) {
+        await showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Activate failed'),
+            content: SelectableText(msg),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK')),
+            ],
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -325,26 +355,35 @@ class _CrmNineanceTelephonyTabState extends State<CrmNineanceTelephonyTab> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    _field('Email', _email, hint: 'admin@company.com'),
+                    Text(
+                      'Map what 9ance sent you:\n'
+                      '• Email → Email\n'
+                      '• Portal / login password → Password\n'
+                      '• API Username → API key\n'
+                      '• API password → API secret',
+                      style: TextStyle(fontSize: 12, height: 1.35, color: widget.textMuted),
+                    ),
+                    const SizedBox(height: 12),
+                    _field('Email', _email, hint: 'info@…'),
                     const SizedBox(height: 10),
                     _field(
-                      'Password',
+                      'Password (portal login)',
                       _password,
-                      hint: widget.settings.nineanceHasPassword ? 'Leave blank to keep saved' : '••••••••',
+                      hint: widget.settings.nineanceHasPassword ? 'Leave blank to keep saved' : 'Login password from 9ance',
                       obscure: true,
                     ),
                     const SizedBox(height: 10),
                     _field(
-                      'API key',
+                      'API key (API Username)',
                       _apiKey,
-                      hint: widget.settings.nineanceHasApiKey ? 'Leave blank to keep saved' : 'From 9ance',
+                      hint: widget.settings.nineanceHasApiKey ? 'Leave blank to keep saved' : 'API Username from 9ance',
                       obscure: true,
                     ),
                     const SizedBox(height: 10),
                     _field(
-                      'API secret',
+                      'API secret (API password)',
                       _apiSecret,
-                      hint: widget.settings.nineanceHasApiSecret ? 'Leave blank to keep saved' : 'From 9ance',
+                      hint: widget.settings.nineanceHasApiSecret ? 'Leave blank to keep saved' : 'API password from 9ance',
                       obscure: true,
                     ),
                     const SizedBox(height: 10),

@@ -245,7 +245,7 @@ class _CrmDashboardView extends StatelessWidget {
                     context,
                     title: 'Total Calls Logged',
                     value: '${kpi.totalCalls}',
-                    subtext: 'Greeter / Elision logged',
+                    subtext: '9ance call logs',
                     icon: Icons.phone_in_talk_rounded,
                     color: const Color(0xFF8B5CF6),
                     isDark: isDark,
@@ -646,7 +646,7 @@ class _CrmDashboardView extends StatelessWidget {
                     _buildModuleTile(
                       context,
                       title: 'Pre-sales',
-                      description: 'Inquiries, dynamic columns, Elision dialer, and sales pipeline.',
+                      description: 'Inquiries, dynamic columns, 9ance dialer, and sales pipeline.',
                       icon: Icons.point_of_sale_rounded,
                       color: const Color(0xFF0284C7),
                       route: '/crm/pre-sales',
@@ -685,7 +685,7 @@ class _CrmDashboardView extends StatelessWidget {
                     _buildModuleTile(
                       context,
                       title: 'CRM Settings',
-                      description: 'Dynamic columns, Elision telephony API, and retention rules.',
+                      description: 'Dynamic columns, 9ance Cloud Telephony, and retention rules.',
                       icon: Icons.settings_rounded,
                       color: primaryGold,
                       route: '/crm/settings',

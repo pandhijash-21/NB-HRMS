@@ -688,7 +688,7 @@ class _CrmAudioPlayerDialogState extends ConsumerState<CrmAudioPlayerDialog>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Attach Greeter Recording URL',
+                        'Attach Recording URL',
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
@@ -700,7 +700,7 @@ class _CrmAudioPlayerDialogState extends ConsumerState<CrmAudioPlayerDialog>
                         controller: _urlEditController,
                         style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
                         decoration: InputDecoration(
-                          hintText: 'https://greeter.co.in/recordings/... or audio file link',
+                          hintText: 'https://… recording URL or audio file link',
                           hintStyle: TextStyle(fontSize: 11, color: textMuted),
                           isDense: true,
                           contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),

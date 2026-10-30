@@ -745,6 +745,21 @@ class CrmSalesUser {
 }
 
 class CrmSettings {
+  final String nineanceBaseUrl;
+  final String nineanceEmail;
+  final String nineancePassword;
+  final bool nineanceHasPassword;
+  final String nineanceApiKey;
+  final bool nineanceHasApiKey;
+  final String nineanceApiSecret;
+  final bool nineanceHasApiSecret;
+  final String nineanceProviderKey;
+  final String nineanceDisplayName;
+  final String nineanceWebhookToken;
+  final String nineanceWebhookUrl;
+  final String nineanceDefaultDidId;
+  final bool nineanceConnected;
+  /** @deprecated kept for older builds */
   final String elisionApiUrl;
   final String elisionUserId;
   final String elisionDid;
@@ -848,14 +863,28 @@ class CrmSettings {
   ];
 
   const CrmSettings({
-    required this.elisionApiUrl,
-    required this.elisionUserId,
-    required this.elisionDid,
-    required this.elisionRouteNumber,
-    required this.elisionDefaultAgentNumber,
-    required this.elisionApiKey,
-    required this.elisionCampaignId,
-    required this.elisionAgentId,
+    this.nineanceBaseUrl = 'https://crmapi.9ance.com',
+    this.nineanceEmail = '',
+    this.nineancePassword = '',
+    this.nineanceHasPassword = false,
+    this.nineanceApiKey = '',
+    this.nineanceHasApiKey = false,
+    this.nineanceApiSecret = '',
+    this.nineanceHasApiSecret = false,
+    this.nineanceProviderKey = 'indiavoice',
+    this.nineanceDisplayName = 'NB Dialer',
+    this.nineanceWebhookToken = '',
+    this.nineanceWebhookUrl = '',
+    this.nineanceDefaultDidId = '',
+    this.nineanceConnected = false,
+    this.elisionApiUrl = '',
+    this.elisionUserId = '',
+    this.elisionDid = '',
+    this.elisionRouteNumber = '',
+    this.elisionDefaultAgentNumber = '',
+    this.elisionApiKey = '',
+    this.elisionCampaignId = '',
+    this.elisionAgentId = '',
     required this.notInterestedRetentionDays,
     required this.binRetentionDays,
     this.notInterestedReasons = const [
@@ -985,11 +1014,29 @@ class CrmSettings {
 
   factory CrmSettings.fromJson(Map<String, dynamic> json) {
     return CrmSettings(
-      elisionApiUrl: json['elision_api_url']?.toString() ?? 'https://greeter.co.in/api/click2call',
-      elisionUserId: json['elision_user_id']?.toString() ?? '634550',
-      elisionDid: json['elision_did']?.toString() ?? '9484700070',
-      elisionRouteNumber: json['elision_route_number']?.toString() ?? '98',
-      elisionDefaultAgentNumber: json['elision_default_agent_number']?.toString() ?? '8511139384',
+      nineanceBaseUrl: json['nineance_base_url']?.toString() ?? 'https://crmapi.9ance.com',
+      nineanceEmail: json['nineance_email']?.toString() ?? '',
+      nineancePassword: json['nineance_password']?.toString() ?? '',
+      nineanceHasPassword: json['nineance_has_password'] == true ||
+          json['nineance_has_password']?.toString() == 'true',
+      nineanceApiKey: json['nineance_api_key']?.toString() ?? '',
+      nineanceHasApiKey: json['nineance_has_api_key'] == true ||
+          json['nineance_has_api_key']?.toString() == 'true',
+      nineanceApiSecret: json['nineance_api_secret']?.toString() ?? '',
+      nineanceHasApiSecret: json['nineance_has_api_secret'] == true ||
+          json['nineance_has_api_secret']?.toString() == 'true',
+      nineanceProviderKey: json['nineance_provider_key']?.toString() ?? 'indiavoice',
+      nineanceDisplayName: json['nineance_display_name']?.toString() ?? 'NB Dialer',
+      nineanceWebhookToken: json['nineance_webhook_token']?.toString() ?? '',
+      nineanceWebhookUrl: json['nineance_webhook_url']?.toString() ?? '',
+      nineanceDefaultDidId: json['nineance_default_did_id']?.toString() ?? '',
+      nineanceConnected: json['nineance_connected'] == true ||
+          json['nineance_connected']?.toString() == 'true',
+      elisionApiUrl: json['elision_api_url']?.toString() ?? '',
+      elisionUserId: json['elision_user_id']?.toString() ?? '',
+      elisionDid: json['elision_did']?.toString() ?? '',
+      elisionRouteNumber: json['elision_route_number']?.toString() ?? '',
+      elisionDefaultAgentNumber: json['elision_default_agent_number']?.toString() ?? '',
       elisionApiKey: json['elision_api_key']?.toString() ?? '',
       elisionCampaignId: json['elision_campaign_id']?.toString() ?? '',
       elisionAgentId: json['elision_agent_id']?.toString() ?? '',
@@ -1282,35 +1329,31 @@ class FinserveApplicationField {
 
 class CrmTelecallerTelephonyConfig {
   const CrmTelecallerTelephonyConfig({
-    required this.apiUrl,
-    required this.userId,
-    required this.did,
-    required this.routeNumber,
-    required this.agentNumber,
+    this.agentId = '',
+    this.agentNumber = '',
+    this.agentEmail = '',
+    this.didId = '',
   });
 
-  final String apiUrl;
-  final String userId;
-  final String did;
-  final String routeNumber;
+  final String agentId;
   final String agentNumber;
+  final String agentEmail;
+  final String didId;
 
   factory CrmTelecallerTelephonyConfig.fromJson(Map<String, dynamic> json) {
     return CrmTelecallerTelephonyConfig(
-      apiUrl: json['api_url']?.toString() ?? 'https://greeter.co.in/api/click2call',
-      userId: json['user_id']?.toString() ?? '',
-      did: json['did']?.toString() ?? '',
-      routeNumber: json['route_number']?.toString() ?? '',
+      agentId: json['agent_id']?.toString() ?? '',
       agentNumber: json['agent_number']?.toString() ?? '',
+      agentEmail: json['agent_email']?.toString() ?? '',
+      didId: json['did_id']?.toString() ?? json['did']?.toString() ?? '',
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'api_url': apiUrl,
-        'user_id': userId,
-        'did': did,
-        'route_number': routeNumber,
+        'agent_id': agentId,
         'agent_number': agentNumber,
+        'agent_email': agentEmail,
+        'did_id': didId,
       };
 }
 
@@ -1341,13 +1384,7 @@ class CrmTelecallerTelephony {
       configured: json['configured'] == true,
       config: cfg is Map
           ? CrmTelecallerTelephonyConfig.fromJson(Map<String, dynamic>.from(cfg))
-          : const CrmTelecallerTelephonyConfig(
-              apiUrl: 'https://greeter.co.in/api/click2call',
-              userId: '',
-              did: '',
-              routeNumber: '',
-              agentNumber: '',
-            ),
+          : const CrmTelecallerTelephonyConfig(),
     );
   }
 }

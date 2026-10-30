@@ -1219,7 +1219,7 @@ class _ModularMatrixTableState extends State<_ModularMatrixTable> {
               ),
               _buildCrmSubCard(
                 title: 'NB Finserve CRM',
-                subtitle: 'Financial services pre-sales, campaigns, pipelines, and Elision telephony',
+                subtitle: 'Financial services pre-sales, campaigns, pipelines, and 9ance telephony',
                 icon: Icons.account_balance_wallet_rounded,
                 color: const Color(0xFF2563EB), // Sapphire blue
                 modules: categoryModules.where((m) => m.key.startsWith('FIN_')).toList(),

@@ -585,6 +585,202 @@ class CrmRepository {
     );
   }
 
+  Future<Map<String, dynamic>> testNineanceConnection() async {
+    return _dio.postEnvelope<Map<String, dynamic>>(
+      'crm/telephony/test-connection',
+      data: {},
+      parse: (raw) => Map<String, dynamic>.from(raw as Map? ?? {}),
+    );
+  }
+
+  Future<Map<String, dynamic>> activateNineance([Map<String, dynamic>? body]) async {
+    return _dio.postEnvelope<Map<String, dynamic>>(
+      'crm/telephony/activate',
+      data: body ?? {},
+      parse: (raw) => Map<String, dynamic>.from(raw as Map? ?? {}),
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> listNineanceAgents() async {
+    return _dio.getEnvelope<List<Map<String, dynamic>>>(
+      'crm/telephony/agents',
+      parse: (raw) {
+        final map = raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
+        final list = map['agents'] ?? raw;
+        if (list is! List) return [];
+        return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      },
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> syncNineanceAgents() async {
+    return _dio.postEnvelope<List<Map<String, dynamic>>>(
+      'crm/telephony/agents/sync',
+      data: {},
+      parse: (raw) {
+        final map = raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
+        final list = map['agents'] ?? raw;
+        if (list is! List) return [];
+        return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> assignNineanceAgent(
+    String agentId, {
+    int? employeeId,
+    String? userId,
+  }) async {
+    return _dio.postEnvelope<Map<String, dynamic>>(
+      'crm/telephony/agents/$agentId/assign',
+      data: {
+        if (employeeId != null) 'employee_id': employeeId,
+        if (userId != null) 'user_id': userId,
+      },
+      parse: (raw) => Map<String, dynamic>.from(raw as Map? ?? {}),
+    );
+  }
+
+  Future<Map<String, dynamic>> setNineanceAgentStatus(
+    String agentId,
+    String status, {
+    String? breakType,
+  }) async {
+    return _dio.postEnvelope<Map<String, dynamic>>(
+      'crm/telephony/agents/$agentId/status',
+      data: {
+        'status': status,
+        if (breakType != null) 'break_type': breakType,
+      },
+      parse: (raw) => Map<String, dynamic>.from(raw as Map? ?? {}),
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> listNineanceDids() async {
+    return _dio.getEnvelope<List<Map<String, dynamic>>>(
+      'crm/telephony/dids',
+      parse: (raw) {
+        final map = raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
+        final list = map['dids'] ?? raw;
+        if (list is! List) return [];
+        return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      },
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> syncNineanceDids() async {
+    return _dio.postEnvelope<List<Map<String, dynamic>>>(
+      'crm/telephony/dids/sync',
+      data: {},
+      parse: (raw) {
+        final map = raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
+        final list = map['dids'] ?? raw;
+        if (list is! List) return [];
+        return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> setNineanceDefaultDid(String didId) async {
+    return _dio.postEnvelope<Map<String, dynamic>>(
+      'crm/telephony/dids/$didId/set-default',
+      data: {},
+      parse: (raw) => Map<String, dynamic>.from(raw as Map? ?? {}),
+    );
+  }
+
+  Future<Map<String, dynamic>> syncNineanceCalls() async {
+    return _dio.postEnvelope<Map<String, dynamic>>(
+      'crm/telephony/calls/sync',
+      data: {},
+      parse: (raw) => Map<String, dynamic>.from(raw as Map? ?? {}),
+    );
+  }
+
+  Future<Map<String, dynamic>> getNineanceDialerConfig() async {
+    return _dio.getEnvelope<Map<String, dynamic>>(
+      'crm/telephony/dialer-config',
+      parse: (raw) => Map<String, dynamic>.from(raw as Map? ?? {}),
+    );
+  }
+
+  Future<Map<String, dynamic>> getNineanceWsToken() async {
+    return _dio.getEnvelope<Map<String, dynamic>>(
+      'crm/telephony/ws-token',
+      parse: (raw) => Map<String, dynamic>.from(raw as Map? ?? {}),
+    );
+  }
+
+  Future<dynamic> listNineanceLiveCalls() async {
+    return _dio.getEnvelope<dynamic>(
+      'crm/telephony/live-calls',
+      parse: (raw) => raw,
+    );
+  }
+
+  Future<Map<String, dynamic>> matchNineancePhone(String phone) async {
+    return _dio.getEnvelope<Map<String, dynamic>>(
+      'crm/telephony/match-phone',
+      queryParameters: {'phone': phone},
+      parse: (raw) => Map<String, dynamic>.from(raw as Map? ?? {}),
+    );
+  }
+
+  Future<Map<String, dynamic>> dispositionNineanceCall(
+    String callId, {
+    required String disposition,
+    String? notes,
+    String? followUpAt,
+  }) async {
+    return _dio.postEnvelope<Map<String, dynamic>>(
+      'crm/telephony/calls/$callId/disposition',
+      data: {
+        'disposition': disposition,
+        if (notes != null) 'notes': notes,
+        if (followUpAt != null) 'follow_up_at': followUpAt,
+      },
+      parse: (raw) => Map<String, dynamic>.from(raw as Map? ?? {}),
+    );
+  }
+
+  Future<dynamic> listNineanceCampaigns() async {
+    return _dio.getEnvelope<dynamic>(
+      'crm/telephony/campaigns',
+      parse: (raw) => raw,
+    );
+  }
+
+  Future<Map<String, dynamic>> createNineanceCampaign(Map<String, dynamic> body) async {
+    return _dio.postEnvelope<Map<String, dynamic>>(
+      'crm/telephony/campaigns',
+      data: body,
+      parse: (raw) => Map<String, dynamic>.from(raw as Map? ?? {}),
+    );
+  }
+
+  Future<Map<String, dynamic>> startNineanceCampaign(String id) async {
+    return _dio.postEnvelope<Map<String, dynamic>>(
+      'crm/telephony/campaigns/$id/start',
+      data: {},
+      parse: (raw) => Map<String, dynamic>.from(raw as Map? ?? {}),
+    );
+  }
+
+  Future<Map<String, dynamic>> stopNineanceCampaign(String id) async {
+    return _dio.postEnvelope<Map<String, dynamic>>(
+      'crm/telephony/campaigns/$id/stop',
+      data: {},
+      parse: (raw) => Map<String, dynamic>.from(raw as Map? ?? {}),
+    );
+  }
+
+  Future<Map<String, dynamic>> nineanceCampaignReport(String id) async {
+    return _dio.getEnvelope<Map<String, dynamic>>(
+      'crm/telephony/campaigns/$id/report',
+      parse: (raw) => Map<String, dynamic>.from(raw as Map? ?? {}),
+    );
+  }
+
   Future<CrmKpiMetrics> getKpiMetrics({
     String? projectId,
     String? campaignId,

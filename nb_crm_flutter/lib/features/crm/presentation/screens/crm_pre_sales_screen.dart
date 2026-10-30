@@ -15,6 +15,7 @@ import '../../data/crm_repository.dart';
 import '../../domain/crm_models.dart';
 import '../bloc/crm_leads_bloc.dart';
 import '../widgets/crm_audio_player_dialog.dart';
+import '../widgets/crm_nineance_dialer_panel.dart';
 import '../widgets/crm_scope_selector.dart';
 import '../widgets/crm_telecaller_status_dialog.dart';
 import '../widgets/crm_send_whatsapp_dialog.dart';
@@ -274,6 +275,15 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
               ),
               body: Column(
                 children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                    child: CrmNineanceDialerPanel(
+                      onIncomingLead: (leadId) {
+                        // Refresh leads so inbound match is visible
+                        context.read<CrmLeadsBloc>().add(const CrmLeadsLoadRequested());
+                      },
+                    ),
+                  ),
                   if (_isOnBreak && _isTelecallerUser())
                     Container(
                       width: double.infinity,
@@ -1279,7 +1289,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                             children: [
                               Icon(Icons.phone_in_talk_rounded, size: 16, color: Color(0xFF16A34A)),
                               SizedBox(width: 6),
-                              Text('Elision', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF16A34A))),
+                              Text('Call', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF16A34A))),
                             ],
                           ),
                         ),
@@ -1512,12 +1522,12 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                               ),
                             ),
 
-                            // Elision Phone Icon Column
+                            // 9ance Click-to-Call
                             DataCell(
                               IconButton(
                                 tooltip: isBlockedForTelecaller
                                     ? 'Lead is handed over to Sales (${lead.assignedToName ?? "Sales Rep"}) — Telecalling is blocked.'
-                                    : 'Click-to-Call via Elision',
+                                    : 'Click-to-Call via 9ance',
                                 icon: Container(
                                   padding: const EdgeInsets.all(6),
                                   decoration: BoxDecoration(
@@ -1541,7 +1551,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                           ),
                                         );
                                       }
-                                    : () => _handleElisionCallAndFollowUp(context, lead),
+                                    : () => _handleNineanceCallAndFollowUp(context, lead),
                               ),
                             ),
 
@@ -2299,7 +2309,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
   }
 
   // ---------------------------------------------------------------------------
-  // TAB 3: Call Recordings & Telephony Logs (Elision / Greeter CTI)
+  // TAB 3: Call Recordings & Telephony Logs (9ance Cloud Telephony)
   // ---------------------------------------------------------------------------
   Widget _buildCallRecordingsTab(
     BuildContext context,
@@ -2351,7 +2361,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Track all incoming and outgoing Greeter CTI calls, talk durations, and listen to audio recordings.',
+                    'Track all incoming and outgoing 9ance calls, talk durations, and listen to audio recordings.',
                     style: TextStyle(fontSize: 13, color: textMuted),
                   ),
                 ],
@@ -2788,9 +2798,9 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
   }
 
   // ---------------------------------------------------------------------------
-  // Elision Call & Automatic Follow-Up Trigger
+  // 9ance Call & Automatic Follow-Up Trigger
   // ---------------------------------------------------------------------------
-  Future<void> _handleElisionCallAndFollowUp(BuildContext context, CrmLead lead) async {
+  Future<void> _handleNineanceCallAndFollowUp(BuildContext context, CrmLead lead) async {
     try {
       final callRes = await context.read<CrmRepository>().clickToCall(lead.id);
       if (mounted) {

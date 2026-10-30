@@ -33,6 +33,7 @@ function initZipArchive(options: any = { zlib: { level: 9 } }): any {
 }
 import { uploadService } from '../personal-education/upload.service';
 import { whatsappService } from './whatsapp.service';
+import { telephonyService } from './telephony.service';
 import { sendFinserveClientOtpEmail } from '../../utils/mailer';
 import { isAdminRole } from '../auth/permissions-map';
 import { deriveDayInOut } from '../attendance/dayPunch.rules';
@@ -3009,17 +3010,28 @@ export const crmService = {
   },
 
   // ---------------------------------------------------------------------------
-  // Settings & Elision Telephony
+  // Settings & 9ance Cloud Telephony
   // ---------------------------------------------------------------------------
   async getSettings(scope: string = 'NB_DEVELOPER') {
     const isFinserve = scope === 'NB_FINSERVE';
     const settings = await prisma.crmSetting.findMany();
     const map: Record<string, string> = {
-      elision_api_url: 'https://greeter.co.in/api/click2call',
-      elision_user_id: '634550',
-      elision_did: '9484700070',
-      elision_route_number: '98',
-      elision_default_agent_number: '8511139384',
+      nineance_base_url: 'https://crmapi.9ance.com',
+      nineance_email: '',
+      nineance_password: '',
+      nineance_api_key: '',
+      nineance_api_secret: '',
+      nineance_provider_key: 'indiavoice',
+      nineance_display_name: isFinserve ? 'NB Finserve Dialer' : 'NB Developer Dialer',
+      nineance_webhook_token: '',
+      nineance_webhook_url: '',
+      nineance_default_did_id: '',
+      nineance_connected: 'false',
+      elision_api_url: '',
+      elision_user_id: '',
+      elision_did: '',
+      elision_route_number: '',
+      elision_default_agent_number: '',
       elision_api_key: '',
       elision_campaign_id: '',
       elision_agent_id: '',
@@ -3140,14 +3152,48 @@ export const crmService = {
         }
       }
     }
+
+    // Overlay masked 9ance public fields (never expose raw secrets)
+    try {
+      const nine = await telephonyService.getPublicNineanceFields(scope);
+      Object.assign(map, nine);
+    } catch (_) {}
+
     return map;
   },
 
   async updateSettings(dto: UpdateCrmSettingsDto, updatedBy?: string, scope: string = 'NB_DEVELOPER') {
     const isFinserve = scope === 'NB_FINSERVE';
+
+    // Route 9ance credential fields through telephony service (handles masking)
+    const nineKeys = [
+      'nineance_base_url',
+      'nineance_email',
+      'nineance_password',
+      'nineance_api_key',
+      'nineance_api_secret',
+      'nineance_provider_key',
+      'nineance_display_name',
+      'nineance_default_did_id',
+    ];
+    const nineDto: Record<string, any> = {};
+    let hasNine = false;
+    for (const k of nineKeys) {
+      if (dto[k] !== undefined) {
+        nineDto[k] = dto[k];
+        hasNine = true;
+        delete (dto as any)[k];
+      }
+    }
+    if (hasNine) {
+      await telephonyService.saveNineanceCredentials(nineDto, updatedBy, scope);
+    }
+
     const entries = Object.entries(dto);
     for (const [key, value] of entries) {
       if (value !== undefined) {
+        // Stop writing legacy Elision keys
+        if (key.startsWith('elision_')) continue;
         const dbKey = isFinserve ? `finserve_${key}` : key;
         const serializedValue = Array.isArray(value) || (typeof value === 'object' && value !== null)
           ? JSON.stringify(value)
@@ -3837,117 +3883,8 @@ export const crmService = {
     };
   },
 
-  /** JSON map: { [employeeId]: { api_url, user_id, did, route_number, agent_number } } */
-  async _readTelecallerConfigMap(scope: string = 'NB_DEVELOPER'): Promise<
-    Record<
-      string,
-      {
-        api_url?: string;
-        user_id?: string;
-        did?: string;
-        route_number?: string;
-        agent_number?: string;
-      }
-    >
-  > {
-    const isFinserve = scope === 'NB_FINSERVE';
-    const key = isFinserve ? 'finserve_elision_telecaller_configs' : 'elision_telecaller_configs';
-    const row = await prisma.crmSetting.findUnique({
-      where: { key },
-    });
-    if (!row?.value) return {};
-    try {
-      const parsed = JSON.parse(row.value);
-      return parsed && typeof parsed === 'object' ? parsed : {};
-    } catch {
-      return {};
-    }
-  },
-
-  async _writeTelecallerConfigMap(
-    map: Record<string, unknown>,
-    updatedBy?: string,
-    scope: string = 'NB_DEVELOPER',
-  ) {
-    const isFinserve = scope === 'NB_FINSERVE';
-    const key = isFinserve ? 'finserve_elision_telecaller_configs' : 'elision_telecaller_configs';
-    await prisma.crmSetting.upsert({
-      where: { key },
-      update: { value: JSON.stringify(map), updatedBy },
-      create: {
-        key,
-        value: JSON.stringify(map),
-        description: `Per-telecaller Elision/Greeter Click2Call credentials for ${isFinserve ? 'NB Finserve' : 'NB Developer'}`,
-        updatedBy,
-      },
-    });
-  },
-
   async listTelecallerTelephony(scope: string = 'NB_DEVELOPER') {
-    const defaults = await this.getSettings(scope);
-    const configs = await this._readTelecallerConfigMap(scope);
-
-    const telecallers = await prisma.employee.findMany({
-      where: {
-        status: 'ACTIVE',
-        OR: [
-          {
-            generalInfo: {
-              designation: { equals: 'Telecaller', mode: 'insensitive' },
-            },
-          },
-          {
-            generalInfo: {
-              designationRef: {
-                name: { equals: 'Telecaller', mode: 'insensitive' },
-              },
-            },
-          },
-        ],
-      },
-      select: {
-        id: true,
-        userId: true,
-        generalInfo: {
-          select: {
-            fullName: true,
-            employeeCode: true,
-            designation: true,
-          },
-        },
-      },
-      orderBy: { generalInfo: { fullName: 'asc' } },
-    });
-
-    return {
-      defaults: {
-        api_url: defaults.elision_api_url,
-        user_id: defaults.elision_user_id,
-        did: defaults.elision_did,
-        route_number: defaults.elision_route_number,
-        agent_number: defaults.elision_default_agent_number,
-      },
-      telecallers: telecallers.map((e) => {
-        const cfg = configs[String(e.id)] ?? {};
-        return {
-          employeeId: e.id,
-          userId: e.userId,
-          name: e.generalInfo?.fullName ?? `Employee #${e.id}`,
-          employeeCode: e.generalInfo?.employeeCode ?? null,
-          designation: e.generalInfo?.designation ?? 'Telecaller',
-          configured: Boolean(
-            cfg.agent_number || cfg.user_id || cfg.did || cfg.api_url || cfg.route_number,
-          ),
-          config: {
-            api_url: cfg.api_url ?? defaults.elision_api_url,
-            user_id: cfg.user_id ?? defaults.elision_user_id,
-            did: cfg.did ?? defaults.elision_did,
-            route_number: cfg.route_number ?? defaults.elision_route_number,
-            agent_number: cfg.agent_number ?? defaults.elision_default_agent_number,
-          },
-        };
-      }),
-    };
+    return telephonyService.listTelecallerTelephony(scope);
   },
 
   async upsertTelecallerTelephony(
@@ -3956,462 +3893,19 @@ export const crmService = {
     updatedBy?: string,
     scope: string = 'NB_DEVELOPER',
   ) {
-    if (!Number.isFinite(employeeId) || employeeId <= 0) {
-      throw new Error('Invalid employee id');
-    }
-    const emp = await prisma.employee.findUnique({
-      where: { id: employeeId },
-      include: {
-        generalInfo: {
-          select: {
-            designation: true,
-            designationRef: { select: { name: true } },
-          },
-        },
-      },
-    });
-    if (!emp) throw new Error('Employee not found');
-    const desig =
-      emp.generalInfo?.designationRef?.name ?? emp.generalInfo?.designation ?? '';
-    if (!/telecaller/i.test(desig)) {
-      throw new Error('Employee designation must be Telecaller');
-    }
-
-    const map = await this._readTelecallerConfigMap(scope);
-    map[String(employeeId)] = {
-      api_url: body.api_url != null ? String(body.api_url).trim() : map[String(employeeId)]?.api_url,
-      user_id: body.user_id != null ? String(body.user_id).trim() : map[String(employeeId)]?.user_id,
-      did: body.did != null ? String(body.did).trim() : map[String(employeeId)]?.did,
-      route_number:
-        body.route_number != null
-          ? String(body.route_number).trim()
-          : map[String(employeeId)]?.route_number,
-      agent_number:
-        body.agent_number != null
-          ? String(body.agent_number).trim()
-          : map[String(employeeId)]?.agent_number,
-    };
-    await this._writeTelecallerConfigMap(map, updatedBy, scope);
-    const list = await this.listTelecallerTelephony(scope);
-    return list.telecallers.find((t) => t.employeeId === employeeId) ?? null;
+    return telephonyService.upsertTelecallerTelephony(employeeId, body, updatedBy, scope);
   },
 
   async clickToCall(leadId: string, agentPhoneOrId?: string, userContext?: any) {
-    const lead = await prisma.crmLead.findUnique({ where: { id: leadId } });
-    if (!lead) throw new Error('Lead not found');
-
-    const leadScope = lead.scope || 'NB_DEVELOPER';
-    const settings = await this.getSettings(leadScope);
-    const telecallerMap = await this._readTelecallerConfigMap(leadScope);
-    const empId = userContext?.employeeId != null ? Number(userContext.employeeId) : null;
-    const personal =
-      empId != null && Number.isFinite(empId) ? telecallerMap[String(empId)] : undefined;
-
-    const apiUrl =
-      personal?.api_url || settings.elision_api_url || 'https://greeter.co.in/api/click2call';
-    const userId = personal?.user_id || settings.elision_user_id || '634550';
-    const routeNumber = personal?.route_number || settings.elision_route_number || '98';
-    const did = personal?.did || settings.elision_did || '9484700070';
-
-    // Normalize customer phone number (strip spaces/dashes)
-    let customerNumber = lead.phone.replace(/[^0-9]/g, '');
-    if (customerNumber.length > 10 && customerNumber.startsWith('91')) {
-      customerNumber = customerNumber.substring(2);
-    }
-
-    // Resolve Agent Mobile Number — prefer personal telephony config, then explicit arg, then profile, then global default
-    let agentNumber: string | null | undefined =
-      personal?.agent_number || agentPhoneOrId || null;
-    if (!agentNumber && userContext?.employeeId) {
-      try {
-        const emp = await prisma.employee.findUnique({
-          where: { id: userContext.employeeId },
-          include: { addresses: true },
-        });
-        const addrWithPhone = emp?.addresses?.find((a: any) => a.mobileNo || a.phoneNo);
-        if (addrWithPhone) {
-          agentNumber = addrWithPhone.mobileNo || addrWithPhone.phoneNo;
-        }
-      } catch (_) {}
-    }
-    let resolvedAgentNumber = agentNumber || settings.elision_default_agent_number || '8511139384';
-    resolvedAgentNumber = resolvedAgentNumber.replace(/[^0-9]/g, '');
-    if (resolvedAgentNumber.length > 10 && resolvedAgentNumber.startsWith('91')) {
-      resolvedAgentNumber = resolvedAgentNumber.substring(2);
-    }
-
-    // Log call attempt timestamp on the lead
-    await prisma.crmLead.update({
-      where: { id: leadId },
-      data: { lastCallAt: new Date() },
-    });
-
-    try {
-      // Greeter / Elision Click2Call API payload (multipart form / URLSearchParams)
-      const formParams = new URLSearchParams();
-      formParams.append('user_id', userId);
-      formParams.append('customer_number', customerNumber);
-      formParams.append('agen_number', resolvedAgentNumber); // Note key name is agen_number
-      formParams.append('number', routeNumber);
-      formParams.append('did', did);
-
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: formParams.toString(),
-      });
-
-      const responseText = await response.text();
-      let responseData: any = {};
-      try {
-        responseData = JSON.parse(responseText);
-      } catch (_) {
-        responseData = { rawResponse: responseText };
-      }
-
-      // Record call log attempt
-      await prisma.crmCallLog.create({
-        data: {
-          leadId: lead.id,
-          customerNumber,
-          agentNumber: resolvedAgentNumber,
-          did,
-          callStatus: response.ok ? 'INITIATED' : 'FAILED',
-          callTime: new Date(),
-          rawPayload: responseData,
-        },
-      });
-
-      return {
-        success: response.ok,
-        message: response.ok
-          ? `Call initiated! Dialing agent (${resolvedAgentNumber}) first, then customer (${customerNumber}).`
-          : `Telephony API returned error: ${responseText}`,
-        customerNumber,
-        agentNumber: resolvedAgentNumber,
-        did,
-        data: responseData,
-      };
-    } catch (err: any) {
-      // Record failed call attempt log
-      await prisma.crmCallLog.create({
-        data: {
-          leadId: lead.id,
-          customerNumber,
-          agentNumber: resolvedAgentNumber,
-          did,
-          callStatus: 'CONNECTION_ERROR',
-          callTime: new Date(),
-          rawPayload: { error: err.message },
-        },
-      });
-
-      return {
-        success: false,
-        error: err.message || 'Failed to connect to Elision Telephony API',
-      };
-    }
+    return telephonyService.clickToCall(leadId, agentPhoneOrId, userContext);
   },
 
   async handleTelephonyWebhook(payload: any) {
-    // Greeter / Elision Call Log Post Payload Parser
-    const rawCustomer = String(
-      payload.customer_number ||
-      payload.Customer_No ||
-      payload.customer_no ||
-      payload.phone ||
-      payload.customerNumber ||
-      payload.Customer_Mobile ||
-      payload.mobile ||
-      payload.cli ||
-      payload.caller ||
-      payload.caller_id ||
-      payload.callerId ||
-      payload.destination ||
-      payload.dst ||
-      payload.src ||
-      ''
-    ).replace(/[^0-9]/g, '');
-
-    const rawAgent = String(
-      payload.agent_number ||
-      payload.agen_number ||
-      payload.Agent_No ||
-      payload.agent_no ||
-      payload.agentNumber ||
-      payload.agent ||
-      payload.user ||
-      payload.extension ||
-      payload.agent_id ||
-      ''
-    ).replace(/[^0-9]/g, '');
-
-    if (!rawCustomer) {
-      return {
-        status: 'ignored',
-        message: 'No valid customer phone number found in payload',
-      };
-    }
-
-    const rawStatus = String(
-      payload.call_status ||
-      payload.status ||
-      payload.Status ||
-      payload.disposition ||
-      payload.Call_Status ||
-      payload.callStatus ||
-      payload.dispo ||
-      'COMPLETED'
-    ).trim();
-
-    let callStatus = rawStatus.toUpperCase();
-    if (['ANSWER', 'ANSWERED', 'COMPLETED', 'SUCCESS', 'CONNECTED'].includes(callStatus)) {
-      callStatus = 'ANSWERED';
-    } else if (['NOANSWER', 'NO_ANSWER', 'MISSED', 'UNANSWERED', 'CANCEL'].includes(callStatus)) {
-      callStatus = 'MISSED';
-    } else if (['BUSY', 'LINE_BUSY', 'USER_BUSY'].includes(callStatus)) {
-      callStatus = 'BUSY';
-    }
-
-    const duration = parseInt(
-      String(
-        payload.AnsDur ||
-        payload.ansdur ||
-        payload.ans_dur ||
-        payload.duration ||
-        payload.talk_time ||
-        payload.Duration ||
-        payload.call_duration ||
-        payload.billsec ||
-        payload.answered_time ||
-        payload.talktime ||
-        0
-      ),
-      10
-    ) || 0;
-
-    let recordingUrl =
-      payload.recording_url ||
-      payload.recording_path ||
-      payload.Recording_Path ||
-      payload.RecordingPath ||
-      payload.recording ||
-      payload.Recording ||
-      payload.Audio_URL ||
-      payload.audio_url ||
-      payload.record_url ||
-      payload.recording_file ||
-      payload.record_file ||
-      payload.AudioUrl ||
-      payload.RecordingUrl ||
-      payload.filename ||
-      payload.file_url ||
-      payload.call_recording ||
-      payload.rec_path ||
-      payload.call_audio ||
-      payload.audio ||
-      null;
-
-    if (recordingUrl && typeof recordingUrl === 'string') {
-      recordingUrl = recordingUrl.trim();
-      if (
-        !recordingUrl.startsWith('http://') &&
-        !recordingUrl.startsWith('https://') &&
-        recordingUrl.length > 3
-      ) {
-        if (recordingUrl.startsWith('/')) {
-          recordingUrl = `https://greeter.co.in${recordingUrl}`;
-        } else {
-          recordingUrl = `https://greeter.co.in/recordings/${recordingUrl}`;
-        }
-      }
-    }
-
-    const did = payload.did || payload.DID || payload.did_number || payload.virtual_number || payload.ivr_number || null;
-    const callId = payload.call_id || payload.unique_id || payload.Call_ID || payload.callId || null;
-    const callTime = payload.call_time || payload.Call_Time || payload.start_time || payload.calldate || payload.timestamp
-      ? new Date(payload.call_time || payload.Call_Time || payload.start_time || payload.calldate || payload.timestamp)
-      : new Date();
-
-    // Match with lead by customer number (last 10 digits)
-    let leadId: string | null = null;
-    if (rawCustomer.length >= 10) {
-      const last10 = rawCustomer.slice(-10);
-      const matchedLead = await prisma.crmLead.findFirst({
-        where: {
-          phone: { contains: last10 },
-        },
-      });
-      if (matchedLead) {
-        leadId = matchedLead.id;
-        await prisma.crmLead.update({
-          where: { id: matchedLead.id },
-          data: { lastCallAt: callTime },
-        });
-      } else {
-        // Auto-create inbound lead so telecallers see incoming inquiries from IVR
-        try {
-          const newLead = await prisma.crmLead.create({
-            data: {
-              phone: rawCustomer,
-              name: `Inbound (${rawCustomer})`,
-              status: 'NOT_STARTED',
-              customFields: {
-                source: did ? `IVR ${did}` : 'IVR Inbound',
-                did: did || '',
-              },
-              lastCallAt: callTime,
-            },
-          });
-          leadId = newLead.id;
-        } catch (_) {}
-      }
-    }
-
-    // Check if there is an existing recent INITIATED log for this customer to update
-    const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
-    const existingInitiatedLog = rawCustomer.length >= 10
-      ? await prisma.crmCallLog.findFirst({
-          where: {
-            customerNumber: { contains: rawCustomer.slice(-10) },
-            callStatus: 'INITIATED',
-            createdAt: { gte: thirtyMinutesAgo },
-          },
-          orderBy: { createdAt: 'desc' },
-        })
-      : null;
-
-    let callLog;
-    if (existingInitiatedLog) {
-      callLog = await prisma.crmCallLog.update({
-        where: { id: existingInitiatedLog.id },
-        data: {
-          leadId: leadId || existingInitiatedLog.leadId,
-          callStatus,
-          duration: duration || existingInitiatedLog.duration,
-          recordingUrl: recordingUrl || existingInitiatedLog.recordingUrl,
-          callTime,
-          did: did || existingInitiatedLog.did,
-          agentNumber: rawAgent || existingInitiatedLog.agentNumber,
-          callId: callId || existingInitiatedLog.callId,
-          rawPayload: payload,
-        },
-      });
-    } else {
-      callLog = await prisma.crmCallLog.create({
-        data: {
-          leadId,
-          customerNumber: rawCustomer,
-          agentNumber: rawAgent,
-          did,
-          callStatus,
-          duration,
-          recordingUrl,
-          callTime,
-          callId,
-          rawPayload: payload,
-        },
-      });
-    }
-
-    // WhatsApp Automation: Post-call relationship greeting message
-    if (leadId && (callStatus === 'ANSWERED' || callStatus === 'COMPLETED' || duration > 0)) {
-      prisma.crmLead
-        .findUnique({
-          where: { id: leadId },
-          include: {
-            campaign: { select: { project: { select: { name: true } } } },
-            assignedTo: { include: { generalInfo: { select: { fullName: true } } } },
-          },
-        })
-        .then((matchedLead) => {
-          if (matchedLead) {
-            whatsappService
-              .triggerEvent('AFTER_CALL', matchedLead, {
-                projectName: (matchedLead.campaign as any)?.project?.name || 'Legacy Tower',
-                callDuration: duration,
-                agentName: matchedLead.assignedTo?.generalInfo?.fullName,
-              })
-              .catch((err) => console.error('[CRM WhatsApp Hook Error - After Call]:', err));
-          }
-        })
-        .catch(() => {});
-    }
-
-    return {
-      status: 'success',
-      message: 'Call log saved successfully',
-      logId: callLog.id,
-      leadMatched: leadId !== null,
-    };
+    return telephonyService.handleTelephonyWebhook(payload);
   },
 
   async streamCallAudio(logId: string, req: Request, res: Response) {
-    const log = await prisma.crmCallLog.findUnique({
-      where: { id: logId },
-      select: { id: true, recordingUrl: true, customerNumber: true },
-    });
-
-    if (!log || !log.recordingUrl) {
-      return res.status(404).send('Recording not found');
-    }
-
-    let audioUrl = log.recordingUrl.trim();
-    if (!audioUrl.startsWith('http://') && !audioUrl.startsWith('https://')) {
-      if (audioUrl.startsWith('/')) {
-        audioUrl = `https://greeter.co.in${audioUrl}`;
-      } else {
-        audioUrl = `https://greeter.co.in/recordings/${audioUrl}`;
-      }
-    }
-
-
-    try {
-      const headers: Record<string, string> = {
-        'User-Agent': 'NB-CRM-Audio-Streamer/1.0',
-      };
-      if (req.headers.range) {
-        headers['Range'] = req.headers.range;
-      }
-
-      const upstreamRes = await fetch(audioUrl, {
-        method: 'GET',
-        headers,
-      });
-
-      const contentType = upstreamRes.headers.get('content-type') || 'audio/mpeg';
-
-      // If PBX returned HTML (such as 404 page or login redirect), do not stream as audio
-      if (contentType.includes('text/html')) {
-        return res.status(404).send('Audio recording file not found on PBX server');
-      }
-
-      res.status(upstreamRes.status);
-      res.setHeader('Content-Type', contentType);
-      res.setHeader('Accept-Ranges', 'bytes');
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Headers', 'Range, Authorization, Content-Type');
-
-      const cl = upstreamRes.headers.get('content-length');
-      if (cl) res.setHeader('Content-Length', cl);
-      const cr = upstreamRes.headers.get('content-range');
-      if (cr) res.setHeader('Content-Range', cr);
-
-      if (upstreamRes.body) {
-        // @ts-ignore
-        const { Readable } = await import('stream');
-        // @ts-ignore
-        Readable.fromWeb(upstreamRes.body).pipe(res);
-      } else {
-        res.end();
-      }
-    } catch (err: any) {
-      if (!res.headersSent) {
-        res.status(502).send(`Error streaming recording: ${err.message}`);
-      }
-    }
+    return telephonyService.streamCallAudio(logId, req, res);
   },
 
   async getCallLogs(query: {

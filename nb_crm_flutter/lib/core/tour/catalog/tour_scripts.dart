@@ -481,7 +481,7 @@ class TourScripts {
           title: 'Leads, search and add',
           route: '/crm/pre-sales',
           body:
-              'First tab is Leads and Inquiries. Search by name or phone. Add New Pre-Sales Lead starts a record. Click-to-Call uses Elision if Settings has the API. Edit the lead. Move to Bin archives it. Headers control which columns you see. Do not invent a side spreadsheet.',
+              'First tab is Leads and Inquiries. Search by name or phone. Add New Pre-Sales Lead starts a record. Click-to-Call uses 9ance if Settings has telephony connected. Edit the lead. Move to Bin archives it. Headers control which columns you see. Do not invent a side spreadsheet.',
         ),
         step(
           sectionId: 'crm.pre_sales',
@@ -534,7 +534,7 @@ class TourScripts {
           title: 'Telephony, KPIs, retention, preferences',
           route: '/crm/settings',
           body:
-              'Tabs are Elision Telephony A P I, Dashboard K P I Management, Bin and Retention Policy, and General Preferences. Telephony needs click to call U R L, credentials and a webhook. K P I toggles show or hide dashboard tiles. Retention controls bin restore. Preferences include default currency, telecaller calling window, and who may assign sales reps. Test one lead after a change.',
+              'Tabs are 9ance Cloud Telephony, Dashboard K P I Management, Bin and Retention Policy, and General Preferences. Telephony needs 9ance email, password, A P I key and secret, then Activate and Sync. Map agents to telecallers. K P I toggles show or hide dashboard tiles. Retention controls bin restore. Test one lead after a change.',
         ),
       ];
 

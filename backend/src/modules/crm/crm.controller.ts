@@ -611,14 +611,282 @@ export const crmController = {
 
   async handleTelephonyWebhook(req: Request, res: Response) {
     try {
-      console.log('[GREETER WEBHOOK RECEIVED]:', JSON.stringify({ body: req.body, query: req.query, headers: req.headers }, null, 2));
+      console.log('[9ANCE WEBHOOK RECEIVED]:', JSON.stringify({ body: req.body, query: req.query }, null, 2));
       const payload = { ...req.body, ...req.query };
       const result = await crmService.handleTelephonyWebhook(payload);
-      console.log('[GREETER WEBHOOK RESULT]:', result);
+      console.log('[9ANCE WEBHOOK RESULT]:', result);
       res.json(result);
     } catch (err: any) {
-      console.error('[GREETER WEBHOOK ERROR]:', err);
+      console.error('[9ANCE WEBHOOK ERROR]:', err);
       res.status(400).json({ status: 'error', message: err.message || 'Webhook processing failed' });
+    }
+  },
+
+  async testNineanceConnection(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const result = await telephonyService.testConnection(getScope(req));
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || '9ance connection test failed'));
+    }
+  },
+
+  async activateNineance(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const authUser = (req as any).user;
+      if (req.body && Object.keys(req.body).length) {
+        await telephonyService.saveNineanceCredentials(req.body, authUser?.id, getScope(req));
+      }
+      const result = await telephonyService.activate(getScope(req), authUser?.id);
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to activate 9ance telephony'));
+    }
+  },
+
+  async listNineanceAgents(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const result = await telephonyService.listAgents(getScope(req));
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to list agents'));
+    }
+  },
+
+  async syncNineanceAgents(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const result = await telephonyService.syncAgents(getScope(req));
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to sync agents'));
+    }
+  },
+
+  async assignNineanceAgent(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const authUser = (req as any).user;
+      const result = await telephonyService.assignAgent(
+        String(req.params.id),
+        req.body ?? {},
+        getScope(req),
+        authUser?.id,
+      );
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to assign agent'));
+    }
+  },
+
+  async setNineanceAgentStatus(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const result = await telephonyService.setAgentStatus(
+        String(req.params.id),
+        String(req.body?.status || 'ready'),
+        req.body?.break_type,
+        getScope(req),
+      );
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to set agent status'));
+    }
+  },
+
+  async listNineanceDids(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const result = await telephonyService.listDids(getScope(req));
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to list DIDs'));
+    }
+  },
+
+  async syncNineanceDids(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const result = await telephonyService.syncDids(getScope(req));
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to sync DIDs'));
+    }
+  },
+
+  async setNineanceDefaultDid(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const authUser = (req as any).user;
+      const result = await telephonyService.setDefaultDid(
+        String(req.params.id),
+        getScope(req),
+        authUser?.id,
+      );
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to set default DID'));
+    }
+  },
+
+  async syncNineanceCalls(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const result = await telephonyService.syncCallsFromNineance(getScope(req), req.body || req.query || {});
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to sync calls'));
+    }
+  },
+
+  async getNineanceDialerConfig(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const result = await telephonyService.getDialerConfig(getScope(req));
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to load dialer config'));
+    }
+  },
+
+  async getNineanceWsToken(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const result = await telephonyService.getWsToken(getScope(req));
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to get WS token'));
+    }
+  },
+
+  async listNineanceLiveCalls(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const result = await telephonyService.listLiveCalls(getScope(req));
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to list live calls'));
+    }
+  },
+
+  async matchNineancePhone(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const phone = String(req.query.phone || req.body?.phone || '');
+      const result = await telephonyService.matchPhone(phone, getScope(req));
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Phone match failed'));
+    }
+  },
+
+  async dispositionNineanceCall(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const result = await telephonyService.dispositionCall(
+        String(req.params.callId),
+        req.body || {},
+        getScope(req),
+      );
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to disposition call'));
+    }
+  },
+
+  async listNineanceCampaigns(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const result = await telephonyService.listCampaigns(getScope(req));
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to list campaigns'));
+    }
+  },
+
+  async createNineanceCampaign(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const result = await telephonyService.createCampaign(req.body || {}, getScope(req));
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to create campaign'));
+    }
+  },
+
+  async previewNineanceDialList(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const result = await telephonyService.previewDialList(req.body || {}, getScope(req));
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to preview dial list'));
+    }
+  },
+
+  async startNineanceCampaign(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const result = await telephonyService.startCampaign(String(req.params.id), getScope(req));
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to start campaign'));
+    }
+  },
+
+  async stopNineanceCampaign(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const result = await telephonyService.stopCampaign(String(req.params.id), getScope(req));
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to stop campaign'));
+    }
+  },
+
+  async nineanceCampaignReport(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const result = await telephonyService.campaignReport(String(req.params.id), getScope(req));
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to get campaign report'));
+    }
+  },
+
+  async listNineanceDispositions(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const result = await telephonyService.listDispositions(getScope(req));
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to list dispositions'));
+    }
+  },
+
+  async nineanceAnalytics(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const result = await telephonyService.agentAnalytics(
+        getScope(req),
+        req.query.date as string | undefined,
+      );
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to load analytics'));
+    }
+  },
+
+  async nineanceProviderDashboard(req: Request, res: Response) {
+    try {
+      const { telephonyService } = await import('./telephony.service');
+      const result = await telephonyService.providerDashboard(getScope(req));
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to load telephony dashboard'));
     }
   },
 

@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -7,11 +7,11 @@ import '../../../../core/bloc/load_status.dart';
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/tour/models/tour_models.dart';
 import '../../../../core/tour/widgets/tour_target.dart';
-import '../../../../core/widgets/mobile_input_formatter.dart';
 import '../../data/crm_repository.dart';
 import '../../domain/crm_models.dart';
 import '../bloc/crm_settings_bloc.dart';
 import '../widgets/crm_whatsapp_settings_widget.dart';
+import '../widgets/crm_nineance_telephony_tab.dart';
 import '../widgets/crm_scope_selector.dart';
 
 class CrmSettingsScreen extends StatelessWidget {
@@ -58,13 +58,6 @@ class _CrmSettingsView extends StatefulWidget {
 class _CrmSettingsViewState extends State<_CrmSettingsView>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
-
-  // Controllers for Telephony Settings (Elision / Greeter Click2Call)
-  final _apiUrlController = TextEditingController(text: 'https://greeter.co.in/api/click2call');
-  final _userIdController = TextEditingController(text: '634550');
-  final _didController = TextEditingController(text: '9484700070');
-  final _routeNumberController = TextEditingController(text: '98');
-  final _defaultAgentController = TextEditingController(text: '8511139384');
 
   // Controllers for Retention Settings
   final _notInterestedDaysController = TextEditingController(text: '30');
@@ -140,39 +133,23 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
   final _untouchedTimeoutController = TextEditingController(text: '30');
   final _idleTimeoutController = TextEditingController(text: '5');
 
-  bool _telephonyLoaded = false;
-  List<CrmTelecallerTelephony> _telecallers = [];
-  bool _telecallersLoading = false;
-  int? _selectedTelecallerId;
-  final _tcApiUrlController = TextEditingController();
-  final _tcUserIdController = TextEditingController();
-  final _tcDidController = TextEditingController();
-  final _tcRouteController = TextEditingController();
-  final _tcAgentController = TextEditingController();
-  bool _savingTelecaller = false;
+  bool _settingsHydrated = false;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 6, vsync: this);
-    _tabController.addListener(() {
-      if (_tabController.index == 2 && _telecallers.isEmpty && !_telecallersLoading) {
-        _loadTelecallers();
-      }
-    });
     CrmRepository.crmScopeNotifier.addListener(_onScopeUpdated);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadTelecallers());
   }
 
   void _onScopeUpdated() {
     if (mounted) {
       _presalesConfigLoaded = false;
-      _telephonyLoaded = false;
+      _settingsHydrated = false;
       _kpiLoaded = false;
       _quotationRemarksLoaded = false;
       _activePresalesSection = null;
       _bankSubTab = 0;
-      _loadTelecallers();
       context.read<CrmSettingsBloc>().add(const CrmSettingsLoadRequested());
       setState(() {});
     }
@@ -182,16 +159,6 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
   void dispose() {
     CrmRepository.crmScopeNotifier.removeListener(_onScopeUpdated);
     _tabController.dispose();
-    _apiUrlController.dispose();
-    _userIdController.dispose();
-    _didController.dispose();
-    _routeNumberController.dispose();
-    _defaultAgentController.dispose();
-    _tcApiUrlController.dispose();
-    _tcUserIdController.dispose();
-    _tcDidController.dispose();
-    _tcRouteController.dispose();
-    _tcAgentController.dispose();
     _notInterestedDaysController.dispose();
     _binDaysController.dispose();
     _newLoanTypeController.dispose();
@@ -207,86 +174,11 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
     super.dispose();
   }
 
-  Future<void> _loadTelecallers() async {
-    setState(() => _telecallersLoading = true);
-    try {
-      final data = await context.read<CrmRepository>().listTelecallerTelephony();
-      if (!mounted) return;
-      setState(() {
-        _telecallers = data.telecallers;
-        _telecallersLoading = false;
-        if (_selectedTelecallerId == null && _telecallers.isNotEmpty) {
-          _selectTelecaller(_telecallers.first.employeeId);
-        } else if (_selectedTelecallerId != null) {
-          _selectTelecaller(_selectedTelecallerId!);
-        }
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _telecallersLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to load telecallers: $e')),
-      );
-    }
-  }
-
-  void _selectTelecaller(int employeeId) {
-    CrmTelecallerTelephony? tc;
-    for (final t in _telecallers) {
-      if (t.employeeId == employeeId) {
-        tc = t;
-        break;
-      }
-    }
-    _selectedTelecallerId = employeeId;
-    if (tc == null) return;
-    _tcApiUrlController.text = tc.config.apiUrl;
-    _tcUserIdController.text = tc.config.userId;
-    _tcDidController.text = tc.config.did;
-    _tcRouteController.text = tc.config.routeNumber;
-    _tcAgentController.text = cleanMobile10(tc.config.agentNumber);
-  }
-
-  Future<void> _saveSelectedTelecaller() async {
-    final id = _selectedTelecallerId;
-    if (id == null) return;
-    setState(() => _savingTelecaller = true);
-    try {
-      await context.read<CrmRepository>().saveTelecallerTelephony(id, {
-        'api_url': _tcApiUrlController.text.trim(),
-        'user_id': _tcUserIdController.text.trim(),
-        'did': _tcDidController.text.trim(),
-        'route_number': _tcRouteController.text.trim(),
-        'agent_number': cleanMobile10(_tcAgentController.text.trim()),
-      });
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Telecaller telephony settings saved'),
-          backgroundColor: Colors.green,
-        ),
-      );
-      await _loadTelecallers();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e'), backgroundColor: Colors.red),
-      );
-    } finally {
-      if (mounted) setState(() => _savingTelecaller = false);
-    }
-  }
-
   void _syncSettings(CrmSettings settings) {
-    if (!_telephonyLoaded) {
-      _apiUrlController.text = settings.elisionApiUrl.isNotEmpty ? settings.elisionApiUrl : 'https://greeter.co.in/api/click2call';
-      _userIdController.text = settings.elisionUserId.isNotEmpty ? settings.elisionUserId : '634550';
-      _didController.text = settings.elisionDid.isNotEmpty ? settings.elisionDid : '9484700070';
-      _routeNumberController.text = settings.elisionRouteNumber.isNotEmpty ? settings.elisionRouteNumber : '98';
-      _defaultAgentController.text = cleanMobile10(settings.elisionDefaultAgentNumber.isNotEmpty ? settings.elisionDefaultAgentNumber : '8511139384');
+    if (!_settingsHydrated) {
       _notInterestedDaysController.text = settings.notInterestedRetentionDays.toString();
       _binDaysController.text = settings.binRetentionDays.toString();
-      _telephonyLoaded = true;
+      _settingsHydrated = true;
     }
     if (!_kpiLoaded) {
       _kpiShowActiveLeads = settings.kpiShowActiveLeads;
@@ -431,7 +323,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
                     ],
                   ),
                 ),
-                const Tab(text: 'Elision Telephony API'),
+                const Tab(text: '9ance Cloud Telephony'),
                 const Tab(text: 'Dashboard KPI Management'),
                 const Tab(text: 'Bin & Retention Policy'),
                 const Tab(text: 'General Preferences'),
@@ -442,7 +334,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
             actions: [
               CrmScopeSelectorWidget(
                 onScopeChanged: () {
-                  _telephonyLoaded = false;
+                  _settingsHydrated = false;
                   _kpiLoaded = false;
                   _presalesConfigLoaded = false;
                   _activePresalesSection = null;
@@ -455,7 +347,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
                 tooltip: 'Refresh Settings',
                 icon: const Icon(Icons.refresh_rounded),
                 onPressed: () {
-                  _telephonyLoaded = false;
+                  _settingsHydrated = false;
                   _kpiLoaded = false;
                   _presalesConfigLoaded = false;
                   _activePresalesSection = null;
@@ -483,7 +375,18 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
                 textMuted: textMuted,
                 primaryColor: primaryGold,
               ),
-              _buildElisionTelephonyTab(isDark, cardBg, borderColor, textMuted, primaryGold),
+              state.settings == null
+                  ? const Center(child: CircularProgressIndicator())
+                  : CrmNineanceTelephonyTab(
+                      settings: state.settings!,
+                      isDark: isDark,
+                      cardBg: cardBg,
+                      borderColor: borderColor,
+                      textMuted: textMuted,
+                      onSettingsChanged: () {
+                        context.read<CrmSettingsBloc>().add(const CrmSettingsLoadRequested());
+                      },
+                    ),
               _buildKpiManagementTab(state, isDark, cardBg, borderColor, textMuted, primaryGold),
               _buildRetentionPolicyTab(isDark, cardBg, borderColor, textMuted, primaryGold),
               _buildGeneralTab(isDark, cardBg, borderColor, textMuted),
@@ -494,491 +397,6 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // Tab 1: Elision Telephony Configuration
-  // ---------------------------------------------------------------------------
-  Widget _buildElisionTelephonyTab(
-    bool isDark,
-    Color cardBg,
-    Color borderColor,
-    Color textMuted,
-    Color primaryColor,
-  ) {
-    const webhookUrl = 'https://crm.nbdeveloper.co.in/api/crm/telephony/webhook';
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Center(
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 700),
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: cardBg,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: borderColor),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF16A34A).withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.phone_in_talk_rounded, color: Color(0xFF16A34A), size: 28),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Elision / Greeter Telephony Integration',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: isDark ? Colors.white : const Color(0xFF1E293B),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Connect your Greeter Click2Call dialer and configure the Call Log Webhook URL.',
-                          style: TextStyle(fontSize: 13, color: textMuted),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-
-              // CALL LOG POST WEBHOOK URL CARD
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF24201D) : const Color(0xFFF1F5F9),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFF3B82F6).withValues(alpha: 0.3)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.webhook_rounded, size: 18, color: Color(0xFF3B82F6)),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Call Log Webhook URL (For Greeter Settings)',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: isDark ? Colors.white : const Color(0xFF1E293B),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Paste this URL into your Greeter Portal under SETTING > API Setting > CALL LOG POST API SETTING:',
-                      style: TextStyle(fontSize: 12, color: textMuted),
-                    ),
-                    const SizedBox(height: 10),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: isDark ? Colors.black26 : Colors.white,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: borderColor),
-                      ),
-                      child: Row(
-                        children: [
-                          const Expanded(
-                            child: SelectableText(
-                              webhookUrl,
-                              style: TextStyle(
-                                fontFamily: 'monospace',
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFF3B82F6),
-                              ),
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.copy_rounded, size: 18),
-                            tooltip: 'Copy Webhook URL',
-                            onPressed: () {
-                              Clipboard.setData(const ClipboardData(text: webhookUrl));
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Webhook URL copied to clipboard!'),
-                                  duration: Duration(seconds: 2),
-                                ),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // Per-telecaller credentials
-              Text(
-                'Telecaller dialer credentials',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                  color: isDark ? Colors.white : const Color(0xFF1E293B),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Employees with designation Telecaller. Select a name to configure their Click2Call number and Greeter credentials.',
-                style: TextStyle(fontSize: 12, color: textMuted),
-              ),
-              const SizedBox(height: 12),
-              if (_telecallersLoading)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 16),
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else if (_telecallers.isEmpty)
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.black26 : const Color(0xFFFFF7ED),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFFFDBA74)),
-                  ),
-                  child: Text(
-                    'No active employees with designation “Telecaller” found. Add telecallers in Workforce, then refresh.',
-                    style: TextStyle(fontSize: 13, color: textMuted),
-                  ),
-                )
-              else ...[
-                DropdownButtonFormField<int>(
-                  value: _selectedTelecallerId,
-                  decoration: InputDecoration(
-                    labelText: 'Telecaller',
-                    prefixIcon: const Icon(Icons.person_search_outlined, size: 20),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                  items: [
-                    for (final t in _telecallers)
-                      DropdownMenuItem(
-                        value: t.employeeId,
-                        child: Text(
-                          [
-                            t.name,
-                            if (t.employeeCode != null && t.employeeCode!.isNotEmpty) '(${t.employeeCode})',
-                            if (t.configured) '• configured',
-                          ].join(' '),
-                        ),
-                      ),
-                  ],
-                  onChanged: (id) {
-                    if (id == null) return;
-                    setState(() => _selectTelecaller(id));
-                  },
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'API Endpoint URL (API URL)',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: isDark ? Colors.white : const Color(0xFF1E293B)),
-                ),
-                const SizedBox(height: 6),
-                TextField(
-                  controller: _tcApiUrlController,
-                  decoration: InputDecoration(
-                    hintText: 'https://greeter.co.in/api/click2call',
-                    prefixIcon: const Icon(Icons.link_rounded, size: 20),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final isCompact = constraints.maxWidth < 500;
-                    final userField = Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('User ID (user_id)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: isDark ? Colors.white : const Color(0xFF1E293B))),
-                        const SizedBox(height: 6),
-                        TextField(
-                          controller: _tcUserIdController,
-                          decoration: InputDecoration(
-                            hintText: 'e.g. 634550',
-                            prefixIcon: const Icon(Icons.account_circle_outlined, size: 20),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                        ),
-                      ],
-                    );
-                    final didField = Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Virtual DID Number (did)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: isDark ? Colors.white : const Color(0xFF1E293B))),
-                        const SizedBox(height: 6),
-                        TextField(
-                          controller: _tcDidController,
-                          keyboardType: TextInputType.phone,
-                          decoration: InputDecoration(
-                            hintText: 'e.g. 9484700070',
-                            prefixIcon: const Icon(Icons.call_outlined, size: 20),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                        ),
-                      ],
-                    );
-                    if (isCompact) {
-                      return Column(children: [userField, const SizedBox(height: 14), didField]);
-                    }
-                    return Row(children: [Expanded(child: userField), const SizedBox(width: 16), Expanded(child: didField)]);
-                  },
-                ),
-                const SizedBox(height: 16),
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final isCompact = constraints.maxWidth < 500;
-                    final routeField = Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Route / Campaign Code (number)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: isDark ? Colors.white : const Color(0xFF1E293B))),
-                        const SizedBox(height: 6),
-                        TextField(
-                          controller: _tcRouteController,
-                          decoration: InputDecoration(
-                            hintText: 'e.g. 98',
-                            prefixIcon: const Icon(Icons.tag_rounded, size: 20),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                        ),
-                      ],
-                    );
-                    final agentField = Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Agent Mobile (agen_number)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: isDark ? Colors.white : const Color(0xFF1E293B))),
-                        const SizedBox(height: 6),
-                        TextField(
-                          controller: _tcAgentController,
-                          keyboardType: TextInputType.phone,
-                          inputFormatters: mobileInputFormatters,
-                          decoration: InputDecoration(
-                            hintText: '10-digit mobile',
-                            prefixText: '+91 ',
-                            prefixIcon: const Icon(Icons.smartphone_outlined, size: 20),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                        ),
-                      ],
-                    );
-                    if (isCompact) {
-                      return Column(children: [routeField, const SizedBox(height: 14), agentField]);
-                    }
-                    return Row(children: [Expanded(child: routeField), const SizedBox(width: 16), Expanded(child: agentField)]);
-                  },
-                ),
-                const SizedBox(height: 16),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: ElevatedButton.icon(
-                    onPressed: _savingTelecaller ? null : _saveSelectedTelecaller,
-                    icon: _savingTelecaller
-                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : const Icon(Icons.save_rounded, size: 18),
-                    label: Text(_savingTelecaller ? 'Saving…' : 'Save Telecaller Settings'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF16A34A),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
-                  ),
-                ),
-              ],
-
-              const SizedBox(height: 28),
-              Divider(color: borderColor),
-              const SizedBox(height: 16),
-              Text(
-                'Organisation defaults (fallback)',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                  color: isDark ? Colors.white : const Color(0xFF1E293B),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Used when a telecaller has no personal config yet, or for non-telecaller users.',
-                style: TextStyle(fontSize: 12, color: textMuted),
-              ),
-              const SizedBox(height: 16),
-
-              // API Endpoint URL
-              Text(
-                'API Endpoint URL (API URL)',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: isDark ? Colors.white : const Color(0xFF1E293B)),
-              ),
-              const SizedBox(height: 6),
-              TextField(
-                controller: _apiUrlController,
-                decoration: InputDecoration(
-                  hintText: 'https://greeter.co.in/api/click2call',
-                  prefixIcon: const Icon(Icons.link_rounded, size: 20),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // 2-Column Responsive Form Fields
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final isCompact = constraints.maxWidth < 500;
-
-                  final userField = Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('User ID (user_id)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: isDark ? Colors.white : const Color(0xFF1E293B))),
-                      const SizedBox(height: 6),
-                      TextField(
-                        controller: _userIdController,
-                        decoration: InputDecoration(
-                          hintText: 'e.g. 634550',
-                          prefixIcon: const Icon(Icons.account_circle_outlined, size: 20),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                      ),
-                    ],
-                  );
-
-                  final didField = Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Virtual DID Number (did)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: isDark ? Colors.white : const Color(0xFF1E293B))),
-                      const SizedBox(height: 6),
-                      TextField(
-                        controller: _didController,
-                        keyboardType: TextInputType.phone,
-                        decoration: InputDecoration(
-                          hintText: 'e.g. 9484700070',
-                          prefixIcon: const Icon(Icons.call_outlined, size: 20),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                      ),
-                    ],
-                  );
-
-                  if (isCompact) {
-                    return Column(
-                      children: [
-                        userField,
-                        const SizedBox(height: 14),
-                        didField,
-                      ],
-                    );
-                  }
-
-                  return Row(
-                    children: [
-                      Expanded(child: userField),
-                      const SizedBox(width: 16),
-                      Expanded(child: didField),
-                    ],
-                  );
-                },
-              ),
-              const SizedBox(height: 16),
-
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final isCompact = constraints.maxWidth < 500;
-
-                  final routeField = Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Route / Campaign Code (number)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: isDark ? Colors.white : const Color(0xFF1E293B))),
-                      const SizedBox(height: 6),
-                      TextField(
-                        controller: _routeNumberController,
-                        decoration: InputDecoration(
-                          hintText: 'e.g. 98',
-                          prefixIcon: const Icon(Icons.tag_rounded, size: 20),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                      ),
-                    ],
-                  );
-
-                  final defaultAgentField = Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Default Agent Mobile (agen_number)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: isDark ? Colors.white : const Color(0xFF1E293B))),
-                      const SizedBox(height: 6),
-                      TextField(
-                        controller: _defaultAgentController,
-                        keyboardType: TextInputType.phone,
-                        inputFormatters: mobileInputFormatters,
-                        decoration: InputDecoration(
-                          hintText: '10-digit mobile',
-                          prefixText: '+91 ',
-                          prefixIcon: const Icon(Icons.smartphone_outlined, size: 20),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                      ),
-                    ],
-                  );
-
-                  if (isCompact) {
-                    return Column(
-                      children: [
-                        routeField,
-                        const SizedBox(height: 14),
-                        defaultAgentField,
-                      ],
-                    );
-                  }
-
-                  return Row(
-                    children: [
-                      Expanded(child: routeField),
-                      const SizedBox(width: 16),
-                      Expanded(child: defaultAgentField),
-                    ],
-                  );
-                },
-              ),
-              const SizedBox(height: 28),
-
-              // Save Button (Responsive)
-              Align(
-                alignment: Alignment.centerRight,
-                child: ElevatedButton.icon(
-                  onPressed: _saveTelephonySettings,
-                  icon: const Icon(Icons.save_rounded, size: 18),
-                  label: const Text('Save Default Telephony Settings'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF16A34A),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
   // ---------------------------------------------------------------------------
   // Tab 3: Dashboard KPI Management (Admin Control & Metrics Toggle)
@@ -1033,7 +451,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Admin Control: Toggle and customize which metrics, lead analytics, and Elision telephony statistics appear on your CRM Dashboard.',
+                          'Admin Control: Toggle and customize which metrics, lead analytics, and 9ance telephony statistics appear on your CRM Dashboard.',
                           style: TextStyle(fontSize: 13, color: textMuted),
                         ),
                       ],
@@ -1191,7 +609,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
                   const Icon(Icons.phone_in_talk_rounded, size: 20, color: Color(0xFF16A34A)),
                   const SizedBox(width: 8),
                   Text(
-                    'Elision Telephony & Dialing KPIs',
+                    '9ance Telephony & Dialing KPIs',
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
@@ -1219,7 +637,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
                     const SizedBox(height: 10),
                     _buildKpiToggleCard(
                       title: 'Total Calls Logged',
-                      subtitle: 'All inbound and outbound calls tracked via Greeter CTI.',
+                      subtitle: 'All inbound and outbound calls tracked via 9ance.',
                       liveValue: '${kpi.totalCalls}',
                       icon: Icons.phone_in_talk_rounded,
                       color: const Color(0xFF8B5CF6),
@@ -1665,16 +1083,6 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
         ),
       ),
     );
-  }
-
-  void _saveTelephonySettings() {
-    context.read<CrmSettingsBloc>().add(CrmSettingsSaved({
-      'elision_api_url': _apiUrlController.text.trim(),
-      'elision_user_id': _userIdController.text.trim(),
-      'elision_did': _didController.text.trim(),
-      'elision_route_number': _routeNumberController.text.trim(),
-      'elision_default_agent_number': _defaultAgentController.text.trim(),
-    }));
   }
 
   void _saveKpiSettings() {

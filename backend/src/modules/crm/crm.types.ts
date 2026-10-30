@@ -120,6 +120,15 @@ export interface ScheduleFollowUpDto {
 }
 
 export interface UpdateCrmSettingsDto {
+  nineance_base_url?: string;
+  nineance_email?: string;
+  nineance_password?: string;
+  nineance_api_key?: string;
+  nineance_api_secret?: string;
+  nineance_provider_key?: string;
+  nineance_display_name?: string;
+  nineance_default_did_id?: string;
+  /** @deprecated use nineance_* */
   elision_api_url?: string;
   elision_user_id?: string;
   elision_did?: string;

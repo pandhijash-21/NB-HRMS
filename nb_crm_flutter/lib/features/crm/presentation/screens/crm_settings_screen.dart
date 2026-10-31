@@ -102,6 +102,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
   List<int> _excelAssignedTelecallerIds = [];
   List<int> _webhookAssignedTelecallerIds = [];
   List<int> _googleAssignedTelecallerIds = [];
+  bool _numberMaskingEnabled = false;
   List<String> _loanTypes = [
     'Home Loan',
     'Personal Loan',
@@ -208,6 +209,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
       _excelAssignedTelecallerIds = List<int>.from(settings.excelAssignedTelecallerIds);
       _webhookAssignedTelecallerIds = List<int>.from(settings.webhookAssignedTelecallerIds);
       _googleAssignedTelecallerIds = List<int>.from(settings.googleAssignedTelecallerIds);
+      _numberMaskingEnabled = settings.numberMaskingEnabled;
       _loanTypes = List<String>.from(settings.loanTypes);
       _loanDocTypes = List<CrmLoanDocType>.from(settings.loanDocTypes);
       _loanTypeDocsMap = Map<String, List<String>>.from(
@@ -2822,6 +2824,54 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
             textMuted: textMuted,
             primaryColor: primaryColor,
           ),
+          const SizedBox(height: 20),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF24201D) : const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: borderColor),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0EA5E9).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.visibility_off_rounded, color: Color(0xFF0EA5E9), size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Number masking',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: isDark ? Colors.white : const Color(0xFF1E293B),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'When on, phones are hidden unless RBAC allows or user is Admin.',
+                        style: TextStyle(fontSize: 12, color: textMuted),
+                      ),
+                    ],
+                  ),
+                ),
+                Switch.adaptive(
+                  value: _numberMaskingEnabled,
+                  activeThumbColor: primaryColor,
+                  onChanged: (v) => setState(() => _numberMaskingEnabled = v),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -3852,6 +3902,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
         'excel_assigned_telecaller_ids': jsonEncode(_excelAssignedTelecallerIds),
         'webhook_assigned_telecaller_ids': jsonEncode(_webhookAssignedTelecallerIds),
         'google_assigned_telecaller_ids': jsonEncode(_googleAssignedTelecallerIds),
+        'crm_number_masking_enabled': _numberMaskingEnabled.toString(),
         'max_telecaller_active_workload': _maxWorkloadController.text.trim(),
         'telecaller_max_workload_map': jsonEncode(_telecallerMaxWorkloadMap),
         'untouched_lead_timeout_minutes': _untouchedTimeoutController.text.trim(),
@@ -3867,6 +3918,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
         'excel_assigned_telecaller_ids': jsonEncode(_excelAssignedTelecallerIds),
         'webhook_assigned_telecaller_ids': jsonEncode(_webhookAssignedTelecallerIds),
         'google_assigned_telecaller_ids': jsonEncode(_googleAssignedTelecallerIds),
+        'crm_number_masking_enabled': _numberMaskingEnabled.toString(),
         'max_telecaller_active_workload': _maxWorkloadController.text.trim(),
         'telecaller_max_workload_map': jsonEncode(_telecallerMaxWorkloadMap),
         'untouched_lead_timeout_minutes': _untouchedTimeoutController.text.trim(),

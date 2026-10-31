@@ -692,6 +692,14 @@ class Permissions {
         hasPermission(perms, 'CRM_TRANSFER_LEADS', 'WRITE');
   }
 
+  /// When CRM number masking is on, roles with this permission still see full phones.
+  /// Admins always see full numbers.
+  static bool canViewFullPhoneNumbers(PermissionMap? perms, [String? role]) {
+    if (isAdmin(role)) return true;
+    return hasPermission(perms, 'CRM_VIEW_PHONE_NUMBERS', 'READ') ||
+        hasPermission(perms, 'CRM_VIEW_PHONE_NUMBERS', 'WRITE');
+  }
+
   static bool canWriteCrmPostSales(PermissionMap? perms, [String? role, String? scope]) {
     if (isAdmin(role)) return true;
     if (scope == 'NB_FINSERVE') {

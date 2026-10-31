@@ -47,6 +47,53 @@ interface TelecallerPresence {
 
 const telecallerPresenceMap = new Map<number, TelecallerPresence>();
 
+const PHONE_FIELD_KEY_RE = /phone|mobile|whatsapp|landline|contact.?no|alternate.?no/i;
+
+/** Mask phone for display: keep last 4 digits, e.g. 9876543210 → ******3210 */
+export function maskPhoneNumber(raw?: string | null): string {
+  if (raw == null || raw === '') return '';
+  const chars = Array.from(String(raw));
+  const digitIdxs: number[] = [];
+  for (let i = 0; i < chars.length; i++) {
+    if (/\d/.test(chars[i])) digitIdxs.push(i);
+  }
+  if (digitIdxs.length === 0) return String(raw);
+  if (digitIdxs.length <= 4) {
+    return chars.map((c) => (/\d/.test(c) ? '*' : c)).join('');
+  }
+  const keep = new Set(digitIdxs.slice(-4));
+  return chars.map((c, i) => (/\d/.test(c) && !keep.has(i) ? '*' : c)).join('');
+}
+
+function maskPhoneLikeRecord(fields: Record<string, any>): Record<string, any> {
+  const out: Record<string, any> = { ...fields };
+  for (const [key, value] of Object.entries(out)) {
+    if (typeof value !== 'string' || !value) continue;
+    if (PHONE_FIELD_KEY_RE.test(key) || (value.replace(/\D/g, '').length >= 8 && /phone|mobile/i.test(key))) {
+      out[key] = maskPhoneNumber(value);
+    }
+  }
+  return out;
+}
+
+/** Redact phone / phone-like custom fields on a lead payload (API response only). */
+export function maskLeadPhones<T extends Record<string, any>>(lead: T): T {
+  if (!lead || typeof lead !== 'object') return lead;
+  const out: any = { ...lead };
+  if (typeof out.phone === 'string') out.phone = maskPhoneNumber(out.phone);
+  if (typeof out.channelPartnerPhone === 'string') {
+    out.channelPartnerPhone = maskPhoneNumber(out.channelPartnerPhone);
+  }
+  if (out.customFields && typeof out.customFields === 'object' && !Array.isArray(out.customFields)) {
+    out.customFields = maskPhoneLikeRecord({ ...(out.customFields as Record<string, any>) });
+  }
+  if (out.lead && typeof out.lead === 'object') {
+    out.lead = maskLeadPhones(out.lead);
+  }
+  if (typeof out.leadPhone === 'string') out.leadPhone = maskPhoneNumber(out.leadPhone);
+  return out as T;
+}
+
 import {
   CreateProjectDto,
   UpdateProjectDto,
@@ -1123,6 +1170,27 @@ export const crmService = {
   // ---------------------------------------------------------------------------
   // Leads Management (Campaign-Scoped)
   // ---------------------------------------------------------------------------
+  /**
+   * True when CRM Settings masking is ON and the user is not Admin /
+   * CRM_VIEW_PHONE_NUMBERS. Used to redact phones in API responses only.
+   */
+  async shouldMaskPhones(opts: {
+    role?: string | null;
+    permissions?: Record<string, string[]> | null;
+    scope?: string;
+  }): Promise<boolean> {
+    if (isAdminRole(opts.role)) return false;
+    const roleUpper = String(opts.role ?? '').toUpperCase();
+    if (['ADMIN', 'SUPER_ADMIN', 'SUPERADMIN', 'SYSTEM_ADMIN', 'ITADMIN'].some((r) => roleUpper.includes(r))) {
+      return false;
+    }
+    const settings = await this.getSettings(opts.scope || 'NB_DEVELOPER');
+    if (String(settings.crm_number_masking_enabled) !== 'true') return false;
+    const actions = opts.permissions?.['CRM_VIEW_PHONE_NUMBERS'] ?? [];
+    if (actions.includes('READ') || actions.includes('WRITE')) return false;
+    return true;
+  },
+
   async getLeads(query: {
     projectId?: string;
     campaignId?: string;
@@ -1133,6 +1201,7 @@ export const crmService = {
     leadFlow?: string;
     userRole?: string;
     userEmployeeId?: number;
+    userPermissions?: Record<string, string[]>;
     page?: number;
     limit?: number;
     scope?: string;
@@ -1319,7 +1388,7 @@ export const crmService = {
       creatorMap.set(c.id, name);
     }
 
-    const enrichedItems = items.map((item) => {
+    let enrichedItems = items.map((item) => {
       const custom = (item.customFields && typeof item.customFields === 'object') ? (item.customFields as Record<string, any>) : {};
       const creatorName = custom.createdByName || (item.createdById ? creatorMap.get(item.createdById) : undefined);
       return {
@@ -1327,6 +1396,15 @@ export const crmService = {
         createdByName: creatorName,
       };
     });
+
+    const maskPhones = await this.shouldMaskPhones({
+      role: query.userRole,
+      permissions: query.userPermissions,
+      scope,
+    });
+    if (maskPhones) {
+      enrichedItems = enrichedItems.map((item) => maskLeadPhones(item));
+    }
 
     return {
       total,
@@ -1347,6 +1425,7 @@ export const crmService = {
     leadFlow?: string;
     userRole?: string;
     userEmployeeId?: number;
+    userPermissions?: Record<string, string[]>;
     scope?: string;
     fromDate?: string;
     toDate?: string;
@@ -1454,6 +1533,12 @@ export const crmService = {
       },
     });
 
+    const maskPhones = await this.shouldMaskPhones({
+      role: query.userRole,
+      permissions: query.userPermissions,
+      scope,
+    });
+
     const rows = leads.map((lead, idx) => {
       const custom = (lead.customFields && typeof lead.customFields === 'object') ? (lead.customFields as Record<string, any>) : {};
       const createdStr = lead.createdAt ? new Date(lead.createdAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : '';
@@ -1470,13 +1555,15 @@ export const crmService = {
         ? `CP: ${lead.channelPartnerName}`
         : (lead.referenceName ? `Ref: ${lead.referenceName}` : (custom.lead_source_type || custom.leadSource || flow));
 
+      const phoneOut = maskPhones ? maskPhoneNumber(lead.phone || '') : (lead.phone || '');
+
       const rowData: Record<string, any> = {
         'S.No': idx + 1,
         'Lead Date': createdStr,
         'Flow': flow,
         'Source': source,
         'Client Name': lead.name || '',
-        'Phone Number': lead.phone || '',
+        'Phone Number': phoneOut,
         'Status': lead.status || '',
         'Allocated Telecaller': lead.telecaller?.generalInfo?.fullName || 'Unallocated',
         'Assigned Sales Manager': lead.assignedTo?.generalInfo?.fullName || 'Unassigned',
@@ -2144,7 +2231,16 @@ export const crmService = {
       ? (dto.status as CrmLeadStatus)
       : (safeAssignedToId && safeAssignedToId > 0 && !dto.status ? ('ASSIGNED' as any) : undefined);
 
-    const rawPhoneVal = dto.phone || (dto.customFields && (dto.customFields['Phone'] || dto.customFields['phone'] || dto.customFields['phoneNumber'] || dto.customFields['mobile']));
+    // Never persist masked display values (e.g. ******3210) back into the DB.
+    const rawPhoneCandidate =
+      dto.phone ||
+      (dto.customFields &&
+        (dto.customFields['Phone'] ||
+          dto.customFields['phone'] ||
+          dto.customFields['phoneNumber'] ||
+          dto.customFields['mobile']));
+    const rawPhoneVal =
+      rawPhoneCandidate && !String(rawPhoneCandidate).includes('*') ? rawPhoneCandidate : undefined;
     const resolvedPhone = rawPhoneVal ? String(rawPhoneVal).replace(/\D/g, '').slice(-10) : undefined;
 
     const rawNameVal = dto.name || (dto.customFields && (dto.customFields['Client_Name'] || dto.customFields['client_name'] || dto.customFields['name'] || dto.customFields['customer_name']));
@@ -2323,6 +2419,48 @@ export const crmService = {
     }
 
     return updated;
+  },
+
+  /**
+   * Admin-only: transfer many leads to one telecaller.
+   * Reuses single-lead transfer so history notes stay consistent.
+   */
+  async bulkTransferLeads(
+    leadIds: string[],
+    targetTelecallerId: number,
+    remarks?: string,
+    userContext?: { userId?: string; employeeId?: number; role?: string; username?: string },
+  ) {
+    const role = userContext?.role;
+    if (!isAdminRole(role)) {
+      throw new Error('Bulk lead transfer is restricted to Admins only.');
+    }
+    const uniqueIds = Array.from(new Set((leadIds || []).map((id) => String(id).trim()).filter(Boolean)));
+    if (uniqueIds.length === 0) {
+      throw new Error('Select at least one lead to transfer.');
+    }
+    if (!targetTelecallerId || Number.isNaN(Number(targetTelecallerId))) {
+      throw new Error('Target telecaller ID is required');
+    }
+
+    const results: { leadId: string; ok: boolean; error?: string }[] = [];
+    let transferred = 0;
+    for (const leadId of uniqueIds) {
+      try {
+        await this.transferLead(leadId, targetTelecallerId, remarks, userContext);
+        results.push({ leadId, ok: true });
+        transferred += 1;
+      } catch (err: any) {
+        results.push({ leadId, ok: false, error: err?.message || 'Transfer failed' });
+      }
+    }
+
+    return {
+      total: uniqueIds.length,
+      transferred,
+      failed: uniqueIds.length - transferred,
+      results,
+    };
   },
 
   async checkPhone(phone: string, scope: string = 'NB_DEVELOPER') {
@@ -2539,7 +2677,11 @@ export const crmService = {
     });
   },
 
-  async getBinLeads(module = 'PRE_SALES', scope: string = 'NB_DEVELOPER') {
+  async getBinLeads(
+    module = 'PRE_SALES',
+    scope: string = 'NB_DEVELOPER',
+    maskOpts?: { role?: string; permissions?: Record<string, string[]> },
+  ) {
     // Return leads marked as isDeleted: true OR marked as NOT_INTERESTED
     const retentionKey = scope === 'NB_FINSERVE' ? 'finserve_not_interested_retention_days' : 'not_interested_retention_days';
     const retentionSetting = await prisma.crmSetting.findUnique({
@@ -2549,7 +2691,7 @@ export const crmService = {
     const thresholdDate = new Date();
     thresholdDate.setDate(thresholdDate.getDate() - retentionDays);
 
-    return prisma.crmLead.findMany({
+    const items = await prisma.crmLead.findMany({
       where: {
         scope,
         OR: [
@@ -2570,6 +2712,14 @@ export const crmService = {
         },
       },
     });
+
+    const maskPhones = await this.shouldMaskPhones({
+      role: maskOpts?.role,
+      permissions: maskOpts?.permissions,
+      scope,
+    });
+    if (!maskPhones) return items;
+    return items.map((item) => maskLeadPhones(item as any));
   },
 
   // ---------------------------------------------------------------------------
@@ -2580,7 +2730,12 @@ export const crmService = {
     filter?: 'today' | 'upcoming' | 'all' | 'overdue';
     date?: string;
     scope?: string;
-    userContext?: { userId?: string; employeeId?: number; role?: string };
+    userContext?: {
+      userId?: string;
+      employeeId?: number;
+      role?: string;
+      permissions?: Record<string, string[]>;
+    };
   }) {
     const scope = query.scope || 'NB_DEVELOPER';
     let today: Date;
@@ -2641,7 +2796,7 @@ export const crmService = {
       }
     }
 
-    return prisma.crmFollowUp.findMany({
+    const followUps = await prisma.crmFollowUp.findMany({
       where,
       orderBy: [{ scheduledDate: 'asc' }, { scheduledTime: 'asc' }],
       include: {
@@ -2659,6 +2814,14 @@ export const crmService = {
         },
       },
     });
+
+    const maskPhones = await this.shouldMaskPhones({
+      role: query.userContext?.role,
+      permissions: query.userContext?.permissions,
+      scope,
+    });
+    if (!maskPhones) return followUps;
+    return followUps.map((fu) => maskLeadPhones(fu as any));
   },
 
   async createFollowUp(dto: ScheduleFollowUpDto, createdById?: string) {
@@ -3128,6 +3291,7 @@ export const crmService = {
       excel_assigned_telecaller_ids: JSON.stringify([]),
       webhook_assigned_telecaller_ids: JSON.stringify([]),
       google_assigned_telecaller_ids: JSON.stringify([]),
+      crm_number_masking_enabled: 'false',
       max_telecaller_active_workload: '20',
       telecaller_max_workload_map: JSON.stringify({}),
       untouched_lead_timeout_minutes: '30',
@@ -3977,6 +4141,9 @@ export const crmService = {
     callStatus?: string;
     did?: string;
     limit?: number | string;
+    userRole?: string;
+    userPermissions?: Record<string, string[]>;
+    scope?: string;
   }) {
     const where: any = {
       customerNumber: { not: '' },
@@ -4044,7 +4211,19 @@ export const crmService = {
       },
     });
 
-    return logs;
+    const maskPhones = await this.shouldMaskPhones({
+      role: query.userRole,
+      permissions: query.userPermissions,
+      scope: query.scope || 'NB_DEVELOPER',
+    });
+    if (!maskPhones) return logs;
+    return logs.map((log) => {
+      const masked: any = maskLeadPhones(log as any);
+      if (typeof masked.customerNumber === 'string') {
+        masked.customerNumber = maskPhoneNumber(masked.customerNumber);
+      }
+      return masked;
+    });
   },
 
   async updateCallLog(

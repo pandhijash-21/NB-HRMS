@@ -1393,6 +1393,10 @@ class _ModularMatrixTableState extends State<_ModularMatrixTable> {
             color: color,
             isDark: isDark,
           ),
+          _buildFeaturedViewPhoneNumbersToggle(
+            color: color,
+            isDark: isDark,
+          ),
           _buildModulesDataTable(
             modules: modules,
             color: color,
@@ -1655,6 +1659,138 @@ class _ModularMatrixTableState extends State<_ModularMatrixTable> {
                   onChanged: isSuperAdminRole
                       ? null
                       : (val) => _toggleAllForModule(transferModule, val),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFeaturedViewPhoneNumbersToggle({
+    required Color color,
+    required bool isDark,
+  }) {
+    const phoneModule = SystemModule(
+      key: 'CRM_VIEW_PHONE_NUMBERS',
+      name: 'Allow See Full Phone Numbers',
+      description:
+          'When number masking is enabled in CRM Settings, roles with this permission can still see full lead phone numbers',
+      category: 'CRM',
+      sortOrder: 11,
+    );
+    final perm = _permFor(phoneModule.key, phoneModule.category);
+    final isSuperAdminRole = Permissions.isSuperAdmin(widget.roleName);
+    final anyGranted = isSuperAdminRole || _hasAnyActionGranted(perm);
+    final isUpdating = _updating.any((k) => k.startsWith('${phoneModule.key}-'));
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: (anyGranted ? const Color(0xFF0EA5E9) : const Color(0xFF64748B))
+            .withValues(alpha: isDark ? 0.12 : 0.06),
+        border: Border(
+          bottom: BorderSide(
+            color: (anyGranted ? const Color(0xFF0EA5E9) : const Color(0xFF64748B))
+                .withValues(alpha: 0.2),
+            width: 1,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: (anyGranted ? const Color(0xFF0EA5E9) : const Color(0xFF64748B))
+                  .withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              Icons.phone_rounded,
+              size: 20,
+              color: anyGranted ? const Color(0xFF0EA5E9) : const Color(0xFF94A3B8),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      phoneModule.name,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        color: isDark ? Colors.white : const Color(0xFF1E293B),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: (anyGranted ? const Color(0xFF0EA5E9) : const Color(0xFFEF4444))
+                            .withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: (anyGranted ? const Color(0xFF0EA5E9) : const Color(0xFFEF4444))
+                              .withValues(alpha: 0.35),
+                          width: 0.8,
+                        ),
+                      ),
+                      child: Text(
+                        anyGranted ? 'ALLOWED' : 'BLOCKED',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: anyGranted ? const Color(0xFF0EA5E9) : const Color(0xFFEF4444),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  phoneModule.description ??
+                      'Allow this role to see full CRM lead phone numbers when masking is on.',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: isDark ? Colors.white54 : const Color(0xFF64748B),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          if (isUpdating)
+            const SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(strokeWidth: 2.5),
+            )
+          else
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  anyGranted ? 'Allowed' : 'Blocked',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: anyGranted ? const Color(0xFF0EA5E9) : const Color(0xFF64748B),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Switch.adaptive(
+                  value: anyGranted,
+                  activeThumbColor: const Color(0xFF0EA5E9),
+                  activeTrackColor: const Color(0xFF0EA5E9).withValues(alpha: 0.4),
+                  onChanged: isSuperAdminRole
+                      ? null
+                      : (val) => _toggleAllForModule(phoneModule, val),
                 ),
               ],
             ),

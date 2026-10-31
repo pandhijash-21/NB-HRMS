@@ -811,6 +811,8 @@ class CrmSettings {
   final List<int> webhookAssignedTelecallerIds;
   /// Google Ads campaign desk (separate from Meta)
   final List<int> googleAssignedTelecallerIds;
+  /// When true, mask lead phones unless admin / CRM_VIEW_PHONE_NUMBERS
+  final bool numberMaskingEnabled;
 
   // Waiting Queue, Inactivity & Workload Management
   final int maxTelecallerActiveWorkload;
@@ -936,6 +938,7 @@ class CrmSettings {
     this.excelAssignedTelecallerIds = const [],
     this.webhookAssignedTelecallerIds = const [],
     this.googleAssignedTelecallerIds = const [],
+    this.numberMaskingEnabled = false,
     this.maxTelecallerActiveWorkload = 20,
     this.telecallerMaxWorkloadMap = const {},
     this.untouchedLeadTimeoutMinutes = 30,
@@ -1092,6 +1095,7 @@ class CrmSettings {
       excelAssignedTelecallerIds: _parseIntList(json['excel_assigned_telecaller_ids']),
       webhookAssignedTelecallerIds: _parseIntList(json['webhook_assigned_telecaller_ids']),
       googleAssignedTelecallerIds: _parseIntList(json['google_assigned_telecaller_ids']),
+      numberMaskingEnabled: json['crm_number_masking_enabled']?.toString() == 'true',
       maxTelecallerActiveWorkload: int.tryParse(json['max_telecaller_active_workload']?.toString() ?? '20') ?? 20,
       telecallerMaxWorkloadMap: _parseWorkloadMap(json['telecaller_max_workload_map']),
       untouchedLeadTimeoutMinutes: int.tryParse(json['untouched_lead_timeout_minutes']?.toString() ?? '30') ?? 30,

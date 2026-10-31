@@ -388,6 +388,27 @@ class CrmRepository {
     return {'status': 'success'};
   }
 
+  /// Admin-only: transfer many leads to one telecaller.
+  Future<Map<String, dynamic>> bulkTransferLeads({
+    required List<String> leadIds,
+    required int targetTelecallerId,
+    String? remarks,
+  }) async {
+    final res = await _dio.dio.post<Map<String, dynamic>>(
+      'crm/leads/bulk-transfer',
+      data: {
+        'leadIds': leadIds,
+        'targetTelecallerId': targetTelecallerId,
+        if (remarks != null && remarks.isNotEmpty) 'remarks': remarks,
+      },
+    );
+    notifyLeadMutated();
+    if (res.data != null && res.data!['data'] is Map) {
+      return Map<String, dynamic>.from(res.data!['data'] as Map);
+    }
+    return {'status': 'success'};
+  }
+
   Future<CrmLead> updateLeadStatus(
     String leadId, {
     required String status,

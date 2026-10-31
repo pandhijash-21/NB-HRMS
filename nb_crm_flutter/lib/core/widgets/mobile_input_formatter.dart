@@ -15,6 +15,31 @@ String cleanMobile10(String? raw) {
   return digits;
 }
 
+/// Mask phone for CRM display: keep last 4 digits, e.g. `9876543210` → `******3210`.
+String maskPhone(String? raw) {
+  if (raw == null || raw.isEmpty) return '';
+  final chars = raw.split('');
+  final digitIdxs = <int>[];
+  for (var i = 0; i < chars.length; i++) {
+    if (RegExp(r'\d').hasMatch(chars[i])) digitIdxs.add(i);
+  }
+  if (digitIdxs.isEmpty) return raw;
+  if (digitIdxs.length <= 4) {
+    return chars.map((c) => RegExp(r'\d').hasMatch(c) ? '*' : c).join();
+  }
+  final keep = digitIdxs.sublist(digitIdxs.length - 4).toSet();
+  return [
+    for (var i = 0; i < chars.length; i++)
+      (RegExp(r'\d').hasMatch(chars[i]) && !keep.contains(i)) ? '*' : chars[i],
+  ].join();
+}
+
+/// Returns [raw] when [showFull] is true; otherwise [maskPhone].
+String displayCrmPhone(String? raw, {required bool showFull}) {
+  if (raw == null || raw.isEmpty) return '';
+  return showFull ? raw : maskPhone(raw);
+}
+
 /// Standard formatters for Indian 10-digit mobile numbers:
 /// Digits only and strictly limited to 10 characters.
 final List<TextInputFormatter> mobileInputFormatters = [

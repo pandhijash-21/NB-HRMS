@@ -149,6 +149,8 @@ export interface UpdateCrmSettingsDto {
   webhook_assigned_telecaller_ids?: string | number[];
   /** Google Ads campaign desk (separate from Meta) */
   google_assigned_telecaller_ids?: string | number[];
+  /** When true, mask lead phones unless admin or CRM_VIEW_PHONE_NUMBERS */
+  crm_number_masking_enabled?: string | boolean;
   max_telecaller_active_workload?: number | string;
   telecaller_max_workload_map?: string | Record<string, number>;
   untouched_lead_timeout_minutes?: number | string;

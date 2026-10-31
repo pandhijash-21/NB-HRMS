@@ -38,6 +38,7 @@ const MODULES = [
   { key: 'CRM_SALES',     name: 'Sales Management', category: 'CRM' },
   { key: 'CRM_VISITOR_DESK', name: 'Visitor Check-In Desk', category: 'CRM' },
   { key: 'CRM_LEAD_TRANSFER', name: 'Allow Transfer Leads', category: 'CRM' },
+  { key: 'CRM_VIEW_PHONE_NUMBERS', name: 'Allow See Full Phone Numbers', category: 'CRM' },
   { key: 'CRM_PARTNERS',  name: 'NB Hub Partners', category: 'CRM' },
   { key: 'TRACKING',      name: 'Live Tracking & Trips', category: 'HRMS' },
   { key: 'ADMIN_STORAGE', name: 'Storage & Document Quotas', category: 'HRMS' },

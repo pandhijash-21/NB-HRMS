@@ -195,6 +195,7 @@ export const crmController = {
         leadFlow: req.query.leadFlow as string,
         userRole: authUser?.role,
         userEmployeeId: authUser?.employeeId,
+        userPermissions: authUser?.permissions,
         page: req.query.page ? parseInt(req.query.page as string, 10) : 1,
         limit: req.query.limit ? parseInt(req.query.limit as string, 10) : 100,
         scope: getScope(req),
@@ -221,6 +222,7 @@ export const crmController = {
         leadFlow: req.query.leadFlow as string,
         userRole: authUser?.role,
         userEmployeeId: authUser?.employeeId,
+        userPermissions: authUser?.permissions,
         scope: getScope(req),
         fromDate: (req.query.fromDate || req.query.startDate) as string,
         toDate: (req.query.toDate || req.query.endDate) as string,
@@ -365,6 +367,42 @@ export const crmController = {
     }
   },
 
+  async bulkTransferLeads(req: Request, res: Response) {
+    try {
+      const authUser = (req as any).user;
+      const role = String(
+        authUser?.roleName ||
+          authUser?.role?.name ||
+          (typeof authUser?.role === 'string' ? authUser?.role : ''),
+      );
+      if (!isAdminRole(role)) {
+        return res.status(403).json(fail('Bulk lead transfer is restricted to Admins only.'));
+      }
+      const { leadIds, targetTelecallerId, remarks } = req.body || {};
+      if (!Array.isArray(leadIds) || leadIds.length === 0) {
+        return res.status(400).json(fail('leadIds array is required'));
+      }
+      if (!targetTelecallerId || isNaN(Number(targetTelecallerId))) {
+        return res.status(400).json(fail('Target telecaller ID is required'));
+      }
+      const userContext = {
+        userId: authUser?.id,
+        employeeId: authUser?.employeeId,
+        role: authUser?.roleName || authUser?.role?.name || (typeof authUser?.role === 'string' ? authUser?.role : ''),
+        username: authUser?.username,
+      };
+      const result = await crmService.bulkTransferLeads(
+        leadIds.map((id: any) => String(id)),
+        Number(targetTelecallerId),
+        remarks,
+        userContext,
+      );
+      res.json(ok(result));
+    } catch (err: any) {
+      res.status(400).json(fail(err.message || 'Failed to bulk transfer leads'));
+    }
+  },
+
   async updateLeadStatus(req: Request, res: Response) {
     try {
       const id = String(req.params.id);
@@ -474,8 +512,12 @@ export const crmController = {
 
   async getBin(req: Request, res: Response) {
     try {
+      const authUser = (req as any).user;
       const module = (req.query.module as string) || 'PRE_SALES';
-      const items = await crmService.getBinLeads(module, getScope(req));
+      const items = await crmService.getBinLeads(module, getScope(req), {
+        role: authUser?.role,
+        permissions: authUser?.permissions,
+      });
       res.json(ok(items));
     } catch (err: any) {
       res.status(500).json(fail(err.message || 'Failed to fetch bin leads'));
@@ -495,6 +537,7 @@ export const crmController = {
           userId: authUser.id,
           employeeId: authUser.employeeId,
           role: authUser.role,
+          permissions: authUser.permissions,
         } : undefined,
       });
       res.json(ok(followUps));
@@ -1182,7 +1225,13 @@ export const crmController = {
 
   async getCallLogs(req: Request, res: Response) {
     try {
-      const logs = await crmService.getCallLogs(req.query as any);
+      const authUser = (req as any).user;
+      const logs = await crmService.getCallLogs({
+        ...(req.query as any),
+        userRole: authUser?.role,
+        userPermissions: authUser?.permissions,
+        scope: getScope(req),
+      });
       res.json(ok(logs));
     } catch (err: any) {
       res.status(500).json(fail(err.message || 'Failed to fetch call logs'));

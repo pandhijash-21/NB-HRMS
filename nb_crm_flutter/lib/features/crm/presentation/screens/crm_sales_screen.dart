@@ -9,6 +9,7 @@ import 'package:file_picker/file_picker.dart';
 
 import '../../../../core/router/app_back_button.dart';
 import '../../../../core/network/app_config.dart';
+import '../../../../core/widgets/mobile_input_formatter.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../data/crm_repository.dart';
@@ -57,6 +58,7 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
   Timer? _heartbeatTimer;
   DateTime _lastInteractionTime = DateTime.now();
   bool _isOnBreak = false;
+  bool _numberMaskingEnabled = false;
 
   @override
   void initState() {
@@ -64,7 +66,24 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
     _tabController = TabController(length: 2, vsync: this);
     CrmRepository.crmScopeNotifier.addListener(_onScopeChanged);
     _setupInactivityTracker();
+    _loadNumberMaskingSetting();
   }
+
+  Future<void> _loadNumberMaskingSetting() async {
+    try {
+      final settings = await context.read<CrmRepository>().getSettings();
+      if (mounted) setState(() => _numberMaskingEnabled = settings.numberMaskingEnabled);
+    } catch (_) {}
+  }
+
+  bool _showFullPhoneNumbers() {
+    final auth = context.read<AuthBloc>().state;
+    return !_numberMaskingEnabled ||
+        Permissions.canViewFullPhoneNumbers(auth.permissions, auth.user?.role);
+  }
+
+  String _displayPhone(String? phone) =>
+      displayCrmPhone(phone, showFull: _showFullPhoneNumbers());
 
   bool _isTelecallerUser() {
     if (!mounted) return false;
@@ -137,6 +156,7 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
   void _onScopeChanged() {
     if (mounted) {
       setState(() {});
+      _loadNumberMaskingSetting();
       context.read<CrmLeadsBloc>().add(const CrmLeadsLoadRequested());
     }
   }
@@ -896,7 +916,7 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
                             children: [
                               Icon(Icons.phone_rounded, size: 14, color: textMuted),
                               const SizedBox(width: 4),
-                              Text(lead.phone, style: TextStyle(fontSize: 13, color: textMuted)),
+                              Text(_displayPhone(lead.phone), style: TextStyle(fontSize: 13, color: textMuted)),
                             ],
                           ),
                           if (lead.email != null)
@@ -1667,7 +1687,7 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
                     const SizedBox(height: 14),
                   ],
 
-                  Text('Customer Phone: ${lead.phone}', style: const TextStyle(fontWeight: FontWeight.w600)),
+                  Text('Customer Phone: ${_displayPhone(lead.phone)}', style: const TextStyle(fontWeight: FontWeight.w600)),
                   const SizedBox(height: 16),
 
                   // Scheduled Date Picker
@@ -2023,7 +2043,7 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
 
     // Controllers initialized directly from unit config amounts - nothing hardcoded!
     final nameCtrl = TextEditingController(text: lead.name);
-    final phoneCtrl = TextEditingController(text: lead.phone);
+    final phoneCtrl = TextEditingController(text: _displayPhone(lead.phone));
     final emailCtrl = TextEditingController(text: lead.email ?? '');
     final addressCtrl = TextEditingController(text: lead.address ?? '');
 
@@ -2793,7 +2813,7 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
                               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                             ),
                             Text(
-                              'Phone: ${lead.phone} • Status: ${lead.status.displayName}',
+                              'Phone: ${_displayPhone(lead.phone)} • Status: ${lead.status.displayName}',
                               style: const TextStyle(fontSize: 12, color: Colors.grey),
                             ),
                           ],
@@ -3216,7 +3236,7 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
                             ),
                             const SizedBox(height: 6),
                             Text(
-                              'Client: ${lead.name.isNotEmpty ? lead.name : "Unnamed"} • ${lead.phone}',
+                              'Client: ${lead.name.isNotEmpty ? lead.name : "Unnamed"} • ${_displayPhone(lead.phone)}',
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w700,
@@ -3419,7 +3439,7 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Client: ${lead.name.isNotEmpty ? lead.name : "Unnamed"} • ${lead.phone}',
+                              'Client: ${lead.name.isNotEmpty ? lead.name : "Unnamed"} • ${_displayPhone(lead.phone)}',
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w700,
@@ -3642,7 +3662,7 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Client: ${lead.name.isNotEmpty ? lead.name : "Unnamed"} • ${lead.phone}',
+                        'Client: ${lead.name.isNotEmpty ? lead.name : "Unnamed"} • ${_displayPhone(lead.phone)}',
                         style: TextStyle(
                           fontSize: 12,
                           color: isDark ? Colors.white70 : const Color(0xFF64748B),
@@ -3762,7 +3782,7 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Client: ${lead.name.isNotEmpty ? lead.name : "Unnamed"} • ${lead.phone}',
+                        'Client: ${lead.name.isNotEmpty ? lead.name : "Unnamed"} • ${_displayPhone(lead.phone)}',
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
@@ -3900,7 +3920,7 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Client: ${lead.name.isNotEmpty ? lead.name : "Unnamed"} • ${lead.phone}',
+                        'Client: ${lead.name.isNotEmpty ? lead.name : "Unnamed"} • ${_displayPhone(lead.phone)}',
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
@@ -4456,7 +4476,7 @@ class _CrmSalesViewState extends ConsumerState<_CrmSalesView>
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    '📞 ${lead.phone} • ✉️ ${lead.email ?? "No Email"} • Product: $loanType',
+                                    '📞 ${_displayPhone(lead.phone)} • ✉️ ${lead.email ?? "No Email"} • Product: $loanType',
                                     style: TextStyle(fontSize: 13, color: textMuted),
                                   ),
                                   const SizedBox(height: 6),

@@ -198,6 +198,20 @@ class CrmLeadTransferRequested extends CrmLeadsEvent {
   List<Object?> get props => [leadId, targetTelecallerId, remarks];
 }
 
+class CrmLeadsBulkTransferRequested extends CrmLeadsEvent {
+  const CrmLeadsBulkTransferRequested({
+    required this.leadIds,
+    required this.targetTelecallerId,
+    this.remarks,
+  });
+  final List<String> leadIds;
+  final int targetTelecallerId;
+  final String? remarks;
+
+  @override
+  List<Object?> get props => [leadIds, targetTelecallerId, remarks];
+}
+
 class CrmLeadsFollowUpFilterChanged extends CrmLeadsEvent {
   const CrmLeadsFollowUpFilterChanged(this.filter);
   final String filter;
@@ -464,6 +478,7 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
     on<CrmLeadsExcelImported>(_onExcelImported);
     on<CrmLeadsMergeRequested>(_onMergeRequested);
     on<CrmLeadTransferRequested>(_onLeadTransferRequested);
+    on<CrmLeadsBulkTransferRequested>(_onBulkLeadTransferRequested);
     on<CrmLeadsFollowUpFilterChanged>(_onFollowUpFilterChanged);
     on<CrmLeadsFollowUpScheduled>(_onFollowUpScheduled);
     on<CrmLeadsFollowUpCompleted>(_onFollowUpCompleted);
@@ -913,6 +928,60 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
       await _refreshLeadsOnly(emit);
     } catch (e) {
       emit(state.copyWith(errorMessage: 'Transfer failed: $e'));
+    }
+  }
+
+  Future<void> _onBulkLeadTransferRequested(
+    CrmLeadsBulkTransferRequested event,
+    Emitter<CrmLeadsState> emit,
+  ) async {
+    final ids = event.leadIds.toSet();
+    if (ids.isEmpty) return;
+
+    final targetUser = state.salesUsers.firstWhere(
+      (u) => u.employeeId == event.targetTelecallerId,
+      orElse: () => CrmSalesUser(
+        employeeId: event.targetTelecallerId,
+        fullName: 'Telecaller #${event.targetTelecallerId}',
+      ),
+    );
+
+    final optimisticallyUpdated = state.leads.map((l) {
+      if (ids.contains(l.id)) {
+        return l.copyWith(
+          telecallerId: event.targetTelecallerId,
+          telecallerName: targetUser.fullName,
+        );
+      }
+      return l;
+    }).toList();
+
+    emit(state.copyWith(
+      isActing: true,
+      leads: optimisticallyUpdated,
+      actionSuccessMessage: 'Transferring ${ids.length} leads to ${targetUser.fullName}…',
+    ));
+
+    try {
+      final result = await _crmRepository.bulkTransferLeads(
+        leadIds: ids.toList(),
+        targetTelecallerId: event.targetTelecallerId,
+        remarks: event.remarks,
+      );
+      final transferred = result['transferred'] is num
+          ? (result['transferred'] as num).toInt()
+          : ids.length;
+      final failed = result['failed'] is num ? (result['failed'] as num).toInt() : 0;
+      await _refreshLeadsOnly(emit);
+      emit(state.copyWith(
+        isActing: false,
+        actionSuccessMessage: failed > 0
+            ? 'Transferred $transferred of ${ids.length} leads to ${targetUser.fullName} ($failed failed)'
+            : 'Transferred $transferred leads to ${targetUser.fullName}',
+      ));
+    } catch (e) {
+      emit(state.copyWith(isActing: false, errorMessage: 'Bulk transfer failed: $e'));
+      await _refreshLeadsOnly(emit);
     }
   }
 

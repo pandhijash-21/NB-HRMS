@@ -154,11 +154,19 @@ export const SYSTEM_SUBMODULES: SystemSubmoduleDef[] = [
     sortOrder: 9,
   },
   {
+    key: 'CRM_VIEW_PHONE_NUMBERS',
+    name: 'Allow See Full Phone Numbers',
+    description:
+      'When CRM number masking is enabled in Settings, roles with this permission can still see full lead phone numbers',
+    category: 'CRM',
+    sortOrder: 10,
+  },
+  {
     key: 'CRM_PARTNERS',
     name: 'NB Hub Partners',
     description: 'Channel partners (CP) and associate partners (AP) — onboarding, profiles, and Hub partner management',
     category: 'CRM',
-    sortOrder: 10,
+    sortOrder: 11,
   },
 
   // ── CRM MODULE (NB FINSERVE) ───────────────────────────────────────────────

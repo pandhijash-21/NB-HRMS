@@ -55,6 +55,9 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
   Timer? _heartbeatTimer;
   DateTime _lastInteractionTime = DateTime.now();
   bool _isOnBreak = false;
+  bool _numberMaskingEnabled = false;
+  /// Admin-only multi-select for bulk transfer.
+  final Set<String> _bulkTransferSelectedIds = {};
 
   @override
   void initState() {
@@ -63,7 +66,24 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     _tabController.addListener(_onTabChanged);
     CrmRepository.crmScopeNotifier.addListener(_onScopeChanged);
     _setupInactivityTracker();
+    _loadNumberMaskingSetting();
   }
+
+  Future<void> _loadNumberMaskingSetting() async {
+    try {
+      final settings = await context.read<CrmRepository>().getSettings();
+      if (mounted) setState(() => _numberMaskingEnabled = settings.numberMaskingEnabled);
+    } catch (_) {}
+  }
+
+  bool _showFullPhoneNumbers() {
+    final auth = context.read<AuthBloc>().state;
+    return !_numberMaskingEnabled ||
+        Permissions.canViewFullPhoneNumbers(auth.permissions, auth.user?.role);
+  }
+
+  String _displayPhone(String? phone) =>
+      displayCrmPhone(phone, showFull: _showFullPhoneNumbers());
 
   void _onTabChanged() {
     if (_tabController.indexIsChanging) return;
@@ -147,6 +167,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
   void _onScopeChanged() {
     if (mounted) {
       setState(() {});
+      _loadNumberMaskingSetting();
       context.read<CrmLeadsBloc>().add(const CrmLeadsLoadRequested());
     }
   }
@@ -383,7 +404,8 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
          userUsername.contains('ITADMIN') ||
          userUsername == '1');
     final canTransfer = Permissions.canTransferLeads(authState.permissions, authState.user?.role);
-    final isAdmin = ['ADMIN', 'SUPER_ADMIN', 'SYSTEM_ADMIN'].contains(userRole);
+    final isAdmin = Permissions.isAdmin(authState.user?.role) ||
+        ['ADMIN', 'SUPER_ADMIN', 'SYSTEM_ADMIN'].contains(userRole);
     final canWrite = Permissions.canWriteCrmPreSales(authState.permissions, authState.user?.role);
     final repo = context.read<CrmRepository>();
     final isFinserve = repo.scope == 'NB_FINSERVE';
@@ -957,6 +979,25 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                             label: Text('Distribute ($waitingCount)'),
                             style: secondaryOutlineStyle(),
                           ),
+                        if (isAdmin && _bulkTransferSelectedIds.isNotEmpty)
+                          FilledButton.icon(
+                            onPressed: () => _showBulkTransferLeadsModal(
+                              context,
+                              filteredLeads
+                                  .where((l) => _bulkTransferSelectedIds.contains(l.id))
+                                  .toList(),
+                              salesUsers,
+                            ),
+                            icon: const Icon(Icons.swap_horiz_rounded, size: 16),
+                            label: Text('Transfer ${_bulkTransferSelectedIds.length}'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF6366F1),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                              visualDensity: VisualDensity.compact,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                          ),
                         PopupMenuButton<String>(
                           tooltip: 'More actions',
                           offset: const Offset(0, 40),
@@ -1032,6 +1073,54 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
             ),
           ),
           const SizedBox(height: 12),
+
+          if (isAdmin && _bulkTransferSelectedIds.isNotEmpty)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF6366F1).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFF6366F1).withValues(alpha: 0.35)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.checklist_rounded, size: 18, color: Color(0xFF6366F1)),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      '${_bulkTransferSelectedIds.length} lead${_bulkTransferSelectedIds.length == 1 ? '' : 's'} selected for bulk transfer',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF6366F1),
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => setState(() => _bulkTransferSelectedIds.clear()),
+                    child: const Text('Clear'),
+                  ),
+                  const SizedBox(width: 4),
+                  FilledButton.icon(
+                    onPressed: () => _showBulkTransferLeadsModal(
+                      context,
+                      filteredLeads
+                          .where((l) => _bulkTransferSelectedIds.contains(l.id))
+                          .toList(),
+                      salesUsers,
+                    ),
+                    icon: const Icon(Icons.swap_horiz_rounded, size: 16),
+                    label: const Text('Transfer Selected'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF6366F1),
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
           // Flow Switcher / Assignment Enforced Banner
           if (isOnlyExcel)
@@ -1296,6 +1385,30 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                       dataRowMinHeight: 48,
                       dataRowMaxHeight: 66,
                       columns: [
+                        if (isAdmin)
+                          DataColumn(
+                            label: Checkbox(
+                              tristate: true,
+                              value: filteredLeads.isEmpty
+                                  ? false
+                                  : (filteredLeads.every((l) => _bulkTransferSelectedIds.contains(l.id))
+                                      ? true
+                                      : (filteredLeads.any((l) => _bulkTransferSelectedIds.contains(l.id))
+                                          ? null
+                                          : false)),
+                              onChanged: (val) {
+                                setState(() {
+                                  if (val == true) {
+                                    _bulkTransferSelectedIds.addAll(filteredLeads.map((l) => l.id));
+                                  } else {
+                                    for (final l in filteredLeads) {
+                                      _bulkTransferSelectedIds.remove(l.id);
+                                    }
+                                  }
+                                });
+                              },
+                            ),
+                          ),
                         const DataColumn(label: Text('#', style: TextStyle(fontWeight: FontWeight.bold))),
                         const DataColumn(label: Text('Flow', style: TextStyle(fontWeight: FontWeight.bold))),
                         const DataColumn(label: Text('Source', style: TextStyle(fontWeight: FontWeight.bold))),
@@ -1376,8 +1489,29 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                         final isBlockedForTelecaller = (isAssignedToSales && !isAdmin && !isAssignedSalesRep) || isBooked;
                         final canAlterLead = canWrite && !isBlockedForTelecaller && !isBooked;
 
+                        final isBulkSelected = _bulkTransferSelectedIds.contains(lead.id);
                         return DataRow(
+                          color: isAdmin && isBulkSelected
+                              ? WidgetStateProperty.all(
+                                  const Color(0xFF6366F1).withValues(alpha: isDark ? 0.12 : 0.06),
+                                )
+                              : null,
                           cells: [
+                            if (isAdmin)
+                              DataCell(
+                                Checkbox(
+                                  value: isBulkSelected,
+                                  onChanged: (val) {
+                                    setState(() {
+                                      if (val == true) {
+                                        _bulkTransferSelectedIds.add(lead.id);
+                                      } else {
+                                        _bulkTransferSelectedIds.remove(lead.id);
+                                      }
+                                    });
+                                  },
+                                ),
+                              ),
                             DataCell(Text('${index + 1}')),
                             DataCell(
                               (!lead.isManual && lead.leadSource == 'META')
@@ -1750,7 +1884,9 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                               if (keyLower == 'client_name' || keyLower == 'name' || keyLower == 'customer_name') {
                                 cellValue = lead.name.isNotEmpty ? lead.name : (lead.customFields[c.columnKey]?.toString() ?? '');
                               } else if (keyLower == 'phone' || keyLower == 'mobile' || keyLower == 'contact' || keyLower == 'phone_number') {
-                                cellValue = lead.phone.isNotEmpty ? lead.phone : (lead.customFields[c.columnKey]?.toString() ?? '');
+                                cellValue = lead.phone.isNotEmpty
+                                    ? _displayPhone(lead.phone)
+                                    : _displayPhone(lead.customFields[c.columnKey]?.toString() ?? '');
                               } else if (isFinserve && (keyLower.contains('loan') || keyLower == 'project_type' || labelLower.contains('requirement') || labelLower.contains('project'))) {
                                 cellValue = lead.customFields['Loan_Type']?.toString() ??
                                     lead.customFields['loan_type']?.toString() ??
@@ -2291,7 +2427,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                             ),
                             const SizedBox(height: 4),
                             if (f.leadPhone != null) ...[
-                              Text('Phone: ${f.leadPhone}', style: TextStyle(fontSize: 13, color: textMuted)),
+                              Text('Phone: ${_displayPhone(f.leadPhone)}', style: TextStyle(fontSize: 13, color: textMuted)),
                               const SizedBox(height: 2),
                             ],
                             if (f.remarks != null && f.remarks!.isNotEmpty)
@@ -2842,7 +2978,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(callRes['message']?.toString() ?? 'Initiated call to ${lead.phone}'),
+            content: Text(callRes['message']?.toString() ?? 'Initiated call to ${_displayPhone(lead.phone)}'),
             backgroundColor: const Color(0xFF16A34A),
             duration: const Duration(seconds: 2),
           ),
@@ -2913,7 +3049,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                         style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                       ),
                       Text(
-                        lead.name.isNotEmpty ? lead.name : 'Lead ${lead.phone}',
+                        lead.name.isNotEmpty ? lead.name : 'Lead ${_displayPhone(lead.phone)}',
                         style: TextStyle(fontSize: 13, color: isDark ? Colors.white70 : const Color(0xFF64748B)),
                       ),
                     ],
@@ -2954,7 +3090,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                     ],
 
                     Text(
-                      'Client Contact: ${lead.phone.isNotEmpty ? lead.phone : "No phone"}',
+                      'Client Contact: ${lead.phone.isNotEmpty ? _displayPhone(lead.phone) : "No phone"}',
                       style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                     ),
                     const SizedBox(height: 14),
@@ -3467,7 +3603,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                               const Icon(Icons.phone_outlined, size: 16, color: Colors.grey),
                               const SizedBox(width: 8),
                               Text(
-                                lead.phone.isNotEmpty ? '+91 ${lead.phone}' : 'No phone',
+                                lead.phone.isNotEmpty ? '+91 ${_displayPhone(lead.phone)}' : 'No phone',
                                 style: const TextStyle(fontSize: 12),
                               ),
                             ],
@@ -4396,7 +4532,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Text(
-                                  lead.phone.isNotEmpty ? '+91 ${lead.phone}' : 'No phone',
+                                  lead.phone.isNotEmpty ? '+91 ${_displayPhone(lead.phone)}' : 'No phone',
                                   style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF6366F1)),
                                 ),
                               ),
@@ -4552,6 +4688,249 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   context.read<CrmLeadsBloc>().add(
                     CrmLeadTransferRequested(
                       leadId: lead.id,
+                      targetTelecallerId: selectedTelecallerId!,
+                      remarks: remarksCtrl.text.trim().isEmpty ? null : remarksCtrl.text.trim(),
+                    ),
+                  );
+                },
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Modal: Bulk Transfer (Admin only)
+  // ---------------------------------------------------------------------------
+  void _showBulkTransferLeadsModal(
+    BuildContext context,
+    List<CrmLead> leads,
+    List<CrmSalesUser> salesUsers,
+  ) {
+    final authState = context.read<AuthBloc>().state;
+    if (!Permissions.isAdmin(authState.user?.role)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Bulk lead transfer is restricted to Admins only.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+    if (leads.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Select at least one lead to transfer')),
+      );
+      return;
+    }
+
+    int? selectedTelecallerId;
+    final remarksCtrl = TextEditingController();
+    String searchQuery = '';
+    final candidates = List<CrmSalesUser>.from(salesUsers);
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setModalState) {
+          final isDark = Theme.of(ctx).brightness == Brightness.dark;
+          final filtered = candidates.where((u) {
+            final q = searchQuery.toLowerCase().trim();
+            if (q.isEmpty) return true;
+            return u.fullName.toLowerCase().contains(q) ||
+                (u.designation ?? '').toLowerCase().contains(q) ||
+                (u.role ?? '').toLowerCase().contains(q) ||
+                u.employeeId.toString().contains(q);
+          }).toList();
+
+          return AlertDialog(
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6366F1).withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.swap_horiz_rounded, color: Color(0xFF6366F1), size: 22),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Bulk Transfer Leads',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Reassign ${leads.length} selected lead${leads.length == 1 ? '' : 's'} to one telecaller',
+                        style: const TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            content: Container(
+              constraints: const BoxConstraints(maxWidth: 480),
+              width: double.maxFinite,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF24201D) : const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: isDark ? Colors.white12 : Colors.grey.shade300),
+                      ),
+                      child: Text(
+                        '${leads.length} leads selected'
+                        '${leads.length <= 5 ? ': ${leads.map((l) => l.name.isNotEmpty ? l.name : _displayPhone(l.phone)).join(', ')}' : ''}',
+                        style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Select New Telecaller *',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      onChanged: (val) => setModalState(() => searchQuery = val),
+                      decoration: InputDecoration(
+                        hintText: 'Search by telecaller name or designation...',
+                        prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                        isDense: true,
+                        filled: true,
+                        fillColor: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey.shade100,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      height: 180,
+                      decoration: BoxDecoration(
+                        border: Border.all(color: isDark ? Colors.white12 : Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: filtered.isEmpty
+                          ? const Center(
+                              child: Text('No matching telecallers found', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                            )
+                          : ListView.separated(
+                              shrinkWrap: true,
+                              itemCount: filtered.length,
+                              separatorBuilder: (_, __) => const Divider(height: 1),
+                              itemBuilder: (ctx, i) {
+                                final user = filtered[i];
+                                final isSelected = selectedTelecallerId == user.employeeId;
+                                return ListTile(
+                                  dense: true,
+                                  selected: isSelected,
+                                  selectedTileColor: const Color(0xFF6366F1).withValues(alpha: 0.12),
+                                  leading: CircleAvatar(
+                                    radius: 14,
+                                    backgroundColor: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                                    child: Text(
+                                      user.fullName.isNotEmpty ? user.fullName[0].toUpperCase() : '?',
+                                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF6366F1)),
+                                    ),
+                                  ),
+                                  title: Text(
+                                    user.fullName,
+                                    style: TextStyle(
+                                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  subtitle: Text(
+                                    user.designation?.isNotEmpty == true
+                                        ? '${user.designation} (#${user.employeeId})'
+                                        : 'Employee #${user.employeeId}',
+                                    style: const TextStyle(fontSize: 11),
+                                  ),
+                                  trailing: isSelected
+                                      ? const Icon(Icons.check_circle_rounded, color: Color(0xFF6366F1), size: 20)
+                                      : null,
+                                  onTap: () => setModalState(() => selectedTelecallerId = user.employeeId),
+                                );
+                              },
+                            ),
+                    ),
+                    const SizedBox(height: 14),
+                    const Text(
+                      'Transfer Reason / Note (Optional)',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: remarksCtrl,
+                      maxLines: 2,
+                      decoration: const InputDecoration(
+                        hintText: 'e.g. Desk rebalance, telecaller on leave',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.info_outline_rounded, color: Colors.amber, size: 18),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Admin only. All selected leads will be allocated to the chosen telecaller immediately.',
+                              style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogCtx),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF6366F1),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                ),
+                icon: const Icon(Icons.swap_horiz_rounded, size: 18),
+                label: Text('Transfer ${leads.length} Leads'),
+                onPressed: () {
+                  if (selectedTelecallerId == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Please select a telecaller to transfer these leads to')),
+                    );
+                    return;
+                  }
+                  Navigator.pop(dialogCtx);
+                  final ids = leads.map((l) => l.id).toList();
+                  setState(() => _bulkTransferSelectedIds.clear());
+                  context.read<CrmLeadsBloc>().add(
+                    CrmLeadsBulkTransferRequested(
+                      leadIds: ids,
                       targetTelecallerId: selectedTelecallerId!,
                       remarks: remarksCtrl.text.trim().isEmpty ? null : remarksCtrl.text.trim(),
                     ),
@@ -5478,12 +5857,16 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                 lead.customFields['client_name']?.toString() ??
                 '');
       } else if (isPhoneCol) {
-        initialVal = cleanMobile10(lead.phone.isNotEmpty
+        final rawPhone = lead.phone.isNotEmpty
             ? lead.phone
             : (lead.customFields[col.columnKey]?.toString() ??
                 lead.customFields['Phone']?.toString() ??
                 lead.customFields['phone']?.toString() ??
-                ''));
+                '');
+        // Don't strip masked display values (e.g. ******3210) down to last-4 digits.
+        initialVal = (!_showFullPhoneNumbers() || rawPhone.contains('*'))
+            ? _displayPhone(rawPhone)
+            : cleanMobile10(rawPhone);
       } else if (isFinserve &&
           (keyLower.contains('loan') ||
               keyLower.contains('project') ||
@@ -5916,7 +6299,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                             ],
                           ),
                           const SizedBox(height: 6),
-                          Text('${primaryLead.name} | ${primaryLead.phone}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5)),
+                          Text('${primaryLead.name} | ${_displayPhone(primaryLead.phone)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5)),
                           const SizedBox(height: 2),
                           Text('Status: ${primaryLead.status.name} | Telecaller: ${primaryLead.telecallerName ?? "Unassigned"}', style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
                           if (primaryLead.customFields.isNotEmpty) ...[
@@ -5950,7 +6333,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                           return DropdownMenuItem<CrmLead>(
                             value: lead,
                             child: Text(
-                              '${lead.name} (${lead.phone}) ${isExactPhone ? "★ Exact Number Match" : ""} [${lead.status.name}]',
+                              '${lead.name} (${_displayPhone(lead.phone)}) ${isExactPhone ? "★ Exact Number Match" : ""} [${lead.status.name}]',
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 fontSize: 12.5,
@@ -5983,7 +6366,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                               ],
                             ),
                             const SizedBox(height: 6),
-                            Text('${selectedDuplicateLead!.name} | ${selectedDuplicateLead!.phone}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                            Text('${selectedDuplicateLead!.name} | ${_displayPhone(selectedDuplicateLead!.phone)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                             const SizedBox(height: 2),
                             Text('Status: ${selectedDuplicateLead!.status.name} | Telecaller: ${selectedDuplicateLead!.telecallerName ?? "Unassigned"}', style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
                             if (selectedDuplicateLead!.customFields.isNotEmpty) ...[
@@ -6155,7 +6538,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                             ),
                             const SizedBox(height: 6),
                             Text(
-                              'Client: ${lead.name.isNotEmpty ? lead.name : "Unnamed"} • ${lead.phone}',
+                              'Client: ${lead.name.isNotEmpty ? lead.name : "Unnamed"} • ${_displayPhone(lead.phone)}',
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w700,
@@ -6369,7 +6752,7 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                                 const Icon(Icons.phone_outlined, size: 16),
                                 const SizedBox(width: 8),
                                 Text(
-                                  lead.phone.isNotEmpty ? '+91 ${lead.phone}' : 'No phone',
+                                  lead.phone.isNotEmpty ? '+91 ${_displayPhone(lead.phone)}' : 'No phone',
                                   style: const TextStyle(fontSize: 13),
                                 ),
                               ],

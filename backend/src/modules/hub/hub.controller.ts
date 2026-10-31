@@ -4,6 +4,22 @@ import { ok, fail } from '../../utils/response';
 
 export const hubController = {
   /**
+   * GET /api/crm/partners/health — connectivity probe to NB Hub REST API.
+   */
+  async health(req: Request, res: Response) {
+    try {
+      const result = await hubApiService.healthCheck();
+      if (!result.ok) {
+        return res.status(502).json(fail(result.message || 'NB Hub API unreachable'));
+      }
+      res.json(ok(result));
+    } catch (err: any) {
+      console.error('[HubController.health]', err);
+      res.status(502).json(fail(err.message || 'NB Hub API unreachable'));
+    }
+  },
+
+  /**
    * GET /api/crm/partners or /crm/api/hub/partners
    * List all partners from NB Hub with optional search, role, or status filter.
    */
@@ -85,9 +101,12 @@ export const hubController = {
    */
   async createPartner(req: Request, res: Response) {
     try {
-      const { email, username } = req.body;
+      const { email, username, password } = req.body || {};
       if (!email || !username) {
         return res.status(400).json(fail('Email and username are required'));
+      }
+      if (!password || String(password).trim().length < 4) {
+        return res.status(400).json(fail('Password is required (min 4 characters) when creating a partner'));
       }
 
       const created = await hubApiService.createPartner(req.body);

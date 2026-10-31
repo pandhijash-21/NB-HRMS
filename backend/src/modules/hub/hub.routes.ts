@@ -14,6 +14,9 @@ function requirePartners(req: Request, res: Response, next: NextFunction) {
 
 hubRouter.use(requirePartners);
 
+// Connectivity probe (must precede /:identifier)
+hubRouter.get('/health', hubController.health);
+
 // Trash / archived records (must precede /:identifier)
 hubRouter.get('/trash', hubController.getTrash);
 hubRouter.get('/trash/records', hubController.getTrash);

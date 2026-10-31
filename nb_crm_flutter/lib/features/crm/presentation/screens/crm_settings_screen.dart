@@ -301,38 +301,116 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
         }
 
         return Scaffold(
-          backgroundColor: isDark ? const Color(0xFF141210) : const Color(0xFFF8FAFC),
+          backgroundColor: isDark ? const Color(0xFF141210) : const Color(0xFFF1F5F9),
           appBar: AppBar(
-            title: Text(isFinserve ? 'Finserve CRM Settings' : 'CRM Settings & Configuration'),
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isFinserve ? 'Finserve CRM Settings' : 'CRM Settings & Configuration',
+                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+                ),
+                Text(
+                  isFinserve
+                      ? 'Loans, desks, WhatsApp, telephony & KPI controls'
+                      : 'Desks, sources, WhatsApp, telephony & KPI controls',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w500,
+                    color: textMuted,
+                  ),
+                ),
+              ],
+            ),
             leading: const AppBackButton(fallbackLocation: '/crm/dashboard'),
             backgroundColor: isDark ? const Color(0xFF1A1816) : Colors.white,
             elevation: 0,
             scrolledUnderElevation: 0,
             bottom: PreferredSize(
-              preferredSize: const Size.fromHeight(48),
+              preferredSize: const Size.fromHeight(52),
               child: TourTarget(
-              id: TourIds.step('crm.settings', 2),
-              child: TabBar(
-              controller: _tabController,
-              isScrollable: true,
-              tabs: [
-                Tab(text: isFinserve ? 'Pre-Sales Settings' : 'Pre-Sales & Front Desk'),
-                const Tab(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.chat_bubble_outline_rounded, size: 16, color: Color(0xFF25D366)),
-                      SizedBox(width: 6),
-                      Text('WhatsApp Automation'),
+                id: TourIds.step('crm.settings', 2),
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(color: borderColor.withValues(alpha: 0.9)),
+                    ),
+                  ),
+                  child: TabBar(
+                    controller: _tabController,
+                    isScrollable: true,
+                    tabAlignment: TabAlignment.start,
+                    indicatorSize: TabBarIndicatorSize.label,
+                    indicatorWeight: 3,
+                    indicatorColor: primaryGold,
+                    labelColor: primaryGold,
+                    unselectedLabelColor: textMuted,
+                    labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                    unselectedLabelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                    tabs: [
+                      Tab(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.tune_rounded, size: 15, color: primaryGold),
+                            const SizedBox(width: 6),
+                            Text(isFinserve ? 'Pre-Sales Settings' : 'Pre-Sales & Front Desk'),
+                          ],
+                        ),
+                      ),
+                      const Tab(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.chat_bubble_outline_rounded, size: 15, color: Color(0xFF25D366)),
+                            SizedBox(width: 6),
+                            Text('WhatsApp Automation'),
+                          ],
+                        ),
+                      ),
+                      const Tab(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.phone_in_talk_rounded, size: 15),
+                            SizedBox(width: 6),
+                            Text('9ance Cloud Telephony'),
+                          ],
+                        ),
+                      ),
+                      const Tab(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.insights_rounded, size: 15),
+                            SizedBox(width: 6),
+                            Text('Dashboard KPI'),
+                          ],
+                        ),
+                      ),
+                      const Tab(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.delete_outline_rounded, size: 15),
+                            SizedBox(width: 6),
+                            Text('Bin & Retention'),
+                          ],
+                        ),
+                      ),
+                      const Tab(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.settings_outlined, size: 15),
+                            SizedBox(width: 6),
+                            Text('General'),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),
-                const Tab(text: '9ance Cloud Telephony'),
-                const Tab(text: 'Dashboard KPI Management'),
-                const Tab(text: 'Bin & Retention Policy'),
-                const Tab(text: 'General Preferences'),
-              ],
-            ),
               ),
             ),
             actions: [
@@ -1372,17 +1450,27 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
           // Section Title
           Row(
             children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(color: primaryColor, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 8),
               Text(
-                'CONFIGURATION MODULES (CLICK TO OPEN)',
+                'CONFIGURATION MODULES',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w800,
-                  letterSpacing: 1.0,
-                  color: textMuted,
+                  letterSpacing: 0.8,
+                  color: isDark ? Colors.white70 : const Color(0xFF334155),
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(child: Divider(color: borderColor)),
+              Text(
+                'Tap a card to open',
+                style: TextStyle(fontSize: 11, color: textMuted, fontWeight: FontWeight.w500),
+              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -1432,9 +1520,7 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
     required Color primaryColor,
   }) {
     return Material(
-      color: cardBg,
-      borderRadius: BorderRadius.circular(16),
-      elevation: 0,
+      color: Colors.transparent,
       child: InkWell(
         onTap: () {
           setState(() {
@@ -1444,140 +1530,143 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
         borderRadius: BorderRadius.circular(16),
         hoverColor: cat.color.withValues(alpha: 0.05),
         splashColor: cat.color.withValues(alpha: 0.12),
-        child: Container(
-          padding: const EdgeInsets.all(20),
+        child: Ink(
           decoration: BoxDecoration(
+            color: cardBg,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: borderColor),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          cat.color.withValues(alpha: 0.22),
-                          cat.color.withValues(alpha: 0.08),
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: cat.color.withValues(alpha: 0.35)),
-                    ),
-                    child: Icon(cat.icon, color: cat.color, size: 24),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          cat.title,
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: isDark ? Colors.white : const Color(0xFF1E293B),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          cat.subtitle,
-                          style: TextStyle(fontSize: 12.5, color: textMuted, height: 1.35),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: isDark ? Colors.white.withValues(alpha: 0.06) : const Color(0xFFF1F5F9),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.arrow_forward_rounded,
-                      size: 16,
-                      color: cat.color,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              // Badges
-              Wrap(
-                spacing: 8,
-                runSpacing: 6,
-                children: cat.badges.map((b) {
-                  return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: cat.color.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: cat.color.withValues(alpha: 0.2)),
-                    ),
-                    child: Text(
-                      b,
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
-                        color: cat.color,
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-              if (cat.previews.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: cat.previews.map((p) {
-                    return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF24201D) : const Color(0xFFF8FAFC),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: borderColor),
-                      ),
-                      child: Text(
-                        p,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: textMuted,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ],
-              const SizedBox(height: 14),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Text(
-                    'Open & Configure',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
-                      color: cat.color,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Icon(Icons.chevron_right_rounded, size: 18, color: cat.color),
-                ],
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.04),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
               ),
             ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(width: 5, color: cat.color),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                width: 46,
+                                height: 46,
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      cat.color.withValues(alpha: 0.22),
+                                      cat.color.withValues(alpha: 0.08),
+                                    ],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: cat.color.withValues(alpha: 0.35)),
+                                ),
+                                child: Icon(cat.icon, color: cat.color, size: 22),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      cat.title,
+                                      style: TextStyle(
+                                        fontSize: 15.5,
+                                        fontWeight: FontWeight.w800,
+                                        color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      cat.subtitle,
+                                      style: TextStyle(fontSize: 12.5, color: textMuted, height: 1.35),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Icon(Icons.arrow_forward_ios_rounded, size: 14, color: cat.color),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
+                            children: cat.badges.map((b) {
+                              return Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: cat.color.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: cat.color.withValues(alpha: 0.2)),
+                                ),
+                                child: Text(
+                                  b,
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: cat.color,
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                          if (cat.previews.isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 6,
+                              children: cat.previews.map((p) {
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: isDark ? const Color(0xFF24201D) : const Color(0xFFF8FAFC),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: borderColor),
+                                  ),
+                                  child: Text(
+                                    p,
+                                    style: TextStyle(fontSize: 11, color: textMuted),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          ],
+                          const SizedBox(height: 12),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: Text(
+                              'Configure →',
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w800,
+                                color: cat.color,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),

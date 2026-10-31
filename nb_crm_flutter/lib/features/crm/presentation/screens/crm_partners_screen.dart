@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -94,26 +97,126 @@ class _CrmPartnersScreenState extends State<CrmPartnersScreen> {
   int get _countAP => _partners.where((p) => p.role == 'AP' || p.role == 'CA').length;
   int get _countActive => _partners.where((p) => p.isActive).length;
 
-  void _openAddEditPartnerDialog([HubPartner? partner]) {
+  Future<void> _openAddEditPartnerDialog([HubPartner? partner]) async {
     final isEdit = partner != null;
-    final formKey = GlobalKey<FormState>();
+    HubPartner? seed = partner;
 
-    String role = partner?.role ?? 'CP';
-    final emailCtrl = TextEditingController(text: partner?.email ?? '');
-    final usernameCtrl = TextEditingController(text: partner?.username ?? '');
-    final phoneCtrl = TextEditingController(text: partner?.phone ?? '');
-    final companyCtrl = TextEditingController(text: partner?.companyOrFirmName ?? '');
-    final contactCtrl = TextEditingController(text: partner?.contactPersonName ?? '');
-    final streamCtrl = TextEditingController(text: partner?.professionalStream ?? '');
-    final panCtrl = TextEditingController(text: partner?.pan ?? '');
-    final gstinCtrl = TextEditingController(text: partner?.gstin ?? '');
-    final reraCtrl = TextEditingController(text: partner?.reraNo ?? '');
-    final icaiCtrl = TextEditingController(text: partner?.icaiMembershipNo ?? '');
-    final cityCtrl = TextEditingController(text: partner?.city ?? '');
-    final addressCtrl = TextEditingController(text: partner?.address ?? '');
-    final pincodeCtrl = TextEditingController(text: partner?.pincode ?? '');
-    final websiteCtrl = TextEditingController(text: partner?.website ?? '');
-    String status = partner?.status ?? 'ACTIVE';
+    // Prefer full Hub profile so edit form is not missing fields from list payloads.
+    if (partner != null) {
+      try {
+        final id = partner.email.isNotEmpty ? partner.email : partner.username;
+        final full = await context.read<CrmRepository>().getHubPartnerProfile(id);
+        if (full != null) seed = full;
+      } catch (_) {}
+    }
+
+    if (!mounted) return;
+
+    final formKey = GlobalKey<FormState>();
+    String role = seed?.role ?? 'CP';
+    String status = seed?.status ?? 'ACTIVE';
+    const permissionOptions = ['READ_ONLY', 'L1', 'L2', 'FULL'];
+    String permissionLevel = seed?.permissionLevel.isNotEmpty == true ? seed!.permissionLevel : 'READ_ONLY';
+    if (!permissionOptions.contains(permissionLevel)) {
+      permissionLevel = 'READ_ONLY';
+    }
+    bool declarationAccepted = seed?.declarationAccepted ?? true;
+    bool obscurePassword = true;
+    List<String> natureOfBusiness = List<String>.from(seed?.natureOfBusiness ?? const []);
+    List<String> areasOfPractice = List<String>.from(seed?.areasOfPractice ?? const []);
+    String? companyLogo = seed?.companyLogo;
+
+    final emailCtrl = TextEditingController(text: seed?.email ?? '');
+    final usernameCtrl = TextEditingController(text: seed?.username ?? '');
+    final passwordCtrl = TextEditingController();
+    final phoneCtrl = TextEditingController(text: seed?.phone ?? '');
+    final companyCtrl = TextEditingController(text: seed?.companyOrFirmName ?? '');
+    final contactCtrl = TextEditingController(text: seed?.contactPersonName ?? '');
+    final streamCtrl = TextEditingController(text: seed?.professionalStream ?? '');
+    final constitutionCtrl = TextEditingController(text: seed?.constitution ?? '');
+    final panCtrl = TextEditingController(text: seed?.pan ?? '');
+    final gstinCtrl = TextEditingController(text: seed?.gstin ?? '');
+    final reraCtrl = TextEditingController(text: seed?.reraNo ?? '');
+    final icaiCtrl = TextEditingController(text: seed?.icaiMembershipNo ?? '');
+    final copCtrl = TextEditingController(text: seed?.copNo ?? '');
+    final doiCtrl = TextEditingController(text: seed?.dateOfIncorporation ?? '');
+    final cityCtrl = TextEditingController(text: seed?.city ?? '');
+    final addressCtrl = TextEditingController(text: seed?.address ?? '');
+    final pincodeCtrl = TextEditingController(text: seed?.pincode ?? '');
+    final websiteCtrl = TextEditingController(text: seed?.website ?? '');
+    final logoUrlCtrl = TextEditingController(text: seed?.companyLogo ?? '');
+    final natureChipCtrl = TextEditingController();
+    final areasChipCtrl = TextEditingController();
+
+    InputDecoration dense(String label, {IconData? icon, String? hint}) => InputDecoration(
+          labelText: label,
+          hintText: hint,
+          border: const OutlineInputBorder(),
+          isDense: true,
+          prefixIcon: icon != null ? Icon(icon, size: 18) : null,
+        );
+
+    Widget sectionTitle(String title) => Padding(
+          padding: const EdgeInsets.only(top: 4, bottom: 10),
+          child: Text(
+            title,
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.primaryBlue),
+          ),
+        );
+
+    Widget chipEditor({
+      required String label,
+      required List<String> values,
+      required TextEditingController controller,
+      required void Function(List<String>) onChanged,
+    }) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              ...values.map(
+                (v) => InputChip(
+                  label: Text(v, style: const TextStyle(fontSize: 12)),
+                  onDeleted: () => onChanged([...values]..remove(v)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  decoration: dense('Add item', hint: 'Type and press Add'),
+                  onSubmitted: (raw) {
+                    final t = raw.trim();
+                    if (t.isEmpty) return;
+                    if (!values.contains(t)) onChanged([...values, t]);
+                    controller.clear();
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton(
+                onPressed: () {
+                  final t = controller.text.trim();
+                  if (t.isEmpty) return;
+                  if (!values.contains(t)) onChanged([...values, t]);
+                  controller.clear();
+                },
+                child: const Text('Add'),
+              ),
+            ],
+          ),
+        ],
+      );
+    }
 
     showDialog(
       context: context,
@@ -122,6 +225,24 @@ class _CrmPartnersScreenState extends State<CrmPartnersScreen> {
         bool isSaving = false;
         return StatefulBuilder(
           builder: (dialogCtx, setDialogState) {
+            Future<void> pickLogo() async {
+              final result = await FilePicker.pickFiles(
+                type: FileType.image,
+                withData: true,
+              );
+              if (result == null || result.files.isEmpty) return;
+              final file = result.files.first;
+              final bytes = file.bytes;
+              if (bytes == null || bytes.isEmpty) return;
+              final mime = (file.extension ?? 'png').toLowerCase();
+              final b64 = base64Encode(bytes);
+              final dataUrl = 'data:image/$mime;base64,$b64';
+              setDialogState(() {
+                companyLogo = dataUrl;
+                logoUrlCtrl.text = dataUrl;
+              });
+            }
+
             return AlertDialog(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               title: Row(
@@ -141,7 +262,7 @@ class _CrmPartnersScreenState extends State<CrmPartnersScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      isEdit ? 'Edit Partner: ${partner.displayName}' : 'Add New Partner',
+                      isEdit ? 'Edit Partner: ${seed?.displayName ?? ''}' : 'Add New Partner',
                       style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -152,28 +273,20 @@ class _CrmPartnersScreenState extends State<CrmPartnersScreen> {
                 ],
               ),
               content: SizedBox(
-                width: 680,
+                width: 720,
                 child: Form(
                   key: formKey,
                   child: SingleChildScrollView(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Partner Role & Credentials',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.primaryBlue),
-                        ),
-                        const SizedBox(height: 10),
+                        sectionTitle('Partner Role & Credentials'),
                         Row(
                           children: [
                             Expanded(
                               child: DropdownButtonFormField<String>(
                                 initialValue: role,
-                                decoration: const InputDecoration(
-                                  labelText: 'Partner Role *',
-                                  border: OutlineInputBorder(),
-                                  isDense: true,
-                                ),
+                                decoration: dense('Partner Role *'),
                                 items: const [
                                   DropdownMenuItem(value: 'CP', child: Text('Channel Partner (CP)')),
                                   DropdownMenuItem(value: 'AP', child: Text('Associate Partner (AP)')),
@@ -188,11 +301,7 @@ class _CrmPartnersScreenState extends State<CrmPartnersScreen> {
                             Expanded(
                               child: DropdownButtonFormField<String>(
                                 initialValue: status,
-                                decoration: const InputDecoration(
-                                  labelText: 'Status',
-                                  border: OutlineInputBorder(),
-                                  isDense: true,
-                                ),
+                                decoration: dense('Status'),
                                 items: const [
                                   DropdownMenuItem(value: 'ACTIVE', child: Text('ACTIVE')),
                                   DropdownMenuItem(value: 'INACTIVE', child: Text('INACTIVE')),
@@ -210,25 +319,16 @@ class _CrmPartnersScreenState extends State<CrmPartnersScreen> {
                             Expanded(
                               child: TextFormField(
                                 controller: usernameCtrl,
-                                decoration: const InputDecoration(
-                                  labelText: 'Username *',
-                                  border: OutlineInputBorder(),
-                                  isDense: true,
-                                  prefixIcon: Icon(Icons.alternate_email, size: 18),
-                                ),
-                                validator: (v) => (v == null || v.trim().isEmpty) ? 'Username is required' : null,
+                                decoration: dense('Username *', icon: Icons.alternate_email),
+                                validator: (v) =>
+                                    (v == null || v.trim().isEmpty) ? 'Username is required' : null,
                               ),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
                               child: TextFormField(
                                 controller: emailCtrl,
-                                decoration: const InputDecoration(
-                                  labelText: 'Email Address *',
-                                  border: OutlineInputBorder(),
-                                  isDense: true,
-                                  prefixIcon: Icon(Icons.email_outlined, size: 18),
-                                ),
+                                decoration: dense('Email Address *', icon: Icons.email_outlined),
                                 validator: (v) {
                                   if (v == null || v.trim().isEmpty) return 'Email is required';
                                   if (!v.contains('@')) return 'Enter a valid email';
@@ -238,36 +338,77 @@ class _CrmPartnersScreenState extends State<CrmPartnersScreen> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 16),
-                        const Divider(),
-                        const Text(
-                          'Company & Contact Information',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.primaryBlue),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                controller: passwordCtrl,
+                                obscureText: obscurePassword,
+                                decoration: dense(
+                                  isEdit ? 'Password (leave blank to keep)' : 'Password *',
+                                  icon: Icons.lock_outline,
+                                ).copyWith(
+                                  suffixIcon: IconButton(
+                                    icon: Icon(
+                                      obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                                      size: 18,
+                                    ),
+                                    onPressed: () =>
+                                        setDialogState(() => obscurePassword = !obscurePassword),
+                                  ),
+                                ),
+                                validator: (v) {
+                                  if (!isEdit && (v == null || v.trim().length < 4)) {
+                                    return 'Password required (min 4 chars)';
+                                  }
+                                  if (v != null && v.isNotEmpty && v.trim().length < 4) {
+                                    return 'Min 4 characters';
+                                  }
+                                  return null;
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: DropdownButtonFormField<String>(
+                                initialValue: permissionLevel,
+                                decoration: dense('Permission Level'),
+                                items: const [
+                                  DropdownMenuItem(value: 'READ_ONLY', child: Text('READ_ONLY')),
+                                  DropdownMenuItem(value: 'L1', child: Text('L1')),
+                                  DropdownMenuItem(value: 'L2', child: Text('L2')),
+                                  DropdownMenuItem(value: 'FULL', child: Text('FULL')),
+                                ],
+                                onChanged: (v) {
+                                  if (v != null) setDialogState(() => permissionLevel = v);
+                                },
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 8),
+                        SwitchListTile.adaptive(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Declaration accepted', style: TextStyle(fontSize: 13)),
+                          value: declarationAccepted,
+                          onChanged: (v) => setDialogState(() => declarationAccepted = v),
+                        ),
+                        const Divider(height: 24),
+                        sectionTitle('Company & Contact'),
                         Row(
                           children: [
                             Expanded(
                               child: TextFormField(
                                 controller: companyCtrl,
-                                decoration: const InputDecoration(
-                                  labelText: 'Company / Firm Name',
-                                  border: OutlineInputBorder(),
-                                  isDense: true,
-                                  prefixIcon: Icon(Icons.business_outlined, size: 18),
-                                ),
+                                decoration: dense('Company / Firm Name', icon: Icons.business_outlined),
                               ),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
                               child: TextFormField(
                                 controller: contactCtrl,
-                                decoration: const InputDecoration(
-                                  labelText: 'Contact Person Name',
-                                  border: OutlineInputBorder(),
-                                  isDense: true,
-                                  prefixIcon: Icon(Icons.person_outline, size: 18),
-                                ),
+                                decoration: dense('Contact Person Name', icon: Icons.person_outline),
                               ),
                             ),
                           ],
@@ -278,56 +419,81 @@ class _CrmPartnersScreenState extends State<CrmPartnersScreen> {
                             Expanded(
                               child: TextFormField(
                                 controller: phoneCtrl,
-                                decoration: const InputDecoration(
-                                  labelText: 'Phone / Mobile Number',
-                                  border: OutlineInputBorder(),
-                                  isDense: true,
-                                  prefixIcon: Icon(Icons.phone_outlined, size: 18),
-                                ),
+                                decoration: dense('Phone / Mobile Number', icon: Icons.phone_outlined),
                               ),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
                               child: TextFormField(
                                 controller: streamCtrl,
-                                decoration: const InputDecoration(
-                                  labelText: 'Professional Stream',
-                                  hintText: 'e.g. Real Estate, Finance, Legal',
-                                  border: OutlineInputBorder(),
-                                  isDense: true,
+                                decoration: dense(
+                                  'Professional Stream',
+                                  hint: 'e.g. Real Estate, Finance, Legal',
                                 ),
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 16),
-                        const Divider(),
-                        const Text(
-                          'Statutory & Registration Numbers',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.primaryBlue),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: constitutionCtrl,
+                          decoration: dense('Constitution', hint: 'e.g. Proprietorship, LLP, Pvt Ltd'),
                         ),
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 12),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                controller: logoUrlCtrl,
+                                decoration: dense('Company Logo URL / Data', icon: Icons.image_outlined),
+                                onChanged: (v) => companyLogo = v.trim().isEmpty ? null : v.trim(),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            OutlinedButton.icon(
+                              onPressed: pickLogo,
+                              icon: const Icon(Icons.upload_file_rounded, size: 16),
+                              label: const Text('Upload'),
+                            ),
+                          ],
+                        ),
+                        if (companyLogo != null && companyLogo!.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: companyLogo!.startsWith('data:')
+                                ? Image.memory(
+                                    base64Decode(companyLogo!.split(',').last),
+                                    height: 56,
+                                    fit: BoxFit.contain,
+                                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                                  )
+                                : Image.network(
+                                    companyLogo!,
+                                    height: 56,
+                                    fit: BoxFit.contain,
+                                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                                  ),
+                          ),
+                        ],
+                        const Divider(height: 28),
+                        sectionTitle('Statutory & Registration'),
                         Row(
                           children: [
                             Expanded(
                               child: TextFormField(
                                 controller: panCtrl,
-                                decoration: const InputDecoration(
-                                  labelText: 'PAN Number',
-                                  border: OutlineInputBorder(),
-                                  isDense: true,
-                                ),
+                                decoration: dense('PAN Number'),
+                                textCapitalization: TextCapitalization.characters,
                               ),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
                               child: TextFormField(
                                 controller: gstinCtrl,
-                                decoration: const InputDecoration(
-                                  labelText: 'GSTIN',
-                                  border: OutlineInputBorder(),
-                                  isDense: true,
-                                ),
+                                decoration: dense('GSTIN'),
+                                textCapitalization: TextCapitalization.characters,
                               ),
                             ),
                           ],
@@ -338,41 +504,60 @@ class _CrmPartnersScreenState extends State<CrmPartnersScreen> {
                             Expanded(
                               child: TextFormField(
                                 controller: reraCtrl,
-                                decoration: const InputDecoration(
-                                  labelText: 'RERA Registration No',
-                                  border: OutlineInputBorder(),
-                                  isDense: true,
-                                ),
+                                decoration: dense('RERA Registration No'),
                               ),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
                               child: TextFormField(
                                 controller: icaiCtrl,
-                                decoration: const InputDecoration(
-                                  labelText: 'ICAI Membership No (if CA)',
-                                  border: OutlineInputBorder(),
-                                  isDense: true,
+                                decoration: dense('ICAI Membership No'),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                controller: copCtrl,
+                                decoration: dense('COP No'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: TextFormField(
+                                controller: doiCtrl,
+                                decoration: dense(
+                                  'Date of Incorporation',
+                                  hint: 'YYYY-MM-DD',
+                                  icon: Icons.calendar_today_outlined,
                                 ),
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 16),
-                        const Divider(),
-                        const Text(
-                          'Address & Location',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.primaryBlue),
+                        const Divider(height: 28),
+                        sectionTitle('Practice Focus'),
+                        chipEditor(
+                          label: 'Nature of Business',
+                          values: natureOfBusiness,
+                          controller: natureChipCtrl,
+                          onChanged: (v) => setDialogState(() => natureOfBusiness = v),
                         ),
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 12),
+                        chipEditor(
+                          label: 'Areas of Practice',
+                          values: areasOfPractice,
+                          controller: areasChipCtrl,
+                          onChanged: (v) => setDialogState(() => areasOfPractice = v),
+                        ),
+                        const Divider(height: 28),
+                        sectionTitle('Address & Location'),
                         TextFormField(
                           controller: addressCtrl,
-                          decoration: const InputDecoration(
-                            labelText: 'Office Address',
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                            prefixIcon: Icon(Icons.location_on_outlined, size: 18),
-                          ),
+                          decoration: dense('Office Address', icon: Icons.location_on_outlined),
                         ),
                         const SizedBox(height: 12),
                         Row(
@@ -380,34 +565,21 @@ class _CrmPartnersScreenState extends State<CrmPartnersScreen> {
                             Expanded(
                               child: TextFormField(
                                 controller: cityCtrl,
-                                decoration: const InputDecoration(
-                                  labelText: 'City',
-                                  border: OutlineInputBorder(),
-                                  isDense: true,
-                                ),
+                                decoration: dense('City'),
                               ),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
                               child: TextFormField(
                                 controller: pincodeCtrl,
-                                decoration: const InputDecoration(
-                                  labelText: 'Pincode',
-                                  border: OutlineInputBorder(),
-                                  isDense: true,
-                                ),
+                                decoration: dense('Pincode'),
                               ),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
                               child: TextFormField(
                                 controller: websiteCtrl,
-                                decoration: const InputDecoration(
-                                  labelText: 'Website',
-                                  border: OutlineInputBorder(),
-                                  isDense: true,
-                                  prefixIcon: Icon(Icons.language_outlined, size: 18),
-                                ),
+                                decoration: dense('Website', icon: Icons.language_outlined),
                               ),
                             ),
                           ],
@@ -435,12 +607,15 @@ class _CrmPartnersScreenState extends State<CrmPartnersScreen> {
                       ? null
                       : () async {
                           if (!formKey.currentState!.validate()) return;
+                          setDialogState(() => isSaving = true);
                           final firm = companyCtrl.text.trim();
                           final contact = contactCtrl.text.trim();
                           final cleanEmail = emailCtrl.text.trim().toLowerCase();
                           final cleanUsername = usernameCtrl.text.trim();
+                          final pwd = passwordCtrl.text.trim();
+                          final logo = (companyLogo ?? logoUrlCtrl.text).trim();
 
-                          final payload = {
+                          final payload = <String, dynamic>{
                             'role': role,
                             'status': status,
                             'username': cleanUsername,
@@ -453,26 +628,40 @@ class _CrmPartnersScreenState extends State<CrmPartnersScreen> {
                             'name': contact.isNotEmpty ? contact : firm,
                             'professional_stream': streamCtrl.text.trim(),
                             'professionalStream': streamCtrl.text.trim(),
+                            'constitution': constitutionCtrl.text.trim(),
                             'pan': panCtrl.text.trim().toUpperCase(),
                             'gstin': gstinCtrl.text.trim().toUpperCase(),
                             'rera_no': reraCtrl.text.trim(),
                             'reraNo': reraCtrl.text.trim(),
                             'icai_membership_no': icaiCtrl.text.trim(),
                             'icaiMembershipNo': icaiCtrl.text.trim(),
+                            'cop_no': copCtrl.text.trim(),
+                            'copNo': copCtrl.text.trim(),
+                            'date_of_incorporation': doiCtrl.text.trim(),
+                            'dateOfIncorporation': doiCtrl.text.trim(),
                             'address': addressCtrl.text.trim(),
                             'city': cityCtrl.text.trim(),
                             'pincode': pincodeCtrl.text.trim(),
                             'website': websiteCtrl.text.trim(),
-                            'declaration_accepted': true,
-                            'declarationAccepted': true,
-                            'permission_level': 'READ_ONLY',
-                            'permissionLevel': 'READ_ONLY',
+                            'nature_of_business': natureOfBusiness,
+                            'natureOfBusiness': natureOfBusiness,
+                            'areas_of_practice': areasOfPractice,
+                            'areasOfPractice': areasOfPractice,
+                            'declaration_accepted': declarationAccepted,
+                            'declarationAccepted': declarationAccepted,
+                            'permission_level': permissionLevel,
+                            'permissionLevel': permissionLevel,
+                            if (logo.isNotEmpty) ...{
+                              'company_logo': logo,
+                              'companyLogo': logo,
+                            },
+                            if (pwd.isNotEmpty) 'password': pwd,
                           };
 
                           try {
                             final repo = context.read<CrmRepository>();
-                            if (isEdit) {
-                              await repo.updateHubPartner(partner.id, payload);
+                            if (isEdit && seed != null) {
+                              await repo.updateHubPartner(seed.id, payload);
                             } else {
                               await repo.createHubPartner(payload);
                             }
@@ -497,7 +686,9 @@ class _CrmPartnersScreenState extends State<CrmPartnersScreen> {
                             if (mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: Text('Error: ${err.toString().replaceAll('Exception:', '').trim()}'),
+                                  content: Text(
+                                    'Error: ${err.toString().replaceAll('Exception:', '').trim()}',
+                                  ),
                                   backgroundColor: Colors.red.shade700,
                                 ),
                               );

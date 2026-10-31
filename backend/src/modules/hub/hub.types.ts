@@ -3,6 +3,8 @@ export interface HubPartner {
   role: 'CP' | 'AP' | string;
   email: string;
   username: string;
+  /** Never returned by Hub on read; write-only on create/update */
+  password?: string;
   phone?: string;
   company_or_firm_name?: string;
   contact_person_name?: string;
@@ -19,13 +21,14 @@ export interface HubPartner {
   city?: string;
   pincode?: string;
   website?: string;
-  nature_of_business?: string[];
-  areas_of_practice?: string[];
+  nature_of_business: string[];
+  areas_of_practice: string[];
   declaration_accepted?: boolean;
   status: 'ACTIVE' | 'INACTIVE' | string;
   permission_level: string;
   created_at: string;
   updated_at: string;
+  [key: string]: any;
 }
 
 export interface HubTrashRecord {
@@ -52,6 +55,7 @@ export interface CreateHubPartnerDto {
   role: 'CP' | 'AP' | string;
   email: string;
   username: string;
+  password?: string;
   phone?: string;
   company_or_firm_name?: string;
   contact_person_name?: string;

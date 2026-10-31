@@ -50,20 +50,47 @@ function last10(v: string): string {
 }
 
 function normalizePhone10(v: string): string {
-  let d = digitsOnly(v);
-  if (d.length > 10 && d.startsWith('91')) d = d.slice(2);
-  return d;
+  // Always collapse to last 10 digits (handles 0-prefix and 91-prefix).
+  return last10(v);
+}
+
+function didNumberOf(item: any): string {
+  const raw =
+    item?.default_did_number ??
+    item?.effective_did ??
+    item?.default_did ??
+    item?.did_number ??
+    '';
+  if (raw && typeof raw === 'object') {
+    return String(raw.number || raw.did || raw.value || '').trim();
+  }
+  return String(raw || '').trim();
 }
 
 function agentDedupeKey(item: any): string {
-  const providerId = item?.provider_agent_id != null ? String(item.provider_agent_id).trim() : '';
-  if (providerId) return `p:${providerId}`;
+  // Phone first — 9ance often returns duplicate agent rows (different UUID /
+  // provider_agent_id) for the same real number after create+sync.
   const phone = normalizePhone10(String(item?.phone || item?.sip_username || ''));
   if (phone.length >= 10) return `ph:${phone}`;
+  const providerId = item?.provider_agent_id != null ? String(item.provider_agent_id).trim() : '';
+  if (providerId) return `p:${providerId}`;
   const id = item?.id != null ? String(item.id) : '';
   if (id) return `id:${id}`;
   const name = String(item?.name || '').trim().toLowerCase();
   return `n:${name}|${phone}`;
+}
+
+function normalizeAgentRecord(item: any): any {
+  if (!item || typeof item !== 'object') return item;
+  const didNum = didNumberOf(item);
+  return {
+    ...item,
+    id: item.id != null ? String(item.id) : item.id,
+    provider_agent_id:
+      item.provider_agent_id != null ? String(item.provider_agent_id) : item.provider_agent_id,
+    default_did_number: didNum || (typeof item.default_did_number === 'string' ? item.default_did_number : ''),
+    effective_did: didNum || (typeof item.effective_did === 'string' ? item.effective_did : ''),
+  };
 }
 
 function preferAgent(a: any, b: any): any {
@@ -89,10 +116,11 @@ function asList(data: any): any[] {
   else if (Array.isArray(data?.calls)) list = data.calls;
 
   // 9ance often returns the same person twice (sync + create) with different UUIDs.
-  // Collapse by provider_agent_id → phone → id.
+  // Collapse by phone → provider_agent_id → id.
   const byKey = new Map<string, any>();
-  for (const item of list) {
-    if (!item || typeof item !== 'object') continue;
+  for (const raw of list) {
+    if (!raw || typeof raw !== 'object') continue;
+    const item = normalizeAgentRecord(raw);
     const key = agentDedupeKey(item);
     const prev = byKey.get(key);
     byKey.set(key, prev ? preferAgent(prev, item) : item);
@@ -1288,7 +1316,50 @@ class TelephonyService {
 
   async deleteAgent(id: string, scope: string = 'NB_DEVELOPER') {
     const client = await this.ensureAuthenticated(scope);
-    return client.deleteAgent(id);
+    const rawId = String(id || '').trim();
+    if (!rawId) throw new Error('Agent id is required');
+
+    // Resolve aliases — 9ance sometimes rejects UUID with "invalid member id"
+    // and expects provider_agent_id (telephony member id) instead.
+    let providerId = '';
+    let uuid = rawId;
+    try {
+      const agents = asList(await client.listAgents());
+      const match = agents.find(
+        (a: any) =>
+          String(a?.id || '') === rawId ||
+          String(a?.provider_agent_id || '') === rawId,
+      );
+      if (match) {
+        uuid = String(match.id || rawId);
+        providerId = String(match.provider_agent_id || '');
+      }
+    } catch (_) {
+      /* still try delete with given id */
+    }
+
+    const candidates = Array.from(new Set([uuid, providerId, rawId].filter(Boolean)));
+    let lastErr: any;
+    for (const candidate of candidates) {
+      try {
+        return await client.deleteAgent(candidate);
+      } catch (err: any) {
+        lastErr = err;
+        const msg = String(err?.message || err?.detail || '').toLowerCase();
+        const alreadyGone =
+          err?.status === 404 ||
+          msg.includes('not found') ||
+          msg.includes('does not exist');
+        if (alreadyGone) return { deleted: true, already_gone: true };
+        const tryNext =
+          msg.includes('member') ||
+          msg.includes('invalid') ||
+          msg.includes('uuid') ||
+          err?.status === 400;
+        if (!tryNext) break;
+      }
+    }
+    throw lastErr || new Error('Failed to delete agent');
   }
 
   async bulkAssignAgents(

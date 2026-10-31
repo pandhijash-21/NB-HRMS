@@ -344,7 +344,15 @@ class _CrmNineanceTelephonyTabState extends State<CrmNineanceTelephonyTab> {
     }
   }
 
-  Future<void> _deleteAgent(String agentId, String name) async {
+  Future<void> _deleteAgent(Map<String, dynamic> agent) async {
+    final agentId = agent['id']?.toString() ?? '';
+    final providerId = agent['provider_agent_id']?.toString() ?? '';
+    final name = agent['name']?.toString() ?? 'Agent';
+    final deleteKey = agentId.isNotEmpty ? agentId : providerId;
+    if (deleteKey.isEmpty) {
+      _snack('This agent has no id — Sync agents, then try again', error: true);
+      return;
+    }
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -362,7 +370,28 @@ class _CrmNineanceTelephonyTabState extends State<CrmNineanceTelephonyTab> {
     );
     if (ok != true) return;
     try {
-      await context.read<CrmRepository>().deleteNineanceAgent(agentId);
+      final repo = context.read<CrmRepository>();
+      try {
+        await repo.deleteNineanceAgent(deleteKey);
+      } catch (firstErr) {
+        // Fallback: 9ance sometimes wants provider/member id instead of UUID.
+        if (providerId.isNotEmpty && providerId != deleteKey) {
+          await repo.deleteNineanceAgent(providerId);
+        } else {
+          throw firstErr;
+        }
+      }
+      // Clear local CRM mapping if this agent was mapped.
+      final mappedEmp = _employeeMappedTo(agentId);
+      if (mappedEmp != null) {
+        try {
+          await repo.saveTelecallerTelephony(mappedEmp, {
+            'agent_id': '',
+            'agent_number': '',
+            'agent_email': '',
+          });
+        } catch (_) {}
+      }
       await _refreshAgentsAndDids(silent: true);
       _snack('Agent deleted');
     } catch (e) {
@@ -597,12 +626,34 @@ class _CrmNineanceTelephonyTabState extends State<CrmNineanceTelephonyTab> {
     }
   }
 
+  String _normalizePhone10(dynamic raw) {
+    var phone = (raw ?? '').toString().replaceAll(RegExp(r'\D'), '');
+    if (phone.length > 10) phone = phone.substring(phone.length - 10);
+    return phone;
+  }
+
+  String _didLabel(Map<String, dynamic> a) {
+    final candidates = [a['default_did_number'], a['effective_did'], a['default_did'], a['did_number']];
+    for (final c in candidates) {
+      if (c == null) continue;
+      if (c is Map) {
+        final n = c['number'] ?? c['did'] ?? c['value'];
+        if (n != null && n.toString().trim().isNotEmpty) return n.toString().trim();
+      } else {
+        final s = c.toString().trim();
+        // Skip Dart Map.toString() garbage like "{id: ..., number: ...}"
+        if (s.isNotEmpty && !s.startsWith('{')) return s;
+      }
+    }
+    return '';
+  }
+
   String _agentDedupeKey(Map<String, dynamic> a) {
+    // Phone first so create+sync duplicates with different UUIDs collapse.
+    final phone = _normalizePhone10(a['phone'] ?? a['sip_username']);
+    if (phone.length >= 10) return 'ph:$phone';
     final providerId = a['provider_agent_id']?.toString().trim() ?? '';
     if (providerId.isNotEmpty) return 'p:$providerId';
-    var phone = (a['phone'] ?? a['sip_username'] ?? '').toString().replaceAll(RegExp(r'\D'), '');
-    if (phone.length > 10 && phone.startsWith('91')) phone = phone.substring(2);
-    if (phone.length >= 10) return 'ph:$phone';
     final id = a['id']?.toString() ?? '';
     if (id.isNotEmpty) return 'id:$id';
     final name = (a['name'] ?? '').toString().trim().toLowerCase();
@@ -835,10 +886,9 @@ class _CrmNineanceTelephonyTabState extends State<CrmNineanceTelephonyTab> {
                         final id = a['id']?.toString() ?? '';
                         final name = a['name']?.toString() ?? 'Agent';
                         final phone = a['phone']?.toString() ?? '';
-                        final did = a['default_did_number']?.toString() ??
-                            a['effective_did']?.toString() ??
-                            '';
+                        final did = _didLabel(a);
                         final mapped = _employeeMappedTo(id);
+                        final canDelete = id.isNotEmpty || (a['provider_agent_id']?.toString().isNotEmpty ?? false);
                         return Card(
                           margin: const EdgeInsets.only(bottom: 8),
                           elevation: 0,
@@ -885,7 +935,7 @@ class _CrmNineanceTelephonyTabState extends State<CrmNineanceTelephonyTab> {
                                     IconButton(
                                       tooltip: 'Delete agent',
                                       icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                                      onPressed: id.isEmpty ? null : () => _deleteAgent(id, name),
+                                      onPressed: canDelete ? () => _deleteAgent(a) : null,
                                     ),
                                   ],
                                 ),

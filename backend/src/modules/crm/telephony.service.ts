@@ -792,20 +792,50 @@ class TelephonyService {
         data: responseData,
       };
     } catch (err: any) {
+      // 9ance often places the call even when our HTTP layer fails (timeout, truncated
+      // body, non-2xx with call_id). Prefer INITIATED so webhooks / sync can correct
+      // status+duration instead of sticking on CONNECTION_ERROR.
+      const detail = err?.detail || err?.providerError || err?.body || err?.response || {};
+      const detailObj = detail && typeof detail === 'object' ? detail : {};
+      const recoveredCallId =
+        detailObj.call_id ||
+        detailObj.provider_call_id ||
+        detailObj.id ||
+        detailObj.Call_ID ||
+        null;
+      const msg = String(err?.message || '').toLowerCase();
+      const likelyDialed =
+        !!recoveredCallId ||
+        /timeout|timed out|network|econnreset|econnrefused|fetch failed|aborted|socket/.test(msg) ||
+        (typeof err?.status === 'number' && err.status >= 500);
+      const callStatus = likelyDialed ? 'INITIATED' : 'CONNECTION_ERROR';
       await prisma.crmCallLog.create({
         data: {
           leadId: lead.id,
           customerNumber,
           agentNumber: agentNumber || agentId || null,
           did: didId || null,
-          callStatus: 'CONNECTION_ERROR',
+          callStatus,
           callTime: new Date(),
-          rawPayload: { error: err?.message, detail: err?.detail || err?.providerError },
+          callId: recoveredCallId ? String(recoveredCallId) : null,
+          rawPayload: {
+            error: err?.message,
+            detail: detailObj,
+            status: err?.status,
+            likelyDialed,
+          },
         },
       });
       return {
-        success: false,
-        error: err?.message || 'Failed to connect to 9ance Cloud Telephony',
+        success: likelyDialed,
+        error: likelyDialed
+          ? undefined
+          : err?.message || 'Failed to connect to 9ance Cloud Telephony',
+        message: likelyDialed
+          ? `Call started (provider may have dialed) despite API warning: ${err?.message || 'unknown'}`
+          : undefined,
+        callId: recoveredCallId ? String(recoveredCallId) : undefined,
+        customerNumber,
       };
     }
   }
@@ -988,10 +1018,14 @@ class TelephonyService {
     }
     if (!callLog && customerDigits.length >= 10) {
       const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+      // Also match CONNECTION_ERROR / FAILED — click-to-call may have thrown after
+      // 9ance already dialed; webhook must still be able to correct status/duration.
       callLog = await prisma.crmCallLog.findFirst({
         where: {
           customerNumber: { contains: last10(customerDigits) },
-          callStatus: { in: ['INITIATED', 'RINGING'] },
+          callStatus: {
+            in: ['INITIATED', 'RINGING', 'CONNECTION_ERROR', 'FAILED', 'LIVE', 'IN_PROGRESS'],
+          },
           createdAt: { gte: thirtyMinutesAgo },
         },
         orderBy: { createdAt: 'desc' },
@@ -1089,7 +1123,20 @@ class TelephonyService {
       }
       if (callStatus === 'NO_ANSWER') callStatus = 'MISSED';
 
-      const existing = await prisma.crmCallLog.findFirst({ where: { callId } });
+      let existing = await prisma.crmCallLog.findFirst({ where: { callId } });
+      // Heal stale click-to-call errors that had no callId but match this provider call
+      if (!existing && customer.length >= 10) {
+        const windowStart = new Date(Date.now() - 6 * 60 * 60 * 1000);
+        existing = await prisma.crmCallLog.findFirst({
+          where: {
+            customerNumber: { contains: last10(customer) },
+            callStatus: { in: ['CONNECTION_ERROR', 'FAILED', 'INITIATED', 'RINGING'] },
+            createdAt: { gte: windowStart },
+            OR: [{ callId: null }, { callId: '' }],
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+      }
       const row = {
         leadId,
         customerNumber: customer || 'unknown',

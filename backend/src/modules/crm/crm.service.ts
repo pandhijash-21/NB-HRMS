@@ -4399,7 +4399,13 @@ export const crmService = {
     }
 
     if (query.hasRecording === true || query.hasRecording === 'true') {
-      where.recordingUrl = { not: null };
+      // recordingUrl from webhook/sync, or callId so we can proxy audio from 9ance
+      where.AND = [
+        ...(where.AND || []),
+        {
+          OR: [{ recordingUrl: { not: null } }, { callId: { not: null } }],
+        },
+      ];
     }
 
     if (query.callStatus && query.callStatus !== 'ALL') {
@@ -4412,10 +4418,15 @@ export const crmService = {
 
     if (query.search) {
       const s = String(query.search).trim();
-      where.OR = [
-        { customerNumber: { contains: s, mode: 'insensitive' } },
-        { agentNumber: { contains: s, mode: 'insensitive' } },
-        { lead: { name: { contains: s, mode: 'insensitive' } } },
+      where.AND = [
+        ...(where.AND || []),
+        {
+          OR: [
+            { customerNumber: { contains: s, mode: 'insensitive' } },
+            { agentNumber: { contains: s, mode: 'insensitive' } },
+            { lead: { name: { contains: s, mode: 'insensitive' } } },
+          ],
+        },
       ];
     }
 

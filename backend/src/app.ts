@@ -76,7 +76,7 @@ app.use(cors({
 }));
 
 app.use(vpnBlockMiddleware);
-// Allow Flutter/web on Netlify/Vercel to read API responses (default helmet CORP is same-origin).
+// Allow cross-origin reads for Flutter web / CRM frontend (default helmet CORP is same-origin).
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
   crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },

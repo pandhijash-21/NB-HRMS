@@ -2744,7 +2744,9 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                       final isInitiated = log.callStatus.toUpperCase() == 'INITIATED';
                       final isMissed = log.callStatus.contains('MISSED') || log.callStatus.contains('NOANSWER');
                       final isBusy = log.callStatus.contains('BUSY');
-                      final hasAudio = log.recordingUrl != null && log.recordingUrl!.isNotEmpty;
+                      // Playable via stored URL or 9ance proxy when provider callId is known
+                      final hasAudio = (log.recordingUrl != null && log.recordingUrl!.isNotEmpty) ||
+                          (log.callId != null && log.callId!.isNotEmpty);
 
                       final Color statusColor;
                       final IconData statusIcon;

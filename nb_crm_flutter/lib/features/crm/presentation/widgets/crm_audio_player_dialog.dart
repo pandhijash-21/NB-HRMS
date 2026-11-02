@@ -141,7 +141,19 @@ class _CrmAudioPlayerDialogState extends ConsumerState<CrmAudioPlayerDialog>
     final targetUrl = _resolveAudioUrl();
     _resolvedUrl = targetUrl;
 
-    if (_currentRecordingUrl.isEmpty && targetUrl.isEmpty) {
+    // Backend proxy needs callId and/or recordingUrl; otherwise ask user to wait/sync or paste URL.
+    final hasProviderLink = (widget.log.callId != null && widget.log.callId!.isNotEmpty) ||
+        _currentRecordingUrl.isNotEmpty;
+    if (!hasProviderLink) {
+      setState(() {
+        _isLoading = false;
+        _hasError = true;
+        _errorMessage =
+            'No recording linked yet. Wait for the call webhook/sync, or paste a URL below.';
+      });
+      return;
+    }
+    if (targetUrl.isEmpty && _currentRecordingUrl.isEmpty) {
       setState(() {
         _isLoading = false;
         _hasError = true;

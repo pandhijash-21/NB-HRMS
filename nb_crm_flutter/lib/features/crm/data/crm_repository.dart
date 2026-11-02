@@ -903,6 +903,14 @@ class CrmRepository {
     );
   }
 
+  Future<Map<String, dynamic>> syncCallsFromNineance({int pageSize = 100}) async {
+    return _dio.postEnvelope<Map<String, dynamic>>(
+      'crm/telephony/calls/sync',
+      data: {'page_size': pageSize},
+      parse: (raw) => Map<String, dynamic>.from(raw as Map? ?? {}),
+    );
+  }
+
   Future<CrmCallLog> updateCallLog(
     String id, {
     String? recordingUrl,

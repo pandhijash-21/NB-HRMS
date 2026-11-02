@@ -4486,6 +4486,11 @@ export const crmService = {
     userPermissions?: Record<string, string[]>;
     scope?: string;
   }) {
+    // Pull latest 9ance history so sticky CONNECTION_ERROR rows (talked but logged as error) get healed
+    try {
+      await telephonyService.maybeHealStaleCallErrors(query.scope || 'NB_DEVELOPER');
+    } catch (_) {}
+
     const where: any = {
       customerNumber: { not: '' },
     };

@@ -262,6 +262,10 @@ class CrmLeadsCallLogsFilterChanged extends CrmLeadsEvent {
   List<Object?> get props => [search, dateFilter, callStatus, hasRecording];
 }
 
+class CrmLeadsCallLogsSyncRequested extends CrmLeadsEvent {
+  const CrmLeadsCallLogsSyncRequested();
+}
+
 class CrmLeadsClickToCallRequested extends CrmLeadsEvent {
   const CrmLeadsClickToCallRequested(this.leadId, {this.agentId, this.customerNumber});
   final String leadId;
@@ -485,6 +489,7 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
     on<CrmLeadsFollowUpCompleted>(_onFollowUpCompleted);
     on<CrmLeadsVisitorCheckinSubmitted>(_onVisitorCheckinSubmitted);
     on<CrmLeadsCallLogsFilterChanged>(_onCallLogsFilterChanged);
+    on<CrmLeadsCallLogsSyncRequested>(_onCallLogsSyncRequested);
     on<CrmLeadsClickToCallRequested>(_onClickToCallRequested);
     on<CrmLeadsColumnVisibilityToggled>(_onColumnVisibilityToggled);
     on<CrmLeadsColumnsMerged>(_onColumnsMerged);
@@ -1087,6 +1092,33 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
       emit(state.copyWith(callLogs: logs));
     } catch (e) {
       emit(state.copyWith(errorMessage: e.toString()));
+    }
+  }
+
+  Future<void> _onCallLogsSyncRequested(
+    CrmLeadsCallLogsSyncRequested event,
+    Emitter<CrmLeadsState> emit,
+  ) async {
+    emit(state.copyWith(isActing: true));
+    try {
+      final sync = await _crmRepository.syncCallsFromNineance();
+      final logs = await _crmRepository.getCallLogs(
+        search: state.callRecordingSearch.isEmpty ? null : state.callRecordingSearch,
+        dateFilter: state.callRecordingFilterDate == 'all' ? null : state.callRecordingFilterDate,
+        callStatus:
+            state.callRecordingFilterStatus == 'ALL' ? null : state.callRecordingFilterStatus,
+        hasRecording: state.callRecordingsOnlyWithAudio ? true : null,
+      );
+      final healed = sync['healed'];
+      final upserted = sync['upserted'];
+      emit(state.copyWith(
+        isActing: false,
+        callLogs: logs,
+        actionSuccessMessage:
+            'Synced from 9ance — updated $upserted call(s)${healed != null ? ', healed $healed error(s)' : ''}.',
+      ));
+    } catch (e) {
+      emit(state.copyWith(isActing: false, errorMessage: e.toString()));
     }
   }
 

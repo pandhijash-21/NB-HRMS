@@ -2548,10 +2548,35 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   ),
                 ],
               ),
-              IconButton.filledTonal(
-                icon: const Icon(Icons.refresh_rounded, size: 18),
-                tooltip: 'Reload Call Logs',
-                onPressed: () => context.read<CrmLeadsBloc>().add(const CrmLeadsCallLogsFilterChanged()),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: state.isActing
+                        ? null
+                        : () => context.read<CrmLeadsBloc>().add(const CrmLeadsCallLogsSyncRequested()),
+                    icon: state.isActing
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.cloud_sync_rounded, size: 18),
+                    label: Text(state.isActing ? 'Syncing…' : 'Sync from 9ance'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: primaryColor,
+                      side: BorderSide(color: primaryColor),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    ),
+                  ),
+                  IconButton.filledTonal(
+                    icon: const Icon(Icons.refresh_rounded, size: 18),
+                    tooltip: 'Reload Call Logs',
+                    onPressed: () =>
+                        context.read<CrmLeadsBloc>().add(const CrmLeadsCallLogsFilterChanged()),
+                  ),
+                ],
               ),
             ],
           ),

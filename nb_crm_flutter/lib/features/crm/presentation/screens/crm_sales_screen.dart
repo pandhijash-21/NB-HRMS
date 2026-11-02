@@ -5012,7 +5012,7 @@ class _ClientProposalsGroupCardState extends State<_ClientProposalsGroupCard> {
                       const SizedBox(width: 8),
                       ElevatedButton.icon(
                         icon: const Icon(Icons.check_circle_rounded, size: 18),
-                        label: const Text('Confirm Booking'),
+                        label: const Text('Select Payment Term & Finalize'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF16A34A),
                           foregroundColor: Colors.white,
@@ -5193,139 +5193,215 @@ class _ClientProposalsGroupCardState extends State<_ClientProposalsGroupCard> {
     );
   }
 
-  // Confirm Booking Action
-  void _handleConfirmBooking(BuildContext context, CrmProposal proposal) {
+  // Confirm Booking / Finalize Deal — requires selecting a payment term
+  Future<void> _handleConfirmBooking(BuildContext context, CrmProposal proposal) async {
+    List<CrmPaymentTermTemplate> templates =
+        List<CrmPaymentTermTemplate>.from(
+      context.read<CrmLeadsBloc>().state.settings?.paymentTermTemplates ?? const [],
+    );
+    if (templates.isEmpty) {
+      try {
+        final s = await context.read<CrmRepository>().getSettings();
+        templates = List<CrmPaymentTermTemplate>.from(s.paymentTermTemplates);
+      } catch (_) {}
+    }
+    if (!context.mounted) return;
+
+    if (templates.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Configure Payment Terms in CRM Settings before finalizing a deal.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    CrmPaymentTermTemplate? selected = templates.first;
+    final currency = NumberFormat('#,##,###.##');
+
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.check_circle_rounded, color: Color(0xFF16A34A)),
-            SizedBox(width: 8),
-            Text('Confirm Unit Booking'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Confirm booking for Unit #${proposal.unitNo} in ${proposal.projectName}?'),
-            const SizedBox(height: 10),
-            Text(
-              'Customer: ${proposal.clientName}',
-              style: const TextStyle(fontWeight: FontWeight.bold),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlg) {
+          final schedule = selected?.toPaymentSchedule(proposal.grandTotal) ?? [];
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Row(
+              children: [
+                Icon(Icons.check_circle_rounded, color: Color(0xFF16A34A)),
+                SizedBox(width: 8),
+                Expanded(child: Text('Select Payment Term & Finalize Deal')),
+              ],
             ),
-            Text(
-              'Agreed Value: ₹ ${NumberFormat("#,##,###").format(proposal.grandTotal)}',
-              style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF16A34A)),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Booking status will be confirmed. You can proceed with the post-booking payment and documentation steps.',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF16A34A),
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () {
-              Navigator.pop(ctx);
-
-              final authState = context.read<AuthBloc>().state;
-              final currentUserName = authState.user?.name ?? 'Sales Manager';
-              final currentUserId = authState.user?.employeeId;
-
-              final updatedProposals = widget.lead.proposals.map((p) {
-                if (p.id == proposal.id) {
-                  return CrmProposal(
-                    id: p.id,
-                    leadId: p.leadId,
-                    revision: p.revision,
-                    status: 'BOOKING_CONFIRMED',
-                    createdAt: p.createdAt,
-                    expiryDate: p.expiryDate,
-                    clientName: p.clientName,
-                    clientPhone: p.clientPhone,
-                    clientEmail: p.clientEmail,
-                    clientAddress: p.clientAddress,
-                    projectId: p.projectId,
-                    projectName: p.projectName,
-                    towerId: p.towerId,
-                    towerName: p.towerName,
-                    unitId: p.unitId,
-                    unitNo: p.unitNo,
-                    unitType: p.unitType,
-                    floorNo: p.floorNo,
-                    carpetArea: p.carpetArea,
-                    superBuiltUp: p.superBuiltUp,
-                    baseRate: p.baseRate,
-                    basePrice: p.basePrice,
-                    plc: p.plc,
-                    frc: p.frc,
-                    developmentCharges: p.developmentCharges,
-                    parkingCharges: 0.0,
-                    maintenanceCharges: p.maintenanceCharges,
-                    gstPercentage: p.gstPercentage,
-                    gstAmount: p.gstAmount,
-                    stampDutyPercentage: p.stampDutyPercentage,
-                    stampDutyAmount: p.stampDutyAmount,
-                    registrationCharges: p.registrationCharges,
-                    otherChargesAmount: p.otherChargesAmount,
-                    discountAmount: 0.0,
-                    grandTotal: p.grandTotal,
-                    description: p.description,
-                    disclaimer: p.disclaimer,
-                    createdById: p.createdById,
-                    createdByName: p.createdByName,
-                  ).toJson();
-                }
-                return p.toJson();
-              }).toList();
-
-              final log = CrmCustomerLog(
-                id: 'LOG-${DateTime.now().millisecondsSinceEpoch}',
-                title: 'Booking Confirmed: Unit ${proposal.unitNo}',
-                description:
-                    'Booking confirmed for Unit #${proposal.unitNo} (${proposal.projectName}) at ₹ ${NumberFormat("#,##,###").format(proposal.grandTotal)} by $currentUserName.',
-                type: 'STATUS_CHANGE',
-                timestamp: DateTime.now(),
-                performedByName: currentUserName,
-                performedById: currentUserId,
-              );
-
-              final updatedLogs = [
-                log.toJson(),
-                ...widget.lead.activityLogs.map((l) => l.toJson()),
-              ];
-
-              context.read<CrmLeadsBloc>().add(
-                    CrmLeadsLeadUpdated(widget.lead.id, {
-                      'status': 'BOOKING_CONFIRMED',
-                      'customFields': {
-                        ...widget.lead.customFields,
-                        'proposals': updatedProposals,
-                        'activityLogs': updatedLogs,
+            content: SizedBox(
+              width: 480,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Unit #${proposal.unitNo} · ${proposal.projectName}'),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Customer: ${proposal.clientName}',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      'Agreed Value: ₹ ${currency.format(proposal.grandTotal)}',
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF16A34A)),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text('Payment Term *', style: TextStyle(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 6),
+                    DropdownButtonFormField<String>(
+                      value: selected?.id,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      items: templates
+                          .map(
+                            (t) => DropdownMenuItem(
+                              value: t.id,
+                              child: Text(t.name, overflow: TextOverflow.ellipsis),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (id) {
+                        setDlg(() {
+                          selected = templates.where((t) => t.id == id).firstOrNull;
+                        });
                       },
-                    }),
-                  );
-
-              widget.onProposalUpdated();
-
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Booking Confirmed for Unit #${proposal.unitNo}!'),
-                  backgroundColor: const Color(0xFF16A34A),
+                    ),
+                    const SizedBox(height: 14),
+                    if (selected != null) ...[
+                      Text(
+                        'Installment schedule (${selected!.name})',
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 8),
+                      ...schedule.map((row) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                flex: 3,
+                                child: Text(row['name']?.toString() ?? '', style: const TextStyle(fontSize: 12)),
+                              ),
+                              SizedBox(
+                                width: 56,
+                                child: Text(
+                                  '${row['percentage']}%',
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                              Expanded(
+                                child: Text(row['timing']?.toString() ?? '', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                              ),
+                              SizedBox(
+                                width: 100,
+                                child: Text(
+                                  '₹ ${currency.format((row['amount'] as num?)?.toDouble() ?? 0)}',
+                                  textAlign: TextAlign.right,
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                    ],
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Selecting a payment term finalizes the deal and confirms the booking.',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ],
                 ),
-              );
-            },
-            child: const Text('Confirm Booking'),
-          ),
-        ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF16A34A),
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: selected == null || !selected!.isValidTotal
+                    ? null
+                    : () {
+                        final term = selected!;
+                        Navigator.pop(ctx);
+
+                        final authState = context.read<AuthBloc>().state;
+                        final currentUserName = authState.user?.name ?? 'Sales Manager';
+                        final currentUserId = authState.user?.employeeId;
+                        final paymentSchedule = term.toPaymentSchedule(proposal.grandTotal);
+
+                        final updatedProposals = widget.lead.proposals.map((p) {
+                          if (p.id != proposal.id) return p.toJson();
+                          final json = p.toJson();
+                          json['status'] = 'BOOKING_CONFIRMED';
+                          json['paymentSchedule'] = paymentSchedule;
+                          json['paymentTermTemplateId'] = term.id;
+                          json['paymentTermTemplateName'] = term.name;
+                          return json;
+                        }).toList();
+
+                        final log = CrmCustomerLog(
+                          id: 'LOG-${DateTime.now().millisecondsSinceEpoch}',
+                          title: 'Deal Finalized: Unit ${proposal.unitNo}',
+                          description:
+                              'Deal finalized with payment term "${term.name}" for Unit #${proposal.unitNo} (${proposal.projectName}) at ₹ ${currency.format(proposal.grandTotal)} by $currentUserName.',
+                          type: 'STATUS_CHANGE',
+                          timestamp: DateTime.now(),
+                          performedByName: currentUserName,
+                          performedById: currentUserId,
+                          metadata: {
+                            'paymentTermTemplateId': term.id,
+                            'paymentTermTemplateName': term.name,
+                            'paymentSchedule': paymentSchedule,
+                          },
+                        );
+
+                        final updatedLogs = [
+                          log.toJson(),
+                          ...widget.lead.activityLogs.map((l) => l.toJson()),
+                        ];
+
+                        context.read<CrmLeadsBloc>().add(
+                              CrmLeadsLeadUpdated(widget.lead.id, {
+                                'status': 'BOOKING_CONFIRMED',
+                                'customFields': {
+                                  ...widget.lead.customFields,
+                                  'proposals': updatedProposals,
+                                  'activityLogs': updatedLogs,
+                                  'selectedPaymentTermId': term.id,
+                                  'selectedPaymentTermName': term.name,
+                                  'paymentSchedule': paymentSchedule,
+                                },
+                              }),
+                            );
+
+                        widget.onProposalUpdated();
+
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'Deal finalized for Unit #${proposal.unitNo} with ${term.name}',
+                            ),
+                            backgroundColor: const Color(0xFF16A34A),
+                          ),
+                        );
+                      },
+                child: const Text('Finalize Deal'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

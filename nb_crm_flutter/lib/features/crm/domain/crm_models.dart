@@ -760,6 +760,99 @@ class CrmSalesUser {
   }
 }
 
+/// One installment line inside a CRM payment term template.
+class CrmPaymentTermLine {
+  final String name;
+  final double percentage;
+  /// Due after N months from booking (0 = on booking / immediate).
+  final int months;
+
+  const CrmPaymentTermLine({
+    required this.name,
+    required this.percentage,
+    this.months = 0,
+  });
+
+  factory CrmPaymentTermLine.fromJson(Map<String, dynamic> json) {
+    return CrmPaymentTermLine(
+      name: json['name']?.toString() ?? '',
+      percentage: (json['percentage'] as num?)?.toDouble() ??
+          (json['percentPayment'] as num?)?.toDouble() ??
+          0,
+      months: (json['months'] as num?)?.toInt() ??
+          (json['lastDayMonths'] as num?)?.toInt() ??
+          0,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'name': name,
+        'percentage': percentage,
+        'months': months,
+      };
+
+  String get timingLabel {
+    if (months <= 0) return 'On booking';
+    if (months == 1) return '1 month';
+    return '$months months';
+  }
+}
+
+/// Named payment term template (e.g. "20:80 Plan") — lines must total 100%.
+class CrmPaymentTermTemplate {
+  final String id;
+  final String name;
+  final List<CrmPaymentTermLine> lines;
+
+  const CrmPaymentTermTemplate({
+    required this.id,
+    required this.name,
+    this.lines = const [],
+  });
+
+  double get totalPercentage =>
+      lines.fold<double>(0, (sum, l) => sum + l.percentage);
+
+  bool get isValidTotal => (totalPercentage - 100).abs() < 0.05;
+
+  factory CrmPaymentTermTemplate.fromJson(Map<String, dynamic> json) {
+    final rawLines = json['lines'];
+    return CrmPaymentTermTemplate(
+      id: json['id']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      lines: rawLines is List
+          ? rawLines
+              .whereType<Map>()
+              .map((m) => CrmPaymentTermLine.fromJson(Map<String, dynamic>.from(m)))
+              .toList()
+          : const [],
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'lines': lines.map((l) => l.toJson()).toList(),
+      };
+
+  /// Build proposal paymentSchedule rows with amounts from [grandTotal].
+  List<Map<String, dynamic>> toPaymentSchedule(double grandTotal) {
+    return [
+      for (var i = 0; i < lines.length; i++)
+        {
+          'seq': i + 1,
+          'name': lines[i].name,
+          'percentage': lines[i].percentage,
+          'months': lines[i].months,
+          'timing': lines[i].timingLabel,
+          'amount': double.parse(
+            ((grandTotal * lines[i].percentage) / 100).toStringAsFixed(2),
+          ),
+        },
+    ];
+  }
+}
+
 class CrmSettings {
   final String nineanceBaseUrl;
   final String nineanceEmail;
@@ -792,6 +885,8 @@ class CrmSettings {
   final List<String> leadSources;
   final List<String> referenceTypes;
   final int? siteVisitDeskEmployeeId;
+  /// When set, Channel Partner (CP) leads are visible only to this employee + admins
+  final int? cpLeadsViewerEmployeeId;
 
   // KPI Management Toggles
   final bool kpiShowActiveLeads;
@@ -826,6 +921,7 @@ class CrmSettings {
   final Map<String, List<String>> loanTypeDocsMap;
   final List<FinserveApplicationField> finserveApplicationFields;
   final String quotationGeneralRemarks;
+  final List<CrmPaymentTermTemplate> paymentTermTemplates;
 
   static const String defaultQuotationGeneralRemarks =
       '1. Prices and availability are subject to change without prior notice.\n2. Applicable Government GST and Stamp Duty charges are subject to statutory revisions.\n3. Booking is subject to clearance of booking token and standard terms of agreement.\n4. All payments to be made via Cheque / Demand Draft / RTGS in favor of NB Developers.';
@@ -925,6 +1021,7 @@ class CrmSettings {
       'Other Client',
     ],
     this.siteVisitDeskEmployeeId,
+    this.cpLeadsViewerEmployeeId,
     this.kpiShowActiveLeads = true,
     this.kpiShowTodayFollowups = true,
     this.kpiShowInterestedDeals = true,
@@ -955,6 +1052,7 @@ class CrmSettings {
     this.loanTypeDocsMap = defaultLoanTypeDocsMap,
     this.finserveApplicationFields = defaultFinserveApplicationFields,
     this.quotationGeneralRemarks = defaultQuotationGeneralRemarks,
+    this.paymentTermTemplates = const [],
   });
 
   static List<int> _parseIntList(dynamic raw) {
@@ -1082,6 +1180,7 @@ class CrmSettings {
         'Other Client',
       ]),
       siteVisitDeskEmployeeId: int.tryParse(json['site_visit_desk_employee_id']?.toString() ?? ''),
+      cpLeadsViewerEmployeeId: int.tryParse(json['cp_leads_viewer_employee_id']?.toString() ?? ''),
       kpiShowActiveLeads: json['kpi_show_active_leads']?.toString() != 'false',
       kpiShowTodayFollowups: json['kpi_show_today_followups']?.toString() != 'false',
       kpiShowInterestedDeals: json['kpi_show_interested_deals']?.toString() != 'false',
@@ -1112,7 +1211,25 @@ class CrmSettings {
       loanTypeDocsMap: _parseLoanTypeDocsMap(json['loan_type_docs_map']),
       finserveApplicationFields: _parseFinserveAppFields(json['finserve_application_fields'] ?? json['application_fields']),
       quotationGeneralRemarks: json['quotation_general_remarks']?.toString() ?? defaultQuotationGeneralRemarks,
+      paymentTermTemplates: _parsePaymentTermTemplates(json['payment_term_templates']),
     );
+  }
+
+  static List<CrmPaymentTermTemplate> _parsePaymentTermTemplates(dynamic raw) {
+    if (raw == null) return const [];
+    dynamic decoded = raw;
+    if (raw is String && raw.trim().isNotEmpty) {
+      try {
+        decoded = jsonDecode(raw);
+      } catch (_) {
+        return const [];
+      }
+    }
+    if (decoded is! List) return const [];
+    return decoded
+        .whereType<Map>()
+        .map((m) => CrmPaymentTermTemplate.fromJson(Map<String, dynamic>.from(m)))
+        .toList();
   }
 
   static List<FinserveApplicationField> _parseFinserveAppFields(dynamic raw) {
@@ -1588,6 +1705,8 @@ class CrmProposal {
 
   // Additional Payment Schedule (optional milestones)
   final List<Map<String, dynamic>> paymentSchedule;
+  final String? paymentTermTemplateId;
+  final String? paymentTermTemplateName;
 
   // Notes & Disclaimers
   final String description;
@@ -1636,6 +1755,8 @@ class CrmProposal {
     this.discountAmount = 0.0,
     required this.grandTotal,
     this.paymentSchedule = const [],
+    this.paymentTermTemplateId,
+    this.paymentTermTemplateName,
     this.description = '',
     this.disclaimer = '',
     this.additionalRemarks = '',
@@ -1713,6 +1834,8 @@ class CrmProposal {
               .map((m) => Map<String, dynamic>.from(m))
               .toList()
           : const [],
+      paymentTermTemplateId: json['paymentTermTemplateId']?.toString(),
+      paymentTermTemplateName: json['paymentTermTemplateName']?.toString(),
       description: json['description']?.toString() ?? '',
       disclaimer: json['disclaimer']?.toString() ?? '',
       additionalRemarks: json['additionalRemarks']?.toString() ?? '',
@@ -1759,6 +1882,8 @@ class CrmProposal {
         'discountAmount': discountAmount,
         'grandTotal': grandTotal,
         'paymentSchedule': paymentSchedule,
+        'paymentTermTemplateId': paymentTermTemplateId,
+        'paymentTermTemplateName': paymentTermTemplateName,
         'description': description,
         'disclaimer': disclaimer,
         'additionalRemarks': additionalRemarks,

@@ -1191,6 +1191,58 @@ export const crmService = {
     return true;
   },
 
+  /** Prisma filter: lead is Channel Partner (CP) sourced / referenced */
+  buildCpLeadCondition(): any {
+    return {
+      OR: [
+        {
+          AND: [
+            { channelPartnerName: { not: null } },
+            { NOT: { channelPartnerName: '' } },
+          ],
+        },
+        { customFields: { path: ['lead_source_type'], equals: 'Channel Partner' } },
+        { customFields: { path: ['leadSource'], equals: 'Channel Partner' } },
+        { customFields: { path: ['Source'], equals: 'Channel Partner' } },
+        { customFields: { path: ['Source'], equals: 'CP' } },
+        { customFields: { path: ['source'], equals: 'Channel Partner' } },
+        { customFields: { path: ['source'], equals: 'CP' } },
+      ],
+    };
+  },
+
+  /**
+   * When cp_leads_viewer_employee_id is set:
+   * - that employee sees all CP leads (+ their normal assigned leads)
+   * - other non-admins never see CP leads
+   * - admins are unaffected (caller skips this for admins)
+   */
+  async applyCpLeadVisibility(
+    where: any,
+    visibilityBlock: any,
+    opts: { scope: string; userEmployeeId: number },
+  ) {
+    const settings = await this.getSettings(opts.scope);
+    const cpViewerId = parseInt(String(settings.cp_leads_viewer_employee_id || ''), 10);
+    const cpConfigured = Number.isFinite(cpViewerId) && cpViewerId > 0;
+    const cpCond = this.buildCpLeadCondition();
+
+    if (cpConfigured) {
+      if (opts.userEmployeeId === cpViewerId) {
+        where.AND = [{ OR: [visibilityBlock, cpCond] }];
+      } else {
+        where.AND = [visibilityBlock, { NOT: cpCond }];
+      }
+      return;
+    }
+
+    if (visibilityBlock.AND) {
+      where.AND = visibilityBlock.AND;
+    } else if (visibilityBlock.OR) {
+      where.OR = visibilityBlock.OR;
+    }
+  },
+
   async getLeads(query: {
     projectId?: string;
     campaignId?: string;
@@ -1249,13 +1301,20 @@ export const crmService = {
         sourceFilters.push({ leadSource: 'GOOGLE' });
       }
 
+      let visibilityBlock: any;
       if (sourceFilters.length === 1) {
-        where.AND = [{ OR: userAssignmentCond }, sourceFilters[0]];
+        visibilityBlock = { AND: [{ OR: userAssignmentCond }, sourceFilters[0]] };
       } else if (sourceFilters.length > 1) {
-        where.AND = [{ OR: userAssignmentCond }, { OR: sourceFilters }];
+        visibilityBlock = { AND: [{ OR: userAssignmentCond }, { OR: sourceFilters }] };
       } else {
-        where.OR = userAssignmentCond;
+        visibilityBlock = { OR: userAssignmentCond };
       }
+
+      // Channel Partner leads: only designated CP viewer (+ admins) may see them
+      await this.applyCpLeadVisibility(where, visibilityBlock, {
+        scope,
+        userEmployeeId: query.userEmployeeId,
+      });
     }
 
     if (query.leadFlow && query.leadFlow !== 'ALL') {
@@ -1444,10 +1503,16 @@ export const crmService = {
     );
 
     if (!isAdmin && query.userEmployeeId) {
-      where.OR = [
-        { telecallerId: query.userEmployeeId },
-        { assignedToId: query.userEmployeeId },
-      ];
+      const visibilityBlock = {
+        OR: [
+          { telecallerId: query.userEmployeeId },
+          { assignedToId: query.userEmployeeId },
+        ],
+      };
+      await this.applyCpLeadVisibility(where, visibilityBlock, {
+        scope,
+        userEmployeeId: query.userEmployeeId,
+      });
     }
 
     if (query.leadFlow && query.leadFlow !== 'ALL') {
@@ -3440,6 +3505,8 @@ export const crmService = {
         'Other Client',
       ]),
       site_visit_desk_employee_id: '',
+      /** When set: Channel Partner leads are visible to this employee + admins only */
+      cp_leads_viewer_employee_id: '',
       kpi_show_active_leads: 'true',
       kpi_show_today_followups: 'true',
       kpi_show_interested_deals: 'true',
@@ -3462,6 +3529,18 @@ export const crmService = {
 2. Applicable Government GST and Stamp Duty charges are subject to statutory revisions.
 3. Booking is subject to clearance of booking token and standard terms of agreement.
 4. All payments to be made via Cheque / Demand Draft / RTGS in favor of NB Developers.`,
+      /** CRM deal payment term templates: [{ id, name, lines: [{ name, percentage, months }] }] — each template lines must total 100% */
+      payment_term_templates: JSON.stringify([
+        {
+          id: 'pt_default_2080',
+          name: '20:80 Plan',
+          lines: [
+            { name: 'Booking Amount', percentage: 10, months: 0 },
+            { name: 'Within 30 Days / Agreement', percentage: 10, months: 1 },
+            { name: 'On Possession', percentage: 80, months: 12 },
+          ],
+        },
+      ]),
       loan_types: JSON.stringify([
         'Home Loan',
         'Personal Loan',

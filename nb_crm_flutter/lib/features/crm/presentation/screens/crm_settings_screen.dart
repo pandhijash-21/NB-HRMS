@@ -99,6 +99,8 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
     'Other Client',
   ];
   int? _siteVisitDeskEmployeeId;
+  int? _cpLeadsViewerEmployeeId;
+  List<CrmPaymentTermTemplate> _paymentTermTemplates = [];
   List<int> _excelAssignedTelecallerIds = [];
   List<int> _webhookAssignedTelecallerIds = [];
   List<int> _googleAssignedTelecallerIds = [];
@@ -206,6 +208,8 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
       _leadSources = List<String>.from(settings.leadSources);
       _referenceTypes = List<String>.from(settings.referenceTypes);
       _siteVisitDeskEmployeeId = settings.siteVisitDeskEmployeeId;
+      _cpLeadsViewerEmployeeId = settings.cpLeadsViewerEmployeeId;
+      _paymentTermTemplates = List<CrmPaymentTermTemplate>.from(settings.paymentTermTemplates);
       _excelAssignedTelecallerIds = List<int>.from(settings.excelAssignedTelecallerIds);
       _webhookAssignedTelecallerIds = List<int>.from(settings.webhookAssignedTelecallerIds);
       _googleAssignedTelecallerIds = List<int>.from(settings.googleAssignedTelecallerIds);
@@ -1897,6 +1901,23 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
               textMuted: textMuted,
               primaryColor: primaryColor,
             )
+          else if (sectionId == 'cp_leads_viewer')
+            _buildCpLeadsViewerSection(
+              employees: employees,
+              isDark: isDark,
+              cardBg: cardBg,
+              borderColor: borderColor,
+              textMuted: textMuted,
+              primaryColor: primaryColor,
+            )
+          else if (sectionId == 'payment_terms')
+            _buildPaymentTermsSection(
+              isDark: isDark,
+              cardBg: cardBg,
+              borderColor: borderColor,
+              textMuted: textMuted,
+              primaryColor: primaryColor,
+            )
           else if (sectionId == 'lead_sources')
             _buildLeadSourcesSection(
               isDark: isDark,
@@ -2031,6 +2052,39 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
           previews: const ['Live Agent Presence', 'Workload Thresholds', 'Waiting List Auto-Dispatch'],
         ),
         _PresalesCategoryMeta(
+          id: 'cp_leads_viewer',
+          title: 'Channel Partner (CP) Lead Viewer',
+          subtitle: 'CP-sourced leads visible only to the selected person and System Admins',
+          icon: Icons.handshake_rounded,
+          color: const Color(0xFF0F766E),
+          badges: [
+            _cpLeadsViewerEmployeeId != null ? 'Viewer Assigned' : 'Open (no restriction)',
+          ],
+          previews: [
+            if (_cpLeadsViewerEmployeeId != null)
+              employees
+                      .where((e) => e.employeeId == _cpLeadsViewerEmployeeId)
+                      .map((e) => e.fullName)
+                      .firstOrNull ??
+                  'Emp #$_cpLeadsViewerEmployeeId'
+            else
+              'Not set',
+          ],
+        ),
+        _PresalesCategoryMeta(
+          id: 'payment_terms',
+          title: 'Payment Terms',
+          subtitle: 'Deal payment plans (installment name, %, timing) — each plan must total 100%',
+          icon: Icons.payments_rounded,
+          color: const Color(0xFFB45309),
+          badges: [
+            '${_paymentTermTemplates.length} Plan${_paymentTermTemplates.length == 1 ? '' : 's'}',
+          ],
+          previews: _paymentTermTemplates.isEmpty
+              ? const ['No plans yet']
+              : _paymentTermTemplates.take(3).map((t) => t.name).toList(),
+        ),
+        _PresalesCategoryMeta(
           id: 'not_interested',
           title: 'Not Interested Reasons',
           subtitle: 'Dropdown options displayed to telecallers when marking a lead as cold or dropped',
@@ -2050,6 +2104,15 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
       for (final e in employees) {
         if (e.employeeId == _siteVisitDeskEmployeeId) {
           siteVisitRep = e.fullName;
+          break;
+        }
+      }
+    }
+    String cpViewerRep = 'Not set (everyone with assignment)';
+    if (_cpLeadsViewerEmployeeId != null) {
+      for (final e in employees) {
+        if (e.employeeId == _cpLeadsViewerEmployeeId) {
+          cpViewerRep = e.fullName;
           break;
         }
       }
@@ -2104,6 +2167,30 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
           _siteVisitDeskEmployeeId != null ? 'In-Charge Assigned' : 'Admin Only',
         ],
         previews: [siteVisitRep],
+      ),
+      _PresalesCategoryMeta(
+        id: 'cp_leads_viewer',
+        title: 'Channel Partner (CP) Lead Viewer',
+        subtitle: 'CP-sourced leads visible only to the selected person and System Admins',
+        icon: Icons.handshake_rounded,
+        color: const Color(0xFF0F766E),
+        badges: [
+          _cpLeadsViewerEmployeeId != null ? 'Viewer Assigned' : 'Open (no restriction)',
+        ],
+        previews: [cpViewerRep],
+      ),
+      _PresalesCategoryMeta(
+        id: 'payment_terms',
+        title: 'Payment Terms',
+        subtitle: 'Deal payment plans (installment name, %, timing) — each plan must total 100%',
+        icon: Icons.payments_rounded,
+        color: const Color(0xFFB45309),
+        badges: [
+          '${_paymentTermTemplates.length} Plan${_paymentTermTemplates.length == 1 ? '' : 's'}',
+        ],
+        previews: _paymentTermTemplates.isEmpty
+            ? const ['No plans yet']
+            : _paymentTermTemplates.take(3).map((t) => t.name).toList(),
       ),
       _PresalesCategoryMeta(
         id: 'lead_sources',
@@ -3054,6 +3141,530 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
   }
 
   // ---------------------------------------------------------------------------
+  // Channel Partner (CP) Lead Viewer
+  // ---------------------------------------------------------------------------
+  Widget _buildCpLeadsViewerSection({
+    required List<CrmSalesUser> employees,
+    required bool isDark,
+    required Color cardBg,
+    required Color borderColor,
+    required Color textMuted,
+    required Color primaryColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0F766E).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.handshake_rounded, color: Color(0xFF0F766E), size: 22),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Channel Partner (CP) Lead Viewer',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : const Color(0xFF1E293B),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'When set, any lead whose source/reference is Channel Partner (CP) is visible only to this person and System Admins. Other telecallers will not see those leads.',
+                      style: TextStyle(fontSize: 13, color: textMuted),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          DropdownButtonFormField<int?>(
+            value: _cpLeadsViewerEmployeeId,
+            isExpanded: true,
+            decoration: InputDecoration(
+              labelText: 'CP Leads Viewer',
+              prefixIcon: const Icon(Icons.person_search_rounded),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            items: [
+              const DropdownMenuItem<int?>(
+                value: null,
+                child: Text('None (no special CP restriction)'),
+              ),
+              ...employees.map((e) => DropdownMenuItem<int?>(
+                    value: e.employeeId,
+                    child: Text(
+                      '${e.fullName} (${e.designation ?? "Employee"}${e.department != null ? " • ${e.department}" : ""}) - Emp #${e.employeeId}',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  )),
+            ],
+            onChanged: (val) {
+              setState(() {
+                _cpLeadsViewerEmployeeId = val;
+              });
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Payment Terms (deal finalize plans)
+  // ---------------------------------------------------------------------------
+  Widget _buildPaymentTermsSection({
+    required bool isDark,
+    required Color cardBg,
+    required Color borderColor,
+    required Color textMuted,
+    required Color primaryColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFB45309).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.payments_rounded, color: Color(0xFFB45309), size: 22),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Payment Terms',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : const Color(0xFF1E293B),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Create payment plans for final deals. Each plan has installment lines (name, %, timing). Lines in a plan must add up to 100%. After a quotation is sent, sales selects one plan to finalize the booking.',
+                      style: TextStyle(fontSize: 13, color: textMuted),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: const Text('Add Plan'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFB45309),
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: () => _showPaymentTermEditor(),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          if (_paymentTermTemplates.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.black26 : const Color(0xFFFFFBEB),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.35)),
+              ),
+              child: Text(
+                'No payment terms yet. Add at least one plan (e.g. 20:80) before finalizing deals.',
+                style: TextStyle(fontSize: 13, color: textMuted),
+              ),
+            )
+          else
+            ..._paymentTermTemplates.asMap().entries.map((entry) {
+              final idx = entry.key;
+              final plan = entry.value;
+              final ok = plan.isValidTotal;
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: ok
+                        ? (isDark ? const Color(0xFF3E3830) : const Color(0xFFE2E8F0))
+                        : Colors.red.withValues(alpha: 0.5),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            plan.name,
+                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: ok
+                                ? const Color(0xFF16A34A).withValues(alpha: 0.12)
+                                : Colors.red.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            'Total ${plan.totalPercentage.toStringAsFixed(1)}%',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: ok ? const Color(0xFF15803D) : Colors.red,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Edit',
+                          icon: const Icon(Icons.edit_rounded, size: 18),
+                          onPressed: () => _showPaymentTermEditor(existing: plan, index: idx),
+                        ),
+                        IconButton(
+                          tooltip: 'Delete',
+                          icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.red),
+                          onPressed: () {
+                            setState(() => _paymentTermTemplates.removeAt(idx));
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    ...plan.lines.map(
+                      (l) => Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: Text(l.name, style: TextStyle(fontSize: 12, color: textMuted)),
+                            ),
+                            Expanded(
+                              child: Text(
+                                '${l.percentage.toStringAsFixed(l.percentage % 1 == 0 ? 0 : 1)}%',
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                            Expanded(
+                              child: Text(l.timingLabel, style: TextStyle(fontSize: 12, color: textMuted)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: ElevatedButton.icon(
+              icon: const Icon(Icons.save_rounded, size: 16),
+              label: const Text('Save Payment Terms'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFB45309),
+                foregroundColor: Colors.white,
+              ),
+              onPressed: _savePaymentTermTemplates,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _savePaymentTermTemplates() {
+    for (final plan in _paymentTermTemplates) {
+      if (plan.name.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Every payment plan needs a name.'), backgroundColor: Colors.red),
+        );
+        return;
+      }
+      if (plan.lines.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Plan "${plan.name}" needs at least one installment line.'), backgroundColor: Colors.red),
+        );
+        return;
+      }
+      if (!plan.isValidTotal) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Plan "${plan.name}" totals ${plan.totalPercentage.toStringAsFixed(1)}% — must be 100%.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+    }
+    context.read<CrmSettingsBloc>().add(CrmSettingsSaved({
+      'payment_term_templates': jsonEncode(_paymentTermTemplates.map((t) => t.toJson()).toList()),
+    }));
+  }
+
+  void _showPaymentTermEditor({CrmPaymentTermTemplate? existing, int? index}) {
+    final nameCtrl = TextEditingController(text: existing?.name ?? '');
+    var lines = existing != null
+        ? existing.lines
+            .map((l) => CrmPaymentTermLine(name: l.name, percentage: l.percentage, months: l.months))
+            .toList()
+        : <CrmPaymentTermLine>[
+            const CrmPaymentTermLine(name: 'Booking Amount', percentage: 10, months: 0),
+            const CrmPaymentTermLine(name: 'Agreement', percentage: 10, months: 1),
+            const CrmPaymentTermLine(name: 'On Possession', percentage: 80, months: 12),
+          ];
+
+    showDialog(
+      context: context,
+      builder: (dlgCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setDlg) {
+            final total = lines.fold<double>(0, (s, l) => s + l.percentage);
+            final ok = (total - 100).abs() < 0.05;
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Text(existing == null ? 'Add Payment Plan' : 'Edit Payment Plan'),
+              content: SizedBox(
+                width: 560,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TextField(
+                        controller: nameCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Plan Name *',
+                          hintText: 'e.g. 20:80 Plan, Construction Linked',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          const Text('Installments', style: TextStyle(fontWeight: FontWeight.w700)),
+                          const Spacer(),
+                          Text(
+                            'Total: ${total.toStringAsFixed(1)}%',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: ok ? const Color(0xFF16A34A) : Colors.red,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          TextButton.icon(
+                            icon: const Icon(Icons.add, size: 16),
+                            label: const Text('Add Line'),
+                            onPressed: () {
+                              setDlg(() {
+                                lines = [
+                                  ...lines,
+                                  const CrmPaymentTermLine(name: 'Installment', percentage: 0, months: 1),
+                                ];
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      ...lines.asMap().entries.map((e) {
+                        final i = e.key;
+                        final line = e.value;
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                flex: 3,
+                                child: TextFormField(
+                                  initialValue: line.name,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Name',
+                                    border: OutlineInputBorder(),
+                                    isDense: true,
+                                  ),
+                                  onChanged: (v) {
+                                    lines[i] = CrmPaymentTermLine(
+                                      name: v,
+                                      percentage: line.percentage,
+                                      months: line.months,
+                                    );
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              SizedBox(
+                                width: 88,
+                                child: TextFormField(
+                                  initialValue: line.percentage % 1 == 0
+                                      ? line.percentage.toInt().toString()
+                                      : line.percentage.toString(),
+                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                  decoration: const InputDecoration(
+                                    labelText: '%',
+                                    border: OutlineInputBorder(),
+                                    isDense: true,
+                                  ),
+                                  onChanged: (v) {
+                                    final pct = double.tryParse(v) ?? 0;
+                                    setDlg(() {
+                                      lines[i] = CrmPaymentTermLine(
+                                        name: lines[i].name,
+                                        percentage: pct,
+                                        months: lines[i].months,
+                                      );
+                                    });
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              SizedBox(
+                                width: 130,
+                                child: DropdownButtonFormField<int>(
+                                  value: line.months.clamp(0, 60),
+                                  isExpanded: true,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Time',
+                                    border: OutlineInputBorder(),
+                                    isDense: true,
+                                  ),
+                                  items: [
+                                    const DropdownMenuItem(value: 0, child: Text('On booking')),
+                                    for (var m = 1; m <= 36; m++)
+                                      DropdownMenuItem(
+                                        value: m,
+                                        child: Text(m == 1 ? '1 month' : '$m months'),
+                                      ),
+                                    const DropdownMenuItem(value: 48, child: Text('48 months')),
+                                    const DropdownMenuItem(value: 60, child: Text('60 months')),
+                                  ],
+                                  onChanged: (v) {
+                                    if (v == null) return;
+                                    setDlg(() {
+                                      lines[i] = CrmPaymentTermLine(
+                                        name: lines[i].name,
+                                        percentage: lines[i].percentage,
+                                        months: v,
+                                      );
+                                    });
+                                  },
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.close, size: 18, color: Colors.red),
+                                onPressed: lines.length <= 1
+                                    ? null
+                                    : () => setDlg(() {
+                                          lines = [...lines]..removeAt(i);
+                                        }),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(dlgCtx), child: const Text('Cancel')),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFB45309),
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () {
+                    final name = nameCtrl.text.trim();
+                    if (name.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Plan name is required.')),
+                      );
+                      return;
+                    }
+                    if (lines.any((l) => l.name.trim().isEmpty)) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Every installment needs a name.')),
+                      );
+                      return;
+                    }
+                    if (!ok) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Installments total ${total.toStringAsFixed(1)}% — must equal 100%.'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                      return;
+                    }
+                    final template = CrmPaymentTermTemplate(
+                      id: existing?.id.isNotEmpty == true
+                          ? existing!.id
+                          : 'pt_${DateTime.now().millisecondsSinceEpoch}',
+                      name: name,
+                      lines: lines
+                          .map((l) => CrmPaymentTermLine(
+                                name: l.name.trim(),
+                                percentage: l.percentage,
+                                months: l.months,
+                              ))
+                          .toList(),
+                    );
+                    setState(() {
+                      if (index != null) {
+                        _paymentTermTemplates[index] = template;
+                      } else {
+                        _paymentTermTemplates = [..._paymentTermTemplates, template];
+                      }
+                    });
+                    Navigator.pop(dlgCtx);
+                  },
+                  child: const Text('Save Plan'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
   // Lead Sources Section (Real Estate)
   // ---------------------------------------------------------------------------
   Widget _buildLeadSourcesSection({
@@ -3992,6 +4603,8 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
         'webhook_assigned_telecaller_ids': jsonEncode(_webhookAssignedTelecallerIds),
         'google_assigned_telecaller_ids': jsonEncode(_googleAssignedTelecallerIds),
         'crm_number_masking_enabled': _numberMaskingEnabled.toString(),
+        'cp_leads_viewer_employee_id': _cpLeadsViewerEmployeeId?.toString() ?? '',
+        'payment_term_templates': jsonEncode(_paymentTermTemplates.map((t) => t.toJson()).toList()),
         'max_telecaller_active_workload': _maxWorkloadController.text.trim(),
         'telecaller_max_workload_map': jsonEncode(_telecallerMaxWorkloadMap),
         'untouched_lead_timeout_minutes': _untouchedTimeoutController.text.trim(),
@@ -4004,6 +4617,8 @@ class _CrmSettingsViewState extends State<_CrmSettingsView>
         'lead_sources': jsonEncode(_leadSources),
         'reference_types': jsonEncode(_referenceTypes),
         'site_visit_desk_employee_id': _siteVisitDeskEmployeeId?.toString() ?? '',
+        'cp_leads_viewer_employee_id': _cpLeadsViewerEmployeeId?.toString() ?? '',
+        'payment_term_templates': jsonEncode(_paymentTermTemplates.map((t) => t.toJson()).toList()),
         'excel_assigned_telecaller_ids': jsonEncode(_excelAssignedTelecallerIds),
         'webhook_assigned_telecaller_ids': jsonEncode(_webhookAssignedTelecallerIds),
         'google_assigned_telecaller_ids': jsonEncode(_googleAssignedTelecallerIds),

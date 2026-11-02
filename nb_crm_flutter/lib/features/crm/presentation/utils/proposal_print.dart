@@ -255,6 +255,34 @@ void printProposalQuotation({
       </table>
     </div>
 
+    <!-- Payment Schedule (after deal finalize) -->
+    ${proposal.paymentSchedule.isNotEmpty ? '''
+      <div style="margin-top: 16px; border: 1px solid #bbf7d0; border-radius: 6px; padding: 10px 12px; background: #f0fdf4;">
+        <div style="font-weight: 700; font-size: 11px; text-transform: uppercase; color: #15803d; margin-bottom: 6px;">
+          Payment Terms${proposal.paymentTermTemplateName != null && proposal.paymentTermTemplateName!.isNotEmpty ? ' — ${proposal.paymentTermTemplateName}' : ''}
+        </div>
+        <table style="width:100%; border-collapse: collapse; font-size: 11.5px;">
+          <thead>
+            <tr style="border-bottom: 1px solid #86efac;">
+              <th style="text-align:left; padding: 4px 0;">Installment</th>
+              <th style="text-align:right; padding: 4px 0;">%</th>
+              <th style="text-align:left; padding: 4px 8px;">Timing</th>
+              <th style="text-align:right; padding: 4px 0;">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${proposal.paymentSchedule.map((row) {
+              final name = row['name']?.toString() ?? '';
+              final pct = row['percentage']?.toString() ?? '';
+              final timing = row['timing']?.toString() ?? (row['months'] != null ? '${row['months']} months' : '');
+              final amt = (row['amount'] as num?)?.toDouble() ?? 0;
+              return '<tr><td style="padding:4px 0;">$name</td><td style="text-align:right;padding:4px 0;">$pct%</td><td style="padding:4px 8px;">$timing</td><td style="text-align:right;padding:4px 0;font-weight:700;">₹ ${currencyFormat.format(amt)}</td></tr>';
+            }).join()}
+          </tbody>
+        </table>
+      </div>
+    ''' : ''}
+
     <!-- Description (if any) -->
     ${proposal.description.isNotEmpty ? '''
       <div style="margin-top: 16px; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 12px; background: #ffffff;">

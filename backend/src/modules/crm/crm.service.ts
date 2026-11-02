@@ -1653,7 +1653,6 @@ export const crmService = {
     }
 
     let creatorName = 'Admin';
-    let isCreatorTelecaller = false;
     let creatorEmployeeId: number | null = null;
     if (createdById) {
       const creatorUser = await prisma.user.findUnique({
@@ -1663,10 +1662,6 @@ export const crmService = {
       if (creatorUser) {
         creatorName = creatorUser.employee?.generalInfo?.fullName || creatorUser.username || creatorUser.role?.name || 'Admin';
         creatorEmployeeId = creatorUser.employeeId || creatorUser.employee?.id || null;
-        const roleName = String(creatorUser.role?.name || '').toLowerCase().trim();
-        const desig = String(creatorUser.employee?.generalInfo?.designation || '').toLowerCase().trim();
-        const isExcluded = ['admin', 'super_admin', 'system_admin'].some((r) => roleName.includes(r));
-        isCreatorTelecaller = !isExcluded && (roleName.includes('telecall') || desig.includes('telecall'));
       }
     }
     custom.createdByName = creatorName;
@@ -1674,15 +1669,14 @@ export const crmService = {
       custom.isManual = true;
     }
 
-    // Telecaller Manual Allocation Rule:
+    // Manual Allocation Rule:
     // 1. If explicit telecallerId was provided, honor it.
-    // 2. If MANUAL lead and creator is a telecaller, by default allocate to themselves.
-    // 3. If anyone else adds manually (e.g. Admin, Receptionist, Visitor Desk), do NOT allocate to them;
-    //    leave unallocated so round-robin / presence-absence dispatch can assign it to on-duty telecallers.
+    // 2. If MANUAL lead and creator has an employeeId, allocate to themselves
+    //    (e.g. Harsh Vyas adds a lead → it belongs to Harsh).
     let allocatedTelecallerId = dto.telecallerId || telecallerId;
     let isSelfAllocated = false;
 
-    if (!allocatedTelecallerId && finalSource === 'MANUAL' && isCreatorTelecaller && creatorEmployeeId) {
+    if (!allocatedTelecallerId && finalSource === 'MANUAL' && creatorEmployeeId) {
       allocatedTelecallerId = creatorEmployeeId;
       isSelfAllocated = true;
     }
@@ -1777,6 +1771,112 @@ export const crmService = {
     }
 
     return newLead;
+  },
+
+  /**
+   * One-time / idempotent: allocate existing MANUAL leads to whoever created them
+   * (Harsh Vyas → Harsh, IT Admin → that admin's employee, etc.).
+   */
+  async backfillManualLeadSelfAllocation(): Promise<{
+    scanned: number;
+    updated: number;
+    alreadyOk: number;
+    skipped: number;
+  }> {
+    const normName = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+
+    const users = await prisma.user.findMany({
+      where: { employeeId: { not: null } },
+      select: {
+        id: true,
+        employeeId: true,
+        username: true,
+        employee: {
+          select: {
+            id: true,
+            generalInfo: { select: { fullName: true } },
+          },
+        },
+      },
+    });
+
+    const empByUserId = new Map<string, number>();
+    const empByName = new Map<string, number>();
+    for (const u of users) {
+      const empId = u.employeeId ?? u.employee?.id;
+      if (!empId) continue;
+      empByUserId.set(u.id, empId);
+      const fullName = u.employee?.generalInfo?.fullName;
+      if (fullName) empByName.set(normName(fullName), empId);
+      if (u.username) empByName.set(normName(u.username), empId);
+    }
+
+    const leads = await prisma.crmLead.findMany({
+      where: {
+        isDeleted: false,
+        OR: [{ leadSource: 'MANUAL' }, { leadSource: null }],
+      },
+      select: {
+        id: true,
+        telecallerId: true,
+        createdById: true,
+        leadSource: true,
+        customFields: true,
+      },
+    });
+
+    let updated = 0;
+    let alreadyOk = 0;
+    let skipped = 0;
+
+    for (const lead of leads) {
+      const custom = (lead.customFields && typeof lead.customFields === 'object'
+        ? { ...(lead.customFields as Record<string, unknown>) }
+        : {}) as Record<string, any>;
+
+      const isManual = lead.leadSource === 'MANUAL' || custom.isManual === true;
+      if (!isManual) {
+        skipped += 1;
+        continue;
+      }
+
+      let creatorEmpId: number | null = null;
+      if (lead.createdById && empByUserId.has(lead.createdById)) {
+        creatorEmpId = empByUserId.get(lead.createdById)!;
+      } else if (custom.creatorEmployeeId && Number.isFinite(Number(custom.creatorEmployeeId))) {
+        creatorEmpId = Number(custom.creatorEmployeeId);
+      } else if (custom.createdByName && typeof custom.createdByName === 'string') {
+        creatorEmpId = empByName.get(normName(custom.createdByName)) ?? null;
+      }
+
+      if (!creatorEmpId) {
+        skipped += 1;
+        continue;
+      }
+
+      if (lead.telecallerId === creatorEmpId && custom.selfAllocated === true) {
+        alreadyOk += 1;
+        continue;
+      }
+
+      custom.isManual = true;
+      custom.selfAllocated = true;
+      custom.selfAllocatedAt = new Date().toISOString();
+      custom.creatorEmployeeId = creatorEmpId;
+      custom.allocatedAt = custom.allocatedAt || new Date().toISOString();
+      custom.selfAllocBackfillAt = new Date().toISOString();
+
+      await prisma.crmLead.update({
+        where: { id: lead.id },
+        data: {
+          telecallerId: creatorEmpId,
+          customFields: custom,
+        },
+      });
+      updated += 1;
+    }
+
+    return { scanned: leads.length, updated, alreadyOk, skipped };
   },
 
   async importExcelLeads(
@@ -2934,6 +3034,13 @@ export const crmService = {
             },
           },
         },
+        telecaller: {
+          include: {
+            generalInfo: {
+              select: { fullName: true, designation: true },
+            },
+          },
+        },
         followUps: {
           where: { status: 'PENDING' },
           orderBy: { scheduledDate: 'desc' },
@@ -2995,6 +3102,12 @@ export const crmService = {
       designation: lead.assignedTo.generalInfo?.designation || 'Sales Manager',
     } : null;
 
+    const handledByTelecaller = lead.telecaller ? {
+      id: lead.telecaller.id,
+      fullName: lead.telecaller.generalInfo?.fullName || `Employee #${lead.telecaller.id}`,
+      designation: lead.telecaller.generalInfo?.designation || 'Telecaller',
+    } : null;
+
     return {
       exists: true,
       isScheduledToday,
@@ -3005,6 +3118,7 @@ export const crmService = {
       nextVisitWording: nextInfo.wording,
       nextVisitOrdinal: nextInfo.ordinal,
       previousSalesManager,
+      handledByTelecaller,
       siteVisitsHistory: siteVisitsList,
       lead,
     };
@@ -4119,8 +4233,13 @@ export const crmService = {
     return telephonyService.upsertTelecallerTelephony(employeeId, body, updatedBy, scope);
   },
 
-  async clickToCall(leadId: string, agentPhoneOrId?: string, userContext?: any) {
-    return telephonyService.clickToCall(leadId, agentPhoneOrId, userContext);
+  async clickToCall(
+    leadId: string,
+    agentPhoneOrId?: string,
+    userContext?: any,
+    customerNumber?: string,
+  ) {
+    return telephonyService.clickToCall(leadId, agentPhoneOrId, userContext, customerNumber);
   },
 
   async handleTelephonyWebhook(payload: any) {

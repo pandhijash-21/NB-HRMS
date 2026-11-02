@@ -125,12 +125,16 @@ class AppNotificationsState {
 
 class AppNotifications extends Notifier<AppNotificationsState> {
   static const _prefsPrefix = 'app_notifications_v1';
+  static const _dismissedPrefix = 'app_notifications_dismissed_v1';
   bool _listening = false;
   CollabSocket? _socket;
   String? _me;
   AppNotificationsState _latest = const AppNotificationsState();
+  /// Locally cleared/dismissed notice IDs — prevents server pull from re-showing them in the bell.
+  final Set<String> _dismissedIds = {};
 
   String get _prefsKey => '$_prefsPrefix:${_me ?? 'anon'}';
+  String get _dismissedKey => '$_dismissedPrefix:${_me ?? 'anon'}';
 
   @override
   AppNotificationsState build() {
@@ -140,6 +144,7 @@ class AppNotifications extends Notifier<AppNotificationsState> {
     if (nextMe != _me) {
       _me = nextMe;
       _latest = const AppNotificationsState();
+      _dismissedIds.clear();
       _listening = false;
       _detach();
     } else {
@@ -150,6 +155,7 @@ class AppNotifications extends Notifier<AppNotificationsState> {
       _detach();
       unawaited(AppSounds.stopRingtone());
       _latest = const AppNotificationsState();
+      _dismissedIds.clear();
       return _latest;
     }
     Future.microtask(_attach);
@@ -227,11 +233,16 @@ class AppNotifications extends Notifier<AppNotificationsState> {
       if (prefs.containsKey(_prefsPrefix)) {
         await prefs.remove(_prefsPrefix);
       }
+      final dismissedRaw = prefs.getStringList(_dismissedKey) ?? const <String>[];
+      _dismissedIds
+        ..clear()
+        ..addAll(dismissedRaw);
       final raw = prefs.getString(_prefsKey);
       if (raw == null || !ref.mounted) return;
       final list = (jsonDecode(raw) as List)
           .whereType<Map>()
           .map((e) => AppNotice.fromJson(Map<String, dynamic>.from(e)))
+          .where((n) => !_dismissedIds.contains(n.id))
           .toList();
       if (!ref.mounted) return;
       _set(AppNotificationsState(items: list, incoming: _latest.incoming));
@@ -241,8 +252,13 @@ class AppNotifications extends Notifier<AppNotificationsState> {
   /// Merge server-persisted announcements into the local bell inbox.
   void mergeServerNotifications(List<AppNotice> notices) {
     // Prefer server truth for this user — do not keep another account's local leftovers.
-    final byId = {for (final n in notices) n.id: n};
+    final byId = <String, AppNotice>{};
+    for (final n in notices) {
+      if (_dismissedIds.contains(n.id)) continue;
+      byId[n.id] = n;
+    }
     for (final n in state.items) {
+      if (_dismissedIds.contains(n.id)) continue;
       // Keep ephemeral push items (calls/chat) that are not yet on the server list.
       if (!byId.containsKey(n.id) && n.kind != 'profile' && n.kind != 'announce') {
         byId[n.id] = n;
@@ -264,6 +280,14 @@ class AppNotifications extends Notifier<AppNotificationsState> {
         _prefsKey,
         jsonEncode(state.items.take(40).map((e) => e.toJson()).toList()),
       );
+      await prefs.setStringList(_dismissedKey, _dismissedIds.take(200).toList());
+    } catch (_) {}
+  }
+
+  Future<void> _markServerAllRead() async {
+    try {
+      final dio = ref.read(dioClientProvider);
+      await dio.postEnvelope<void>('notifications/read-all', parse: (_) {});
     } catch (_) {}
   }
 
@@ -329,11 +353,17 @@ class AppNotifications extends Notifier<AppNotificationsState> {
       incoming: state.incoming,
     ));
     await _persist();
+    unawaited(_markServerAllRead());
   }
 
+  /// Removes items from the bell permanently (survives server refresh) and marks them read on the server.
   Future<void> clearAll() async {
+    for (final n in state.items) {
+      _dismissedIds.add(n.id);
+    }
     _set(AppNotificationsState(incoming: state.incoming));
     await _persist();
+    unawaited(_markServerAllRead());
   }
 
   Future<void> dismissCall() async {

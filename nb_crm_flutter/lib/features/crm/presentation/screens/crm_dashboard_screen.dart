@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/bloc/load_status.dart';
 import '../../../../core/router/app_back_button.dart';
+import '../../../../core/widgets/click_to_call_dial_dialog.dart';
 import '../../../auth/domain/permissions.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../../core/tour/models/tour_models.dart';
@@ -564,11 +565,20 @@ class _CrmDashboardView extends StatelessWidget {
                               IconButton(
                                 icon: const Icon(Icons.phone_in_talk_rounded, color: Color(0xFF16A34A), size: 18),
                                 tooltip: 'Call Lead',
-                                onPressed: () {
-                                  context.read<CrmRepository>().clickToCall(item.leadId);
+                                onPressed: () async {
+                                  final dial = await showClickToCallDialDialog(
+                                    context,
+                                    phone: item.leadPhone ?? '',
+                                    leadName: item.leadName,
+                                  );
+                                  if (dial == null || !context.mounted) return;
+                                  context.read<CrmRepository>().clickToCall(
+                                        item.leadId,
+                                        customerNumber: dial,
+                                      );
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
-                                      content: Text('Calling ${item.leadName ?? item.leadPhone}...'),
+                                      content: Text('Calling ${item.leadName ?? dial}...'),
                                       backgroundColor: const Color(0xFF16A34A),
                                       duration: const Duration(seconds: 2),
                                     ),

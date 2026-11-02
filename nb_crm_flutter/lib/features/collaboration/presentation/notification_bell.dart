@@ -120,12 +120,13 @@ class NotificationBellButton extends ConsumerWidget {
   }
 
   Future<void> _openSheet(BuildContext context, WidgetRef ref) async {
-    await ref.read(appNotificationsProvider.notifier).markAllRead();
     if (!context.mounted) return;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final router = GoRouter.of(context);
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      showDragHandle: false,
       backgroundColor: isDark ? AppColors.surfaceDark : Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -133,23 +134,16 @@ class NotificationBellButton extends ConsumerWidget {
       builder: (ctx) {
         return Consumer(
           builder: (ctx, ref, _) {
-            final items = ref.watch(appNotificationsProvider).items;
+            final bell = ref.watch(appNotificationsProvider);
+            final items = bell.items;
+            final unread = bell.unread;
             return SafeArea(
               child: SizedBox(
                 height: MediaQuery.sizeOf(ctx).height * 0.62,
                 child: Column(
                   children: [
-                    const SizedBox(height: 8),
-                    Container(
-                      width: 36,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: isDark ? Colors.white24 : Colors.black12,
-                        borderRadius: BorderRadius.circular(99),
-                      ),
-                    ),
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 14, 8, 8),
+                      padding: const EdgeInsets.fromLTRB(20, 16, 8, 8),
                       child: Row(
                         children: [
                           Text(
@@ -160,7 +154,31 @@ class NotificationBellButton extends ConsumerWidget {
                               color: isDark ? Colors.white : const Color(0xFF1E293B),
                             ),
                           ),
+                          if (unread > 0) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEF4444).withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(99),
+                              ),
+                              child: Text(
+                                '$unread new',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFFEF4444),
+                                ),
+                              ),
+                            ),
+                          ],
                           const Spacer(),
+                          TextButton(
+                            onPressed: items.isEmpty || unread == 0
+                                ? null
+                                : () => ref.read(appNotificationsProvider.notifier).markAllRead(),
+                            child: const Text('Mark as read'),
+                          ),
                           TextButton(
                             onPressed: items.isEmpty
                                 ? null
@@ -169,15 +187,16 @@ class NotificationBellButton extends ConsumerWidget {
                           ),
                           TextButton(
                             onPressed: () {
-                              Navigator.pop(ctx);
-                              context.go('/notifications');
+                              Navigator.of(ctx).pop();
+                              // Use captured router — sheet context is unsafe after pop.
+                              router.go('/notifications');
                             },
                             child: const Text('Open inbox'),
                           ),
                         ],
                       ),
                     ),
-                    const Divider(height: 1),
+                    Divider(height: 1, color: isDark ? Colors.white10 : const Color(0xFFE2E8F0)),
                     Expanded(
                       child: items.isEmpty
                           ? Center(
@@ -192,14 +211,21 @@ class NotificationBellButton extends ConsumerWidget {
                                 height: 1,
                                 color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
                               ),
-                              itemBuilder: (context, i) {
+                              itemBuilder: (tileCtx, i) {
                                 final n = items[i];
                                 return ListTile(
                                   leading: CircleAvatar(
                                     backgroundColor: _kindColor(n.kind).withValues(alpha: 0.18),
                                     child: NbIcon(_kindIcon(n.kind), color: _kindColor(n.kind), size: 20),
                                   ),
-                                  title: Text(n.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                  title: Text(
+                                    n.title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontWeight: n.read ? FontWeight.w500 : FontWeight.w700,
+                                    ),
+                                  ),
                                   subtitle: Text(
                                     n.body,
                                     maxLines: 2,
@@ -210,7 +236,7 @@ class NotificationBellButton extends ConsumerWidget {
                                     style: TextStyle(fontSize: 11, color: isDark ? Colors.white38 : Colors.black38),
                                   ),
                                   onTap: () {
-                                    Navigator.pop(ctx);
+                                    Navigator.of(ctx).pop();
                                     _openNotice(context, n);
                                   },
                                 );

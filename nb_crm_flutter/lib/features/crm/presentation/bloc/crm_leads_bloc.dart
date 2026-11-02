@@ -263,12 +263,13 @@ class CrmLeadsCallLogsFilterChanged extends CrmLeadsEvent {
 }
 
 class CrmLeadsClickToCallRequested extends CrmLeadsEvent {
-  const CrmLeadsClickToCallRequested(this.leadId, {this.agentId});
+  const CrmLeadsClickToCallRequested(this.leadId, {this.agentId, this.customerNumber});
   final String leadId;
   final String? agentId;
+  final String? customerNumber;
 
   @override
-  List<Object?> get props => [leadId, agentId];
+  List<Object?> get props => [leadId, agentId, customerNumber];
 }
 
 class CrmLeadsColumnVisibilityToggled extends CrmLeadsEvent {
@@ -1094,7 +1095,11 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
     Emitter<CrmLeadsState> emit,
   ) async {
     try {
-      await _crmRepository.clickToCall(event.leadId, agentId: event.agentId);
+      await _crmRepository.clickToCall(
+        event.leadId,
+        agentId: event.agentId,
+        customerNumber: event.customerNumber,
+      );
       emit(state.copyWith(actionSuccessMessage: 'Calling lead...'));
     } catch (e) {
       emit(state.copyWith(errorMessage: e.toString()));

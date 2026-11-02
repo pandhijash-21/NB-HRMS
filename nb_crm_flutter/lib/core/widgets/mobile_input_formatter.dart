@@ -15,6 +15,42 @@ String cleanMobile10(String? raw) {
   return digits;
 }
 
+/// Digits only (no truncation) — used for international / dial overrides.
+String digitsOnlyPhone(String? raw) {
+  if (raw == null || raw.trim().isEmpty) return '';
+  return raw.replaceAll(RegExp(r'\D'), '');
+}
+
+/// Builds a click-to-call dial preview like `+919876543210`.
+/// Keeps an existing `+` country code; otherwise defaults to `+91` + last 10.
+String formatClickToCallDialPreview(String? phone) {
+  final raw = (phone ?? '').trim().replaceAll(RegExp(r'[\s()-]'), '');
+  if (raw.isEmpty) return '+91';
+  if (raw.startsWith('+')) {
+    final rest = digitsOnlyPhone(raw);
+    return rest.isEmpty ? '+' : '+$rest';
+  }
+  final digits = digitsOnlyPhone(raw);
+  if (digits.isEmpty) return '+91';
+  if (digits.length == 12 && digits.startsWith('91')) return '+$digits';
+  if (digits.length > 10) return '+$digits';
+  return '+91$digits';
+}
+
+/// Combine editable country code (`+91`) + national number for storage / dialing.
+String composeInternationalPhone({
+  required String countryCode,
+  required String nationalNumber,
+}) {
+  final cc = countryCode.trim().isEmpty ? '+91' : countryCode.trim();
+  final ccDigits = digitsOnlyPhone(cc);
+  final national = digitsOnlyPhone(nationalNumber);
+  if (national.isEmpty) return '';
+  // India: keep legacy 10-digit storage for CRM matching.
+  if (ccDigits == '91' || ccDigits.isEmpty) return national.length > 10 ? national.substring(national.length - 10) : national;
+  return '$ccDigits$national';
+}
+
 /// Mask phone for CRM display: keep last 4 digits, e.g. `9876543210` → `******3210`.
 String maskPhone(String? raw) {
   if (raw == null || raw.isEmpty) return '';

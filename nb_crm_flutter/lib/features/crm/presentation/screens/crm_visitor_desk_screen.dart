@@ -473,10 +473,23 @@ class _CrmVisitorDeskViewState extends State<_CrmVisitorDeskView> {
         if (res['exists'] == true && res['lead'] != null) {
           final l = res['lead'] as Map<String, dynamic>;
           _nameController.text = l['name']?.toString() ?? '';
+          final telecaller = res['handledByTelecaller'] as Map<String, dynamic>?;
+          final telecallerId = (telecaller?['id'] as num?)?.toInt() ?? (l['telecallerId'] as num?)?.toInt();
           final prevMgr = res['previousSalesManager'] as Map<String, dynamic>?;
-          if (prevMgr != null && prevMgr['id'] != null) {
+          final salesIds = context
+              .read<CrmLeadsBloc>()
+              .state
+              .salesUsers
+              .map((u) => u.employeeId)
+              .whereType<int>()
+              .toSet();
+          // Prefer the telecaller who handled the lead (site visit assign to them);
+          // fall back to previous sales manager. Reception can change if they're absent.
+          if (telecallerId != null && salesIds.contains(telecallerId)) {
+            _selectedSalesId = telecallerId;
+          } else if (prevMgr != null && prevMgr['id'] != null && salesIds.contains((prevMgr['id'] as num).toInt())) {
             _selectedSalesId = (prevMgr['id'] as num).toInt();
-          } else if (l['assignedToId'] != null) {
+          } else if (l['assignedToId'] != null && salesIds.contains((l['assignedToId'] as num).toInt())) {
             _selectedSalesId = (l['assignedToId'] as num).toInt();
           }
         }
@@ -510,6 +523,11 @@ class _CrmVisitorDeskViewState extends State<_CrmVisitorDeskView> {
     final prevMgr = _lookupData?['previousSalesManager'] as Map<String, dynamic>?;
     final prevMgrName = prevMgr?['fullName']?.toString() ?? lead?['assignedTo']?['generalInfo']?['fullName']?.toString();
     final prevMgrId = (prevMgr?['id'] as num?)?.toInt() ?? (lead?['assignedToId'] as num?)?.toInt();
+    final handledBy = _lookupData?['handledByTelecaller'] as Map<String, dynamic>?;
+    final telecallerName = handledBy?['fullName']?.toString() ??
+        lead?['telecaller']?['generalInfo']?['fullName']?.toString() ??
+        lead?['telecallerName']?.toString();
+    final telecallerId = (handledBy?['id'] as num?)?.toInt() ?? (lead?['telecallerId'] as num?)?.toInt();
 
     final authState = context.watch<AuthBloc>().state;
     final currentUser = authState.user;
@@ -602,6 +620,54 @@ class _CrmVisitorDeskViewState extends State<_CrmVisitorDeskView> {
                 if (lead['campaign'] != null && lead['campaign']['name'] != null) ...[
                   const SizedBox(height: 4),
                   Text('Campaign: ${lead['campaign']['name']}', style: TextStyle(fontSize: 13, color: textMuted)),
+                ],
+                if (telecallerName != null && telecallerName.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.black26 : const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFF2563EB).withValues(alpha: 0.35)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.headset_mic_rounded, size: 18, color: Color(0xFF2563EB)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '$telecallerName talked to this lead',
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF1D4ED8)),
+                          ),
+                        ),
+                        if (telecallerId != null &&
+                            salesUsers.any((u) => u.employeeId == telecallerId) &&
+                            _selectedSalesId != telecallerId)
+                          TextButton.icon(
+                            icon: const Icon(Icons.person_add_alt_1_rounded, size: 14),
+                            label: const Text('Assign them', style: TextStyle(fontSize: 12)),
+                            style: TextButton.styleFrom(
+                              foregroundColor: const Color(0xFF2563EB),
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              visualDensity: VisualDensity.compact,
+                            ),
+                            onPressed: () => setState(() => _selectedSalesId = telecallerId),
+                          )
+                        else if (telecallerId != null && _selectedSalesId == telecallerId)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2563EB).withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text(
+                              '✓ Assigned to them',
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF1D4ED8)),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
                 ],
                 if (prevMgrName != null && prevMgrName.isNotEmpty) ...[
                   const SizedBox(height: 12),
@@ -764,11 +830,14 @@ class _CrmVisitorDeskViewState extends State<_CrmVisitorDeskView> {
         ),
         const SizedBox(height: 6),
         Text(
-          'Select the Sales Manager / Representative who is attending this visitor at the site.',
+          telecallerName != null && telecallerName.isNotEmpty
+              ? 'Defaults to $telecallerName (who handled this lead). Change if they are absent.'
+              : 'Select the Sales Manager / Representative who is attending this visitor at the site.',
           style: TextStyle(fontSize: 12, color: textMuted),
         ),
         const SizedBox(height: 8),
         DropdownButtonFormField<int?>(
+          key: ValueKey('visitor-sales-$_selectedSalesId'),
           isExpanded: true,
           initialValue: _selectedSalesId,
           hint: const Text('Select Sales Representative (from HRMS employees)'),

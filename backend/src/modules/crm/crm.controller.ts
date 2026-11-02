@@ -614,9 +614,9 @@ export const crmController = {
 
   async clickToCall(req: Request, res: Response) {
     try {
-      const { leadId, agentId } = req.body;
+      const { leadId, agentId, customerNumber } = req.body;
       const authUser = (req as any).user;
-      const result = await crmService.clickToCall(leadId, agentId, authUser);
+      const result = await crmService.clickToCall(leadId, agentId, authUser, customerNumber);
       res.json(ok(result));
     } catch (err: any) {
       res.status(400).json(fail(err.message || 'Failed to initiate click-to-call'));

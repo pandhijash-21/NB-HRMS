@@ -125,6 +125,27 @@ async function start() {
       });
       console.log('==> One-time Real Estate Pre-Sales data wipe completed successfully!');
     }
+
+    // Allocate existing MANUAL leads to the employee who created them (self-alloc backfill)
+    const selfAllocBackfill = await prisma.crmSetting.findUnique({
+      where: { key: 'manual_lead_self_alloc_backfill_v1' },
+    });
+    if (!selfAllocBackfill) {
+      console.log('==> Backfilling MANUAL leads to creators (self-allocation)...');
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { crmService } = require('./modules/crm/crm.service') as typeof import('./modules/crm/crm.service');
+      const result = await crmService.backfillManualLeadSelfAllocation();
+      await prisma.crmSetting.upsert({
+        where: { key: 'manual_lead_self_alloc_backfill_v1' },
+        update: { value: JSON.stringify(result) },
+        create: {
+          key: 'manual_lead_self_alloc_backfill_v1',
+          value: JSON.stringify(result),
+          description: 'One-time: MANUAL leads allocated to creator employee (self-alloc)',
+        },
+      });
+      console.log('==> MANUAL lead self-alloc backfill done:', result);
+    }
   } catch (err) {
     console.warn('Database schema column verify notice:', err);
   }

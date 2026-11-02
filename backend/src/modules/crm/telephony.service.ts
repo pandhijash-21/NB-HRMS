@@ -54,6 +54,20 @@ function normalizePhone10(v: string): string {
   return last10(v);
 }
 
+/** Dial number for CTC: keep full international digits when present; else last 10. */
+function dialNumberFromLeadPhone(phone: string): string {
+  const raw = String(phone || '').trim();
+  const d = digitsOnly(raw);
+  if (!d) return '';
+  if (raw.startsWith('+') || d.length > 10) return d;
+  return last10(d);
+}
+
+/** User-confirmed dial override — digits only, no forced last-10 truncation. */
+function dialNumberOverride(v: string): string {
+  return digitsOnly(String(v || '').trim());
+}
+
 function didNumberOf(item: any): string {
   const raw =
     item?.default_did_number ??
@@ -675,7 +689,12 @@ class TelephonyService {
 
   // ── Click to call ─────────────────────────────────────────────────────────
 
-  async clickToCall(leadId: string, agentPhoneOrId?: string, userContext?: any) {
+  async clickToCall(
+    leadId: string,
+    agentPhoneOrId?: string,
+    userContext?: any,
+    customerNumberOverride?: string,
+  ) {
     const lead = await prisma.crmLead.findUnique({ where: { id: leadId } });
     if (!lead) throw new Error('Lead not found');
 
@@ -690,7 +709,9 @@ class TelephonyService {
     const personal =
       empId != null && Number.isFinite(empId) ? telecallerMap[String(empId)] : undefined;
 
-    let customerNumber = normalizePhone10(lead.phone || '');
+    let customerNumber = customerNumberOverride?.trim()
+      ? dialNumberOverride(customerNumberOverride)
+      : dialNumberFromLeadPhone(lead.phone || '');
     if (!customerNumber) throw new Error('Lead has no phone number');
 
     let agentId = personal?.agent_id || '';

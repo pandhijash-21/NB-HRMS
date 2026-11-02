@@ -598,10 +598,18 @@ class CrmRepository {
     );
   }
 
-  Future<Map<String, dynamic>> clickToCall(String leadId, {String? agentId}) async {
+  Future<Map<String, dynamic>> clickToCall(
+    String leadId, {
+    String? agentId,
+    String? customerNumber,
+  }) async {
     return _dio.postEnvelope<Map<String, dynamic>>(
       'crm/telephony/click-to-call',
-      data: {'leadId': leadId, if (agentId != null) 'agentId': agentId},
+      data: {
+        'leadId': leadId,
+        if (agentId != null) 'agentId': agentId,
+        if (customerNumber != null && customerNumber.isNotEmpty) 'customerNumber': customerNumber,
+      },
       parse: (raw) => Map<String, dynamic>.from(raw as Map),
     );
   }

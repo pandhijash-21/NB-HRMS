@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 
@@ -8,6 +9,7 @@ import '../../../../core/router/app_back_button.dart';
 import '../../../../core/tour/models/tour_models.dart';
 import '../../../../core/tour/widgets/tour_target.dart';
 import '../../../../core/utils/open_url.dart';
+import '../../../../core/widgets/click_to_call_dial_dialog.dart';
 import '../../../../core/widgets/mobile_input_formatter.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../auth/domain/permissions.dart';
@@ -2439,8 +2441,16 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                       IconButton(
                         tooltip: 'Click-to-Call',
                         icon: const Icon(Icons.phone_in_talk_rounded, color: Color(0xFF16A34A)),
-                        onPressed: () {
-                          context.read<CrmLeadsBloc>().add(CrmLeadsClickToCallRequested(f.leadId));
+                        onPressed: () async {
+                          final dial = await showClickToCallDialDialog(
+                            context,
+                            phone: f.leadPhone ?? '',
+                            leadName: f.leadName,
+                          );
+                          if (dial == null || !context.mounted) return;
+                          context.read<CrmLeadsBloc>().add(
+                                CrmLeadsClickToCallRequested(f.leadId, customerNumber: dial),
+                              );
                         },
                       ),
                       IconButton(
@@ -2973,12 +2983,22 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
   // 9ance Call & Automatic Follow-Up Trigger
   // ---------------------------------------------------------------------------
   Future<void> _handleNineanceCallAndFollowUp(BuildContext context, CrmLead lead) async {
+    final dial = await showClickToCallDialDialog(
+      context,
+      phone: lead.phone,
+      leadName: lead.name.isNotEmpty ? lead.name : null,
+    );
+    if (dial == null || !mounted) return;
+
     try {
-      final callRes = await context.read<CrmRepository>().clickToCall(lead.id);
+      final callRes = await context.read<CrmRepository>().clickToCall(
+            lead.id,
+            customerNumber: dial,
+          );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(callRes['message']?.toString() ?? 'Initiated call to ${_displayPhone(lead.phone)}'),
+            content: Text(callRes['message']?.toString() ?? 'Initiated call to $dial'),
             backgroundColor: const Color(0xFF16A34A),
             duration: const Duration(seconds: 2),
           ),
@@ -5303,6 +5323,8 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
     String selectedLeadSource = 'Walk-in';
     final cpNameController = TextEditingController();
     final cpPhoneController = TextEditingController();
+    final cpCountryCodeController = TextEditingController(text: '+91');
+    final phoneCountryCodeController = TextEditingController(text: '+91');
     final refNameController = TextEditingController();
     String selectedRefType = 'Client';
     final settings = context.read<CrmLeadsBloc>().state.settings;
@@ -5384,16 +5406,42 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                         children: [
                           const Text('Channel Partner Number *', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                           const SizedBox(height: 6),
-                          TextField(
-                            controller: cpPhoneController,
-                            keyboardType: TextInputType.phone,
-                            inputFormatters: mobileInputFormatters,
-                            decoration: InputDecoration(
-                              hintText: '10-digit CP number',
-                              prefixIcon: buildMobilePrefix(isDark: Theme.of(context).brightness == Brightness.dark),
-                              prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
-                              border: const OutlineInputBorder(),
-                            ),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SizedBox(
+                                width: 88,
+                                child: TextField(
+                                  controller: cpCountryCodeController,
+                                  keyboardType: TextInputType.phone,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.allow(RegExp(r'[0-9+]')),
+                                    LengthLimitingTextInputFormatter(5),
+                                  ],
+                                  decoration: const InputDecoration(
+                                    labelText: 'Code',
+                                    hintText: '+91',
+                                    border: OutlineInputBorder(),
+                                    isDense: true,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: TextField(
+                                  controller: cpPhoneController,
+                                  keyboardType: TextInputType.phone,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly,
+                                    LengthLimitingTextInputFormatter(15),
+                                  ],
+                                  decoration: const InputDecoration(
+                                    hintText: 'Mobile number',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -5518,44 +5566,80 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            TextField(
-                              controller: controllers[col.columnKey],
-                              keyboardType: TextInputType.phone,
-                              inputFormatters: mobileInputFormatters,
-                              onChanged: (val) async {
-                                final clean = cleanMobile10(val);
-                                if (clean.length == 10) {
-                                  setDialogState(() => isCheckingPhone = true);
-                                  final res = await context.read<CrmRepository>().checkPhone(clean);
-                                  setDialogState(() {
-                                    isCheckingPhone = false;
-                                    existingLeadInfo = res['exists'] == true ? (res['lead'] as Map<String, dynamic>?) : null;
-                                    if (existingLeadInfo == null) allowDuplicate = false;
-                                  });
-                                } else if (existingLeadInfo != null) {
-                                  setDialogState(() {
-                                    existingLeadInfo = null;
-                                    allowDuplicate = false;
-                                  });
-                                }
-                              },
-                              decoration: InputDecoration(
-                                hintText: '10-digit number',
-                                prefixIcon: buildMobilePrefix(isDark: Theme.of(context).brightness == Brightness.dark),
-                                prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
-                                border: const OutlineInputBorder(),
-                                suffixIcon: isCheckingPhone
-                                    ? const Padding(
-                                        padding: EdgeInsets.all(12),
-                                        child: SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
-                                      )
-                                    : (existingLeadInfo != null
-                                        ? const Tooltip(
-                                            message: 'Phone number already exists in CRM',
-                                            child: Icon(Icons.warning_amber_rounded, color: Colors.amber),
-                                          )
-                                        : null),
-                              ),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                SizedBox(
+                                  width: 88,
+                                  child: TextField(
+                                    controller: phoneCountryCodeController,
+                                    keyboardType: TextInputType.phone,
+                                    inputFormatters: [
+                                      FilteringTextInputFormatter.allow(RegExp(r'[0-9+]')),
+                                      LengthLimitingTextInputFormatter(5),
+                                    ],
+                                    decoration: const InputDecoration(
+                                      labelText: 'Code',
+                                      hintText: '+91',
+                                      border: OutlineInputBorder(),
+                                      isDense: true,
+                                    ),
+                                    onChanged: (_) => setDialogState(() {}),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: TextField(
+                                    controller: controllers[col.columnKey],
+                                    keyboardType: TextInputType.phone,
+                                    inputFormatters: [
+                                      FilteringTextInputFormatter.digitsOnly,
+                                      LengthLimitingTextInputFormatter(15),
+                                    ],
+                                    onChanged: (val) async {
+                                      final composed = composeInternationalPhone(
+                                        countryCode: phoneCountryCodeController.text,
+                                        nationalNumber: val,
+                                      );
+                                      final clean = composed.length >= 10 ? composed.substring(composed.length - 10) : composed;
+                                      if (clean.length >= 7) {
+                                        setDialogState(() => isCheckingPhone = true);
+                                        final res = await context.read<CrmRepository>().checkPhone(clean);
+                                        setDialogState(() {
+                                          isCheckingPhone = false;
+                                          existingLeadInfo = res['exists'] == true ? (res['lead'] as Map<String, dynamic>?) : null;
+                                          if (existingLeadInfo == null) allowDuplicate = false;
+                                        });
+                                      } else if (existingLeadInfo != null) {
+                                        setDialogState(() {
+                                          existingLeadInfo = null;
+                                          allowDuplicate = false;
+                                        });
+                                      }
+                                    },
+                                    decoration: InputDecoration(
+                                      hintText: 'Mobile number',
+                                      border: const OutlineInputBorder(),
+                                      suffixIcon: isCheckingPhone
+                                          ? const Padding(
+                                              padding: EdgeInsets.all(12),
+                                              child: SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+                                            )
+                                          : (existingLeadInfo != null
+                                              ? const Tooltip(
+                                                  message: 'Phone number already exists in CRM',
+                                                  child: Icon(Icons.warning_amber_rounded, color: Colors.amber),
+                                                )
+                                              : null),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Country code is editable for international numbers (default +91).',
+                              style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                             ),
                             if (existingLeadInfo != null) ...[
                               const SizedBox(height: 8),
@@ -5702,15 +5786,22 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                   '';
             }
 
-            if (phone.isEmpty || phone.length != 10) {
+            phone = composeInternationalPhone(
+              countryCode: phoneCountryCodeController.text,
+              nationalNumber: phone,
+            );
+            if (phone.isEmpty || phone.length < 7) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Phone number must be exactly 10 digits.')),
+                const SnackBar(content: Text('Enter a valid phone number (with country code).')),
               );
               return;
             }
 
             final cpName = cpNameController.text.trim();
-            final cpPhone = cleanMobile10(cpPhoneController.text);
+            final cpPhone = composeInternationalPhone(
+              countryCode: cpCountryCodeController.text,
+              nationalNumber: cpPhoneController.text,
+            );
             final refName = refNameController.text.trim();
 
             if (selectedLeadSource == 'Channel Partner') {
@@ -5720,9 +5811,9 @@ class _CrmPreSalesViewState extends State<_CrmPreSalesView>
                 );
                 return;
               }
-              if (cpPhone.length != 10) {
+              if (cpPhone.length < 7) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Channel Partner phone number must be exactly 10 digits.')),
+                  const SnackBar(content: Text('Enter a valid Channel Partner phone number.')),
                 );
                 return;
               }

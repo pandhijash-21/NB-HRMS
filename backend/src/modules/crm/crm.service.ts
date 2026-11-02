@@ -1774,19 +1774,20 @@ export const crmService = {
   },
 
   /**
-   * One-time / idempotent: allocate existing MANUAL leads to whoever created them
-   * (Harsh Vyas → Harsh, IT Admin → that admin's employee, etc.).
+   * Force-allocate MANUAL leads to whoever added them — even if currently
+   * assigned to someone else (e.g. Harsh created → was on Apeksha → back to Harsh).
    */
   async backfillManualLeadSelfAllocation(): Promise<{
     scanned: number;
     updated: number;
     alreadyOk: number;
     skipped: number;
+    reassignedFromOther: number;
   }> {
     const normName = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+    const technicalSources = new Set(['EXCEL', 'META', 'GOOGLE', 'WEBHOOK']);
 
     const users = await prisma.user.findMany({
-      where: { employeeId: { not: null } },
       select: {
         id: true,
         employeeId: true,
@@ -1803,7 +1804,7 @@ export const crmService = {
     const empByUserId = new Map<string, number>();
     const empByName = new Map<string, number>();
     for (const u of users) {
-      const empId = u.employeeId ?? u.employee?.id;
+      const empId = u.employeeId ?? u.employee?.id ?? null;
       if (!empId) continue;
       empByUserId.set(u.id, empId);
       const fullName = u.employee?.generalInfo?.fullName;
@@ -1811,11 +1812,19 @@ export const crmService = {
       if (u.username) empByName.set(normName(u.username), empId);
     }
 
+    // Also index active employees by name (covers creators resolved only by createdByName)
+    const employees = await prisma.employee.findMany({
+      where: { status: 'ACTIVE' },
+      select: { id: true, generalInfo: { select: { fullName: true } } },
+    });
+    for (const e of employees) {
+      const fullName = e.generalInfo?.fullName;
+      if (fullName) empByName.set(normName(fullName), e.id);
+    }
+
+    // Scan all leads — filter manual in JS (UI treats more than leadSource=MANUAL as manual)
     const leads = await prisma.crmLead.findMany({
-      where: {
-        isDeleted: false,
-        OR: [{ leadSource: 'MANUAL' }, { leadSource: null }],
-      },
+      where: { isDeleted: false },
       select: {
         id: true,
         telecallerId: true,
@@ -1828,25 +1837,57 @@ export const crmService = {
     let updated = 0;
     let alreadyOk = 0;
     let skipped = 0;
+    let reassignedFromOther = 0;
 
     for (const lead of leads) {
       const custom = (lead.customFields && typeof lead.customFields === 'object'
         ? { ...(lead.customFields as Record<string, unknown>) }
         : {}) as Record<string, any>;
 
-      const isManual = lead.leadSource === 'MANUAL' || custom.isManual === true;
+      const ls = String(lead.leadSource || '').toUpperCase().trim();
+      const businessSource = String(
+        custom.lead_source_type || custom.leadSource || custom.Source || custom.source || '',
+      )
+        .trim()
+        .toLowerCase();
+      const manualBusinessSources = new Set([
+        'walk in',
+        'walk-in',
+        'channel partner',
+        'reference',
+        'referral',
+        'direct call',
+        'direct call / other',
+        'website',
+        'social media',
+        'other',
+      ]);
+
+      const storedCreatorName =
+        typeof custom.createdByName === 'string' ? custom.createdByName.trim() : '';
+      const isManual =
+        ls === 'MANUAL' ||
+        custom.isManual === true ||
+        custom.is_manual === true ||
+        (!technicalSources.has(ls) &&
+          storedCreatorName !== '' &&
+          !['system', 'webhook', 'admin'].includes(storedCreatorName.toLowerCase())) ||
+        (!technicalSources.has(ls) && manualBusinessSources.has(businessSource));
+
       if (!isManual) {
         skipped += 1;
         continue;
       }
 
+      // Prefer live createdById → employee; then stored name; then creatorEmployeeId last
+      // (creatorEmployeeId may be stale / wrong from older logic)
       let creatorEmpId: number | null = null;
       if (lead.createdById && empByUserId.has(lead.createdById)) {
         creatorEmpId = empByUserId.get(lead.createdById)!;
+      } else if (storedCreatorName) {
+        creatorEmpId = empByName.get(normName(storedCreatorName)) ?? null;
       } else if (custom.creatorEmployeeId && Number.isFinite(Number(custom.creatorEmployeeId))) {
         creatorEmpId = Number(custom.creatorEmployeeId);
-      } else if (custom.createdByName && typeof custom.createdByName === 'string') {
-        creatorEmpId = empByName.get(normName(custom.createdByName)) ?? null;
       }
 
       if (!creatorEmpId) {
@@ -1859,12 +1900,19 @@ export const crmService = {
         continue;
       }
 
+      if (lead.telecallerId && lead.telecallerId !== creatorEmpId) {
+        custom.previousTelecallerId = lead.telecallerId;
+        custom.reassignedFromTelecallerId = lead.telecallerId;
+        reassignedFromOther += 1;
+      }
+
       custom.isManual = true;
       custom.selfAllocated = true;
       custom.selfAllocatedAt = new Date().toISOString();
       custom.creatorEmployeeId = creatorEmpId;
-      custom.allocatedAt = custom.allocatedAt || new Date().toISOString();
+      custom.allocatedAt = new Date().toISOString();
       custom.selfAllocBackfillAt = new Date().toISOString();
+      custom.selfAllocBackfillVersion = 2;
 
       await prisma.crmLead.update({
         where: { id: lead.id },
@@ -1876,7 +1924,7 @@ export const crmService = {
       updated += 1;
     }
 
-    return { scanned: leads.length, updated, alreadyOk, skipped };
+    return { scanned: leads.length, updated, alreadyOk, skipped, reassignedFromOther };
   },
 
   async importExcelLeads(

@@ -126,25 +126,26 @@ async function start() {
       console.log('==> One-time Real Estate Pre-Sales data wipe completed successfully!');
     }
 
-    // Allocate existing MANUAL leads to the employee who created them (self-alloc backfill)
-    const selfAllocBackfill = await prisma.crmSetting.findUnique({
-      where: { key: 'manual_lead_self_alloc_backfill_v1' },
+    // v2: force-reallocate ALL manual leads to creator even if currently on someone else
+    const selfAllocBackfillV2 = await prisma.crmSetting.findUnique({
+      where: { key: 'manual_lead_self_alloc_backfill_v2' },
     });
-    if (!selfAllocBackfill) {
-      console.log('==> Backfilling MANUAL leads to creators (self-allocation)...');
+    if (!selfAllocBackfillV2) {
+      console.log('==> Backfill v2: force MANUAL leads → creator (incl. already allocated)...');
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const { crmService } = require('./modules/crm/crm.service') as typeof import('./modules/crm/crm.service');
       const result = await crmService.backfillManualLeadSelfAllocation();
       await prisma.crmSetting.upsert({
-        where: { key: 'manual_lead_self_alloc_backfill_v1' },
+        where: { key: 'manual_lead_self_alloc_backfill_v2' },
         update: { value: JSON.stringify(result) },
         create: {
-          key: 'manual_lead_self_alloc_backfill_v1',
+          key: 'manual_lead_self_alloc_backfill_v2',
           value: JSON.stringify(result),
-          description: 'One-time: MANUAL leads allocated to creator employee (self-alloc)',
+          description:
+            'v2: MANUAL leads force-allocated to creator even if previously assigned to another telecaller',
         },
       });
-      console.log('==> MANUAL lead self-alloc backfill done:', result);
+      console.log('==> MANUAL lead self-alloc backfill v2 done:', result);
     }
   } catch (err) {
     console.warn('Database schema column verify notice:', err);

@@ -123,12 +123,14 @@ class _CrmAudioPlayerDialogState extends ConsumerState<CrmAudioPlayerDialog>
     });
   }
 
+  /// Public CRM proxy — audioplayers cannot send Authorization headers, and
+  /// opening raw 9ance URLs in a browser returns 401.
   String _resolveAudioUrl() {
     if (widget.log.id.isNotEmpty) {
       final base = AppConfig.apiBaseUrl;
-      return '$base/crm/telephony/recordings/${widget.log.id}/audio';
+      return '$base/crm-public/telephony/recordings/${widget.log.id}/audio';
     }
-    return _currentRecordingUrl;
+    return '';
   }
 
   Future<void> _initAndPlayAudio() async {
@@ -141,9 +143,9 @@ class _CrmAudioPlayerDialogState extends ConsumerState<CrmAudioPlayerDialog>
     final targetUrl = _resolveAudioUrl();
     _resolvedUrl = targetUrl;
 
-    // Backend proxy needs callId and/or recordingUrl; otherwise ask user to wait/sync or paste URL.
     final hasProviderLink = (widget.log.callId != null && widget.log.callId!.isNotEmpty) ||
-        _currentRecordingUrl.isNotEmpty;
+        _currentRecordingUrl.isNotEmpty ||
+        widget.log.id.isNotEmpty;
     if (!hasProviderLink) {
       setState(() {
         _isLoading = false;
@@ -153,47 +155,39 @@ class _CrmAudioPlayerDialogState extends ConsumerState<CrmAudioPlayerDialog>
       });
       return;
     }
-    if (targetUrl.isEmpty && _currentRecordingUrl.isEmpty) {
-      setState(() {
-        _isLoading = false;
-        _hasError = true;
-        _errorMessage = 'No recording audio file URL is linked to this call.';
-      });
-      return;
-    }
 
     try {
       await _player.setReleaseMode(ReleaseMode.stop);
       await _player.setPlaybackRate(_playbackRate);
       await _player.setVolume(_isMuted ? 0.0 : _volume);
 
-      await _player.play(UrlSource(targetUrl));
-
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    } catch (e) {
-      // Fallback: try direct URL if available and different
-      if (_currentRecordingUrl.isNotEmpty && _currentRecordingUrl != targetUrl) {
-        try {
-          _resolvedUrl = _currentRecordingUrl;
-          await _player.play(UrlSource(_currentRecordingUrl));
-          if (mounted) {
-            setState(() {
-              _isLoading = false;
-              _hasError = false;
-            });
-          }
+      // Prefer authenticated download → BytesSource (works with CRM JWT)
+      try {
+        final bytes =
+            await ref.read(crmRepositoryProvider).downloadCallRecordingAudio(widget.log.id);
+        if (bytes.isNotEmpty) {
+          await _player.play(BytesSource(bytes));
+          if (mounted) setState(() => _isLoading = false);
           return;
-        } catch (_) {}
+        }
+      } catch (_) {
+        // Fall through to public URL stream
       }
 
+      if (targetUrl.isNotEmpty) {
+        await _player.play(UrlSource(targetUrl));
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
+
+      throw Exception('empty audio');
+    } catch (e) {
       if (mounted) {
         setState(() {
           _isLoading = false;
           _hasError = true;
           _errorMessage =
-              'Could not load recording from PBX. Check if file exists on server or update URL below.';
+              'Could not load recording. Never open the raw 9ance URL (needs login). Use Retry after Sync from 9ance.';
         });
       }
     }
@@ -832,16 +826,16 @@ class _CrmAudioPlayerDialogState extends ConsumerState<CrmAudioPlayerDialog>
                       },
                     ),
 
-                    // Copy Link Button
+                    // Copy Link Button — always CRM proxy (raw 9ance URLs return 401)
                     IconButton(
                       icon: Icon(Icons.copy_rounded, size: 17, color: textMuted),
                       tooltip: 'Copy Audio URL',
                       onPressed: () {
-                        Clipboard.setData(
-                            ClipboardData(text: _currentRecordingUrl.isNotEmpty ? _currentRecordingUrl : _resolvedUrl));
+                        final url = _resolvedUrl.isNotEmpty ? _resolvedUrl : _resolveAudioUrl();
+                        Clipboard.setData(ClipboardData(text: url));
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text('Audio URL copied to clipboard!'),
+                            content: Text('CRM audio proxy URL copied (not raw 9ance)'),
                             duration: Duration(seconds: 2),
                           ),
                         );
@@ -854,9 +848,8 @@ class _CrmAudioPlayerDialogState extends ConsumerState<CrmAudioPlayerDialog>
                           size: 19, color: textMuted),
                       tooltip: 'Download Recording File',
                       onPressed: () {
-                        final downloadUrlStr = _currentRecordingUrl.isNotEmpty
-                            ? _currentRecordingUrl
-                            : _resolvedUrl;
+                        final downloadUrlStr =
+                            _resolvedUrl.isNotEmpty ? _resolvedUrl : _resolveAudioUrl();
                         if (downloadUrlStr.isNotEmpty) {
                           downloadUrl(
                             downloadUrlStr,

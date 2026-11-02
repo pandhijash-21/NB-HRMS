@@ -426,12 +426,31 @@ export class NineanceClient {
     });
   }
 
-  async fetchRecordingResponse(callId: string, rangeHeader?: string): Promise<Response> {
-    const url = this.buildUrl(`/api/telephony/calls/${callId}/recording/`);
-    const headers: Record<string, string> = {};
+  async fetchRecordingResponse(
+    callId: string,
+    rangeHeader?: string,
+    retried = false,
+  ): Promise<Response> {
+    const url = this.buildUrl(`/api/telephony/calls/${callId}/recording/`, {
+      download: 1,
+    });
+    const headers: Record<string, string> = {
+      Accept: 'audio/*,application/octet-stream,*/*',
+    };
     if (this.accessToken) headers.Authorization = `Bearer ${this.accessToken}`;
     if (rangeHeader) headers.Range = rangeHeader;
-    return fetch(url, { method: 'GET', headers });
+
+    const res = await fetch(url, { method: 'GET', headers });
+
+    // Raw fetch bypasses request() — still refresh once on 401
+    if (res.status === 401 && !retried && this.refreshHandler) {
+      const refreshed = await this.refreshHandler();
+      if (refreshed?.access) {
+        this.setTokens(refreshed);
+        return this.fetchRecordingResponse(callId, rangeHeader, true);
+      }
+    }
+    return res;
   }
 
   async dispositionCall(

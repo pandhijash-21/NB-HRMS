@@ -911,6 +911,33 @@ class CrmRepository {
     );
   }
 
+  /// Download call audio via CRM proxy (authenticated). Prefer this over UrlSource.
+  Future<Uint8List> downloadCallRecordingAudio(String logId) async {
+    // Try authenticated CRM route first, then public stream path
+    try {
+      final response = await _dio.dio.get<List<int>>(
+        'crm/telephony/recordings/$logId/audio',
+        options: Options(
+          responseType: ResponseType.bytes,
+          followRedirects: true,
+          validateStatus: (s) => s != null && s >= 200 && s < 400,
+        ),
+      );
+      final bytes = Uint8List.fromList(response.data ?? []);
+      if (bytes.isNotEmpty) return bytes;
+    } catch (_) {}
+
+    final response = await _dio.dio.get<List<int>>(
+      'crm-public/telephony/recordings/$logId/audio',
+      options: Options(
+        responseType: ResponseType.bytes,
+        followRedirects: true,
+        validateStatus: (s) => s != null && s >= 200 && s < 400,
+      ),
+    );
+    return Uint8List.fromList(response.data ?? []);
+  }
+
   Future<CrmCallLog> updateCallLog(
     String id, {
     String? recordingUrl,

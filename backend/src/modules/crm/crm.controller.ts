@@ -1236,9 +1236,15 @@ export const crmController = {
   async getCallLogs(req: Request, res: Response) {
     try {
       const authUser = (req as any).user;
+      const role =
+        authUser?.roleName ||
+        authUser?.role?.name ||
+        (typeof authUser?.role === 'string' ? authUser?.role : '') ||
+        '';
       const logs = await crmService.getCallLogs({
         ...(req.query as any),
-        userRole: authUser?.role,
+        userRole: role,
+        userEmployeeId: authUser?.employeeId != null ? Number(authUser.employeeId) : undefined,
         userPermissions: authUser?.permissions,
         scope: getScope(req),
       });

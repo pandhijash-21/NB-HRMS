@@ -4469,6 +4469,57 @@ export const crmService = {
   },
 
   async streamCallAudio(logId: string, req: Request, res: Response) {
+    const authUser = (req as any).user;
+    if (authUser) {
+      const role =
+        authUser?.roleName ||
+        authUser?.role?.name ||
+        (typeof authUser?.role === 'string' ? authUser?.role : '') ||
+        '';
+      const roleUpper = String(role).toUpperCase();
+      const isAdmin =
+        isAdminRole(role) ||
+        ['ADMIN', 'SUPER_ADMIN', 'SUPERADMIN', 'SYSTEM_ADMIN', 'ITADMIN'].some((r) =>
+          roleUpper.includes(r),
+        );
+      if (!isAdmin) {
+        const empId =
+          authUser?.employeeId != null && Number.isFinite(Number(authUser.employeeId))
+            ? Number(authUser.employeeId)
+            : null;
+        if (!empId) {
+          return res.status(403).json({ status: 'error', message: 'Forbidden' });
+        }
+        const scope =
+          (req as any).crmScope ||
+          String(req.headers['x-crm-scope'] || 'NB_DEVELOPER').toUpperCase() ||
+          'NB_DEVELOPER';
+        const { agentNumbers, agentIds } = await telephonyService.getEmployeeAgentIdentifiers(
+          empId,
+          scope === 'NB_FINSERVE' ? 'NB_FINSERVE' : 'NB_DEVELOPER',
+        );
+        const log = await prisma.crmCallLog.findUnique({
+          where: { id: logId },
+          select: {
+            agentNumber: true,
+            lead: { select: { telecallerId: true, assignedToId: true } },
+          },
+        });
+        if (!log) return res.status(404).send('Recording not found');
+        const agent = String(log.agentNumber || '');
+        const owns =
+          log.lead?.telecallerId === empId ||
+          log.lead?.assignedToId === empId ||
+          agentNumbers.some((n) => agent.includes(n)) ||
+          agentIds.some((id) => agent === id || agent.includes(id));
+        if (!owns) {
+          return res.status(403).json({
+            status: 'error',
+            message: 'You can only play your own call recordings',
+          });
+        }
+      }
+    }
     return telephonyService.streamCallAudio(logId, req, res);
   },
 
@@ -4483,6 +4534,7 @@ export const crmService = {
     did?: string;
     limit?: number | string;
     userRole?: string;
+    userEmployeeId?: number;
     userPermissions?: Record<string, string[]>;
     scope?: string;
   }) {
@@ -4496,6 +4548,41 @@ export const crmService = {
     };
     if (query.leadId) {
       where.leadId = query.leadId;
+    }
+
+    // Admins see all recordings; everyone else only their own agent / assigned leads
+    const roleUpper = String(query.userRole || '').toUpperCase();
+    const isAdmin =
+      isAdminRole(query.userRole) ||
+      ['ADMIN', 'SUPER_ADMIN', 'SUPERADMIN', 'SYSTEM_ADMIN', 'ITADMIN'].some((r) =>
+        roleUpper.includes(r),
+      );
+    const empId =
+      query.userEmployeeId != null && Number.isFinite(Number(query.userEmployeeId))
+        ? Number(query.userEmployeeId)
+        : null;
+
+    if (!isAdmin) {
+      if (!empId) {
+        // Non-admin without employee link cannot browse others' recordings
+        return [];
+      }
+      const { agentNumbers, agentIds } = await telephonyService.getEmployeeAgentIdentifiers(
+        empId,
+        query.scope || 'NB_DEVELOPER',
+      );
+      const ownershipOr: any[] = [
+        { lead: { telecallerId: empId } },
+        { lead: { assignedToId: empId } },
+      ];
+      for (const n of agentNumbers) {
+        ownershipOr.push({ agentNumber: { contains: n } });
+      }
+      for (const id of agentIds) {
+        ownershipOr.push({ agentNumber: id });
+        ownershipOr.push({ agentNumber: { contains: id } });
+      }
+      where.AND = [...(where.AND || []), { OR: ownershipOr }];
     }
 
     if (query.hasRecording === true || query.hasRecording === 'true') {

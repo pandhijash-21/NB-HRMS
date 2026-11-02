@@ -116,9 +116,6 @@ crmRouter.post(
   ),
   crmController.clickToCall,
 );
-crmRouter.get('/telephony/call-logs', requireCrmSubmodule('CRM_SETTINGS'), crmController.getCallLogs);
-crmRouter.patch('/telephony/call-logs/:id', requireCrmSubmodule('CRM_SETTINGS'), crmController.updateCallLog);
-
 // 9ance Cloud Telephony
 crmRouter.post('/telephony/test-connection', requireCrmSubmodule('CRM_SETTINGS'), crmController.testNineanceConnection);
 crmRouter.post('/telephony/activate', requireCrmSubmodule('CRM_SETTINGS'), crmController.activateNineance);
@@ -223,6 +220,10 @@ const generalCrmGuard = (req: any, res: any, next: any) => {
     : ['CRM', 'CRM_PRE_SALES', 'CRM_SALES'];
   return requireAnyPermission(modules, actionFor(req.method))(req, res, next);
 };
+
+// Call recordings: admins see all; non-admins filtered to own agent/leads in service
+crmRouter.get('/telephony/call-logs', generalCrmGuard, crmController.getCallLogs);
+crmRouter.patch('/telephony/call-logs/:id', generalCrmGuard, crmController.updateCallLog);
 
 const visitorDeskGuard = (req: any, res: any, next: any) => {
   if (req.crmScope === 'NB_FINSERVE') {

@@ -501,6 +501,47 @@ class TelephonyService {
     });
   }
 
+  /** Agent numbers / ids mapped to an employee for call-log ownership checks. */
+  async getEmployeeAgentIdentifiers(
+    employeeId: number,
+    scope: string = 'NB_DEVELOPER',
+  ): Promise<{ agentNumbers: string[]; agentIds: string[] }> {
+    const agentNumbers = new Set<string>();
+    const agentIds = new Set<string>();
+    if (!Number.isFinite(employeeId) || employeeId <= 0) {
+      return { agentNumbers: [], agentIds: [] };
+    }
+
+    const map = await this._readTelecallerConfigMap(scope);
+    const cfg = map[String(employeeId)] || {};
+    if (cfg.agent_number) {
+      const n = normalizePhone10(String(cfg.agent_number));
+      if (n) agentNumbers.add(n);
+      if (n.length >= 10) agentNumbers.add(last10(n));
+    }
+    if (cfg.agent_id) agentIds.add(String(cfg.agent_id).trim());
+
+    try {
+      const emp = await prisma.employee.findUnique({
+        where: { id: employeeId },
+        include: { addresses: true },
+      });
+      const addr = emp?.addresses?.find((a: any) => a.mobileNo || a.phoneNo);
+      if (addr) {
+        const n = normalizePhone10(addr.mobileNo || addr.phoneNo || '');
+        if (n) {
+          agentNumbers.add(n);
+          if (n.length >= 10) agentNumbers.add(last10(n));
+        }
+      }
+    } catch (_) {}
+
+    return {
+      agentNumbers: [...agentNumbers].filter(Boolean),
+      agentIds: [...agentIds].filter(Boolean),
+    };
+  }
+
   async listTelecallerTelephony(scope: string = 'NB_DEVELOPER') {
     const configs = await this._readTelecallerConfigMap(scope);
     const settings = await this.getNineanceSettings(scope);
@@ -1260,6 +1301,35 @@ class TelephonyService {
     }
   }
 
+  private async _pipeUpstreamAudio(upstreamRes: Response, res: Response): Promise<boolean> {
+    if (!(upstreamRes.ok || upstreamRes.status === 206)) return false;
+    const contentType = upstreamRes.headers.get('content-type') || 'audio/mpeg';
+    // Reject HTML login pages and JSON error bodies
+    if (
+      contentType.includes('text/html') ||
+      contentType.includes('application/json') ||
+      contentType.includes('text/plain')
+    ) {
+      return false;
+    }
+    res.status(upstreamRes.status);
+    res.setHeader('Content-Type', contentType.includes('audio') ? contentType : 'audio/mpeg');
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cache-Control', 'private, max-age=60');
+    const cl = upstreamRes.headers.get('content-length');
+    if (cl) res.setHeader('Content-Length', cl);
+    const cr = upstreamRes.headers.get('content-range');
+    if (cr) res.setHeader('Content-Range', cr);
+    if (upstreamRes.body) {
+      const { Readable } = await import('stream');
+      // @ts-ignore
+      Readable.fromWeb(upstreamRes.body).pipe(res);
+      return true;
+    }
+    return false;
+  }
+
   async streamCallAudio(logId: string, req: Request, res: Response) {
     const log = await prisma.crmCallLog.findUnique({
       where: { id: logId },
@@ -1275,78 +1345,66 @@ class TelephonyService {
       });
       if (lead?.scope) scope = lead.scope;
     }
+    const scopesToTry = Array.from(new Set([scope, 'NB_DEVELOPER', 'NB_FINSERVE']));
+    const range = req.headers.range as string | undefined;
+    const proxyErrors: string[] = [];
 
-    // Prefer 9ance authenticated recording proxy
+    // 1) Authenticated 9ance recording by callId (with token refresh)
     if (log.callId) {
-      try {
-        const client = await this.ensureAuthenticated(scope);
-        const upstreamRes = await client.fetchRecordingResponse(
-          String(log.callId),
-          req.headers.range as string | undefined,
-        );
-        if (upstreamRes.ok || upstreamRes.status === 206) {
-          const contentType = upstreamRes.headers.get('content-type') || 'audio/mpeg';
-          if (!contentType.includes('text/html')) {
-            res.status(upstreamRes.status);
-            res.setHeader('Content-Type', contentType);
-            res.setHeader('Accept-Ranges', 'bytes');
-            res.setHeader('Access-Control-Allow-Origin', '*');
-            const cl = upstreamRes.headers.get('content-length');
-            if (cl) res.setHeader('Content-Length', cl);
-            const cr = upstreamRes.headers.get('content-range');
-            if (cr) res.setHeader('Content-Range', cr);
-            if (upstreamRes.body) {
-              const { Readable } = await import('stream');
-              // @ts-ignore
-              Readable.fromWeb(upstreamRes.body).pipe(res);
-              return;
-            }
-          }
+      for (const tryScope of scopesToTry) {
+        try {
+          const client = await this.ensureAuthenticated(tryScope);
+          const upstreamRes = await client.fetchRecordingResponse(String(log.callId), range);
+          if (await this._pipeUpstreamAudio(upstreamRes, res)) return;
+          proxyErrors.push(`${tryScope} callId→${upstreamRes.status}`);
+        } catch (err: any) {
+          proxyErrors.push(`${tryScope} callId→${err?.message || err}`);
         }
-      } catch (err: any) {
-        console.warn('[9ance recording proxy]', err?.message);
       }
     }
 
-    if (!log.recordingUrl) return res.status(404).send('Recording not found');
-
-    let audioUrl = log.recordingUrl.trim();
-    try {
-      const headers: Record<string, string> = {
-        'User-Agent': 'NB-CRM-Audio-Streamer/1.0',
-      };
-      if (req.headers.range) headers.Range = req.headers.range as string;
-      // Attach bearer if URL is on 9ance host
-      if (audioUrl.includes('9ance.com')) {
+    // 2) Fallback: stored recordingUrl with Bearer if hosted on 9ance
+    if (log.recordingUrl) {
+      let audioUrl = log.recordingUrl.trim();
+      // Relative 9ance API paths → absolute
+      if (audioUrl.startsWith('/')) {
+        audioUrl = `https://crmapi.9ance.com${audioUrl}`;
+      }
+      for (const tryScope of scopesToTry) {
         try {
-          const client = await this.ensureAuthenticated(scope);
-          if (client.accessToken) headers.Authorization = `Bearer ${client.accessToken}`;
-        } catch (_) {}
+          const headers: Record<string, string> = {
+            'User-Agent': 'NB-CRM-Audio-Streamer/1.0',
+            Accept: 'audio/*,application/octet-stream,*/*',
+          };
+          if (range) headers.Range = range;
+          if (audioUrl.includes('9ance.com')) {
+            const client = await this.ensureAuthenticated(tryScope);
+            if (client.accessToken) headers.Authorization = `Bearer ${client.accessToken}`;
+          }
+          let upstreamRes = await fetch(audioUrl, { method: 'GET', headers });
+          if (upstreamRes.status === 401 && audioUrl.includes('9ance.com')) {
+            const refreshed = await this.refreshTokens(tryScope).catch(() => null);
+            if (refreshed?.access) {
+              headers.Authorization = `Bearer ${refreshed.access}`;
+              upstreamRes = await fetch(audioUrl, { method: 'GET', headers });
+            }
+          }
+          if (await this._pipeUpstreamAudio(upstreamRes, res)) return;
+          proxyErrors.push(`${tryScope} url→${upstreamRes.status}`);
+        } catch (err: any) {
+          proxyErrors.push(`${tryScope} url→${err?.message || err}`);
+        }
       }
-      const upstreamRes = await fetch(audioUrl, { method: 'GET', headers });
-      const contentType = upstreamRes.headers.get('content-type') || 'audio/mpeg';
-      if (contentType.includes('text/html')) {
-        return res.status(404).send('Audio recording file not found');
-      }
-      res.status(upstreamRes.status);
-      res.setHeader('Content-Type', contentType);
-      res.setHeader('Accept-Ranges', 'bytes');
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      const cl = upstreamRes.headers.get('content-length');
-      if (cl) res.setHeader('Content-Length', cl);
-      const cr = upstreamRes.headers.get('content-range');
-      if (cr) res.setHeader('Content-Range', cr);
-      if (upstreamRes.body) {
-        const { Readable } = await import('stream');
-        // @ts-ignore
-        Readable.fromWeb(upstreamRes.body).pipe(res);
-      } else {
-        res.end();
-      }
-    } catch (err: any) {
-      if (!res.headersSent) {
-        res.status(502).send(`Error streaming recording: ${err.message}`);
-      }
+    }
+
+    console.warn('[9ance recording proxy failed]', logId, proxyErrors.join(' | '));
+    if (!res.headersSent) {
+      return res.status(404).json({
+        status: 'error',
+        message:
+          'Recording not available from 9ance yet (auth or file missing). Re-sync the call or try again shortly.',
+        details: proxyErrors,
+      });
     }
   }
 

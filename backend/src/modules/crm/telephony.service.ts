@@ -1106,93 +1106,133 @@ class TelephonyService {
     const calls = asList(data);
     let upserted = 0;
     let healed = 0;
-    for (const c of calls) {
-      const callId = String(c.id || c.provider_call_id || '');
-      if (!callId) continue;
-      const customer =
-        c.direction === 'inbound'
-          ? normalizePhone10(c.from_number || '')
-          : normalizePhone10(c.to_number || '');
-      let leadId: string | null = c.lead || null;
-      if (!leadId && customer.length >= 10) {
+    let skipped = 0;
+    const errors: string[] = [];
+
+    const resolveLeadId = async (
+      candidate: string | null | undefined,
+      customerPhone: string,
+    ): Promise<string | null> => {
+      // 9ance `lead` is often their own id — only keep if it exists in our CRM
+      if (candidate) {
+        const id = String(candidate).trim();
+        if (id) {
+          const found = await prisma.crmLead.findUnique({
+            where: { id },
+            select: { id: true },
+          });
+          if (found) return found.id;
+        }
+      }
+      if (customerPhone.length >= 10) {
         const matched = await prisma.crmLead.findFirst({
-          where: { phone: { contains: last10(customer) } },
+          where: { phone: { contains: last10(customerPhone) } },
           select: { id: true },
         });
-        leadId = matched?.id || null;
+        if (matched) return matched.id;
       }
-      const statusRaw = String(c.status || c.call_result || 'COMPLETED').toUpperCase();
-      let callStatus = statusRaw.replace(/\s+/g, '_');
-      if (['ANSWERED', 'COMPLETED'].includes(callStatus) || statusRaw.includes('ANSWER')) {
-        callStatus = callStatus === 'NO_ANSWER' ? 'MISSED' : 'ANSWERED';
-      }
-      if (callStatus === 'NO_ANSWER') callStatus = 'MISSED';
+      return null;
+    };
 
-      const callTime = c.started_at ? new Date(c.started_at) : new Date();
-      const duration = Number(c.talk_duration_secs || c.duration_secs || 0) || 0;
+    for (const c of calls) {
+      try {
+        const callId = String(c.id || c.provider_call_id || '');
+        if (!callId) continue;
+        const customer =
+          c.direction === 'inbound'
+            ? normalizePhone10(c.from_number || '')
+            : normalizePhone10(c.to_number || '');
 
-      let existing = await prisma.crmCallLog.findFirst({ where: { callId } });
-      let didHeal = false;
-      // Heal sticky click-to-call CONNECTION_ERROR / FAILED rows that never got a callId
-      if (!existing && customer.length >= 10) {
-        const windowStart = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
-        const callTimeStart = new Date(callTime.getTime() - 2 * 60 * 60 * 1000);
-        const callTimeEnd = new Date(callTime.getTime() + 2 * 60 * 60 * 1000);
-        const candidates = await prisma.crmCallLog.findMany({
-          where: {
-            customerNumber: { contains: last10(customer) },
-            callStatus: { in: ['CONNECTION_ERROR', 'FAILED', 'INITIATED', 'RINGING'] },
-            createdAt: { gte: windowStart },
-            OR: [{ callId: null }, { callId: '' }],
-            callTime: { gte: callTimeStart, lte: callTimeEnd },
-          },
-          orderBy: { createdAt: 'desc' },
-          take: 10,
-        });
-        if (candidates.length === 0) {
-          // Fallback: any sticky error for this number in the last 14 days
-          const loose = await prisma.crmCallLog.findMany({
+        const statusRaw = String(c.status || c.call_result || 'COMPLETED').toUpperCase();
+        let callStatus = statusRaw.replace(/\s+/g, '_');
+        if (['ANSWERED', 'COMPLETED'].includes(callStatus) || statusRaw.includes('ANSWER')) {
+          callStatus = callStatus === 'NO_ANSWER' ? 'MISSED' : 'ANSWERED';
+        }
+        if (callStatus === 'NO_ANSWER') callStatus = 'MISSED';
+
+        const callTime = c.started_at ? new Date(c.started_at) : new Date();
+        const duration = Number(c.talk_duration_secs || c.duration_secs || 0) || 0;
+
+        let existing = await prisma.crmCallLog.findFirst({ where: { callId } });
+        let didHeal = false;
+        // Heal sticky click-to-call CONNECTION_ERROR / FAILED rows that never got a callId
+        if (!existing && customer.length >= 10) {
+          const windowStart = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+          const callTimeStart = new Date(callTime.getTime() - 2 * 60 * 60 * 1000);
+          const callTimeEnd = new Date(callTime.getTime() + 2 * 60 * 60 * 1000);
+          const candidates = await prisma.crmCallLog.findMany({
             where: {
               customerNumber: { contains: last10(customer) },
-              callStatus: { in: ['CONNECTION_ERROR', 'FAILED'] },
+              callStatus: { in: ['CONNECTION_ERROR', 'FAILED', 'INITIATED', 'RINGING'] },
               createdAt: { gte: windowStart },
               OR: [{ callId: null }, { callId: '' }],
+              callTime: { gte: callTimeStart, lte: callTimeEnd },
             },
             orderBy: { createdAt: 'desc' },
-            take: 5,
+            take: 10,
           });
-          existing = loose[0] || null;
-        } else {
-          // Prefer closest callTime
-          existing = candidates.sort((a, b) => {
-            const aT = a.callTime ? a.callTime.getTime() : a.createdAt.getTime();
-            const bT = b.callTime ? b.callTime.getTime() : b.createdAt.getTime();
-            return Math.abs(aT - callTime.getTime()) - Math.abs(bT - callTime.getTime());
-          })[0];
+          if (candidates.length === 0) {
+            const loose = await prisma.crmCallLog.findMany({
+              where: {
+                customerNumber: { contains: last10(customer) },
+                callStatus: { in: ['CONNECTION_ERROR', 'FAILED'] },
+                createdAt: { gte: windowStart },
+                OR: [{ callId: null }, { callId: '' }],
+              },
+              orderBy: { createdAt: 'desc' },
+              take: 5,
+            });
+            existing = loose[0] || null;
+          } else {
+            existing = candidates.sort((a, b) => {
+              const aT = a.callTime ? a.callTime.getTime() : a.createdAt.getTime();
+              const bT = b.callTime ? b.callTime.getTime() : b.createdAt.getTime();
+              return Math.abs(aT - callTime.getTime()) - Math.abs(bT - callTime.getTime());
+            })[0];
+          }
+          if (existing) didHeal = true;
         }
-        if (existing) didHeal = true;
+
+        const leadId = await resolveLeadId(
+          c.lead || c.lead_id || existing?.leadId || null,
+          customer,
+        );
+
+        const row = {
+          leadId,
+          customerNumber: customer || existing?.customerNumber || 'unknown',
+          agentNumber: c.agent_name || c.agent || existing?.agentNumber || null,
+          did: c.did_number || existing?.did || null,
+          callStatus,
+          duration,
+          recordingUrl: c.recording_url || existing?.recordingUrl || null,
+          callTime,
+          callId,
+          rawPayload: c,
+        };
+        if (existing) {
+          await prisma.crmCallLog.update({ where: { id: existing.id }, data: row });
+          if (didHeal) healed += 1;
+        } else {
+          await prisma.crmCallLog.create({ data: row });
+        }
+        upserted += 1;
+      } catch (err: any) {
+        skipped += 1;
+        const msg = err?.message || String(err);
+        if (errors.length < 5) errors.push(msg);
+        console.warn('[9ance sync skip]', msg);
       }
-      const row = {
-        leadId: leadId || existing?.leadId || null,
-        customerNumber: customer || existing?.customerNumber || 'unknown',
-        agentNumber: c.agent_name || c.agent || existing?.agentNumber || null,
-        did: c.did_number || existing?.did || null,
-        callStatus,
-        duration,
-        recordingUrl: c.recording_url || existing?.recordingUrl || null,
-        callTime,
-        callId,
-        rawPayload: c,
-      };
-      if (existing) {
-        await prisma.crmCallLog.update({ where: { id: existing.id }, data: row });
-        if (didHeal) healed += 1;
-      } else {
-        await prisma.crmCallLog.create({ data: row });
-      }
-      upserted += 1;
     }
-    return { success: true, upserted, healed, total: calls.length, raw: data };
+    return {
+      success: true,
+      upserted,
+      healed,
+      skipped,
+      total: calls.length,
+      errors: errors.length ? errors : undefined,
+      raw: data,
+    };
   }
 
   /** Best-effort: pull 9ance history to fix sticky CONNECTION_ERROR rows (throttled). */

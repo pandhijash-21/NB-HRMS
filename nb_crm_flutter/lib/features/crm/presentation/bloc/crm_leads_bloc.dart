@@ -1111,11 +1111,14 @@ class CrmLeadsBloc extends Bloc<CrmLeadsEvent, CrmLeadsState> {
       );
       final healed = sync['healed'];
       final upserted = sync['upserted'];
+      final skipped = sync['skipped'];
       emit(state.copyWith(
         isActing: false,
         callLogs: logs,
         actionSuccessMessage:
-            'Synced from 9ance — updated $upserted call(s)${healed != null ? ', healed $healed error(s)' : ''}.',
+            'Synced from 9ance — updated $upserted call(s)'
+            '${healed != null && healed != 0 ? ', healed $healed error(s)' : ''}'
+            '${skipped != null && skipped != 0 ? ', skipped $skipped' : ''}.',
       ));
     } catch (e) {
       emit(state.copyWith(isActing: false, errorMessage: e.toString()));
